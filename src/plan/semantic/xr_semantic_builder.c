@@ -2095,6 +2095,84 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     return true;
 }
 
+static bool xi_type_names_string_builder(const XrType *type) {
+    return xr_type_is_named_class(type, "StringBuilder");
+}
+
+static bool xi_string_builder_constructor_candidate(const XiValue *value) {
+    if (!value || value->op != XI_CALL_BUILTIN)
+        return false;
+    bool named_builtin = value->aux && strcmp((const char *) value->aux, "StringBuilder") == 0;
+    return named_builtin || xi_type_names_string_builder(value->type);
+}
+
+static bool xi_string_builder_constructor_exact(const XiValue *value) {
+    const XrType *type = value ? value->type : NULL;
+    return value && value->op == XI_CALL_BUILTIN && value->nargs == 0 && value->aux &&
+           strcmp((const char *) value->aux, "StringBuilder") == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int == 0 &&
+           value->flags == xi_generated_op_default_flags(XI_CALL_BUILTIN) &&
+           value->transfer_mode == XR_TRANSFER_SHARE && value->param_mode == XR_PARAM_READ &&
+           xr_type_is_builtin_named_class(type, "StringBuilder") &&
+           type->semantic_type_id == 0 && type->instance.type_arg_count == 0 &&
+           !type->is_nullable && !type->is_const && !type->is_value_type && !type->is_literal &&
+           !type->is_cycle_candidate && !type->ptr_is_mut &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && !type->alias_name;
+}
+
+static bool semantic_string_builder_type_exact(const XrSemanticTypeRecord *type) {
+    char expected[160];
+    int length = snprintf(expected, sizeof(expected),
+                          "type-v2:%u:0:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
+                          (unsigned) XR_KIND_INSTANCE, (unsigned) XR_SCALAR_REP_NONE);
+    return type && length > 0 && (size_t) length < sizeof(expected) &&
+           type->kind == XR_KIND_INSTANCE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags ==
+               (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->canonical_key && strcmp(type->canonical_key, expected) == 0;
+}
+
+static bool semantic_string_builder_constructor_exact(const XrSemanticBuildContext *ctx,
+                                                      const XrSemanticOperationRecord *record) {
+    const XrSemanticTypeRecord *type =
+        record->result_type < ctx->plan->type_count ? &ctx->plan->types[record->result_type] : NULL;
+    const char *metadata = record->metadata_count == 1 &&
+                                   record->metadata_begin < ctx->plan->metadata_count
+                               ? ctx->plan->metadata[record->metadata_begin]
+                               : NULL;
+    return semantic_string_builder_type_exact(type) && metadata &&
+           strcmp(metadata, "StringBuilder") == 0 && record->operand_count == 0 &&
+           record->auxiliary_kind == XI_AUX_KIND_NONE && record->semantic_immediate == 0 &&
+           record->constant == XR_SEMANTIC_INDEX_NONE &&
+           record->callable_function == XR_SEMANTIC_INDEX_NONE &&
+           record->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+           record->ownership_use == xi_generated_op_own_use(XI_CALL_BUILTIN) &&
+           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+           record->transfer_mode == XR_TRANSFER_SHARE && record->parameter_mode == XR_PARAM_READ &&
+           record->parameter_ownership == XI_OWN_NONE &&
+           record->flags == xi_generated_op_default_flags(XI_CALL_BUILTIN) &&
+           record->result_alias_operand == -1 && record->return_parameter == -1 &&
+           record->return_provenance == XR_SEM_RETURN_OWNED && record->return_complete == 1;
+}
+
+static bool append_operation_allocation_identity(XrSemanticBuildContext *ctx,
+                                                 XrSemanticOperationRecord *record) {
+    XrTextBuilder allocation_key = {0};
+    if (!text_append_format(&allocation_key, "%s/allocation", record->canonical_key)) {
+        text_dispose(&allocation_key);
+        return fail(ctx, "XR_EXEC_5003", "allocation identity allocation failed");
+    }
+    record->allocation_key = xr_semantic_plan_copy_string(ctx->plan, allocation_key.data);
+    text_dispose(&allocation_key);
+    XrFingerprint digest;
+    if (!record->allocation_key ||
+        !xr_stable_id_from_key(record->allocation_key, &record->allocation_id, &digest))
+        return fail(ctx, "XR_EXEC_5003", "allocation stable identity failed");
+    return true;
+}
+
 static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_index_value,
                              uint32_t block_index_value, const XiValue *value) {
     if (!value || value->op >= XI_OP_COUNT || !xi_generated_op_name(value->op))
@@ -2178,19 +2256,6 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->return_parameter = value_ownership.param_index;
     record->return_provenance = value_ownership.kind;
     record->return_complete = value_ownership.complete ? 1u : 0u;
-    if ((record->effects & XI_EFFECT_ALLOCATES) != 0 ||
-        xi_generated_op_escape_alloc(value->op) == XI_GEN_ESCAPE_ALLOC_HEAP) {
-        XrTextBuilder allocation_key = {0};
-        if (!text_append_format(&allocation_key, "%s/allocation", record->canonical_key)) {
-            text_dispose(&allocation_key);
-            return fail(ctx, "XR_EXEC_5003", "allocation identity allocation failed");
-        }
-        record->allocation_key = xr_semantic_plan_copy_string(ctx->plan, allocation_key.data);
-        text_dispose(&allocation_key);
-        if (!record->allocation_key ||
-            !xr_stable_id_from_key(record->allocation_key, &record->allocation_id, &digest))
-            return fail(ctx, "XR_EXEC_5003", "allocation stable identity failed");
-    }
     for (uint16_t i = 0; i < value->nargs; i++) {
         if (!append_operand(ctx, function, value, i))
             return false;
@@ -2212,6 +2277,18 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     }
     if (!add_operation_metadata(ctx, value, record) || !append_constant(ctx, value, record))
         return false;
+    bool string_builder_candidate = xi_string_builder_constructor_candidate(value);
+    bool string_builder_exact = xi_string_builder_constructor_exact(value);
+    if (string_builder_candidate &&
+        (!string_builder_exact || !semantic_string_builder_constructor_exact(ctx, record)))
+        return fail(ctx, "XR_SEM_0019",
+                    "StringBuilder constructor authority is not exact");
+    if ((record->effects & XI_EFFECT_ALLOCATES) != 0 ||
+        xi_generated_op_escape_alloc(value->op) == XI_GEN_ESCAPE_ALLOC_HEAP ||
+        string_builder_exact) {
+        if (!append_operation_allocation_identity(ctx, record))
+            return false;
+    }
     return append_call_target(ctx, value, index);
 }
 

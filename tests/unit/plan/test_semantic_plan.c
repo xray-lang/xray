@@ -41,6 +41,23 @@ static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 4, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 6, .frozen = true};
+static XrType stub_string_builder = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 9,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {.class_name = "StringBuilder"},
+};
+static XrType stub_shadow_string_builder = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 10,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {
+        .class_name = "StringBuilder",
+        .class_ref = (XrClassInfo *) (uintptr_t) 1,
+    },
+};
 static XrType stub_function = {
     .kind = XR_KIND_FUNCTION,
     .id = 7,
@@ -110,6 +127,40 @@ static XrSemanticPlan *build_probe_plan(void) {
     REQUIRE(plan != NULL);
     xi_func_free(function);
     return plan;
+}
+
+static XrSemanticPlan *build_string_builder_constructor_plan(void) {
+    XiFunc *function = xi_func_new("string_builder_constructor_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *builder =
+        xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_string_builder, 0);
+    REQUIRE(builder != NULL);
+    builder->aux = (void *) "StringBuilder";
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = builder;
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "StringBuilder constructor plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticOperationRecord *find_operation(XrSemanticPlan *plan, uint16_t opcode) {
+    for (uint32_t index = 0; plan && index < plan->operation_count; index++)
+        if (plan->operations[index].opcode == opcode)
+            return &plan->operations[index];
+    return NULL;
 }
 
 static XrSemanticPlan *build_owned_parameter_plan(void) {
@@ -1570,7 +1621,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(second_debug->canonical_key, "discriminator=2:operation=") != NULL);
     char first_debug_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(first_debug->id, first_debug_id_hex);
-    REQUIRE(strcmp(first_debug_id_hex, "38cf5b131a42ff1ea9c0bdff5662d6d2") == 0);
+    REQUIRE(strcmp(first_debug_id_hex, "135f7780183c388a06586dcca6532bf8") == 0);
     const XrSemanticOperationRecord *decoded_debug_operation =
         &decoded->operations[first_debug->subject];
     REQUIRE(decoded_debug_operation->source_file != NULL &&
@@ -1596,7 +1647,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
     char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(loan_entity->id, loan_id_hex);
-    REQUIRE(strcmp(loan_id_hex, "60b80cca91559c040f9d72215bc8c39a") == 0);
+    REQUIRE(strcmp(loan_id_hex, "a6a513c86410dadd84315b7acc05fc84") == 0);
     size_t entity_dump_size = 0;
     char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
     REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&
@@ -1643,11 +1694,11 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "6f9f40d639d12885ea6b3060063b091bc6f60a1959d31f3267b9c0acc03ce049") == 0);
+                   "71e7149702e3a8745f9fe1a10061dcedc8e72a13427a4682e97c328a7fcb99ac") == 0);
     REQUIRE(strcmp(registry_hex,
-                   "9e7c59f19702a084fb7a3bdb720bf98acf40cb126f1af2fe261f9c7b0b4d8794") == 0);
+                   "b653ccc07325d435364bca30b5c76db2b59df0cc303dfef7604f5dc82495cd9d") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "0a6b956d138ac07ffd7738be884f5c58b92e6c8dcca68c0954166d8fd0fcedc3") == 0);
+                   "b6d2da60fd7e848e7f7b7bb66795a81448f3d4a81481cd541088ca22954c5619") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -1674,6 +1725,109 @@ static void test_immutable_owned_snapshot(void) {
     REQUIRE(ownership != NULL);
     REQUIRE(xr_ownership_certificate_owner_count(ownership) == 1);
     xr_semantic_plan_free(plan);
+}
+
+static void test_string_builder_constructor_allocation_authority(void) {
+    XrSemanticPlan *plan = build_string_builder_constructor_plan();
+    XrSemanticOperationRecord *constructor = find_operation(plan, XI_CALL_BUILTIN);
+    REQUIRE(constructor != NULL && constructor->operand_count == 0 &&
+            constructor->metadata_count == 1);
+    REQUIRE(strcmp(plan->metadata[constructor->metadata_begin], "StringBuilder") == 0);
+    REQUIRE(constructor->result_type < plan->type_count);
+    const XrSemanticTypeRecord *type = &plan->types[constructor->result_type];
+    REQUIRE(strcmp(type->canonical_key,
+                   "type-v2:11:0:0:0:0:0:0:0:255:0:;named:13:StringBuilder[0]") == 0);
+    REQUIRE(type->flags ==
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT));
+    REQUIRE(constructor->allocation_key != NULL);
+    size_t operation_key_length = strlen(constructor->canonical_key);
+    REQUIRE(strncmp(constructor->allocation_key, constructor->canonical_key,
+                    operation_key_length) == 0);
+    REQUIRE(strcmp(constructor->allocation_key + operation_key_length, "/allocation") == 0);
+    REQUIRE(constructor->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+            constructor->return_provenance == XR_SEM_RETURN_OWNED &&
+            constructor->return_complete == 1);
+
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    char error[512] = {0};
+    REQUIRE(xr_xsm_encode(plan, &bytes, &size, error, sizeof(error)));
+    XrSemanticPlan *decoded = NULL;
+    REQUIRE(xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)));
+    XrSemanticOperationRecord *decoded_constructor =
+        find_operation(decoded, XI_CALL_BUILTIN);
+    REQUIRE(decoded_constructor != NULL && decoded_constructor->allocation_key != NULL);
+    REQUIRE(strcmp(decoded_constructor->allocation_key, constructor->allocation_key) == 0);
+    REQUIRE(xr_stable_id_equal(decoded_constructor->allocation_id,
+                               constructor->allocation_id));
+    uint8_t *roundtrip = NULL;
+    size_t roundtrip_size = 0;
+    REQUIRE(xr_xsm_encode(decoded, &roundtrip, &roundtrip_size, error, sizeof(error)));
+    REQUIRE(roundtrip_size == size && memcmp(roundtrip, bytes, size) == 0);
+    xr_free(roundtrip);
+    xr_semantic_plan_free(decoded);
+    xr_free(bytes);
+
+    const char *saved_metadata = plan->metadata[constructor->metadata_begin];
+    plan->metadata[constructor->metadata_begin] = "StringBuilded";
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->metadata[constructor->metadata_begin] = saved_metadata;
+
+    uint16_t saved_operand_count = constructor->operand_count;
+    constructor->operand_count = 1;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    constructor->operand_count = saved_operand_count;
+
+    uint32_t saved_result_type = constructor->result_type;
+    REQUIRE(saved_result_type != 0);
+    constructor->result_type = 0;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    constructor->result_type = saved_result_type;
+
+    uint8_t saved_result_ownership = constructor->result_ownership;
+    constructor->result_ownership = XI_GEN_RESULT_OWNERSHIP_BORROWED;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    constructor->result_ownership = saved_result_ownership;
+
+    const char *saved_allocation_key = constructor->allocation_key;
+    constructor->allocation_key = NULL;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    constructor->allocation_key = saved_allocation_key;
+
+    XrStableId saved_allocation_id = constructor->allocation_id;
+    constructor->allocation_id.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_SEM_0002");
+    constructor->allocation_id = saved_allocation_id;
+
+    char forged_allocation_key[512];
+    REQUIRE(snprintf(forged_allocation_key, sizeof(forged_allocation_key), "%s/allocatioN",
+                     constructor->canonical_key) > 0);
+    constructor->allocation_key = forged_allocation_key;
+    REQUIRE(xr_stable_id_from_key(constructor->allocation_key, &constructor->allocation_id,
+                                  &(XrFingerprint) {{0}}));
+    expect_verify_failure(plan, "XR_SEM_0019");
+    constructor->allocation_key = saved_allocation_key;
+    constructor->allocation_id = saved_allocation_id;
+    REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+
+    XiFunc *shadow = xi_func_new("shadow_string_builder_constructor_probe", &stub_int);
+    REQUIRE(shadow != NULL);
+    XiBlock *entry = xi_block_new(shadow);
+    REQUIRE(entry != NULL);
+    XiValue *call =
+        xi_value_new(shadow, entry, XI_CALL_BUILTIN, &stub_shadow_string_builder, 0);
+    REQUIRE(call != NULL);
+    call->aux = (void *) "StringBuilder";
+    XiValue *result = xi_const_int(shadow, entry, 0, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(entry, result);
+    shadow->stage = XI_STAGE_OPTIMIZED;
+    plan = NULL;
+    memset(error, 0, sizeof(error));
+    REQUIRE(!xr_semantic_plan_build(shadow, &plan, error, sizeof(error)));
+    REQUIRE(plan == NULL && strncmp(error, "XR_SEM_0019", strlen("XR_SEM_0019")) == 0);
+    xi_func_free(shadow);
 }
 
 static void test_operation_registry(void) {
@@ -1981,12 +2135,12 @@ static void test_direct_local_call_target_authority(void) {
     REQUIRE(target->function == 1 && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL);
     REQUIRE(plan->operations[target->operation].opcode == XI_CALL);
     REQUIRE(plan->operations[target->operation].effects == xi_generated_op_effects(XI_CALL));
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=17:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=18:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":function=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "47f21da8f5ffc8a9001a4155957dc51a") == 0);
+    REQUIRE(strcmp(target_id_hex, "d87e7cee9f89bfb52103d7c5495a08de") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
@@ -2070,12 +2224,12 @@ static void test_indirect_callable_state_authority(void) {
             plan->types[target->callable_type].kind == XR_KIND_FUNCTION);
     REQUIRE(plan->operations[target->operation].opcode == XI_CALL);
     REQUIRE(strstr(target->canonical_key,
-                   "call-target-v3:schema=17:operation=") != NULL);
+                   "call-target-v3:schema=18:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":callable-type=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=4") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "c858626d640306d6535db92312ce4e10") == 0);
+    REQUIRE(strcmp(target_id_hex, "5b77cf0ddb74c1519a17b635dd9a2e0d") == 0);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         state_count += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
@@ -2102,7 +2256,7 @@ static void test_indirect_callable_state_authority(void) {
     xr_semantic_plan_free(decoded);
 
     uint8_t *old_schema = copy_bytes(bytes, size);
-    old_schema[8] = 16;
+    old_schema[8] = 17;
     old_schema[9] = old_schema[10] = old_schema[11] = 0;
     expect_decode_failure(old_schema, size, "XR_ARTIFACT_2000");
     xr_free(old_schema);
@@ -2174,9 +2328,9 @@ static void test_source_export_call_target_authority(void) {
     xr_stable_id_hex(plan->dependencies[0].id, dependency_id);
     xr_stable_id_hex(dependency->source_exports[0].id, export_id);
     xr_stable_id_hex(target->id, target_id);
-    REQUIRE(strcmp(dependency_id, "8b69ff45c4d67c667b466fc201c439f5") == 0);
-    REQUIRE(strcmp(export_id, "c6656bdd6a670e569e65123e24e05b0b") == 0);
-    REQUIRE(strcmp(target_id, "e4cdc7b77dc48d7b1071130ef16c5c51") == 0);
+    REQUIRE(strcmp(dependency_id, "5395690794925b4557e26aa5987159df") == 0);
+    REQUIRE(strcmp(export_id, "6931652f2a3d74c5b0a8c8ab3c493d6a") == 0);
+    REQUIRE(strcmp(target_id, "2af261b837bfd9073a9a4aba24ba281f") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error,
@@ -2258,7 +2412,7 @@ static void test_native_yieldable_call_target_authority(void) {
             target->operation < plan->operation_count &&
             plan->operations[target->operation].opcode == XI_CALL);
     REQUIRE(strstr(target->canonical_key,
-                   "call-target-v3:schema=17:operation=") != NULL);
+                   "call-target-v3:schema=18:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":native=os.__sleep:kind=2") != NULL);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
@@ -2349,12 +2503,12 @@ static void test_native_namespace_yieldable_authority(void) {
             target->source_export == XR_SEMANTIC_INDEX_NONE &&
             target->callable_type == XR_SEMANTIC_INDEX_NONE);
     REQUIRE(strstr(target->canonical_key,
-                   "call-target-v5:schema=17:operation=") != NULL);
+                   "call-target-v5:schema=18:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key,
                    ":native-namespace=time.sleep:kind=5") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "7fca38cde076aaf27c22e89eb0b2f71d") == 0);
+    REQUIRE(strcmp(target_id_hex, "78f0cc5ed76fa1a07783a342455268ee") == 0);
     const XrSemanticOperationRecord *import = NULL;
     for (uint32_t i = 0; i < plan->operation_count; i++)
         if (plan->operations[i].opcode == XI_IMPORT_REF)
@@ -2391,7 +2545,7 @@ static void test_native_namespace_yieldable_authority(void) {
     xr_free(roundtrip);
     xr_semantic_plan_free(decoded);
     uint8_t *old_schema = copy_bytes(bytes, size);
-    old_schema[8] = 16;
+    old_schema[8] = 17;
     old_schema[9] = old_schema[10] = old_schema[11] = 0;
     expect_decode_failure(old_schema, size, "XR_ARTIFACT_2000");
     xr_free(old_schema);
@@ -2467,11 +2621,11 @@ static void test_shared_direct_call_target_authority(void) {
     REQUIRE(call->function == 2 && call->opcode == XI_CALL);
     REQUIRE((call->effects & XI_EFFECT_MAY_SUSPEND) == 0);
     REQUIRE((call->flags & XI_FLAG_MAY_SUSPEND) == 0);
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=17:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=18:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "8a6e1bbfab2c0c6bdd9c047fbb009c3e") == 0);
+    REQUIRE(strcmp(target_id_hex, "0ca54af00bb1c25ac680553cb3d1a875") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
@@ -3772,6 +3926,7 @@ int main(void) {
     test_incomplete_debug_span_fails_closed();
     test_operation_registry();
     test_immutable_owned_snapshot();
+    test_string_builder_constructor_allocation_authority();
     test_xsm_roundtrip_and_determinism();
     test_fingerprint_separates_metadata_boundaries();
     test_xsm_signed_extreme_roundtrip();

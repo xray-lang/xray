@@ -942,6 +942,68 @@ static bool build_definition_map(const XrSemanticPlan *plan, uint32_t **out,
     return true;
 }
 
+static bool semantic_type_is_exact_string_builder(const XrSemanticTypeRecord *type) {
+    char expected[160];
+    int length = snprintf(expected, sizeof(expected),
+                          "type-v2:%u:0:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
+                          (unsigned) XR_KIND_INSTANCE, (unsigned) XR_SCALAR_REP_NONE);
+    return type && length > 0 && (size_t) length < sizeof(expected) &&
+           type->kind == XR_KIND_INSTANCE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags ==
+               (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->canonical_key && strcmp(type->canonical_key, expected) == 0;
+}
+
+static bool allocation_identity_is_exact(const XrSemanticOperationRecord *operation) {
+    if (!operation || !operation->canonical_key || !operation->allocation_key ||
+        !verify_id(operation->allocation_key, operation->allocation_id))
+        return false;
+    size_t operation_length = strlen(operation->canonical_key);
+    static const char suffix[] = "/allocation";
+    size_t allocation_length = strlen(operation->allocation_key);
+    return allocation_length == operation_length + sizeof(suffix) - 1u &&
+           memcmp(operation->allocation_key, operation->canonical_key, operation_length) == 0 &&
+           memcmp(operation->allocation_key + operation_length, suffix, sizeof(suffix)) == 0;
+}
+
+static bool verify_string_builder_constructor(const XrSemanticPlan *plan,
+                                              const XrSemanticOperationRecord *operation,
+                                              char *error, size_t error_size) {
+    if (operation->opcode != XI_CALL_BUILTIN)
+        return true;
+    const XrSemanticTypeRecord *type = operation->result_type < plan->type_count
+                                           ? &plan->types[operation->result_type]
+                                           : NULL;
+    bool type_names_constructor = semantic_type_is_exact_string_builder(type);
+    const char *metadata = operation->metadata_count == 1 &&
+                                   operation->metadata_begin < plan->metadata_count
+                               ? plan->metadata[operation->metadata_begin]
+                               : NULL;
+    bool metadata_names_constructor = metadata && strcmp(metadata, "StringBuilder") == 0;
+    if (!type_names_constructor && !metadata_names_constructor)
+        return true;
+    bool exact = type_names_constructor && metadata_names_constructor &&
+                 operation->operand_count == 0 &&
+                 operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                 operation->semantic_immediate == 0 &&
+                 operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                 operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
+                 operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                 operation->ownership_use == xi_generated_op_own_use(XI_CALL_BUILTIN) &&
+                 operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                 operation->transfer_mode == XR_TRANSFER_SHARE &&
+                 operation->parameter_mode == XR_PARAM_READ &&
+                 operation->parameter_ownership == XI_OWN_NONE &&
+                 operation->flags == xi_generated_op_default_flags(XI_CALL_BUILTIN) &&
+                 operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
+                 operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                 operation->return_complete == 1 && allocation_identity_is_exact(operation);
+    return exact || report(error, error_size, "XR_SEM_0019",
+                           "StringBuilder constructor authority is not exact");
+}
+
 static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *edge_mask,
                                      uint32_t *definitions, uint32_t value_count, char *error,
                                      size_t error_size) {
@@ -1047,6 +1109,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
             !verify_id(operation->allocation_key, operation->allocation_id)) {
             return report(error, error_size, "XR_SEM_0002", "allocation identity is invalid");
         }
+        if (!verify_string_builder_constructor(plan, operation, error, error_size))
+            return false;
         if (operation->opcode == XI_TRY && (operation->evidence[7] >= plan->block_count ||
                                             (edge_mask[i] & XR_SEM_OPERATION_EDGE_PANIC) == 0)) {
             return report(error, error_size, "XR_SEM_0010",
