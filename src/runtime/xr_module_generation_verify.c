@@ -16,9 +16,11 @@
 #include "xr_module_generation_internal.h"
 #include "../base/xsha256.h"
 #include "../plan/semantic/xr_semantic_ids.h"
+#include "../plan/target/xr_target_instruction_verify.h"
 #include "../plan/target/xr_target_plan.h"
 #include "../plan/target/xr_target_profile_internal.h"
 #include "../plan/target/xr_target_verify.h"
+#include "../vm/xr_typed_frame.h"
 #include "abi/xr_runtime_target_authority.h"
 #include <stdio.h>
 #include <string.h>
@@ -194,6 +196,79 @@ static bool verify_native_identity(const XrLoadedModuleGeneration *generation,
     return true;
 }
 
+static bool verifier_has_no_non_scalar_execution_authority(
+    const XrTargetPlan *plan) {
+    uint32_t count = 0;
+    xr_target_plan_storage(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_allocations(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_extent_operands(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_calls(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_call_arguments(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_root_maps(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_root_slots(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_cleanups(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_adapters(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_coroutines(plan, &count);
+    return count == 0;
+}
+
+static bool verifier_sole_scalar_generation_eligible(
+    const XrLoadedModuleGeneration *generation) {
+    char nested[512] = {0};
+    const XrTargetPlan *plan = generation ? generation->plan : NULL;
+    if (!plan || !xr_target_plan_is_verified(plan) ||
+        !xr_target_plan_fingerprint_is_intact(plan) ||
+        !xr_target_plan_verify(plan, nested, sizeof(nested)) ||
+        xr_target_plan_schema_version(plan) !=
+            XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION ||
+        xr_target_plan_completed_family_mask(plan) !=
+            XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK ||
+        memcmp(generation->identity.target_plan_fingerprint,
+               xr_target_plan_fingerprint(plan).bytes,
+               XR_RUNTIME_GENERATION_FINGERPRINT_SIZE) != 0 ||
+        !xr_target_instruction_program_verify(plan, nested, sizeof(nested)))
+        return false;
+
+    uint32_t function_count = 0;
+    const XrTargetFunctionRecord *functions =
+        xr_target_plan_functions(plan, &function_count);
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_instructions(plan, &instruction_count);
+    uint32_t sole_instruction_count = 0;
+    const XrTargetInstructionRecord *sole_instructions =
+        xr_target_plan_function_instructions(plan, 0,
+                                             &sole_instruction_count);
+    if (!functions || function_count != 1 || functions[0].id != 0 ||
+        functions[0].semantic_function != 0 || functions[0].root_count != 0 ||
+        functions[0].cleanup_count != 0 ||
+        functions[0].coroutine_count != 0 || !instructions ||
+        !sole_instructions || instruction_count == 0 ||
+        instruction_count != sole_instruction_count ||
+        xr_target_plan_function_execution_family_mask(plan, 0) !=
+            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE)
+        return false;
+    return verifier_has_no_non_scalar_execution_authority(plan);
+}
+
 XRAY_API bool xr_module_generation_verify(
     const XrLoadedModuleGeneration *generation, char *diagnostic,
     size_t diagnostic_size) {
@@ -219,9 +294,9 @@ XRAY_API bool xr_module_generation_verify(
                        verify_native_identity(generation, diagnostic,
                                               diagnostic_size);
     bool unavailable_state =
-        !xr_runtime_generation_activation_available() &&
         snapshot.state >= XR_MODULE_GENERATION_READY &&
-        snapshot.state <= XR_MODULE_GENERATION_DRAINING;
+        snapshot.state <= XR_MODULE_GENERATION_DRAINING &&
+        !verifier_sole_scalar_generation_eligible(generation);
     xr_mutex_unlock(&authority->gate);
     if (!shape_ok || !budget_ok)
         return reject(diagnostic, diagnostic_size, "XR_EXEC_5008",

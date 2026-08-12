@@ -32,7 +32,7 @@ relations; it contains no child-frame, spill, root, cleanup, drop, cancel, or
 action authority. Aggregate, rooted, owned, caller-storage, coroutine, and
 adapter execution is not implemented here and remains fail closed.
 
-Schema 8 also admits one sealed non-static call descriptor: an exact,
+Schema 9 also admits one sealed non-static call descriptor: an exact,
 non-super, non-suspending `Channel.close()` operation reconstructed from
 frozen SemanticPlan receiver, selector, arity, and Unit-result facts. The
 receiver is only the dispatch target. The row has no callee function,
@@ -51,11 +51,15 @@ Evidence:
 - `test_typed_frame` proves exact schema/family/fingerprint rejection, packed
   access identity, initialization/poison/cleanup state, and allocation budgets.
 - `test_typed_frame_runtime_archive` proves the public header and symbols link
-  from the runtime-only archive without compiler or AOT ownership, and proves
-  that the internal scalar dispatcher is present without activating it.
+  from the runtime-only archive without compiler or AOT ownership.
+- `test_runtime_generation` proves that only a sole-function, nonempty scalar
+  instruction plan may activate and consume this frame through the bounded
+  generation executor; rooted, call, adapter, and coroutine plans remain
+  unavailable.
 
 anchor-sha256: src/plan/target/xr_target_plan.h 541839b09d06c7ff051b4e9b8b648ed2ab27ec66bd85af272d7f0f97e6066989
 anchor-sha256: src/vm/xr_typed_frame.h 2cd4328e776257047b496a8a49eaf8464d2d3ea527bb8fdfb0a5784c92c9f4ed
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 5a19e39404c8e9decbc72187d1eee8e307bc44484e18422fb705c271ec192b49
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7

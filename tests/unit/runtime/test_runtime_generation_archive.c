@@ -17,14 +17,18 @@ int main(void) {
     XrRuntimeGenerationAuthority *authority = NULL;
     XrLoadedModuleGeneration *generation =
         (XrLoadedModuleGeneration *) (uintptr_t) 1;
+    int64_t result = 1;
     char diagnostic[256] = {0};
     if (!xr_runtime_generation_authority_create(
             &budget, &authority, diagnostic, sizeof(diagnostic)) ||
-        !authority || xr_runtime_generation_activation_available() ||
+        !authority || !xr_runtime_generation_activation_available() ||
         xr_module_generation_load_verified_target_plan(
             authority, NULL, &generation, diagnostic, sizeof(diagnostic)) ||
         generation != NULL ||
         strstr(diagnostic, "XR_ARTIFACT_2004") == NULL ||
+        xr_module_generation_execute_sole_scalar_i64(
+            NULL, &result, diagnostic, sizeof(diagnostic)) ||
+        result != 0 || strstr(diagnostic, "XR_EXEC_5005") == NULL ||
         !xr_runtime_generation_authority_destroy(
             &authority, diagnostic, sizeof(diagnostic)) ||
         authority != NULL) {

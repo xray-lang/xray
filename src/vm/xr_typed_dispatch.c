@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_typed_dispatch.c - Test-only typed TargetPlan scalar executor
+ * xr_typed_dispatch.c - Typed TargetPlan scalar executor
  *
  * KEY CONCEPT:
  *   The dispatcher consumes only a verified function-local instruction table

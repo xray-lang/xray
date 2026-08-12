@@ -17,9 +17,12 @@
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
 #include "../plan/semantic/xr_semantic_ids.h"
+#include "../plan/target/xr_target_instruction_verify.h"
 #include "../plan/target/xr_target_plan.h"
 #include "../plan/target/xr_target_profile_internal.h"
 #include "../plan/target/xr_target_verify.h"
+#include "../vm/xr_typed_dispatch.h"
+#include "../vm/xr_typed_frame.h"
 #include "abi/xr_runtime_target_authority.h"
 #include <stdio.h>
 #include <string.h>
@@ -234,7 +237,7 @@ XRAY_API bool xr_runtime_generation_authority_destroy(
 }
 
 XRAY_API bool xr_runtime_generation_activation_available(void) {
-    return false;
+    return true;
 }
 
 XRAY_API bool xr_module_generation_load_verified_target_plan(
@@ -301,6 +304,107 @@ static bool transition_locked(XrLoadedModuleGeneration *generation,
     return true;
 }
 
+static bool plan_has_no_non_scalar_execution_authority(
+    const XrTargetPlan *plan) {
+    uint32_t count = 0;
+    xr_target_plan_storage(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_allocations(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_extent_operands(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_calls(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_call_arguments(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_root_maps(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_root_slots(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_cleanups(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_adapters(plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_coroutines(plan, &count);
+    return count == 0;
+}
+
+static bool sole_scalar_generation_eligible(
+    const XrLoadedModuleGeneration *generation) {
+    char diagnostic[512] = {0};
+    if (!generation || !generation->plan ||
+        !xr_target_plan_is_verified(generation->plan) ||
+        !xr_target_plan_fingerprint_is_intact(generation->plan) ||
+        !xr_target_plan_verify(generation->plan, diagnostic,
+                               sizeof(diagnostic)) ||
+        xr_target_plan_schema_version(generation->plan) !=
+            XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION ||
+        xr_target_plan_completed_family_mask(generation->plan) !=
+            XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK ||
+        memcmp(generation->identity.target_plan_fingerprint,
+               xr_target_plan_fingerprint(generation->plan).bytes,
+               XR_RUNTIME_GENERATION_FINGERPRINT_SIZE) != 0)
+        return false;
+    if (!xr_target_instruction_program_verify(
+            generation->plan, diagnostic, sizeof(diagnostic)))
+        return false;
+
+    uint32_t function_count = 0;
+    const XrTargetFunctionRecord *functions =
+        xr_target_plan_functions(generation->plan, &function_count);
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_instructions(generation->plan, &instruction_count);
+    uint32_t sole_instruction_count = 0;
+    const XrTargetInstructionRecord *sole_instructions =
+        xr_target_plan_function_instructions(generation->plan, 0,
+                                             &sole_instruction_count);
+    if (!functions || function_count != 1 || functions[0].id != 0 ||
+        functions[0].semantic_function != 0 || functions[0].root_count != 0 ||
+        functions[0].cleanup_count != 0 ||
+        functions[0].coroutine_count != 0 || !instructions ||
+        !sole_instructions || instruction_count == 0 ||
+        instruction_count != sole_instruction_count ||
+        xr_target_plan_function_execution_family_mask(generation->plan, 0) !=
+            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE)
+        return false;
+    return plan_has_no_non_scalar_execution_authority(generation->plan);
+}
+
+static bool fail_typed_dispatch(XrTypedDispatchStatus status,
+                                char *diagnostic,
+                                size_t diagnostic_size) {
+    switch (status) {
+        case XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                        "scalar generation plan identity changed");
+        case XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                        "sole-function scalar i64 authority is unavailable");
+        case XR_TYPED_DISPATCH_FRAME_ERROR:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5001",
+                        "scalar generation frame rejected a slot representation");
+        case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
+        case XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED:
+        case XR_TYPED_DISPATCH_PROGRAM_INVALID:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5000",
+                        "verified sole-function scalar i64 execution failed");
+        case XR_TYPED_DISPATCH_OK:
+            return true;
+    }
+    return fail(diagnostic, diagnostic_size, "XR_EXEC_5000",
+                "scalar generation dispatcher returned an unknown status");
+}
+
 XRAY_API bool xr_module_generation_prepare(
     XrLoadedModuleGeneration *generation, char *diagnostic,
     size_t diagnostic_size) {
@@ -312,12 +416,22 @@ XRAY_API bool xr_module_generation_prepare(
     bool eligible = generation->state == XR_MODULE_GENERATION_VERIFIED &&
                     !generation->poisoned &&
                     !generation->rollback_requested;
-    xr_mutex_unlock(&authority->gate);
-    if (!eligible)
+    if (!eligible) {
+        xr_mutex_unlock(&authority->gate);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "only a healthy verified generation may become ready");
-    return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
-                "typed executor, call, and root families are not installed");
+    }
+    if (!sole_scalar_generation_eligible(generation)) {
+        xr_mutex_unlock(&authority->gate);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                    "generation lacks the exact sole-function scalar i64 authority");
+    }
+    bool ok = transition_locked(generation, XR_MODULE_GENERATION_VERIFIED,
+                                XR_MODULE_GENERATION_READY,
+                                "only a verified generation may become ready",
+                                diagnostic, diagnostic_size);
+    xr_mutex_unlock(&authority->gate);
+    return ok;
 }
 
 XRAY_API bool xr_module_generation_activate(
@@ -331,12 +445,60 @@ XRAY_API bool xr_module_generation_activate(
     bool ready = generation->state == XR_MODULE_GENERATION_READY &&
                  !generation->poisoned &&
                  !generation->rollback_requested;
-    xr_mutex_unlock(&authority->gate);
-    if (!ready)
+    if (!ready) {
+        xr_mutex_unlock(&authority->gate);
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
                     "generation activation requires the exact READY state");
-    return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
-                "typed generation activation authority is unavailable");
+    }
+    if (!sole_scalar_generation_eligible(generation)) {
+        xr_mutex_unlock(&authority->gate);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                    "generation lacks the exact sole-function scalar i64 authority");
+    }
+    bool ok = transition_locked(generation, XR_MODULE_GENERATION_READY,
+                                XR_MODULE_GENERATION_ACTIVE,
+                                "generation activation requires the exact READY state",
+                                diagnostic, diagnostic_size);
+    xr_mutex_unlock(&authority->gate);
+    return ok;
+}
+
+XRAY_API bool xr_module_generation_execute_sole_scalar_i64(
+    XrLoadedModuleGeneration *generation, int64_t *result,
+    char *diagnostic, size_t diagnostic_size) {
+    if (result)
+        *result = 0;
+    if (!generation || !result)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "sole-function scalar execution requires a generation and result");
+    if (!xr_module_generation_pin_acquire(
+            generation, XR_MODULE_GENERATION_INFLIGHT_CALL,
+            diagnostic, diagnostic_size))
+        return false;
+
+    bool eligible = sole_scalar_generation_eligible(generation);
+    XrFingerprint required_fingerprint = {{0}};
+    memcpy(required_fingerprint.bytes,
+           generation->identity.target_plan_fingerprint,
+           sizeof(required_fingerprint.bytes));
+    int64_t executed_result = 0;
+    XrTypedDispatchStatus status = eligible
+                                       ? xr_typed_dispatch_execute_i64(
+                                             generation->plan,
+                                             &required_fingerprint, 0,
+                                             &executed_result)
+                                       : XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+    if (!xr_module_generation_pin_release(
+            generation, XR_MODULE_GENERATION_INFLIGHT_CALL,
+            diagnostic, diagnostic_size))
+        return false;
+    if (!eligible)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                    "active generation lost sole-function scalar i64 authority");
+    if (status != XR_TYPED_DISPATCH_OK)
+        return fail_typed_dispatch(status, diagnostic, diagnostic_size);
+    *result = executed_result;
+    return true;
 }
 
 XRAY_API bool xr_module_generation_begin_drain(

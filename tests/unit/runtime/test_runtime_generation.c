@@ -3,6 +3,7 @@
  */
 
 #include "../../../include/xray_runtime_generation.h"
+#include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/os/os_thread.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
@@ -26,22 +27,14 @@
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 
-static XrTargetPlan *build_plan(XrSemanticPlan **semantic_out,
-                                XrTargetProfile **profile_out) {
-    XiFunc *function = xi_func_new("generation_probe", &stub_int);
-    REQUIRE(function != NULL);
-    XiBlock *entry = xi_block_new(function);
-    REQUIRE(entry != NULL);
-    XiValue *result = xi_const_int(function, entry, 42, &stub_int);
-    REQUIRE(result != NULL);
-    xi_block_set_return(entry, result);
-    function->stage = XI_STAGE_OPTIMIZED;
-
+static XrTargetPlan *finish_plan(XiFunc *root,
+                                 XrSemanticPlan **semantic_out,
+                                 XrTargetProfile **profile_out) {
     XrSemanticPlan *semantic = NULL;
     char diagnostic[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, diagnostic,
+    REQUIRE(xr_semantic_plan_build(root, &semantic, diagnostic,
                                    sizeof(diagnostic)));
-    xi_func_free(function);
+    xi_func_free(root);
 
     XrRuntimeTargetAuthority native;
     REQUIRE(xr_runtime_target_authority_native_hosted(&native) ==
@@ -67,6 +60,57 @@ static XrTargetPlan *build_plan(XrSemanticPlan **semantic_out,
     return plan;
 }
 
+static XrTargetPlan *build_plan(XrSemanticPlan **semantic_out,
+                                XrTargetProfile **profile_out) {
+    XiFunc *function = xi_func_new("generation_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *result = xi_const_int(function, entry, 42, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    return finish_plan(function, semantic_out, profile_out);
+}
+
+static XrTargetPlan *build_unsupported_plan(
+    XrSemanticPlan **semantic_out, XrTargetProfile **profile_out) {
+    XiFunc *function = xi_func_new("generation_div_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *left = xi_const_int(function, entry, 84, &stub_int);
+    XiValue *right = xi_const_int(function, entry, 2, &stub_int);
+    XiValue *result = xi_binary(function, entry, XI_DIV, &stub_int,
+                                left, right);
+    REQUIRE(left != NULL && right != NULL && result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    return finish_plan(function, semantic_out, profile_out);
+}
+
+static XrTargetPlan *build_multi_function_plan(
+    XrSemanticPlan **semantic_out, XrTargetProfile **profile_out) {
+    XiFunc *root = xi_func_new("generation_multi_root", &stub_int);
+    XiFunc *child = xi_func_new("generation_multi_child", &stub_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+    XiValue *root_result = xi_const_int(root, root_entry, 7, &stub_int);
+    XiValue *child_result = xi_const_int(child, child_entry, 9, &stub_int);
+    REQUIRE(root_result != NULL && child_result != NULL);
+    xi_block_set_return(root_entry, root_result);
+    xi_block_set_return(child_entry, child_result);
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+    return finish_plan(root, semantic_out, profile_out);
+}
+
 static XrRuntimeGenerationBudget make_budget(uint32_t generations) {
     XrRuntimeGenerationBudget budget = {
         .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
@@ -78,9 +122,10 @@ static XrRuntimeGenerationBudget make_budget(uint32_t generations) {
     return budget;
 }
 
-static void test_fail_closed_lifecycle(XrTargetPlan *plan) {
+static void test_scalar_generation_lifecycle(XrTargetPlan *plan) {
     char diagnostic[512] = {0};
     XrRuntimeGenerationBudget budget = make_budget(2);
+    budget.max_pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] = 1;
     XrRuntimeGenerationAuthority *authority = NULL;
     REQUIRE(xr_runtime_generation_authority_create(
         &budget, &authority, diagnostic, sizeof(diagnostic)));
@@ -97,7 +142,75 @@ static void test_fail_closed_lifecycle(XrTargetPlan *plan) {
     REQUIRE(before.state == XR_MODULE_GENERATION_VERIFIED);
     REQUIRE(before.identity.generation_number == 1);
 
-    REQUIRE(!xr_runtime_generation_activation_available());
+    REQUIRE(xr_runtime_generation_activation_available());
+    int64_t result = 99;
+    REQUIRE(!xr_module_generation_execute_sole_scalar_i64(
+        generation, &result, diagnostic, sizeof(diagnostic)));
+    REQUIRE(result == 0 && strstr(diagnostic, "XR_OWN_3003") != NULL);
+    REQUIRE(xr_module_generation_prepare(generation, diagnostic,
+                                         sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_verify(generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_snapshot(generation, &after));
+    REQUIRE(after.state == XR_MODULE_GENERATION_READY);
+    REQUIRE(xr_module_generation_activate(generation, diagnostic,
+                                          sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_verify(generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_execute_sole_scalar_i64(
+        generation, &result, diagnostic, sizeof(diagnostic)));
+    REQUIRE(result == 42);
+    REQUIRE(xr_module_generation_snapshot(generation, &after));
+    REQUIRE(after.state == XR_MODULE_GENERATION_ACTIVE &&
+            after.total_pins == 0 &&
+            after.pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] == 0);
+
+    REQUIRE(xr_module_generation_pin_acquire(
+        generation, XR_MODULE_GENERATION_INFLIGHT_CALL, diagnostic,
+        sizeof(diagnostic)));
+    result = 99;
+    REQUIRE(!xr_module_generation_execute_sole_scalar_i64(
+        generation, &result, diagnostic, sizeof(diagnostic)));
+    REQUIRE(result == 0 && strstr(diagnostic, "XR_EXEC_5003") != NULL);
+    REQUIRE(xr_module_generation_snapshot(generation, &after));
+    REQUIRE(after.total_pins == 1 &&
+            after.pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] == 1);
+    REQUIRE(xr_module_generation_begin_drain(generation, diagnostic,
+                                             sizeof(diagnostic)));
+    result = 99;
+    REQUIRE(!xr_module_generation_execute_sole_scalar_i64(
+        generation, &result, diagnostic, sizeof(diagnostic)));
+    REQUIRE(result == 0 && strstr(diagnostic, "XR_OWN_3003") != NULL);
+    REQUIRE(!xr_module_generation_retire(generation, diagnostic,
+                                         sizeof(diagnostic)));
+    REQUIRE(strstr(diagnostic, "XR_EXEC_5006") != NULL);
+    REQUIRE(xr_module_generation_pin_release(
+        generation, XR_MODULE_GENERATION_INFLIGHT_CALL, diagnostic,
+        sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_retire(generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_unload(&generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(generation == NULL);
+    REQUIRE(xr_runtime_generation_authority_destroy(
+        &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(authority == NULL);
+}
+
+static void test_unsupported_generation_remains_verified(
+    XrTargetPlan *plan) {
+    char diagnostic[512] = {0};
+    XrRuntimeGenerationBudget budget = make_budget(2);
+    XrRuntimeGenerationAuthority *authority = NULL;
+    REQUIRE(xr_runtime_generation_authority_create(
+        &budget, &authority, diagnostic, sizeof(diagnostic)));
+    XrLoadedModuleGeneration *generation = NULL;
+    REQUIRE(xr_module_generation_load_verified_target_plan(
+        authority, plan, &generation, diagnostic, sizeof(diagnostic)));
+    XrModuleGenerationSnapshot before;
+    XrModuleGenerationSnapshot after;
+    REQUIRE(xr_module_generation_snapshot(generation, &before));
+    REQUIRE(before.state == XR_MODULE_GENERATION_VERIFIED);
     REQUIRE(!xr_module_generation_prepare(generation, diagnostic,
                                           sizeof(diagnostic)));
     REQUIRE(strstr(diagnostic, "XR_EXEC_5004") != NULL);
@@ -110,6 +223,16 @@ static void test_fail_closed_lifecycle(XrTargetPlan *plan) {
     REQUIRE(strstr(diagnostic, "XR_OWN_3003") != NULL);
     REQUIRE(xr_module_generation_snapshot(generation, &after));
     REQUIRE(memcmp(&before, &after, sizeof(before)) == 0);
+
+    xr_mutex_lock(&authority->gate);
+    generation->state = XR_MODULE_GENERATION_READY;
+    xr_mutex_unlock(&authority->gate);
+    REQUIRE(!xr_module_generation_verify(generation, diagnostic,
+                                         sizeof(diagnostic)));
+    REQUIRE(strstr(diagnostic, "XR_EXEC_5004") != NULL);
+    xr_mutex_lock(&authority->gate);
+    generation->state = XR_MODULE_GENERATION_VERIFIED;
+    xr_mutex_unlock(&authority->gate);
 
     uint8_t poison[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE] = {0};
     REQUIRE(!xr_module_generation_poison(generation, poison, diagnostic,
@@ -274,13 +397,10 @@ static void test_actual_identity_mutations(XrTargetPlan *plan) {
     REQUIRE(strstr(diagnostic, "XR_EXEC_5008") != NULL);
     xr_mutex_lock(&authority->gate);
     generation->identity.generation_fingerprint[0] ^= 1u;
-    generation->state = XR_MODULE_GENERATION_READY;
     xr_mutex_unlock(&authority->gate);
-    REQUIRE(!xr_module_generation_verify(generation, diagnostic,
-                                         sizeof(diagnostic)));
-    REQUIRE(strstr(diagnostic, "XR_EXEC_5004") != NULL);
+    REQUIRE(xr_module_generation_verify(generation, diagnostic,
+                                        sizeof(diagnostic)));
     xr_mutex_lock(&authority->gate);
-    generation->state = XR_MODULE_GENERATION_VERIFIED;
     generation->total_pins = 1;
     xr_mutex_unlock(&authority->gate);
     REQUIRE(!xr_module_generation_verify(generation, diagnostic,
@@ -352,13 +472,35 @@ int main(void) {
     XrSemanticPlan *semantic = NULL;
     XrTargetProfile *profile = NULL;
     XrTargetPlan *plan = build_plan(&semantic, &profile);
-    test_fail_closed_lifecycle(plan);
+    XrSemanticPlan *unsupported_semantic = NULL;
+    XrTargetProfile *unsupported_profile = NULL;
+    XrTargetPlan *unsupported = build_unsupported_plan(
+        &unsupported_semantic, &unsupported_profile);
+    XrSemanticPlan *multi_semantic = NULL;
+    XrTargetProfile *multi_profile = NULL;
+    XrTargetPlan *multi = build_multi_function_plan(
+        &multi_semantic, &multi_profile);
+    uint32_t function_count = 0;
+    REQUIRE(xr_target_plan_function_execution_family_mask(unsupported, 0) == 0);
+    REQUIRE(xr_target_plan_functions(multi, &function_count) != NULL &&
+            function_count == 2);
+    REQUIRE(xr_target_plan_function_execution_family_mask(multi, 0) ==
+            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
+    test_scalar_generation_lifecycle(plan);
+    test_unsupported_generation_remains_verified(unsupported);
+    test_unsupported_generation_remains_verified(multi);
     test_independent_state_machine_verifier();
     test_actual_identity_mutations(plan);
     test_concurrent_generation_budget(plan);
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
+    xr_target_plan_free(unsupported);
+    xr_target_profile_free(unsupported_profile);
+    xr_semantic_plan_free(unsupported_semantic);
+    xr_target_plan_free(multi);
+    xr_target_profile_free(multi_profile);
+    xr_semantic_plan_free(multi_semantic);
     puts("runtime generation authority tests passed");
     return 0;
 }

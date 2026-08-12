@@ -103,6 +103,10 @@ XRAY_API bool xr_module_generation_prepare(
 XRAY_API bool xr_module_generation_activate(
     XrLoadedModuleGeneration *generation, char *diagnostic,
     size_t diagnostic_size);
+/* Executes function 0 only for an ACTIVE, sole-function scalar-i64 generation. */
+XRAY_API bool xr_module_generation_execute_sole_scalar_i64(
+    XrLoadedModuleGeneration *generation, int64_t *result,
+    char *diagnostic, size_t diagnostic_size);
 XRAY_API bool xr_module_generation_begin_drain(
     XrLoadedModuleGeneration *generation, char *diagnostic,
     size_t diagnostic_size);

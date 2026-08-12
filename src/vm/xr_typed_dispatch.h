@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_typed_dispatch.h - Test-only typed TargetPlan scalar executor
+ * xr_typed_dispatch.h - Typed TargetPlan scalar executor
  */
 
 #ifndef XR_TYPED_DISPATCH_H

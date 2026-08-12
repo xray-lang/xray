@@ -35,6 +35,7 @@ REQUIRED = {
     "xr_runtime_generation_authority_destroy",
     "xr_module_generation_activate",
     "xr_module_generation_begin_drain",
+    "xr_module_generation_execute_sole_scalar_i64",
     "xr_module_generation_load_verified_target_plan",
     "xr_module_generation_pin_acquire",
     "xr_module_generation_pin_release",
@@ -130,10 +131,12 @@ def compile_header(cc: Path, prefix: Path, work: Path) -> None:
         "static XrTargetPlan *plan;\n"
         "static XrRuntimeGenerationAuthority *generation_authority;\n"
         "static XrLoadedModuleGeneration *generation;\n"
+        "static int64_t scalar_result;\n"
         "int main(void) { return xr_runtime_artifact_authority_load_available() || "
-        "xr_runtime_generation_activation_available() || "
+        "!xr_runtime_generation_activation_available() || "
         "authority != 0 || plan != 0 || generation_authority != 0 || generation != 0 || "
-        "identity.schema_version != 0; }\n",
+        "scalar_result != 0 || identity.schema_version != 0 || "
+        "xr_module_generation_execute_sole_scalar_i64(generation, &scalar_result, 0, 0); }\n",
         encoding="utf-8",
     )
     if os.name == "nt":

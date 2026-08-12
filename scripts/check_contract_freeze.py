@@ -301,6 +301,7 @@ CONTRACT_SPECS = (
             "src/vm/xr_typed_frame.c",
             "tests/unit/vm/test_typed_frame.c",
             "tests/unit/runtime/test_typed_frame_runtime_archive.c",
+            "tests/unit/runtime/test_runtime_generation.c",
         ),
     ),
     ContractSpec(
@@ -322,6 +323,9 @@ CONTRACT_SPECS = (
             "tests/unit/vm/test_typed_dispatch.c",
             "tests/unit/plan/test_xtp_format.c",
             "tests/unit/runtime/test_typed_frame_runtime_archive.c",
+            "include/xray_runtime_generation.h",
+            "src/runtime/xr_module_generation.c",
+            "tests/unit/runtime/test_runtime_generation.c",
         ),
     ),
     ContractSpec(
@@ -347,6 +351,10 @@ CONTRACT_SPECS = (
             "src/runtime/xr_module_generation_internal.h",
             "src/runtime/xr_module_generation.c",
             "src/runtime/xr_module_generation_verify.c",
+            "src/vm/xr_typed_dispatch.h",
+            "src/vm/xr_typed_dispatch.c",
+            "src/vm/xr_typed_frame.h",
+            "src/vm/xr_typed_frame.c",
             "contracts/target-machine/diagnostic-codes.toml",
             "tests/unit/runtime/test_runtime_generation.c",
             "tests/unit/runtime/test_runtime_generation_archive.c",
