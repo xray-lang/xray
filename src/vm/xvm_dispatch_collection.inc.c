@@ -1032,26 +1032,28 @@ vmcase(OP_LEN) {
 vmcase(OP_ARRAY_DATA_PTR) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
+    const void *data = NULL;
+    XrDataPointerLifetime lifetime = XR_DATA_POINTER_OWNER_BORROW;
     if (XR_IS_STRING(R(b))) {
         XrString *str = XR_TO_STRING(R(b));
-        R(a) = xr_int((xr_Integer) (intptr_t) (str ? str->data : NULL));
-        vmbreak;
-    }
-    if (XR_IS_ARRAY_REF(R(b))) {
-        R(a) = xr_int((xr_Integer) (intptr_t) R(b).ptr);
-        vmbreak;
-    }
-    if (XR_IS_SLICE_REF(R(b))) {
+        data = str ? str->data : NULL;
+        lifetime = XR_DATA_POINTER_STATIC;
+    } else if (XR_IS_ARRAY_REF(R(b))) {
+        data = R(b).ptr;
+    } else if (XR_IS_SLICE_REF(R(b))) {
         XrSliceView *span = XR_TO_SLICE_REF(R(b));
-        R(a) = xr_int((xr_Integer) (intptr_t) (span ? span->data : NULL));
-        vmbreak;
-    }
-    if (!XR_IS_ARRAY(R(b))) {
+        data = span ? span->data : NULL;
+    } else if (XR_IS_ARRAY(R(b))) {
+        XrArray *arr = XR_TO_ARRAY(R(b));
+        data = arr->data;
+    } else {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                          "ptr() expects static bytes, an array, fixed array, or slice receiver");
     }
-    XrArray *arr = XR_TO_ARRAY(R(b));
-    R(a) = xr_int((xr_Integer) (intptr_t) arr->data);
+    XrDataPointerProjection projection = XR_DATA_POINTER_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI, XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO,
+        XR_SEM_CONSUMER_VM, data, lifetime);
+    R(a) = xr_int((xr_Integer) (intptr_t) projection.address);
     vmbreak;
 }
 

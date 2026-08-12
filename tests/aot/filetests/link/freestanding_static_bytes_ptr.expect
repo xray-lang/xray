@@ -7,8 +7,8 @@ contains=origin=static
 contains=escape=stable
 c_contains=static const char _xbytes_m0_1[] = "A\000B";
 c_contains=static const char _xbytes_m0_2[] = "ok\000";
-c_contains=(void *)((const uint8_t *)_xbytes_m0_1)
-c_contains=(void *)((const uint8_t *)_xbytes_m0_2)
+c_contains=xrt_data_pointer_project((const uint8_t *)_xbytes_m0_1, XR_DATA_POINTER_STATIC).address
+c_contains=xrt_data_pointer_project((const uint8_t *)_xbytes_m0_2, XR_DATA_POINTER_STATIC).address
 c_not_contains=_fa
 c_not_contains=xrt_mem_addr
 not_contains=xray_rt_coro

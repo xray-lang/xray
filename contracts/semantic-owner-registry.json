@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "e525dbb47853aec742d8e66317883932200e5075cb56c118f8f70aa28f3026c8",
+  "canonical_fingerprint": "bf06c40fa64d409c314206c975623994711d8c39fb447c59fc33ccaeaae99631",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -544,6 +544,53 @@
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
           "symbol": "cg_cell_access_adapter_name"
+        }
+      ]
+    },
+    {
+      "owner": "shared.data-pointer",
+      "owner_id": "ba07a1754147a6e15ccbfb90632e35f8",
+      "owner_id_hi": "0xba07a1754147a6e1",
+      "owner_id_lo": "0x5ccbfb90632e35f8",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.array.data.ptr",
+        "xi.static.bytes.ptr"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
+      ],
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_data_pointer_project",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_DATA_POINTER_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_data_pointer_project"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_data_pointer_project"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_data_pointer_adapter_name"
         }
       ]
     },
@@ -1208,28 +1255,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.agg.set"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.array.data.ptr",
-      "owner_id": "ef937d1d0012c4539c2042dcf5386153",
-      "owner_id_hi": "0xef937d1d0012c453",
-      "owner_id_lo": "0x9c2042dcf5386153",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.array.data.ptr"
       ],
       "consumers": [
         "semantic-plan"
@@ -3804,28 +3829,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.static.addr"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.static.bytes.ptr",
-      "owner_id": "d3a67138b4376bd15beac85525d57c69",
-      "owner_id_hi": "0xd3a67138b4376bd1",
-      "owner_id_lo": "0x5beac85525d57c69",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.static.bytes.ptr"
       ],
       "consumers": [
         "semantic-plan"
@@ -8149,21 +8152,45 @@
       "operation_id": "ef937d1d0012c4539c2042dcf5386153",
       "operation_id_hi": "0xef937d1d0012c453",
       "operation_id_lo": "0x9c2042dcf5386153",
-      "owner": "xi.array.data.ptr",
-      "owner_id": "ef937d1d0012c4539c2042dcf5386153",
-      "owner_id_hi": "0xef937d1d0012c453",
-      "owner_id_lo": "0x9c2042dcf5386153",
-      "category": "declarative-primitive",
+      "owner": "shared.data-pointer",
+      "owner_id": "ba07a1754147a6e15ccbfb90632e35f8",
+      "owner_id_hi": "0xba07a1754147a6e1",
+      "owner_id_lo": "0x5ccbfb90632e35f8",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_data_pointer_project",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_DATA_POINTER_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_data_pointer_project"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_data_pointer_project"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_data_pointer_adapter_name"
         }
       ]
     },
@@ -8172,21 +8199,45 @@
       "operation_id": "d3a67138b4376bd15beac85525d57c69",
       "operation_id_hi": "0xd3a67138b4376bd1",
       "operation_id_lo": "0x5beac85525d57c69",
-      "owner": "xi.static.bytes.ptr",
-      "owner_id": "d3a67138b4376bd15beac85525d57c69",
-      "owner_id_hi": "0xd3a67138b4376bd1",
-      "owner_id_lo": "0x5beac85525d57c69",
-      "category": "declarative-primitive",
+      "owner": "shared.data-pointer",
+      "owner_id": "ba07a1754147a6e15ccbfb90632e35f8",
+      "owner_id_hi": "0xba07a1754147a6e1",
+      "owner_id_lo": "0x5ccbfb90632e35f8",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_data_pointer_project",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_DATA_POINTER_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_data_pointer_project"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_data_pointer_project"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_data_pointer_adapter_name"
         }
       ]
     },

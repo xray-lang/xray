@@ -5454,6 +5454,9 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
            "data pointer methods must not survive as dynamic method names");
     assert(!contains(code, "xrt_method_0(") &&
            "data pointer methods must not fall back to dynamic method dispatch");
+    assert(contains(code, "xrt_data_pointer_project(") &&
+           contains(code, "XR_DATA_POINTER_OWNER_BORROW).address") &&
+           "Array/Slice pointers must route through the stable data-pointer owner");
     const char *fn = find_static_function_definition(code, "static int64_t test_run_");
     assert(fn != NULL && "run definition should exist");
     const char *fn_end = next_static_after(fn);

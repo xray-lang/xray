@@ -15016,8 +15016,14 @@ static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         emit_codegen_abort_expr(out);
         return;
     }
+    const char *owner_adapter = cg_data_pointer_adapter_name(ctx);
+    if (!owner_adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_RAWPTR, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "(void *)%s(", owner_adapter);
     CgFixedArrayLaneInfo fixed;
     if (cg_fixed_array_lane_info_from_value(v->args[0], &fixed)) {
         fprintf(out, "(void *)(");
@@ -15032,6 +15038,8 @@ static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
         fprintf(out, "->data)");
     }
+    fprintf(out, ", %s).address",
+            static_borrow ? "XR_DATA_POINTER_STATIC" : "XR_DATA_POINTER_OWNER_BORROW");
     emit_conversion_suffix(out, conv_suffix);
 }
 
@@ -15063,9 +15071,16 @@ static void xicgen_static_bytes_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
         return;
     }
 
+    const char *owner_adapter = cg_data_pointer_adapter_name(ctx);
+    if (!owner_adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_RAWPTR, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "(void *)((const uint8_t *)_xbytes_%u)", plan->blob_id);
+    fprintf(out, "(void *)%s((const uint8_t *)_xbytes_%u, XR_DATA_POINTER_STATIC).address",
+            owner_adapter, plan->blob_id);
     emit_conversion_suffix(out, conv_suffix);
 }
 

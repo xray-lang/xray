@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 258,
+  "operation_count": 259,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -253,6 +253,34 @@
         "vm",
         "aot",
         "hosted"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/data-pointer",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_data_pointer_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/data-pointer",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_data_pointer_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.data-pointer",
+      "ownership": "native",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
       ]
     },
     {
@@ -983,18 +1011,18 @@
       "capabilities": [
         "array-like"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_data_pointer_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "memory-read"
       ],
       "error_panic_suspend_cancel_publication": [],
       "family": "memory-and-place",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.data-pointer",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_data_pointer_core.h",
       "observable_edges": [],
       "operation_id": "xi.array.data.ptr",
       "ownership": "borrow",
@@ -5355,16 +5383,16 @@
         "static-bytes",
         "addressable"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_data_pointer_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-pure",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.data-pointer",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_data_pointer_core.h",
       "observable_edges": [],
       "operation_id": "xi.static.bytes.ptr",
       "ownership": "borrow",
@@ -6638,5 +6666,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "fd9f945ef31576dc26da330d7855f111b60f11b2eb6505fcf34264a8c12d3e27"
+  "source_tree_fingerprint": "aeee13f835c13ae74a6803de37ed2f4b838b370495b81e6ead78180640e4ede0"
 }

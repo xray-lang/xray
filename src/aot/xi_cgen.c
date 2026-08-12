@@ -4716,6 +4716,24 @@ static const char *cg_raw_memory_copy_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
+static const char *cg_data_pointer_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI,
+                                        XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: data-pointer owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI, XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: data-pointer owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
 static const char *cg_raw_scalar_access_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(
             XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,

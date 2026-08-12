@@ -71,6 +71,16 @@ typedef int bool;
 #define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_NATIVE
 #define XR_ELEM_U8 6
 
+/* Restricted C90 mechanically projects the same address/lifetime pair. */
+#define XR_DATA_POINTER_C90 1
+#include "../shared/xr_data_pointer_core.h"
+#undef XR_DATA_POINTER_C90
+
+static XrDataPointerProjection
+xrt_data_pointer_project(const void *address, XrDataPointerLifetime lifetime) {
+    return xr_data_pointer_project_core(address, lifetime);
+}
+
 /* Restricted C90 is a mechanical ABI adapter over the raw-memory owner core. */
 #define XR_RAW_MEMORY_C90 1
 #include "../shared/xr_raw_memory_core.h"

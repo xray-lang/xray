@@ -47,6 +47,7 @@ int memcmp(const void *a, const void *b, size_t n);
 
 #include "../shared/xr_raw_scalar_core.h"
 #include "../shared/xr_raw_memory_core.h"
+#include "../shared/xr_data_pointer_core.h"
 #include "../shared/xr_obj_header.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_byte_slice_scalar_core.h"
@@ -98,6 +99,10 @@ int memcmp(const void *a, const void *b, size_t n);
                              XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,                                \
                              XR_SEM_CONSUMER_AOT_FREESTANDING,                                  \
                              xr_null_test_pointer_is_null_core((const void *) (pointer)))
+#define xrt_data_pointer_project(address, lifetime)                                               \
+    XR_DATA_POINTER_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI,                           \
+                                XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO,                           \
+                                XR_SEM_CONSUMER_AOT_FREESTANDING, address, lifetime)
 #define xrt_raw_memory_copy_nonoverlap(dst, src, count)                                           \
     XR_RAW_MEMORY_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,                     \
                                    XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,                     \

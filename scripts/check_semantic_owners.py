@@ -164,6 +164,7 @@ RAW_SCALAR_ACCESS_OPERATIONS = {"xi.ptr.load", "xi.ptr.store"}
 ENUM_METADATA_ACCESS_OPERATIONS = {"xi.enum.variant.at", "xi.enum.payload.at"}
 CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
 NULL_TEST_OPERATIONS = {"xi.isnull"}
+DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -2041,6 +2042,87 @@ def verify_null_test_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_data_pointer_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.data-pointer"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != DATA_POINTER_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.data-pointer family")
+
+    core_text = (root / "src/shared/xr_data_pointer_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_DATA_POINTER_OWNER_APPLY",
+                  "xr_data_pointer_project_core", "XR_DATA_POINTER_OWNER_BORROW",
+                  "XR_DATA_POINTER_STATIC"):
+        if token not in core_text:
+            errors.append("src/shared/xr_data_pointer_core.h: data pointer lacks stable owner")
+            break
+    core_body = extract_c_function(core_text, "xr_data_pointer_project_core") or ""
+    if ("result.address = address" not in core_body or
+            "result.lifetime = lifetime" not in core_body or
+            any(token in core_body for token in ("malloc(", "memcpy(", "retain", "release"))):
+        errors.append("src/shared/xr_data_pointer_core.h: projection contract drifted")
+
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    start = vm_text.find("vmcase(OP_ARRAY_DATA_PTR)")
+    end = vm_text.find("vmbreak;", start)
+    body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_DATA_POINTER_OWNER_APPLY", "XR_DATA_POINTER_STATIC",
+                  "XR_DATA_POINTER_OWNER_BORROW", "projection.address"):
+        if token not in body:
+            errors.append("src/vm/xvm_dispatch_collection.inc.c: OP_ARRAY_DATA_PTR bypasses owner")
+            break
+    if re.search(r"R\(a\)\s*=.*(?:str->data|arr->data|span->data|R\(b\)\.ptr)", body):
+        errors.append("src/vm/xvm_dispatch_collection.inc.c: VM revived direct pointer semantics")
+
+    for relative, consumer in (("src/aot/xrt.h", "XR_SEM_CONSUMER_AOT_HOSTED"),
+                               ("src/aot/xrt_core_freestanding.h",
+                                "XR_SEM_CONSUMER_AOT_FREESTANDING")):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for token in (f"{marker}_HI", f"{marker}_LO", consumer,
+                      "XR_DATA_POINTER_OWNER_APPLY", "xrt_data_pointer_project"):
+            if token not in text:
+                errors.append(f"{relative}: AOT data-pointer adapter bypasses stable owner")
+                break
+        if "#ifndef xrt_data_pointer_project" in text:
+            errors.append(f"{relative}: data-pointer fallback or alias revived")
+
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    c90_body = extract_c_function(c90_text, "xrt_data_pointer_project") or ""
+    if ("xr_data_pointer_project_core" not in c90_body or
+            any(token in c90_body for token in ("malloc(", "memcpy(", "retain", "release"))):
+        errors.append("src/aot/xrt_c90.h: C90 data-pointer adapter owns semantics")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_data_pointer_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: data pointer does not resolve stable adapter")
+    dispatch = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for emitter, lifetime in (("xicgen_array_data_ptr", "XR_DATA_POINTER_OWNER_BORROW"),
+                              ("xicgen_static_bytes_ptr", "XR_DATA_POINTER_STATIC")):
+        emitter_body = extract_c_function(dispatch, emitter) or ""
+        if ("cg_data_pointer_adapter_name" not in emitter_body or
+                ").address" not in emitter_body or lifetime not in emitter_body):
+            errors.append(f"src/aot/xi_cgen_dispatch_helpers.inc.c: {emitter} bypasses owner")
+        if ("xr_data_pointer_project_core" in emitter_body or
+                "xrt_data_pointer_project(" in emitter_body):
+            errors.append(f"src/aot/xi_cgen_dispatch_helpers.inc.c: {emitter} owns semantics")
+
+    opt_text = (root / "src/ir/xi_opt.c").read_text(encoding="utf-8", errors="strict")
+    if ("case XI_ARRAY_DATA_PTR:" not in opt_text or
+            "*out = XR_REP_RAWPTR;" not in opt_text):
+        errors.append("src/ir/xi_opt.c: data-pointer optimizer adapter drifted")
+    if "case XI_STATIC_BYTES_PTR:" in opt_text:
+        errors.append("src/ir/xi_opt.c: optimizer revived private static-pointer semantics")
+    return errors
+
+
 def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     families = (
@@ -2247,8 +2329,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 32:
-        errors.append(f"shared-core inventory must contain exactly 32 headers, found {len(actual)}")
+    if len(actual) != 33:
+        errors.append(f"shared-core inventory must contain exactly 33 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -2289,6 +2371,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_enum_metadata_access_ratchet(root, registry))
         errors.extend(verify_cell_access_ratchet(root, registry))
         errors.extend(verify_null_test_ratchet(root, registry))
+        errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))
         errors.extend(verify_pod_slice_view_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)

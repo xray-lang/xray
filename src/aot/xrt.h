@@ -9,6 +9,7 @@
  *
  * KEY CONCEPT:
  *   Includes all layered sub-headers in dependency order:
+ *     L0  xr_data_pointer_core.h - borrowed storage-address projection
  *     L0  xr_raw_scalar_core.h - unchecked unaligned scalar memory access
  *     L0  xrt_value.h   - tags, boxing/unboxing, source-level aliases, XrtContext
  *     L1  xrt_arc.h     - execution-local ARC arena, str_alloc/str_concat
@@ -35,6 +36,7 @@
 #ifndef XRT_H
 #define XRT_H
 
+#include "../shared/xr_data_pointer_core.h" // L0: borrowed data-pointer projection
 #include "../shared/xr_raw_scalar_core.h"  // L0: unsafe raw scalar load/store
 #include "../shared/xr_raw_memory_core.h"  // L0: unsafe non-overlapping memory copy
 #include "../shared/xr_bits_core.h"        // L0: exact-width compiler bit intrinsics
@@ -81,6 +83,10 @@
                              XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,                                \
                              XR_SEM_CONSUMER_AOT_HOSTED,                                        \
                              xr_null_test_pointer_is_null_core((const void *) (pointer)))
+#define xrt_data_pointer_project(address, lifetime)                                               \
+    XR_DATA_POINTER_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI,                           \
+                                XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO,                           \
+                                XR_SEM_CONSUMER_AOT_HOSTED, address, lifetime)
 #define xrt_raw_memory_copy_nonoverlap(dst, src, count)                                           \
     XR_RAW_MEMORY_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,                     \
                                    XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,                     \

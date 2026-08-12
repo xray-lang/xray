@@ -387,6 +387,30 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_data_pointer_core.h",
+      "id": "data-pointer",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt.h",
+        "src/aot/xrt_c90.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/vm/xvm.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_data_pointer_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_enum_metadata_core.h",
       "id": "enum-metadata",
       "owner": "shared-kernel",

@@ -2676,8 +2676,6 @@
     xi.byte.array.copy.from
     xi.byte.array.append.from
     xi.byte.array.repeat.from
-    xi.array.data.ptr
-    xi.static.bytes.ptr
     xi.static.addr
     xi.local.addr
     xi.place.load
@@ -2776,6 +2774,8 @@
 
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
+    xi.array.data.ptr
+    xi.static.bytes.ptr
     xi.cell.get
     xi.cell.set
     xi.isnull
@@ -3249,6 +3249,28 @@
     (aot-hosted "src/aot/xrt_coll.h" "xrt_pod_slice_view_semantics")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_pod_slice_view_semantics")
     (cgen "src/aot/xi_cgen.c" "cg_pod_slice_view_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.data-pointer
+  :category shared-semantic-kernel
+  :operations (
+    xi.array.data.ptr
+    xi.static.bytes.ptr
+  )
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_data_pointer_project
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_collection.inc.c" "XR_DATA_POINTER_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_data_pointer_project")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_data_pointer_project")
+    (cgen "src/aot/xi_cgen.c" "cg_data_pointer_adapter_name")
   ))
 
 (define-xi-observable-owner shared.raw-memory-copy
