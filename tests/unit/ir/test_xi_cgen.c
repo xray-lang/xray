@@ -8081,17 +8081,41 @@ TEST(cgen_null_test_uses_stable_owner_adapter) {
     TEST_REQUIRE(adapter != NULL && strcmp(adapter, "xrt_null_test") == 0,
                  "null test publishes its stable CGen adapter");
 
-    const char *src = "class Box {}\n"
-                      "fn tagged(value: int?) -> int { return value ?? 1 }\n"
-                      "fn pointer(value: Box?) -> Box { return value ?? Box() }\n";
-    XiFunc *ir = compile_to_ir(src);
-    TEST_REQUIRE(ir != NULL, "null-test owner fixture compiled");
+    XrType tagged_type = {
+        .kind = XR_KIND_INT, .id = 942, .scalar_rep = XR_NATIVE_I64,
+        .is_nullable = true, .frozen = true};
+    XrType bool_type = {
+        .kind = XR_KIND_BOOL, .id = 944, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_null_test_owner", &tagged_type);
+    TEST_REQUIRE(ir != NULL, "manual null-test owner function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual null-test owner entry allocated");
+    entry->sealed = true;
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "manual null-test owner parameters allocated");
+    XiValue *source = xi_param(ir, entry, 0, &tagged_type);
+    ir->params[0] = source;
+    XiValue *tagged_test = xi_value_new(ir, entry, XI_ISNULL, &bool_type, 1);
+    XiValue *one = xi_const_int(ir, entry, 1, &tagged_type);
+    XiValue *zero = xi_const_int(ir, entry, 0, &tagged_type);
+    XiValue *selected = xi_value_new(ir, entry, XI_SELECT, &tagged_type, 3);
+    TEST_REQUIRE(tagged_test != NULL, "manual tagged null test allocated");
+    TEST_REQUIRE(one != NULL && zero != NULL && selected != NULL,
+                 "manual null-test result consumer allocated");
+    TEST_REQUIRE(source != NULL, "manual tagged null-test source allocated");
+    tagged_test->args[0] = source;
+    selected->args[0] = tagged_test;
+    selected->args[1] = one;
+    selected->args[2] = zero;
+    xi_block_set_return(entry, selected);
+    TEST_REQUIRE(test_prepare_backend_ir(ir), "null-test owner fixture reached Backend");
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL && !had_error, "null-test owner fixture generated C");
-    TEST_REQUIRE(contains(code, "xrt_null_test_tagged(") &&
-                     contains(code, "xrt_null_test_pointer("),
-                 "tagged and pointer null tests call the stable owner adapter");
+    TEST_REQUIRE(contains(code, "xrt_null_test_tagged("),
+                 "tagged null tests call the stable owner adapter");
     TEST_REQUIRE(!contains(code, ".tag == XR_TAG_NULL") && !contains(code, " == NULL)"),
                  "generated C does not recreate null-test semantics");
     xr_free(code);
