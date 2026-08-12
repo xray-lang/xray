@@ -18,10 +18,24 @@
 #include "xr_cache_artifact_verify.h"
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdatomic.h>
 #include <stdint.h>
 
 #define XR_TARGET_PLAN_TASK_ERROR_SIZE 512u
 #define XR_TARGET_PLAN_TASK_INDEX_NONE UINT32_MAX
+
+/* One operation owns one token. Cancellation is monotonic: callers create a
+ * new token instead of racing a reset with active workers. */
+typedef struct XrTargetPlanCancellationToken {
+    atomic_bool requested;
+} XrTargetPlanCancellationToken;
+
+XR_FUNC void xr_target_plan_cancellation_token_init(
+    XrTargetPlanCancellationToken *token);
+XR_FUNC void xr_target_plan_cancellation_token_request(
+    XrTargetPlanCancellationToken *token);
+XR_FUNC bool xr_target_plan_cancellation_token_is_requested(
+    const XrTargetPlanCancellationToken *token);
 
 typedef struct XrTargetPlanTaskInput {
     const XrSemanticPlan *semantic_plan;
@@ -42,6 +56,7 @@ typedef struct XrTargetPlanTaskResult {
     bool cache_publish_attempted;
     bool cache_published;
     bool built;
+    bool cancelled;
     char error[XR_TARGET_PLAN_TASK_ERROR_SIZE];
 } XrTargetPlanTaskResult;
 
@@ -52,6 +67,7 @@ typedef struct XrTargetPlanTaskStats {
     uint32_t misses;
     uint32_t rejected;
     uint32_t published;
+    uint32_t cancelled;
 } XrTargetPlanTaskStats;
 
 typedef struct XrTargetPlanTaskBatch {
@@ -62,6 +78,7 @@ typedef struct XrTargetPlanTaskBatch {
     XrCacheFingerprint optimization_budget;
     bool rebuild;
     uint32_t worker_limit;
+    XrTargetPlanCancellationToken *cancellation;
     XrTargetPlanTaskResult *results;
 } XrTargetPlanTaskBatch;
 

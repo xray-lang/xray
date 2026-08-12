@@ -28,6 +28,7 @@ typedef struct XrTargetPlanTaskPool {
     XrCacheFingerprint optimization_budget;
     bool rebuild;
     uint32_t worker_count;
+    XrTargetPlanCancellationToken *cancellation;
     XrTargetPlanTaskResult *results;
 } XrTargetPlanTaskPool;
 
@@ -38,6 +39,24 @@ typedef struct XrTargetPlanWorker {
 } XrTargetPlanWorker;
 
 #define XR_TARGET_PLAN_TASK_MAX_WORKERS 64u
+
+void xr_target_plan_cancellation_token_init(
+    XrTargetPlanCancellationToken *token) {
+    if (token)
+        atomic_init(&token->requested, false);
+}
+
+void xr_target_plan_cancellation_token_request(
+    XrTargetPlanCancellationToken *token) {
+    if (token)
+        atomic_store_explicit(&token->requested, true, memory_order_release);
+}
+
+bool xr_target_plan_cancellation_token_is_requested(
+    const XrTargetPlanCancellationToken *token) {
+    return token &&
+           atomic_load_explicit(&token->requested, memory_order_acquire);
+}
 
 static void set_error(char *error, size_t error_size, const char *format, ...) {
     if (!error || error_size == 0)
@@ -61,6 +80,14 @@ static bool rejected_publish_status(XrCachePublishStatus status) {
            status == XR_CACHE_PUBLISH_TOO_LARGE;
 }
 
+static bool cancel_task(XrTargetPlanTaskResult *result, XrTargetPlan *plan) {
+    xr_target_plan_free(plan);
+    result->cancelled = true;
+    set_error(result->error, sizeof(result->error),
+              "TargetPlan task was cancelled");
+    return false;
+}
+
 static bool process_task(XrTargetPlanTaskPool *pool, uint32_t index) {
     XrTargetPlanTaskResult *result = &pool->results[index];
     const XrSemanticPlan *semantic_plan = pool->inputs[index].semantic_plan;
@@ -71,6 +98,8 @@ static bool process_task(XrTargetPlanTaskPool *pool, uint32_t index) {
     result->rebuild_requested = pool->rebuild;
     result->load_status = XR_CACHE_LOAD_MISS;
     result->publish_status = XR_CACHE_PUBLISH_IO_ERROR;
+    if (xr_target_plan_cancellation_token_is_requested(pool->cancellation))
+        return cancel_task(result, NULL);
     if (!semantic_plan) {
         set_error(result->error, sizeof(result->error),
                   "TargetPlan task lacks SemanticPlan authority");
@@ -102,6 +131,8 @@ static bool process_task(XrTargetPlanTaskPool *pool, uint32_t index) {
             pool->cache_store, XR_CACHE_ARTIFACT_XTP, key,
             xr_cache_materialize_xtp_artifact, &load, &blob);
         xr_cache_blob_release(&blob);
+        if (xr_target_plan_cancellation_token_is_requested(pool->cancellation))
+            return cancel_task(result, load.accepted_plan);
         if (result->load_status == XR_CACHE_LOAD_HIT) {
             if (!load.accepted_plan) {
                 set_error(result->error, sizeof(result->error),
@@ -126,6 +157,9 @@ static bool process_task(XrTargetPlanTaskPool *pool, uint32_t index) {
         result->built = true;
     }
 
+    if (xr_target_plan_cancellation_token_is_requested(pool->cancellation))
+        return cancel_task(result, plan);
+
     if (pool->cache_store && !result->cache_hit) {
         uint8_t *bytes = NULL;
         size_t size = 0;
@@ -149,6 +183,9 @@ static bool process_task(XrTargetPlanTaskPool *pool, uint32_t index) {
             return false;
         }
     }
+
+    if (xr_target_plan_cancellation_token_is_requested(pool->cancellation))
+        return cancel_task(result, plan);
 
     if (!plan || !xr_target_plan_is_verified(plan) ||
         !xr_target_plan_fingerprint_is_intact(plan) ||
@@ -200,6 +237,10 @@ static void collect_stats(const XrTargetPlanTaskResult *results,
         if (!result->complete &&
             stats->first_failed_index == XR_TARGET_PLAN_TASK_INDEX_NONE)
             stats->first_failed_index = i;
+        if (result->cancelled) {
+            stats->cancelled++;
+            continue;
+        }
         if (!result->cache_enabled ||
             (!result->cache_load_attempted &&
              !result->rebuild_requested))
@@ -243,6 +284,7 @@ bool xr_target_plan_tasks_run(
         .optimization_budget = batch->optimization_budget,
         .rebuild = batch->rebuild,
         .worker_count = worker_count,
+        .cancellation = batch->cancellation,
         .results = batch->results,
     };
     XrTargetPlanWorker *workers = (XrTargetPlanWorker *) xr_calloc(
@@ -281,6 +323,17 @@ bool xr_target_plan_tasks_run(
                                          memory_order_acquire))
                 xr_thread_yield();
             xr_thread_detach(threads[i]);
+        }
+    }
+    if (xr_target_plan_cancellation_token_is_requested(batch->cancellation)) {
+        for (uint32_t i = 0; i < batch->input_count; i++) {
+            xr_target_plan_free(batch->results[i].plan);
+            batch->results[i].plan = NULL;
+            batch->results[i].complete = false;
+            batch->results[i].cancelled = true;
+            set_error(batch->results[i].error,
+                      sizeof(batch->results[i].error),
+                      "TargetPlan task was cancelled");
         }
     }
     collect_stats(batch->results, batch->input_count, worker_count, stats);

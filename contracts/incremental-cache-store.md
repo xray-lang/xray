@@ -68,6 +68,14 @@ invalidation, compiler-session ownership, or any compatibility reader.
    fingerprints, diagnostics, cache counters, or bundle order. Failure is
    reported at the lowest canonical input index after all started workers have
    joined and every independently owned plan is released.
+10. Cancellation is a monotonic operation-owned token. Workers check it before
+    authority validation, after cache materialization, after planning, and
+    after publication. Once requested, the joiner releases every task-owned
+    plan and normalizes every row to cancelled before reporting input index
+    zero, so timing cannot expose a partial bundle or nondeterministic counters.
+    A verified immutable cache object published before the request remains
+    available to later operations; cancellation never deletes another
+    operation's content-addressed entry.
 
 Changing the root-lock coverage, rejected-snapshot identity, quota reservation
 order, atomic publication sequence, directory/link boundary, lock cleanup, or
@@ -79,16 +87,16 @@ anchor-sha256: src/incremental/xr_cache_artifact_verify.h b6e0ca7a521764f981fdd1
 anchor-sha256: src/incremental/xr_cache_artifact_verify.c 66e1059f2a67229b720bf350399911f21d56d0bef6ceafc371d4783f53603727
 anchor-sha256: src/incremental/xr_cache_store.h f34e4f86ba65f44cbc29356488f32cbc52088c8dda6848ff756a571c78c9b1d9
 anchor-sha256: src/incremental/xr_cache_store.c bb726097541fb71d58d463f106bc7f103c21295ffee344425221b67a094d305b
-anchor-sha256: src/incremental/xr_target_plan_tasks.h 5b55f38a787014fa8ee1b625ced5349864e902897144256a4c41134d1bb89025
-anchor-sha256: src/incremental/xr_target_plan_tasks.c 5499c49fb7a461967da5ab1f9766b0ad4dc653a9d6e710e42344089d4cfcc6f0
-anchor-sha256: src/aot/xaot_driver.h ab01aef3334ff626ff1f7e87e715e1a9e02df4bbe1c109bc50ac3f5b79748fa1
-anchor-sha256: src/aot/xaot_driver.c 67855495da1496f5ff28bb2bd71eeaa82c757f52396f4c222c7fe7e4095b3d39
+anchor-sha256: src/incremental/xr_target_plan_tasks.h b8898e83f64a5f3526199de7e2cdc1de081ccaf677007c2adf65b641b92aff5a
+anchor-sha256: src/incremental/xr_target_plan_tasks.c 97cb9d24a31e852506ace288f2b3c72fd7828a7cc1a1adb161f7a6a3c85377cc
+anchor-sha256: src/aot/xaot_driver.h 6788cdeaa4983f58696ca3d1d20a36e0b42485167fa0e1544eea00ee69504c8d
+anchor-sha256: src/aot/xaot_driver.c ec71094c24b0b042a139942b1eee03d66c838273033990b1822e48ab157a1571
 anchor-sha256: src/os/os_fs.h b1a95259a4952a1e33e1d2c109fd0955f5b00bff4db81e6a21abede9ec07fe84
 anchor-sha256: src/os/unix/fs_unix.c 5f86aaa44d1e794ca2cdeea814c1d115bd598e56b3e7dfe47d0c6726da187e54
 anchor-sha256: src/os/win/fs_win.c 4b9195ab156d94761c6c72c10a80fdb62a01838d1ec829ab42bbb5bc9bd71e2f
 anchor-sha256: tests/unit/CMakeLists.txt 23c9e8a7fdac7c760c712bc08dcc5a88651ced5eb5910261583c8bc3440cf383
 anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c 8a7a0f35523e2f7b846a84e22f42521d43c2e70d0eb4342d4a3d13c58dfc1fb4
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
-anchor-sha256: tests/unit/incremental/test_target_plan_tasks.c e0f43f52131f25a93775c1d0726e7dfeacedba5a8dd4d25f82ce96ca8f1dd4af
-anchor-sha256: tests/unit/aot/test_xaot_driver.c a1ce878c1a582042f04b2d37415b431e89e069acbc070e91a28af464e2163892
+anchor-sha256: tests/unit/incremental/test_target_plan_tasks.c 4ea47fb617bb4bed33d98ada661ef0e171d720815dac8a2c4f66c340ce133188
+anchor-sha256: tests/unit/aot/test_xaot_driver.c 3d00bf877ccb2a2acf955a270e3277e669aa5c6ad125224bef6b301aa6706e62
 anchor-sha256: tests/unit/os/test_fs_atomic.c f8f6ee065dcb3c4b75ae24edb4e96d95253c540f5a40252cf79a10aa140ddb5f

@@ -3,6 +3,7 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/module/xmodule_resolver.h"
+#include "../../../src/incremental/xr_target_plan_tasks.h"
 #include "../../../src/app/toolchain/xtc_target_profile.h"
 #include "../../../src/os/os_dir.h"
 #include "../../../src/os/os_temp.h"
@@ -1015,6 +1016,16 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
         ASSERT_TRUE(xaot_build(entry_source, &options, &result) != 0);
         ASSERT_TRUE(result.target_plan_cache.workers == 3);
         ASSERT_TRUE(result.target_plan_cache.hits == 3);
+
+        xaot_build_result_free(&result);
+        XrTargetPlanCancellationToken cancellation;
+        xr_target_plan_cancellation_token_init(&cancellation);
+        xr_target_plan_cancellation_token_request(&cancellation);
+        options.target_plan_cancellation = &cancellation;
+        ASSERT_TRUE(xaot_build(entry_source, &options, &result) != 0);
+        ASSERT_TRUE(result.target_plan_cache.cancelled == 3);
+        ASSERT_TRUE(result.n_sources == 0);
+        options.target_plan_cancellation = NULL;
     }
 
     xaot_build_result_free(&result);

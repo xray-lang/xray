@@ -33,6 +33,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+struct XrTargetPlanCancellationToken;
+
 /* ========== Feature Set ========== */
 
 #define XAOT_MAX_STDLIB_SYMBOLS 128
@@ -116,6 +118,7 @@ typedef struct XaotTargetPlanCacheStats {
     uint32_t misses;
     uint32_t rejected;
     uint32_t published;
+    uint32_t cancelled;
 } XaotTargetPlanCacheStats;
 
 /* Result of xaot_build().  Caller must free owned strings via xr_free(). */
@@ -165,6 +168,8 @@ typedef struct XaotBuildOptions {
     bool incremental_cache_rebuild;
     bool incremental_cache_verbose;
     uint32_t target_plan_workers; /* zero selects the host CPU count */
+    /* Borrowed for xaot_build. Cancellation prevents partial plan install. */
+    struct XrTargetPlanCancellationToken *target_plan_cancellation;
     const char *const *imported_summary_payloads;
     uint32_t imported_summary_payload_count;
 } XaotBuildOptions;

@@ -1724,6 +1724,7 @@ static bool xaot_resolve_semantic_dependencies(
 static bool xaot_build_module_target_plans(
     XaotBundle *bundle, XrTargetProfile *profile, XrCacheStore *cache_store,
     bool rebuild, bool verbose, uint32_t worker_limit,
+    XrTargetPlanCancellationToken *cancellation,
     XaotTargetPlanCacheStats *stats) {
     if (!bundle || !profile || !bundle->modules ||
         bundle->nmodules == 0 || !stats ||
@@ -1775,6 +1776,7 @@ static bool xaot_build_module_target_plans(
         .optimization_budget = xaot_target_plan_optimization_budget(),
         .rebuild = rebuild,
         .worker_limit = worker_limit,
+        .cancellation = cancellation,
         .results = results,
     };
     bool planned = xr_target_plan_tasks_run(
@@ -1784,6 +1786,7 @@ static bool xaot_build_module_target_plans(
     stats->misses = task_stats.misses;
     stats->rejected = task_stats.rejected;
     stats->published = task_stats.published;
+    stats->cancelled = task_stats.cancelled;
     if (!planned) {
         uint32_t failed = task_stats.first_failed_index;
         const char *name = failed < bundle->nmodules && bundle->modules[failed] &&
@@ -2474,6 +2477,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             &aot_bundle, options->target_profile,
             xr_compiler_session_cache_store(session), evidence_cache_rebuild,
             evidence_cache_verbose, options->target_plan_workers,
+            options->target_plan_cancellation,
             &result->target_plan_cache))
         goto fail_free_ir;
     if (!xaot_install_module_representation_refinements(

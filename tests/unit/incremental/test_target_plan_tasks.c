@@ -15,6 +15,7 @@
 #include "os/os_dir.h"
 #include "os/os_fs.h"
 #include "os/os_temp.h"
+#include "os/os_thread.h"
 #include "plan/semantic/xr_semantic_builder.h"
 #include "plan/format/xr_xtp_schema.h"
 #include "plan/target/xr_target_plan.h"
@@ -91,6 +92,7 @@ static XrCacheStore *open_store(const char *root) {
 static bool run_batch(const XrTargetPlanTaskInput inputs[TASK_COUNT],
                       XrTargetProfile *profile, XrCacheStore *store,
                       uint32_t workers, bool rebuild,
+                      XrTargetPlanCancellationToken *cancellation,
                       XrTargetPlanTaskResult results[TASK_COUNT],
                       XrTargetPlanTaskStats *stats) {
     static const uint8_t policy[] = "parallel-target-plan-test-v1";
@@ -104,6 +106,7 @@ static bool run_batch(const XrTargetPlanTaskInput inputs[TASK_COUNT],
         .optimization_budget = budget,
         .rebuild = rebuild,
         .worker_limit = workers,
+        .cancellation = cancellation,
         .results = results,
     };
     char error[512] = {0};
@@ -127,7 +130,7 @@ TEST(worker_counts_produce_identical_canonical_plans) {
         inputs[i].semantic_plan = semantics[i];
     }
 
-    ASSERT_TRUE(run_batch(inputs, profile, NULL, 1u, false, results, &stats));
+    ASSERT_TRUE(run_batch(inputs, profile, NULL, 1u, false, NULL, results, &stats));
     ASSERT_EQ_UINT(stats.worker_count, 1u);
     ASSERT_EQ_UINT(stats.first_failed_index, XR_TARGET_PLAN_TASK_INDEX_NONE);
     for (uint32_t i = 0; i < TASK_COUNT; i++) {
@@ -141,7 +144,7 @@ TEST(worker_counts_produce_identical_canonical_plans) {
     }
     xr_target_plan_task_results_release(results, TASK_COUNT);
 
-    ASSERT_TRUE(run_batch(inputs, profile, NULL, 2u, false, results, &stats));
+    ASSERT_TRUE(run_batch(inputs, profile, NULL, 2u, false, NULL, results, &stats));
     ASSERT_EQ_UINT(stats.worker_count, 2u);
     for (uint32_t i = 0; i < TASK_COUNT; i++) {
         ASSERT_TRUE(xr_fingerprint_equal(
@@ -157,7 +160,7 @@ TEST(worker_counts_produce_identical_canonical_plans) {
     }
     xr_target_plan_task_results_release(results, TASK_COUNT);
 
-    ASSERT_TRUE(run_batch(inputs, profile, NULL, TASK_COUNT, false, results, &stats));
+    ASSERT_TRUE(run_batch(inputs, profile, NULL, TASK_COUNT, false, NULL, results, &stats));
     ASSERT_EQ_UINT(stats.worker_count, TASK_COUNT);
     for (uint32_t i = 0; i < TASK_COUNT; i++) {
         ASSERT_TRUE(xr_fingerprint_equal(
@@ -199,7 +202,7 @@ TEST(parallel_cache_publish_and_hit_preserve_input_order) {
         inputs[i].semantic_plan = semantics[i];
     }
 
-    ASSERT_TRUE(run_batch(inputs, profile, store, 4u, true, results, &stats));
+    ASSERT_TRUE(run_batch(inputs, profile, store, 4u, true, NULL, results, &stats));
     ASSERT_EQ_UINT(stats.worker_count, 4u);
     ASSERT_EQ_UINT(stats.hits, 0u);
     ASSERT_EQ_UINT(stats.misses, TASK_COUNT);
@@ -208,7 +211,7 @@ TEST(parallel_cache_publish_and_hit_preserve_input_order) {
         cold_fingerprints[i] = xr_target_plan_fingerprint(results[i].plan);
     xr_target_plan_task_results_release(results, TASK_COUNT);
 
-    ASSERT_TRUE(run_batch(inputs, profile, store, 3u, false, results, &stats));
+    ASSERT_TRUE(run_batch(inputs, profile, store, 3u, false, NULL, results, &stats));
     ASSERT_EQ_UINT(stats.worker_count, 3u);
     ASSERT_EQ_UINT(stats.hits, TASK_COUNT);
     ASSERT_EQ_UINT(stats.misses, 0u);
@@ -247,7 +250,7 @@ TEST(failure_is_reported_by_lowest_canonical_index) {
     for (size_t run = 0; run < sizeof(worker_counts) / sizeof(worker_counts[0]);
          run++) {
         ASSERT_FALSE(run_batch(inputs, profile, NULL, worker_counts[run], false,
-                               results, &stats));
+                               NULL, results, &stats));
         ASSERT_EQ_UINT(stats.first_failed_index, 2u);
         ASSERT_FALSE(results[2].complete);
         ASSERT_FALSE(results[5].complete);
@@ -266,8 +269,75 @@ TEST(failure_is_reported_by_lowest_canonical_index) {
     xr_semantic_plan_free(semantic);
 }
 
+typedef struct CancellationRequest {
+    XrTargetPlanCancellationToken *token;
+} CancellationRequest;
+
+static void *request_cancellation(void *argument) {
+    CancellationRequest *request = (CancellationRequest *) argument;
+    xr_target_plan_cancellation_token_request(request->token);
+    return NULL;
+}
+
+TEST(cancellation_discards_results_without_deleting_cache_entries) {
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-target-cancel", root, sizeof(root)), 0);
+    XrCacheStore *store = open_store(root);
+    ASSERT_NOT_NULL(store);
+    XrSemanticPlan *semantics[TASK_COUNT] = {0};
+    XrTargetPlanTaskInput inputs[TASK_COUNT] = {0};
+    XrTargetPlanTaskResult results[TASK_COUNT] = {0};
+    XrTargetPlanTaskStats stats = {0};
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    for (uint32_t i = 0; i < TASK_COUNT; i++) {
+        semantics[i] = build_semantic(200u + i);
+        ASSERT_NOT_NULL(semantics[i]);
+        inputs[i].semantic_plan = semantics[i];
+    }
+
+    ASSERT_TRUE(run_batch(inputs, profile, store, 4u, true, NULL, results,
+                          &stats));
+    ASSERT_EQ_UINT(stats.published, TASK_COUNT);
+    xr_target_plan_task_results_release(results, TASK_COUNT);
+
+    XrTargetPlanCancellationToken token;
+    xr_target_plan_cancellation_token_init(&token);
+    CancellationRequest request = {.token = &token};
+    xr_thread_t requester;
+    ASSERT_TRUE(xr_thread_create(&requester, request_cancellation, &request));
+    while (!xr_target_plan_cancellation_token_is_requested(&token))
+        xr_thread_yield();
+    ASSERT_EQ_INT(xr_thread_join(requester, NULL), 0);
+    ASSERT_FALSE(run_batch(inputs, profile, store, TASK_COUNT, false, &token,
+                           results, &stats));
+    ASSERT_EQ_UINT(stats.cancelled, TASK_COUNT);
+    ASSERT_EQ_UINT(stats.first_failed_index, 0u);
+    ASSERT_EQ_UINT(stats.hits, 0u);
+    ASSERT_EQ_UINT(stats.misses, 0u);
+    for (uint32_t i = 0; i < TASK_COUNT; i++) {
+        ASSERT_TRUE(results[i].cancelled);
+        ASSERT_NULL(results[i].plan);
+    }
+    xr_target_plan_task_results_release(results, TASK_COUNT);
+
+    ASSERT_TRUE(run_batch(inputs, profile, store, 3u, false, NULL, results,
+                          &stats));
+    ASSERT_EQ_UINT(stats.hits, TASK_COUNT);
+    ASSERT_EQ_UINT(stats.cancelled, 0u);
+    xr_target_plan_task_results_release(results, TASK_COUNT);
+
+    for (uint32_t i = 0; i < TASK_COUNT; i++)
+        xr_semantic_plan_free(semantics[i]);
+    xr_target_profile_free(profile);
+    xr_cache_store_close(store);
+    remove_store_root(root);
+}
+
 TEST_MAIN_BEGIN()
     RUN_TEST(worker_counts_produce_identical_canonical_plans);
     RUN_TEST(parallel_cache_publish_and_hit_preserve_input_order);
     RUN_TEST(failure_is_reported_by_lowest_canonical_index);
+    RUN_TEST(cancellation_discards_results_without_deleting_cache_entries);
 TEST_MAIN_END()
