@@ -11,6 +11,12 @@
 #include "../test_framework.h"
 #include "aot/xrt_core_freestanding.h"
 
+_Noreturn void xr_hook_panic(const char *message, size_t len) {
+    (void) fwrite(message, 1, len, stderr);
+    (void) fputc('\n', stderr);
+    abort();
+}
+
 TEST(freestanding_byte_slice_compare_owner_preserves_unsigned_and_prefix_ordering) {
     uint8_t left_bytes[] = {0, 127, 128, 255};
     uint8_t lower_bytes[] = {0, 127, 128, 254};
