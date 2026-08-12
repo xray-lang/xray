@@ -5701,7 +5701,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "58b79b7ea879a6b5c960756588d6616457655cb9e54c11ef5eaa63ffb8f83403",
+      "evidence_sha256": "aaa3a550afb914a4bc79e2adb91170221f8cebe6c93c6c459a26388b530fef5e",
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 15,
       "path": "src/module/xproto_codec.c",
@@ -5715,7 +5715,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "bba918bfd73826d524c5c638afce713fa024d612ec595826811935de90887cce",
+      "evidence_sha256": "61a83b32482e6edd5123fe8ad92ff8845040648c23d1c4a8763e1763e20f3fbb",
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 6,
       "path": "src/module/xproto_codec.h",
@@ -10030,6 +10030,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "c9c107a3ca2e66011b7939f8e4158b2dfd75b212b5eff21acd48097978a5a943",
+  "source_tree_fingerprint": "1c3dc344f6ce97add44e0340bb04b5c3a1a0f6b673afb891ca2c69663fe866d6",
   "total": 3959
 }

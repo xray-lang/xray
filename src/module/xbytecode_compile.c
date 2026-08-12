@@ -60,7 +60,7 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *canonic
 
     // Serialize
     size_t bc_size;
-    XrBcError bc_error = XR_BC_OK;
+    XrBootstrapContainerError bc_error = XR_BOOTSTRAP_CONTAINER_OK;
     uint8_t *bc = canonical_module
                       ? xr_bootstrap_container_write_stdlib(X, canonical_module, proto, flags, &bc_size,
                                                  &bc_error)

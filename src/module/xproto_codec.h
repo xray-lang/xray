@@ -49,39 +49,40 @@ struct XrProto;
 #define XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE 4u
 #define XR_BOOTSTRAP_CONTAINER_VERSION UINT16_C(30)
 
-// Serialization flags
-#define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)
-#define XR_BC_STRIP_SOURCE (1 << 1)  // Remove source file path
+/* Serialization flags for compiler/bootstrap-only containers. */
+#define XR_BOOTSTRAP_CONTAINER_STRIP_DEBUG (1 << 0)
+#define XR_BOOTSTRAP_CONTAINER_STRIP_SOURCE (1 << 1)
 
 typedef enum {
-    XR_BC_OK = 0,
-    XR_BC_ERR_MAGIC,
-    XR_BC_ERR_VERSION,
-    XR_BC_ERR_TRUNCATED,
-    XR_BC_ERR_CORRUPT,
-    XR_BC_ERR_ALLOC,
-    XR_BC_ERR_METADATA,
-    XR_BC_ERR_TARGET_ABI,
-} XrBcError;
+    XR_BOOTSTRAP_CONTAINER_OK = 0,
+    XR_BOOTSTRAP_CONTAINER_ERR_MAGIC,
+    XR_BOOTSTRAP_CONTAINER_ERR_VERSION,
+    XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED,
+    XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT,
+    XR_BOOTSTRAP_CONTAINER_ERR_ALLOC,
+    XR_BOOTSTRAP_CONTAINER_ERR_METADATA,
+    XR_BOOTSTRAP_CONTAINER_ERR_TARGET_ABI,
+} XrBootstrapContainerError;
 
-XR_FUNC const char *xr_bootstrap_container_error_string(XrBcError error);
+XR_FUNC const char *xr_bootstrap_container_error_string(XrBootstrapContainerError error);
 
 /* ========== Serialization API ========== */
 
-// Serialize XrProto to byte array, caller must free
-XR_FUNC uint8_t *xr_bootstrap_container_write(struct XrVMRuntime *X, struct XrProto *proto, int flags,
-                                   size_t *out_size, XrBcError *error);
+/* Serialize XrProto to a byte array owned by the caller. */
+XR_FUNC uint8_t *xr_bootstrap_container_write(
+    struct XrVMRuntime *X, struct XrProto *proto, int flags, size_t *out_size,
+    XrBootstrapContainerError *error);
 
 /* Serialize a built-in stdlib module.  The canonical module identity is part
  * of the compilation unit, not inferred from load order: enum constants that
  * also have native producers are encoded as that module's nominal type. */
-XR_FUNC uint8_t *xr_bootstrap_container_write_stdlib(struct XrVMRuntime *X, const char *canonical_module,
-                                          struct XrProto *proto, int flags, size_t *out_size,
-                                          XrBcError *error);
+XR_FUNC uint8_t *xr_bootstrap_container_write_stdlib(
+    struct XrVMRuntime *X, const char *canonical_module, struct XrProto *proto, int flags,
+    size_t *out_size, XrBootstrapContainerError *error);
 
-// Deserialize XrProto from byte array
-XR_FUNC struct XrProto *xr_bootstrap_container_read(struct XrVMRuntime *X, const uint8_t *data, size_t size,
-                                         XrBcError *error);
+/* Deserialize XrProto from a bootstrap container. */
+XR_FUNC struct XrProto *xr_bootstrap_container_read(
+    struct XrVMRuntime *X, const uint8_t *data, size_t size, XrBootstrapContainerError *error);
 
 // Execute bytecode directly, returns 0 on success
 XR_FUNC int xr_eval_bytecode(struct XrVMRuntime *X, const uint8_t *data, size_t size);

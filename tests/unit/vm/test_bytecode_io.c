@@ -184,10 +184,10 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
     ASSERT_GT(size, 16);
     ASSERT_EQ_UINT(read_le16(bytes + 4), XR_BOOTSTRAP_CONTAINER_VERSION);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(PROTO_CODE_COUNT(roundtrip), 1);
     ASSERT_EQ_INT(GET_OPCODE(PROTO_CODE(roundtrip, 0)), OP_RETURN);
     ASSERT_EQ_INT(roundtrip->maxstacksize, 1);
@@ -220,10 +220,10 @@ TEST(bytecode_roundtrips_reachable_entry_plan) {
     uint8_t *bytes = xr_bootstrap_container_write(iso, root, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_UINT(roundtrip->entry_plan.entry_func_id, 1);
     ASSERT_EQ_UINT(roundtrip->entry_plan.reachable_body_count, 2);
     ASSERT_TRUE((roundtrip->entry_plan.required_capability_bits & XR_CAP_COROUTINE) != 0);
@@ -250,10 +250,10 @@ TEST(bytecode_roundtrips_struct_area_size) {
     uint8_t *bytes = xr_bootstrap_container_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_UINT(roundtrip->struct_area_size, 1024u * 1024u);
 
     xr_instruction_unit_free(roundtrip);
@@ -282,10 +282,10 @@ TEST(bytecode_roundtrips_exact_string_constant_lengths) {
     uint8_t *bytes = xr_bootstrap_container_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(reader, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 2);
     XrValue value = PROTO_CONSTANT(roundtrip, 0);
     ASSERT_TRUE(XR_IS_STRING(value));
@@ -319,10 +319,10 @@ TEST(bytecode_roundtrips_rune_constants) {
     uint8_t *bytes = xr_bootstrap_container_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(reader, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
     XrValue value = PROTO_CONSTANT(roundtrip, 0);
     ASSERT_TRUE(XR_IS_RUNE(value));
@@ -375,10 +375,10 @@ TEST(bytecode_roundtrips_bigint_constants) {
         uint8_t *bytes = xr_bootstrap_container_write(writer, proto, 0, &size, NULL);
         ASSERT_NOT_NULL(bytes);
 
-        XrBcError error = XR_BC_OK;
+        XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
         XrProto *roundtrip = xr_bootstrap_container_read(reader, bytes, size, &error);
         ASSERT_NOT_NULL(roundtrip);
-        ASSERT_EQ_INT(error, XR_BC_OK);
+        ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
         ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
 
         XrValue value = PROTO_CONSTANT(roundtrip, 0);
@@ -411,10 +411,10 @@ TEST(bytecode_reader_assigns_unique_proto_ids) {
     uint8_t *bytes = xr_bootstrap_container_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(PROTO_PROTO_COUNT(roundtrip), 1);
 
     XrProto *roundtrip_child = PROTO_PROTO(roundtrip, 0);
@@ -444,10 +444,10 @@ TEST(bytecode_reader_rejects_previous_layout_version) {
     bytes[4] = (uint8_t) (previous_version & 0xff);
     bytes[5] = (uint8_t) (previous_version >> 8);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *bad = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NULL(bad);
-    ASSERT_EQ_INT(error, XR_BC_ERR_VERSION);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_VERSION);
 
     xr_free(bytes);
     xr_instruction_unit_free(proto);
@@ -488,10 +488,10 @@ TEST(bytecode_roundtrips_exact_structural_shape_across_isolates) {
     uint8_t *bytes = xr_bootstrap_container_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(reader, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
 
     XrValue cls_val = PROTO_CONSTANT(roundtrip, 0);
@@ -572,10 +572,10 @@ TEST(bytecode_roundtrips_typed_object_decode_shape) {
     uint8_t *bytes = xr_bootstrap_container_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(reader, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     XrClass *roundtrip_shape = (XrClass *) (intptr_t) XR_TO_INT(PROTO_CONSTANT(roundtrip, 0));
     ASSERT_NOT_NULL(roundtrip_shape);
     ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_STRUCT_OBJECT);
@@ -655,10 +655,10 @@ TEST(bytecode_roundtrips_typed_json_root_schema) {
     uint8_t *bytes = xr_bootstrap_container_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(reader, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     XrClass *roundtrip_shape = (XrClass *) (intptr_t) XR_TO_INT(PROTO_CONSTANT(roundtrip, 0));
     ASSERT_NOT_NULL(roundtrip_shape);
     ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_JSON_DECODE_ROOT) != 0);
@@ -719,10 +719,10 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     uint8_t *bytes = xr_bootstrap_container_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(reader, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
 
     XrValue roundtrip_val = PROTO_CONSTANT(roundtrip, 0);
@@ -844,20 +844,20 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
 
     size_t size_a = 0;
     size_t size_b = 0;
-    XrBcError write_error = XR_BC_OK;
+    XrBootstrapContainerError write_error = XR_BOOTSTRAP_CONTAINER_OK;
     uint8_t *bytes_a = xr_bootstrap_container_write(writer, proto, 0, &size_a, &write_error);
     ASSERT_NOT_NULL(bytes_a);
-    ASSERT_EQ_INT(write_error, XR_BC_OK);
+    ASSERT_EQ_INT(write_error, XR_BOOTSTRAP_CONTAINER_OK);
     uint8_t *bytes_b = xr_bootstrap_container_write(writer, proto, 0, &size_b, &write_error);
     ASSERT_NOT_NULL(bytes_b);
     ASSERT_EQ_UINT(size_a, size_b);
     ASSERT_MEM_EQ(bytes_a, bytes_b, size_a);
     ASSERT_EQ_UINT(read_le32(bytes_a + 20), 4);
 
-    XrBcError read_error = XR_BC_OK;
+    XrBootstrapContainerError read_error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(reader, bytes_a, size_a, &read_error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(read_error, XR_BC_OK);
+    ASSERT_EQ_INT(read_error, XR_BOOTSTRAP_CONTAINER_OK);
     XrClassDescriptor *read_outer = XR_TO_PTR(PROTO_CONSTANT(roundtrip, 0));
     XrClassDescriptor *read_copy = XR_TO_PTR(PROTO_CONSTANT(roundtrip, 1));
     XrClassDescriptor *read_union = XR_TO_PTR(PROTO_CONSTANT(roundtrip, 2));
@@ -923,36 +923,36 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     ASSERT_GT(size, 84);
     ASSERT_EQ_UINT(read_le32(bytes + 20), 1);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     bytes[36] ^= 1u;
     ASSERT_NULL(xr_bootstrap_container_read(iso, bytes, size, &error));
-    ASSERT_EQ_INT(error, XR_BC_ERR_TARGET_ABI);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_TARGET_ABI);
     bytes[36] ^= 1u;
 
     write_le16(bytes + 58, XR_MAX_AGG_FIELDS + 1);
     ASSERT_NULL(xr_bootstrap_container_read(iso, bytes, size, &error));
-    ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT);
     write_le16(bytes + 58, 1);
 
     write_le32(bytes + 61, 1);
     ASSERT_NULL(xr_bootstrap_container_read(iso, bytes, size, &error));
-    ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT);
     write_le32(bytes + 61, 0);
 
     ASSERT_NULL(xr_bootstrap_container_read(iso, bytes, 60, &error));
-    ASSERT_EQ_INT(error, XR_BC_ERR_TRUNCATED);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED);
     ASSERT_NULL(xr_bootstrap_container_read(iso, bytes, 3, &error));
-    ASSERT_EQ_INT(error, XR_BC_ERR_TRUNCATED);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED);
     uint8_t *with_trailing_byte = xr_malloc(size + 1);
     ASSERT_NOT_NULL(with_trailing_byte);
     memcpy(with_trailing_byte, bytes, size);
     with_trailing_byte[size] = 0;
     ASSERT_NULL(xr_bootstrap_container_read(iso, with_trailing_byte, size + 1, &error));
-    ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT);
     xr_free(with_trailing_byte);
-    ASSERT_STR_EQ(xr_bootstrap_container_error_string(XR_BC_ERR_TARGET_ABI),
+    ASSERT_STR_EQ(xr_bootstrap_container_error_string(XR_BOOTSTRAP_CONTAINER_ERR_TARGET_ABI),
                   "bytecode aggregate layout target ABI mismatch");
-    ASSERT_STR_EQ(xr_bootstrap_container_error_string(XR_BC_ERR_CORRUPT), "corrupt bytecode metadata");
+    ASSERT_STR_EQ(xr_bootstrap_container_error_string(XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT), "corrupt bytecode metadata");
 
     xr_free(bytes);
     xr_instruction_unit_free(proto);
@@ -979,7 +979,7 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     ASSERT_TRUE(find_nested_key_offset(bytes, size, &nested_key_offset, &owner_key));
     write_le64(bytes + nested_key_offset, owner_key);
     ASSERT_NULL(xr_bootstrap_container_read(iso, bytes, size, &error));
-    ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT);
 
     xr_free(bytes);
     xr_instruction_unit_free(proto);
@@ -1005,9 +1005,9 @@ TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth) {
     xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
     xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
     size_t size = 0;
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     ASSERT_NULL(xr_bootstrap_container_write(iso, proto, 0, &size, &error));
-    ASSERT_EQ_INT(error, XR_BC_ERR_TARGET_ABI);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_TARGET_ABI);
     xr_instruction_unit_free(proto);
 
     XrAggregateLayout chain[18];
@@ -1029,7 +1029,7 @@ TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth) {
     xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
     xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
     ASSERT_NULL(xr_bootstrap_container_write(iso, proto, 0, &size, &error));
-    ASSERT_EQ_INT(error, XR_BC_ERR_METADATA);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_METADATA);
 
     xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
@@ -1102,10 +1102,10 @@ TEST(bytecode_roundtrips_enum_type_constants) {
     uint8_t *bytes = xr_bootstrap_container_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(reader, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
 
     XrValue roundtrip_val = PROTO_CONSTANT(roundtrip, 0);
@@ -1172,14 +1172,14 @@ TEST(bytecode_preserves_native_stdlib_enum_nominal_identity_across_modules) {
     xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     uint8_t *bytes = xr_bootstrap_container_write_stdlib(writer, "net", proto, 0, &size, &error);
     ASSERT_NOT_NULL(bytes);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
 
     XrProto *roundtrip = xr_bootstrap_container_read(reader, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
     ASSERT_TRUE(XR_IS_ENUM_TYPE(PROTO_CONSTANT(roundtrip, 0)));
     ASSERT_TRUE(XR_TO_ENUM_TYPE(PROTO_CONSTANT(roundtrip, 0)) == reader_enum);
@@ -1203,10 +1203,10 @@ TEST(bytecode_rejects_mismatched_native_stdlib_enum_shape) {
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(wrong)), 0);
 
     size_t size = 123;
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     ASSERT_NULL(xr_bootstrap_container_write_stdlib(writer, "net", proto, 0, &size, &error));
     ASSERT_EQ_UINT(size, 0);
-    ASSERT_EQ_INT(error, XR_BC_ERR_METADATA);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_METADATA);
 
     xr_instruction_unit_free(proto);
     xray_vm_delete(writer);
@@ -1227,10 +1227,10 @@ TEST(bytecode_roundtrips_u16_upvalue_index) {
     ASSERT_NOT_NULL(bytes);
     ASSERT_GT(size, 16);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(PROTO_UPVAL_COUNT(roundtrip), 1);
 
     UpvalInfo info = PROTO_UPVALUE(roundtrip, 0);
@@ -1257,10 +1257,10 @@ TEST(bytecode_roundtrips_declared_shared_count) {
     uint8_t *bytes = xr_bootstrap_container_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(roundtrip->shared_count, 4);
     ASSERT_FALSE(roundtrip->shared_slots_bound);
 
@@ -1301,10 +1301,10 @@ TEST(bytecode_roundtrips_symbol_index_above_255) {
     uint8_t *bytes = xr_bootstrap_container_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_EQ_INT(PROTO_SYMBOL_COUNT(roundtrip), 301);
     ASSERT_EQ_INT(GET_OPCODE(PROTO_CODE(roundtrip, 0)), OP_GETPROP);
     ASSERT_EQ_UINT(GETARG_C(PROTO_CODE(roundtrip, 0)), 300);
@@ -1341,10 +1341,10 @@ TEST(bytecode_roundtrips_extern_ffi_signature) {
     uint8_t *bytes = xr_bootstrap_container_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_TRUE(roundtrip->is_extern);
     ASSERT_NOT_NULL(roundtrip->ffi_sig);
     ASSERT_STR_EQ(roundtrip->ffi_sig->symbol, "pow");
@@ -1379,10 +1379,10 @@ TEST(bytecode_roundtrips_extern_default_library) {
     uint8_t *bytes = xr_bootstrap_container_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_TRUE(roundtrip->is_extern);
     ASSERT_NOT_NULL(roundtrip->ffi_sig);
     ASSERT_STR_EQ(roundtrip->ffi_sig->symbol, "sqrt");
@@ -1413,10 +1413,10 @@ TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
     uint8_t *bytes = xr_bootstrap_container_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
-    XrBcError error = XR_BC_OK;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
     XrProto *roundtrip = xr_bootstrap_container_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_TRUE(roundtrip->is_extern);
     ASSERT_NOT_NULL(roundtrip->ffi_sig);
     ASSERT_EQ_UINT(roundtrip->ffi_sig->nparams, 1);

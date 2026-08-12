@@ -221,7 +221,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "555b4eddbf70843562dfd40e4b81b5b0faa04a0e41b9ce2650fc598bc5a3cdb1"
+    "sha256": "9a82ed35a2ce97172e1e34c79645619bbd15d761f9479e8d53f127be4c116328"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
@@ -295,7 +295,7 @@
       {
         "id": "legacy-xrc",
         "path_regex": "(?i)(?:^|/)(?:xbytecode_io\\.[ch]|[^/]*\\.xrc)$",
-        "text_regex": "(?i)(?:\\.xrc\\b|\\bXR_ARTIFACT_KIND_LEGACY_XRC\\b|\\bXR_(?:BC_MAGIC|BC_VERSION|LEGACY_XRC_VERSION)\\b|\\bxr_bytecode_[A-Za-z0-9_]+\\b|xbytecode_io)"
+        "text_regex": "(?i)(?:\\.xrc\\b|\\bXR_ARTIFACT_KIND_LEGACY_XRC\\b|\\bXrBcError\\b|\\bXR_BC_(?:MAGIC|VERSION|OK|ERR_[A-Z0-9_]+|STRIP_[A-Z0-9_]+)\\b|\\bXR_LEGACY_XRC_VERSION\\b|\\bxr_bytecode_[A-Za-z0-9_]+\\b|xbytecode_io)"
       },
       {
         "id": "legacy-vm",

@@ -20,7 +20,8 @@ TEXT_SUFFIXES = {".c", ".h", ".in", ".py", ".sh", ".ps1", ".cmake", ".toml"}
 CANDIDATE_RE = re.compile(
     r"(?P<xrc>\.xrc\b)|"
     r"(?P<xrc_identity>\bXR_ARTIFACT_KIND_LEGACY_XRC\b)|"
-    r"(?P<bytecode_abi>\b(?:XR_BC_(?:MAGIC|VERSION)|XR_LEGACY_XRC_VERSION)\b)|"
+    r"(?P<bytecode_abi>\b(?:XrBcError|XR_BC_(?:MAGIC|VERSION|OK|ERR_[A-Z0-9_]+|"
+    r"STRIP_[A-Z0-9_]+)|XR_LEGACY_XRC_VERSION)\b)|"
     r"(?P<public_vm_symbol>\bxray_vm_[A-Za-z0-9_]+\b)|"
     r"(?P<public_vm_type>\bXr(?:VMRuntime|VMConfig|VMBackendType|BytecodeModule|BytecodeBundle)\b)|"
     r"(?P<internal_vm_alias>\bxr_vm_[A-Za-z0-9_]+\b)|"
@@ -302,11 +303,17 @@ def self_test() -> int:
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
         drifted, _ = check(root, collect(root))
+        (root / "src/new_codec.c").write_text(
+            "XrBcError error = XR_BC_ERR_CORRUPT;\n", encoding="utf-8"
+        )
+        codec_abi_drifted, _ = check(root, collect(root))
         owner.unlink()
         (root / "src/new_loader.c").unlink()
+        (root / "src/new_codec.c").unlink()
         zero = collect(root)
         terminal, _ = check(root, zero)
-    if (not clean or backend_drifted or debug_setters_drifted or drifted or not terminal
+    if (not clean or backend_drifted or debug_setters_drifted or drifted
+            or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")
         return 1

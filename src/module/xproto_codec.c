@@ -69,7 +69,7 @@ typedef struct {
     XrVMRuntime *X;
     const char *stdlib_module;
     int flags;
-    XrBcError error;
+    XrBootstrapContainerError error;
     BcWriteLayoutEntry *layouts;
     uint32_t layout_count;
     uint32_t layout_capacity;
@@ -83,7 +83,7 @@ static void bc_writer_init(BcWriter *w, XrVMRuntime *X, const char *stdlib_modul
     w->X = X;
     w->stdlib_module = stdlib_module;
     w->flags = flags;
-    w->error = XR_BC_OK;
+    w->error = XR_BOOTSTRAP_CONTAINER_OK;
     w->layouts = NULL;
     w->layout_count = 0;
     w->layout_capacity = 0;
@@ -107,7 +107,7 @@ static bool bc_writer_ensure(BcWriter *w, size_t need) {
         return true;
 
     if (need > SIZE_MAX - w->size) {
-        w->error = XR_BC_ERR_ALLOC;
+        w->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return false;
     }
     size_t required = w->size + need;
@@ -125,7 +125,7 @@ static bool bc_writer_ensure(BcWriter *w, size_t need) {
 
     uint8_t *new_buf = xr_realloc(w->buf, new_cap);
     if (!new_buf) {
-        w->error = XR_BC_ERR_ALLOC;
+        w->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return false;
     }
 
@@ -203,7 +203,7 @@ static bool bc_put_string_data(BcWriter *w, const char *str, uint32_t len) {
 static bool bc_put_string(BcWriter *w, const char *str) {
     size_t len = str ? strlen(str) : 0;
     if (len > UINT32_MAX) {
-        w->error = XR_BC_ERR_METADATA;
+        w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
         return false;
     }
     return bc_put_string_data(w, str ? str : "", (uint32_t) len);
@@ -216,7 +216,7 @@ typedef struct {
     size_t size;
     size_t pos;
     XrVMRuntime *X;
-    XrBcError error;
+    XrBootstrapContainerError error;
     BcReadLayoutEntry *layouts;
     uint32_t layout_count;
 } BcReader;
@@ -229,7 +229,7 @@ static void bc_reader_init(BcReader *r, XrVMRuntime *X, const uint8_t *buf, size
     r->size = size;
     r->pos = 0;
     r->X = X;
-    r->error = XR_BC_OK;
+    r->error = XR_BOOTSTRAP_CONTAINER_OK;
     r->layouts = NULL;
     r->layout_count = 0;
 }
@@ -240,7 +240,7 @@ static bool bc_has_bytes(BcReader *r, size_t n) {
 
 static uint8_t bc_get_u8(BcReader *r) {
     if (!bc_has_bytes(r, 1)) {
-        r->error = XR_BC_ERR_TRUNCATED;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED;
         return 0;
     }
     return r->buf[r->pos++];
@@ -248,7 +248,7 @@ static uint8_t bc_get_u8(BcReader *r) {
 
 static uint16_t bc_get_u16(BcReader *r) {
     if (!bc_has_bytes(r, 2)) {
-        r->error = XR_BC_ERR_TRUNCATED;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED;
         return 0;
     }
     uint16_t v = r->buf[r->pos] | (r->buf[r->pos + 1] << 8);
@@ -258,7 +258,7 @@ static uint16_t bc_get_u16(BcReader *r) {
 
 static uint32_t bc_get_u32(BcReader *r) {
     if (!bc_has_bytes(r, 4)) {
-        r->error = XR_BC_ERR_TRUNCATED;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED;
         return 0;
     }
     uint32_t v = (uint32_t) r->buf[r->pos] | ((uint32_t) r->buf[r->pos + 1] << 8) |
@@ -269,7 +269,7 @@ static uint32_t bc_get_u32(BcReader *r) {
 
 static uint64_t bc_get_u64(BcReader *r) {
     if (!bc_has_bytes(r, 8)) {
-        r->error = XR_BC_ERR_TRUNCATED;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED;
         return 0;
     }
     uint64_t v = 0;
@@ -294,20 +294,20 @@ static double bc_get_f64(BcReader *r) {
 
 static char *bc_get_string_data(BcReader *r, uint32_t *out_len) {
     uint32_t len = bc_get_u32(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         return NULL;
     if (!bc_has_bytes(r, len)) {
-        r->error = XR_BC_ERR_TRUNCATED;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED;
         return NULL;
     }
 
     if ((size_t) len > SIZE_MAX - 1u) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return NULL;
     }
     char *str = xr_malloc((size_t) len + 1u);
     if (!str) {
-        r->error = XR_BC_ERR_ALLOC;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return NULL;
     }
 
@@ -335,24 +335,24 @@ static char *bc_read_optional_string(BcReader *r);
 static bool bc_writer_add_layout(BcWriter *w, const XrAggregateLayout *layout, uint32_t depth) {
     if (!w || !layout || depth > BC_MAX_LAYOUT_DEPTH || layout->field_count > XR_MAX_AGG_FIELDS) {
         if (w)
-            w->error = XR_BC_ERR_METADATA;
+            w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
         return false;
     }
     const XrTargetDataLayout *target = xr_target_data_layout_host();
     if (!target || layout->target_abi_hash != target->stable_hash) {
-        w->error = XR_BC_ERR_TARGET_ABI;
+        w->error = XR_BOOTSTRAP_CONTAINER_ERR_TARGET_ABI;
         return false;
     }
     uint64_t key = xr_aggregate_layout_stable_key(layout);
     if (key == 0) {
-        w->error = XR_BC_ERR_METADATA;
+        w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
         return false;
     }
     for (uint32_t i = 0; i < w->layout_count; i++) {
         if (w->layouts[i].key != key)
             continue;
         if (!xr_aggregate_layout_semantically_equal(w->layouts[i].layout, layout)) {
-            w->error = XR_BC_ERR_METADATA;
+            w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
             return false;
         }
         return true;
@@ -366,18 +366,18 @@ static bool bc_writer_add_layout(BcWriter *w, const XrAggregateLayout *layout, u
     XrAggregateLayout computed = *layout;
     if (!xr_aggregate_layout_compute(&computed, target) ||
         computed.total_size != layout->total_size || computed.alignment != layout->alignment) {
-        w->error = XR_BC_ERR_METADATA;
+        w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
         return false;
     }
     for (uint16_t i = 0; i < layout->field_count; i++) {
         if (computed.fields[i].offset != layout->fields[i].offset ||
             computed.fields[i].size != layout->fields[i].size) {
-            w->error = XR_BC_ERR_METADATA;
+            w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
             return false;
         }
     }
     if (w->layout_count == BC_MAX_LAYOUTS) {
-        w->error = XR_BC_ERR_METADATA;
+        w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
         return false;
     }
     if (w->layout_count == w->layout_capacity) {
@@ -387,7 +387,7 @@ static bool bc_writer_add_layout(BcWriter *w, const XrAggregateLayout *layout, u
         BcWriteLayoutEntry *entries =
             (BcWriteLayoutEntry *) xr_realloc(w->layouts, (size_t) next * sizeof(*entries));
         if (!entries) {
-            w->error = XR_BC_ERR_ALLOC;
+            w->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return false;
         }
         w->layouts = entries;
@@ -412,7 +412,7 @@ static uint64_t bc_writer_layout_key(BcWriter *w, const XrAggregateLayout *layou
             xr_aggregate_layout_semantically_equal(w->layouts[i].layout, layout))
             return key;
     }
-    w->error = XR_BC_ERR_METADATA;
+    w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
     return 0;
 }
 
@@ -466,7 +466,7 @@ static XrAggregateLayout *bc_reader_layout(BcReader *r, uint64_t key) {
         return NULL;
     int index = bc_reader_layout_index(r, key);
     if (index < 0) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return NULL;
     }
     return r->layouts[index].layout;
@@ -491,14 +491,14 @@ static void bc_reader_layout_table_dispose(BcReader *r) {
 static bool bc_reader_validate_layout(BcReader *r, uint32_t index, uint32_t depth) {
     if (!r || index >= r->layout_count || depth > BC_MAX_LAYOUT_DEPTH) {
         if (r)
-            r->error = XR_BC_ERR_CORRUPT;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return false;
     }
     BcReadLayoutEntry *entry = &r->layouts[index];
     if (entry->state == 2)
         return true;
     if (entry->state == 1) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return false;
     }
     entry->state = 1;
@@ -511,32 +511,32 @@ static bool bc_reader_validate_layout(BcReader *r, uint32_t index, uint32_t dept
         if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
             int child = bc_reader_layout_index(r, nested_key);
             if (nested_key == 0 || child < 0) {
-                r->error = XR_BC_ERR_CORRUPT;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
                 return false;
             }
             if (!bc_reader_validate_layout(r, (uint32_t) child, depth + 1))
                 return false;
             field->sub_layout = r->layouts[child].layout;
         } else if (nested_key != 0) {
-            r->error = XR_BC_ERR_CORRUPT;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             return false;
         }
     }
     const XrTargetDataLayout *target = xr_target_data_layout_host();
     if (!xr_aggregate_layout_compute(layout, target) || layout->total_size != expected_total ||
         layout->alignment != expected_align) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return false;
     }
     for (uint16_t i = 0; i < layout->field_count; i++) {
         if (layout->fields[i].offset != entry->expected_offsets[i] ||
             layout->fields[i].size != entry->expected_sizes[i]) {
-            r->error = XR_BC_ERR_CORRUPT;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             return false;
         }
     }
     if (xr_aggregate_layout_stable_key(layout) != entry->key) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return false;
     }
     entry->state = 2;
@@ -558,7 +558,7 @@ static bool bc_reader_intern_layout(BcReader *r, uint32_t index) {
     XrAggregateLayout *canonical =
         xr_vm_struct_layout_intern_owned(xr_isolate_get_vm_state(r->X), entry->layout);
     if (!canonical) {
-        r->error = XR_BC_ERR_ALLOC;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return false;
     }
     entry->layout = canonical;
@@ -568,23 +568,23 @@ static bool bc_reader_intern_layout(BcReader *r, uint32_t index) {
 
 static bool bc_read_layout_table(BcReader *r) {
     uint32_t count = bc_get_u32(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         return false;
     if (count > BC_MAX_LAYOUTS) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return false;
     }
     if (count == 0)
         return true;
     r->layouts = (BcReadLayoutEntry *) xr_calloc(count, sizeof(*r->layouts));
     if (!r->layouts) {
-        r->error = XR_BC_ERR_ALLOC;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return false;
     }
     r->layout_count = count;
     const XrTargetDataLayout *target = xr_target_data_layout_host();
     if (!target) {
-        r->error = XR_BC_ERR_TARGET_ABI;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_TARGET_ABI;
         return false;
     }
     uint64_t previous_key = 0;
@@ -599,7 +599,7 @@ static bool bc_read_layout_table(BcReader *r) {
         uint32_t explicit_align = bc_get_u32(r);
         char *nominal_name = bc_read_optional_string(r);
         uint16_t field_count = bc_get_u16(r);
-        if (r->error != XR_BC_OK) {
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK) {
             xr_free(nominal_name);
             return false;
         }
@@ -608,19 +608,19 @@ static bool bc_read_layout_table(BcReader *r) {
             total_size > UINT16_MAX || alignment == 0 || alignment > UINT16_MAX ||
             field_count > XR_MAX_AGG_FIELDS) {
             xr_free(nominal_name);
-            r->error = XR_BC_ERR_CORRUPT;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             return false;
         }
         if (target_hash != target->stable_hash) {
             xr_free(nominal_name);
-            r->error = XR_BC_ERR_TARGET_ABI;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_TARGET_ABI;
             return false;
         }
         previous_key = entry->key;
         XrAggregateLayout *layout = (XrAggregateLayout *) xr_calloc(1, sizeof(*layout));
         if (!layout) {
             xr_free(nominal_name);
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return false;
         }
         entry->layout = layout;
@@ -638,7 +638,7 @@ static bool bc_read_layout_table(BcReader *r) {
             entry->expected_sizes = (uint16_t *) xr_calloc(field_count, sizeof(uint16_t));
             if (!layout->field_names || !entry->nested_keys || !entry->expected_offsets ||
                 !entry->expected_sizes) {
-                r->error = XR_BC_ERR_ALLOC;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
                 return false;
             }
         }
@@ -651,14 +651,14 @@ static bool bc_read_layout_table(BcReader *r) {
             uint8_t elem_type = bc_get_u8(r);
             uint64_t nested_key = bc_get_u64(r);
             uint8_t flexible = bc_get_u8(r);
-            if (r->error != XR_BC_OK) {
+            if (r->error != XR_BOOTSTRAP_CONTAINER_OK) {
                 xr_free(name);
                 return false;
             }
             if (offset > UINT16_MAX || size > UINT16_MAX || elem_count > UINT16_MAX ||
                 native_type > XR_NATIVE_POINTER || elem_type > XR_NATIVE_POINTER || flexible > 1) {
                 xr_free(name);
-                r->error = XR_BC_ERR_CORRUPT;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
                 return false;
             }
             layout->field_names[fi] = name;
@@ -916,7 +916,7 @@ static bool bc_write_enum_type(BcWriter *w, XrValue val) {
     if (w->stdlib_module && strcmp(nominal_owner, w->stdlib_module) == 0) {
         XrEnumType *canonical = xr_stdlib_enum_type_get(w->X, w->stdlib_module, enum_type->name);
         if (canonical && !bc_enum_shape_matches(enum_type, canonical)) {
-            w->error = XR_BC_ERR_METADATA;
+            w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
             return false;
         }
     }
@@ -995,7 +995,7 @@ static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
             return false;
         char *digits = xr_bigint_to_string((XrBigInt *) XR_TO_PTR(val));
         if (!digits) {
-            w->error = XR_BC_ERR_ALLOC;
+            w->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return false;
         }
         bool ok = bc_put_string(w, digits);
@@ -1012,10 +1012,10 @@ static char *bc_read_string_or_empty(BcReader *r) {
 
 static char *bc_read_optional_string(BcReader *r) {
     uint8_t present = bc_get_u8(r);
-    if (r->error != XR_BC_OK || present == 0)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK || present == 0)
         return NULL;
     if (present != 1) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return NULL;
     }
     return bc_get_string(r);
@@ -1028,7 +1028,7 @@ static bool bc_read_field_descriptor(BcReader *r, XrFieldDescriptorEntry *field)
     field->type_name = bc_read_optional_string(r);
     field->default_value = bc_read_value(r);
     field->flags = bc_get_u16(r);
-    return r->error == XR_BC_OK && bc_read_json_decode_schema(r, &field->json_decode_schema, 0);
+    return r->error == XR_BOOTSTRAP_CONTAINER_OK && bc_read_json_decode_schema(r, &field->json_decode_schema, 0);
 }
 
 static bool bc_read_method_descriptor(BcReader *r, XrMethodDescriptorEntry *method) {
@@ -1038,17 +1038,17 @@ static bool bc_read_method_descriptor(BcReader *r, XrMethodDescriptorEntry *meth
     method->closure_index = bc_get_u32(r);
     method->return_type_name = bc_read_optional_string(r);
     method->param_count = bc_get_u8(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         return false;
     if (method->param_count > 0) {
         const char **params = xr_calloc(method->param_count, sizeof(char *));
         if (!params) {
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return false;
         }
         for (uint8_t i = 0; i < method->param_count; i++) {
             params[i] = bc_read_optional_string(r);
-            if (r->error != XR_BC_OK)
+            if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
                 return false;
         }
         method->param_type_names = params;
@@ -1056,13 +1056,13 @@ static bool bc_read_method_descriptor(BcReader *r, XrMethodDescriptorEntry *meth
     method->flags = bc_get_u16(r);
     method->op_type = bc_get_u8(r);
     method->is_operator = bc_get_u8(r) != 0;
-    return r->error == XR_BC_OK;
+    return r->error == XR_BOOTSTRAP_CONTAINER_OK;
 }
 
 static XrValue bc_read_class_descriptor(BcReader *r) {
     XrClassDescriptor *desc = xr_calloc(1, sizeof(XrClassDescriptor));
     if (!desc) {
-        r->error = XR_BC_ERR_ALLOC;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return xr_null();
     }
 
@@ -1071,22 +1071,22 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
     desc->generic_origin_name = bc_read_optional_string(r);
     desc->display_name = bc_read_optional_string(r);
     uint32_t mono_count = bc_get_u32(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         return xr_null();
     if (mono_count > UINT16_MAX) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return xr_null();
     }
     desc->mono_type_arg_count = (int) mono_count;
     if (mono_count > 0) {
         const char **names = xr_calloc(mono_count, sizeof(char *));
         if (!names) {
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return xr_null();
         }
         for (uint32_t i = 0; i < mono_count; i++) {
             names[i] = bc_read_optional_string(r);
-            if (r->error != XR_BC_OK)
+            if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
                 return xr_null();
         }
         desc->mono_type_arg_names = names;
@@ -1100,7 +1100,7 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
         desc->instance_fields =
             xr_calloc(desc->instance_field_count, sizeof(XrFieldDescriptorEntry));
         if (!desc->instance_fields) {
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return xr_null();
         }
         for (uint32_t i = 0; i < desc->instance_field_count; i++) {
@@ -1113,7 +1113,7 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
     if (desc->static_field_count > 0) {
         desc->static_fields = xr_calloc(desc->static_field_count, sizeof(XrFieldDescriptorEntry));
         if (!desc->static_fields) {
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return xr_null();
         }
         for (uint32_t i = 0; i < desc->static_field_count; i++) {
@@ -1127,7 +1127,7 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
         desc->instance_methods =
             xr_calloc(desc->instance_method_count, sizeof(XrMethodDescriptorEntry));
         if (!desc->instance_methods) {
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return xr_null();
         }
         for (uint32_t i = 0; i < desc->instance_method_count; i++) {
@@ -1141,7 +1141,7 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
         desc->static_methods =
             xr_calloc(desc->static_method_count, sizeof(XrMethodDescriptorEntry));
         if (!desc->static_methods) {
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return xr_null();
         }
         for (uint32_t i = 0; i < desc->static_method_count; i++) {
@@ -1154,13 +1154,13 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
     if (desc->interface_count > 0) {
         desc->interfaces = xr_calloc(desc->interface_count, sizeof(XrInterfaceDescriptorEntry));
         if (!desc->interfaces) {
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return xr_null();
         }
         for (uint8_t i = 0; i < desc->interface_count; i++) {
             desc->interfaces[i].interface_name = bc_read_optional_string(r);
             desc->interfaces[i].interface_ptr = NULL;
-            if (r->error != XR_BC_OK)
+            if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
                 return xr_null();
         }
     }
@@ -1169,7 +1169,7 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
     desc->descriptor_version = bc_get_u32(r);
     desc->checksum = bc_get_u32(r);
     uint64_t layout_key = bc_get_u64(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         return xr_null();
     if (layout_key != 0) {
         desc->struct_layout = bc_reader_layout(r, layout_key);
@@ -1189,7 +1189,7 @@ static XrValue bc_read_enum_type(BcReader *r) {
     char *enum_name = bc_read_string_or_empty(r);
     uint32_t member_count = bc_get_u32(r);
     uint32_t derive_flags = bc_get_u32(r);
-    if (r->error != XR_BC_OK) {
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK) {
         xr_free(nominal_owner);
         xr_free(enum_name);
         return xr_null();
@@ -1198,7 +1198,7 @@ static XrValue bc_read_enum_type(BcReader *r) {
         member_count == 0 || member_count > UINT16_MAX) {
         xr_free(nominal_owner);
         xr_free(enum_name);
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return xr_null();
     }
 
@@ -1213,7 +1213,7 @@ static XrValue bc_read_enum_type(BcReader *r) {
         xr_free(payload_counts);
         xr_free(payload_names);
         xr_free(payload_type_ids);
-        r->error = XR_BC_ERR_ALLOC;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return xr_null();
     }
 
@@ -1221,10 +1221,10 @@ static XrValue bc_read_enum_type(BcReader *r) {
     for (uint32_t i = 0; i < member_count; i++) {
         member_names[i] = bc_read_string_or_empty(r);
         uint16_t payload_count = bc_get_u16(r);
-        if (r->error != XR_BC_OK)
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
             break;
         if (!member_names[i] || member_names[i][0] == '\0') {
-            r->error = XR_BC_ERR_CORRUPT;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             break;
         }
         payload_counts[i] = (int) payload_count;
@@ -1233,26 +1233,26 @@ static XrValue bc_read_enum_type(BcReader *r) {
             payload_names[i] = xr_calloc(payload_count, sizeof(char *));
             payload_type_ids[i] = xr_calloc(payload_count, sizeof(uint8_t));
             if (!payload_names[i] || !payload_type_ids[i]) {
-                r->error = XR_BC_ERR_ALLOC;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
                 break;
             }
             for (uint16_t p = 0; p < payload_count; p++) {
                 payload_names[i][p] = bc_read_string_or_empty(r);
                 payload_type_ids[i][p] = bc_get_u8(r);
-                if (r->error != XR_BC_OK)
+                if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
                     break;
                 if (!payload_names[i][p] || payload_type_ids[i][p] >= XR_TID_COUNT) {
-                    r->error = XR_BC_ERR_CORRUPT;
+                    r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
                     break;
                 }
             }
-            if (r->error != XR_BC_OK)
+            if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
                 break;
         }
     }
 
     XrEnumType *enum_type = NULL;
-    if (r->error == XR_BC_OK) {
+    if (r->error == XR_BOOTSTRAP_CONTAINER_OK) {
         XrEnumType *canonical = xr_stdlib_enum_type_get(r->X, nominal_owner, enum_name);
         if (canonical) {
             bool shape_matches = canonical->member_count == member_count;
@@ -1262,23 +1262,23 @@ static XrValue bc_read_enum_type(BcReader *r) {
                                 xr_enum_type_payload_count(canonical, i) == payload_counts[i];
             }
             if (!shape_matches) {
-                r->error = XR_BC_ERR_CORRUPT;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             } else {
                 canonical->derive_flags = derive_flags;
                 enum_type = canonical;
             }
-        } else if (r->error == XR_BC_OK) {
+        } else if (r->error == XR_BOOTSTRAP_CONTAINER_OK) {
             enum_type =
                 xr_enum_type_new(r->X, nominal_owner, enum_name, member_names, (int) member_count);
             if (!enum_type) {
-                r->error = XR_BC_ERR_ALLOC;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             }
         }
         if (enum_type && enum_type != canonical) {
             enum_type->derive_flags = derive_flags;
             if (has_payloads &&
                 !xr_enum_type_set_adt_payloads(enum_type, payload_counts, (int) member_count)) {
-                r->error = XR_BC_ERR_CORRUPT;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
                 enum_type = NULL;
             }
             if (enum_type) {
@@ -1287,7 +1287,7 @@ static XrValue bc_read_enum_type(BcReader *r) {
                         !xr_enum_layout_set_variant_payload_metadata(
                             enum_type->layout, i, (const char *const *) payload_names[i],
                             payload_type_ids[i], (uint16_t) payload_counts[i])) {
-                        r->error = XR_BC_ERR_CORRUPT;
+                        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
                         enum_type = NULL;
                         break;
                     }
@@ -1310,7 +1310,7 @@ static XrValue bc_read_enum_type(BcReader *r) {
     xr_free(nominal_owner);
     xr_free(enum_name);
 
-    return (r->error == XR_BC_OK && enum_type) ? XR_FROM_PTR(enum_type) : xr_null();
+    return (r->error == XR_BOOTSTRAP_CONTAINER_OK && enum_type) ? XR_FROM_PTR(enum_type) : xr_null();
 }
 
 static void bc_dispose_json_decode_schema(XrJsonDecodeSchema *schema) {
@@ -1327,47 +1327,47 @@ static void bc_dispose_json_decode_schema(XrJsonDecodeSchema *schema) {
 static bool bc_read_json_decode_schema(BcReader *r, XrJsonDecodeSchema *out, int depth) {
     if (!r || !out || depth > 32) {
         if (r)
-            r->error = XR_BC_ERR_CORRUPT;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return false;
     }
     memset(out, 0, sizeof(*out));
     out->value_kind = bc_get_u8(r);
     out->storage_type = bc_get_u8(r);
     uint8_t base = xr_json_value_kind_base(out->value_kind);
-    if (r->error != XR_BC_OK || base > XR_JSON_VALUE_CLASS_INSTANCE ||
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK || base > XR_JSON_VALUE_CLASS_INSTANCE ||
         out->storage_type >= XR_ELEM_COUNT) {
-        if (r->error == XR_BC_OK)
-            r->error = XR_BC_ERR_CORRUPT;
+        if (r->error == XR_BOOTSTRAP_CONTAINER_OK)
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return false;
     }
     if (base == XR_JSON_VALUE_STRUCT_OBJECT) {
         XrValue nested = bc_read_value(r);
-        if (r->error != XR_BC_OK || !XR_IS_INT(nested) || XR_TO_INT(nested) == 0) {
-            if (r->error == XR_BC_OK)
-                r->error = XR_BC_ERR_CORRUPT;
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK || !XR_IS_INT(nested) || XR_TO_INT(nested) == 0) {
+            if (r->error == XR_BOOTSTRAP_CONTAINER_OK)
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             return false;
         }
         out->target_descriptor = (const void *) (intptr_t) XR_TO_INT(nested);
     } else if (base == XR_JSON_VALUE_ENUM) {
         XrValue enum_type = bc_read_value(r);
-        if (r->error != XR_BC_OK || !XR_IS_ENUM_TYPE(enum_type)) {
-            if (r->error == XR_BC_OK)
-                r->error = XR_BC_ERR_CORRUPT;
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK || !XR_IS_ENUM_TYPE(enum_type)) {
+            if (r->error == XR_BOOTSTRAP_CONTAINER_OK)
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             return false;
         }
         out->target_descriptor = XR_TO_PTR(enum_type);
     } else if (base == XR_JSON_VALUE_CLASS_INSTANCE) {
         XrValue class_name = bc_read_value(r);
-        if (r->error != XR_BC_OK || !XR_IS_STRING(class_name)) {
-            if (r->error == XR_BC_OK)
-                r->error = XR_BC_ERR_CORRUPT;
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK || !XR_IS_STRING(class_name)) {
+            if (r->error == XR_BOOTSTRAP_CONTAINER_OK)
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             return false;
         }
         out->target_descriptor = XR_TO_PTR(class_name);
     } else if (base == XR_JSON_VALUE_ARRAY || base == XR_JSON_VALUE_MAP) {
         XrJsonDecodeSchema *child = (XrJsonDecodeSchema *) xr_calloc(1, sizeof(*child));
         if (!child) {
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             return false;
         }
         if (!bc_read_json_decode_schema(r, child, depth + 1)) {
@@ -1384,11 +1384,11 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
     uint8_t kind = bc_get_u8(r);
     uint8_t sealed_raw = bc_get_u8(r);
     uint32_t count = bc_get_u32(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         return xr_null();
     if (count > UINT16_MAX ||
         (kind != BC_SHAPE_STRUCT_OBJECT && kind != BC_SHAPE_JSON_DECODE_ROOT)) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return xr_null();
     }
 
@@ -1407,7 +1407,7 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
         shape_field_flags = xr_malloc((size_t) count);
         if (!names || !json_value_kinds || !json_struct_object_classes || !json_decode_schemas ||
             !stable_type_keys || !shape_field_flags) {
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             goto fail;
         }
         memset(names, 0, sizeof(char *) * (size_t) count);
@@ -1415,21 +1415,21 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
 
     for (uint32_t i = 0; i < count; i++) {
         names[i] = bc_get_string(r);
-        if (r->error != XR_BC_OK)
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
             goto fail;
         if (!names[i]) {
             names[i] = xr_malloc(1);
             if (!names[i]) {
-                r->error = XR_BC_ERR_ALLOC;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
                 goto fail;
             }
             names[i][0] = '\0';
         }
         stable_type_keys[i] = bc_get_u64(r);
         shape_field_flags[i] = bc_get_u8(r);
-        if (r->error != XR_BC_OK || (shape_field_flags[i] & ~XR_OBJECT_SHAPE_FIELD_READONLY) != 0) {
-            if (r->error == XR_BC_OK)
-                r->error = XR_BC_ERR_CORRUPT;
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK || (shape_field_flags[i] & ~XR_OBJECT_SHAPE_FIELD_READONLY) != 0) {
+            if (r->error == XR_BOOTSTRAP_CONTAINER_OK)
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             goto fail;
         }
         if (!bc_read_json_decode_schema(r, &json_decode_schemas[i], 0))
@@ -1442,7 +1442,7 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
     XrClass *cls = NULL;
     bool sealed = sealed_raw != 0;
     if (!sealed) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         cls = NULL;
     } else {
         cls = xr_class_build_struct_object_chain(
@@ -1450,7 +1450,7 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
             json_struct_object_classes, json_decode_schemas, stable_type_keys, shape_field_flags);
         if (cls && kind == BC_SHAPE_JSON_DECODE_ROOT) {
             if (count != 1) {
-                r->error = XR_BC_ERR_CORRUPT;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
                 cls = NULL;
             } else {
                 cls->flags |= XR_CLASS_JSON_DECODE_ROOT;
@@ -1470,7 +1470,7 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
     xr_free(shape_field_flags);
 
     if (!cls) {
-        r->error = XR_BC_ERR_ALLOC;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return xr_null();
     }
     return xr_int((int64_t) (intptr_t) cls);
@@ -1495,7 +1495,7 @@ fail:
 
 static XrValue bc_read_value(BcReader *r) {
     uint8_t type = bc_get_u8(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         return xr_null();
 
     switch (type) {
@@ -1512,7 +1512,7 @@ static XrValue bc_read_value(BcReader *r) {
         case BC_VAL_STRING: {
             uint32_t len = 0;
             char *str = bc_get_string_data(r, &len);
-            if (r->error != XR_BC_OK)
+            if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
                 return xr_null();
             /* Bytecode literals are module-lifetime constants.  Re-enter the
              * permanent compiler pool so embedded-NUL/raw byte payloads remain
@@ -1523,7 +1523,7 @@ static XrValue bc_read_value(BcReader *r) {
         }
         case BC_VAL_BIGINT: {
             char *digits = bc_get_string(r);
-            if (r->error != XR_BC_OK)
+            if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
                 return xr_null();
             /* Rebuild on the compiler fixed heap so the constant lives for the
              * module lifetime, matching how the emitter materializes BigInt
@@ -1533,14 +1533,14 @@ static XrValue bc_read_value(BcReader *r) {
                 /* An empty payload cannot come from the writer, which always
                  * emits at least one digit; the stream is corrupt. */
                 xr_free(digits);
-                r->error = XR_BC_ERR_CORRUPT;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
                 return xr_null();
             }
             XrBigInt *bi =
                 xr_bigint_from_string_on_fixed_heap(xr_isolate_get_fixed_heap(r->X), digits);
             xr_free(digits);
             if (!bi) {
-                r->error = XR_BC_ERR_ALLOC;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
                 return xr_null();
             }
             XrayCoreClasses *core = xr_isolate_get_core_classes(r->X);
@@ -1555,7 +1555,7 @@ static XrValue bc_read_value(BcReader *r) {
         case BC_VAL_ENUM_TYPE:
             return bc_read_enum_type(r);
         default:
-            r->error = XR_BC_ERR_CORRUPT;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             return xr_null();
     }
 }
@@ -1694,13 +1694,13 @@ static bool *bc_collect_class_descriptor_constants(XrProto *proto, uint32_t cons
 static bool bc_collect_layouts_from_proto(BcWriter *w, XrProto *proto, uint32_t depth) {
     if (!w || !proto || depth > BC_MAX_NESTING_DEPTH) {
         if (w)
-            w->error = XR_BC_ERR_METADATA;
+            w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
         return false;
     }
     uint32_t const_count = (uint32_t) PROTO_CONST_COUNT(proto);
     bool *class_consts = bc_collect_class_descriptor_constants(proto, const_count);
     if (const_count > 0 && !class_consts) {
-        w->error = XR_BC_ERR_ALLOC;
+        w->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return false;
     }
     for (uint32_t i = 0; i < const_count; i++) {
@@ -1709,7 +1709,7 @@ static bool bc_collect_layouts_from_proto(BcWriter *w, XrProto *proto, uint32_t 
         XrValue value = PROTO_CONSTANT(proto, i);
         if (!XR_IS_PTR(value) || !XR_TO_PTR(value)) {
             xr_free(class_consts);
-            w->error = XR_BC_ERR_METADATA;
+            w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
             return false;
         }
         const XrClassDescriptor *desc = (const XrClassDescriptor *) XR_TO_PTR(value);
@@ -1736,7 +1736,7 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         return false;
 
     // 2. Source file (optional)
-    if (w->flags & XR_BC_STRIP_SOURCE) {
+    if (w->flags & XR_BOOTSTRAP_CONTAINER_STRIP_SOURCE) {
         if (!bc_put_string(w, ""))
             return false;
     } else {
@@ -1849,7 +1849,7 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     xr_free(class_consts);
 
     // 6. Line info (optional)
-    if (w->flags & XR_BC_STRIP_DEBUG) {
+    if (w->flags & XR_BOOTSTRAP_CONTAINER_STRIP_DEBUG) {
         if (!bc_put_u32(w, 0))
             return false;
     } else {
@@ -1905,20 +1905,20 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
 
 static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     if (depth > BC_MAX_NESTING_DEPTH) {
-        r->error = XR_BC_ERR_CORRUPT;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return NULL;
     }
     // Allocate Proto through the canonical constructor so runtime metadata
     // such as proto_id stays unique for inline-cache indexing.
     XrProto *proto = xr_instruction_unit_new();
     if (!proto) {
-        r->error = XR_BC_ERR_ALLOC;
+        r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return NULL;
     }
 
     // 1. Function name
     char *name = bc_get_string(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         goto fail;
     if (name && name[0]) {
         proto->name = xr_string_intern(r->X, name, strlen(name), 0);
@@ -1927,7 +1927,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
 
     // 2. Source file
     char *source = bc_get_string(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         goto fail;
     if (source && source[0]) {
         proto->source_file = source;
@@ -1946,7 +1946,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     proto->is_coro_safe = bc_get_u8(r) != 0;
     proto->may_scheduler_suspend = bc_get_u8(r) != 0;
     proto->may_task_spawn = bc_get_u8(r) != 0;
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         goto fail;
 
     // 3a. Canonical reachable-runtime entry contract
@@ -1961,19 +1961,19 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     proto->entry_plan.root_representation = bc_get_u8(r);
     proto->entry_plan.scheduler_mode = bc_get_u8(r);
     proto->entry_plan.unproven_reason = bc_get_u8(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         goto fail;
 
     // 3b. FFI extern signature
     {
         uint8_t has_ffi = bc_get_u8(r);
-        if (r->error != XR_BC_OK)
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
             goto fail;
         if (has_ffi) {
             char *sym = bc_get_string(r);
             char *dylib = bc_get_string(r);
             uint8_t np = bc_get_u8(r);
-            if (r->error != XR_BC_OK) {
+            if (r->error != XR_BOOTSTRAP_CONTAINER_OK) {
                 xr_free(sym);
                 xr_free(dylib);
                 goto fail;
@@ -1982,13 +1982,13 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
             xr_free(sym);
             xr_free(dylib);
             if (!sig) {
-                r->error = XR_BC_ERR_ALLOC;
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
                 goto fail;
             }
             for (uint8_t i = 0; i < np; i++) {
                 sig->params[i] = bc_get_u8(r);
                 uint8_t has_cb = bc_get_u8(r);
-                if (r->error != XR_BC_OK) {
+                if (r->error != XR_BOOTSTRAP_CONTAINER_OK) {
                     xr_ffi_sig_free(sig);
                     goto fail;
                 }
@@ -1998,13 +1998,13 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
                     uint8_t *cb_params = cb_np <= 16 ? cb_stack : xr_malloc(cb_np);
                     if (cb_np > 0 && !cb_params) {
                         xr_ffi_sig_free(sig);
-                        r->error = XR_BC_ERR_ALLOC;
+                        r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
                         goto fail;
                     }
                     for (uint8_t ci = 0; ci < cb_np; ci++)
                         cb_params[ci] = bc_get_u8(r);
                     uint8_t cb_ret = bc_get_u8(r);
-                    if (r->error != XR_BC_OK) {
+                    if (r->error != XR_BOOTSTRAP_CONTAINER_OK) {
                         if (cb_params != cb_stack)
                             xr_free(cb_params);
                         xr_ffi_sig_free(sig);
@@ -2015,13 +2015,13 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
                         xr_free(cb_params);
                     if (!ok) {
                         xr_ffi_sig_free(sig);
-                        r->error = XR_BC_ERR_ALLOC;
+                        r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
                         goto fail;
                     }
                 }
             }
             sig->ret = bc_get_u8(r);
-            if (r->error != XR_BC_OK) {
+            if (r->error != XR_BOOTSTRAP_CONTAINER_OK) {
                 xr_ffi_sig_free(sig);
                 goto fail;
             }
@@ -2032,40 +2032,40 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
 
     // 4. Bytecode
     uint32_t code_count = bc_get_u32(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         goto fail;
     for (uint32_t i = 0; i < code_count; i++) {
         XrInstruction inst = bc_get_u64(r);
-        if (r->error != XR_BC_OK)
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
             goto fail;
         DYNARRAY_ADD(&proto->code, inst, XrInstruction);
     }
 
     // 5. Constants
     uint32_t const_count = bc_get_u32(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         goto fail;
     for (uint32_t i = 0; i < const_count; i++) {
         XrValue val = bc_read_value(r);
-        if (r->error != XR_BC_OK)
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
             goto fail;
         DYNARRAY_ADD(&proto->constants, val, XrValue);
     }
 
     // 6. Line info
     uint32_t line_count = bc_get_u32(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         goto fail;
     for (uint32_t i = 0; i < line_count; i++) {
         int line = (int) bc_get_u32(r);
-        if (r->error != XR_BC_OK)
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
             goto fail;
         DYNARRAY_ADD(&proto->lineinfo, line, int);
     }
 
     // 7. Upvalue info
     uint32_t upval_count = bc_get_u32(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         goto fail;
     for (uint32_t i = 0; i < upval_count; i++) {
         UpvalInfo info = {0};
@@ -2075,14 +2075,14 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
         info.is_const = bc_get_u8(r);
         info.slot_type = bc_get_u8(r);
         info.capture_action = bc_get_u8(r);
-        if (r->error != XR_BC_OK)
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
             goto fail;
         DYNARRAY_ADD(&proto->upvalues, info, UpvalInfo);
     }
 
     // 8. Nested Protos
     uint32_t sub_count = bc_get_u32(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         goto fail;
     for (uint32_t i = 0; i < sub_count; i++) {
         XrProto *sub = bc_read_proto_depth(r, depth + 1);
@@ -2093,19 +2093,19 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
 
     // 9. Per-function symbol table
     uint32_t sym_count = bc_get_u32(r);
-    if (r->error != XR_BC_OK)
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
         goto fail;
     if (sym_count > 0) {
         proto->symbols = xr_malloc(sym_count * sizeof(int32_t));
         if (!proto->symbols) {
-            r->error = XR_BC_ERR_ALLOC;
+            r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             goto fail;
         }
         proto->symbol_count = (int) sym_count;
         proto->symbol_capacity = (int) sym_count;
         for (uint32_t i = 0; i < sym_count; i++) {
             proto->symbols[i] = (int32_t) bc_get_u32(r);
-            if (r->error != XR_BC_OK)
+            if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
                 goto fail;
         }
     }
@@ -2119,23 +2119,23 @@ fail:
 
 /* ========== Public API ========== */
 
-const char *xr_bootstrap_container_error_string(XrBcError error) {
+const char *xr_bootstrap_container_error_string(XrBootstrapContainerError error) {
     switch (error) {
-        case XR_BC_OK:
+        case XR_BOOTSTRAP_CONTAINER_OK:
             return "ok";
-        case XR_BC_ERR_MAGIC:
+        case XR_BOOTSTRAP_CONTAINER_ERR_MAGIC:
             return "invalid bytecode magic";
-        case XR_BC_ERR_VERSION:
+        case XR_BOOTSTRAP_CONTAINER_ERR_VERSION:
             return "unsupported bytecode version";
-        case XR_BC_ERR_TRUNCATED:
+        case XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED:
             return "truncated bytecode payload";
-        case XR_BC_ERR_CORRUPT:
+        case XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT:
             return "corrupt bytecode metadata";
-        case XR_BC_ERR_ALLOC:
+        case XR_BOOTSTRAP_CONTAINER_ERR_ALLOC:
             return "out of memory";
-        case XR_BC_ERR_METADATA:
+        case XR_BOOTSTRAP_CONTAINER_ERR_METADATA:
             return "unsupported or inconsistent bytecode metadata";
-        case XR_BC_ERR_TARGET_ABI:
+        case XR_BOOTSTRAP_CONTAINER_ERR_TARGET_ABI:
             return "bytecode aggregate layout target ABI mismatch";
         default:
             return "unknown bytecode error";
@@ -2143,18 +2143,18 @@ const char *xr_bootstrap_container_error_string(XrBcError error) {
 }
 
 static uint8_t *bytecode_write_impl(XrVMRuntime *X, const char *stdlib_module, XrProto *proto,
-                                    int flags, size_t *out_size, XrBcError *error) {
+                                    int flags, size_t *out_size, XrBootstrapContainerError *error) {
     if (error)
-        *error = XR_BC_OK;
+        *error = XR_BOOTSTRAP_CONTAINER_OK;
     if (!X || !proto || !out_size) {
         if (error)
-            *error = XR_BC_ERR_METADATA;
+            *error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
         return NULL;
     }
     *out_size = 0;
     if (!xr_vm_entry_plan_validate(proto) && !xr_vm_entry_plan_derive(proto)) {
         if (error)
-            *error = XR_BC_ERR_METADATA;
+            *error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
         return NULL;
     }
 
@@ -2204,27 +2204,27 @@ static uint8_t *bytecode_write_impl(XrVMRuntime *X, const char *stdlib_module, X
     *out_size = w.size;
     xr_free(w.layouts);
     if (error)
-        *error = XR_BC_OK;
+        *error = XR_BOOTSTRAP_CONTAINER_OK;
     return w.buf;
 
 fail:
     xr_free(w.buf);
     xr_free(w.layouts);
     if (error)
-        *error = w.error == XR_BC_OK ? XR_BC_ERR_METADATA : w.error;
+        *error = w.error == XR_BOOTSTRAP_CONTAINER_OK ? XR_BOOTSTRAP_CONTAINER_ERR_METADATA : w.error;
     return NULL;
 }
 
 uint8_t *xr_bootstrap_container_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *out_size,
-                           XrBcError *error) {
+                           XrBootstrapContainerError *error) {
     return bytecode_write_impl(X, NULL, proto, flags, out_size, error);
 }
 
 uint8_t *xr_bootstrap_container_write_stdlib(XrVMRuntime *X, const char *canonical_module, XrProto *proto,
-                                  int flags, size_t *out_size, XrBcError *error) {
+                                  int flags, size_t *out_size, XrBootstrapContainerError *error) {
     if (!canonical_module || !canonical_module[0]) {
         if (error)
-            *error = XR_BC_ERR_METADATA;
+            *error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
         if (out_size)
             *out_size = 0;
         return NULL;
@@ -2232,10 +2232,10 @@ uint8_t *xr_bootstrap_container_write_stdlib(XrVMRuntime *X, const char *canonic
     return bytecode_write_impl(X, canonical_module, proto, flags, out_size, error);
 }
 
-XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBcError *error) {
+XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBootstrapContainerError *error) {
     if (!X || !data || size == 0) {
         if (error)
-            *error = XR_BC_ERR_TRUNCATED;
+            *error = XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED;
         return NULL;
     }
 
@@ -2245,26 +2245,26 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
     // Read header
     if (!bc_has_bytes(&r, XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE)) {
         if (error)
-            *error = XR_BC_ERR_TRUNCATED;
+            *error = XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED;
         return NULL;
     }
     if (memcmp(r.buf + r.pos, xr_bootstrap_container_magic,
                XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE) != 0) {
         if (error)
-            *error = XR_BC_ERR_MAGIC;
+            *error = XR_BOOTSTRAP_CONTAINER_ERR_MAGIC;
         return NULL;
     }
     r.pos += XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE;
 
     uint16_t version = bc_get_u16(&r);
-    if (r.error != XR_BC_OK) {
+    if (r.error != XR_BOOTSTRAP_CONTAINER_OK) {
         if (error)
             *error = r.error;
         return NULL;
     }
     if (version != XR_BOOTSTRAP_CONTAINER_VERSION) {
         if (error)
-            *error = XR_BC_ERR_VERSION;
+            *error = XR_BOOTSTRAP_CONTAINER_ERR_VERSION;
         return NULL;
     }
 
@@ -2273,7 +2273,7 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
     uint32_t max_symbol_id = bc_get_u32(&r);  // max symbol id
     uint32_t shared_count = bc_get_u32(&r);   // shared count
 
-    if (r.error != XR_BC_OK) {
+    if (r.error != XR_BOOTSTRAP_CONTAINER_OK) {
         if (error)
             *error = r.error;
         return NULL;
@@ -2282,7 +2282,7 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
     if (proto_count != 1 || shared_count > (uint32_t) INT_MAX ||
         max_symbol_id >= (uint32_t) INT_MAX) {
         if (error)
-            *error = XR_BC_ERR_CORRUPT;
+            *error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
         return NULL;
     }
 
@@ -2300,7 +2300,7 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
         id_map = xr_malloc(map_size * sizeof(int));
         if (!id_map) {
             if (error)
-                *error = XR_BC_ERR_ALLOC;
+                *error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
             bc_reader_layout_table_dispose(&r);
             return NULL;
         }
@@ -2308,7 +2308,7 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
 
         for (uint32_t i = 1; i <= max_symbol_id; i++) {
             char *name = bc_get_string(&r);
-            if (r.error != XR_BC_OK) {
+            if (r.error != XR_BOOTSTRAP_CONTAINER_OK) {
                 xr_free(id_map);
                 if (error)
                     *error = r.error;
@@ -2327,8 +2327,8 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
 
     // Read Proto
     XrProto *proto = bc_read_proto_depth(&r, 0);
-    if (!proto && r.error == XR_BC_OK)
-        r.error = XR_BC_ERR_CORRUPT;
+    if (!proto && r.error == XR_BOOTSTRAP_CONTAINER_OK)
+        r.error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
 
     // Remap symbol IDs
     if (proto && id_map) {
@@ -2339,12 +2339,12 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
     if (proto && !xr_vm_entry_plan_validate(proto)) {
         xr_instruction_unit_free(proto);
         proto = NULL;
-        r.error = XR_BC_ERR_CORRUPT;
+        r.error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
     }
     if (proto && r.pos != r.size) {
         xr_instruction_unit_free(proto);
         proto = NULL;
-        r.error = XR_BC_ERR_CORRUPT;
+        r.error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
     }
 
     xr_free(id_map);
@@ -2357,7 +2357,7 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
 int xr_eval_bytecode(XrVMRuntime *X, const uint8_t *data, size_t size) {
     XR_DCHECK(X != NULL, "eval_bytecode: NULL isolate");
     XR_DCHECK(data != NULL, "eval_bytecode: NULL data");
-    XrBcError error;
+    XrBootstrapContainerError error;
     XrProto *proto = xr_bootstrap_container_read(X, data, size, &error);
     if (!proto) {
         xr_log_warning("bytecode", "failed to load: %s", xr_bootstrap_container_error_string(error));
@@ -2415,7 +2415,7 @@ XRAY_API int xray_vm_eval_bundle(XrVMRuntime *X, const XrBytecodeBundle *bundle)
 XrProto *xr_bootstrap_container_load(XrVMRuntime *X, const uint8_t *data, size_t size) {
     XR_DCHECK(X != NULL, "bytecode_load: NULL isolate");
     XR_DCHECK(data != NULL, "bytecode_load: NULL data");
-    XrBcError error;
+    XrBootstrapContainerError error;
     XrProto *proto = xr_bootstrap_container_read(X, data, size, &error);
     if (!proto) {
         xr_log_warning("bytecode", "failed to load: %s", xr_bootstrap_container_error_string(error));

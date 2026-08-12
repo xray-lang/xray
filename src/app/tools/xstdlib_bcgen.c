@@ -167,11 +167,11 @@ int main(int argc, char **argv) {
             continue;
         }
         if (strcmp(argv[i], "--strip-debug") == 0) {
-            flags |= XR_BC_STRIP_DEBUG;
+            flags |= XR_BOOTSTRAP_CONTAINER_STRIP_DEBUG;
             continue;
         }
         if (strcmp(argv[i], "--strip-source") == 0) {
-            flags |= XR_BC_STRIP_SOURCE;
+            flags |= XR_BOOTSTRAP_CONTAINER_STRIP_SOURCE;
             continue;
         }
         fprintf(stderr, "xray_stdlib_bcgen: unknown argument '%s'\n", argv[i]);

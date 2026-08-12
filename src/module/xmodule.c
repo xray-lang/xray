@@ -841,7 +841,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
     size_t embedded_bc_size = 0;
     const uint8_t *embedded_bc = xr_get_embedded_stdlib_bytecode(module_name, &embedded_bc_size);
     if (embedded_bc && embedded_bc_size > 0) {
-        XrBcError bc_error;
+        XrBootstrapContainerError bc_error;
         code = xr_bootstrap_container_read(isolate, embedded_bc, embedded_bc_size, &bc_error);
         if (!code) {
             xr_isolate_set_current_module(isolate, prev_module);
@@ -1089,7 +1089,7 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
     XrProto *code = NULL;
 
     if (embedded) {
-        XrBcError error = XR_BC_OK;
+        XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
         code = xr_bootstrap_container_read(isolate, embedded->bytecode, embedded->bytecode_size, &error);
         if (!code) {
             xr_log_warning("module", "failed to load embedded bytecode '%s': %s", path,

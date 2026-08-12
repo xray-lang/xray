@@ -166,9 +166,9 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
 
     int flags = 0;
     if (xr_cli_opt_present(&inv->options, "strip-debug"))
-        flags |= XR_BC_STRIP_DEBUG;
+        flags |= XR_BOOTSTRAP_CONTAINER_STRIP_DEBUG;
     if (xr_cli_opt_present(&inv->options, "strip-source"))
-        flags |= XR_BC_STRIP_SOURCE;
+        flags |= XR_BOOTSTRAP_CONTAINER_STRIP_SOURCE;
 
     /* Parse explicit format */
     XrOutputFormat explicit_format = XR_OUTPUT_AUTO;
