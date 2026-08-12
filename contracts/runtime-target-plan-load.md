@@ -83,7 +83,13 @@ roots, or general module activation.
    SemanticPlan verifier before the runtime builds its canonical native
    TargetProfile. They do not guess SemanticPlan or TargetProfile authority
    from a host name, file name, sibling artifact, or caller-authored
-   fingerprint.
+   fingerprint. A dependency-bearing schema-15 XSM cannot be decoded as a
+   standalone artifact: its module-set route must present the canonical ordered
+   vector of every exact verified dependency SemanticPlan, and the decoder
+   rechecks dependency module IDs, semantic fingerprints, public export IDs,
+   callee function IDs, and frozen suspendability. The installed sole-scalar
+   route remains standalone-only and therefore rejects such cross-module
+   artifacts.
 7. The installed positive route is deliberately limited to exact XSM plus its
    matching XTP and the sole-function scalar generation executor. A build-time
    fixture generator freezes exact bytes for the current native profile; the
@@ -106,8 +112,8 @@ anchor-sha256: CMakeLists.txt c3c9d9c6d90e8f449f169a907438f2b12e3eb6baab2cf965a6
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h 38fd73865e25d62392d8dd0abfd5e6193edf2356803a817349db14c43ccf9874
 anchor-sha256: src/plan/format/xr_artifact_kind.c 289fb506284ed97372e211225dcb5c1d205d7149416ddc96abb2a7f3b8704b39
-anchor-sha256: src/plan/format/xr_xsm_schema.h 88dfd41f4086139d40f40cc991861137ef5020f5a428ea1fb0ba99a7adca05b0
-anchor-sha256: src/plan/format/xr_xsm_decode.c d54abb3c877ed3127b1ffe33642270fd3ec8cb2958cf46dfaf9b5de9a3c21007
+anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
+anchor-sha256: src/plan/format/xr_xsm_decode.c 1d9b6b50c2acecd71322aadfceb70ae9ab9328428d344b8ff9e5a766558df16c
 anchor-sha256: src/plan/format/xr_xtp_schema.h cab1a8c8256144b07ca8adc4f9d12bb59d419d00d4d3acf9fd1754b9cf524074
 anchor-sha256: src/plan/format/xr_xtp_internal.h a07aa91f18d9078e0f80adce2e49629eff4ac9825daf23c26f9c79889e354548
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1

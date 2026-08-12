@@ -1228,6 +1228,197 @@ static bool resolve_frozen_native_yieldable_target(const XrSemanticPlan *plan,
     return false;
 }
 
+static bool resolve_frozen_source_namespace_target(
+    const XrSemanticPlan *plan, const uint32_t *definitions, uint32_t value_count,
+    uint32_t operation_index, const char **module_path, const char **selector) {
+    const XrSemanticOperationRecord *call = &plan->operations[operation_index];
+    if (call->opcode != XI_CALL_METHOD || (call->semantic_immediate & 1) != 0 ||
+        call->operand_count == 0 || call->metadata_count != 1 ||
+        plan->operands[call->operand_begin].role != XR_SEM_OPERAND_RECEIVER)
+        return false;
+    uint32_t value = plan->operands[call->operand_begin].value;
+    uint32_t load = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
+        if (value >= value_count || definitions[value] >= plan->operation_count)
+            return false;
+        const XrSemanticOperationRecord *producer = &plan->operations[definitions[value]];
+        if (producer->function != call->function)
+            return false;
+        if (producer->opcode == XI_GET_SHARED && producer->semantic_immediate >= 0) {
+            load = definitions[value];
+            break;
+        }
+        if (producer->opcode != XI_COPY ||
+            producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
+            producer->operand_count != 1 || producer->result_alias_operand != 0)
+            return false;
+        value = plan->operands[producer->operand_begin].value;
+    }
+    if (load == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    int64_t slot = plan->operations[load].semantic_immediate;
+    uint32_t store = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t owner = call->function; owner != XR_SEMANTIC_INDEX_NONE;
+         owner = plan->functions[owner].parent) {
+        uint32_t candidate = XR_SEMANTIC_INDEX_NONE;
+        if (!find_frozen_shared_store(plan, owner, slot, &candidate))
+            return false;
+        if (candidate == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        if (owner != 0 || plan->functions[0].parent != XR_SEMANTIC_INDEX_NONE ||
+            !root_store_precedes_activation(plan, candidate))
+            return false;
+        store = candidate;
+        break;
+    }
+    if (store == XR_SEMANTIC_INDEX_NONE || plan->operations[store].operand_count != 1)
+        return false;
+    value = plan->operands[plan->operations[store].operand_begin].value;
+    for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
+        if (value >= value_count || definitions[value] >= plan->operation_count)
+            return false;
+        const XrSemanticOperationRecord *producer = &plan->operations[definitions[value]];
+        if (producer->function != 0)
+            return false;
+        if (producer->opcode == XI_IMPORT_REF) {
+            if (producer->metadata_count != 2 ||
+                producer->metadata_begin > plan->metadata_count ||
+                producer->metadata_count > plan->metadata_count - producer->metadata_begin ||
+                plan->metadata[producer->metadata_begin][0] == '\0' ||
+                plan->metadata[producer->metadata_begin + 1][0] != '\0')
+                return false;
+            *module_path = plan->metadata[producer->metadata_begin];
+            *selector = plan->metadata[call->metadata_begin];
+            return (*selector)[0] != '\0';
+        }
+        if (producer->opcode != XI_COPY ||
+            producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
+            producer->operand_count != 1 || producer->result_alias_operand != 0)
+            return false;
+        value = plan->operands[producer->operand_begin].value;
+    }
+    return false;
+}
+
+static bool stable_id_zero(XrStableId id) {
+    XrStableId zero = {{0}};
+    return xr_stable_id_equal(id, zero);
+}
+
+static const XrSemanticEntityRecord *verify_plan_module_entity(
+    const XrSemanticPlan *plan) {
+    const XrSemanticEntityRecord *found = NULL;
+    for (uint32_t i = 0; plan && i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        if (entity->kind != XR_SEM_ENTITY_MODULE)
+            continue;
+        if (found)
+            return NULL;
+        found = entity;
+    }
+    return found;
+}
+
+static bool verify_source_export_rows(const XrSemanticPlan *plan,
+                                      const uint32_t *definitions,
+                                      uint32_t value_count, char *error,
+                                      size_t error_size) {
+    const char *previous = NULL;
+    uint32_t annotated = 0;
+    uint32_t root_shared_count = 0;
+    for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
+        const XrSemanticOperationRecord *candidate = &plan->operations[operation];
+        if (candidate->function == 0 && candidate->opcode == XI_SET_SHARED &&
+            candidate->semantic_immediate >= 0 &&
+            (uint64_t) candidate->semantic_immediate < UINT32_MAX) {
+            uint32_t required = (uint32_t) candidate->semantic_immediate + 1u;
+            if (required > root_shared_count)
+                root_shared_count = required;
+        }
+    }
+    uint32_t *root_shared_stores =
+        root_shared_count
+            ? (uint32_t *) xr_malloc((size_t) root_shared_count *
+                                     sizeof(*root_shared_stores))
+            : NULL;
+    uint8_t *root_shared_ambiguous =
+        root_shared_count ? (uint8_t *) xr_calloc(root_shared_count, 1) : NULL;
+    if (root_shared_count && (!root_shared_stores || !root_shared_ambiguous)) {
+        xr_free(root_shared_stores);
+        xr_free(root_shared_ambiguous);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "source-export shared-store index allocation failed");
+    }
+    for (uint32_t slot = 0; slot < root_shared_count; slot++)
+        root_shared_stores[slot] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
+        const XrSemanticOperationRecord *candidate = &plan->operations[operation];
+        if (candidate->function == 0 && candidate->opcode == XI_SET_SHARED &&
+            candidate->semantic_immediate >= 0 &&
+            (uint64_t) candidate->semantic_immediate < root_shared_count) {
+            uint32_t slot = (uint32_t) candidate->semantic_immediate;
+            if (root_shared_stores[slot] != XR_SEMANTIC_INDEX_NONE)
+                root_shared_ambiguous[slot] = 1;
+            else
+                root_shared_stores[slot] = operation;
+        }
+        if (candidate->opcode == XI_SET_SHARED && candidate->metadata_count == 2 &&
+            strcmp(plan->metadata[candidate->metadata_begin], "source-export-v1") == 0)
+            annotated++;
+    }
+    if (annotated != plan->source_export_count) {
+        xr_free(root_shared_stores);
+        xr_free(root_shared_ambiguous);
+        return report(error, error_size, "XR_SEM_0019",
+                      "source-export table does not exactly cover root export stores");
+    }
+    for (uint32_t i = 0; i < plan->source_export_count; i++) {
+        const XrSemanticSourceExportRecord *record = &plan->source_exports[i];
+        uint32_t store = record->shared_slot < root_shared_count
+                             ? root_shared_stores[record->shared_slot]
+                             : XR_SEMANTIC_INDEX_NONE;
+        if (!record->name || !record->name[0] || record->function >= plan->function_count ||
+            (previous && strcmp(previous, record->name) >= 0) ||
+            record->shared_slot >= root_shared_count ||
+            root_shared_ambiguous[record->shared_slot] ||
+            store == XR_SEMANTIC_INDEX_NONE ||
+            !root_store_precedes_activation(plan, store)) {
+            xr_free(root_shared_stores);
+            xr_free(root_shared_ambiguous);
+            return report(error, error_size, "XR_SEM_0019",
+                          "source-export table is not canonical");
+        }
+        const XrSemanticOperationRecord *operation = &plan->operations[store];
+        uint32_t target = operation->operand_count == 1
+                              ? resolve_frozen_closure_value(
+                                    plan, definitions, value_count, 0,
+                                    plan->operands[operation->operand_begin].value)
+                              : XR_SEMANTIC_INDEX_NONE;
+        char expected[512];
+        char function_id[XR_STABLE_ID_BYTES * 2 + 1];
+        xr_stable_id_hex(plan->functions[record->function].id, function_id);
+        int length = snprintf(expected, sizeof(expected),
+                              "source-export-v1:schema=%u:name=%zu:%s:function=%s:slot=%u",
+                              XR_SEMANTIC_SCHEMA_VERSION, strlen(record->name), record->name,
+                              function_id, record->shared_slot);
+        if (target != record->function || operation->metadata_count != 2 ||
+            strcmp(plan->metadata[operation->metadata_begin], "source-export-v1") != 0 ||
+            strcmp(plan->metadata[operation->metadata_begin + 1], record->name) != 0 ||
+            length <= 0 || (size_t) length >= sizeof(expected) ||
+            strcmp(record->canonical_key ? record->canonical_key : "", expected) != 0 ||
+            !verify_id(record->canonical_key, record->id)) {
+            xr_free(root_shared_stores);
+            xr_free(root_shared_ambiguous);
+            return report(error, error_size, "XR_SEM_0019",
+                          "source-export row is not grounded in the root initializer");
+        }
+        previous = record->name;
+    }
+    xr_free(root_shared_stores);
+    xr_free(root_shared_ambiguous);
+    return true;
+}
+
 static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *definitions,
                                 const XrSemanticGraph *graph, uint32_t value_count,
                                 char *error, size_t error_size) {
@@ -1239,6 +1430,10 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         const char *native_member = NULL;
         bool native_yieldable = resolve_frozen_native_yieldable_target(
             plan, definitions, value_count, operation, &native_module, &native_member);
+        const char *source_module = NULL;
+        const char *source_selector = NULL;
+        bool source_namespace = resolve_frozen_source_namespace_target(
+            plan, definitions, value_count, operation, &source_module, &source_selector);
         const XrSemanticCallTargetRecord *target =
             cursor < plan->call_target_count && plan->call_targets[cursor].operation == operation
                 ? &plan->call_targets[cursor]
@@ -1246,6 +1441,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         if (cursor < plan->call_target_count && plan->call_targets[cursor].operation < operation)
             return report(error, error_size, "XR_SEM_0019",
                           "call-target table is not in operation order");
+        bool source_export = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable) && !target)
             return report(error, error_size, "XR_SEM_0019",
                           "provable call has no call-target authority");
@@ -1254,17 +1450,35 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         bool direct = direct_function != XR_SEMANTIC_INDEX_NONE && !native_yieldable &&
                       target->function == direct_function &&
                       target->function < plan->function_count &&
-                      target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
+                      target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+                      target->dependency == XR_SEMANTIC_INDEX_NONE &&
+                      target->source_export == XR_SEMANTIC_INDEX_NONE &&
+                      stable_id_zero(target->export_identity) &&
+                      stable_id_zero(target->callee_function);
         bool native = direct_function == XR_SEMANTIC_INDEX_NONE && native_yieldable &&
                       target->function == XR_SEMANTIC_INDEX_NONE &&
-                      target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE;
-        if ((!direct && !native) || target->reserved[0] != 0 ||
+                      target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE &&
+                      target->dependency == XR_SEMANTIC_INDEX_NONE &&
+                      target->source_export == XR_SEMANTIC_INDEX_NONE &&
+                      stable_id_zero(target->export_identity) &&
+                      stable_id_zero(target->callee_function);
+        bool source_shape = source_export && source_namespace &&
+                            direct_function == XR_SEMANTIC_INDEX_NONE &&
+                            !native_yieldable && target->function == XR_SEMANTIC_INDEX_NONE &&
+                            target->dependency < plan->dependency_count &&
+                            strcmp(plan->dependencies[target->dependency].module_path,
+                                   source_module) == 0 &&
+                            !stable_id_zero(target->export_identity) &&
+                            !stable_id_zero(target->callee_function) &&
+                            plan->operations[operation].opcode == XI_CALL_METHOD &&
+                            (plan->operations[operation].semantic_immediate & 1) == 0;
+        if ((!direct && !native && !source_shape) || target->reserved[0] != 0 ||
             target->reserved[1] != 0 || target->reserved[2] != 0)
             return report(error, error_size, "XR_SEM_0019",
                           "call-target authority disagrees with frozen invocation facts");
         char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
         char function_id[XR_STABLE_ID_BYTES * 2 + 1];
-        char expected_key[192];
+        char expected_key[320];
         xr_stable_id_hex(plan->operations[operation].id, operation_id);
         int length;
         if (direct) {
@@ -1273,11 +1487,23 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                               "call-target-v3:schema=%u:operation=%s:function=%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, function_id,
                               (unsigned) target->kind);
-        } else {
+        } else if (native) {
             length = snprintf(expected_key, sizeof(expected_key),
                               "call-target-v3:schema=%u:operation=%s:native=%s.%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, native_module,
                               native_member, (unsigned) target->kind);
+        } else {
+            char dependency_id[XR_STABLE_ID_BYTES * 2 + 1];
+            char export_id[XR_STABLE_ID_BYTES * 2 + 1];
+            char callee_id[XR_STABLE_ID_BYTES * 2 + 1];
+            xr_stable_id_hex(plan->dependencies[target->dependency].id, dependency_id);
+            xr_stable_id_hex(target->export_identity, export_id);
+            xr_stable_id_hex(target->callee_function, callee_id);
+            length = snprintf(expected_key, sizeof(expected_key),
+                              "call-target-v4:schema=%u:operation=%s:dependency=%s:"
+                              "export=%s:function=%s:kind=%u",
+                              XR_SEMANTIC_SCHEMA_VERSION, operation_id, dependency_id,
+                              export_id, callee_id, (unsigned) target->kind);
         }
         if (length < 0 || (size_t) length >= sizeof(expected_key) ||
             strcmp(target->canonical_key ? target->canonical_key : "", expected_key) != 0 ||
@@ -1387,6 +1613,18 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
                               "native yieldable call-target shape is invalid");
             }
             work.suspendable[operation->function] = 1;
+        } else if (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT) {
+            const XrSemanticOperationRecord *operation =
+                &plan->operations[target->operation];
+            if (target->function != XR_SEMANTIC_INDEX_NONE ||
+                target->dependency >= plan->dependency_count ||
+                operation->opcode != XI_CALL_METHOD ||
+                operation->function >= plan->function_count) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "source-export call-target shape is invalid");
+            }
+            work.suspendable[operation->function] = 1;
         }
     }
     for (uint32_t entity_index = 0; entity_index < plan->entity_count; entity_index++) {
@@ -1431,21 +1669,27 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
             const XrSemanticCallTargetRecord *target =
                 &plan->call_targets[target_index];
             dynamic_suspend =
-                plan->operations[operation].opcode == XI_CALL &&
-                (target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE ||
-                 (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
-                  work.suspendable[target->function] != 0));
+                (plan->operations[operation].opcode == XI_CALL &&
+                 (target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE ||
+                  (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+                   work.suspendable[target->function] != 0))) ||
+                (plan->operations[operation].opcode == XI_CALL_METHOD &&
+                 target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT);
         }
         bool expected = operation_is_static_suspend(&plan->operations[operation]) ||
                         dynamic_suspend;
         if (work.state_counts[operation] != (uint8_t) expected) {
-            char detail[192];
+            char detail[256];
             const XrSemanticOperationRecord *record = &plan->operations[operation];
+            const char *selector = record->metadata_count != 0 &&
+                                           record->metadata_begin < plan->metadata_count
+                                       ? plan->metadata[record->metadata_begin]
+                                       : "";
             snprintf(detail, sizeof(detail),
                      "coroutine state count disagrees with grounded call authority "
-                     "function=%u operation=%u opcode=%u expected=%u actual=%u",
-                     record->function, operation, record->opcode, expected ? 1u : 0u,
-                     work.state_counts[operation]);
+                     "function=%u operation=%u opcode=%u selector=%s expected=%u actual=%u",
+                     record->function, operation, record->opcode, selector,
+                     expected ? 1u : 0u, work.state_counts[operation]);
             coroutine_authority_work_dispose(&work);
             return report(error, error_size, "XR_SEM_0019", detail);
         }
@@ -1582,6 +1826,7 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
                                                  error_size) &&
         verify_operation_uses(plan, graph, definitions, value_count, error, error_size) &&
         verify_block_controls(plan, graph, definitions, value_count, error, error_size) &&
+        verify_source_export_rows(plan, definitions, value_count, error, error_size) &&
         verify_call_targets(plan, definitions, graph, value_count, error, error_size);
     xr_free(definitions);
     return valid;
@@ -1611,6 +1856,102 @@ static bool verify_constants(const XrSemanticPlan *plan, char *error, size_t err
     return true;
 }
 
+static bool compute_plan_suspendable_functions(const XrSemanticPlan *plan,
+                                               uint8_t **suspendable_out,
+                                               char *error, size_t error_size) {
+    uint8_t *suspendable = plan->function_count
+                               ? (uint8_t *) xr_calloc(plan->function_count, 1)
+                               : NULL;
+    uint32_t *head = plan->function_count
+                         ? (uint32_t *) xr_malloc((size_t) plan->function_count * sizeof(*head))
+                         : NULL;
+    uint32_t *next = plan->call_target_count
+                         ? (uint32_t *) xr_malloc((size_t) plan->call_target_count * sizeof(*next))
+                         : NULL;
+    uint32_t *queue = plan->function_count
+                          ? (uint32_t *) xr_malloc((size_t) plan->function_count * sizeof(*queue))
+                          : NULL;
+    if ((plan->function_count && (!suspendable || !head || !queue)) ||
+        (plan->call_target_count && !next)) {
+        xr_free(suspendable);
+        xr_free(head);
+        xr_free(next);
+        xr_free(queue);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "source dependency suspendability budget exhausted");
+    }
+    for (uint32_t f = 0; f < plan->function_count; f++)
+        head[f] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->call_target_count; i++)
+        next[i] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        if (entity->kind == XR_SEM_ENTITY_COROUTINE_STATE &&
+            entity->subject < plan->operation_count)
+            suspendable[plan->operations[entity->subject].function] = 1;
+    }
+    for (uint32_t i = 0; i < plan->call_target_count; i++) {
+        const XrSemanticCallTargetRecord *target = &plan->call_targets[i];
+        if (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+            target->function < plan->function_count && target->operation < plan->operation_count &&
+            operation_propagates_suspend(&plan->operations[target->operation])) {
+            next[i] = head[target->function];
+            head[target->function] = i;
+        }
+    }
+    uint32_t begin = 0, end = 0;
+    for (uint32_t f = 0; f < plan->function_count; f++)
+        if (suspendable[f])
+            queue[end++] = f;
+    while (begin < end) {
+        uint32_t callee = queue[begin++];
+        for (uint32_t edge = head[callee]; edge != XR_SEMANTIC_INDEX_NONE; edge = next[edge]) {
+            uint32_t caller = plan->operations[plan->call_targets[edge].operation].function;
+            if (!suspendable[caller]) {
+                suspendable[caller] = 1;
+                queue[end++] = caller;
+            }
+        }
+    }
+    xr_free(head);
+    xr_free(next);
+    xr_free(queue);
+    *suspendable_out = suspendable;
+    return true;
+}
+
+static bool verify_dependency_rows(const XrSemanticPlan *plan, char *error,
+                                   size_t error_size) {
+    for (uint32_t i = 0; i < plan->dependency_count; i++) {
+        const XrSemanticDependencyRecord *record = &plan->dependencies[i];
+        if (!record->module_path || !record->module_path[0] ||
+            stable_id_zero(record->module))
+            return report(error, error_size, "XR_SEM_0019",
+                          "source dependency row is incomplete");
+        char expected[512];
+        char module_id[XR_STABLE_ID_BYTES * 2 + 1];
+        char fingerprint[XR_FINGERPRINT_BYTES * 2 + 1];
+        xr_stable_id_hex(record->module, module_id);
+        for (unsigned b = 0; b < XR_FINGERPRINT_BYTES; b++)
+            snprintf(fingerprint + b * 2, sizeof(fingerprint) - b * 2, "%02x",
+                     record->semantic_fingerprint.bytes[b]);
+        int length = snprintf(expected, sizeof(expected),
+                              "dependency-v1:schema=%u:path=%zu:%s:module=%s:semantic=%s",
+                              XR_SEMANTIC_SCHEMA_VERSION, strlen(record->module_path),
+                              record->module_path, module_id, fingerprint);
+        if (length <= 0 || (size_t) length >= sizeof(expected) ||
+            strcmp(record->canonical_key ? record->canonical_key : "", expected) != 0 ||
+            !verify_id(record->canonical_key, record->id))
+            return report(error, error_size, "XR_SEM_0019",
+                          "source dependency identity is not canonical");
+        for (uint32_t before = 0; before < i; before++)
+            if (xr_stable_id_equal(plan->dependencies[before].module, record->module))
+                return report(error, error_size, "XR_SEM_0019",
+                              "source dependency module is duplicated");
+    }
+    return true;
+}
+
 bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t error_size) {
     if (!plan || !plan->frozen || plan->schema != XR_SEMANTIC_SCHEMA_VERSION)
         return report(error, error_size, "XR_SEM_0004",
@@ -1628,7 +1969,9 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
         plan->block_count > 2000000u || plan->operation_count > 10000000u ||
         plan->parameter_count > 25600000u || plan->capture_count > 6400000u ||
         plan->edge_count > 40000000u || plan->operand_count > 40000000u ||
-        plan->entity_count > 80000000u || plan->call_target_count > plan->operation_count)
+        plan->entity_count > 80000000u || plan->call_target_count > plan->operation_count ||
+        plan->dependency_count > plan->function_count + plan->operation_count ||
+        plan->source_export_count > plan->function_count)
         return report(error, error_size, "XR_EXEC_5003", "SemanticPlan exceeds hard budgets");
     uint8_t *block_edge_mask = (uint8_t *) xr_calloc(plan->block_count, sizeof(*block_edge_mask));
     uint8_t *operation_edge_mask =
@@ -1649,6 +1992,7 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
                     xr_semantic_graph_build(plan, &graph, error, error_size) &&
                     verify_operations(plan, operation_edge_mask, &graph, error, error_size) &&
                     verify_coroutine_authority(plan, error, error_size) &&
+                    verify_dependency_rows(plan, error, error_size) &&
                     verify_constants(plan, error, error_size) &&
                     xr_ownership_certificate_check(plan, &graph, error, error_size);
     xr_semantic_graph_dispose(&graph);
@@ -1661,5 +2005,98 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
     if (!xr_fingerprint_equal(actual, plan->fingerprint))
         return report(error, error_size, "XR_SEM_0004",
                       "frozen SemanticPlan fingerprint changed after freeze");
+    return true;
+}
+
+bool xr_semantic_plan_verify_module_set(
+    const XrSemanticPlan *plan, const XrSemanticPlan *const *dependencies,
+    uint32_t dependency_count, char *error, size_t error_size) {
+    if (!xr_semantic_plan_verify(plan, error, error_size))
+        return false;
+    if (dependency_count != plan->dependency_count ||
+        (dependency_count != 0 && !dependencies))
+        return report(error, error_size, "XR_SEM_0019",
+                      "source dependency vector does not exactly cover the plan");
+    if (dependency_count == 0)
+        return true;
+
+    uint8_t *used = (uint8_t *) xr_calloc(dependency_count, sizeof(*used));
+    uint8_t **suspendable =
+        (uint8_t **) xr_calloc(dependency_count, sizeof(*suspendable));
+    if (!used || !suspendable) {
+        xr_free(used);
+        xr_free(suspendable);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "source dependency verifier budget exhausted");
+    }
+    bool valid = true;
+    for (uint32_t row = 0; valid && row < plan->dependency_count; row++) {
+        const XrSemanticDependencyRecord *record = &plan->dependencies[row];
+        const XrSemanticPlan *match = dependencies[row];
+        const XrSemanticEntityRecord *module = verify_plan_module_entity(match);
+        if (!match || !xr_semantic_plan_is_verified(match) || !module ||
+            !xr_stable_id_equal(module->id, record->module) ||
+            !xr_fingerprint_equal(record->semantic_fingerprint,
+                                  xr_semantic_plan_fingerprint(match))) {
+            valid = false;
+            break;
+        }
+        if (!xr_semantic_plan_verify(match, error, error_size) ||
+            !compute_plan_suspendable_functions(match, &suspendable[row], error,
+                                                 error_size)) {
+            for (uint32_t i = 0; i < dependency_count; i++)
+                xr_free(suspendable[i]);
+            xr_free(suspendable);
+            xr_free(used);
+            return false;
+        }
+    }
+    for (uint32_t target_index = 0;
+         valid && target_index < plan->call_target_count; target_index++) {
+        const XrSemanticCallTargetRecord *target = &plan->call_targets[target_index];
+        if (target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+            continue;
+        if (target->dependency >= dependency_count) {
+            valid = false;
+            break;
+        }
+        const XrSemanticPlan *match = dependencies[target->dependency];
+        const XrSemanticSourceExportRecord *source_export =
+            target->source_export < match->source_export_count
+                ? &match->source_exports[target->source_export]
+                : NULL;
+        const XrSemanticOperationRecord *operation =
+            target->operation < plan->operation_count
+                ? &plan->operations[target->operation]
+                : NULL;
+        const XrSemanticFunctionRecord *callee =
+            source_export && source_export->function < match->function_count
+                ? &match->functions[source_export->function]
+                : NULL;
+        const char *selector =
+            operation && operation->metadata_count == 1
+                ? plan->metadata[operation->metadata_begin]
+                : NULL;
+        if (!source_export || !operation || !callee || !selector ||
+            strcmp(selector, source_export->name) != 0 ||
+            callee->parameter_count == UINT16_MAX ||
+            operation->operand_count != (uint16_t) (callee->parameter_count + 1u) ||
+            !suspendable[target->dependency][source_export->function] ||
+            !xr_stable_id_equal(target->export_identity, source_export->id) ||
+            !xr_stable_id_equal(target->callee_function, callee->id)) {
+            valid = false;
+            break;
+        }
+        used[target->dependency] = 1;
+    }
+    for (uint32_t i = 0; valid && i < dependency_count; i++)
+        valid = used[i] != 0;
+    for (uint32_t i = 0; i < dependency_count; i++)
+        xr_free(suspendable[i]);
+    xr_free(suspendable);
+    xr_free(used);
+    if (!valid)
+        return report(error, error_size, "XR_SEM_0019",
+                      "ordered source-export authority is not grounded by verified dependencies");
     return true;
 }

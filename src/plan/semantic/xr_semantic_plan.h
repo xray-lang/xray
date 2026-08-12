@@ -66,6 +66,7 @@ typedef enum XrSemanticOperandFlag {
 typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_DIRECT_LOCAL = 1,
     XR_SEM_CALL_TARGET_NATIVE_YIELDABLE,
+    XR_SEM_CALL_TARGET_SOURCE_EXPORT,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 
@@ -330,17 +331,44 @@ typedef struct XrSemanticOperandRecord {
 /*
  * Exact call-site authority. DIRECT_LOCAL is rebuilt from frozen SSA or from a
  * unique lexical SET_SHARED/GET_SHARED slot chain. NATIVE_YIELDABLE is rebuilt
- * from a bare IMPORT_REF and the canonical stdlib binding registry. Both kinds
- * independently authorize coroutine state creation without retaining Xi data.
+ * from a bare IMPORT_REF and the canonical stdlib binding registry.
+ * SOURCE_EXPORT is completed only by the ordered module-set verifier against
+ * the dependency's public export table. All three kinds independently
+ * authorize coroutine state creation without retaining Xi data.
  */
 typedef struct XrSemanticCallTargetRecord {
     XrStableId id;
     const char *canonical_key;
     uint32_t operation;
     uint32_t function;
+    uint32_t dependency;
+    uint32_t source_export;
+    XrStableId export_identity;
+    XrStableId callee_function;
     uint8_t kind;
     uint8_t reserved[3];
 } XrSemanticCallTargetRecord;
+
+/* Exact source-module dependency.  The fingerprint is a content address, not
+ * a suspendability assertion: consumers must present the matching verified
+ * dependency plan to the module-set verifier before this row is executable. */
+typedef struct XrSemanticDependencyRecord {
+    XrStableId id;
+    const char *canonical_key;
+    const char *module_path;
+    XrStableId module;
+    XrFingerprint semantic_fingerprint;
+} XrSemanticDependencyRecord;
+
+/* A source export is admitted only when the local root entry uniquely stores
+ * the named local closure into this shared slot before module activation. */
+typedef struct XrSemanticSourceExportRecord {
+    XrStableId id;
+    const char *canonical_key;
+    const char *name;
+    uint32_t function;
+    uint32_t shared_slot;
+} XrSemanticSourceExportRecord;
 
 XR_FUNC XrSemanticPlan *xr_semantic_plan_retain(XrSemanticPlan *plan);
 XR_FUNC void xr_semantic_plan_free(XrSemanticPlan *plan);
@@ -357,6 +385,8 @@ XR_FUNC size_t xr_semantic_plan_capture_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_block_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_operation_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_call_target_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_dependency_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_source_export_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_edge_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_constant_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_entity_count(const XrSemanticPlan *plan);
@@ -373,6 +403,10 @@ XR_FUNC const XrSemanticBlockRecord *xr_semantic_plan_block(const XrSemanticPlan
 XR_FUNC const XrSemanticOperationRecord *xr_semantic_plan_operation(const XrSemanticPlan *plan,
                                                                     uint32_t index);
 XR_FUNC const XrSemanticCallTargetRecord *xr_semantic_plan_call_target(
+    const XrSemanticPlan *plan, uint32_t index);
+XR_FUNC const XrSemanticDependencyRecord *xr_semantic_plan_dependency(
+    const XrSemanticPlan *plan, uint32_t index);
+XR_FUNC const XrSemanticSourceExportRecord *xr_semantic_plan_source_export(
     const XrSemanticPlan *plan, uint32_t index);
 XR_FUNC const XrSemanticEdgeRecord *xr_semantic_plan_edge(const XrSemanticPlan *plan,
                                                           uint32_t index);

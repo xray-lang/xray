@@ -9,7 +9,7 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 14 preserves the pointer-free `DIRECT_LOCAL` call-target
+SemanticPlan schema 15 preserves the pointer-free `DIRECT_LOCAL` call-target
 authority to lexical shared slots. Direct SSA callees still resolve only
 through exact identity copies to a closure/function binding. A shared callee
 must be a `GET_SHARED(slot)` whose first lexical owner, found by walking the
@@ -32,18 +32,27 @@ static suspend operation (or `XI_GO`), the same row also authorizes exactly one
 coroutine-state entity for an ordinary call. A direct tail-call edge propagates
 the target's suspendability to its caller but has no resume state of its own.
 The record never copies caller-authored
-effects, provider spellings, symbols, pointers, or raw digests. Schema 14 adds
+effects, provider spellings, symbols, pointers, or raw digests. Schema 15 retains
 one separate `NATIVE_YIELDABLE` authority for an ordinary `XI_CALL` whose
 callee resolves through exact identity copies to a bare canonical
 `XI_IMPORT_REF`. The module/member pair must name exactly one generated stdlib
 definition with a complete signature, VM binding, yieldable contract, and
 exact argument count. The full generated stdlib registry is fingerprinted into
 SemanticPlan and XSM; the independent verifier repeats the name, shape,
-argument, registry-fingerprint, and coroutine-state proof. Tail calls, methods,
-relative imports, unknown or duplicate definitions, and source-level wrapper
-exports remain absent and fail closed. In particular, a public Xray wrapper
-such as `net.writeBytes` is not reinterpreted as private native
-`net.__writeBytes`.
+argument, registry-fingerprint, and coroutine-state proof. Tail calls, relative
+imports, unknown or duplicate definitions remain absent and fail closed.
+Schema 15 additionally admits `SOURCE_EXPORT` only for a non-super method call
+whose receiver independently resolves through identity copies and one
+root-initializer `SET_SHARED` to a whole-module `XI_IMPORT_REF`. The import path,
+selector, dependency module stable identity, exact dependency SemanticPlan
+fingerprint, public export identity, and exported function identity are frozen.
+The dependency plan must itself prove that the public export is the unique
+root-entry store of that local closure before activation and that its function
+is suspendable through the frozen direct call graph. Standalone XSM decoding of
+such a plan fails closed; module-set decoding requires the exact canonical
+ordered vector of verified dependency plans and repeats every relation. This
+follows a public Xray wrapper such as
+`net.writeBytes`; it never reinterprets it as private native `net.__writeBytes`.
 Function declarations publish their immutable binding capability and lexical
 storage domain with the rest of analyzer ownership evidence. Closure lowering
 may copy those facts into SemanticPlan capture records but may not infer them
@@ -208,12 +217,12 @@ anchor-sha256: tests/unit/ir/test_xi_lower.c fbcb2ea7d98487c81c049b936716158b209
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 8ac0559b635cba3f51a6027b9fb49b0f1e7c24f5d13d5525dc151bf66b8fa6bf
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef875074bfbe67aa4c0ffcb9c6cda031741
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
-anchor-sha256: src/plan/format/xr_xsm_schema.h 88dfd41f4086139d40f40cc991861137ef5020f5a428ea1fb0ba99a7adca05b0
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c cd9695373eca7c9bf77163f4b9a7cd2b710d17598f30f017fcd066087f999491
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h 0d3c90639d0112359830ff3e599d9cb80df283e13fe812c913a243abe334e969
-anchor-sha256: src/plan/semantic/xr_semantic_plan.c 73c96a100d90c7b72de7c01de69c804a694e19c2413a3c9cf586c6e26c4bf9bf
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h cb6b20cff5f2c1e4f6e92edeb0b34789af61a1603511da37681cfb7a320c1ccb
-anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 4792284f6ca79d64322897a37f24ec4309db1e6a16aaa2bf0ab5a7f6b5842749
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 826b73827bc9d8eac1a0363d0461422e2c2aacd4c8876e85eea69d98986da5c1
+anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 4763f4940f71a5f959228f0521c9bd07bf64b541d5d0c45c0a74782142c499e1
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h ebe48e4d669728137845fc84a5b5dde4b4301f54ccf9f60312acfd97f3992795
+anchor-sha256: src/plan/semantic/xr_semantic_plan.c 7d30a04491ee44ac9846d922d33dd54068f79efb05b2abaabebc0bba25b680ed
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h f28672d63dd4cdf3d3e107156c93adce839a7a4042da32a55bb0387c2148f615
+anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 290c011774c28fd8c86c0c67fbb4775c92d3de1bff8f8636b3ad896194049d06
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c c14b1d2f1422afe861cb1a1902a04ef8d5d2147ffcdd559087fad148c6015712
 anchor-sha256: src/stdlib/xstdlib_metadata.h 85ee76561c9ed7b5d1d43028881b355fe8580b47ea0f1ef1a797a878a5078a11
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 3a56f937fb6e2fefdb4e0ba8b86dc82bd542e6c846e3ea49f813bd63657b5b41
+anchor-sha256: tests/unit/plan/test_semantic_plan.c d3097a953a55ffc181beaeab4488aee3ea5d7ea43304e02c45d0742a293d5239

@@ -25,6 +25,7 @@ struct XrSemanticPlan {
     uint32_t schema;
     bool frozen;
     bool verified;
+    bool module_set_verified;
     XrFingerprint fingerprint;
     XrFingerprint operation_registry_fingerprint;
     XrFingerprint stdlib_registry_fingerprint;
@@ -43,6 +44,15 @@ struct XrSemanticPlan {
     XrSemanticCallTargetRecord *call_targets;
     uint32_t call_target_count;
     uint32_t call_target_capacity;
+    XrSemanticDependencyRecord *dependencies;
+    uint32_t dependency_count;
+    uint32_t dependency_capacity;
+    XrSemanticSourceExportRecord *source_exports;
+    uint32_t source_export_count;
+    uint32_t source_export_capacity;
+    XrSemanticPlan **dependency_plans;
+    uint32_t dependency_plan_count;
+    uint32_t dependency_plan_capacity;
     XrSemanticEdgeRecord *edges;
     uint32_t edge_count;
     uint32_t edge_capacity;

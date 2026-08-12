@@ -24,6 +24,8 @@ static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->block_count);
     xr_xsm_put_u32(writer, plan->operation_count);
     xr_xsm_put_u32(writer, plan->call_target_count);
+    xr_xsm_put_u32(writer, plan->dependency_count);
+    xr_xsm_put_u32(writer, plan->source_export_count);
     xr_xsm_put_u32(writer, plan->edge_count);
     xr_xsm_put_u32(writer, plan->constant_count);
     xr_xsm_put_u32(writer, plan->entity_count);
@@ -218,10 +220,37 @@ static void encode_call_targets(XrXsmWriter *writer, const XrSemanticPlan *plan)
         xr_xsm_put_string(writer, record->canonical_key);
         xr_xsm_put_u32(writer, record->operation);
         xr_xsm_put_u32(writer, record->function);
+        xr_xsm_put_u32(writer, record->dependency);
+        xr_xsm_put_u32(writer, record->source_export);
+        xr_xsm_put_bytes(writer, record->export_identity.bytes,
+                         sizeof(record->export_identity.bytes));
+        xr_xsm_put_bytes(writer, record->callee_function.bytes,
+                         sizeof(record->callee_function.bytes));
         xr_xsm_put_u8(writer, record->kind);
         xr_xsm_put_u8(writer, 0);
         xr_xsm_put_u8(writer, 0);
         xr_xsm_put_u8(writer, 0);
+    }
+}
+
+static void encode_dependencies_and_exports(XrXsmWriter *writer,
+                                            const XrSemanticPlan *plan) {
+    for (uint32_t i = 0; i < plan->dependency_count; i++) {
+        const XrSemanticDependencyRecord *record = &plan->dependencies[i];
+        xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
+        xr_xsm_put_string(writer, record->canonical_key);
+        xr_xsm_put_string(writer, record->module_path);
+        xr_xsm_put_bytes(writer, record->module.bytes, sizeof(record->module.bytes));
+        xr_xsm_put_bytes(writer, record->semantic_fingerprint.bytes,
+                         sizeof(record->semantic_fingerprint.bytes));
+    }
+    for (uint32_t i = 0; i < plan->source_export_count; i++) {
+        const XrSemanticSourceExportRecord *record = &plan->source_exports[i];
+        xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
+        xr_xsm_put_string(writer, record->canonical_key);
+        xr_xsm_put_string(writer, record->name);
+        xr_xsm_put_u32(writer, record->function);
+        xr_xsm_put_u32(writer, record->shared_slot);
     }
 }
 
@@ -310,7 +339,8 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
         *bytes = NULL;
     if (size)
         *size = 0;
-    if (!plan || !bytes || !size || !plan->frozen || !plan->verified || !plan->ownership) {
+    if (!plan || !bytes || !size || !plan->frozen || !plan->verified || !plan->ownership ||
+        (plan->dependency_count != 0 && !plan->module_set_verified)) {
         if (error && error_size)
             snprintf(error, error_size,
                      "XR_ARTIFACT_2004: encoder requires a verified frozen SemanticPlan");
@@ -326,6 +356,7 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
     encode_blocks(&payload, plan);
     encode_operations(&payload, plan);
     encode_call_targets(&payload, plan);
+    encode_dependencies_and_exports(&payload, plan);
     encode_edges(&payload, plan);
     encode_constants(&payload, plan);
     encode_ownership(&payload, plan);

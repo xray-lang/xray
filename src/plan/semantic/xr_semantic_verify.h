@@ -16,5 +16,8 @@
 #include <stddef.h>
 
 XR_FUNC bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t error_size);
+XR_FUNC bool xr_semantic_plan_verify_module_set(
+    const XrSemanticPlan *plan, const XrSemanticPlan *const *dependencies,
+    uint32_t dependency_count, char *error, size_t error_size);
 
 #endif  // XR_SEMANTIC_VERIFY_H

@@ -824,7 +824,13 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         xi_func_dump(ir, stderr);
         fprintf(stderr, "=======================================\n");
     }
-    if (!xr_semantic_plan_build_and_attach(ir, transition_error, sizeof(transition_error))) {
+    uint32_t semantic_dependency_count =
+        cfg->graph_modules && cfg->graph_module_count > 0
+            ? (uint32_t) cfg->graph_module_count
+            : 0;
+    if (!xr_semantic_plan_build_and_attach_module_set(
+            ir, cfg->graph_modules, semantic_dependency_count,
+            transition_error, sizeof(transition_error))) {
         xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_SEMANTIC_PLAN,
                               XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
         goto fail;

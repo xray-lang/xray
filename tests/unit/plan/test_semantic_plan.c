@@ -9,6 +9,7 @@
 #include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_coro_analyze.h"
 #include "../../../src/ir/xi_effect.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate.h"
@@ -351,6 +352,118 @@ static XrSemanticPlan *build_native_yieldable_call_target_plan(const char *modul
     REQUIRE(built && plan != NULL);
     xi_func_free(function);
     return plan;
+}
+
+static XrSemanticPlan *build_source_export_call_target_plan(
+    XrSemanticPlan **dependency_out) {
+    XiFunc *dependency_root = xi_func_new("net_init", &stub_unit);
+    XiFunc *write_bytes = xi_func_new("writeBytes", &stub_unit);
+    REQUIRE(dependency_root != NULL && write_bytes != NULL);
+    XiBlock *dependency_entry = xi_block_new(dependency_root);
+    XiBlock *write_entry = xi_block_new(write_bytes);
+    REQUIRE(dependency_entry != NULL && write_entry != NULL);
+    dependency_root->children = (XiFunc **) xr_malloc(sizeof(*dependency_root->children));
+    REQUIRE(dependency_root->children != NULL);
+    dependency_root->children[0] = write_bytes;
+    dependency_root->nchildren = dependency_root->children_cap = 1;
+    write_bytes->parent_func = dependency_root;
+    XiValue *closure = xi_value_new(dependency_root, dependency_entry, XI_CLOSURE_NEW,
+                                    &stub_function, 0);
+    XiValue *store = xi_value_new(dependency_root, dependency_entry, XI_SET_SHARED,
+                                  &stub_unit, 1);
+    REQUIRE(closure != NULL && store != NULL);
+    closure->aux = write_bytes;
+    store->args[0] = closure;
+    store->aux_int = 0;
+    dependency_root->nshared = 1;
+    xi_block_set_return(dependency_entry, NULL);
+    XiValue *yield = xi_value_new(write_bytes, write_entry, XI_YIELD, &stub_unit, 0);
+    REQUIRE(yield != NULL);
+    xi_block_set_return(write_entry, yield);
+    XiCoroSuspendPoint write_point = {
+        .state_id = 1, .op = yield, .kind = XI_CORO_SUSP_YIELD,
+    };
+    XiCoroPlan write_coroutine = {
+        .is_coroutine = true, .nstates = 1, .points = &write_point,
+    };
+    write_bytes->coro_plan = &write_coroutine;
+    dependency_root->stage = write_bytes->stage = XI_STAGE_OPTIMIZED;
+    XiModule *dependency_module =
+        xi_module_new("stdlib/net/net.xr", "net", dependency_root);
+    REQUIRE(dependency_module != NULL);
+    dependency_root->module = dependency_module;
+    dependency_module->nslots = 1;
+    dependency_module->nexports = 1;
+    dependency_module->exports =
+        (XiModuleExport *) xr_calloc(1, sizeof(*dependency_module->exports));
+    REQUIRE(dependency_module->exports != NULL);
+    dependency_module->exports[0].name = "writeBytes";
+    dependency_module->exports[0].shared_slot = 0;
+    dependency_module->exports[0].function = write_bytes;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(dependency_root, error, sizeof(error)));
+    XrSemanticPlan *dependency = xr_semantic_plan_retain(dependency_root->semantic_plan);
+    REQUIRE(dependency != NULL && dependency->source_export_count == 1);
+
+    XiFunc *caller_root = xi_func_new("http_init", &stub_unit);
+    XiFunc *caller = xi_func_new("_serverWriteAll", &stub_unit);
+    REQUIRE(caller_root != NULL && caller != NULL);
+    XiBlock *root_entry = xi_block_new(caller_root);
+    XiBlock *caller_entry = xi_block_new(caller);
+    REQUIRE(root_entry != NULL && caller_entry != NULL);
+    caller_root->children = (XiFunc **) xr_malloc(sizeof(*caller_root->children));
+    REQUIRE(caller_root->children != NULL);
+    caller_root->children[0] = caller;
+    caller_root->nchildren = caller_root->children_cap = 1;
+    caller->parent_func = caller_root;
+    XiImportRef import_ref = {
+        .module_path = "stdlib/net/net.xr",
+        .member_name = NULL,
+        .resolved_mod_index = 0,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolved_module = dependency_module,
+    };
+    XiValue *namespace_ref = xi_value_new(caller_root, root_entry, XI_IMPORT_REF,
+                                          &stub_shape, 0);
+    XiValue *namespace_store = xi_value_new(caller_root, root_entry, XI_SET_SHARED,
+                                            &stub_unit, 1);
+    REQUIRE(namespace_ref != NULL && namespace_store != NULL);
+    namespace_ref->aux = &import_ref;
+    namespace_store->args[0] = namespace_ref;
+    namespace_store->aux_int = 0;
+    caller_root->nshared = 1;
+    xi_block_set_return(root_entry, NULL);
+    XiValue *receiver = xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_shape, 0);
+    XiValue *method = xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, 1);
+    REQUIRE(receiver != NULL && method != NULL);
+    receiver->aux_int = 0;
+    method->args[0] = receiver;
+    method->aux = "writeBytes";
+    method->aux_int = 0;
+    xi_block_set_return(caller_entry, method);
+    XiCoroSuspendPoint caller_point = {
+        .state_id = 1, .op = method, .kind = XI_CORO_SUSP_CALL,
+    };
+    XiCoroPlan caller_coroutine = {
+        .is_coroutine = true, .nstates = 1, .points = &caller_point,
+    };
+    caller->coro_plan = &caller_coroutine;
+    caller_root->stage = caller->stage = XI_STAGE_OPTIMIZED;
+    XiModule *caller_module = xi_module_new("stdlib/http/http.xr", "http", caller_root);
+    REQUIRE(caller_module != NULL);
+    caller_root->module = caller_module;
+    caller_module->nslots = 1;
+    XiModule *dependency_modules[] = {dependency_module};
+    REQUIRE(xr_semantic_plan_build_and_attach_module_set(
+        caller_root, dependency_modules, 1, error, sizeof(error)));
+    XrSemanticPlan *result = xr_semantic_plan_retain(caller_root->semantic_plan);
+    REQUIRE(result != NULL);
+    xi_func_free(caller_root);
+    xi_func_free(dependency_root);
+    *dependency_out = dependency;
+    return result;
 }
 
 static XrSemanticPlan *build_direct_local_call_target_plan(void) {
@@ -1226,6 +1339,8 @@ static void forge_direct_call_target(XrSemanticPlan *plan, uint32_t caller,
     XrSemanticCallTargetRecord *target = &plan->call_targets[0];
     target->operation = operation;
     target->function = function;
+    target->dependency = XR_SEMANTIC_INDEX_NONE;
+    target->source_export = XR_SEMANTIC_INDEX_NONE;
     target->kind = XR_SEM_CALL_TARGET_DIRECT_LOCAL;
     char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
     char function_id[XR_STABLE_ID_BYTES * 2 + 1];
@@ -1348,7 +1463,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(second_debug->canonical_key, "discriminator=2:operation=") != NULL);
     char first_debug_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(first_debug->id, first_debug_id_hex);
-    REQUIRE(strcmp(first_debug_id_hex, "a0856e9cd6ec10ceaeee4b35a6718aae") == 0);
+    REQUIRE(strcmp(first_debug_id_hex, "016b84b956dba0d79518976e20ca3339") == 0);
     const XrSemanticOperationRecord *decoded_debug_operation =
         &decoded->operations[first_debug->subject];
     REQUIRE(decoded_debug_operation->source_file != NULL &&
@@ -1374,7 +1489,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
     char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(loan_entity->id, loan_id_hex);
-    REQUIRE(strcmp(loan_id_hex, "bc6eb23cc30b881d9bf627fee688b4f5") == 0);
+    REQUIRE(strcmp(loan_id_hex, "ea89cc7ffa5e5ddf4b924d2f3c08c0c5") == 0);
     size_t entity_dump_size = 0;
     char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
     REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&
@@ -1425,7 +1540,7 @@ static void test_immutable_owned_snapshot(void) {
     REQUIRE(strcmp(registry_hex,
                    "078bf0896540bef1e87408d44b7803921a9d006d603365f048f28c92f0a99506") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "b68885b089fe5c7a8160429496d7629b3fccdadd97c0b660fcb28d24d971a584") == 0);
+                   "99363a746d91598698c60448321beb2e63057fa202435d6255bba85bf178b494") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -1759,12 +1874,12 @@ static void test_direct_local_call_target_authority(void) {
     REQUIRE(target->function == 1 && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL);
     REQUIRE(plan->operations[target->operation].opcode == XI_CALL);
     REQUIRE(plan->operations[target->operation].effects == xi_generated_op_effects(XI_CALL));
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=14:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=15:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":function=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "6b0fdd3970bfe56a674cc38264a775e7") == 0);
+    REQUIRE(strcmp(target_id_hex, "883b31b7fc4f15a37a7066210c25f95b") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
@@ -1836,6 +1951,103 @@ static void test_direct_local_call_target_authority(void) {
     xr_semantic_plan_free(unknown);
 }
 
+static void test_source_export_call_target_authority(void) {
+    XrSemanticPlan *dependency = NULL;
+    XrSemanticPlan *plan = build_source_export_call_target_plan(&dependency);
+    REQUIRE(plan != NULL && dependency != NULL);
+    REQUIRE(xr_semantic_plan_is_verified(plan));
+    REQUIRE(plan->dependency_count == 1 && dependency->source_export_count == 1);
+    REQUIRE(plan->call_target_count == 1);
+    XrSemanticCallTargetRecord *target = &plan->call_targets[0];
+    REQUIRE(target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT);
+    REQUIRE(target->dependency == 0 && target->source_export == 0);
+    REQUIRE(xr_stable_id_equal(target->export_identity, dependency->source_exports[0].id));
+    REQUIRE(xr_stable_id_equal(target->callee_function,
+                               dependency->functions[dependency->source_exports[0].function].id));
+    REQUIRE(plan->operations[target->operation].opcode == XI_CALL_METHOD);
+    REQUIRE(plan->operations[target->operation].metadata_count == 1);
+    REQUIRE(strcmp(plan->metadata[plan->operations[target->operation].metadata_begin],
+                   "writeBytes") == 0);
+    char dependency_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char export_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char target_id[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(plan->dependencies[0].id, dependency_id);
+    xr_stable_id_hex(dependency->source_exports[0].id, export_id);
+    xr_stable_id_hex(target->id, target_id);
+    REQUIRE(strcmp(dependency_id, "990e20347dba0a64301fdff544d2a95e") == 0);
+    REQUIRE(strcmp(export_id, "32c237b434b2e2267b5d73c5d36f8a3f") == 0);
+    REQUIRE(strcmp(target_id, "e3a71d0daed0b3803409feb9626e7609") == 0);
+    const XrSemanticPlan *dependencies[] = {dependency};
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error,
+                                               sizeof(error)));
+
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    REQUIRE(xr_xsm_encode(plan, &bytes, &size, error, sizeof(error)));
+    XrSemanticPlan *decoded = NULL;
+    REQUIRE(!xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)));
+    REQUIRE(decoded == NULL && strncmp(error, "XR_ARTIFACT_2004", 16) == 0);
+    memset(error, 0, sizeof(error));
+    REQUIRE(xr_xsm_decode_module_set(bytes, size, dependencies, 1, &decoded, error,
+                                     sizeof(error)));
+    REQUIRE(decoded != NULL && xr_semantic_plan_is_verified(decoded));
+    REQUIRE(decoded->dependency_count == 1 && decoded->call_target_count == 1);
+    xr_semantic_plan_free(decoded);
+    xr_free(bytes);
+
+    XrStableId saved_export = target->export_identity;
+    target->export_identity.bytes[0] ^= 1;
+    REQUIRE(!xr_semantic_plan_verify_module_set(plan, dependencies, 1, error,
+                                                sizeof(error)));
+    target->export_identity = saved_export;
+    uint32_t saved_dependency = target->dependency;
+    target->dependency = XR_SEMANTIC_INDEX_NONE;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    target->dependency = saved_dependency;
+    uint32_t saved_source_export = target->source_export;
+    target->source_export = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(!xr_semantic_plan_verify_module_set(plan, dependencies, 1, error,
+                                                sizeof(error)));
+    target->source_export = saved_source_export;
+    XrStableId saved_callee = target->callee_function;
+    target->callee_function.bytes[0] ^= 1;
+    REQUIRE(!xr_semantic_plan_verify_module_set(plan, dependencies, 1, error,
+                                                sizeof(error)));
+    target->callee_function = saved_callee;
+    XrSemanticOperationRecord *call = &plan->operations[target->operation];
+    int64_t saved_immediate = call->semantic_immediate;
+    call->semantic_immediate |= 1;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    call->semantic_immediate = saved_immediate;
+    const char *saved_selector = plan->metadata[call->metadata_begin];
+    const XrSemanticOperationRecord *import = NULL;
+    for (uint32_t operation = 0; operation < plan->operation_count; operation++)
+        if (plan->operations[operation].opcode == XI_IMPORT_REF)
+            import = &plan->operations[operation];
+    REQUIRE(import != NULL && import->metadata_count == 2);
+    plan->metadata[call->metadata_begin] =
+        plan->metadata[import->metadata_begin + 1];
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->metadata[call->metadata_begin] = saved_selector;
+    XrFingerprint saved_fingerprint = plan->dependencies[0].semantic_fingerprint;
+    plan->dependencies[0].semantic_fingerprint.bytes[0] ^= 1;
+    REQUIRE(!xr_semantic_plan_verify_module_set(plan, dependencies, 1, error,
+                                                sizeof(error)));
+    plan->dependencies[0].semantic_fingerprint = saved_fingerprint;
+    const XrSemanticPlan *wrong_dependencies[] = {plan};
+    REQUIRE(!xr_semantic_plan_verify_module_set(plan, wrong_dependencies, 1, error,
+                                                sizeof(error)));
+    bool saved_verified = dependency->verified;
+    dependency->verified = false;
+    REQUIRE(!xr_semantic_plan_verify_module_set(plan, dependencies, 1, error,
+                                                sizeof(error)));
+    dependency->verified = saved_verified;
+    REQUIRE(!xr_semantic_plan_verify_module_set(plan, NULL, 0, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+    xr_semantic_plan_free(dependency);
+}
+
 static void test_native_yieldable_call_target_authority(void) {
     XrSemanticPlan *plan = build_native_yieldable_call_target_plan(
         "os", "__sleep", XI_CALL, 1, true, true);
@@ -1846,7 +2058,7 @@ static void test_native_yieldable_call_target_authority(void) {
             target->operation < plan->operation_count &&
             plan->operations[target->operation].opcode == XI_CALL);
     REQUIRE(strstr(target->canonical_key,
-                   "call-target-v3:schema=14:operation=") != NULL);
+                   "call-target-v3:schema=15:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":native=os.__sleep:kind=2") != NULL);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
@@ -1934,11 +2146,11 @@ static void test_shared_direct_call_target_authority(void) {
     REQUIRE(call->function == 2 && call->opcode == XI_CALL);
     REQUIRE((call->effects & XI_EFFECT_MAY_SUSPEND) == 0);
     REQUIRE((call->flags & XI_FLAG_MAY_SUSPEND) == 0);
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=14:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=15:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "ac80aa65c3379fe51ca7713358a02de6") == 0);
+    REQUIRE(strcmp(target_id_hex, "aa016691ff04e00aa9aa125808558710") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
@@ -3247,6 +3459,7 @@ int main(void) {
     test_typed_call_operand_contract();
     test_direct_local_call_target_authority();
     test_native_yieldable_call_target_authority();
+    test_source_export_call_target_authority();
     test_shared_direct_call_target_authority();
     test_parameter_and_capture_contracts();
     test_attachment_freezes_exact_function_identity();

@@ -44,7 +44,7 @@ bool xr_semantic_plan_verify_identity_set(const XrSemanticPlan *plan, char *erro
     size_t count =
         (size_t) plan->entity_count + plan->type_count + plan->function_count + plan->block_count +
         plan->parameter_count + plan->capture_count + plan->operation_count * 2u +
-        plan->call_target_count +
+        plan->call_target_count + plan->dependency_count + plan->source_export_count +
         plan->edge_count +
         (plan->ownership ? (size_t) plan->ownership->owner_count + plan->ownership->event_count +
                                plan->ownership->loop_invariant_count
@@ -80,6 +80,10 @@ bool xr_semantic_plan_verify_identity_set(const XrSemanticPlan *plan, char *erro
     }
     for (uint32_t i = 0; i < plan->call_target_count; i++)
         XR_ADD_ID_KEY(plan->call_targets[i].id, plan->call_targets[i].canonical_key);
+    for (uint32_t i = 0; i < plan->dependency_count; i++)
+        XR_ADD_ID_KEY(plan->dependencies[i].id, plan->dependencies[i].canonical_key);
+    for (uint32_t i = 0; i < plan->source_export_count; i++)
+        XR_ADD_ID_KEY(plan->source_exports[i].id, plan->source_exports[i].canonical_key);
     for (uint32_t i = 0; i < plan->edge_count; i++)
         XR_ADD_ID_KEY(plan->edges[i].id, plan->edges[i].canonical_key);
     if (plan->ownership) {
@@ -131,7 +135,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v14\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v15\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -147,6 +151,8 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
     hash_u64(&ctx, plan->block_count);
     hash_u64(&ctx, plan->operation_count);
     hash_u64(&ctx, plan->call_target_count);
+    hash_u64(&ctx, plan->dependency_count);
+    hash_u64(&ctx, plan->source_export_count);
     hash_u64(&ctx, plan->edge_count);
     hash_u64(&ctx, plan->constant_count);
     hash_u64(&ctx, plan->entity_count);
@@ -292,7 +298,28 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_string(&ctx, target->canonical_key);
         hash_u64(&ctx, target->operation);
         hash_u64(&ctx, target->function);
+        hash_u64(&ctx, target->dependency);
+        hash_u64(&ctx, target->source_export);
+        hash_bytes(&ctx, target->export_identity.bytes, sizeof(target->export_identity.bytes));
+        hash_bytes(&ctx, target->callee_function.bytes, sizeof(target->callee_function.bytes));
         hash_u64(&ctx, target->kind);
+    }
+    for (uint32_t i = 0; i < plan->dependency_count; i++) {
+        const XrSemanticDependencyRecord *dependency = &plan->dependencies[i];
+        hash_bytes(&ctx, dependency->id.bytes, sizeof(dependency->id.bytes));
+        hash_string(&ctx, dependency->canonical_key);
+        hash_string(&ctx, dependency->module_path);
+        hash_bytes(&ctx, dependency->module.bytes, sizeof(dependency->module.bytes));
+        hash_bytes(&ctx, dependency->semantic_fingerprint.bytes,
+                   sizeof(dependency->semantic_fingerprint.bytes));
+    }
+    for (uint32_t i = 0; i < plan->source_export_count; i++) {
+        const XrSemanticSourceExportRecord *source_export = &plan->source_exports[i];
+        hash_bytes(&ctx, source_export->id.bytes, sizeof(source_export->id.bytes));
+        hash_string(&ctx, source_export->canonical_key);
+        hash_string(&ctx, source_export->name);
+        hash_u64(&ctx, source_export->function);
+        hash_u64(&ctx, source_export->shared_slot);
     }
     for (uint32_t i = 0; i < plan->operand_count; i++) {
         const XrSemanticOperandRecord *operand = &plan->operands[i];
@@ -481,6 +508,11 @@ void xr_semantic_plan_free(XrSemanticPlan *plan) {
     xr_free(plan->blocks);
     xr_free(plan->operations);
     xr_free(plan->call_targets);
+    xr_free(plan->dependencies);
+    xr_free(plan->source_exports);
+    for (uint32_t i = 0; i < plan->dependency_plan_count; i++)
+        xr_semantic_plan_free(plan->dependency_plans[i]);
+    xr_free(plan->dependency_plans);
     xr_free(plan->edges);
     xr_free(plan->constants);
     xr_free(plan->entities);
@@ -499,7 +531,8 @@ bool xr_semantic_plan_is_frozen(const XrSemanticPlan *plan) {
 }
 
 bool xr_semantic_plan_is_verified(const XrSemanticPlan *plan) {
-    return plan && plan->frozen && plan->verified;
+    return plan && plan->frozen && plan->verified &&
+           (plan->dependency_count == 0 || plan->module_set_verified);
 }
 
 uint32_t xr_semantic_plan_schema(const XrSemanticPlan *plan) {
@@ -532,6 +565,8 @@ XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_capture_count, capture_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_block_count, block_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_operation_count, operation_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_call_target_count, call_target_count)
+XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_dependency_count, dependency_count)
+XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_source_export_count, source_export_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_edge_count, edge_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_constant_count, constant_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_entity_count, entity_count)
@@ -552,6 +587,10 @@ XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_operation, XrSemanticOperationRecord, o
                         operation_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_call_target, XrSemanticCallTargetRecord, call_targets,
                         call_target_count)
+XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_dependency, XrSemanticDependencyRecord, dependencies,
+                        dependency_count)
+XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_source_export, XrSemanticSourceExportRecord,
+                        source_exports, source_export_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_edge, XrSemanticEdgeRecord, edges, edge_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_constant, XrSemanticConstantRecord, constants,
                         constant_count)
@@ -658,9 +697,11 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
             stdlib_registry_fingerprint);
     fprintf(out,
             "  types=%u functions=%u parameters=%u captures=%u blocks=%u operations=%u "
-            "call-targets=%u edges=%u constants=%u entities=%u\n",
+            "call-targets=%u dependencies=%u source-exports=%u edges=%u constants=%u "
+            "entities=%u\n",
             plan->type_count, plan->function_count, plan->parameter_count, plan->capture_count,
-            plan->block_count, plan->operation_count, plan->call_target_count, plan->edge_count,
+            plan->block_count, plan->operation_count, plan->call_target_count,
+            plan->dependency_count, plan->source_export_count, plan->edge_count,
             plan->constant_count, plan->entity_count);
     for (uint32_t i = 0; i < plan->entity_count; i++) {
         const XrSemanticEntityRecord *record = &plan->entities[i];
@@ -798,8 +839,39 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
         dump_id(out, record->id);
         fputs(" key=", out);
         dump_text(out, record->canonical_key);
-        fprintf(out, " operation=%u function=%u kind=%u\n", record->operation,
-                record->function, record->kind);
+        fprintf(out,
+                " operation=%u function=%u dependency=%u source-export=%u export-id=",
+                record->operation, record->function, record->dependency,
+                record->source_export);
+        dump_id(out, record->export_identity);
+        fputs(" callee-function=", out);
+        dump_id(out, record->callee_function);
+        fprintf(out, " kind=%u\n", record->kind);
+    }
+    for (uint32_t i = 0; i < plan->dependency_count; i++) {
+        const XrSemanticDependencyRecord *record = &plan->dependencies[i];
+        char fingerprint[XR_FINGERPRINT_BYTES * 2 + 1];
+        xr_fingerprint_hex(record->semantic_fingerprint, fingerprint);
+        fprintf(out, "  dependency[%u] id=", i);
+        dump_id(out, record->id);
+        fputs(" key=", out);
+        dump_text(out, record->canonical_key);
+        fputs(" path=", out);
+        dump_text(out, record->module_path);
+        fputs(" module=", out);
+        dump_id(out, record->module);
+        fprintf(out, " semantic=%s\n", fingerprint);
+    }
+    for (uint32_t i = 0; i < plan->source_export_count; i++) {
+        const XrSemanticSourceExportRecord *record = &plan->source_exports[i];
+        fprintf(out, "  source-export[%u] id=", i);
+        dump_id(out, record->id);
+        fputs(" key=", out);
+        dump_text(out, record->canonical_key);
+        fputs(" name=", out);
+        dump_text(out, record->name);
+        fprintf(out, " function=%u shared-slot=%u\n", record->function,
+                record->shared_slot);
     }
     for (uint32_t i = 0; i < plan->edge_count; i++) {
         const XrSemanticEdgeRecord *record = &plan->edges[i];

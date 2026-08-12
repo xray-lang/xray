@@ -28,5 +28,8 @@ XR_FUNC bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *
                            size_t error_size);
 XR_FUNC bool xr_xsm_decode(const uint8_t *bytes, size_t size, XrSemanticPlan **plan, char *error,
                            size_t error_size);
+XR_FUNC bool xr_xsm_decode_module_set(
+    const uint8_t *bytes, size_t size, const XrSemanticPlan *const *dependencies,
+    uint32_t dependency_count, XrSemanticPlan **plan, char *error, size_t error_size);
 
 #endif  // XR_XSM_SCHEMA_H
