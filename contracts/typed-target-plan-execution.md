@@ -53,10 +53,15 @@ frozen SemanticPlan bound through TargetPlan and rejects missing, extra,
 reordered, wrong-kind, wrong-spelling, wrong-recipe, profile, target, and
 projection fingerprint mutations.
 
-This is a test-only scalar execution foundation. It adds no public CLI or
-installed execution route and does not claim general typed VM instruction
-coverage, control flow, calls, aggregates, ownership, exceptions, coroutines,
-or complete typed TargetPlan VM execution.
+The runtime generation authority exposes this family only through a public
+sole-function scalar-i64 execution route. PREPARE requires exactly one
+canonical function, this exact nonempty execution family, the typed-frame
+schema/family closure, and no storage, allocation, call, root, cleanup,
+adapter, or coroutine execution authority. Execution requires healthy ACTIVE
+state and a balanced in-flight-call pin. This does not add a public CLI,
+installed XTP loader-to-execution path, export resolver, or general typed VM
+instruction coverage, control flow, calls, aggregates, ownership, exceptions,
+coroutines, or complete typed TargetPlan VM execution.
 
 The required `COROUTINE_STATE_CALL` family is independent of this
 dispatcher. It freezes only the state/resume/direct-call/result-slot relation;
@@ -73,7 +78,10 @@ Evidence:
 - `test_xtp_format` proves the instruction row width is part of the complete
   exact codec registry.
 - `test_typed_frame_runtime_archive` proves the dispatcher and verifier link
-  into the runtime-only archive without activating a public execution route.
+  into the runtime-only archive.
+- `test_runtime_generation` proves exact sole-function PREPARE, ACTIVE scalar
+  execution, unsupported-plan rejection, bounded pins, drain, retirement, and
+  unload without any legacy execution fallback.
 
 anchor-sha256: src/plan/target/xr_target_plan.h fcb5361be828a1a0164c9ba6d01f0df7c9444f6f5088b59025158a8f2c66ad3d
 anchor-sha256: src/plan/target/xr_target_plan.c b6bf2d627ceac8ea3b4878bfa543ac8f131e323c916af4bd7edce5bec28537f2
@@ -85,9 +93,12 @@ anchor-sha256: src/plan/format/xr_xtp_schema.h 257b840e064875dde48ace6dd593b9ae9
 anchor-sha256: src/plan/format/xr_xtp_rows.c 4a443bd20e20e63eb9064bb6e81cebb55bcd218abd4a10990b9a689af4a128b8
 anchor-sha256: src/plan/format/xr_xtp_encode.c 8cb0983494ace434ec1d1f7389f19d4780ad82f6f88460144e04a9e28c1502bc
 anchor-sha256: src/plan/target/xr_xtp_materialize.c b8196ae0744dfa56b23c1a0f93e27aabf761340b0b3ad28c45e952b32b69ebe7
-anchor-sha256: src/vm/xr_typed_dispatch.h fd64a88c487eb3ffe90e4fb52aee41bf6b3e5ed78f14bf1106e764d789ae558f
-anchor-sha256: src/vm/xr_typed_dispatch.c c4d7a76779f0080211e41147d86721e5dbf90edd3db4395d5e3b18fc0640106a
+anchor-sha256: src/vm/xr_typed_dispatch.h f72964091ac427130a3ff00c6d051cf85a3edd6ae174846984e0c1d506adeecd
+anchor-sha256: src/vm/xr_typed_dispatch.c 3fd358dc6b4aaa5ce0ff2f039a1b62e0420bede465473c8cfc2da51980e94945
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 52836fa969629698359a0df893581c3341b45b17977990178dbae12edd438f1c
 anchor-sha256: tests/unit/plan/test_xtp_format.c dfa3139ae691ce336cbf8929b7722f49dd704451d100edef4d14f2df0c2ed099
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c a34cb68cf7ca7832312737dbd485791297766d9f300a3532669c4df55e6a74cd
+anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
+anchor-sha256: src/runtime/xr_module_generation.c d02e74f29b281d354ea03b339205e457e62266c06bd4b1afb6692d90a2c0e1d7
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7
