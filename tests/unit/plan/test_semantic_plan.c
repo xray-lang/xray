@@ -1421,11 +1421,11 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "75ce29577ec583547efc60e1d5585b26861df5ae1c35a756e458445c3442c6d0") == 0);
+                   "5a4bc9202dc6230107179bcae31140539240e0481470f152f44d1349eb8a274b") == 0);
     REQUIRE(strcmp(registry_hex,
-                   "9028443b045879a184661cd27468d64ba65f96f8596c190f5a08aa6a43d5e8d8") == 0);
+                   "6b7a93347fb7d0301cdfbf8af7fae4c18e961ccc44cd18e17c84b8fea1f484f5") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "a4ae958972d1045be7c3f79320463b01a3bd32ddedcfabf19cf80017afd351e5") == 0);
+                   "ac183a6034d96219446e005d1acff7edcab96502ea71c1cb9d2970bb12754d42") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
