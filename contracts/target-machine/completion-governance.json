@@ -1,6 +1,16 @@
 {
   "authorities": [
     {
+      "id": "symbol-evidence-producer",
+      "path": "scripts/collect_target_machine_symbol_evidence.py",
+      "required_regex": [
+        "PRODUCER\\s*=\\s*\"target-machine-symbol-evidence/1\"",
+        "defined_symbol_names",
+        "forbidden_symbols",
+        "raw_log_identity"
+      ]
+    },
+    {
       "id": "dependency-graph-evidence-producer",
       "path": "scripts/collect_target_machine_dependency_graph_evidence.py",
       "required_regex": [
@@ -109,6 +119,7 @@
       "scripts/assemble_target_machine_completion_evidence.py",
       "scripts/check_target_machine_completion.py",
       "scripts/collect_target_machine_dependency_graph_evidence.py",
+      "scripts/collect_target_machine_symbol_evidence.py",
       "src/plan/format/xr_xtp_schema.h",
       "src/plan/semantic/xr_semantic_ids.h",
       "src/plan/target/xr_target_plan.h",
@@ -128,7 +139,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "76b243b6aeffe9f41d6a976b668c645b2c781326eeba0debd7ff613689db411c"
+    "sha256": "adb2dfbbd4de0be3861a01fb219e33f3f5fb717f5bd35d22e91ef395de2ac740"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",

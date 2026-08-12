@@ -4157,6 +4157,28 @@ if(BUILD_TESTS)
         TIMEOUT 180
     )
 
+    add_custom_target(target_machine_symbol_evidence_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_symbol_evidence_collector.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Checking identity-bound target-machine symbol evidence collection"
+        VERBATIM
+    )
+
+    add_test(
+        NAME target_machine_symbol_evidence_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_symbol_evidence_collector.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_machine_symbol_evidence_self_test PROPERTIES
+        LABELS "meta;target-machine;governance;evidence;symbol"
+        PROCESSORS 1
+        TIMEOUT 180
+    )
+
     add_test(
         NAME target_machine_baseline_runner_self_test
         COMMAND ${XRAY_PYTHON}
