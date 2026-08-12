@@ -28,9 +28,13 @@ root-slot, cleanup, tuple, or general owned-String authority and remains
 outside the trivial frame allocator.
 The direct-local-callee-storage family describes only the borrowed dynamic
 outer `XrValue` token loaded from one shared slot whose every use is the callee
-of the same frozen direct-local call target. It grants no closure allocation,
-body, root map, cleanup, or general indirect-call authority and remains outside
-the trivial frame allocator.
+of the same frozen direct-local call target. The target is the unique canonical
+child of the first lexical shared-slot owner: either the caller itself or the
+module root whose entry-prefix initializer precedes activation. This includes
+root-owned sibling helpers but rejects an arbitrary ancestor, duplicate store,
+or unrelated sibling. It grants no closure allocation, body, root map, cleanup,
+or general indirect-call authority and remains outside the trivial frame
+allocator.
 The direct-local-GO-callee-storage family similarly describes only a borrowed
 dynamic outer callable token produced by one canonical shared-slot
 initializer and used exclusively as operand zero of exact `XI_GO` sites for

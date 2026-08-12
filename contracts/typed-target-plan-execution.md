@@ -41,8 +41,12 @@ cleanup execution authority; the scalar dispatcher continues to reject it.
 The direct-local-callee-storage row is a borrowed dynamic outer `XrValue`
 token. Independent builder, Target verifier, and AOT materialization verifier
 prove that every use is operand zero of the same frozen direct-local call and
-that the live shared slot names the unique canonical child. It grants no
-closure allocation, body, root, cleanup, or indirect-call authority.
+that the live shared slot names the unique canonical child of the first lexical
+slot owner. A caller-local store must dominate the load; the only parent-scope
+exception is a unique module-root entry-prefix initializer before any
+activation-shaped operation. Thus a root-owned sibling helper is exact without
+turning arbitrary shared values into call authority. It grants no closure
+allocation, body, root, cleanup, or indirect-call authority.
 The direct-local-GO-callee-storage row is a distinct borrowed dynamic outer
 `XrValue` token. Three independent reconstructions prove one canonical
 closure initializer, shared-slot dominance, unique canonical local child and
@@ -126,10 +130,10 @@ Evidence:
 
 anchor-sha256: src/plan/target/xr_target_plan.h 9cc8176a48d405c78ddfecf8c4a86173b21ee34ad5fa83e0ccbf04da1161b6c4
 anchor-sha256: src/plan/target/xr_target_plan.c 2080e5263d00cbc2777c413c6db64b177bb90bc56a1629cbbebea1e94de0b2b4
-anchor-sha256: src/plan/target/xr_target_builder.c fb8da60ddff4da393c3bafb4161316696d782bf1fbb9b36f8b036dfb2e9f3ecb
+anchor-sha256: src/plan/target/xr_target_builder.c 9427acc993d0b4a2fa42fb3379a91f0577649fb9f5e8124f89c74a90d1172bf3
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 5eea43c77cf0e3802e30eacf12ca7e1a105b7b32de0497635cf7048de1b3438b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c af74c69df7296ff561d3a3abbf4d42a4016e6db54762a750c6da2ad8b4f2ee07
-anchor-sha256: src/plan/target/xr_target_verify.c fafb0166c2469911739d57894bb499315488a0f3aac5a064b759aa8f6489b2d3
+anchor-sha256: src/plan/target/xr_target_verify.c f1d4dbb4e7484012d7f78fdefd256f9fad8c974bacd8c73fbe96ce7c6339832c
 anchor-sha256: src/plan/format/xr_xtp_schema.h e9c410961d012cee5003c53d75ad9b22381983eeda2850f8e8f95da5e6d56dd1
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 8cb0983494ace434ec1d1f7389f19d4780ad82f6f88460144e04a9e28c1502bc

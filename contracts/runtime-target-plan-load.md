@@ -50,8 +50,11 @@ roots, or general module activation.
    root map, root slot, or cleanup path.
    Direct-local-callee storage covers only a borrowed dynamic outer `XrValue`
    loaded from one shared slot when every use is the callee of the same frozen
-   direct-local call target. It grants no closure allocation/body, root map,
-   cleanup, general indirect call, or executable callable authority.
+   direct-local call target and the frozen target is the unique child of the
+   first lexical shared-slot owner. Caller-local stores require dominance; the
+   sole parent-scope exception is a canonical module-root entry-prefix store
+   before activation. It grants no closure allocation/body, root map, cleanup,
+   general indirect call, or executable callable authority.
    Direct-local-GO-callee storage is a separate family for the same outer
    borrowed dynamic callable token when it is produced by one canonical
    entry initializer (`CLOSURE_NEW` then `SET_SHARED`) and every use of the
@@ -160,8 +163,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h ec795265cca3a1ccbe82cdd1dda13
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
 anchor-sha256: src/plan/target/xr_target_plan.h 9cc8176a48d405c78ddfecf8c4a86173b21ee34ad5fa83e0ccbf04da1161b6c4
 anchor-sha256: src/plan/target/xr_target_plan.c 2080e5263d00cbc2777c413c6db64b177bb90bc56a1629cbbebea1e94de0b2b4
-anchor-sha256: src/plan/target/xr_target_builder.c fb8da60ddff4da393c3bafb4161316696d782bf1fbb9b36f8b036dfb2e9f3ecb
-anchor-sha256: src/plan/target/xr_target_verify.c fafb0166c2469911739d57894bb499315488a0f3aac5a064b759aa8f6489b2d3
+anchor-sha256: src/plan/target/xr_target_builder.c 9427acc993d0b4a2fa42fb3379a91f0577649fb9f5e8124f89c74a90d1172bf3
+anchor-sha256: src/plan/target/xr_target_verify.c f1d4dbb4e7484012d7f78fdefd256f9fad8c974bacd8c73fbe96ce7c6339832c
 anchor-sha256: src/plan/target/xr_xtp_materialize.c c43b819e15e02784e50911b46ad3ec228b2069c114a7691216abbf59ab6bcdbf
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317

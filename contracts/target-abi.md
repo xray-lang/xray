@@ -94,8 +94,12 @@ reordered, stale, or incorrectly spelled rows fail before emission; this does
 not authorize general owned Strings, tuples, or object bodies.
 Schema 9 also projects an exact borrowed `TAGGED`/`XrValue` row for a frozen
 direct-local shared callee token. CGen consumes that immutable row mechanically;
-it cannot infer callable representation from Xi type or representation state,
-and the row grants no closure body, allocation, root, or cleanup authority.
+it cannot infer callable representation from Xi type or representation state.
+The live materialization verifier walks the caller parent chain to the frozen
+callee's first lexical shared-slot owner and requires that owner's unique child
+and slot pointer to match, so root-owned sibling helpers are accepted without
+name or type guessing. The row grants no closure body, allocation, root, or
+cleanup authority.
 For an exact scalar `XI_CHAN_TRY_RECV`, schema 9 owns the receiver semantic
 value and exact scalar unbox helper spelling. Sync and coroutine CGen consume
 that recipe mechanically; they cannot infer it from Xi type/representation or

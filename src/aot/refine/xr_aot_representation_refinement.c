@@ -1005,7 +1005,19 @@ static bool aot_direct_local_callee_type_is_exact(
         xr_semantic_plan_type(semantic, operation->result_type);
     const XrSemanticFunctionRecord *target =
         xr_semantic_plan_function(semantic, target_function);
-    if (!type || !target || target->parent != operation->function ||
+    uint32_t lexical_owner = target ? target->parent : XR_SEMANTIC_INDEX_NONE;
+    uint32_t caller_ancestor = operation->function;
+    for (uint32_t depth = 0;
+         caller_ancestor != XR_SEMANTIC_INDEX_NONE &&
+         caller_ancestor != lexical_owner &&
+         depth < xr_semantic_plan_function_count(semantic);
+         depth++) {
+        const XrSemanticFunctionRecord *ancestor =
+            xr_semantic_plan_function(semantic, caller_ancestor);
+        caller_ancestor = ancestor ? ancestor->parent : XR_SEMANTIC_INDEX_NONE;
+    }
+    if (!type || !target || lexical_owner == XR_SEMANTIC_INDEX_NONE ||
+        caller_ancestor != lexical_owner ||
         (type->kind != XR_KIND_FUNCTION &&
          type->kind != XR_KIND_UNKNOWN) ||
         type->scalar_rep != XR_SCALAR_REP_NONE ||
@@ -1810,12 +1822,27 @@ static bool verify_static_shared_callable_type_authority(
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
     const XrSemanticFunctionRecord *semantic_target =
         xr_semantic_plan_function(ctx->semantic, target_index);
+    const XiFunc *shared_owner = owner;
+    uint32_t shared_owner_index = operation->function;
+    for (uint32_t depth = 0;
+         semantic_target && shared_owner &&
+         shared_owner_index != semantic_target->parent &&
+         depth < ctx->function_count;
+         depth++) {
+        const XrSemanticFunctionRecord *semantic_owner =
+            xr_semantic_plan_function(ctx->semantic, shared_owner_index);
+        shared_owner_index = semantic_owner ? semantic_owner->parent
+                                            : XR_SEMANTIC_INDEX_NONE;
+        shared_owner = shared_owner->parent_func;
+    }
     if (!aot_direct_local_callee_type_is_exact(ctx->semantic, operation,
                                                 target_index) ||
         !semantic_type || !semantic_target ||
+        shared_owner_index != semantic_target->parent || !shared_owner ||
+        shared_owner->semantic_plan_function_index != shared_owner_index ||
         !source_type_matches(live->type, semantic_type) ||
-        !owner->shared_slot_funcs ||
-        operation->semantic_immediate >= owner->shared_slot_func_count)
+        !shared_owner->shared_slot_funcs ||
+        operation->semantic_immediate >= shared_owner->shared_slot_func_count)
         return false;
     bool typed_function = semantic_type->kind == XR_KIND_FUNCTION;
     if (typed_function &&
@@ -1825,11 +1852,12 @@ static bool verify_static_shared_callable_type_authority(
          !live->type->function.return_type))
         return false;
     uint16_t slot = (uint16_t) operation->semantic_immediate;
-    const XiFunc *callee = owner->shared_slot_funcs[slot];
+    const XiFunc *callee = shared_owner->shared_slot_funcs[slot];
     uint32_t pointer_matches = 0;
     uint32_t index_matches = 0;
-    for (uint16_t i = 0; i < owner->nchildren; i++) {
-        const XiFunc *child = owner->children ? owner->children[i] : NULL;
+    for (uint16_t i = 0; i < shared_owner->nchildren; i++) {
+        const XiFunc *child =
+            shared_owner->children ? shared_owner->children[i] : NULL;
         pointer_matches += child == callee;
         if (child && child->semantic_plan_function_index == target_index) {
             index_matches++;
@@ -1837,7 +1865,7 @@ static bool verify_static_shared_callable_type_authority(
                 return false;
         }
     }
-    if (!callee || callee->parent_func != owner || pointer_matches != 1 ||
+    if (!callee || callee->parent_func != shared_owner || pointer_matches != 1 ||
         index_matches != 1 ||
         callee->semantic_plan_function_index != target_index ||
         callee->nparams != semantic_target->parameter_count ||

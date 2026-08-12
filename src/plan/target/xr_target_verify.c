@@ -1181,7 +1181,19 @@ static bool verifier_direct_local_callee_type_is_exact(
         xr_semantic_plan_type(semantic, operation->result_type);
     const XrSemanticFunctionRecord *target =
         xr_semantic_plan_function(semantic, target_function);
-    if (!type || !target || target->parent != operation->function ||
+    uint32_t lexical_owner = target ? target->parent : XR_SEMANTIC_INDEX_NONE;
+    uint32_t caller_ancestor = operation->function;
+    for (uint32_t depth = 0;
+         caller_ancestor != XR_SEMANTIC_INDEX_NONE &&
+         caller_ancestor != lexical_owner &&
+         depth < xr_semantic_plan_function_count(semantic);
+         depth++) {
+        const XrSemanticFunctionRecord *ancestor =
+            xr_semantic_plan_function(semantic, caller_ancestor);
+        caller_ancestor = ancestor ? ancestor->parent : XR_SEMANTIC_INDEX_NONE;
+    }
+    if (!type || !target || lexical_owner == XR_SEMANTIC_INDEX_NONE ||
+        caller_ancestor != lexical_owner ||
         (type->kind != XR_KIND_FUNCTION &&
          type->kind != XR_KIND_UNKNOWN) ||
         type->scalar_rep != XR_SCALAR_REP_NONE ||

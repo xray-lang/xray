@@ -107,6 +107,7 @@ typedef struct ClosureStorageFixture {
 
 typedef struct DirectLocalCalleeStorageFixture {
     XiFunc *function;
+    XiFunc *caller;
     XiFunc *child;
     XiFunc *decoy;
     XiBlock *entry;
@@ -511,14 +512,17 @@ static DirectLocalCalleeStorageFixture
 direct_local_callee_storage_fixture_create(bool extra_use) {
     DirectLocalCalleeStorageFixture fixture = {0};
     fixture.function =
-        xi_func_new("direct_local_shared_callee", &scalar_int);
+        xi_func_new("direct_local_shared_root", &scalar_int);
+    fixture.caller =
+        xi_func_new("direct_local_shared_caller", &scalar_int);
     fixture.child = xi_func_new("direct_local_shared_target", &scalar_int);
     fixture.decoy = xi_func_new("direct_local_shared_decoy", &scalar_int);
-    REQUIRE(fixture.function && fixture.child && fixture.decoy);
+    REQUIRE(fixture.function && fixture.caller && fixture.child && fixture.decoy);
     fixture.entry = xi_block_new(fixture.function);
+    XiBlock *caller_entry = xi_block_new(fixture.caller);
     XiBlock *child_entry = xi_block_new(fixture.child);
     XiBlock *decoy_entry = xi_block_new(fixture.decoy);
-    REQUIRE(fixture.entry && child_entry && decoy_entry);
+    REQUIRE(fixture.entry && caller_entry && child_entry && decoy_entry);
     XiValue *child_result =
         xi_const_int(fixture.child, child_entry, 42, &scalar_int);
     XiValue *decoy_result =
@@ -528,11 +532,13 @@ direct_local_callee_storage_fixture_create(bool extra_use) {
     xi_block_set_return(decoy_entry, decoy_result);
 
     fixture.function->children =
-        (XiFunc **) xr_calloc(2, sizeof(*fixture.function->children));
+        (XiFunc **) xr_calloc(3, sizeof(*fixture.function->children));
     REQUIRE(fixture.function->children != NULL);
-    fixture.function->children[0] = fixture.child;
-    fixture.function->children[1] = fixture.decoy;
-    fixture.function->nchildren = fixture.function->children_cap = 2;
+    fixture.function->children[0] = fixture.caller;
+    fixture.function->children[1] = fixture.child;
+    fixture.function->children[2] = fixture.decoy;
+    fixture.function->nchildren = fixture.function->children_cap = 3;
+    fixture.caller->parent_func = fixture.function;
     fixture.child->parent_func = fixture.function;
     fixture.decoy->parent_func = fixture.function;
 
@@ -540,9 +546,9 @@ direct_local_callee_storage_fixture_create(bool extra_use) {
                                     XI_CLOSURE_NEW, &scalar_closure, 0);
     XiValue *store = xi_value_new(fixture.function, fixture.entry,
                                   XI_SET_SHARED, &scalar_unit, 1);
-    fixture.load = xi_value_new(fixture.function, fixture.entry,
+    fixture.load = xi_value_new(fixture.caller, caller_entry,
                                 XI_GET_SHARED, &opaque_callable, 0);
-    fixture.call = xi_value_new(fixture.function, fixture.entry,
+    fixture.call = xi_value_new(fixture.caller, caller_entry,
                                 XI_CALL, &scalar_int, 1);
     REQUIRE(closure && store && fixture.load && fixture.call);
     closure->aux = fixture.child;
@@ -551,19 +557,20 @@ direct_local_callee_storage_fixture_create(bool extra_use) {
     fixture.load->aux_int = 0;
     fixture.call->args[0] = fixture.load;
     if (extra_use) {
-        XiValue *unexpected = xi_value_new(fixture.function, fixture.entry,
+        XiValue *unexpected = xi_value_new(fixture.caller, caller_entry,
                                            XI_PRINT, &scalar_unit, 1);
         REQUIRE(unexpected != NULL);
         unexpected->args[0] = fixture.load;
     }
-    xi_block_set_return(fixture.entry, fixture.call);
+    xi_block_set_return(fixture.entry, NULL);
+    xi_block_set_return(caller_entry, fixture.call);
     fixture.function->nshared = 1;
     fixture.function->shared_slot_funcs = (XiFunc **) xi_func_arena_alloc(
         fixture.function, sizeof(*fixture.function->shared_slot_funcs));
     REQUIRE(fixture.function->shared_slot_funcs != NULL);
     fixture.function->shared_slot_funcs[0] = fixture.child;
     fixture.function->shared_slot_func_count = 1;
-    fixture.function->stage = fixture.child->stage =
+    fixture.function->stage = fixture.caller->stage = fixture.child->stage =
         fixture.decoy->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
@@ -1582,6 +1589,24 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
             fixture.call->args[0] == fixture.load);
     REQUIRE(xr_aot_representation_materialization_verify(
         &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    XiFunc *saved_parent = fixture.child->parent_func;
+    fixture.child->parent_func = fixture.caller;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY ||
+            diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    fixture.child->parent_func = saved_parent;
+
+    uint32_t saved_child_index =
+        fixture.child->semantic_plan_function_index;
+    fixture.child->semantic_plan_function_index =
+        fixture.decoy->semantic_plan_function_index;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY ||
+            diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    fixture.child->semantic_plan_function_index = saved_child_index;
 
     fixture.function->shared_slot_funcs[0] = fixture.decoy;
     REQUIRE(!xr_aot_representation_materialization_verify(
