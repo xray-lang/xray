@@ -14,7 +14,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include "xray_export.h"
 
 #ifdef __cplusplus
@@ -69,13 +68,6 @@ XRAY_API int xray_vm_eval_bundle(XrVMRuntime *vm, const XrBytecodeBundle *bundle
 
 XRAY_API void xray_vm_set_script_info(XrVMRuntime *vm, const char *script_file, int argc,
                                       char **argv);
-
-XRAY_API void xray_vm_set_stdout(XrVMRuntime *vm, FILE *stream);
-XRAY_API void xray_vm_set_deadline_ms(XrVMRuntime *vm, int64_t timeout_ms);
-XRAY_API bool xray_vm_timed_out(XrVMRuntime *vm);
-
-XRAY_API void xray_vm_set_module_allowlist(XrVMRuntime *vm, const char *const *allowed,
-                                           size_t count);
 
 XRAY_API void xray_vm_multicore_init(XrVMRuntime *vm, int num_workers);
 XRAY_API void xray_vm_multicore_destroy(XrVMRuntime *vm);

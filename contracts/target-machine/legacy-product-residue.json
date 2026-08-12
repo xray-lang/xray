@@ -1,10 +1,10 @@
 {
   "counts": {
-    "api": 58,
+    "api": 50,
     "build": 65,
     "cli": 116,
     "install": 7,
-    "source": 3665
+    "source": 3652
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -556,13 +556,9 @@
     "xray_vm_multicore_init",
     "xray_vm_new",
     "xray_vm_new_full",
-    "xray_vm_set_deadline_ms",
-    "xray_vm_set_module_allowlist",
-    "xray_vm_set_script_info",
-    "xray_vm_set_stdout",
-    "xray_vm_timed_out"
+    "xray_vm_set_script_info"
   ],
-  "owner_count": 733,
+  "owner_count": 732,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -603,9 +599,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "e3dc8ed6497e54d93230edb02060aee4e148bf39bf15e98a2b28e83993bc6fa1",
+      "evidence_sha256": "dea3e038c0b59a905d67b40f3c09e0c38a6843ea0024f39dc339e23adbcfb0f2",
       "family": "legacy-vm-api",
-      "hit_count": 14,
+      "hit_count": 10,
       "path": "include/xray_vm.h",
       "status": "transitional-owner",
       "surface": "api",
@@ -617,11 +613,7 @@
         "xray_vm_eval_bundle",
         "xray_vm_multicore_destroy",
         "xray_vm_multicore_init",
-        "xray_vm_set_deadline_ms",
-        "xray_vm_set_module_allowlist",
-        "xray_vm_set_script_info",
-        "xray_vm_set_stdout",
-        "xray_vm_timed_out"
+        "xray_vm_set_script_info"
       ]
     },
     {
@@ -662,9 +654,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "dc3ba36b9fec80a69daf3c4e96ac36bfe2e62bc0189a34c1971f50b58da97260",
+      "evidence_sha256": "51f5166534ad59c90e57e69d556727db48989d792daa1c7385649e1b27ad39fe",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 27,
+      "hit_count": 23,
       "path": "include/xray_vm.h",
       "status": "transitional-owner",
       "surface": "api",
@@ -3294,19 +3286,15 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "ee8343ef683a0d08d7f5d5a4663729a9b77a677e80f206a033fa008139c04458",
+      "evidence_sha256": "bd7e8efc42051106a6a1210eb861226bf21997a0efaa8bd8f5b2dbce18ec080b",
       "family": "legacy-vm-api",
-      "hit_count": 7,
+      "hit_count": 2,
       "path": "src/app/mcp/xmcp_tools_run.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "xray_vm_config_init",
-        "xray_vm_delete",
-        "xray_vm_set_deadline_ms",
-        "xray_vm_set_module_allowlist",
-        "xray_vm_set_stdout",
-        "xray_vm_timed_out"
+        "xray_vm_delete"
       ]
     },
     {
@@ -3408,47 +3396,29 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "e2ea75062b1d9f789890084c3760064e4eda9296ea3c8f3f2fd25cac7769d31a",
+      "evidence_sha256": "cfa10f8649d787b7cd69a41a300ef3db629dd0a8bc37eadd3be7e9e704b8a643",
       "family": "legacy-vm-api",
-      "hit_count": 4,
-      "path": "src/runtime/xisolate_api.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_set_deadline_ms",
-        "xray_vm_set_module_allowlist",
-        "xray_vm_set_stdout",
-        "xray_vm_timed_out"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "50a2c804a12ba51c8d9cf75c7a78b4fe761526709d465a21cc6565526b929340",
-      "family": "legacy-vm-api",
-      "hit_count": 4,
+      "hit_count": 3,
       "path": "src/runtime/xisolate_api.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "xray_vm_current",
         "xray_vm_enter",
-        "xray_vm_exit",
-        "xray_vm_set_deadline_ms"
+        "xray_vm_exit"
       ]
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "21451dd92efb0cb3c8539efc54955027d349e5148838091457a30a958ddcc890",
+      "evidence_sha256": "164c38879427ec733fcfeeaba56e10b16f9d1845aca047ea272ec24818e65701",
       "family": "legacy-vm-api",
-      "hit_count": 4,
+      "hit_count": 2,
       "path": "src/runtime/xisolate_internal.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "xray_vm_enter",
-        "xray_vm_exit",
-        "xray_vm_set_deadline_ms",
-        "xray_vm_set_stdout"
+        "xray_vm_exit"
       ]
     },
     {
@@ -3502,17 +3472,15 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "0eaa76d74d91b39cf97fb9ed938755a93ef295ac064c097dea0c3d7316a604f4",
+      "evidence_sha256": "bd7e8efc42051106a6a1210eb861226bf21997a0efaa8bd8f5b2dbce18ec080b",
       "family": "legacy-vm-api",
-      "hit_count": 4,
+      "hit_count": 2,
       "path": "tests/fuzz/fuzz_stdlib_data.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "xray_vm_config_init",
-        "xray_vm_delete",
-        "xray_vm_set_deadline_ms",
-        "xray_vm_timed_out"
+        "xray_vm_delete"
       ]
     },
     {
@@ -3581,15 +3549,14 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "aaaa634546ab897aa581687d6aacadf50ed8bb040c887929ec8a0f7f223bb241",
+      "evidence_sha256": "b8754862c4c321bde633df229c44a4b18f52547939843dc43195a94c91a41491",
       "family": "legacy-vm-api",
-      "hit_count": 32,
+      "hit_count": 31,
       "path": "tests/unit/api/test_repl.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "xray_vm_delete",
-        "xray_vm_set_stdout"
+        "xray_vm_delete"
       ]
     },
     {
@@ -6946,9 +6913,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "fd75068b94d4488ce05c21c1676d464a114ef2cf5c3b33b117685141416bd9cd",
+      "evidence_sha256": "44feb03d58d2585583fb7b020562ea31f93a46d850513432e3dc6fa035267854",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 36,
+      "hit_count": 35,
       "path": "src/runtime/xisolate_api.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -6958,9 +6925,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "9aee94524c9e3fac2e15360cd9056cf52bd18510d83d18d1ca9f1d4a04125ff0",
+      "evidence_sha256": "4f5463189891a1c4aa72953a161caf28b3d99464f3087bc3be5770231477b1fc",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 53,
+      "hit_count": 56,
       "path": "src/runtime/xisolate_api.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -9965,6 +9932,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "8d8ff4b0d5be524716ecc226a8690b5a0650ff2b16c1f536500055b84f11eae9",
-  "total": 3911
+  "source_tree_fingerprint": "b86719fd69dd42b3f91c63307e9fbff6addd38713b12ea6fb8e3572fd88c871b",
+  "total": 3890
 }

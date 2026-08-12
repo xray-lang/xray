@@ -175,12 +175,12 @@ FILE *xr_isolate_stdout(XrVMRuntime *X) {
     return stdout;
 }
 
-void xray_vm_set_stdout(XrVMRuntime *X, FILE *stream) {
+void xr_isolate_set_stdout(XrVMRuntime *X, FILE *stream) {
     if (X)
         X->user_stdout = stream;
 }
 
-void xray_vm_set_deadline_ms(XrVMRuntime *X, int64_t timeout_ms) {
+void xr_isolate_set_deadline_ms(XrVMRuntime *X, int64_t timeout_ms) {
     if (!X)
         return;
     X->deadline_exceeded = false;
@@ -211,11 +211,7 @@ bool xr_isolate_timed_out(XrVMRuntime *X) {
     return X ? X->deadline_exceeded : false;
 }
 
-bool xray_vm_timed_out(XrVMRuntime *X) {
-    return xr_isolate_timed_out(X);
-}
-
-void xray_vm_set_module_allowlist(XrVMRuntime *X, const char *const *allowed, size_t count) {
+void xr_isolate_set_module_allowlist(XrVMRuntime *X, const char *const *allowed, size_t count) {
     if (!X)
         return;
     if (!allowed || count == 0) {

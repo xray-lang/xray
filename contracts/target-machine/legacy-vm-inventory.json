@@ -3582,7 +3582,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "1608ab1e1005c68ab96c5eb30e3caa847f4c00157e438ef40b4ec35ca7cffbff",
+  "source_tree_fingerprint": "5954fad443fd821a45d150dd57ffb551ca0a07394751bfd07fcd90f5c9ce0ffc",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xvm.c",
@@ -4163,10 +4163,6 @@
     "xray_vm_multicore_init",
     "xray_vm_new",
     "xray_vm_new_full",
-    "xray_vm_set_deadline_ms",
-    "xray_vm_set_module_allowlist",
-    "xray_vm_set_script_info",
-    "xray_vm_set_stdout",
-    "xray_vm_timed_out"
+    "xray_vm_set_script_info"
   ]
 }

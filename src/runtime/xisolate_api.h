@@ -100,6 +100,8 @@ XR_FUNC void xr_isolate_set_suppress_exception_print(XrVMRuntime *X, bool suppre
  * Tolerates NULL isolate (returns stdout) so OP_PRINT code paths do not
  * need an extra branch. */
 XR_FUNC FILE *xr_isolate_stdout(XrVMRuntime *X);
+XR_FUNC void xr_isolate_set_stdout(XrVMRuntime *X, FILE *stream);
+XR_FUNC void xr_isolate_set_deadline_ms(XrVMRuntime *X, int64_t timeout_ms);
 
 /* Wall-clock deadline check. Returns true and sets `X->deadline_exceeded`
  * when the configured deadline has passed; returns false (no syscalls)
@@ -107,11 +109,13 @@ XR_FUNC FILE *xr_isolate_stdout(XrVMRuntime *X);
 XR_FUNC bool xr_isolate_check_deadline(XrVMRuntime *X);
 
 /* True if the most recent execution aborted because the wall-clock
- * deadline was exceeded. Cleared by xray_vm_set_deadline_ms(). */
+ * deadline was exceeded. Cleared by xr_isolate_set_deadline_ms(). */
 XR_FUNC bool xr_isolate_timed_out(XrVMRuntime *X);
 
 /* Decide whether `module_name` may be imported by `X`. When no
  * allowlist is configured every module is allowed. */
+XR_FUNC void xr_isolate_set_module_allowlist(XrVMRuntime *X, const char *const *allowed,
+                                             size_t count);
 XR_FUNC bool xr_isolate_module_allowed(XrVMRuntime *X, const char *module_name);
 
 /* ========== Compilation & Execution ========== */

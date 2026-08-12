@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "xray_vm.h"
+#include "../../src/runtime/xisolate_api.h"
 
 #define XR_STDLIB_DATA_FUZZ_MAX_INPUT 4096
 #define XR_STDLIB_DATA_FUZZ_DEADLINE_MS 2000
@@ -171,9 +172,9 @@ static int run_source(const char *source) {
     if (!iso)
         return 0;
 
-    xray_vm_set_deadline_ms(iso, XR_STDLIB_DATA_FUZZ_DEADLINE_MS);
+    xr_isolate_set_deadline_ms(iso, XR_STDLIB_DATA_FUZZ_DEADLINE_MS);
     int rc = xray_vm_dostring(iso, source);
-    bool timed_out = xray_vm_timed_out(iso);
+    bool timed_out = xr_isolate_timed_out(iso);
     xray_vm_delete(iso);
 
     return (rc == 0 && !timed_out) ? 0 : 1;

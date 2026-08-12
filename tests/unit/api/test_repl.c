@@ -809,7 +809,7 @@ TEST(repl_print_type_simple_expression) {
 
     FILE *out = tmpfile();
     ASSERT_NOT_NULL(out);
-    xray_vm_set_stdout(iso, out);
+    xr_isolate_set_stdout(iso, out);
     xr_repl_print_type(iso, "1 + 2");
 
     char buf[64];

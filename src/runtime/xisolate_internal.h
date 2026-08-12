@@ -124,13 +124,13 @@ struct XrVMRuntime {
      *
      * `user_stdout` — alternative FILE* for `print()` / `OP_PRINT`
      *   output. NULL = use the process `stdout`. Set via
-     *   xray_vm_set_stdout(). Must outlive the isolate.
+     *   xr_isolate_set_stdout(). Must outlive the isolate.
      *
      * `deadline_ns` — wall-clock deadline (CLOCK_MONOTONIC, ns). When
      *   non-zero, the VM checks at backward branches whether we have
      *   passed the deadline; if so it sets `deadline_exceeded` and
      *   aborts the running coroutine with a runtime error so the
-     *   host can recover. Set via xray_vm_set_deadline_ms().
+     *   host can recover. Set via xr_isolate_set_deadline_ms().
      *
      * `deadline_exceeded` — sticky flag observed after a timed
      *   execution returns; cleared each time a new deadline is set.

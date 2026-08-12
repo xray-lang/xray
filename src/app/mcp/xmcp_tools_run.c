@@ -21,6 +21,7 @@
 #include "../../base/xjson.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../runtime/xisolate_api.h"
 #include "xray_vm.h"
 #include <stdio.h>
 #include <string.h>
@@ -160,7 +161,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
         output_limit = XMCP_TOOLS_RUN_OUTPUT_HARD_MAX;
 
     /* Per-call in-memory stdout capture; written to via
-     * xray_vm_set_stdout() so we never touch the process-wide fd 1
+     * xr_isolate_set_stdout() so we never touch the process-wide fd 1
      * (which is the MCP transport) or the filesystem. */
     XmcpRunCapture capture;
     if (!xmcp_run_capture_open(&capture)) {
@@ -185,9 +186,9 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
     /* Sandbox configuration. Order matters: the allowlist applies to user
      * imports issued by xray_vm_dostring(); the isolate's own prelude
      * bootstrap already ran during xray_vm_new() and is not affected. */
-    xray_vm_set_stdout(iso, capture.file);
-    xray_vm_set_module_allowlist(iso, RUN_ALLOWED_MODULES, RUN_ALLOWED_MODULES_COUNT);
-    xray_vm_set_deadline_ms(iso, timeout_ms);
+    xr_isolate_set_stdout(iso, capture.file);
+    xr_isolate_set_module_allowlist(iso, RUN_ALLOWED_MODULES, RUN_ALLOWED_MODULES_COUNT);
+    xr_isolate_set_deadline_ms(iso, timeout_ms);
 
     /* No multicore runtime: xr_execute() falls back to the in-place
      * interpreter, which (since the VM back-edge fallback) keeps refilling
@@ -195,7 +196,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
      * wall-clock deadline above remains the sole termination guarantee for
      * tight loops. Skipping the runtime saves the per-call thread spin-up. */
     int exec_result = xray_vm_dostring(iso, code);
-    bool timed_out = xray_vm_timed_out(iso);
+    bool timed_out = xr_isolate_timed_out(iso);
 
     xray_vm_delete(iso);
 
