@@ -1251,117 +1251,29 @@ XrBigInt *xr_bigint_pow(struct XrCoroutine *coro, XrBigInt *a, uint32_t n) {
     return result;
 }
 
-/* ========== Bitwise Operations (two's complement semantics) ========== */
+/* ========== Bitwise Operations ========== */
 
-// Get two's complement limbs for a BigInt value
-// Positive: limbs as-is, high extension = 0x00000000
-// Negative: ~(|x|-1), high extension = 0xFFFFFFFF
-static void bigint_to_twos_comp(XrBigInt *a, uint32_t *tc, uint32_t len) {
-    if (a->sign >= 0) {
-        for (uint32_t i = 0; i < len; i++)
-            tc[i] = (i < a->len) ? a->limbs[i] : 0;
-        return;
-    }
-    // Negative: tc = ~(|a| - 1)
-    uint32_t borrow = 1;
-    for (uint32_t i = 0; i < len; i++) {
-        uint64_t limb = (i < a->len) ? (uint64_t) a->limbs[i] : 0;
-        uint64_t sub = limb - borrow;
-        tc[i] = ~(uint32_t) sub;
-        borrow = (limb < borrow) ? 1 : 0;
-    }
-}
-
-// Convert two's complement back to sign-magnitude BigInt
-static XrBigInt *bigint_from_twos_comp(struct XrCoroutine *coro, uint32_t *tc, uint32_t len,
-                                       bool negative) {
-    if (!negative) {
-        XrBigInt *r = bigint_alloc(coro, len);
-        if (!r)
-            return NULL;
-        for (uint32_t i = 0; i < len; i++)
-            r->limbs[i] = tc[i];
-        r->len = len;
-        r->sign = 1;
-        bigint_normalize(r);
-        return r;
-    }
-    // Negative: |result| = ~tc + 1
-    XrBigInt *r = bigint_alloc(coro, len);
-    if (!r)
+XrBigInt *xr_bigint_bitwise(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b,
+                            XrBitwiseBinaryKind kind, XrBitwiseBinaryStatus *status) {
+    XR_DCHECK(a != NULL, "bigint_bitwise: NULL a");
+    XR_DCHECK(b != NULL, "bigint_bitwise: NULL b");
+    XrBigIntBitwisePlan plan = XR_BITWISE_BINARY_BIGINT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI, XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,
+        XR_SEM_CONSUMER_RUNTIME, kind, a->len, a->sign, b->len, b->sign);
+    if (status)
+        *status = plan.status;
+    if (plan.status != XR_BITWISE_BINARY_STATUS_OK)
         return NULL;
-    uint32_t carry = 1;
-    for (uint32_t i = 0; i < len; i++) {
-        uint64_t val = (uint64_t) (~tc[i]) + carry;
-        r->limbs[i] = (uint32_t) val;
-        carry = (uint32_t) (val >> 32);
-    }
-    r->len = len;
-    r->sign = -1;
-    bigint_normalize(r);
-    return r;
-}
 
-// Generic bitwise operation with two's complement semantics
-typedef uint32_t (*BitwiseOp)(uint32_t, uint32_t);
-static uint32_t op_and(uint32_t a, uint32_t b) {
-    return a & b;
-}
-static uint32_t op_or(uint32_t a, uint32_t b) {
-    return a | b;
-}
-static uint32_t op_xor(uint32_t a, uint32_t b) {
-    return a ^ b;
-}
-
-static XrBigInt *bigint_bitwise(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b, BitwiseOp op,
-                                bool result_negative) {
-    // +1 for potential carry in two's complement conversion
-    uint32_t len = ((a->len > b->len) ? a->len : b->len) + 1;
-
-    uint32_t *ta = (uint32_t *) xr_malloc(len * sizeof(uint32_t));
-    uint32_t *tb = (uint32_t *) xr_malloc(len * sizeof(uint32_t));
-    if (!ta || !tb) {
-        xr_free(ta);
-        xr_free(tb);
+    XrBigInt *result = bigint_alloc(coro, plan.capacity);
+    if (!result)
         return NULL;
-    }
-
-    bigint_to_twos_comp(a, ta, len);
-    bigint_to_twos_comp(b, tb, len);
-
-    for (uint32_t i = 0; i < len; i++) {
-        ta[i] = op(ta[i], tb[i]);
-    }
-
-    XrBigInt *result = bigint_from_twos_comp(coro, ta, len, result_negative);
-    xr_free(ta);
-    xr_free(tb);
+    result->len = XR_BITWISE_BINARY_BIGINT_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI, XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,
+        XR_SEM_CONSUMER_RUNTIME, &plan, a->limbs, a->len, a->sign, b->limbs, b->len, b->sign,
+        result->limbs, &result->sign);
+    XR_DCHECK(result->len != 0, "bigint_bitwise: validated owner plan failed");
     return result;
-}
-
-XrBigInt *xr_bigint_and(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(a != NULL, "bigint_and: NULL a");
-    XR_DCHECK(b != NULL, "bigint_and: NULL b");
-    // AND is negative only if both operands are negative
-    bool neg = (a->sign < 0) && (b->sign < 0);
-    return bigint_bitwise(coro, a, b, op_and, neg);
-}
-
-XrBigInt *xr_bigint_or(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(a != NULL, "bigint_or: NULL a");
-    XR_DCHECK(b != NULL, "bigint_or: NULL b");
-    // OR is negative if either operand is negative
-    bool neg = (a->sign < 0) || (b->sign < 0);
-    return bigint_bitwise(coro, a, b, op_or, neg);
-}
-
-XrBigInt *xr_bigint_xor(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
-    XR_DCHECK(a != NULL, "bigint_xor: NULL a");
-    XR_DCHECK(b != NULL, "bigint_xor: NULL b");
-    // XOR is negative if exactly one operand is negative
-    bool neg = (a->sign < 0) != (b->sign < 0);
-    return bigint_bitwise(coro, a, b, op_xor, neg);
 }
 
 XrBigInt *xr_bigint_shift(struct XrCoroutine *coro, XrBigInt *a, int64_t count,

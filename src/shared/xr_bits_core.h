@@ -201,6 +201,132 @@ static inline int64_t xr_bits_not_i64(int64_t value) {
     return INT64_MIN + (int64_t) (bits & (uint64_t) INT64_MAX);
 }
 
+typedef enum XrBitwiseBinaryKind {
+    XR_BITWISE_BINARY_AND = 0,
+    XR_BITWISE_BINARY_OR = 1,
+    XR_BITWISE_BINARY_XOR = 2,
+} XrBitwiseBinaryKind;
+
+typedef enum XrBitwiseBinaryStatus {
+    XR_BITWISE_BINARY_STATUS_OK = 0,
+    XR_BITWISE_BINARY_STATUS_INVALID_KIND = 1,
+    XR_BITWISE_BINARY_STATUS_CAPACITY_OVERFLOW = 2,
+} XrBitwiseBinaryStatus;
+
+typedef struct XrBigIntBitwisePlan {
+    XrBitwiseBinaryStatus status;
+    XrBitwiseBinaryKind kind;
+    uint32_t capacity;
+    uint8_t result_negative;
+} XrBigIntBitwisePlan;
+
+static inline int64_t xr_bits_i64_from_pattern(uint64_t bits) {
+    if ((bits & (UINT64_C(1) << 63)) == 0)
+        return (int64_t) bits;
+    return INT64_MIN + (int64_t) (bits & (uint64_t) INT64_MAX);
+}
+
+static inline int xr_bitwise_binary_kind_valid(XrBitwiseBinaryKind kind) {
+    return kind == XR_BITWISE_BINARY_AND || kind == XR_BITWISE_BINARY_OR ||
+           kind == XR_BITWISE_BINARY_XOR;
+}
+
+/* Canonical xi.band/xi.bor/xi.bxor scalar semantics operate on the complete
+ * signed 64-bit two's-complement pattern. Boolean adapters use the same owner
+ * with normalized zero/one inputs. */
+static inline int64_t xr_bitwise_binary_i64(XrBitwiseBinaryKind kind, int64_t lhs, int64_t rhs) {
+    uint64_t left = (uint64_t) lhs;
+    uint64_t right = (uint64_t) rhs;
+    uint64_t result = 0;
+    if (kind == XR_BITWISE_BINARY_AND)
+        result = left & right;
+    else if (kind == XR_BITWISE_BINARY_OR)
+        result = left | right;
+    else if (kind == XR_BITWISE_BINARY_XOR)
+        result = left ^ right;
+    return xr_bits_i64_from_pattern(result);
+}
+
+/* BigInts use sign-magnitude storage but bitwise operators observe an
+ * unbounded two's-complement value. One extra high limb carries the sign
+ * extension; adapters allocate only the capacity selected here. */
+static inline XrBigIntBitwisePlan xr_bitwise_binary_bigint_plan(
+    XrBitwiseBinaryKind kind, uint32_t lhs_len, int8_t lhs_sign, uint32_t rhs_len,
+    int8_t rhs_sign) {
+    XrBigIntBitwisePlan plan = {XR_BITWISE_BINARY_STATUS_OK, kind, 0, 0};
+    if (!xr_bitwise_binary_kind_valid(kind)) {
+        plan.status = XR_BITWISE_BINARY_STATUS_INVALID_KIND;
+        return plan;
+    }
+    uint32_t max_len = lhs_len > rhs_len ? lhs_len : rhs_len;
+    if (max_len == UINT32_MAX) {
+        plan.status = XR_BITWISE_BINARY_STATUS_CAPACITY_OVERFLOW;
+        return plan;
+    }
+    plan.capacity = max_len + 1u;
+    int lhs_negative = lhs_sign < 0;
+    int rhs_negative = rhs_sign < 0;
+    if (kind == XR_BITWISE_BINARY_AND)
+        plan.result_negative = (uint8_t) (lhs_negative && rhs_negative);
+    else if (kind == XR_BITWISE_BINARY_OR)
+        plan.result_negative = (uint8_t) (lhs_negative || rhs_negative);
+    else
+        plan.result_negative = (uint8_t) (lhs_negative != rhs_negative);
+    return plan;
+}
+
+static inline uint32_t xr_bitwise_binary_twos_limb(const uint32_t *source,
+                                                   uint32_t source_len, int8_t source_sign,
+                                                   uint32_t index, uint32_t *borrow) {
+    uint64_t limb = index < source_len ? source[index] : 0;
+    if (source_sign >= 0)
+        return (uint32_t) limb;
+    uint64_t subtracted = limb - *borrow;
+    *borrow = limb < *borrow ? 1u : 0u;
+    return ~(uint32_t) subtracted;
+}
+
+/* Apply one validated plan directly into little-endian base-2^32 magnitude
+ * limbs. Two's-complement conversion, operator selection, result sign and
+ * normalization all remain in this owner. */
+static inline uint32_t xr_bitwise_binary_bigint_apply(
+    const XrBigIntBitwisePlan *plan, const uint32_t *lhs, uint32_t lhs_len, int8_t lhs_sign,
+    const uint32_t *rhs, uint32_t rhs_len, int8_t rhs_sign, uint32_t *result,
+    int8_t *result_sign) {
+    if (!plan || plan->status != XR_BITWISE_BINARY_STATUS_OK || plan->capacity == 0 || !lhs ||
+        !rhs || !result || !result_sign)
+        return 0;
+
+    uint32_t lhs_borrow = lhs_sign < 0 ? 1u : 0u;
+    uint32_t rhs_borrow = rhs_sign < 0 ? 1u : 0u;
+    for (uint32_t i = 0; i < plan->capacity; i++) {
+        uint32_t left = xr_bitwise_binary_twos_limb(lhs, lhs_len, lhs_sign, i, &lhs_borrow);
+        uint32_t right = xr_bitwise_binary_twos_limb(rhs, rhs_len, rhs_sign, i, &rhs_borrow);
+        if (plan->kind == XR_BITWISE_BINARY_AND)
+            result[i] = left & right;
+        else if (plan->kind == XR_BITWISE_BINARY_OR)
+            result[i] = left | right;
+        else
+            result[i] = left ^ right;
+    }
+
+    if (plan->result_negative) {
+        uint32_t carry = 1;
+        for (uint32_t i = 0; i < plan->capacity; i++) {
+            uint64_t magnitude = (uint64_t) (~result[i]) + carry;
+            result[i] = (uint32_t) magnitude;
+            carry = (uint32_t) (magnitude >> 32);
+        }
+    }
+
+    uint32_t result_len = plan->capacity;
+    while (result_len > 1 && result[result_len - 1] == 0)
+        result_len--;
+    int is_zero = result_len == 1 && result[0] == 0;
+    *result_sign = (int8_t) (is_zero ? 1 : plan->result_negative ? -1 : 1);
+    return result_len;
+}
+
 typedef enum XrShiftKind {
     XR_SHIFT_LEFT = 0,
     XR_SHIFT_RIGHT_SIGNED = 1,
@@ -223,24 +349,18 @@ typedef struct XrBigIntShiftPlan {
     uint8_t zero_result;
 } XrBigIntShiftPlan;
 
-static inline int64_t xr_shift_i64_from_bits(uint64_t bits) {
-    if ((bits & (UINT64_C(1) << 63)) == 0)
-        return (int64_t) bits;
-    return INT64_MIN + (int64_t) (bits & (uint64_t) INT64_MAX);
-}
-
 /* Canonical scalar shift semantics. Counts are modulo 64, left shift wraps,
  * and signed right shift is explicitly sign-extending on every C compiler. */
 static inline int64_t xr_shift_i64(XrShiftKind kind, int64_t value, int64_t count) {
     uint32_t n = (uint32_t) ((uint64_t) count & UINT64_C(63));
     uint64_t bits = (uint64_t) value;
     if (kind == XR_SHIFT_LEFT)
-        return xr_shift_i64_from_bits(bits << n);
+        return xr_bits_i64_from_pattern(bits << n);
     if (kind == XR_SHIFT_RIGHT_UNSIGNED)
-        return xr_shift_i64_from_bits(bits >> n);
+        return xr_bits_i64_from_pattern(bits >> n);
     if (n == 0 || value >= 0)
-        return xr_shift_i64_from_bits(bits >> n);
-    return xr_shift_i64_from_bits((bits >> n) | (UINT64_MAX << (64u - n)));
+        return xr_bits_i64_from_pattern(bits >> n);
+    return xr_bits_i64_from_pattern((bits >> n) | (UINT64_MAX << (64u - n)));
 }
 
 /* Canonical BigInt planning. Unlike scalar shifts, BigInt counts are not
@@ -535,6 +655,48 @@ static inline int64_t xr_bits_exact_kernel_mul_high(int64_t lhs, int64_t rhs,
 #define XR_BITS_NOT_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, value)                           \
     (XR_BITS_NOT_OWNER_GUARD((owner_hi), (owner_lo)),                                              \
      XR_BITS_NOT_CONSUMER_GUARD((consumer_bit)), xr_bits_not_i64((int64_t) (value)))
+
+#define XR_BITWISE_BINARY_OWNER_GUARD(owner_hi, owner_lo)                                         \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_bitwise_binary                                      \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI &&              \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO)                \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BITWISE_BINARY_CONSUMER_GUARD(consumer_bit)                                            \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_bitwise_binary                          \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&           \
+                (XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_CONSUMERS &                                \
+                 (uint32_t) (consumer_bit)) != 0)                                                 \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BITWISE_BINARY_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, kind, lhs, rhs)            \
+    (XR_BITWISE_BINARY_OWNER_GUARD((owner_hi), (owner_lo)),                                       \
+     XR_BITWISE_BINARY_CONSUMER_GUARD((consumer_bit)),                                            \
+     xr_bitwise_binary_i64((XrBitwiseBinaryKind) (kind), (int64_t) (lhs), (int64_t) (rhs)))
+
+#define XR_BITWISE_BINARY_BIGINT_OWNER_PLAN(owner_hi, owner_lo, consumer_bit, kind, lhs_len,       \
+                                             lhs_sign, rhs_len, rhs_sign)                          \
+    (XR_BITWISE_BINARY_OWNER_GUARD((owner_hi), (owner_lo)),                                       \
+     XR_BITWISE_BINARY_CONSUMER_GUARD((consumer_bit)),                                            \
+     xr_bitwise_binary_bigint_plan((XrBitwiseBinaryKind) (kind), (uint32_t) (lhs_len),            \
+                                    (int8_t) (lhs_sign), (uint32_t) (rhs_len),                     \
+                                    (int8_t) (rhs_sign)))
+
+#define XR_BITWISE_BINARY_BIGINT_OWNER_APPLY(                                                      \
+    owner_hi, owner_lo, consumer_bit, plan, lhs, lhs_len, lhs_sign, rhs, rhs_len, rhs_sign,       \
+    result, result_sign)                                                                           \
+    (XR_BITWISE_BINARY_OWNER_GUARD((owner_hi), (owner_lo)),                                       \
+     XR_BITWISE_BINARY_CONSUMER_GUARD((consumer_bit)),                                            \
+     xr_bitwise_binary_bigint_apply((plan), (lhs), (uint32_t) (lhs_len), (int8_t) (lhs_sign),     \
+                                     (rhs), (uint32_t) (rhs_len), (int8_t) (rhs_sign), (result),  \
+                                     (result_sign)))
 
 #define XR_SHIFT_OWNER_GUARD(owner_hi, owner_lo)                                                   \
     ((void) sizeof(struct {                                                                        \

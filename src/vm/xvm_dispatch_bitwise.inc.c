@@ -22,8 +22,7 @@
 ** Bitwise Operations
 ** ======================================================== */
 
-#define XVM_TEMPLATE_BITWISE_BINARY_CASE(op, int_op, bigint_fn, op_flag, op_symbol, op_name,       \
-                                         error_msg)                                                \
+#define XVM_TEMPLATE_BITWISE_BINARY_CASE(op, bitwise_kind, allows_bool, error_msg)                 \
     vmcase(op) {                                                                                   \
         int a = GETARG_A(i);                                                                       \
         int b = GETARG_B(i);                                                                       \
@@ -31,50 +30,38 @@
         XrValue vb = R(b);                                                                         \
         XrValue vc = R(c);                                                                         \
         if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
-            R(a) = xr_int(XR_TO_INT(vb) int_op XR_TO_INT(vc));                                     \
+            XR_SET_INT(R(a), XR_BITWISE_BINARY_OWNER_APPLY(                                       \
+                                 XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,                         \
+                                 XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO, XR_SEM_CONSUMER_VM,    \
+                                 bitwise_kind, XR_TO_INT(vb), XR_TO_INT(vc)));                     \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        if ((allows_bool) && XR_IS_BOOL(vb) && XR_IS_BOOL(vc)) {                                  \
+            int64_t result = XR_BITWISE_BINARY_OWNER_APPLY(                                       \
+                XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,                                         \
+                XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO, XR_SEM_CONSUMER_VM, bitwise_kind,       \
+                XR_TO_BOOL(vb) ? 1 : 0, XR_TO_BOOL(vc) ? 1 : 0);                                  \
+            R(a) = xr_bool(result != 0);                                                           \
             vmbreak;                                                                               \
         }                                                                                          \
         if (XR_IS_BIGINT(vb) && XR_IS_BIGINT(vc)) {                                                \
+            XrBitwiseBinaryStatus bitwise_status = XR_BITWISE_BINARY_STATUS_OK;                    \
             XrBigInt *ba = (XrBigInt *) XR_TO_PTR(vb);                                             \
             XrBigInt *bb = (XrBigInt *) XR_TO_PTR(vc);                                             \
-            XrBigInt *result = bigint_fn(VM_CURRENT_CORO, ba, bb);                                 \
+            XrBigInt *result = xr_bigint_bitwise(VM_CURRENT_CORO, ba, bb, bitwise_kind,            \
+                                                 &bitwise_status);                                 \
+            if (bitwise_status != XR_BITWISE_BINARY_STATUS_OK || XR_UNLIKELY(result == NULL)) {   \
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,                                             \
+                                 "bigint bitwise allocation failed");                            \
+            }                                                                                      \
             R(a) = XR_FROM_PTR(result);                                                            \
             vmbreak;                                                                               \
         }                                                                                          \
-        VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
-    }
-
-#define XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE(op, int_op, bool_op, bigint_fn, op_flag, op_symbol,  \
-                                              op_name, error_msg)                                  \
-    vmcase(op) {                                                                                   \
-        int a = GETARG_A(i);                                                                       \
-        int b = GETARG_B(i);                                                                       \
-        int c = GETARG_C(i);                                                                       \
-        XrValue vb = R(b);                                                                         \
-        XrValue vc = R(c);                                                                         \
-        if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
-            R(a) = xr_int(XR_TO_INT(vb) int_op XR_TO_INT(vc));                                     \
-            vmbreak;                                                                               \
-        }                                                                                          \
-        if (XR_IS_BOOL(vb) && XR_IS_BOOL(vc)) {                                                    \
-            R(a) = xr_bool(XR_TO_BOOL(vb) bool_op XR_TO_BOOL(vc));                                 \
-            vmbreak;                                                                               \
-        }                                                                                          \
-        if (XR_IS_BIGINT(vb) && XR_IS_BIGINT(vc)) {                                                \
-            XrBigInt *ba = (XrBigInt *) XR_TO_PTR(vb);                                             \
-            XrBigInt *bb = (XrBigInt *) XR_TO_PTR(vc);                                             \
-            XrBigInt *result = bigint_fn(VM_CURRENT_CORO, ba, bb);                                 \
-            R(a) = XR_FROM_PTR(result);                                                            \
-            vmbreak;                                                                               \
-        }                                                                                          \
-        VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
     }
 
 #include "xvm_template_bitwise_binary_gen.inc.c"
 
-#undef XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE
 #undef XVM_TEMPLATE_BITWISE_BINARY_CASE
 
 #define XVM_TEMPLATE_BITWISE_UNARY_CASE(op, error_msg)                                            \

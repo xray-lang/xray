@@ -100,6 +100,58 @@ TEST(numeric_core_shift_counts_are_mod64) {
                   INT64_MIN);
 }
 
+TEST(bitwise_binary_owner_freezes_scalar_and_bigint_edges) {
+    ASSERT_EQ_INT(xr_bitwise_binary_i64(XR_BITWISE_BINARY_AND, -1, 0x55), 0x55);
+    ASSERT_EQ_INT(xr_bitwise_binary_i64(XR_BITWISE_BINARY_OR, INT64_MIN, 1), INT64_MIN + 1);
+    ASSERT_EQ_INT(xr_bitwise_binary_i64(XR_BITWISE_BINARY_XOR, -1, INT64_MIN), INT64_MAX);
+    ASSERT_EQ_INT(XR_BITWISE_BINARY_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,
+                      XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO, XR_SEM_CONSUMER_VM,
+                      XR_BITWISE_BINARY_XOR, 1, 1),
+                  0);
+
+    const uint32_t positive_2_32[2] = {0, 1};
+    const uint32_t negative_3[1] = {3};
+    uint32_t result[3] = {0};
+    int8_t sign = 0;
+
+    XrBigIntBitwisePlan plan = xr_bitwise_binary_bigint_plan(
+        XR_BITWISE_BINARY_AND, 2, 1, 1, -1);
+    ASSERT_EQ_INT(plan.status, XR_BITWISE_BINARY_STATUS_OK);
+    ASSERT_EQ_INT(plan.capacity, 3);
+    ASSERT_FALSE(plan.result_negative);
+    ASSERT_EQ_INT(xr_bitwise_binary_bigint_apply(&plan, positive_2_32, 2, 1, negative_3, 1,
+                                                 -1, result, &sign),
+                  2);
+    ASSERT_EQ_UINT(result[0], 0);
+    ASSERT_EQ_UINT(result[1], 1);
+    ASSERT_EQ_INT(sign, 1);
+
+    memset(result, 0, sizeof(result));
+    plan = xr_bitwise_binary_bigint_plan(XR_BITWISE_BINARY_OR, 2, 1, 1, -1);
+    ASSERT_TRUE(plan.result_negative);
+    ASSERT_EQ_INT(xr_bitwise_binary_bigint_apply(&plan, positive_2_32, 2, 1, negative_3, 1,
+                                                 -1, result, &sign),
+                  1);
+    ASSERT_EQ_UINT(result[0], 3);
+    ASSERT_EQ_INT(sign, -1);
+
+    memset(result, 0, sizeof(result));
+    plan = xr_bitwise_binary_bigint_plan(XR_BITWISE_BINARY_XOR, 2, 1, 1, -1);
+    ASSERT_TRUE(plan.result_negative);
+    ASSERT_EQ_INT(xr_bitwise_binary_bigint_apply(&plan, positive_2_32, 2, 1, negative_3, 1,
+                                                 -1, result, &sign),
+                  2);
+    ASSERT_EQ_UINT(result[0], 3);
+    ASSERT_EQ_UINT(result[1], 1);
+    ASSERT_EQ_INT(sign, -1);
+
+    plan = xr_bitwise_binary_bigint_plan((XrBitwiseBinaryKind) 99, 1, 1, 1, 1);
+    ASSERT_EQ_INT(plan.status, XR_BITWISE_BINARY_STATUS_INVALID_KIND);
+    plan = xr_bitwise_binary_bigint_plan(XR_BITWISE_BINARY_AND, UINT32_MAX, 1, 1, 1);
+    ASSERT_EQ_INT(plan.status, XR_BITWISE_BINARY_STATUS_CAPACITY_OVERFLOW);
+}
+
 TEST(shift_owner_bigint_plan_and_limb_kernel) {
     uint32_t one[1] = {1};
     uint32_t wide[4] = {0};
@@ -418,6 +470,7 @@ RUN_TEST(numeric_core_math_abs_preserves_int_or_promotes_min);
 RUN_TEST(numeric_core_integer_arithmetic_wraps);
 RUN_TEST(numeric_core_integer_div_mod_edges_match_language);
 RUN_TEST(numeric_core_shift_counts_are_mod64);
+RUN_TEST(bitwise_binary_owner_freezes_scalar_and_bigint_edges);
 RUN_TEST(numeric_conversion_integer_matrix_is_bit_defined);
 RUN_TEST(numeric_conversion_integer_to_float_is_round_to_even);
 RUN_TEST(numeric_conversion_f64_to_f32_has_frozen_edges);

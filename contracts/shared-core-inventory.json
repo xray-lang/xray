@@ -160,13 +160,18 @@
         "xr_bits_exact_rotate_right",
         "xr_bits_exact_trailing_zeros",
         "xr_bits_exact_width",
+        "xr_bits_i64_from_pattern",
         "xr_bits_not_i64",
         "xr_bits_smulh64",
         "xr_bits_umulh64",
+        "xr_bitwise_binary_bigint_apply",
+        "xr_bitwise_binary_bigint_plan",
+        "xr_bitwise_binary_i64",
+        "xr_bitwise_binary_kind_valid",
+        "xr_bitwise_binary_twos_limb",
         "xr_shift_bigint_apply",
         "xr_shift_bigint_plan",
-        "xr_shift_i64",
-        "xr_shift_i64_from_bits"
+        "xr_shift_i64"
       ],
       "status": "production",
       "test_callers": [

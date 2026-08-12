@@ -2649,9 +2649,6 @@
     xi.div
     xi.mod
     xi.neg
-    xi.band
-    xi.bor
-    xi.bxor
     xi.codegen.opaque
     xi.codegen.compiler-fence
     xi.eq
@@ -2799,6 +2796,9 @@
   :operations (
     xi.not
     xi.bnot
+    xi.band
+    xi.bor
+    xi.bxor
     xi.shl
     xi.shr
     xi.narrow.i8
@@ -2941,6 +2941,31 @@
     (aot-hosted "src/aot/xrt.h" "xrt_bits_not_eval")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_bits_not_eval")
     (cgen "src/aot/xi_cgen.c" "cg_bits_not_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.bitwise-binary
+  :category shared-semantic-kernel
+  :operations (
+    xi.band
+    xi.bor
+    xi.bxor
+  )
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+    runtime
+  )
+  :cgen-adapter xrt_bitwise_binary_eval
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_bitwise.inc.c" "XR_BITWISE_BINARY_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_bitwise_binary_eval")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_bitwise_binary_eval")
+    (cgen "src/aot/xi_cgen.c" "cg_bitwise_binary_adapter_name")
+    (runtime "src/runtime/object/xbigint.c" "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY")
   ))
 
 (define-xi-observable-owner shared.shift

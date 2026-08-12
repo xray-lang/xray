@@ -484,12 +484,20 @@ TEST(const_fold_bitwise_ops) {
     XiValue *c6 = xi_const_int(f, blk, 6, &stub_int);
     XiValue *c3 = xi_const_int(f, blk, 3, &stub_int);
     XiValue *bxor = xi_binary(f, blk, XI_BXOR, &stub_int, c6, c3);
+    XiValue *cneg1 = xi_const_int(f, blk, -1, &stub_int);
+    XiValue *cmin = xi_const_int(f, blk, INT64_MIN, &stub_int);
+    XiValue *band_negative = xi_binary(f, blk, XI_BAND, &stub_int, cneg1, c0F);
+    XiValue *bor_edge = xi_binary(f, blk, XI_BOR, &stub_int, cmin, c05);
+    XiValue *bxor_edge = xi_binary(f, blk, XI_BXOR, &stub_int, cneg1, cmin);
 
     xi_opt_const_fold(f);
 
     assert(band->op == XI_CONST && band->aux_int == 0x0F);
     assert(bor->op == XI_CONST && bor->aux_int == 0xA5);
     assert(bxor->op == XI_CONST && bxor->aux_int == 5);
+    assert(band_negative->op == XI_CONST && band_negative->aux_int == 0x0F);
+    assert(bor_edge->op == XI_CONST && bor_edge->aux_int == INT64_MIN + 5);
+    assert(bxor_edge->op == XI_CONST && bxor_edge->aux_int == INT64_MAX);
     xi_func_free(f);
 }
 

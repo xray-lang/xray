@@ -62,6 +62,10 @@ int memcmp(const void *a, const void *b, size_t n);
     XR_BITS_NOT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,                                  \
                             XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO,                                  \
                             XR_SEM_CONSUMER_AOT_FREESTANDING, value)
+#define xrt_bitwise_binary_eval(kind, lhs, rhs)                                                   \
+    XR_BITWISE_BINARY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,                       \
+                                   XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,                      \
+                                   XR_SEM_CONSUMER_AOT_FREESTANDING, kind, lhs, rhs)
 #define xrt_shift_eval(kind, value, count)                                                        \
     XR_SHIFT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_SHIFT_HI,                                        \
                          XR_SEM_OWNER_ID_SHARED_SHIFT_LO,                                        \

@@ -93,9 +93,8 @@ XR_FUNC XrBigInt *xr_bigint_pow(struct XrCoroutine *coro, XrBigInt *a, uint32_t 
 
 /* ========== Bitwise ========== */
 
-XR_FUNC XrBigInt *xr_bigint_and(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b);  // a & b
-XR_FUNC XrBigInt *xr_bigint_or(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b);   // a | b
-XR_FUNC XrBigInt *xr_bigint_xor(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b);  // a ^ b
+XR_FUNC XrBigInt *xr_bigint_bitwise(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b,
+                                    XrBitwiseBinaryKind kind, XrBitwiseBinaryStatus *status);
 XR_FUNC XrBigInt *xr_bigint_shift(struct XrCoroutine *coro, XrBigInt *a, int64_t count,
                                   XrShiftKind kind, XrShiftStatus *status);
 

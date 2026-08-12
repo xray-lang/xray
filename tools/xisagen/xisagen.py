@@ -1822,12 +1822,9 @@ XI_NUMERIC_WIDTH_KERNELS = {
 }
 
 XI_VM_TEMPLATE_BITWISE_BINARY = {
-    'xi.band': ('&', '&&', 'xr_bigint_and', 'XR_OP_BAND_FLAG', 'SYMBOL_OP_BAND',
-                '"&"', '"bitwise AND requires integer types"'),
-    'xi.bor': ('|', '||', 'xr_bigint_or', 'XR_OP_BOR_FLAG', 'SYMBOL_OP_BOR',
-               '"|"', '"bitwise OR requires integer types"'),
-    'xi.bxor': ('^', None, 'xr_bigint_xor', 'XR_OP_BXOR_FLAG', 'SYMBOL_OP_BXOR',
-                '"^"', '"bitwise XOR requires integer types"'),
+    'xi.band': ('XR_BITWISE_BINARY_AND', 'true', '"bitwise AND requires integer types"'),
+    'xi.bor': ('XR_BITWISE_BINARY_OR', 'true', '"bitwise OR requires integer types"'),
+    'xi.bxor': ('XR_BITWISE_BINARY_XOR', 'false', '"bitwise XOR requires integer types"'),
 }
 
 XI_VM_TEMPLATE_BITWISE_UNARY = {
@@ -1890,9 +1887,9 @@ XI_AOT_C_TEMPLATE_DIV_MOD = {
 }
 
 XI_AOT_C_TEMPLATE_BITWISE_BINARY = {
-    'xi.band': '&',
-    'xi.bor': '|',
-    'xi.bxor': '^',
+    'xi.band': 'XR_BITWISE_BINARY_AND',
+    'xi.bor': 'XR_BITWISE_BINARY_OR',
+    'xi.bxor': 'XR_BITWISE_BINARY_XOR',
 }
 
 XI_AOT_C_TEMPLATE_BITWISE_UNARY = {'xi.bnot'}
@@ -2318,23 +2315,11 @@ def generate_xi_vm_template_bitwise_binary_dispatch(entries: list[XiLoweringDef]
     lines.append('#ifndef XVM_TEMPLATE_BITWISE_BINARY_CASE')
     lines.append('#error "XVM_TEMPLATE_BITWISE_BINARY_CASE must be defined before including this file"')
     lines.append('#endif')
-    lines.append('#ifndef XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE')
-    lines.append('#error "XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE must be defined before including this file"')
-    lines.append('#endif')
-    lines.append('')
     for entry in bitwise_entries:
         opcode = XI_VM_TEMPLATE_OPCODES[entry.op_name]
-        int_op, bool_op, bigint_fn, op_flag, op_symbol, op_name, error_msg = (
-            XI_VM_TEMPLATE_BITWISE_BINARY[entry.op_name]
-        )
-        if bool_op is not None:
-            lines.append(
-                f'XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE({opcode}, {int_op}, {bool_op}, '
-                f'{bigint_fn}, {op_flag}, {op_symbol}, {op_name}, {error_msg})')
-        else:
-            lines.append(
-                f'XVM_TEMPLATE_BITWISE_BINARY_CASE({opcode}, {int_op}, {bigint_fn}, '
-                f'{op_flag}, {op_symbol}, {op_name}, {error_msg})')
+        kind, allows_bool, error_msg = XI_VM_TEMPLATE_BITWISE_BINARY[entry.op_name]
+        lines.append(
+            f'XVM_TEMPLATE_BITWISE_BINARY_CASE({opcode}, {kind}, {allows_bool}, {error_msg})')
     lines.append('')
     return '\n'.join(lines)
 
@@ -2693,7 +2678,7 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('    return "";')
     lines.append('}')
     lines.append('')
-    lines.append('static inline const char *xi_to_c_template_bitwise_binary_op(uint16_t op) {')
+    lines.append('static inline const char *xi_to_c_template_bitwise_binary_kind(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for entry in bitwise_binary_entries:
         op_text = XI_AOT_C_TEMPLATE_BITWISE_BINARY[entry.op_name]
@@ -2846,7 +2831,7 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
         if 'aot-c' in entry.target_drivers and entry.op_name in XI_AOT_C_TEMPLATE_BITWISE_BINARY:
             op_text = XI_AOT_C_TEMPLATE_BITWISE_BINARY[entry.op_name]
             lines.append(
-                f'    assert(strcmp(xi_to_c_template_bitwise_binary_op(XI_{entry.ident}), "{op_text}") == 0);')
+                f'    assert(strcmp(xi_to_c_template_bitwise_binary_kind(XI_{entry.ident}), "{op_text}") == 0);')
         if 'aot-c' in entry.target_drivers and entry.op_name in XI_AOT_C_TEMPLATE_SHIFT:
             fn = XI_AOT_C_TEMPLATE_SHIFT[entry.op_name]
             lines.append(
@@ -4323,8 +4308,9 @@ def _test_xi_lowering_parser():
                       {'vm-bytecode': 'xi_emit_arith'}, {}, {},
                       template='value-binary'),
     ])
-    assert 'XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE(OP_BAND, &, &&' in vm_bitwise
-    assert 'XVM_TEMPLATE_BITWISE_BINARY_CASE(OP_BXOR, ^' in vm_bitwise
+    assert 'XVM_TEMPLATE_BITWISE_BINARY_CASE(OP_BAND, XR_BITWISE_BINARY_AND, true' in vm_bitwise
+    assert 'XVM_TEMPLATE_BITWISE_BINARY_CASE(OP_BXOR, XR_BITWISE_BINARY_XOR, false' in vm_bitwise
+    assert 'xr_bigint_and' not in vm_bitwise and 'SYMBOL_OP_BAND' not in vm_bitwise
     vm_bitwise_unary = generate_xi_vm_template_bitwise_unary_dispatch([
         XiLoweringDef('xi.bnot', 'BNOT', ['vm-bytecode'], ['vm-bytecode'],
                       {'vm-bytecode': 'xi_emit_bnot'}, {}, {},

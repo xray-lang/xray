@@ -4226,27 +4226,47 @@ static void cg_emit_narrow_arith_operand(XiCgenCtx *ctx, const XiFunc *f, FILE *
     emit_vref(out, src ? src : o);
 }
 
-static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *op) {
-    /* BigInt bitwise: the operands are tagged BigInts, so unboxing them as
-     * int64 would read the pointer as an integer. Emit the tagged runtime that
-     * mirrors the VM (two's-complement AND/OR/XOR over the limbs). */
-    if (v->nargs >= 2 && v->args[0] && xr_type_is_builtin_named_class(v->args[0]->type, "BigInt")) {
-        const char *fn = (v->op == XI_BAND)  ? "xrt_bigint_and_val"
-                         : (v->op == XI_BOR) ? "xrt_bigint_or_val"
-                                             : "xrt_bigint_xor_val";
-        fprintf(out, "%s(", fn);
+static const char *cg_bitwise_binary_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,
+                                        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: bitwise-binary owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI, XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: bitwise-binary owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                    const char *kind) {
+    const char *adapter = cg_bitwise_binary_adapter_name(ctx);
+    if (!adapter || !kind || !kind[0] || !v || v->nargs != 2 || !v->args[0] || !v->args[1] ||
+        (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (xr_type_is_builtin_named_class(v->args[0]->type, "BigInt")) {
+        fprintf(out, "xrt_bigint_bitwise_val(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ")");
+        fprintf(out, ", %s)", kind);
         return;
     }
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
     if (boxed)
-        fprintf(out, "XR_FROM_INT(");
-    fprintf(out, "(");
+        fprintf(out, cg_value_type_is_bool(v) ? "XR_FROM_BOOL(" : "XR_FROM_INT(");
+    fprintf(out, "%s(%s, ", adapter, kind);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, ") %s (", op);
+    fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out, ")");
     if (boxed)
@@ -6967,7 +6987,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
                cg_type_is_unsigned_int(user->type);
     }
 
-    template_op = xi_to_c_template_bitwise_binary_op(user->op);
+    template_op = xi_to_c_template_bitwise_binary_kind(user->op);
     if (template_op && *template_op)
         return arg_index < 2;
 
@@ -9790,6 +9810,7 @@ static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
         "xrt_shr",
         "xrt_sar",
         /* Stable shared shift owner adapter is header-inline. */
+        "xrt_bitwise_binary_eval",
         "xrt_shift_eval",
         "xrt_rotl",
         "xrt_rotr",

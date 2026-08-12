@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "e001fba7e974a5127c6fb104ff9b50d187bc891946c1ec95cd472c46b6fd846a",
+  "canonical_fingerprint": "75ce29577ec583547efc60e1d5585b26861df5ae1c35a756e458445c3442c6d0",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -158,6 +158,60 @@
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
           "symbol": "cg_bits_not_adapter_name"
+        }
+      ]
+    },
+    {
+      "owner": "shared.bitwise-binary",
+      "owner_id": "ed163bd74ec14c905a52f8ade83f970d",
+      "owner_id_hi": "0xed163bd74ec14c90",
+      "owner_id_lo": "0x5a52f8ade83f970d",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.band",
+        "xi.bor",
+        "xi.bxor"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen",
+        "runtime"
+      ],
+      "consumer_bits": "0x0000003f",
+      "cgen_adapter": "xrt_bitwise_binary_eval",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITWISE_BINARY_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bitwise_binary_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bitwise_binary_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_bitwise_binary_adapter_name"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/object/xbigint.c",
+          "symbol": "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY"
         }
       ]
     },
@@ -777,50 +831,6 @@
       ]
     },
     {
-      "owner": "xi.band",
-      "owner_id": "1e345fc05d4e4229245412229aa4e7c4",
-      "owner_id_hi": "0x1e345fc05d4e4229",
-      "owner_id_lo": "0x245412229aa4e7c4",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.band"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.bor",
-      "owner_id": "115766f11686a3a3b9ebf02a6d8a1312",
-      "owner_id_hi": "0x115766f11686a3a3",
-      "owner_id_lo": "0xb9ebf02a6d8a1312",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.bor"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
       "owner": "xi.bounds.check",
       "owner_id": "941ab69f64894b97bad2b11893504f2c",
       "owner_id_hi": "0x941ab69f64894b97",
@@ -872,28 +882,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.buffer.materialize"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.bxor",
-      "owner_id": "7b922d0cf92c6c67a45712b71459c9fc",
-      "owner_id_hi": "0x7b922d0cf92c6c67",
-      "owner_id_lo": "0xa45712b71459c9fc",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.bxor"
       ],
       "consumers": [
         "semantic-plan"
@@ -4866,21 +4854,51 @@
       "operation_id": "1e345fc05d4e4229245412229aa4e7c4",
       "operation_id_hi": "0x1e345fc05d4e4229",
       "operation_id_lo": "0x245412229aa4e7c4",
-      "owner": "xi.band",
-      "owner_id": "1e345fc05d4e4229245412229aa4e7c4",
-      "owner_id_hi": "0x1e345fc05d4e4229",
-      "owner_id_lo": "0x245412229aa4e7c4",
-      "category": "declarative-primitive",
+      "owner": "shared.bitwise-binary",
+      "owner_id": "ed163bd74ec14c905a52f8ade83f970d",
+      "owner_id_hi": "0xed163bd74ec14c90",
+      "owner_id_lo": "0x5a52f8ade83f970d",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen",
+        "runtime"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000003f",
+      "cgen_adapter": "xrt_bitwise_binary_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITWISE_BINARY_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bitwise_binary_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bitwise_binary_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_bitwise_binary_adapter_name"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/object/xbigint.c",
+          "symbol": "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY"
         }
       ]
     },
@@ -4889,21 +4907,51 @@
       "operation_id": "115766f11686a3a3b9ebf02a6d8a1312",
       "operation_id_hi": "0x115766f11686a3a3",
       "operation_id_lo": "0xb9ebf02a6d8a1312",
-      "owner": "xi.bor",
-      "owner_id": "115766f11686a3a3b9ebf02a6d8a1312",
-      "owner_id_hi": "0x115766f11686a3a3",
-      "owner_id_lo": "0xb9ebf02a6d8a1312",
-      "category": "declarative-primitive",
+      "owner": "shared.bitwise-binary",
+      "owner_id": "ed163bd74ec14c905a52f8ade83f970d",
+      "owner_id_hi": "0xed163bd74ec14c90",
+      "owner_id_lo": "0x5a52f8ade83f970d",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen",
+        "runtime"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000003f",
+      "cgen_adapter": "xrt_bitwise_binary_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITWISE_BINARY_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bitwise_binary_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bitwise_binary_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_bitwise_binary_adapter_name"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/object/xbigint.c",
+          "symbol": "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY"
         }
       ]
     },
@@ -4912,21 +4960,51 @@
       "operation_id": "7b922d0cf92c6c67a45712b71459c9fc",
       "operation_id_hi": "0x7b922d0cf92c6c67",
       "operation_id_lo": "0xa45712b71459c9fc",
-      "owner": "xi.bxor",
-      "owner_id": "7b922d0cf92c6c67a45712b71459c9fc",
-      "owner_id_hi": "0x7b922d0cf92c6c67",
-      "owner_id_lo": "0xa45712b71459c9fc",
-      "category": "declarative-primitive",
+      "owner": "shared.bitwise-binary",
+      "owner_id": "ed163bd74ec14c905a52f8ade83f970d",
+      "owner_id_hi": "0xed163bd74ec14c90",
+      "owner_id_lo": "0x5a52f8ade83f970d",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen",
+        "runtime"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000003f",
+      "cgen_adapter": "xrt_bitwise_binary_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITWISE_BINARY_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bitwise_binary_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bitwise_binary_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_bitwise_binary_adapter_name"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/object/xbigint.c",
+          "symbol": "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY"
         }
       ]
     },

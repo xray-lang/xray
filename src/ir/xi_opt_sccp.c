@@ -431,11 +431,11 @@ static SccpCell eval_bitwise(uint16_t op, SccpCell a, SccpCell b, bool shr_unsig
         return sccp_bot();
     switch (op) {
         case XI_BAND:
-            return sccp_int(a.ival & b.ival);
+            return sccp_int(xr_bitwise_binary_i64(XR_BITWISE_BINARY_AND, a.ival, b.ival));
         case XI_BOR:
-            return sccp_int(a.ival | b.ival);
+            return sccp_int(xr_bitwise_binary_i64(XR_BITWISE_BINARY_OR, a.ival, b.ival));
         case XI_BXOR:
-            return sccp_int(a.ival ^ b.ival);
+            return sccp_int(xr_bitwise_binary_i64(XR_BITWISE_BINARY_XOR, a.ival, b.ival));
         case XI_SHL:
             return sccp_int(xr_shift_i64(XR_SHIFT_LEFT, a.ival, b.ival));
         case XI_SHR:

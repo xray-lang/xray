@@ -99,6 +99,11 @@ BITS_NOT_AOT_BINDINGS = (
     "src/aot/xrt.h",
     "src/aot/xrt_core_freestanding.h",
 )
+BITWISE_BINARY_OPERATIONS = {"xi.band", "xi.bor", "xi.bxor"}
+BITWISE_BINARY_AOT_BINDINGS = (
+    "src/aot/xrt.h",
+    "src/aot/xrt_core_freestanding.h",
+)
 SHIFT_OPERATIONS = {"xi.shl", "xi.shr"}
 SHIFT_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -852,6 +857,106 @@ def verify_shift_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_bitwise_binary_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.bitwise-binary")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.bitwise-binary"), None)
+    if owner is None or set(owner.get("operations", [])) != BITWISE_BINARY_OPERATIONS:
+        errors.append(
+            "semantic owner registry has no exact shared.bitwise-binary operation family")
+
+    core_text = (root / "src/shared/xr_bits_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_BITWISE_BINARY_OWNER_APPLY",
+                  "XR_BITWISE_BINARY_BIGINT_OWNER_PLAN",
+                  "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY", "xr_bitwise_binary_i64",
+                  "xr_bitwise_binary_bigint_plan", "xr_bitwise_binary_bigint_apply"):
+        if token not in core_text:
+            errors.append(
+                f"src/shared/xr_bits_core.h: shared bitwise-binary owner lacks {token}")
+
+    vm_text = (root / "src/vm/xvm_dispatch_bitwise.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    vm_start = vm_text.find("#define XVM_TEMPLATE_BITWISE_BINARY_CASE")
+    vm_end = vm_text.find("#undef XVM_TEMPLATE_BITWISE_BINARY_CASE", vm_start)
+    vm_body = vm_text[vm_start:vm_end] if vm_start >= 0 and vm_end > vm_start else ""
+    if "XR_BITWISE_BINARY_OWNER_APPLY" not in vm_body or "xr_bigint_bitwise" not in vm_body:
+        errors.append("src/vm/xvm_dispatch_bitwise.inc.c: VM bitwise binary bypasses owner")
+    if any(token in vm_body for token in
+           ("VM_TRY_BINARY_OP_OVERLOAD", "SYMBOL_OP_BAND", "SYMBOL_OP_BOR", "SYMBOL_OP_BXOR",
+            "xr_bigint_and", "xr_bigint_or", "xr_bigint_xor")):
+        errors.append("src/vm/xvm_dispatch_bitwise.inc.c: retired VM bitwise semantics revived")
+
+    vm_gen_text = (root / "src/vm/xvm_template_bitwise_binary_gen.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    if (vm_gen_text.count("XVM_TEMPLATE_BITWISE_BINARY_CASE(") != 3 or
+            any(token in vm_gen_text for token in
+                ("XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE", "xr_bigint_and", "xr_bigint_or",
+                 "xr_bigint_xor", "SYMBOL_OP_BAND", "SYMBOL_OP_BOR", "SYMBOL_OP_BXOR"))):
+        errors.append("src/vm/xvm_template_bitwise_binary_gen.inc.c: generated semantics revived")
+
+    runtime_text = (root / "src/runtime/object/xbigint.c").read_text(
+        encoding="utf-8", errors="strict")
+    runtime_body = extract_c_function(runtime_text, "xr_bigint_bitwise")
+    if (runtime_body is None or "XR_BITWISE_BINARY_BIGINT_OWNER_PLAN" not in runtime_body or
+            "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY" not in runtime_body):
+        errors.append("src/runtime/object/xbigint.c: BigInt bitwise adapter bypasses owner")
+
+    for relative in BITWISE_BINARY_AOT_BINDINGS:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "XR_BITWISE_BINARY_OWNER_APPLY" not in text or
+                "xrt_bitwise_binary_eval" not in text):
+            errors.append(f"{relative}: AOT bitwise-binary adapter bypasses shared owner")
+
+    hosted_text = (root / "src/aot/xrt_arith.h").read_text(
+        encoding="utf-8", errors="strict")
+    hosted_body = extract_c_function(hosted_text, "xrt_bigint_bitwise_val")
+    if (hosted_body is None or "XR_BITWISE_BINARY_BIGINT_OWNER_PLAN" not in hosted_body or
+            "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY" not in hosted_body):
+        errors.append("src/aot/xrt_arith.h: hosted BigInt bitwise bypasses shared owner")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_bitwise_binary_adapter_name")
+    emitter_body = extract_c_function(cgen_text, "emit_bitwise_binop_ctx")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append("src/aot/xi_cgen.c: CGen bitwise binary does not resolve by owner ID")
+    if (emitter_body is None or "cg_bitwise_binary_adapter_name" not in emitter_body or
+            "xrt_bigint_bitwise_val" not in emitter_body):
+        errors.append("src/aot/xi_cgen.c: CGen bitwise binary bypasses mechanical adapters")
+    if emitter_body and re.search(r"\)\s*[&|^]\s*\(", emitter_body):
+        errors.append("src/aot/xi_cgen.c: raw C bitwise-binary semantics revived")
+
+    optimizer_text = (root / "src/ir/xi_opt.c").read_text(encoding="utf-8", errors="strict")
+    optimizer_body = extract_c_function(optimizer_text, "fold_int_binary")
+    sccp_text = (root / "src/ir/xi_opt_sccp.c").read_text(encoding="utf-8", errors="strict")
+    sccp_body = extract_c_function(sccp_text, "eval_bitwise")
+    if optimizer_body is None or optimizer_body.count("xr_bitwise_binary_i64") != 3:
+        errors.append("src/ir/xi_opt.c: bitwise-binary folding bypasses shared owner")
+    if sccp_body is None or sccp_body.count("xr_bitwise_binary_i64") != 3:
+        errors.append("src/ir/xi_opt_sccp.c: bitwise-binary SCCP bypasses shared owner")
+
+    retired_sources = (
+        "src/runtime/object/xbigint.h", "src/runtime/object/xbigint.c",
+        "src/aot/xrt_arith.h", "src/aot/xi_cgen.c",
+        "src/vm/xvm_template_bitwise_binary_gen.inc.c", "src/aot/xi_to_c_dispatch_gen.h",
+    )
+    retired_tokens = (
+        "xr_bigint_and", "xr_bigint_or", "xr_bigint_xor", "xrt_bigint_and_val",
+        "xrt_bigint_or_val", "xrt_bigint_xor_val", "xrt_bi_to_twos", "xrt_bi_from_twos",
+        "xi_to_c_template_bitwise_binary_op", "XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE",
+    )
+    for rel in retired_sources:
+        text = (root / rel).read_text(encoding="utf-8", errors="strict")
+        for token in retired_tokens:
+            if token in text:
+                errors.append(f"{rel}: retired bitwise-binary semantic source remains: {token}")
+    return errors
+
+
 def verify_numeric_width_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     marker = owner_macro_prefix("shared.numeric-conversion")
@@ -1140,6 +1245,7 @@ def verify(root: Path, write: bool) -> list[str]:
         registry = json.loads(registry_path.read_text(encoding="utf-8", errors="strict"))
         errors.extend(verify_exact_bits_ratchet(root, registry))
         errors.extend(verify_bits_not_ratchet(root, registry))
+        errors.extend(verify_bitwise_binary_ratchet(root, registry))
         errors.extend(verify_shift_ratchet(root, registry))
         errors.extend(verify_numeric_width_ratchet(root, registry))
         errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
@@ -1149,6 +1255,9 @@ def verify(root: Path, write: bool) -> list[str]:
 
 
 def self_test() -> int:
+    assert re.search(r"\)\s*[&|^]\s*\(", "(lhs) & (rhs)")
+    assert not re.search(r"\)\s*[&|^]\s*\(",
+                         "xrt_bitwise_binary_eval(XR_BITWISE_BINARY_AND, lhs, rhs)")
     assert re.search(r"emit_native_[A-Za-z0-9_]*shift", "emit_native_const_shift")
     assert not re.search(r"emit_native_[A-Za-z0-9_]*shift", "emit_shift_binop_ctx")
     assert re.search(r"rewrite_to_const_int\s*\(\s*v\s*,\s*~",

@@ -462,85 +462,29 @@ static inline XrValue xrt_bigint_mod_val(XrValue a, XrValue b) {
     return r;
 }
 
-/* Two's-complement view of a magnitude+sign BigInt over `len` limbs (negative
- * values become ~(|a|-1)); the inverse rebuilds sign-magnitude. Mirrors the
- * VM's bigint_to/from_twos_comp so bitwise results match across backends. */
-static inline void xrt_bi_to_twos(const xrt_bigint_view_t *a, uint32_t *tc, uint32_t len) {
-    if (a->sign >= 0) {
-        for (uint32_t i = 0; i < len; i++)
-            tc[i] = (i < a->len) ? a->limbs[i] : 0;
-        return;
-    }
-    uint32_t borrow = 1;
-    for (uint32_t i = 0; i < len; i++) {
-        uint64_t limb = (i < a->len) ? (uint64_t) a->limbs[i] : 0;
-        uint64_t sub = limb - borrow;
-        tc[i] = ~(uint32_t) sub;
-        borrow = (limb < borrow) ? 1 : 0;
-    }
-}
-
-static inline XrValue xrt_bi_from_twos(const uint32_t *tc, uint32_t len, int negative) {
-    XrValue rv;
-    xrt_bigint_view_t *r = xrt_bigint_new(len ? len : 1, &rv);
-    if (!negative) {
-        for (uint32_t i = 0; i < len; i++)
-            r->limbs[i] = tc[i];
-        r->len = len ? len : 1;
-        r->sign = 1;
-    } else {
-        uint32_t carry = 1;
-        for (uint32_t i = 0; i < len; i++) {
-            uint64_t val = (uint64_t) (~tc[i]) + carry;
-            r->limbs[i] = (uint32_t) val;
-            carry = (uint32_t) (val >> 32);
-        }
-        r->len = len ? len : 1;
-        r->sign = -1;
-    }
-    xrt_bigint_norm(r);
-    return rv;
-}
-
-/* which: 0 = and, 1 = or, 2 = xor. Result sign follows the operator's rule on
- * the operand signs, matching the VM. */
-static inline XrValue xrt_bigint_bitwise(XrValue av, XrValue bv, int which) {
+/* Adapt hosted BigInt representation and allocation to shared.bitwise-binary.
+ * Two's-complement conversion, operator choice and result sign remain solely
+ * in the runtime-neutral owner. */
+static inline XrValue xrt_bigint_bitwise_val(XrValue av, XrValue bv,
+                                             XrBitwiseBinaryKind kind) {
     const xrt_bigint_view_t *a = xrt_bigint_view(av);
     const xrt_bigint_view_t *b = xrt_bigint_view(bv);
     XrValue rv;
-    if (!a || !b) {
-        xrt_bigint_new(1, &rv);
-        return rv;
-    }
-    uint32_t len = ((a->len > b->len) ? a->len : b->len) + 1;
-    uint32_t *ta = (uint32_t *) XRT_MALLOC((size_t) len * sizeof(uint32_t));
-    uint32_t *tb = (uint32_t *) XRT_MALLOC((size_t) len * sizeof(uint32_t));
-    if (!ta || !tb) {
-        XRT_FREE(ta);
-        XRT_FREE(tb);
-        xrt_bigint_new(1, &rv);
-        return rv;
-    }
-    xrt_bi_to_twos(a, ta, len);
-    xrt_bi_to_twos(b, tb, len);
-    for (uint32_t i = 0; i < len; i++)
-        ta[i] = (which == 0) ? (ta[i] & tb[i]) : (which == 1) ? (ta[i] | tb[i]) : (ta[i] ^ tb[i]);
-    int an = a->sign < 0, bn = b->sign < 0;
-    int result_neg = (which == 0) ? (an && bn) : (which == 1) ? (an || bn) : (an != bn);
-    rv = xrt_bi_from_twos(ta, len, result_neg);
-    XRT_FREE(ta);
-    XRT_FREE(tb);
+    if (!a || !b)
+        xrt_throw_exc(xr_box_str("E0404: bitwise operation requires integer types"));
+    XrBigIntBitwisePlan plan = XR_BITWISE_BINARY_BIGINT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI, XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, kind, a->len, a->sign, b->len, b->sign);
+    if (plan.status == XR_BITWISE_BINARY_STATUS_INVALID_KIND)
+        xrt_throw_exc(xr_box_str("E0404: invalid bitwise operation"));
+    if (plan.status == XR_BITWISE_BINARY_STATUS_CAPACITY_OVERFLOW)
+        xrt_throw_exc(xr_box_str("E0601: bigint bitwise allocation failed"));
+    xrt_bigint_view_t *r = xrt_bigint_new(plan.capacity, &rv);
+    r->len = XR_BITWISE_BINARY_BIGINT_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI, XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, &plan, a->limbs, a->len, a->sign, b->limbs, b->len,
+        b->sign, r->limbs, &r->sign);
     return rv;
-}
-
-static inline XrValue xrt_bigint_and_val(XrValue a, XrValue b) {
-    return xrt_bigint_bitwise(a, b, 0);
-}
-static inline XrValue xrt_bigint_or_val(XrValue a, XrValue b) {
-    return xrt_bigint_bitwise(a, b, 1);
-}
-static inline XrValue xrt_bigint_xor_val(XrValue a, XrValue b) {
-    return xrt_bigint_bitwise(a, b, 2);
 }
 
 /* Adapt BigInt storage/allocation to the shared shift owner. Negative and

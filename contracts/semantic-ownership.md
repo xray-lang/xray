@@ -38,6 +38,15 @@ machine-readable fingerprint are all derived from the same `ops.def` row.
 Restoring a source-name/literal adapter guess, borrowing another consumer bit,
 or losing any of the six production bindings fails the owner ratchet.
 
+`shared.bitwise-binary` owns `xi.band`, `xi.bor`, and `xi.bxor` for signed
+64-bit patterns and arbitrary-precision BigInts. BigInt sign-magnitude storage
+is converted according to unbounded two's-complement rules inside the shared
+kernel; result sign and normalization are owner decisions. VM, optimizer,
+hosted and freestanding AOT, CGen, and runtime code only adapt tags, allocation,
+errors, and emitted representation. Per-operation BigInt helpers, operator
+overload fallback, raw optimizer folds, or raw CGen `&`, `|`, and `^` emission
+fail the owner ratchet.
+
 `shared.shift` owns `xi.shl` and `xi.shr` for scalar and BigInt values. Scalar
 counts use modulo 64, left shift wraps, and right shift is explicitly signed or
 unsigned. BigInt counts are validated without modulo reduction and limb
@@ -53,9 +62,9 @@ effect evidence cannot be guessed inside CGen.
 
 ## Digest anchors
 
-anchor-sha256: contracts/semantic-owners.toml ee36fa14229545d778af0a960b70c3f1b3aa9a532478485252cf02c741dc632a
-anchor-sha256: contracts/semantic-owner-registry.json be8ca33562196c57b386fe2f9e3c081f545040bcc74e6109493f3c80c75c46fa
+anchor-sha256: contracts/semantic-owners.toml 2d770e1ab831da1dcaa2948fd53fb541e7fbcc4e7853c2d1079e244f4c131a73
+anchor-sha256: contracts/semantic-owner-registry.json cf618e443bd3778e81967c4005f99c4a1043b2902660422b3f44f6e9486a43f4
 anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
-anchor-sha256: contracts/shared-core-inventory.json 384d48850c860bf70b688fc35ff743c0d6361551b7626c28c759ce4cf995eb11
-anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h fe0b9d47f5f4e26de9ac0c55c91cf4a45e1405d5fd1b903403c50a4d5aec2db0
-anchor-sha256: scripts/check_semantic_owners.py 319ebc6eb783d6972df45575ec508d8d44dc67f81419678b9de6d88e1bc55a46
+anchor-sha256: contracts/shared-core-inventory.json 187362da318d07799579a42d0a96a22111a26fd8db56038c4b3cb9c95992a1cf
+anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h c93f60b48d286a5cbd3f30cf4baa14ca7aa4c8e27c871c0e5424f841c7c69546
+anchor-sha256: scripts/check_semantic_owners.py 4b034191c9a5128269d8e3e1d1c1177b8ac9be7e784c6693e8b9c41b24557e37

@@ -296,11 +296,11 @@ static inline const char *xi_to_c_template_div_mod_int_fn(uint16_t op) {
     return "";
 }
 
-static inline const char *xi_to_c_template_bitwise_binary_op(uint16_t op) {
+static inline const char *xi_to_c_template_bitwise_binary_kind(uint16_t op) {
     switch ((XiOp) op) {
-        case XI_BAND: return "&";
-        case XI_BOR: return "|";
-        case XI_BXOR: return "^";
+        case XI_BAND: return "XR_BITWISE_BINARY_AND";
+        case XI_BOR: return "XR_BITWISE_BINARY_OR";
+        case XI_BXOR: return "XR_BITWISE_BINARY_XOR";
         case XI_OP_COUNT: return "";
         default: return "";
     }

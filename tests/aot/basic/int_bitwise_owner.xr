@@ -1,0 +1,17 @@
+// VM/AOT/generated-C differential KAT for shared.bitwise-binary.
+// Runtime variables keep the scalar operators out of constant-fold-only paths.
+
+var all: int = -1
+var mask: int = 85
+var min: int = -9223372036854775807 - 1
+print(all & mask)       // 85
+print(min | 1)          // -9223372036854775807
+print(all ^ min)        // 9223372036854775807
+
+// BigInts expose unbounded two's-complement semantics while retaining the
+// runtime's sign-magnitude representation.
+var big = 4294967296.toBigInt()
+var negative = (-3).toBigInt()
+print((big & negative).toString())  // 4294967296
+print((big | negative).toString())  // -3
+print((big ^ negative).toString())  // -4294967299

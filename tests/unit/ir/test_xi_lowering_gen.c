@@ -165,7 +165,7 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_BAND) == true);
     assert(xi_emit_vm_template_opcode(XI_BAND) == OP_BAND);
     assert(xi_emit_vm_template_swaps_args(XI_BAND) == false);
-    assert(strcmp(xi_to_c_template_bitwise_binary_op(XI_BAND), "&") == 0);
+    assert(strcmp(xi_to_c_template_bitwise_binary_kind(XI_BAND), "XR_BITWISE_BINARY_AND") == 0);
     assert(xi_emit_vm_requires_fresh_dst(XI_BAND) == false);
     assert(xi_lowering_generated_targets(XI_BOR) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_BOR) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
@@ -174,7 +174,7 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_BOR) == true);
     assert(xi_emit_vm_template_opcode(XI_BOR) == OP_BOR);
     assert(xi_emit_vm_template_swaps_args(XI_BOR) == false);
-    assert(strcmp(xi_to_c_template_bitwise_binary_op(XI_BOR), "|") == 0);
+    assert(strcmp(xi_to_c_template_bitwise_binary_kind(XI_BOR), "XR_BITWISE_BINARY_OR") == 0);
     assert(xi_emit_vm_requires_fresh_dst(XI_BOR) == false);
     assert(xi_lowering_generated_targets(XI_BXOR) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_BXOR) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
@@ -183,7 +183,7 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_BXOR) == true);
     assert(xi_emit_vm_template_opcode(XI_BXOR) == OP_BXOR);
     assert(xi_emit_vm_template_swaps_args(XI_BXOR) == false);
-    assert(strcmp(xi_to_c_template_bitwise_binary_op(XI_BXOR), "^") == 0);
+    assert(strcmp(xi_to_c_template_bitwise_binary_kind(XI_BXOR), "XR_BITWISE_BINARY_XOR") == 0);
     assert(xi_emit_vm_requires_fresh_dst(XI_BXOR) == false);
     assert(xi_lowering_generated_targets(XI_BNOT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_BNOT) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));

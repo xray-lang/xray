@@ -5,10 +5,6 @@
 #ifndef XVM_TEMPLATE_BITWISE_BINARY_CASE
 #error "XVM_TEMPLATE_BITWISE_BINARY_CASE must be defined before including this file"
 #endif
-#ifndef XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE
-#error "XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE must be defined before including this file"
-#endif
-
-XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE(OP_BAND, &, &&, xr_bigint_and, XR_OP_BAND_FLAG, SYMBOL_OP_BAND, "&", "bitwise AND requires integer types")
-XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE(OP_BOR, |, ||, xr_bigint_or, XR_OP_BOR_FLAG, SYMBOL_OP_BOR, "|", "bitwise OR requires integer types")
-XVM_TEMPLATE_BITWISE_BINARY_CASE(OP_BXOR, ^, xr_bigint_xor, XR_OP_BXOR_FLAG, SYMBOL_OP_BXOR, "^", "bitwise XOR requires integer types")
+XVM_TEMPLATE_BITWISE_BINARY_CASE(OP_BAND, XR_BITWISE_BINARY_AND, true, "bitwise AND requires integer types")
+XVM_TEMPLATE_BITWISE_BINARY_CASE(OP_BOR, XR_BITWISE_BINARY_OR, true, "bitwise OR requires integer types")
+XVM_TEMPLATE_BITWISE_BINARY_CASE(OP_BXOR, XR_BITWISE_BINARY_XOR, false, "bitwise XOR requires integer types")

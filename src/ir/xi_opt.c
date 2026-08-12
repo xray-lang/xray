@@ -376,13 +376,13 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, bool shr_unsigned
             *result = divmod_unsigned ? xr_i64_mod_u_wrap(a, b) : xr_i64_mod_wrap(a, b);
             return true;
         case XI_BAND:
-            *result = a & b;
+            *result = xr_bitwise_binary_i64(XR_BITWISE_BINARY_AND, a, b);
             return true;
         case XI_BOR:
-            *result = a | b;
+            *result = xr_bitwise_binary_i64(XR_BITWISE_BINARY_OR, a, b);
             return true;
         case XI_BXOR:
-            *result = a ^ b;
+            *result = xr_bitwise_binary_i64(XR_BITWISE_BINARY_XOR, a, b);
             return true;
         case XI_SHL:
             *result = xr_shift_i64(XR_SHIFT_LEFT, a, b);

@@ -460,7 +460,7 @@ def run_self_test() -> None:
     vm_bitwise_opcodes = {"OP_BAND"}
     vm_bitwise_coverage = check_vm_generated_body_coverage(
         vm_bitwise_opcodes,
-        "XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE(OP_BAND, &, &&, fn, flag, sym, name, err)\n",
+        "XVM_TEMPLATE_BITWISE_BINARY_CASE(OP_BAND, XR_BITWISE_BINARY_AND, true, err)\n",
         VM_GENERATED_BITWISE_BINARY_FILE,
         r"\bXVM_TEMPLATE_BITWISE_BINARY(?:_BOOL)?_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
         "bitwise binary")

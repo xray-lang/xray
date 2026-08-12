@@ -7621,6 +7621,41 @@ TEST(cgen_bits_not_uses_stable_owner_adapter) {
     xi_func_free(ir);
 }
 
+TEST(cgen_bitwise_binary_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,
+                                          XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
+           "bitwise-binary owner must publish CGen as a mechanical consumer");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,
+        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO);
+    assert(adapter != NULL && strcmp(adapter, "xrt_bitwise_binary_eval") == 0 &&
+           "CGen must resolve the stable bitwise-binary owner adapter");
+
+    const char *src = "fn ownerAnd(a: int, b: int) -> int { return a & b }\n"
+                      "fn ownerOr(a: int, b: int) -> int { return a | b }\n"
+                      "fn ownerXor(a: int, b: int) -> int { return a ^ b }\n"
+                      "print(ownerAnd(-1, 85))\n"
+                      "print(ownerOr(-8, 3))\n"
+                      "print(ownerXor(-1, -9223372036854775807 - 1))\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "bitwise-binary IR compilation failed");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "stable-owner bitwise-binary C generation failed");
+    assert(count_between(code, code + strlen(code), "xrt_bitwise_binary_eval(") >= 3 &&
+           "all bitwise-binary operators must call the stable owner adapter");
+    assert(!contains(code, "xrt_bigint_and_val") && !contains(code, "xrt_bigint_or_val") &&
+           !contains(code, "xrt_bigint_xor_val") &&
+           "generated C must not name retired per-operation BigInt helpers");
+    assert(!contains(code, ") & (") && !contains(code, ") | (") &&
+           !contains(code, ") ^ (") &&
+           "generated C must not recreate raw bitwise-binary semantics");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_numeric_width_uses_stable_owner_adapter) {
     assert(xr_semantic_owner_has_consumer(
                XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
@@ -12905,6 +12940,7 @@ int main(void) {
     run_cgen_typeid_uses_stable_owner_adapter();
     run_cgen_exact_bits_use_stable_owner_adapter();
     run_cgen_bits_not_uses_stable_owner_adapter();
+    run_cgen_bitwise_binary_uses_stable_owner_adapter();
     run_cgen_numeric_width_uses_stable_owner_adapter();
     run_cgen_byte_slice_scalar_uses_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();

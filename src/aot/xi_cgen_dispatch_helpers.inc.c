@@ -1049,7 +1049,7 @@ static void xicgen_template_bitwise_binary(XiCgenCtx *ctx, FILE *out, const XiFu
                                            const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    emit_bitwise_binop_ctx(ctx, out, v, xi_to_c_template_bitwise_binary_op(v->op));
+    emit_bitwise_binop_ctx(ctx, out, v, xi_to_c_template_bitwise_binary_kind(v->op));
 }
 
 #define XICGEN_DEFINE_TEMPLATE_BITWISE_BINARY_DRIVER(ident, driver)                                \
