@@ -270,9 +270,12 @@ CONTRACT_SPECS = (
     ContractSpec(
         "runtime-target-plan-load.md",
         (
+            "CMakeLists.txt",
             "include/xray_target_plan_load.h",
             "src/plan/format/xr_artifact_kind.h",
             "src/plan/format/xr_artifact_kind.c",
+            "src/plan/format/xr_xsm_schema.h",
+            "src/plan/format/xr_xsm_decode.c",
             "src/plan/format/xr_xtp_schema.h",
             "src/plan/format/xr_xtp_internal.h",
             "src/plan/format/xr_xtp_artifact.c",
@@ -297,6 +300,7 @@ CONTRACT_SPECS = (
             "scripts/check_legacy_product_residue.py",
             "tests/unit/plan/test_target_plan.c",
             "tests/unit/plan/test_xtp_format.c",
+            "tests/unit/CMakeLists.txt",
             "tests/unit/runtime/test_runtime_target_plan_load_archive.c",
             "tests/cli/run_target_artifact_boundary_tests.py",
             "tests/install/run_installed_runtime_symbol_tests.py",

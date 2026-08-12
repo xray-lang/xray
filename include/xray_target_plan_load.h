@@ -45,9 +45,12 @@ typedef struct XrRuntimeArtifactAuthorityIdentity {
     uint8_t authority_fingerprint[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE];
 } XrRuntimeArtifactAuthorityIdentity;
 
-/* Installed runtimes cannot construct this package until independently
- * governed SemanticPlan and exact TargetProfile artifacts are available. */
+/* Availability covers only exact XSM-backed authority construction. */
 XRAY_API bool xr_runtime_artifact_authority_load_available(void);
+XRAY_API bool xr_runtime_artifact_authority_load_xsm(
+    const uint8_t *artifact_bytes, size_t artifact_size,
+    XrRuntimeArtifactAuthority **authority, char *diagnostic,
+    size_t diagnostic_size);
 XRAY_API bool xr_runtime_artifact_authority_verify(
     const XrRuntimeArtifactAuthority *authority, char *diagnostic,
     size_t diagnostic_size);

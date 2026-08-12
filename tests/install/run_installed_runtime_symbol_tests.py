@@ -25,6 +25,7 @@ from xraytest import binary as binlib  # noqa: E402
 REQUIRED = {
     "xr_artifact_probe",
     "xr_runtime_artifact_authority_load_available",
+    "xr_runtime_artifact_authority_load_xsm",
     "xr_runtime_artifact_authority_free",
     "xr_runtime_artifact_authority_identity",
     "xr_runtime_artifact_authority_verify",
@@ -49,6 +50,7 @@ REQUIRED = {
     "xr_target_plan_free",
     "xr_target_plan_verify",
     "xr_target_profile_verify",
+    "xr_xsm_decode",
     "xr_xtp_decode_candidate",
     "xr_xtp_materialize_target_plan",
 }
@@ -132,7 +134,8 @@ def compile_header(cc: Path, prefix: Path, work: Path) -> None:
         "static XrRuntimeGenerationAuthority *generation_authority;\n"
         "static XrLoadedModuleGeneration *generation;\n"
         "static int64_t scalar_result;\n"
-        "int main(void) { return xr_runtime_artifact_authority_load_available() || "
+        "int main(void) { return !xr_runtime_artifact_authority_load_available() || "
+        "xr_runtime_artifact_authority_load_xsm(0, 0, &authority, 0, 0) || "
         "!xr_runtime_generation_activation_available() || "
         "authority != 0 || plan != 0 || generation_authority != 0 || generation != 0 || "
         "scalar_result != 0 || identity.schema_version != 0 || "

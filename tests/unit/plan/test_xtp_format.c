@@ -7,12 +7,14 @@
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/format/xr_artifact_kind.h"
+#include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
 #include "../../../src/runtime/xr_runtime_artifact_authority_internal.h"
 #include "../../../include/xray_target_plan_load.h"
+#include "../../../include/xray_runtime_generation.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xsha256.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -783,6 +785,112 @@ static void test_runtime_factory_owns_native_profile(void) {
     dispose_fixture(&fixture);
 }
 
+static void test_public_xsm_authority_loads_exact_semantics(void) {
+    XtpFixture fixture = make_fixture();
+    uint8_t *xsm = NULL;
+    size_t xsm_size = 0;
+    char diagnostic[512] = {0};
+    REQUIRE(xr_xsm_encode(fixture.semantic, &xsm, &xsm_size, diagnostic,
+                          sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_load_available());
+
+    XrRuntimeArtifactAuthority *authority = NULL;
+    REQUIRE(xr_runtime_artifact_authority_load_xsm(
+        xsm, xsm_size, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(authority != NULL);
+    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic,
+                                                 sizeof(diagnostic)));
+    XrRuntimeArtifactAuthorityIdentity identity;
+    REQUIRE(xr_runtime_artifact_authority_identity(authority, &identity));
+    REQUIRE(memcmp(identity.semantic_fingerprint,
+                   xr_semantic_plan_fingerprint(fixture.semantic).bytes,
+                   XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE) == 0);
+
+    XrTargetPlan *loaded = NULL;
+    REQUIRE(xr_runtime_target_plan_load(
+        fixture.bytes, fixture.size, authority, &loaded, diagnostic,
+        sizeof(diagnostic)));
+    REQUIRE(loaded != NULL && xr_target_plan_is_verified(loaded));
+    REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(loaded),
+                                 xr_target_plan_fingerprint(fixture.plan)));
+
+    XtpFixture foreign = make_direct_call_fixture();
+    XrTargetPlan *foreign_loaded = (XrTargetPlan *) (uintptr_t) 1;
+    memset(diagnostic, 0, sizeof(diagnostic));
+    REQUIRE(!xr_runtime_target_plan_load(
+        foreign.bytes, foreign.size, authority, &foreign_loaded, diagnostic,
+        sizeof(diagnostic)));
+    REQUIRE(foreign_loaded == NULL);
+    REQUIRE(strstr(diagnostic, "XR_TARGET_1000") != NULL);
+    dispose_fixture(&foreign);
+
+    XrRuntimeGenerationBudget budget = {
+        .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
+        .max_loaded_generations = 1,
+        .max_total_pins = 4,
+        .max_pins_per_generation = 4,
+        .max_pins_by_kind = {4, 4, 4, 4, 4},
+    };
+    XrRuntimeGenerationAuthority *generation_authority = NULL;
+    XrLoadedModuleGeneration *generation = NULL;
+    int64_t result = 0;
+    REQUIRE(xr_runtime_generation_authority_create(
+        &budget, &generation_authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_load_verified_target_plan(
+        generation_authority, loaded, &generation, diagnostic,
+        sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_prepare(generation, diagnostic,
+                                         sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_activate(generation, diagnostic,
+                                          sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_execute_sole_scalar_i64(
+        generation, &result, diagnostic, sizeof(diagnostic)));
+    REQUIRE(result == 42);
+    REQUIRE(xr_module_generation_begin_drain(generation, diagnostic,
+                                             sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_retire(generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_unload(&generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_runtime_generation_authority_destroy(
+        &generation_authority, diagnostic, sizeof(diagnostic)));
+    xr_target_plan_free(loaded);
+    xr_runtime_artifact_authority_free(authority);
+
+    uint8_t *old_schema = (uint8_t *) xr_malloc(xsm_size);
+    REQUIRE(old_schema != NULL);
+    memcpy(old_schema, xsm, xsm_size);
+    old_schema[8] ^= 1;
+    authority = (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
+    memset(diagnostic, 0, sizeof(diagnostic));
+    REQUIRE(!xr_runtime_artifact_authority_load_xsm(
+        old_schema, xsm_size, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(authority == NULL);
+    REQUIRE(strstr(diagnostic, "XR_ARTIFACT_2000") != NULL);
+    xr_free(old_schema);
+
+    uint8_t *corrupt = (uint8_t *) xr_malloc(xsm_size);
+    REQUIRE(corrupt != NULL);
+    memcpy(corrupt, xsm, xsm_size);
+    corrupt[XR_XSM_HEADER_SIZE] ^= 1;
+    authority = (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
+    memset(diagnostic, 0, sizeof(diagnostic));
+    REQUIRE(!xr_runtime_artifact_authority_load_xsm(
+        corrupt, xsm_size, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(authority == NULL);
+    REQUIRE(strstr(diagnostic, "XR_ARTIFACT_2002") != NULL);
+    xr_free(corrupt);
+
+    authority = (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
+    REQUIRE(!xr_runtime_artifact_authority_load_xsm(
+        fixture.bytes, fixture.size, &authority, diagnostic,
+        sizeof(diagnostic)));
+    REQUIRE(authority == NULL);
+    REQUIRE(strstr(diagnostic, "XR_ARTIFACT_2000") != NULL);
+    xr_free(xsm);
+    dispose_fixture(&fixture);
+}
+
 static void test_independent_verifier_rejects_forged_machine_profiles(void) {
     XtpFixture fixture = make_fixture();
     char diagnostic[512] = {0};
@@ -1177,9 +1285,57 @@ static int write_fixture(const char *path) {
     return written && closed ? 0 : 1;
 }
 
+static bool write_c_byte_array(FILE *file, const char *name,
+                               const uint8_t *bytes, size_t size) {
+    if (fprintf(file, "static const uint8_t %s[] = {\n", name) < 0)
+        return false;
+    for (size_t i = 0; i < size; i++) {
+        if ((i % 12u) == 0 && fputs("    ", file) == EOF)
+            return false;
+        if (fprintf(file, "0x%02x%s", bytes[i],
+                    i + 1u == size ? "" : ", ") < 0)
+            return false;
+        if ((i % 12u) == 11u || i + 1u == size) {
+            if (fputc('\n', file) == EOF)
+                return false;
+        }
+    }
+    return fputs("};\n", file) != EOF;
+}
+
+static int write_runtime_fixture_header(const char *path) {
+    XtpFixture fixture = make_fixture();
+    uint8_t *xsm = NULL;
+    size_t xsm_size = 0;
+    char diagnostic[512] = {0};
+    if (!xr_xsm_encode(fixture.semantic, &xsm, &xsm_size, diagnostic,
+                       sizeof(diagnostic))) {
+        dispose_fixture(&fixture);
+        return 1;
+    }
+    FILE *file = fopen(path, "wb");
+    bool written = file &&
+                   fputs("#ifndef XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n"
+                         "#define XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n"
+                         "#include <stdint.h>\n",
+                         file) != EOF &&
+                   write_c_byte_array(file, "xr_runtime_scalar_xsm", xsm,
+                                      xsm_size) &&
+                   write_c_byte_array(file, "xr_runtime_scalar_xtp",
+                                      fixture.bytes, fixture.size) &&
+                   fputs("#endif  // XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n",
+                         file) != EOF;
+    bool closed = file && fclose(file) == 0;
+    xr_free(xsm);
+    dispose_fixture(&fixture);
+    return written && closed ? 0 : 1;
+}
+
 int main(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "--write") == 0)
         return write_fixture(argv[2]);
+    if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
+        return write_runtime_fixture_header(argv[2]);
     test_artifact_classifier();
     test_wire_row_inventory();
     test_every_typed_row_codec();
@@ -1191,6 +1347,7 @@ int main(int argc, char **argv) {
     test_identity_and_typed_mutations();
     test_runtime_machine_authority_is_exact_and_scalar_only();
     test_runtime_factory_owns_native_profile();
+    test_public_xsm_authority_loads_exact_semantics();
     test_independent_verifier_rejects_forged_machine_profiles();
     test_runtime_load_rejects_foreign_profile_artifacts();
     test_runtime_load_materializes_only_verified_plan();

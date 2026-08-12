@@ -57,11 +57,13 @@ Evidence:
   access identity, initialization/poison/cleanup state, and allocation budgets.
 - `test_typed_frame_runtime_archive` proves the public header and symbols link
   from the runtime-only archive without compiler or AOT ownership, and proves
-  that the internal scalar dispatcher is present without activating it.
+  that the scalar dispatcher is present without activating it.
 - `test_runtime_generation` proves that only a sole-function, nonempty scalar
   instruction plan may activate and consume this frame through the bounded
   generation executor; rooted, call, adapter, and coroutine plans remain
   unavailable.
+- The runtime artifact archive gate separately proves activation only through
+  the exact XSM/XTP sole-function generation route.
 
 anchor-sha256: src/plan/target/xr_target_plan.h fcb5361be828a1a0164c9ba6d01f0df7c9444f6f5088b59025158a8f2c66ad3d
 anchor-sha256: src/vm/xr_typed_frame.h 2708159b57fc14ccbbe32739a65c5dc136750d76f6d147e962ac9f0d6b66d666

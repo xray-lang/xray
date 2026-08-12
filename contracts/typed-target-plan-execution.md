@@ -53,15 +53,17 @@ frozen SemanticPlan bound through TargetPlan and rejects missing, extra,
 reordered, wrong-kind, wrong-spelling, wrong-recipe, profile, target, and
 projection fingerprint mutations.
 
-The runtime generation authority exposes this family only through a public
-sole-function scalar-i64 execution route. PREPARE requires exactly one
+The runtime generation authority exposes this family through one public
+product route: exact XSM bytes construct runtime-owned semantic and native
+profile authority, which may load their matching XTP into a sole-function
+scalar-i64 generation and execute function 0. PREPARE requires exactly one
 canonical function, this exact nonempty execution family, the typed-frame
 schema/family closure, and no storage, allocation, call, root, cleanup,
 adapter, or coroutine execution authority. Execution requires healthy ACTIVE
-state and a balanced in-flight-call pin. This does not add a public CLI,
-installed XTP loader-to-execution path, export resolver, or general typed VM
-instruction coverage, control flow, calls, aggregates, ownership, exceptions,
-coroutines, or complete typed TargetPlan VM execution.
+state and a balanced in-flight-call pin. This adds no public CLI, export
+selection, or general typed VM instruction coverage, control flow, calls,
+aggregates, ownership, exceptions, coroutines, or complete typed TargetPlan
+VM execution.
 
 The required `COROUTINE_STATE_CALL` family is independent of this
 dispatcher. It freezes only the state/resume/direct-call/result-slot relation;
@@ -76,9 +78,10 @@ Evidence:
   fingerprint/content rejection, prior-schema rejection, and fail-closed mutation of
   opcode, def-use, row identity, function identity, and return structure.
 - `test_xtp_format` proves the instruction row width is part of the complete
-  exact codec registry.
+  exact codec registry and exercises the public XSM/XTP generation route.
 - `test_typed_frame_runtime_archive` proves the dispatcher and verifier link
-  into the runtime-only archive.
+  into the runtime-only archive; the runtime artifact archive gate separately
+  proves the exact XSM/XTP sole-function product route.
 - `test_runtime_generation` proves exact sole-function PREPARE, ACTIVE scalar
   execution, unsupported-plan rejection, bounded pins, drain, retirement, and
   unload without any legacy execution fallback.
@@ -97,7 +100,7 @@ anchor-sha256: src/vm/xr_typed_dispatch.h f72964091ac427130a3ff00c6d051cf85a3edd
 anchor-sha256: src/vm/xr_typed_dispatch.c 3fd358dc6b4aaa5ce0ff2f039a1b62e0420bede465473c8cfc2da51980e94945
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 52836fa969629698359a0df893581c3341b45b17977990178dbae12edd438f1c
-anchor-sha256: tests/unit/plan/test_xtp_format.c dfa3139ae691ce336cbf8929b7722f49dd704451d100edef4d14f2df0c2ed099
+anchor-sha256: tests/unit/plan/test_xtp_format.c f97746e16b612fa047054ff26f3d1ba0a47597b48c04cf061ebf1233d78a2de4
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c a34cb68cf7ca7832312737dbd485791297766d9f300a3532669c4df55e6a74cd
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation.c d02e74f29b281d354ea03b339205e457e62266c06bd4b1afb6692d90a2c0e1d7

@@ -1334,10 +1334,11 @@ set(XRAY_VM_RUNTIME_CORO_SOURCES ${CORO_SRC})
 list(FILTER XRAY_VM_RUNTIME_CORO_SOURCES EXCLUDE REGEX "xaot_test_yield\\.c$")
 
 # Runtime loading owns a deliberately narrow verifier closure. Encoders and
-# compiler-side builders stay in xray_core; the installed VM archive can only
-# decode an exact XTP candidate and materialize it against explicit authorities.
+# compiler-side builders stay in xray_core; the installed VM archive decodes
+# exact XSM authority and materializes an exact XTP candidate against it.
 set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
     src/plan/format/xr_artifact_kind.c
+    src/plan/format/xr_xsm_decode.c
     src/plan/format/xr_xtp_artifact.c
     src/plan/format/xr_xtp_decode.c
     src/plan/format/xr_xtp_rows.c

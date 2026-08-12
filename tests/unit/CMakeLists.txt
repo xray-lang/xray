@@ -323,8 +323,26 @@ add_xray_unit_test(test_xtp_format plan/test_xtp_format.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_executable(test_runtime_target_plan_load_archive
     runtime/test_runtime_target_plan_load_archive.c)
+set(XR_RUNTIME_SCALAR_ARTIFACT_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/generated)
+set(XR_RUNTIME_SCALAR_ARTIFACT_HEADER
+    ${XR_RUNTIME_SCALAR_ARTIFACT_DIR}/runtime_scalar_artifacts.h)
+add_custom_command(
+    OUTPUT ${XR_RUNTIME_SCALAR_ARTIFACT_HEADER}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            ${XR_RUNTIME_SCALAR_ARTIFACT_DIR}
+    COMMAND $<TARGET_FILE:test_xtp_format>
+            --write-runtime-header ${XR_RUNTIME_SCALAR_ARTIFACT_HEADER}
+    DEPENDS test_xtp_format
+    COMMENT "Generating native exact XSM/XTP scalar runtime fixture"
+    VERBATIM)
+add_custom_target(runtime_scalar_artifact_fixture
+    DEPENDS ${XR_RUNTIME_SCALAR_ARTIFACT_HEADER})
+add_dependencies(test_runtime_target_plan_load_archive
+    runtime_scalar_artifact_fixture)
 target_include_directories(test_runtime_target_plan_load_archive PRIVATE
-    ${CMAKE_SOURCE_DIR}/include)
+    ${CMAKE_SOURCE_DIR}/include
+    ${XR_RUNTIME_SCALAR_ARTIFACT_DIR})
 target_link_libraries(test_runtime_target_plan_load_archive PRIVATE
     xray_vm_runtime)
 add_test(NAME test_runtime_target_plan_load_archive

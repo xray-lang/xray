@@ -2,8 +2,9 @@
 
 This contract freezes the runtime-owned authority for loaded TargetPlan
 generations and one deliberately narrow sole-function scalar executor. It does
-not claim that an export resolver, call engine, root scanner, general typed
-executor, or product activation route is installed.
+not claim that an export resolver, call engine, root scanner, or general typed
+executor is installed. Its sole-function scalar route is the only governed
+product activation path.
 
 1. A generation authority requires explicit, nonzero hard limits for loaded
    generations, total pins, per-generation pins, and every pin kind. The same
@@ -52,9 +53,10 @@ executor, or product activation route is installed.
 8. The standalone public header and lifecycle/scalar-execution symbols are
    shipped by the Core component and link from `xray_vm_runtime` without
    compiler builders, encoders, analyzer objects, or Xi implementation symbols.
-   The installed artifact-authority loader remains unavailable, so this is not
-   an installed XTP-to-execution, CLI, export-publishing, or product end-to-end
-   claim.
+   Installed runtime code can derive authority from exact XSM and materialize a
+   matching XTP, so its archive gate owns the XSM/XTP-to-sole-scalar success
+   route. It still has no general resolver, export publication, calls, roots,
+   source/CLI entry, or product end-to-end claim.
 
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation_internal.h 427d2d23bfa8991dd8d20463169fb9bb23d7486a38d5274cb5d84b089a14a96a
@@ -67,5 +69,5 @@ anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 54ee3affe064aabfb89fe1cc75ef5642837fd14b6e7e575a0badb4fc670efd74
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py f81c404c1128f9ff470974956ab84898ad63df5b9a52e476f59111551adce476
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 3ec8c875fcabbaeb42cc83a4a20782b3b2edab52a7912362215483a40da241e6
 anchor-sha256: tests/install/run_install_public_surface_tests.py 9ef54ccfd07d2bf8c40d2ca5065248e7667899a291a3e9cbaba74aafd067ef47

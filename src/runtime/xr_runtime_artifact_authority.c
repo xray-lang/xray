@@ -12,6 +12,7 @@
 #include "abi/xr_runtime_target_authority.h"
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
+#include "../plan/format/xr_xsm_schema.h"
 #include "../plan/semantic/xr_semantic_verify.h"
 #include "../plan/target/xr_target_profile_internal.h"
 #include <stdio.h>
@@ -169,7 +170,27 @@ static bool populate_identity(
 }
 
 XRAY_API bool xr_runtime_artifact_authority_load_available(void) {
-    return false;
+    return true;
+}
+
+XRAY_API bool xr_runtime_artifact_authority_load_xsm(
+    const uint8_t *artifact_bytes, size_t artifact_size,
+    XrRuntimeArtifactAuthority **authority, char *diagnostic,
+    size_t diagnostic_size) {
+    if (authority)
+        *authority = NULL;
+    if (!authority || !artifact_bytes || artifact_size == 0)
+        return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
+                    "exact XSM bytes and an authority output are required");
+
+    XrSemanticPlan *semantic_plan = NULL;
+    if (!xr_xsm_decode(artifact_bytes, artifact_size, &semantic_plan,
+                       diagnostic, diagnostic_size))
+        return false;
+    bool created = xr_runtime_artifact_authority_create_internal(
+        semantic_plan, authority, diagnostic, diagnostic_size);
+    xr_semantic_plan_free(semantic_plan);
+    return created;
 }
 
 XR_FUNCDEF bool xr_runtime_artifact_authority_create_internal(
