@@ -96,6 +96,14 @@ Schema 6 also projects an exact borrowed `TAGGED`/`XrValue` row for a frozen
 direct-local shared callee token. CGen consumes that immutable row mechanically;
 it cannot infer callable representation from Xi type or representation state,
 and the row grants no closure body, allocation, root, or cleanup authority.
+An AOT cross-execution transfer row binds its site and payload to exactly one
+representation authority. A TargetPlan value binding and a legacy value row
+are mutually exclusive; the only accepted legacy rows are the independently
+verified enum-ordinal and backend representation-adapter families. Transfer
+verification reconstructs the site, payload, mode, action, storage domains,
+proof identities, and evidence without calling the prepare collector. Missing,
+duplicate, swapped, backend-only, or non-durable value authorities fail closed.
+This tightens internal plan verification without changing the public target ABI.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -282,7 +290,7 @@ the compiler core does not download a provider.
 
 anchor-sha256: src/aot/xaot_link.c a268bec7948a3a9cecf081d63d51545e3fe41af0b6ab32a9a38b21b031127da0
 anchor-sha256: src/aot/xaot_prepare.c 14065b3961b50a4fee75ddfb5ca9ede64d2fb4c351184834921f60f80cc23589
-anchor-sha256: src/aot/xaot_verify.c 9ccf50201d136e3d395ff13923671cc4dbedd0ac0901bb335fa84d700dc211fb
+anchor-sha256: src/aot/xaot_verify.c dd20098c80d32cd67944e347a39de93b4f38126a6b989890fce6ce355a4211b6
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 591cd0f4e85d5b95aa667ba815a4fc7f166e96d5df1fc35d60fa4c1f56bacae5
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 11e99944b4cf4a3cddad2830bb60f364731489d6ec6b8be4e8df584312e852da
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b8d083eaa338831e94cd91e5f47d3db65b9fa1df1778bd888229fb270684cf73

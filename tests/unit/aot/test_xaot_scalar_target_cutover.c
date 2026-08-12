@@ -11,6 +11,7 @@
 #include "../../../src/aot/xaot_prepare.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_op_name.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
@@ -51,6 +52,19 @@ typedef struct CutoverBundle {
     bool evidence_initialized;
 } CutoverBundle;
 
+typedef struct TransferAuthorityFixture {
+    XiModule module;
+    XiModule *module_ptr;
+    XiFunc *function;
+    XiValue *payload;
+    XiValue *send;
+    XiValue *adapter;
+    XrTargetProfile *profile;
+    XrTargetPlan *target_plan;
+    XaotBundle bundle;
+    XgGlobalEvidence evidence;
+} TransferAuthorityFixture;
+
 static XrType scalar_int = {
     .kind = XR_KIND_INT,
     .id = 27001,
@@ -70,6 +84,13 @@ static XrType scalar_unit = {
     .id = 27003,
     .scalar_rep = XR_SCALAR_REP_NONE,
     .frozen = true,
+};
+
+static XrType scalar_channel = {
+    .kind = XR_KIND_CHANNEL,
+    .id = 27005,
+    .frozen = true,
+    .container = {.element_type = &scalar_int},
 };
 
 static XrEnumLayout scalar_enum_layout = {
@@ -233,6 +254,94 @@ static void cutover_bundle_free(CutoverBundle *fixture) {
         xi_func_free(fixture->modules[module_index].function);
     }
     xr_target_profile_free(fixture->profile);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
+static void transfer_authority_fixture_create(TransferAuthorityFixture *fixture) {
+    char error[512] = {0};
+
+    memset(fixture, 0, sizeof(*fixture));
+    fixture->function = xi_func_new("transfer_authority", &scalar_int);
+    REQUIRE(fixture->function != NULL);
+    XiBlock *entry = xi_block_new(fixture->function);
+    REQUIRE(entry != NULL);
+    XiValue *channel = xi_param(fixture->function, entry, 0, &scalar_channel);
+    fixture->payload = xi_const_int(fixture->function, entry, 27, &scalar_int);
+    fixture->send = xi_value_new(fixture->function, entry, XI_CHAN_SEND,
+                                 &scalar_unit, 2);
+    REQUIRE(channel && fixture->payload && fixture->send);
+    fixture->function->params =
+        (XiValue **) xr_calloc(1, sizeof(*fixture->function->params));
+    REQUIRE(fixture->function->params != NULL);
+    fixture->function->params[0] = channel;
+    fixture->function->nparams = 1;
+    fixture->send->args[0] = channel;
+    fixture->send->args[1] = fixture->payload;
+    xi_chan_send_set_transfer_mode(fixture->send, XR_TRANSFER_SHARE);
+    xi_block_set_return(entry, fixture->payload);
+    fixture->function->stage = XI_STAGE_SEMANTIC_LOWERED;
+    fixture->function->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(fixture->function, NULL));
+    fixture->function->stage = XI_STAGE_OPTIMIZED;
+    bool semantic_built = xr_semantic_plan_build_and_attach(
+        fixture->function, error, sizeof(error));
+    if (!semantic_built)
+        fprintf(stderr, "transfer authority semantic plan failed: %s\n", error);
+    REQUIRE(semantic_built);
+
+    fixture->module.name = "transfer_authority";
+    fixture->module.init = fixture->function;
+    fixture->module_ptr = &fixture->module;
+    fixture->profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(fixture->profile != NULL);
+    bool target_built = xr_target_plan_build(
+        fixture->function->semantic_plan, fixture->profile,
+        &fixture->target_plan, error, sizeof(error));
+    if (!target_built)
+        fprintf(stderr, "transfer authority TargetPlan failed: %s\n", error);
+    REQUIRE(target_built);
+
+    fixture->payload->rep = XR_REP_I64;
+    fixture->adapter = xi_value_new(fixture->function, entry, XI_BOX,
+                                    &scalar_int, 1);
+    REQUIRE(fixture->adapter != NULL);
+    fixture->adapter->args[0] = fixture->payload;
+    fixture->adapter->backend_origin = XI_BACKEND_VALUE_REP_BOX;
+    fixture->adapter->rep = XR_REP_TAGGED;
+    fixture->send->args[1] = fixture->adapter;
+
+    REQUIRE(xaot_bundle_init(&fixture->bundle, &fixture->module_ptr, 1, 0));
+    REQUIRE(xaot_bundle_set_target_plan(&fixture->bundle, 0,
+                                        fixture->target_plan));
+    XgBuildKey key = {
+        .compiler_semver_hash = UINT64_C(0x279),
+        .module_id = 1,
+        .profile = XG_BUILD_NATIVE_RELEASE,
+    };
+    xg_global_evidence_init(&fixture->evidence, key);
+    XgBodySummary body = {
+        .func_id = 1,
+        .module_id = 1,
+        .name_id = xg_name_id("<module-init>"),
+        .kind = XG_BODY_MODULE_INIT,
+        .body_hash = UINT64_C(0x279001),
+    };
+    fixture->function->xg_body_func_id = body.func_id;
+    REQUIRE(xg_global_evidence_add_body(&fixture->evidence, &body) != NULL);
+    REQUIRE(xaot_bundle_set_global_evidence(&fixture->bundle,
+                                            &fixture->evidence,
+                                            XG_BUILD_NATIVE_RELEASE));
+    REQUIRE(xaot_prepare_bundle(&fixture->bundle, NULL));
+}
+
+static void transfer_authority_fixture_free(TransferAuthorityFixture *fixture) {
+    xaot_bundle_free(&fixture->bundle);
+    xg_global_evidence_free(&fixture->evidence);
+    xr_target_plan_free(fixture->target_plan);
+    xr_target_profile_free(fixture->profile);
+    xi_func_free(fixture->function);
     memset(fixture, 0, sizeof(*fixture));
 }
 
@@ -757,6 +866,89 @@ static void test_exact_rep_adapter_family_and_mutations(void) {
     cutover_bundle_free(&forged);
 }
 
+static void test_transfer_value_authority_is_exact_and_independent(void) {
+    TransferAuthorityFixture fixture;
+    char error[512] = {0};
+
+    transfer_authority_fixture_create(&fixture);
+    REQUIRE(fixture.bundle.ntransfer_plans == 1);
+    REQUIRE(xaot_bundle_find_value_plan(&fixture.bundle, fixture.send) == NULL);
+    const XaotValuePlan *adapter_row =
+        xaot_bundle_find_value_plan(&fixture.bundle, fixture.adapter);
+    REQUIRE(adapter_row != NULL);
+    REQUIRE(xaot_value_plan_is_exact_rep_adapter(&fixture.bundle, adapter_row));
+    XaotTransferPlan *transfer = &fixture.bundle.transfer_plans[0];
+    REQUIRE(transfer->site == fixture.send);
+    REQUIRE(transfer->value == fixture.adapter);
+    REQUIRE(transfer->action == XR_TRANSFER_INLINE_COPY);
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
+                               error, sizeof(error)));
+
+    REQUIRE(fixture.bundle.nvalue_plans < fixture.bundle.value_plan_cap);
+    uint32_t target_legacy_index = fixture.bundle.nvalue_plans++;
+    fixture.bundle.value_plans[target_legacy_index] = *adapter_row;
+    fixture.bundle.value_plans[target_legacy_index].func = fixture.function;
+    fixture.bundle.value_plans[target_legacy_index].value = fixture.send;
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
+                                error, sizeof(error)));
+    fixture.bundle.nvalue_plans--;
+
+    uint32_t adapter_index = UINT32_MAX;
+    for (uint32_t i = 0; i < fixture.bundle.nvalue_plans; i++) {
+        if (fixture.bundle.value_plans[i].func == fixture.function &&
+            fixture.bundle.value_plans[i].value == fixture.adapter) {
+            adapter_index = i;
+            break;
+        }
+    }
+    REQUIRE(adapter_index != UINT32_MAX);
+    REQUIRE(fixture.bundle.nvalue_plans < fixture.bundle.value_plan_cap);
+    uint32_t duplicate_index = fixture.bundle.nvalue_plans++;
+    fixture.bundle.value_plans[duplicate_index] =
+        fixture.bundle.value_plans[adapter_index];
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
+                                error, sizeof(error)));
+    REQUIRE(strstr(error, "duplicate legacy") != NULL);
+    fixture.bundle.nvalue_plans--;
+
+    const XiValue *saved_site = transfer->site;
+    const XiValue *saved_value = transfer->value;
+    transfer->site = saved_value;
+    transfer->value = saved_site;
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
+                                error, sizeof(error)));
+    transfer->site = saved_site;
+    transfer->value = saved_value;
+
+    transfer->value = fixture.payload;
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
+                                error, sizeof(error)));
+    REQUIRE(strstr(error, "value does not re-derive") != NULL);
+    transfer->value = saved_value;
+
+    uint8_t saved_action = transfer->action;
+    transfer->action = XR_TRANSFER_CONST_SHARE;
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
+                                error, sizeof(error)));
+    REQUIRE(strstr(error, "action does not re-derive") != NULL);
+    transfer->action = saved_action;
+
+    uint8_t saved_origin = fixture.adapter->backend_origin;
+    fixture.adapter->backend_origin = XI_BACKEND_VALUE_NONE;
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
+                                error, sizeof(error)));
+    fixture.adapter->backend_origin = saved_origin;
+
+    uint32_t saved_count = fixture.bundle.nvalue_plans;
+    fixture.bundle.nvalue_plans = adapter_index;
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
+                                error, sizeof(error)));
+    fixture.bundle.nvalue_plans = saved_count;
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
+                               error, sizeof(error)));
+    transfer_authority_fixture_free(&fixture);
+}
+
 int main(void) {
     test_missing_and_partial_module_plans_fail_before_prepare();
     test_multi_module_prepare_has_no_scalar_legacy_rows();
@@ -765,6 +957,7 @@ int main(void) {
     test_plan_dump_preserves_exact_enum_ordinal_authority();
     test_corrupt_bound_plan_and_scalar_residue_fail_closed();
     test_exact_rep_adapter_family_and_mutations();
+    test_transfer_value_authority_is_exact_and_independent();
     puts("test_xaot_scalar_target_cutover: ok");
     return 0;
 }
