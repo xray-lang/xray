@@ -3280,14 +3280,12 @@ static int cmd_build_native(
     bool shared_library = artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY;
     char cache_dir[XR_PATH_MAX];
     bool cache_dir_ready = false;
-    if (!c_only || (native_package_plan && native_package_plan->layout_count > 0)) {
-        if (xaot_resolve_cache_dir(output, target, cache_dir_arg, cache_dir, sizeof(cache_dir)) !=
-            0) {
-            fprintf(stderr, "Error: cannot create object cache directory '%s'\n", cache_dir);
-            return 1;
-        }
-        cache_dir_ready = true;
+    if (xaot_resolve_cache_dir(output, target, cache_dir_arg, cache_dir,
+                               sizeof(cache_dir)) != 0) {
+        fprintf(stderr, "Error: cannot create AOT cache directory '%s'\n", cache_dir);
+        return 1;
     }
+    cache_dir_ready = true;
     if (!xaot_target_init(&build_target, target && target->name ? target->name : "native-c90")) {
         fprintf(stderr, "Error: failed to initialize AOT build target\n");
         return 1;
@@ -3341,9 +3339,9 @@ static int cmd_build_native(
     build_options.emit_global_evidence_dump = dump_global_evidence;
     build_options.emit_local_evidence_dump = dump_xi_evidence;
     build_options.emit_residue_dump = dump_residue;
-    build_options.evidence_cache_dir = cache_dir_ready ? cache_dir : NULL;
-    build_options.evidence_cache_rebuild = rebuild;
-    build_options.evidence_cache_verbose = verbose;
+    build_options.incremental_cache_dir = cache_dir_ready ? cache_dir : NULL;
+    build_options.incremental_cache_rebuild = rebuild;
+    build_options.incremental_cache_verbose = verbose;
     int rc = xaot_build(input, &build_options, &aot_result);
     xr_target_profile_free(target_profile);
     xaot_target_free(&build_target);

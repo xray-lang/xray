@@ -110,6 +110,13 @@ typedef struct {
     char *c_source; /* generated C for this TU (malloc'd) */
 } XaotModuleSource;
 
+typedef struct XaotTargetPlanCacheStats {
+    uint32_t hits;
+    uint32_t misses;
+    uint32_t rejected;
+    uint32_t published;
+} XaotTargetPlanCacheStats;
+
 /* Result of xaot_build().  Caller must free owned strings via xr_free(). */
 typedef struct {
     XaotModuleSource *sources;  /* per-module generated C (malloc'd array) */
@@ -131,6 +138,7 @@ typedef struct {
     XaotPrepareStats prepare_stats;
     XiCgenStats cgen_stats;
     XiCgenCoroFrameStats coro_frame_stats;
+    XaotTargetPlanCacheStats target_plan_cache;
 } XaotBuildResult;
 
 typedef enum XaotBuildProfile {
@@ -152,9 +160,9 @@ typedef struct XaotBuildOptions {
     bool emit_local_evidence_dump;
     bool emit_residue_dump; /* task 217 --dump-residue */
     bool quiet;             /* suppress progress banners for diagnostic consumers */
-    const char *evidence_cache_dir;
-    bool evidence_cache_rebuild;
-    bool evidence_cache_verbose;
+    const char *incremental_cache_dir;
+    bool incremental_cache_rebuild;
+    bool incremental_cache_verbose;
     const char *const *imported_summary_payloads;
     uint32_t imported_summary_payload_count;
 } XaotBuildOptions;

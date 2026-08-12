@@ -30,8 +30,6 @@ typedef struct XrCacheStoreConfig {
     uint64_t quota_bytes;
     size_t max_entry_bytes;
     uint64_t stale_temp_age_ns;
-    XrCacheArtifactVerifier verifier;
-    void *verifier_context;
 } XrCacheStoreConfig;
 
 typedef struct XrCacheBlob {
@@ -72,9 +70,14 @@ XR_FUNC XrCacheStore *xr_cache_store_open(const XrCacheStoreConfig *config);
 XR_FUNC void xr_cache_store_close(XrCacheStore *store);
 XR_FUNC XrCachePublishStatus xr_cache_store_publish(XrCacheStore *store,
                                                     XrCacheArtifactKind kind, XrCacheKey key,
-                                                    const uint8_t *bytes, size_t size);
+                                                    const uint8_t *bytes, size_t size,
+                                                    XrCacheArtifactVerifier verifier,
+                                                    void *verifier_context);
 XR_FUNC XrCacheLoadStatus xr_cache_store_load(XrCacheStore *store, XrCacheArtifactKind kind,
-                                              XrCacheKey key, XrCacheBlob *out);
+                                              XrCacheKey key,
+                                              XrCacheArtifactVerifier verifier,
+                                              void *verifier_context,
+                                              XrCacheBlob *out);
 XR_FUNC void xr_cache_blob_release(XrCacheBlob *blob);
 XR_FUNC bool xr_cache_store_collect(XrCacheStore *store, XrCacheCollectStats *out);
 XR_FUNC char *xr_cache_store_entry_path(const XrCacheStore *store, XrCacheArtifactKind kind,

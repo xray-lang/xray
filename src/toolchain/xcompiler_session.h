@@ -112,8 +112,8 @@ typedef struct XrCompilerSessionConfig {
     struct XrTargetProfile *target_profile;
     const struct XrNativePackagePlan *native_package_plan; /* borrowed */
     /* The session opens and owns the configured store. The store copies all
-     * scalar and path configuration; verifier context lifetime remains the
-     * caller's explicit responsibility. */
+     * scalar and path configuration. Artifact authority is supplied per
+     * operation and is never retained by the session or store. */
     const struct XrCacheStoreConfig *incremental_cache;
 } XrCompilerSessionConfig;
 
@@ -147,6 +147,10 @@ XR_FUNC const struct XrInvalidationResult *xr_compiler_session_invalidation_at(
     const XrCompilerSession *session, size_t index);
 XR_FUNC struct XrCacheStore *xr_compiler_session_cache_store(
     const XrCompilerSession *session);
+/* Installs the session-owned cache before an operation starts. Replacement is
+ * forbidden because it would make one session generation observe two stores. */
+XR_FUNC bool xr_compiler_session_open_incremental_cache(
+    XrCompilerSession *session, const struct XrCacheStoreConfig *config);
 XR_FUNC XrCompilerSessionIncrementalStats xr_compiler_session_incremental_stats(
     const XrCompilerSession *session);
 XR_FUNC bool xr_compiler_session_incremental_idle_cleanup(

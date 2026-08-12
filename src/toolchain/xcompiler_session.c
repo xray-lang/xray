@@ -504,6 +504,24 @@ XrCacheStore *xr_compiler_session_cache_store(const XrCompilerSession *session) 
     return session ? session->cache_store : NULL;
 }
 
+bool xr_compiler_session_open_incremental_cache(
+    XrCompilerSession *session, const XrCacheStoreConfig *config) {
+    if (!session || !config || session->cache_store ||
+        session->incremental_operation_active)
+        return false;
+    XrCacheStore *store = xr_cache_store_open(config);
+    if (!store)
+        return false;
+    if (!xr_compiler_session_apply_generation_change(
+            session, XR_COMPILER_SESSION_CHANGE_CONFIGURATION)) {
+        xr_cache_store_close(store);
+        return false;
+    }
+    session->cache_store = store;
+    refresh_incremental_watermark(session);
+    return true;
+}
+
 XrCompilerSessionIncrementalStats xr_compiler_session_incremental_stats(
     const XrCompilerSession *session) {
     if (!session)

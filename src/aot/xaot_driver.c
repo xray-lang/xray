@@ -55,6 +55,9 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_mono.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../incremental/xr_cache_artifact_verify.h"
+#include "../incremental/xr_cache_store.h"
+#include "../plan/format/xr_xtp_schema.h"
 #include "../plan/target/xr_target_builder.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -1642,20 +1645,117 @@ static void xaot_module_emission_plans_free(XrCEmissionPlan **plans,
     xr_free(plans);
 }
 
-static bool xaot_build_module_target_plans(XaotBundle *bundle,
-                                           XrTargetProfile *profile) {
+static XrCacheFingerprint xaot_target_plan_optimization_budget(void) {
+    static const uint8_t policy[] = "xray-target-baseline-plan-v1";
+    XrCacheFingerprint fingerprint;
+    xr_cache_fingerprint_bytes(policy, sizeof(policy) - 1u, &fingerprint);
+    return fingerprint;
+}
+
+static bool xaot_build_module_target_plans(
+    XaotBundle *bundle, XrTargetProfile *profile, XrCacheStore *cache_store,
+    bool rebuild, bool verbose, XaotTargetPlanCacheStats *stats) {
     if (!bundle || !profile || !bundle->modules ||
-        bundle->nmodules == 0 ||
+        bundle->nmodules == 0 || !stats ||
         !xr_target_profile_verify(profile, NULL, 0))
         return false;
     for (uint32_t module_index = 0; module_index < bundle->nmodules;
          module_index++) {
         XiModule *module = bundle->modules[module_index];
         XrTargetPlan *target_plan = NULL;
+        bool loaded_from_cache = false;
         char error[512] = {0};
-        if (!module || !module->init || !module->init->semantic_plan ||
+        if (!module || !module->init || !module->init->semantic_plan) {
+            fprintf(stderr, "Error: module TargetPlan lacks SemanticPlan authority for '%s'\n",
+                    module && module->name ? module->name : "?");
+            return false;
+        }
+        XrCacheXtpArtifactVerifyContext requirements = {
+            .semantic_plan = module->init->semantic_plan,
+            .target_profile = profile,
+            .optimization_budget = xaot_target_plan_optimization_budget(),
+        };
+        XrCacheKey key = {{0}};
+        bool has_key = cache_store && xr_cache_xtp_key(&requirements, &key);
+        if (cache_store && !has_key) {
+            fprintf(stderr,
+                    "Error: module TargetPlan cache key authority failed for '%s'\n",
+                    module->name ? module->name : "?");
+            return false;
+        }
+        if (has_key && !rebuild) {
+            XrCacheXtpArtifactLoadContext load = {
+                .requirements = requirements,
+            };
+            XrCacheBlob blob = {0};
+            XrCacheLoadStatus status = xr_cache_store_load(
+                cache_store, XR_CACHE_ARTIFACT_XTP, key,
+                xr_cache_materialize_xtp_artifact, &load, &blob);
+            xr_cache_blob_release(&blob);
+            if (status == XR_CACHE_LOAD_HIT && load.accepted_plan) {
+                target_plan = load.accepted_plan;
+                loaded_from_cache = true;
+                stats->hits++;
+                if (verbose)
+                    fprintf(stderr, "[target-plan-cache] hit %s\n",
+                            module->name ? module->name : "?");
+            } else {
+                xr_target_plan_free(load.accepted_plan);
+                if (status == XR_CACHE_LOAD_REJECTED ||
+                    status == XR_CACHE_LOAD_CORRUPT ||
+                    status == XR_CACHE_LOAD_TOO_LARGE)
+                    stats->rejected++;
+                stats->misses++;
+                if (verbose)
+                    fprintf(stderr, "[target-plan-cache] miss %s status=%d\n",
+                            module->name ? module->name : "?", (int) status);
+            }
+        } else if (has_key) {
+            stats->misses++;
+            if (verbose)
+                fprintf(stderr, "[target-plan-cache] rebuild %s\n",
+                        module->name ? module->name : "?");
+        }
+        if (!target_plan &&
             !xr_target_plan_build(module->init->semantic_plan, profile,
-                                  &target_plan, error, sizeof(error)) ||
+                                  &target_plan, error, sizeof(error))) {
+            fprintf(stderr, "Error: module TargetPlan build failed for '%s': %s\n",
+                    module->name ? module->name : "?",
+                    error[0] ? error : "unknown error");
+            return false;
+        }
+        if (has_key && target_plan && !loaded_from_cache) {
+            uint8_t *bytes = NULL;
+            size_t size = 0;
+            if (!xr_xtp_encode_plan(target_plan, &bytes, &size, error,
+                                    sizeof(error))) {
+                fprintf(stderr, "Error: module TargetPlan cache encode failed for '%s': %s\n",
+                        module->name ? module->name : "?",
+                        error[0] ? error : "unknown error");
+                xr_target_plan_free(target_plan);
+                return false;
+            }
+            XrCachePublishStatus publish = xr_cache_store_publish(
+                cache_store, XR_CACHE_ARTIFACT_XTP, key, bytes, size,
+                xr_cache_verify_xtp_artifact, &requirements);
+            xr_xtp_encoded_free(bytes);
+            if (publish == XR_CACHE_PUBLISH_OK)
+                stats->published++;
+            if (publish == XR_CACHE_PUBLISH_REJECTED ||
+                publish == XR_CACHE_PUBLISH_CONFLICT ||
+                publish == XR_CACHE_PUBLISH_TOO_LARGE) {
+                fprintf(stderr,
+                        "Error: module TargetPlan cache publication failed for '%s' status=%d\n",
+                        module->name ? module->name : "?", (int) publish);
+                xr_target_plan_free(target_plan);
+                return false;
+            }
+            if (verbose && publish == XR_CACHE_PUBLISH_IO_ERROR)
+                fprintf(stderr,
+                        "[target-plan-cache] publish unavailable %s\n",
+                        module->name ? module->name : "?");
+        }
+        if (!target_plan ||
             !xaot_bundle_set_target_plan(bundle, module_index, target_plan)) {
             fprintf(stderr, "Error: module TargetPlan build failed for '%s': %s\n",
                     module && module->name ? module->name : "?",
@@ -1828,9 +1928,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     emit_global_evidence_dump = options->emit_global_evidence_dump;
     emit_local_evidence_dump = options->emit_local_evidence_dump;
     quiet = options->quiet;
-    evidence_cache_dir = options->evidence_cache_dir;
-    evidence_cache_rebuild = options->evidence_cache_rebuild;
-    evidence_cache_verbose = options->evidence_cache_verbose;
+    evidence_cache_dir = options->incremental_cache_dir;
+    evidence_cache_rebuild = options->incremental_cache_rebuild;
+    evidence_cache_verbose = options->incremental_cache_verbose;
     profile = options->profile;
     xg_profile = profile == XAOT_BUILD_PROFILE_FREESTANDING ? XG_BUILD_FREESTANDING
                                                             : XG_BUILD_NATIVE_RELEASE;
@@ -1860,6 +1960,20 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         fprintf(stderr, "Error: failed to install exact TargetProfile in compiler session\n");
         xray_vm_delete(X);
         return 1;
+    }
+    if (evidence_cache_dir && evidence_cache_dir[0]) {
+        XrCacheStoreConfig cache_config = {
+            .root = evidence_cache_dir,
+            .quota_bytes = UINT64_C(1024) * 1024u * 1024u,
+            .max_entry_bytes = XR_XTP_MAX_ARTIFACT_SIZE,
+            .stale_temp_age_ns = UINT64_C(24) * 60u * 60u * 1000000000u,
+        };
+        if (!xr_compiler_session_open_incremental_cache(session,
+                                                        &cache_config) &&
+            evidence_cache_verbose) {
+            fprintf(stderr,
+                    "[target-plan-cache] store unavailable; recomputing plans\n");
+        }
     }
 
     xr_module_system_init_with_script(X, input_path);
@@ -2288,8 +2402,10 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                 aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
         goto fail_free_ir;
     }
-    if (!xaot_build_module_target_plans(&aot_bundle,
-                                        options->target_profile))
+    if (!xaot_build_module_target_plans(
+            &aot_bundle, options->target_profile,
+            xr_compiler_session_cache_store(session), evidence_cache_rebuild,
+            evidence_cache_verbose, &result->target_plan_cache))
         goto fail_free_ir;
     if (!xaot_install_module_representation_refinements(
             &aot_bundle, &cfg.rep_policy))

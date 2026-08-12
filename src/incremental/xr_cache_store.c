@@ -46,8 +46,6 @@ struct XrCacheStore {
     uint64_t quota_bytes;
     size_t max_entry_bytes;
     uint64_t stale_temp_age_ns;
-    XrCacheArtifactVerifier verifier;
-    void *verifier_context;
     xr_mutex_t lock;
 };
 
@@ -158,7 +156,7 @@ static void cache_store_free(XrCacheStore *store, bool destroy_lock) {
 }
 
 XrCacheStore *xr_cache_store_open(const XrCacheStoreConfig *config) {
-    if (!config || !config->root || !*config->root || !config->verifier ||
+    if (!config || !config->root || !*config->root ||
         config->max_entry_bytes == 0 || config->quota_bytes < XR_CACHE_OBJECT_HEADER_SIZE ||
         config->max_entry_bytes > SIZE_MAX - XR_CACHE_OBJECT_HEADER_SIZE ||
         config->max_entry_bytes > config->quota_bytes - XR_CACHE_OBJECT_HEADER_SIZE ||
@@ -173,8 +171,6 @@ XrCacheStore *xr_cache_store_open(const XrCacheStoreConfig *config) {
     store->quota_bytes = config->quota_bytes;
     store->max_entry_bytes = config->max_entry_bytes;
     store->stale_temp_age_ns = config->stale_temp_age_ns;
-    store->verifier = config->verifier;
-    store->verifier_context = config->verifier_context;
     if (!store->root || !store->lock_path || !ensure_directory(store->root)) {
         cache_store_free(store, false);
         return NULL;
@@ -345,8 +341,11 @@ static bool cleanup_rejected_snapshot_locked(
 }
 
 XrCacheLoadStatus xr_cache_store_load(XrCacheStore *store, XrCacheArtifactKind kind,
-                                      XrCacheKey key, XrCacheBlob *out) {
-    if (!store || !artifact_kind_valid(kind) || !out)
+                                      XrCacheKey key,
+                                      XrCacheArtifactVerifier verifier,
+                                      void *verifier_context,
+                                      XrCacheBlob *out) {
+    if (!store || !artifact_kind_valid(kind) || !verifier || !out)
         return XR_CACHE_LOAD_IO_ERROR;
     memset(out, 0, sizeof(*out));
     XrFsExclusiveLock root_lock = {0};
@@ -361,7 +360,7 @@ XrCacheLoadStatus xr_cache_store_load(XrCacheStore *store, XrCacheArtifactKind k
         return XR_CACHE_LOAD_IO_ERROR;
     }
     if (status == XR_CACHE_LOAD_HIT &&
-        !store->verifier(kind, key, out->bytes, out->size, store->verifier_context)) {
+        !verifier(kind, key, out->bytes, out->size, verifier_context)) {
         xr_cache_blob_release(out);
         XrFsExclusiveLock cleanup_lock = {0};
         if (!acquire_root_lock(store, &cleanup_lock))
@@ -470,12 +469,14 @@ static XrCachePublishStatus publish_locked(XrCacheStore *store, XrCacheArtifactK
 }
 
 XrCachePublishStatus xr_cache_store_publish(XrCacheStore *store, XrCacheArtifactKind kind,
-                                            XrCacheKey key, const uint8_t *bytes, size_t size) {
-    if (!store || !artifact_kind_valid(kind) || (!bytes && size != 0))
+                                            XrCacheKey key, const uint8_t *bytes, size_t size,
+                                            XrCacheArtifactVerifier verifier,
+                                            void *verifier_context) {
+    if (!store || !artifact_kind_valid(kind) || !verifier || (!bytes && size != 0))
         return XR_CACHE_PUBLISH_IO_ERROR;
     if (size > store->max_entry_bytes)
         return XR_CACHE_PUBLISH_TOO_LARGE;
-    if (!store->verifier(kind, key, bytes, size, store->verifier_context))
+    if (!verifier(kind, key, bytes, size, verifier_context))
         return XR_CACHE_PUBLISH_REJECTED;
 
     XrFsExclusiveLock root_lock = {0};

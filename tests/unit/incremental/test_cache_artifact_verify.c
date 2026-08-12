@@ -91,6 +91,19 @@ static void test_exact_xtp_cache_hit(void) {
     REQUIRE(xr_cache_verify_xtp_artifact(
         XR_CACHE_ARTIFACT_XTP, fixture.key, fixture.bytes, fixture.size,
         &fixture.requirements));
+    XrCacheXtpArtifactLoadContext load = {
+        .requirements = fixture.requirements,
+    };
+    REQUIRE(xr_cache_materialize_xtp_artifact(
+        XR_CACHE_ARTIFACT_XTP, fixture.key, fixture.bytes, fixture.size,
+        &load));
+    REQUIRE(load.accepted_plan != NULL);
+    REQUIRE(xr_target_plan_semantic_plan(load.accepted_plan) == fixture.semantic);
+    REQUIRE(xr_cache_key_equal(fixture.key, repeated));
+    REQUIRE(!xr_cache_materialize_xtp_artifact(
+        XR_CACHE_ARTIFACT_XTP, fixture.key, fixture.bytes, fixture.size,
+        &load));
+    xr_target_plan_free(load.accepted_plan);
     dispose_fixture(&fixture);
 }
 

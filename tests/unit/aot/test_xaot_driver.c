@@ -4,6 +4,8 @@
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/module/xmodule_resolver.h"
 #include "../../../src/app/toolchain/xtc_target_profile.h"
+#include "../../../src/os/os_dir.h"
+#include "../../../src/os/os_temp.h"
 #include "../test_win_compat.h"
 
 #include <errno.h>
@@ -63,6 +65,41 @@ static bool write_temp_source(char *path, size_t path_sz) {
         return false;
     }
     return true;
+}
+
+static bool corrupt_first_xtp_cache_object(const char *root) {
+    char directory[XR_TEST_PATH_MAX];
+    if (snprintf(directory, sizeof(directory), "%s/xtp", root) < 0 ||
+        strlen(directory) >= sizeof(directory))
+        return false;
+    XrDirIter *iterator = xr_dir_open(directory);
+    if (!iterator)
+        return false;
+    XrDirEntry entry;
+    bool corrupted = false;
+    while (xr_dir_next(iterator, &entry)) {
+        if (entry.is_dir || entry.name[0] == '.')
+            continue;
+        char path[XR_TEST_PATH_MAX];
+        if (snprintf(path, sizeof(path), "%s/%s", directory, entry.name) < 0 ||
+            strlen(path) >= sizeof(path))
+            break;
+        FILE *file = fopen(path, "r+b");
+        if (!file)
+            break;
+        if (fseek(file, -1L, SEEK_END) == 0) {
+            int byte = fgetc(file);
+            if (byte != EOF && fseek(file, -1L, SEEK_END) == 0 &&
+                fputc(byte ^ 1, file) != EOF && fclose(file) == 0) {
+                corrupted = true;
+                break;
+            }
+        }
+        fclose(file);
+        break;
+    }
+    xr_dir_close(iterator);
+    return corrupted;
 }
 
 static bool add_package_link_dependency(XgGlobalEvidence *package, XgModuleId module_id) {
@@ -536,6 +573,7 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
 
 static void test_driver_consumes_imported_summary_payload_set(void) {
     char source_path[256];
+    char cache_dir[256];
     XaotTarget target = {0};
     XaotBuildOptions options = {0};
     XaotBuildResult result;
@@ -545,6 +583,8 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
 
     memset(&result, 0, sizeof(result));
     ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-target-plan-cache", cache_dir,
+                                   sizeof(cache_dir)) == 0);
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     payload = make_package_payload();
     ASSERT_TRUE(payload != NULL);
@@ -557,11 +597,25 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
     options.emit_global_evidence_dump = true;
     options.imported_summary_payloads = payloads;
     options.imported_summary_payload_count = 1;
+    options.incremental_cache_dir = cache_dir;
 
     ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
     ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
+    ASSERT_TRUE(result.target_plan_cache.misses == 1);
+    ASSERT_TRUE(result.target_plan_cache.published == 1);
 
+    xaot_build_result_free(&result);
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.target_plan_cache.hits == 1);
+    ASSERT_TRUE(result.target_plan_cache.misses == 0);
+    xaot_build_result_free(&result);
+    ASSERT_TRUE(corrupt_first_xtp_cache_object(cache_dir));
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.target_plan_cache.hits == 0);
+    ASSERT_TRUE(result.target_plan_cache.misses == 1);
+    ASSERT_TRUE(result.target_plan_cache.rejected == 1);
+    ASSERT_TRUE(result.target_plan_cache.published == 1);
     xaot_build_result_free(&result);
     release_target_profile(&options);
     xaot_target_free(&target);
@@ -875,12 +929,11 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
-    options.evidence_cache_dir = cache_dir;
+    options.incremental_cache_dir = cache_dir;
 
     ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
     ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
-
     xaot_build_result_free(&result);
     release_target_profile(&options);
     xaot_target_free(&target);
@@ -935,7 +988,7 @@ static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
-    options.evidence_cache_dir = cache_dir;
+    options.incremental_cache_dir = cache_dir;
 
     ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
@@ -1006,7 +1059,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
-    options.evidence_cache_dir = cache_dir;
+    options.incremental_cache_dir = cache_dir;
 
     ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
@@ -1022,6 +1075,12 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
 }
 
 int main(void) {
+    const char *filter = getenv("XRAY_TEST_FILTER");
+    if (filter && strcmp(filter, "target_plan_cache") == 0) {
+        test_driver_consumes_imported_summary_payload_set();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
     test_target_simd_plan_is_explicit_and_fail_closed();
     test_driver_consumes_imported_summary_payload_set();
     test_driver_dumps_subject_bound_local_evidence();

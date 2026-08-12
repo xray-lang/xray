@@ -33,6 +33,12 @@ owned graph capacity, canonical module keys, invalidation records, and reason
 evidence. It is not process RSS and cannot be used as a performance completion
 claim without the separate cold/warm/edit benchmark evidence.
 
+The optional cache store is installed exactly once, either while constructing
+the session or before its first active operation. Installation advances the
+configuration generation. Replacement and installation during an operation
+are forbidden, while each cache load or publication supplies its own exact
+artifact authority and operation-local verifier output.
+
 ## Required evidence
 
 - The compiler-session focused test proves deep-copy ownership, session
@@ -46,6 +52,6 @@ claim without the separate cold/warm/edit benchmark evidence.
 
 ## Digest anchors
 
-anchor-sha256: src/toolchain/xcompiler_session.h 9c3fc0fcd1b47fe967d1dc3b55c55eb1fa97e1145dc2d9679d4b1d96f2ec2801
-anchor-sha256: src/toolchain/xcompiler_session.c 7b36ae71943d07f48227a33a734069a774e3e7d861907f884a61cba754450989
-anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c a5b9cebe2e332403e2086f0250ff31cdba42f9679ef3ec9768c921e871a31b6e
+anchor-sha256: src/toolchain/xcompiler_session.h 02a439cbb799c1a0fe9e1047b4365b5bea0070e6bc98f6a5c5bbb4a0e93d97ea
+anchor-sha256: src/toolchain/xcompiler_session.c db145aa17dd0bf44570ef678e6b102ccaf86630f4121e356730b6208b7d75285
+anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c ae42cde0771a6705bb01759f9ac9e6884e82b83adb888ffcf67d235ffb21ec52

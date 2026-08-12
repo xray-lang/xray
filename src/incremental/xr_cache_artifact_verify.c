@@ -93,12 +93,13 @@ bool xr_cache_xtp_key(const XrCacheXtpArtifactVerifyContext *context,
     return true;
 }
 
-bool xr_cache_verify_xtp_artifact(XrCacheArtifactKind kind, XrCacheKey key,
-                                  const uint8_t *bytes, size_t size, void *context) {
-    const XrCacheXtpArtifactVerifyContext *requirements =
-        (const XrCacheXtpArtifactVerifyContext *) context;
+static bool materialize_verified_xtp(
+    XrCacheArtifactKind kind, XrCacheKey key, const uint8_t *bytes, size_t size,
+    const XrCacheXtpArtifactVerifyContext *requirements, XrTargetPlan **out) {
+    if (out)
+        *out = NULL;
     XrCacheKey expected = {{0}};
-    if (kind != XR_CACHE_ARTIFACT_XTP || (!bytes && size != 0) ||
+    if (!out || kind != XR_CACHE_ARTIFACT_XTP || (!bytes && size != 0) ||
         !xr_cache_xtp_key(requirements, &expected) ||
         !xr_cache_key_equal(key, expected))
         return false;
@@ -114,7 +115,33 @@ bool xr_cache_verify_xtp_artifact(XrCacheArtifactKind kind, XrCacheKey key,
     bool verified = materialized && plan && xr_target_plan_is_verified(plan) &&
                     xr_target_plan_fingerprint_is_intact(plan) &&
                     xr_target_plan_verify(plan, error, sizeof(error));
-    xr_target_plan_free(plan);
     xr_xtp_candidate_release(candidate);
+    if (!verified) {
+        xr_target_plan_free(plan);
+        return false;
+    }
+    *out = plan;
+    return true;
+}
+
+bool xr_cache_verify_xtp_artifact(XrCacheArtifactKind kind, XrCacheKey key,
+                                  const uint8_t *bytes, size_t size, void *context) {
+    XrTargetPlan *plan = NULL;
+    bool verified = materialize_verified_xtp(
+        kind, key, bytes, size,
+        (const XrCacheXtpArtifactVerifyContext *) context, &plan);
+    xr_target_plan_free(plan);
     return verified;
+}
+
+bool xr_cache_materialize_xtp_artifact(XrCacheArtifactKind kind, XrCacheKey key,
+                                       const uint8_t *bytes, size_t size,
+                                       void *context) {
+    XrCacheXtpArtifactLoadContext *load =
+        (XrCacheXtpArtifactLoadContext *) context;
+    if (!load || load->accepted_plan)
+        return false;
+    return materialize_verified_xtp(kind, key, bytes, size,
+                                    &load->requirements,
+                                    &load->accepted_plan);
 }

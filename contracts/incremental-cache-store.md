@@ -36,6 +36,10 @@ invalidation, compiler-session ownership, or any compatibility reader.
    unconditionally closes the native handle or descriptor. A native unlock
    error remains an error even though close is still attempted.
 7. Cache hits never bypass the caller-supplied independent artifact verifier.
+   The verifier and its context are supplied per load or publication and are
+   never retained by the store. Parallel module planning can therefore apply
+   distinct immutable SemanticPlan/TargetProfile authorities to one shared
+   store without mutable verifier rebinding.
    Corrupt, stale, rejected, or unverifiable bytes cannot activate an artifact,
    and there is no legacy cache format, compatibility fallback, or execution
    fallback in this storage boundary.
@@ -45,9 +49,11 @@ invalidation, compiler-session ownership, or any compatibility reader.
    optimization budget. A matching object is still only a candidate: the
    verifier takes an owned XTP snapshot, materializes it against the exact
    authorities, and independently verifies the resulting TargetPlan before
-   accepting the hit. Wrong keys, authority mismatches, old schemas, corrupt
-   bytes, and valid artifacts for another semantic or target identity fail
-   closed to recomputation.
+   accepting the hit. The production AOT driver consumes that exact owned
+   plan; it does not decode a second time or rebuild semantic rows on a hit.
+   Wrong keys, authority mismatches, old schemas, corrupt bytes, and valid
+   artifacts for another semantic or target identity fail closed to
+   recomputation.
 
 Changing the root-lock coverage, rejected-snapshot identity, quota reservation
 order, atomic publication sequence, directory/link boundary, lock cleanup, or
@@ -55,14 +61,14 @@ mandatory verification is a contract change.
 
 ## Digest anchors
 
-anchor-sha256: src/incremental/xr_cache_artifact_verify.h 50ae3bc67f4061568750b02af95bd7b85ba9c59dcefade1163bb733fd57be444
-anchor-sha256: src/incremental/xr_cache_artifact_verify.c fd041db7a2bfafa2dba55d3b58a745ace2c5d6c3939792fd91fa28cbecce8b78
-anchor-sha256: src/incremental/xr_cache_store.h 5db44e3fddbe73196411909734eb8904be579ce1456270b92b9e29769e2f9df6
-anchor-sha256: src/incremental/xr_cache_store.c 9f492d6bcf561d5f1b93ff791a83ce602a1623c961f473c218c3afd3ca3a3925
+anchor-sha256: src/incremental/xr_cache_artifact_verify.h c70b37fb819f7bf64af9b4b968cb770bae8693011e95353a0c5710e3f1ab6a2e
+anchor-sha256: src/incremental/xr_cache_artifact_verify.c 90cc79eeffe2766ebd494d0056b4b0ede9681b846537714327a7428d01adeced
+anchor-sha256: src/incremental/xr_cache_store.h f34e4f86ba65f44cbc29356488f32cbc52088c8dda6848ff756a571c78c9b1d9
+anchor-sha256: src/incremental/xr_cache_store.c bb726097541fb71d58d463f106bc7f103c21295ffee344425221b67a094d305b
 anchor-sha256: src/os/os_fs.h b1a95259a4952a1e33e1d2c109fd0955f5b00bff4db81e6a21abede9ec07fe84
 anchor-sha256: src/os/unix/fs_unix.c 5f86aaa44d1e794ca2cdeea814c1d115bd598e56b3e7dfe47d0c6726da187e54
 anchor-sha256: src/os/win/fs_win.c 4b9195ab156d94761c6c72c10a80fdb62a01838d1ec829ab42bbb5bc9bd71e2f
 anchor-sha256: tests/unit/CMakeLists.txt 3b70eacbac8d8c3001e6020c12c30103d55d630830949e0ab40af5ef18a8524a
-anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c 60296080d3a5b0dc1e653714a06a68cf01c528620cd7a4be11f59d5a48500c59
-anchor-sha256: tests/unit/incremental/test_cache_store.c 2169b3d241caabca03254a7810085e03f10fd5398a2ca1e5852f13ec7616c220
+anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c 8a7a0f35523e2f7b846a84e22f42521d43c2e70d0eb4342d4a3d13c58dfc1fb4
+anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
 anchor-sha256: tests/unit/os/test_fs_atomic.c f8f6ee065dcb3c4b75ae24edb4e96d95253c540f5a40252cf79a10aa140ddb5f

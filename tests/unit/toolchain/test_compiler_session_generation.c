@@ -92,16 +92,6 @@ static bool change_root_signature(XrCompilerSession *session, uint8_t seed) {
     return ok;
 }
 
-static bool verify_cache_artifact(XrCacheArtifactKind kind, XrCacheKey key,
-                                  const uint8_t *bytes, size_t size, void *context) {
-    (void) kind;
-    (void) key;
-    (void) bytes;
-    (void) size;
-    (void) context;
-    return true;
-}
-
 static void remove_empty_cache_root(const char *root) {
     char path[XR_PATH_MAX];
     if (snprintf(path, sizeof(path), "%s/xsm", root) > 0)
@@ -533,7 +523,6 @@ TEST(session_owns_cache_store_handle) {
         .quota_bytes = 1u << 20,
         .max_entry_bytes = 1u << 16,
         .stale_temp_age_ns = UINT64_C(1000000000),
-        .verifier = verify_cache_artifact,
     };
     XrCompilerSessionConfig config = {.incremental_cache = &cache};
     XrCompilerSession *session = xr_compiler_session_new(&config);
@@ -541,6 +530,35 @@ TEST(session_owns_cache_store_handle) {
     ASSERT_NOT_NULL(xr_compiler_session_cache_store(session));
     ASSERT_TRUE(xr_compiler_session_incremental_stats(session).cache_store_open);
     cache.root = "caller-mutated-invalid-root";
+    xr_compiler_session_delete(session);
+    remove_empty_cache_root(root);
+}
+
+TEST(session_installs_one_cache_before_operations) {
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-session-cache-install", root,
+                                     sizeof(root)), 0);
+    XrCacheStoreConfig cache = {
+        .root = root,
+        .quota_bytes = 1u << 20,
+        .max_entry_bytes = 1u << 16,
+        .stale_temp_age_ns = UINT64_C(1000000000),
+    };
+    XrCompilerSession *session = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(session);
+    XrCompilerSessionGenerationSnapshot before =
+        xr_compiler_session_generation_snapshot(session);
+    ASSERT_TRUE(xr_compiler_session_open_incremental_cache(session, &cache));
+    XrCompilerSessionGenerationSnapshot after =
+        xr_compiler_session_generation_snapshot(session);
+    ASSERT_EQ_UINT(after.configuration_generation,
+                   before.configuration_generation + 1u);
+    ASSERT_NOT_NULL(xr_compiler_session_cache_store(session));
+    ASSERT_FALSE(xr_compiler_session_open_incremental_cache(session, &cache));
+    XrCompilerSessionOperationScope operation = {0};
+    ASSERT_TRUE(xr_compiler_session_operation_begin(session, &operation));
+    ASSERT_FALSE(xr_compiler_session_open_incremental_cache(session, &cache));
+    ASSERT_TRUE(xr_compiler_session_operation_succeed(&operation));
     xr_compiler_session_delete(session);
     remove_empty_cache_root(root);
 }
@@ -558,5 +576,6 @@ RUN_TEST(operation_scope_rejects_forged_and_stale_commits);
 RUN_TEST(invalidation_history_is_bounded_and_idle_cleanup_is_observable);
 RUN_TEST(rejected_invalidation_preserves_published_state);
 RUN_TEST(session_owns_cache_store_handle);
+RUN_TEST(session_installs_one_cache_before_operations);
 RUN_TEST(production_compile_entry_commits_or_aborts_one_operation);
 TEST_MAIN_END()

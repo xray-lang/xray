@@ -64,24 +64,22 @@ static XrCacheStore *open_store(const char *root, uint64_t quota, size_t max_ent
         .quota_bytes = quota,
         .max_entry_bytes = max_entry,
         .stale_temp_age_ns = stale_age_ns,
-        .verifier = verify_artifact,
-        .verifier_context = NULL,
     };
     return xr_cache_store_open(&config);
 }
 
-static XrCacheStore *open_store_with_verifier(const char *root, uint64_t quota,
-                                              size_t max_entry, uint64_t stale_age_ns,
-                                              XrCacheArtifactVerifier verifier, void *context) {
-    XrCacheStoreConfig config = {
-        .root = root,
-        .quota_bytes = quota,
-        .max_entry_bytes = max_entry,
-        .stale_temp_age_ns = stale_age_ns,
-        .verifier = verifier,
-        .verifier_context = context,
-    };
-    return xr_cache_store_open(&config);
+static XrCachePublishStatus publish_verified(XrCacheStore *store,
+                                             XrCacheArtifactKind kind,
+                                             XrCacheKey key,
+                                             const uint8_t *bytes, size_t size) {
+    return xr_cache_store_publish(store, kind, key, bytes, size,
+                                  verify_artifact, NULL);
+}
+
+static XrCacheLoadStatus load_verified(XrCacheStore *store,
+                                       XrCacheArtifactKind kind,
+                                       XrCacheKey key, XrCacheBlob *out) {
+    return xr_cache_store_load(store, kind, key, verify_artifact, NULL, out);
 }
 
 static void clear_directory(const char *path) {
@@ -214,7 +212,7 @@ static int child_publish(const char *root, const char *key_text, const char *pay
     if (!store)
         return CHILD_OPERATION_FAILED;
     XrCachePublishStatus status =
-        xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, cache_key(key_text),
+        publish_verified(store, XR_CACHE_ARTIFACT_XSM, cache_key(key_text),
                                (const uint8_t *) payload, strlen(payload) + 1u);
     xr_cache_store_close(store);
     if (status == XR_CACHE_PUBLISH_OK)
@@ -245,13 +243,14 @@ static int child_load_blocking(const char *root, const char *key_text, const cha
         .ready_path = ready_path,
         .release_path = release_path,
     };
-    XrCacheStore *store = open_store_with_verifier(
-        root, 4096u, 512u, UINT64_C(1000000000), blocking_load_verifier, &verifier_context);
+    XrCacheStore *store = open_store(
+        root, 4096u, 512u, UINT64_C(1000000000));
     if (!store)
         return CHILD_OPERATION_FAILED;
     XrCacheBlob blob = {0};
     XrCacheLoadStatus status =
-        xr_cache_store_load(store, XR_CACHE_ARTIFACT_XSM, cache_key(key_text), &blob);
+        xr_cache_store_load(store, XR_CACHE_ARTIFACT_XSM, cache_key(key_text),
+                            blocking_load_verifier, &verifier_context, &blob);
     size_t expected_size = strlen(payload) + 1u;
     bool complete = status == XR_CACHE_LOAD_HIT && blob.size == expected_size &&
                     memcmp(blob.bytes, payload, expected_size) == 0;
@@ -267,14 +266,14 @@ static int child_load_rejecting(const char *root, const char *key_text,
         .ready_path = ready_path,
         .release_path = release_path,
     };
-    XrCacheStore *store = open_store_with_verifier(
-        root, 4096u, 512u, UINT64_C(1000000000),
-        blocking_reject_verifier, &verifier_context);
+    XrCacheStore *store = open_store(
+        root, 4096u, 512u, UINT64_C(1000000000));
     if (!store)
         return CHILD_OPERATION_FAILED;
     XrCacheBlob blob = {0};
     XrCacheLoadStatus status = xr_cache_store_load(
-        store, XR_CACHE_ARTIFACT_XSM, cache_key(key_text), &blob);
+        store, XR_CACHE_ARTIFACT_XSM, cache_key(key_text),
+        blocking_reject_verifier, &verifier_context, &blob);
     xr_cache_blob_release(&blob);
     xr_cache_store_close(store);
     return status == XR_CACHE_LOAD_REJECTED ? 0 : CHILD_OPERATION_FAILED;
@@ -345,19 +344,19 @@ TEST(publish_load_and_existing_object_are_immutable) {
     XrCacheKey key = cache_key("one");
     const uint8_t payload[] = "verified-plan";
 
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, key, payload,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, key, payload,
                                          sizeof(payload)),
                   XR_CACHE_PUBLISH_OK);
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, key, payload,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, key, payload,
                                          sizeof(payload)),
                   XR_CACHE_PUBLISH_EXISTS);
     const uint8_t conflicting[] = "different-plan";
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, key, conflicting,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, key, conflicting,
                                          sizeof(conflicting)),
                   XR_CACHE_PUBLISH_CONFLICT);
 
     XrCacheBlob blob;
-    ASSERT_EQ_INT(xr_cache_store_load(store, XR_CACHE_ARTIFACT_XSM, key, &blob),
+    ASSERT_EQ_INT(load_verified(store, XR_CACHE_ARTIFACT_XSM, key, &blob),
                   XR_CACHE_LOAD_HIT);
     ASSERT_EQ_UINT(blob.size, sizeof(payload));
     ASSERT_MEM_EQ(blob.bytes, payload, sizeof(payload));
@@ -373,7 +372,7 @@ TEST(corruption_and_unverified_payload_fail_closed) {
     ASSERT_NOT_NULL(store);
     XrCacheKey key = cache_key("corrupt");
     const uint8_t payload[] = "valid";
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, key, payload,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, key, payload,
                                          sizeof(payload)),
                   XR_CACHE_PUBLISH_OK);
 
@@ -389,11 +388,11 @@ TEST(corruption_and_unverified_payload_fail_closed) {
     xr_free(disk);
 
     XrCacheBlob blob;
-    ASSERT_EQ_INT(xr_cache_store_load(store, XR_CACHE_ARTIFACT_XSM, key, &blob),
+    ASSERT_EQ_INT(load_verified(store, XR_CACHE_ARTIFACT_XSM, key, &blob),
                   XR_CACHE_LOAD_CORRUPT);
     ASSERT_FALSE(xr_fs_exists(path));
     const uint8_t rejected[] = {0xffu, 0u};
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, key, rejected,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, key, rejected,
                                          sizeof(rejected)),
                   XR_CACHE_PUBLISH_REJECTED);
     xr_free(path);
@@ -409,18 +408,19 @@ TEST(rejected_load_removes_only_the_verified_snapshot) {
     XrCacheStore *writer = open_store(root, 4096u, 512u,
                                       UINT64_C(1000000000));
     ASSERT_NOT_NULL(writer);
-    ASSERT_EQ_INT(xr_cache_store_publish(writer, XR_CACHE_ARTIFACT_XSM, key,
+    ASSERT_EQ_INT(publish_verified(writer, XR_CACHE_ARTIFACT_XSM, key,
                                          payload, sizeof(payload)),
                   XR_CACHE_PUBLISH_OK);
     char *path = xr_cache_store_entry_path(writer, XR_CACHE_ARTIFACT_XSM, key);
     ASSERT_NOT_NULL(path);
     xr_cache_store_close(writer);
 
-    XrCacheStore *reader = open_store_with_verifier(
-        root, 4096u, 512u, UINT64_C(1000000000), reject_artifact, NULL);
+    XrCacheStore *reader = open_store(
+        root, 4096u, 512u, UINT64_C(1000000000));
     ASSERT_NOT_NULL(reader);
     XrCacheBlob blob = {0};
-    ASSERT_EQ_INT(xr_cache_store_load(reader, XR_CACHE_ARTIFACT_XSM, key, &blob),
+    ASSERT_EQ_INT(xr_cache_store_load(reader, XR_CACHE_ARTIFACT_XSM, key,
+                                      reject_artifact, NULL, &blob),
                   XR_CACHE_LOAD_REJECTED);
     ASSERT_FALSE(xr_fs_exists(path));
     xr_cache_blob_release(&blob);
@@ -433,18 +433,19 @@ TEST(verifier_callbacks_may_reenter_after_root_unlock) {
     char root[XR_PATH_MAX];
     ASSERT_TRUE(create_root(root));
     ReentrantVerifierContext context = {0};
-    XrCacheStore *store = open_store_with_verifier(
-        root, 4096u, 512u, UINT64_C(1000000000), reentrant_verifier,
-        &context);
+    XrCacheStore *store = open_store(
+        root, 4096u, 512u, UINT64_C(1000000000));
     ASSERT_NOT_NULL(store);
     context.store = store;
     XrCacheKey key = cache_key("reentrant-verifier");
     static const uint8_t payload[] = "verified-outside-root-lock";
     ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, key,
-                                         payload, sizeof(payload)),
+                                         payload, sizeof(payload),
+                                         reentrant_verifier, &context),
                   XR_CACHE_PUBLISH_OK);
     XrCacheBlob blob = {0};
-    ASSERT_EQ_INT(xr_cache_store_load(store, XR_CACHE_ARTIFACT_XSM, key, &blob),
+    ASSERT_EQ_INT(xr_cache_store_load(store, XR_CACHE_ARTIFACT_XSM, key,
+                                      reentrant_verifier, &context, &blob),
                   XR_CACHE_LOAD_HIT);
     ASSERT_EQ_UINT(context.calls, 2u);
     xr_cache_blob_release(&blob);
@@ -462,7 +463,7 @@ typedef struct PublishThreadContext {
 
 static void *publish_thread(void *argument) {
     PublishThreadContext *context = (PublishThreadContext *) argument;
-    context->status = xr_cache_store_publish(context->store, XR_CACHE_ARTIFACT_XTP, context->key,
+    context->status = publish_verified(context->store, XR_CACHE_ARTIFACT_XTP, context->key,
                                              context->payload, context->size);
     return NULL;
 }
@@ -496,7 +497,7 @@ TEST(concurrent_same_key_writers_publish_one_complete_object) {
                  contexts[0].status == XR_CACHE_PUBLISH_EXISTS));
 
     XrCacheBlob blob;
-    ASSERT_EQ_INT(xr_cache_store_load(first_store, XR_CACHE_ARTIFACT_XTP, contexts[0].key, &blob),
+    ASSERT_EQ_INT(load_verified(first_store, XR_CACHE_ARTIFACT_XTP, contexts[0].key, &blob),
                   XR_CACHE_LOAD_HIT);
     ASSERT_MEM_EQ(blob.bytes, payload, sizeof(payload));
     xr_cache_blob_release(&blob);
@@ -528,7 +529,7 @@ TEST(cross_process_conflicting_writers_publish_one_complete_object) {
     XrCacheStore *store = open_store(root, 4096u, 512u, UINT64_C(1000000000));
     ASSERT_NOT_NULL(store);
     XrCacheBlob blob = {0};
-    ASSERT_EQ_INT(xr_cache_store_load(store, XR_CACHE_ARTIFACT_XSM,
+    ASSERT_EQ_INT(load_verified(store, XR_CACHE_ARTIFACT_XSM,
                                       cache_key("process-key"), &blob),
                   XR_CACHE_LOAD_HIT);
     static const char first_payload[] = "first-process-payload";
@@ -596,7 +597,7 @@ TEST(cross_process_loaded_blob_survives_cleanup_after_locked_read) {
     XrCacheKey key = cache_key("reader-cleanup-key");
     XrCacheStore *store = open_store(root, 4096u, 512u, UINT64_C(1000000000));
     ASSERT_NOT_NULL(store);
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, key,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, key,
                                          (const uint8_t *) payload, sizeof(payload)),
                   XR_CACHE_PUBLISH_OK);
     char *entry = xr_cache_store_entry_path(store, XR_CACHE_ARTIFACT_XSM, key);
@@ -653,7 +654,7 @@ TEST(cross_process_reject_cleanup_preserves_aba_replacement) {
     XrCacheStore *writer = open_store(root, 4096u, 512u,
                                       UINT64_C(1000000000));
     ASSERT_NOT_NULL(writer);
-    ASSERT_EQ_INT(xr_cache_store_publish(writer, XR_CACHE_ARTIFACT_XSM, key,
+    ASSERT_EQ_INT(publish_verified(writer, XR_CACHE_ARTIFACT_XSM, key,
                                          original, sizeof(original)),
                   XR_CACHE_PUBLISH_OK);
     xr_cache_store_close(writer);
@@ -679,7 +680,7 @@ TEST(cross_process_reject_cleanup_preserves_aba_replacement) {
     int cleaner_wait = xr_proc_wait(cleaner, &cleaner_exit);
     writer = open_store(root, 4096u, 512u, UINT64_C(1000000000));
     bool replacement_published =
-        writer && xr_cache_store_publish(writer, XR_CACHE_ARTIFACT_XSM, key,
+        writer && publish_verified(writer, XR_CACHE_ARTIFACT_XSM, key,
                                          replacement, sizeof(replacement)) ==
                       XR_CACHE_PUBLISH_OK;
     bool release_written = write_signal(reader_release);
@@ -688,7 +689,7 @@ TEST(cross_process_reject_cleanup_preserves_aba_replacement) {
 
     XrCacheBlob blob = {0};
     bool replacement_preserved =
-        writer && xr_cache_store_load(writer, XR_CACHE_ARTIFACT_XSM, key,
+        writer && load_verified(writer, XR_CACHE_ARTIFACT_XSM, key,
                                       &blob) == XR_CACHE_LOAD_HIT &&
         blob.size == sizeof(replacement) &&
         memcmp(blob.bytes, replacement, sizeof(replacement)) == 0;
@@ -717,22 +718,22 @@ TEST(quota_evicts_oldest_entry_and_stale_temps_recover) {
     XrCacheKey first = cache_key("first");
     XrCacheKey second = cache_key("second");
     XrCacheKey third = cache_key("third");
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, first, payload,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, first, payload,
                                          sizeof(payload)),
                   XR_CACHE_PUBLISH_OK);
     xr_time_sleep_ms(2u);
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, second, payload,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, second, payload,
                                          sizeof(payload)),
                   XR_CACHE_PUBLISH_OK);
     xr_time_sleep_ms(2u);
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, third, payload,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, third, payload,
                                          sizeof(payload)),
                   XR_CACHE_PUBLISH_OK);
 
     XrCacheBlob blob;
-    ASSERT_EQ_INT(xr_cache_store_load(store, XR_CACHE_ARTIFACT_XSM, first, &blob),
+    ASSERT_EQ_INT(load_verified(store, XR_CACHE_ARTIFACT_XSM, first, &blob),
                   XR_CACHE_LOAD_MISS);
-    ASSERT_EQ_INT(xr_cache_store_load(store, XR_CACHE_ARTIFACT_XSM, third, &blob),
+    ASSERT_EQ_INT(load_verified(store, XR_CACHE_ARTIFACT_XSM, third, &blob),
                   XR_CACHE_LOAD_HIT);
     xr_cache_blob_release(&blob);
 
@@ -764,10 +765,10 @@ TEST(quota_reservation_commits_before_publish_without_existing_eviction) {
     memset(second_payload, 2, sizeof(second_payload));
     XrCacheKey first = cache_key("quota-first");
     XrCacheKey second = cache_key("quota-second");
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, first,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, first,
                                          first_payload, sizeof(first_payload)),
                   XR_CACHE_PUBLISH_OK);
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, second,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, second,
                                          second_payload, sizeof(second_payload)),
                   XR_CACHE_PUBLISH_OK);
     char *first_path = xr_cache_store_entry_path(
@@ -780,7 +781,7 @@ TEST(quota_reservation_commits_before_publish_without_existing_eviction) {
     ASSERT_EQ_INT(xr_fs_write_new_file_sync(over_budget_path, &injected,
                                             sizeof(injected)),
                   0);
-    ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM, second,
+    ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM, second,
                                          second_payload, sizeof(second_payload)),
                   XR_CACHE_PUBLISH_EXISTS);
     ASSERT_TRUE(xr_fs_exists(first_path));
@@ -793,7 +794,7 @@ TEST(quota_reservation_commits_before_publish_without_existing_eviction) {
     ASSERT_EQ_UINT(stats.live_entries, 2u);
     ASSERT_EQ_UINT(stats.live_bytes, 224u);
     XrCacheBlob blob = {0};
-    ASSERT_EQ_INT(xr_cache_store_load(store, XR_CACHE_ARTIFACT_XSM, first, &blob),
+    ASSERT_EQ_INT(load_verified(store, XR_CACHE_ARTIFACT_XSM, first, &blob),
                   XR_CACHE_LOAD_HIT);
     xr_cache_blob_release(&blob);
     xr_cache_store_close(store);
@@ -842,7 +843,7 @@ TEST(artifact_directory_link_swap_fails_closed) {
     ASSERT_GE(capability, 0);
     if (capability == 1) {
         static const uint8_t payload[] = "must-not-follow-directory-link";
-        ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XSM,
+        ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XSM,
                                              cache_key("linked-root"), payload,
                                              sizeof(payload)),
                       XR_CACHE_PUBLISH_IO_ERROR);
@@ -870,7 +871,7 @@ TEST(cache_root_link_swap_fails_closed) {
     ASSERT_GE(capability, 0);
     if (capability == 1) {
         static const uint8_t payload[] = "must-not-follow-cache-root-link";
-        ASSERT_EQ_INT(xr_cache_store_publish(store, XR_CACHE_ARTIFACT_XTP,
+        ASSERT_EQ_INT(publish_verified(store, XR_CACHE_ARTIFACT_XTP,
                                              cache_key("linked-cache-root"),
                                              payload, sizeof(payload)),
                       XR_CACHE_PUBLISH_IO_ERROR);
