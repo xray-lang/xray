@@ -205,6 +205,10 @@ def payload(kind: str, log: str, raw: Path) -> dict[str, Any]:
             },
             "activation_before_verify": 0, "runtime_only_compiler_symbols": 0,
             "artifact_routes": [],
+            "route_proofs": {
+                name: {"result": "passed", "log": log}
+                for name in ("hosted-fragment", "target-plan-to-native")
+            },
         }
     if kind == "full-validation":
         return {"lanes": []}
