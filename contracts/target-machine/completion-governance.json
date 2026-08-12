@@ -176,7 +176,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "b0d3ce78f3808a7bd7af2f32b0cf20c8c25e8f3a92f0392fe182f03eee892b92"
+    "sha256": "cabc0ca6fbbf7f644053034d50d4ee6b720787f08e034d956f3b4c295766c448"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
