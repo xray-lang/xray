@@ -174,13 +174,14 @@ def validate_timestamp(value: Any, kind: str) -> None:
 def raw_log_identity(kind: str, source_commit: str, repository_sha256: str,
                      governance_sha256: str, relative: str, digest: str,
                      owner: str, generated_at: str, command: list[str],
-                     platform: dict[str, str]) -> str:
+                     platform: dict[str, str], exit_code: int,
+                     status: str) -> str:
     command_json = json.dumps(command, ensure_ascii=False, separators=(",", ":"))
     platform_json = json.dumps(platform, sort_keys=True, separators=(",", ":"))
     framed = "\0".join((kind, source_commit, repository_sha256,
                          governance_sha256, relative, digest, owner,
-                         generated_at, command_json, platform_json, "0",
-                         "passed"))
+                         generated_at, command_json, platform_json,
+                         str(exit_code), status))
     return hashlib.sha256(framed.encode("utf-8")).hexdigest()
 
 
@@ -254,6 +255,7 @@ def validate_raw_manifest(path: Path, raw_root: Path, kind: str,
             kind, identity["source_commit"], identity["repository_sha256"],
             governance_sha256, str(relative), digest, row["owner"],
             row["generated_at"], row["command"], row["platform"],
+            row["exit_code"], row["status"],
         )
         if log.get("identity_sha256") != expected or log.get("result") != "passed":
             raise AssemblyError(f"{kind} raw log identity/result is invalid: {relative}")

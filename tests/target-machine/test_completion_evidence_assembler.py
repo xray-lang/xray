@@ -225,7 +225,7 @@ def raw_fixture(raw: Path, identity: dict[str, str], governance_hash: str,
             "identity_sha256": assembler.raw_log_identity(
                 kind, identity["source_commit"], identity["repository_sha256"],
                 governance_hash, relative, digest, owner, generated_at,
-                command, platform,
+                command, platform, 0, "passed",
             ),
         }],
     }
