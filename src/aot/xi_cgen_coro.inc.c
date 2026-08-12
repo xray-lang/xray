@@ -3803,11 +3803,29 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_CHAN_NEW) {
-        fprintf(out, "    XrValue _chan_%u = xr_aot_channel_new(ctx, ", v->id);
-        if (v->nargs >= 1)
-            emit_int64_arg(out, v->args[0]);
-        else
-            fprintf(out, "0");
+        XrCValueEmissionView emission = {0};
+        XrCValueEmissionView capacity = {0};
+        CgValueEmissionStatus status =
+            cg_value_emission_view(ctx, f, v, &emission);
+        CgValueEmissionStatus capacity_status =
+            v->nargs == 1
+                ? cg_value_emission_view(ctx, f, v->args[0], &capacity)
+                : CG_VALUE_EMISSION_ERROR;
+        if (status != CG_VALUE_EMISSION_FOUND ||
+            capacity_status != CG_VALUE_EMISSION_FOUND ||
+            emission.rep != XR_C_VALUE_REP_TAGGED ||
+            emission.materialization !=
+                XR_C_VALUE_MATERIALIZATION_CHANNEL_NEW ||
+            !emission.recipe_symbol ||
+            emission.recipe_operand_value != capacity.semantic_value ||
+            v->nargs != 1) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: immutable coroutine channel recipe is missing\n");
+            return;
+        }
+        fprintf(out, "    XrValue _chan_%u = %s(ctx, ", v->id,
+                emission.recipe_symbol);
+        emit_int64_arg(out, v->args[0]);
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];

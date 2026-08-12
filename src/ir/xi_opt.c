@@ -3143,6 +3143,12 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_SOURCE_MOVE:
         case XI_OWNER_FORWARD:
             return arg_idx == 0 ? sr_def_rep(user, policy) : XR_REP_TAGGED;
+        case XI_CHAN_NEW:
+            /* The immutable CHANNEL_ALLOCATION_STORAGE recipe binds the
+             * capacity operand as an exact integer machine value. Keep the
+             * canonical representation-selection boundary native so no BOX
+             * adapter can mutate that authority. */
+            return arg_idx == 0 ? XR_REP_I64 : XR_REP_TAGGED;
         case XI_BOX:
             if (user->args[0] && user->args[0]->type) {
                 return sr_type_native_boundary_rep(user->args[0]->type);

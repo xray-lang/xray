@@ -2655,8 +2655,12 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
            left->memory_size == right->memory_size && left->rep == right->rep &&
            left->materialization == right->materialization &&
            left->literal_byte_length == right->literal_byte_length &&
+           left->recipe_operand_value == right->recipe_operand_value &&
            left->reserved == right->reserved && left->c_type && right->c_type &&
            strcmp(left->c_type, right->c_type) == 0 &&
+           ((!left->recipe_symbol && !right->recipe_symbol) ||
+            (left->recipe_symbol && right->recipe_symbol &&
+             strcmp(left->recipe_symbol, right->recipe_symbol) == 0)) &&
            (left->literal_byte_length == 0 ||
             (left->literal_bytes && right->literal_bytes &&
              memcmp(left->literal_bytes, right->literal_bytes,
@@ -5198,24 +5202,31 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     }
 
     if (v->op == XI_CHAN_NEW) {
-        XrRep rep = cg_value_plan_storage_rep(ctx, v);
-        if (rep == XR_REP_PTR)
-            fprintf(out, "(");
-        else if (rep != XR_REP_TAGGED) {
-            fprintf(stderr, "[xi_cgen] ERROR: unsupported channel storage representation %d\n",
-                    (int) rep);
+        XrCValueEmissionView emission = {0};
+        XrCValueEmissionView capacity = {0};
+        CgValueEmissionStatus status =
+            cg_value_emission_view(ctx, f, v, &emission);
+        CgValueEmissionStatus capacity_status =
+            v->nargs == 1
+                ? cg_value_emission_view(ctx, f, v->args[0], &capacity)
+                : CG_VALUE_EMISSION_ERROR;
+        if (status != CG_VALUE_EMISSION_FOUND ||
+            capacity_status != CG_VALUE_EMISSION_FOUND ||
+            emission.rep != XR_C_VALUE_REP_TAGGED ||
+            emission.materialization !=
+                XR_C_VALUE_MATERIALIZATION_CHANNEL_NEW ||
+            !emission.recipe_symbol ||
+            emission.recipe_operand_value != capacity.semantic_value ||
+            v->nargs != 1) {
+            fprintf(stderr, "[xi_cgen] ERROR: immutable channel materialization recipe is missing\n");
             emit_codegen_abort_expr(out);
             ctx->error = true;
             return;
         }
-        fprintf(out, "xr_aot_channel_new(%s, ", xicgen_aot_context_expr(ctx, f));
-        if (v->nargs >= 1)
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-        else
-            fprintf(out, "0");
+        fprintf(out, "%s(%s, ", emission.recipe_symbol,
+                xicgen_aot_context_expr(ctx, f));
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
         fprintf(out, ")");
-        if (rep == XR_REP_PTR)
-            fprintf(out, ").ptr");
         return;
     }
 

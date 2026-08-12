@@ -517,11 +517,11 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     xr_target_plan_free(decoded_plan);
     xr_xtp_candidate_release(candidate);
 
-    uint8_t *old_v9 = copy_artifact(&fixture);
-    xr_xtp_put_u32(old_v9 + 4, UINT32_C(9));
-    resign_artifact(old_v9, fixture.size);
-    expect_decode_failure(old_v9, fixture.size);
-    xr_free(old_v9);
+    uint8_t *old_v10 = copy_artifact(&fixture);
+    xr_xtp_put_u32(old_v10 + 4, UINT32_C(10));
+    resign_artifact(old_v10, fixture.size);
+    expect_decode_failure(old_v10, fixture.size);
+    xr_free(old_v10);
 
     uint8_t *mutated_profile = copy_artifact(&fixture);
     uint8_t *profile_entry =

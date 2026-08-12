@@ -585,6 +585,8 @@ typedef struct VerifyAuthority {
     uint8_t *seen_block;
     uint8_t *seen_record;
     uint8_t *exact_direct_callee_value;
+    uint8_t *exact_channel_value;
+    uint8_t *exact_channel_allocation_value;
     uint64_t bytes;
     uint64_t work;
 } VerifyAuthority;
@@ -633,6 +635,8 @@ static void verify_authority_dispose(VerifyAuthority *ctx) {
     xr_free(ctx->seen_block);
     xr_free(ctx->seen_record);
     xr_free(ctx->exact_direct_callee_value);
+    xr_free(ctx->exact_channel_value);
+    xr_free(ctx->exact_channel_allocation_value);
     ctx->operation_by_value = NULL;
     ctx->parameter_by_value = NULL;
     ctx->direct_callee_target_by_value = NULL;
@@ -642,6 +646,8 @@ static void verify_authority_dispose(VerifyAuthority *ctx) {
     ctx->seen_block = NULL;
     ctx->seen_record = NULL;
     ctx->exact_direct_callee_value = NULL;
+    ctx->exact_channel_value = NULL;
+    ctx->exact_channel_allocation_value = NULL;
 }
 
 static bool verify_bounded_string_length(VerifyAuthority *ctx,
@@ -809,6 +815,156 @@ static bool semantic_string_literal_is_exact(
            type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            (type->flags & forbidden) == 0 &&
            (type->flags & required) == required;
+}
+
+static bool aot_stable_id_is_zero(XrStableId id) {
+    for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++)
+        if (id.bytes[i] != 0)
+            return false;
+    return true;
+}
+
+static bool aot_channel_type_is_exact(const XrSemanticPlan *semantic,
+                                      uint32_t type_index,
+                                      uint32_t *element_type) {
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(semantic, type_index);
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_count);
+    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE |
+                       XR_SEM_TYPE_OWNERSHIP_ROOT;
+    uint8_t allowed = required | XR_SEM_TYPE_CONST;
+    if (!semantic || !type || type->kind != XR_KIND_CHANNEL ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->child_count != 1 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        (type->flags & required) != required ||
+        (type->flags & ~allowed) != 0 || type->child_begin >= child_count ||
+        children[type->child_begin] >= xr_semantic_plan_type_count(semantic))
+        return false;
+    if (element_type)
+        *element_type = children[type->child_begin];
+    return true;
+}
+
+static bool aot_channel_capacity_type_is_exact(
+    VerifyAuthority *ctx, uint32_t type_index) {
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(ctx->semantic, type_index);
+    if (!type || type->kind != XR_KIND_INT || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->flags != 0)
+        return false;
+    switch (type->scalar_rep) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE: return true;
+        default: return false;
+    }
+}
+
+static bool aot_channel_allocation_is_exact(
+    VerifyAuthority *ctx, const XrSemanticOperationRecord *operation) {
+    if (!ctx || !operation || operation->opcode != XI_CHAN_NEW ||
+        operation->result_value >= ctx->value_count ||
+        operation->operand_count != 1 ||
+        !semantic_allocation_identity_is_canonical(operation) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CHAN_NEW) ||
+        operation->flags != xi_generated_op_default_flags(XI_CHAN_NEW) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(XI_CHAN_NEW) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(ctx->semantic, &operand_count);
+    uint32_t element_type = XR_SEMANTIC_INDEX_NONE;
+    if (operation->operand_begin >= operand_count ||
+        !aot_channel_type_is_exact(ctx->semantic, operation->result_type,
+                                   &element_type))
+        return false;
+    const XrSemanticOperandRecord *capacity =
+        &operands[operation->operand_begin];
+    return capacity->value < ctx->value_count && capacity->parameter == -1 &&
+           capacity->role == XR_SEM_OPERAND_VALUE && capacity->flags == 0 &&
+           aot_channel_capacity_type_is_exact(ctx, capacity->type) &&
+           element_type < xr_semantic_plan_type_count(ctx->semantic);
+}
+
+static bool aot_channel_identity_copy_is_exact(
+    VerifyAuthority *ctx, const XrSemanticOperationRecord *operation) {
+    if (!ctx || !operation || !ctx->exact_channel_value ||
+        operation->opcode != XI_COPY || operation->operand_count != 1 ||
+        operation->semantic_immediate != XI_COPY_KIND_IDENTITY ||
+        operation->allocation_key ||
+        !aot_stable_id_is_zero(operation->allocation_id) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->effects != xi_generated_op_effects(XI_COPY) ||
+        operation->flags != xi_generated_op_default_flags(XI_COPY) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        operation->result_alias_operand != 0 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(ctx->semantic, &operand_count);
+    if (operation->operand_begin >= operand_count)
+        return false;
+    const XrSemanticOperandRecord *source =
+        &operands[operation->operand_begin];
+    uint32_t source_element = XR_SEMANTIC_INDEX_NONE;
+    uint32_t result_element = XR_SEMANTIC_INDEX_NONE;
+    return source->value < ctx->value_count &&
+           ctx->exact_channel_value[source->value] &&
+           source->parameter == -1 && source->role == XR_SEM_OPERAND_VALUE &&
+           source->flags == 0 &&
+           aot_channel_type_is_exact(ctx->semantic, source->type,
+                                     &source_element) &&
+           aot_channel_type_is_exact(ctx->semantic, operation->result_type,
+                                     &result_element) &&
+           source_element == result_element;
+}
+
+static bool aot_index_channel_values(VerifyAuthority *ctx) {
+    if (!verify_alloc(ctx, ctx->value_count, sizeof(uint8_t),
+                      (void **) &ctx->exact_channel_value) ||
+        !verify_alloc(ctx, ctx->value_count, sizeof(uint8_t),
+                      (void **) &ctx->exact_channel_allocation_value))
+        return false;
+    for (uint32_t i = 0; i < ctx->operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(ctx->semantic, i);
+        if (!operation || operation->result_value >= ctx->value_count)
+            return false;
+        bool allocation = aot_channel_allocation_is_exact(ctx, operation);
+        bool alias = aot_channel_identity_copy_is_exact(ctx, operation);
+        if (operation->opcode == XI_CHAN_NEW && !allocation) {
+            set_diag(ctx->diag, XR_AOT_REFINEMENT_SOURCE_TYPE, i,
+                     operation->result_value, i);
+            return false;
+        }
+        if (allocation) {
+            ctx->exact_channel_value[operation->result_value] = 1;
+            ctx->exact_channel_allocation_value[operation->result_value] = 1;
+        } else if (alias) {
+            ctx->exact_channel_value[operation->result_value] = 1;
+        }
+    }
+    return true;
 }
 
 static bool aot_direct_local_callee_type_is_exact(
@@ -1257,7 +1413,29 @@ static bool verify_authority_init(VerifyAuthority *ctx) {
         }
         ctx->parameter_by_value[parameter->value] = i;
     }
-    return aot_index_direct_local_callee_values(ctx);
+    return aot_index_direct_local_callee_values(ctx) &&
+           aot_index_channel_values(ctx);
+}
+
+static bool verify_channel_type_authority(
+    VerifyAuthority *ctx, const XrSemanticOperationRecord *operation,
+    const XiValue *live) {
+    uint32_t element_type = XR_SEMANTIC_INDEX_NONE;
+    if (!ctx || !operation || !live || !live->type ||
+        operation->result_value >= ctx->value_count ||
+        !ctx->exact_channel_value ||
+        !ctx->exact_channel_value[operation->result_value] ||
+        !aot_channel_type_is_exact(ctx->semantic, operation->result_type,
+                                   &element_type) ||
+        live->type->kind != XR_KIND_CHANNEL ||
+        !source_type_matches(live->type,
+                             xr_semantic_plan_type(ctx->semantic,
+                                                   operation->result_type)) ||
+        !live->type->container.element_type)
+        return false;
+    return source_type_matches(
+        live->type->container.element_type,
+        xr_semantic_plan_type(ctx->semantic, element_type));
 }
 
 static bool verify_register_value(VerifyAuthority *ctx, const XiFunc *function,
@@ -1449,6 +1627,11 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                                                                  operation)
                                   ? verify_string_literal_type_authority(
                                         ctx, operation, value)
+                              : operation->result_value < ctx->value_count &&
+                                        ctx->exact_channel_value[
+                                            operation->result_value]
+                                  ? verify_channel_type_authority(
+                                        ctx, operation, value)
                                   : verify_scalar_type_authority(
                                         ctx, operation->result_type, value->type);
         exact = exact && operation->function == function_index &&
@@ -1514,6 +1697,14 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                             ? verify_string_literal_type_authority(
                                   ctx, source_operation, value->args[a]) &&
                                   operand->type == source_operation->result_type
+                        : source_operation &&
+                                  source_operation->result_value <
+                                      ctx->value_count &&
+                                  ctx->exact_channel_value[
+                                      source_operation->result_value]
+                            ? verify_channel_type_authority(
+                                  ctx, source_operation, value->args[a]) &&
+                                  operand->type == source_operation->result_type
                             : verify_scalar_type_authority(
                                   ctx, operand->type, value->args[a]->type);
             }
@@ -1540,6 +1731,12 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                                     semantic_string_literal_is_exact(
                                         ctx->semantic, operation)
                               ? verify_string_literal_type_authority(
+                                    ctx, operation, value)
+                          : operation &&
+                                    operation->result_value < ctx->value_count &&
+                                    ctx->exact_channel_value[
+                                        operation->result_value]
+                              ? verify_channel_type_authority(
                                     ctx, operation, value)
                               : verify_scalar_type_authority(ctx, type_index,
                                                              value->type);
@@ -1908,6 +2105,77 @@ static bool oracle_static_direct_local_callee_storage(
     return true;
 }
 
+static bool oracle_dynamic_channel_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind || !ctx->exact_channel_value ||
+        !ctx->exact_channel_value[semantic_value])
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index == XR_SEMANTIC_INDEX_NONE
+            ? NULL
+            : xr_semantic_plan_operation(ctx->semantic, operation_index);
+    if (!operation || operation->result_value != semantic_value)
+        return false;
+    bool allocation = ctx->exact_channel_allocation_value &&
+                      ctx->exact_channel_allocation_value[semantic_value];
+    uint8_t expected_ownership = allocation ? XR_TARGET_OWNERSHIP_OWNED
+                                            : XR_TARGET_OWNERSHIP_BORROWED;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != expected_ownership ||
+        memory_rep->ownership != expected_ownership ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != expected_ownership)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static bool oracle_direct_local_callee_use(
     const VerifyAuthority *ctx, uint32_t operation_index,
     uint16_t operand_index, uint32_t source_value) {
@@ -1983,6 +2251,23 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             : NULL;
     if (!operation)
         return false;
+    if (ctx->exact_channel_value &&
+        ctx->exact_channel_value[semantic_value])
+        return oracle_dynamic_channel_storage(ctx, semantic_value,
+                                              out_storage,
+                                              out_machine_kind);
+    if (operation->opcode == XI_COPY && operation->operand_count == 1 &&
+        operation->semantic_immediate == XI_COPY_KIND_IDENTITY) {
+        uint32_t operand_count = 0;
+        const XrSemanticOperandRecord *operands =
+            xr_semantic_plan_operands(ctx->semantic, &operand_count);
+        if (operation->operand_begin >= operand_count ||
+            operands[operation->operand_begin].value >= semantic_value)
+            return false;
+        return oracle_definition_storage(
+            ctx, operands[operation->operand_begin].value, out_storage,
+            out_machine_kind);
+    }
     switch (operation->opcode) {
         case XI_CLOSURE_NEW:
             return oracle_dynamic_closure_storage(ctx, semantic_value,
@@ -2057,6 +2342,8 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
         case XI_ISNULL:
         case XI_IS:
         case XI_LEN:
+        case XI_CHAN_RECV_STATUS:
+        case XI_CHAN_IS_CLOSED:
         case XI_CALL:
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
@@ -2106,7 +2393,11 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         case XI_RELEASE: {
             XrRep literal_storage = XR_REP_TAGGED;
             if (!oracle_dynamic_string_literal_storage(
-                    ctx, source_value, &literal_storage, &ignored_kind))
+                    ctx, source_value, &literal_storage, &ignored_kind) &&
+                !(ctx->exact_channel_allocation_value &&
+                  ctx->exact_channel_allocation_value[source_value] &&
+                  oracle_dynamic_channel_storage(
+                      ctx, source_value, &literal_storage, &ignored_kind)))
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
@@ -2120,6 +2411,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                                                 &machine_storage,
                                                 &ignored_kind) &&
                 !oracle_dynamic_string_literal_storage(
+                    ctx, source_value, &machine_storage, &ignored_kind) &&
+                !oracle_dynamic_channel_storage(
                     ctx, source_value, &machine_storage, &ignored_kind))
                 return false;
             *out_storage = XR_REP_TAGGED;
@@ -2169,6 +2462,42 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         case XI_WIDEN_F32:
             return oracle_machine_storage(ctx, source_value, out_storage,
                                           &ignored_kind);
+        case XI_CHAN_NEW:
+            if (operand_index != 0 || !ctx->exact_channel_allocation_value ||
+                !ctx->exact_channel_allocation_value[operation->result_value])
+                return false;
+            return oracle_machine_storage(ctx, source_value, out_storage,
+                                          &ignored_kind);
+        case XI_CHAN_SEND:
+        case XI_CHAN_TRY_SEND:
+            if (operand_index == 0) {
+                if (!ctx->exact_channel_value[source_value])
+                    return false;
+                *out_storage = XR_REP_TAGGED;
+                return true;
+            }
+            if (operand_index == 1) {
+                *out_storage = XR_REP_TAGGED;
+                return true;
+            }
+            return false;
+        case XI_CHAN_RECV:
+        case XI_CHAN_TRY_RECV:
+        case XI_CHAN_IS_CLOSED:
+        case XI_CHAN_TIMER_DISPOSE:
+            if (operand_index != 0 || !ctx->exact_channel_value[source_value])
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
+        case XI_CHAN_RECV_STATUS:
+            if (operand_index != 0) return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
+        case XI_SELECT_BLOCK:
+            if (!ctx->exact_channel_value[source_value])
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
         case XI_PHI:
             if (ctx->policy->force_phi_tagged) {
                 *out_storage = XR_REP_TAGGED;
@@ -2408,9 +2737,12 @@ static bool authority_collect_obligations(CollectContext *ctx) {
         .parameter_by_value = ctx->parameter_by_value,
     };
     bool valid = aot_index_direct_local_callee_values(&oracle) &&
+                 aot_index_channel_values(&oracle) &&
                  authority_collect_obligations_indexed(ctx, &oracle);
     xr_free(oracle.direct_callee_target_by_value);
     xr_free(oracle.exact_direct_callee_value);
+    xr_free(oracle.exact_channel_value);
+    xr_free(oracle.exact_channel_allocation_value);
     return valid;
 }
 

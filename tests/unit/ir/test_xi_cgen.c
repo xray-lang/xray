@@ -2783,6 +2783,11 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
         .kind = XR_KIND_STRING, .id = 964, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XrType unit_type = {
         .kind = XR_KIND_UNIT, .id = 965, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType channel_type = {.kind = XR_KIND_CHANNEL,
+                           .id = 966,
+                           .scalar_rep = XR_SCALAR_REP_NONE,
+                           .frozen = true};
+    channel_type.container.element_type = &u32_type;
     XiFunc *ir = xi_func_new("scalar_emission_consumer", &u32_type);
     TEST_REQUIRE(ir != NULL, "scalar emission consumer function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2798,12 +2803,15 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     XiValue *literal = xi_const_str(ir, entry, "immutable-authority",
                                     &string_type);
     XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
-    TEST_REQUIRE(parameter && one && sum && literal && print,
+    XiValue *capacity = xi_const_int(ir, entry, 3, &u32_type);
+    XiValue *channel = xi_value_new(ir, entry, XI_CHAN_NEW, &channel_type, 1);
+    TEST_REQUIRE(parameter && one && sum && literal && print && capacity && channel,
                  "value emission consumer values allocated");
     ir->params[0] = parameter;
     sum->args[0] = parameter;
     sum->args[1] = one;
     print->args[0] = literal;
+    channel->args[0] = capacity;
     xi_block_set_return(entry, sum);
     TEST_REQUIRE(test_prepare_backend_ir(ir), "scalar emission consumer backend prepared");
 
@@ -2873,8 +2881,9 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
 
     TEST_REQUIRE(xaot_bundle_find_value_plan(&legacy_plan.bundle, parameter) == NULL &&
                      xaot_bundle_find_value_plan(&legacy_plan.bundle, one) == NULL &&
-                     xaot_bundle_find_value_plan(&legacy_plan.bundle, sum) == NULL,
-                 "migrated scalar values have no legacy Xaot rows");
+                     xaot_bundle_find_value_plan(&legacy_plan.bundle, sum) == NULL &&
+                     xaot_bundle_find_value_plan(&legacy_plan.bundle, channel) == NULL,
+                 "migrated value families have no legacy Xaot rows");
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     TEST_REQUIRE(ctx != NULL, "scalar emission consumer context allocated");
@@ -2898,7 +2907,9 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     legacy_value->rep.c_type = "XrValue";
     legacy_value->rep.flags = 0;
     uint8_t saved_xi_rep = sum->rep;
+    uint8_t saved_channel_rep = channel->rep;
     sum->rep = XR_REP_TAGGED;
+    channel->rep = XR_REP_PTR;
     const char *saved_literal = (const char *) literal->aux;
     literal->aux = "forged-live-xi";
 
@@ -2911,6 +2922,7 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     TEST_REQUIRE(xr_close_memstream(mem, &buf, &bufsz) == 0,
                  "scalar emission consumer stream closed");
     sum->rep = saved_xi_rep;
+    channel->rep = saved_channel_rep;
     literal->aux = (void *) saved_literal;
 
     TEST_REQUIRE(!xi_cgen_has_error(ctx), "scalar emission consumer generated without error");
@@ -2930,6 +2942,9 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     TEST_REQUIRE(contains(buf, "immutable-authority") &&
                      !contains(buf, "forged-live-xi"),
                  "String literal CGen mechanically consumes immutable plan-owned bytes");
+    TEST_REQUIRE(contains(buf, "xr_aot_channel_new(") &&
+                     !contains(buf, "xr_aot_channel_new(NULL"),
+                 "Channel CGen mechanically consumes the immutable recipe despite poisoned Xi rep");
     const char *second_fn = find_static_function_definition(
         buf, "scalar_emission_consumer_second");
     TEST_REQUIRE(second_fn != NULL,
