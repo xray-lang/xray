@@ -180,15 +180,13 @@ def residue_scan(prefix: Path, governance: dict[str, Any]) -> tuple[int, list[st
         relative = path.relative_to(prefix).as_posix()
         if path_regex.search(relative):
             count += 1
-            if len(samples) < completion.MAX_SAMPLES:
-                samples.append(f"{relative}: path")
+            samples.append(f"{relative}: path")
         text = completion.readable_text(path)
         if text is None:
             continue
         for match in text_regex.finditer(text):
             count += 1
-            if len(samples) < completion.MAX_SAMPLES:
-                samples.append(f"{relative}: {match.group(0)}")
+            samples.append(f"{relative}: {match.group(0)}")
     return count, samples
 
 
