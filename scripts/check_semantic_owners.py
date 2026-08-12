@@ -161,6 +161,7 @@ POD_SLICE_COMPARE_OPERATIONS = {"xi.slice.compare"}
 POD_SLICE_VIEW_OPERATIONS = {"xi.slice.as.bytes", "xi.slice.reinterpret"}
 RAW_MEMORY_COPY_OPERATIONS = {"xi.ptr.copy.nonoverlap"}
 RAW_SCALAR_ACCESS_OPERATIONS = {"xi.ptr.load", "xi.ptr.store"}
+ENUM_METADATA_ACCESS_OPERATIONS = {"xi.enum.variant.at", "xi.enum.payload.at"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -1820,6 +1821,70 @@ def verify_raw_scalar_access_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_enum_metadata_access_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.enum-metadata-access"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != ENUM_METADATA_ACCESS_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.enum-metadata-access family")
+
+    core_text = (root / "src/shared/xr_enum_metadata_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_ENUM_METADATA_ACCESS_OWNER_APPLY",
+                  "xr_enum_metadata_variant_at_core", "xr_enum_metadata_payload_at_core"):
+        if token not in core_text:
+            errors.append("src/shared/xr_enum_metadata_core.h: enum metadata lacks stable owner")
+            break
+
+    vm_text = (root / "src/vm/xvm_dispatch_enum.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for opcode, kernel in (("OP_ENUM_VARIANT_AT", "xr_enum_metadata_variant_at_core"),
+                           ("OP_ENUM_PAYLOAD_AT", "xr_enum_metadata_payload_at_core")):
+        start = vm_text.find(f"vmcase({opcode})")
+        end = vm_text.find("vmbreak;", start)
+        body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+        if (f"{marker}_HI" not in body or f"{marker}_LO" not in body or
+                "XR_ENUM_METADATA_ACCESS_OWNER_APPLY" not in body or kernel not in body or
+                "index < 0" in body or ">= count" in body or "<< 32" in body):
+            errors.append(f"src/vm/xvm_dispatch_enum.inc.c: {opcode} bypasses enum metadata owner")
+
+    for relative, consumer in (("src/aot/xrt_coll.h", "XR_SEM_CONSUMER_AOT_HOSTED"),
+                               ("src/aot/xrt_core_freestanding.h",
+                                "XR_SEM_CONSUMER_AOT_FREESTANDING")):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for function, kernel in (
+                ("xrt_enum_metadata_access_variant_at", "xr_enum_metadata_variant_at_core"),
+                ("xrt_enum_metadata_access_payload_at", "xr_enum_metadata_payload_at_core")):
+            body = extract_c_function(text, function) or ""
+            if (f"{marker}_HI" not in body or f"{marker}_LO" not in body or consumer not in body or
+                    "XR_ENUM_METADATA_ACCESS_OWNER_APPLY" not in body or kernel not in body):
+                errors.append(f"{relative}: {function} bypasses enum metadata owner")
+            if "index < 0" in body or ">= count" in body or "<< 32" in body:
+                errors.append(f"{relative}: {function} owns enum metadata semantics")
+        if "#ifndef xrt_enum_metadata_access" in text:
+            errors.append(f"{relative}: enum metadata fallback or alias revived")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_enum_metadata_access_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: enum metadata does not resolve stable adapter")
+    dispatch = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for emitter, suffix in (("xicgen_enum_variant_at", "_variant_at("),
+                            ("xicgen_enum_payload_at", "_payload_at(")):
+        body = extract_c_function(dispatch, emitter) or ""
+        if ("cg_enum_metadata_access_adapter_name" not in body or suffix not in body or
+                "XI_CGEN_C_DIALECT_C90" not in body):
+            errors.append(f"src/aot/xi_cgen_dispatch_helpers.inc.c: {emitter} bypasses owner adapter")
+        if ("index out of bounds" in body or "_i < 0" in body or "_i >=" in body or
+                "<< 32" in body or "xrt_throw_error" in body):
+            errors.append(f"src/aot/xi_cgen_dispatch_helpers.inc.c: {emitter} owns semantics")
+    return errors
+
+
 def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     families = (
@@ -2026,8 +2091,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 29:
-        errors.append(f"shared-core inventory must contain exactly 29 headers, found {len(actual)}")
+    if len(actual) != 30:
+        errors.append(f"shared-core inventory must contain exactly 30 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -2065,6 +2130,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_byte_slice_common_prefix_ratchet(root, registry))
         errors.extend(verify_raw_memory_copy_ratchet(root, registry))
         errors.extend(verify_raw_scalar_access_ratchet(root, registry))
+        errors.extend(verify_enum_metadata_access_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))
         errors.extend(verify_pod_slice_view_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)

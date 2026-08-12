@@ -1,7 +1,7 @@
 schema = 1
 
 [policy]
-observable_owner_count = 4
+observable_owner_count = 5
 unknown_plan = "fail_closed"
 native_kernel_forbids_tagged_value = true
 tagged_and_descriptor_kernels_are_explicit = true
@@ -61,6 +61,13 @@ header = "src/shared/xr_error_core.h"
 representation = "native"
 owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "enum-metadata"
+header = "src/shared/xr_enum_metadata_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
 id = "hash"
@@ -421,6 +428,20 @@ fixtures = [
 ]
 
 [[operation]]
+id = "enum-metadata-access"
+observable_contract = "src/shared/xr_enum_metadata_core.h"
+semantic_kernel = "src/shared/xr_enum_metadata_core.h"
+vm_adapter = "src/vm/xvm_dispatch_enum.inc.c"
+aot_adapter = "src/aot/xrt_coll.h"
+typed_plan = "shared.enum-metadata-access"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_enum_metadata_core.c",
+  "tests/unit/aot/test_xrt_enum_metadata_owner_freestanding.c",
+  "tests/unit/ir/test_xi_cgen.c",
+]
+
+[[operation]]
 id = "pod-slice-copy"
 observable_contract = "src/shared/xr_pod_slice_core.h"
 semantic_kernel = "src/shared/xr_pod_slice_core.h"
@@ -499,7 +520,7 @@ disposition = "migrated"
 
 [[operation_family]]
 id = "enum-aggregate"
-canonical_cores = ["native-type", "type-identity", "type-names", "truthiness"]
+canonical_cores = ["enum-metadata", "native-type", "type-identity", "type-names", "truthiness"]
 duplicate_sources = []
 disposition = "single-owner"
 

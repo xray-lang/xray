@@ -360,6 +360,35 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_enum_metadata_core.h",
+      "id": "enum-metadata",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xrt.h",
+        "src/aot/xrt_coll.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_enum.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_enum_metadata_payload_at_core",
+        "xr_enum_metadata_variant_at_core"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_enum_metadata_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_error_core.h",
       "id": "error",
       "owner": "shared-kernel",

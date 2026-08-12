@@ -58,6 +58,7 @@
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_error_core.h"
 #include "../shared/xr_error_messages.h"
+#include "../shared/xr_enum_metadata_core.h"
 #include "../shared/xr_conversion.h"
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_numeric_core.h"

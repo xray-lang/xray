@@ -67,11 +67,14 @@ vmcase(OP_ENUM_VARIANT_AT) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    int64_t count = XR_TO_INT(R(b));
-    int64_t index = XR_TO_INT(R(c));
-    if (index < 0 || index >= count)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum variant index out of bounds");
-    R(a) = XR_FROM_INT(index);
+    XrEnumMetadataResult result = XR_ENUM_METADATA_ACCESS_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO, XR_SEM_CONSUMER_VM,
+        xr_enum_metadata_variant_at_core(XR_TO_INT(R(b)), XR_TO_INT(R(c))));
+    if (result.status != XR_ENUM_METADATA_OK)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                         XR_ERROR_CORE_ENUM_VARIANT_INDEX_OOB_MSG);
+    R(a) = XR_FROM_INT(result.value);
     vmbreak;
 }
 
@@ -79,13 +82,14 @@ vmcase(OP_ENUM_PAYLOAD_AT) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    uint64_t view = (uint64_t) XR_TO_INT(R(b));
-    uint32_t ordinal = (uint32_t) view;
-    uint32_t count = (uint32_t) (view >> 32);
-    int64_t index = XR_TO_INT(R(c));
-    if (index < 0 || (uint64_t) index >= count)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum payload field index out of bounds");
-    R(a) = XR_FROM_INT((int64_t) (((uint64_t) ordinal << 32) | (uint32_t) index));
+    XrEnumMetadataResult result = XR_ENUM_METADATA_ACCESS_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO, XR_SEM_CONSUMER_VM,
+        xr_enum_metadata_payload_at_core((uint64_t) XR_TO_INT(R(b)), XR_TO_INT(R(c))));
+    if (result.status != XR_ENUM_METADATA_OK)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                         XR_ERROR_CORE_ENUM_PAYLOAD_INDEX_OOB_MSG);
+    R(a) = XR_FROM_INT(result.value);
     vmbreak;
 }
 

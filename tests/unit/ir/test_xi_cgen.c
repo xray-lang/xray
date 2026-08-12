@@ -7957,6 +7957,55 @@ TEST(cgen_raw_memory_copy_owner_registry_is_stable) {
 
 }
 
+TEST(cgen_enum_metadata_access_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+               XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO, XR_SEM_CONSUMER_CGEN) &&
+           "enum-metadata owner must publish CGen as a mechanical consumer");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO);
+    assert(adapter != NULL && strcmp(adapter, "xrt_enum_metadata_access") == 0 &&
+           "CGen must resolve the stable enum-metadata owner adapter");
+
+    XrType int_type = {
+        .kind = XR_KIND_INT, .id = 1311, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_enum_metadata_access", &int_type);
+    TEST_REQUIRE(ir != NULL, "manual enum metadata owner fixture allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual enum metadata owner entry allocated");
+    entry->sealed = true;
+    XiValue *variant_count = xi_const_int(ir, entry, 3, &int_type);
+    XiValue *variant_index = xi_const_int(ir, entry, 1, &int_type);
+    XiValue *variant = xi_value_new(ir, entry, XI_ENUM_VARIANT_AT, &int_type, 2);
+    XiValue *payload_view = xi_const_int(
+        ir, entry, (int64_t) ((UINT64_C(2) << 32) | UINT64_C(9)), &int_type);
+    XiValue *payload_index = xi_const_int(ir, entry, 1, &int_type);
+    XiValue *payload = xi_value_new(ir, entry, XI_ENUM_PAYLOAD_AT, &int_type, 2);
+    TEST_REQUIRE(variant_count && variant_index && variant && payload_view && payload_index &&
+                     payload,
+                 "manual enum metadata owner values allocated");
+    variant->args[0] = variant_count;
+    variant->args[1] = variant_index;
+    payload->args[0] = payload_view;
+    payload->args[1] = payload_index;
+    xi_block_set_return(entry, payload);
+    TEST_REQUIRE(test_prepare_backend_ir(ir), "enum metadata owner fixture reached Backend");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "enum metadata owner fixture generated C");
+    TEST_REQUIRE(contains(code, "xrt_enum_metadata_access_variant_at(") &&
+                     contains(code, "xrt_enum_metadata_access_payload_at("),
+                 "both enum metadata operations call the stable owner adapter");
+    TEST_REQUIRE(!contains(code, "({ int64_t _n =") &&
+                     !contains(code, "({ uint64_t _p =") &&
+                     !contains(code, "enum variant index out of bounds") &&
+                     !contains(code, "enum payload field index out of bounds"),
+                 "generated C does not recreate enum metadata semantics");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
     const char *src = "fn forceUtf8(data: Array<byte>) -> string {\n"
                       "    return string.fromUtf8(data[:])!\n"
@@ -13229,6 +13278,7 @@ int main(void) {
     run_cgen_pod_slice_copy_compare_use_stable_owner_adapters();
     run_cgen_pod_slice_view_uses_stable_owner_adapter();
     run_cgen_raw_memory_copy_owner_registry_is_stable();
+    run_cgen_enum_metadata_access_uses_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();

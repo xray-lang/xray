@@ -37,6 +37,7 @@
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
 #include "../shared/xr_numeric_core.h"
+#include "../shared/xr_enum_metadata_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
@@ -4728,6 +4729,25 @@ static const char *cg_raw_scalar_access_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: raw-scalar-access owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_enum_metadata_access_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(
+            XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+            XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO, XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: enum-metadata-access owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: enum-metadata-access owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }

@@ -53,6 +53,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_pod_slice_core.h"
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_error_messages.h"
+#include "../shared/xr_enum_metadata_core.h"
 #include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
@@ -935,6 +936,26 @@ static inline XRT_COLD XRT_NORETURN void xrt_freestanding_trap(const char *messa
 static inline XRT_COLD XRT_NORETURN void xrt_throw_error(int code, const char *message) {
     (void) code;
     xrt_freestanding_trap(message && message[0] ? message : "freestanding runtime error");
+}
+
+static inline int64_t xrt_enum_metadata_access_variant_at(int64_t count, int64_t index) {
+    XrEnumMetadataResult result = XR_ENUM_METADATA_ACCESS_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,
+        xr_enum_metadata_variant_at_core(count, index));
+    if (result.status != XR_ENUM_METADATA_OK)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_ENUM_VARIANT_INDEX_OOB_MSG);
+    return result.value;
+}
+
+static inline int64_t xrt_enum_metadata_access_payload_at(uint64_t view, int64_t index) {
+    XrEnumMetadataResult result = XR_ENUM_METADATA_ACCESS_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,
+        xr_enum_metadata_payload_at_core(view, index));
+    if (result.status != XR_ENUM_METADATA_OK)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_ENUM_PAYLOAD_INDEX_OOB_MSG);
+    return result.value;
 }
 
 static inline int64_t xrt_numeric_float_to_int_or_throw(double source, uint8_t target_rep,

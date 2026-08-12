@@ -13186,14 +13186,19 @@ static void xicgen_enum_variant_at(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) f;
     (void) prefix;
     XR_DCHECK(v && v->nargs >= 2, "xicgen_enum_variant_at: missing operands");
+    const char *owner_adapter = cg_enum_metadata_access_adapter_name(ctx);
+    if (!owner_adapter || ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
     const char *suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "({ int64_t _n = ");
+    fprintf(out, "%s_variant_at(", owner_adapter);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, "; int64_t _i = ");
+    fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    fprintf(out, "; if (_i < 0 || _i >= _n) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                 "\"enum variant index out of bounds\"); _i; })");
+    fprintf(out, ")");
     emit_conversion_suffix(out, suffix);
 }
 
@@ -13202,16 +13207,19 @@ static void xicgen_enum_payload_at(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) f;
     (void) prefix;
     XR_DCHECK(v && v->nargs >= 2, "xicgen_enum_payload_at: missing operands");
+    const char *owner_adapter = cg_enum_metadata_access_adapter_name(ctx);
+    if (!owner_adapter || ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
     const char *suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "({ uint64_t _p = (uint64_t)(");
+    fprintf(out, "%s_payload_at((uint64_t)(", owner_adapter);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, "); int64_t _i = ");
+    fprintf(out, "), ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    fprintf(out, "; uint32_t _n = (uint32_t)(_p >> 32); if (_i < 0 || (uint64_t)_i >= _n) "
-                 "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                 "\"enum payload field index out of bounds\"); "
-                 "(int64_t)(((uint64_t)(uint32_t)_p << 32) | (uint32_t)_i); })");
+    fprintf(out, ")");
     emit_conversion_suffix(out, suffix);
 }
 

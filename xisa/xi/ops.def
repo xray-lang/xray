@@ -2667,8 +2667,6 @@
     xi.weak.store.field
     xi.index.get
     xi.index.set
-    xi.enum.variant.at
-    xi.enum.payload.at
     xi.enum.meta.get
     xi.slice.window
     xi.slice.from.ptr
@@ -2781,6 +2779,8 @@
 
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
+    xi.enum.variant.at
+    xi.enum.payload.at
     xi.ptr.load
     xi.ptr.store
     xi.range
@@ -3290,6 +3290,28 @@
     (aot-hosted "src/aot/xrt.h" "xrt_raw_scalar_access_load_i64")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_raw_scalar_access_load_i64")
     (cgen "src/aot/xi_cgen.c" "cg_raw_scalar_access_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.enum-metadata-access
+  :category shared-semantic-kernel
+  :operations (
+    xi.enum.variant.at
+    xi.enum.payload.at
+  )
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_enum_metadata_access
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_enum.inc.c" "XR_ENUM_METADATA_ACCESS_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt_coll.h" "xrt_enum_metadata_access_variant_at")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_enum_metadata_access_variant_at")
+    (cgen "src/aot/xi_cgen.c" "cg_enum_metadata_access_adapter_name")
   ))
 
 (define-xi-observable-owner primitive.type-identity

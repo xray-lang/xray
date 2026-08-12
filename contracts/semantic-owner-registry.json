@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "265826078eb4b6fba08669f2bdfef9a0b342eded3ff31083dc25613422469c47",
+  "canonical_fingerprint": "ae890992429e418c97448921bc8649a56b068a1f3c609c96b32a0f5a2eb762bd",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -497,6 +497,53 @@
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
           "symbol": "cg_byte_slice_scalar_adapter_name"
+        }
+      ]
+    },
+    {
+      "owner": "shared.enum-metadata-access",
+      "owner_id": "91816487d9c027457588962d27c68c29",
+      "owner_id_hi": "0x91816487d9c02745",
+      "owner_id_lo": "0x7588962d27c68c29",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.enum.variant.at",
+        "xi.enum.payload.at"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
+      ],
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_enum_metadata_access",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_enum.inc.c",
+          "symbol": "XR_ENUM_METADATA_ACCESS_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_coll.h",
+          "symbol": "xrt_enum_metadata_access_variant_at"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_enum_metadata_access_variant_at"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_enum_metadata_access_adapter_name"
         }
       ]
     },
@@ -2256,50 +2303,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.enum.meta.get"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.enum.payload.at",
-      "owner_id": "f50fe11f2cac45f65f60d3797bbd553c",
-      "owner_id_hi": "0xf50fe11f2cac45f6",
-      "owner_id_lo": "0x5f60d3797bbd553c",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.enum.payload.at"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.enum.variant.at",
-      "owner_id": "dc8b10f42eb8f4df0b1bedb86cc09ff1",
-      "owner_id_hi": "0xdc8b10f42eb8f4df",
-      "owner_id_lo": "0x0b1bedb86cc09ff1",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.enum.variant.at"
       ],
       "consumers": [
         "semantic-plan"
@@ -6925,21 +6928,45 @@
       "operation_id": "dc8b10f42eb8f4df0b1bedb86cc09ff1",
       "operation_id_hi": "0xdc8b10f42eb8f4df",
       "operation_id_lo": "0x0b1bedb86cc09ff1",
-      "owner": "xi.enum.variant.at",
-      "owner_id": "dc8b10f42eb8f4df0b1bedb86cc09ff1",
-      "owner_id_hi": "0xdc8b10f42eb8f4df",
-      "owner_id_lo": "0x0b1bedb86cc09ff1",
-      "category": "declarative-primitive",
+      "owner": "shared.enum-metadata-access",
+      "owner_id": "91816487d9c027457588962d27c68c29",
+      "owner_id_hi": "0x91816487d9c02745",
+      "owner_id_lo": "0x7588962d27c68c29",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_enum_metadata_access",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_enum.inc.c",
+          "symbol": "XR_ENUM_METADATA_ACCESS_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_coll.h",
+          "symbol": "xrt_enum_metadata_access_variant_at"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_enum_metadata_access_variant_at"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_enum_metadata_access_adapter_name"
         }
       ]
     },
@@ -6948,21 +6975,45 @@
       "operation_id": "f50fe11f2cac45f65f60d3797bbd553c",
       "operation_id_hi": "0xf50fe11f2cac45f6",
       "operation_id_lo": "0x5f60d3797bbd553c",
-      "owner": "xi.enum.payload.at",
-      "owner_id": "f50fe11f2cac45f65f60d3797bbd553c",
-      "owner_id_hi": "0xf50fe11f2cac45f6",
-      "owner_id_lo": "0x5f60d3797bbd553c",
-      "category": "declarative-primitive",
+      "owner": "shared.enum-metadata-access",
+      "owner_id": "91816487d9c027457588962d27c68c29",
+      "owner_id_hi": "0x91816487d9c02745",
+      "owner_id_lo": "0x7588962d27c68c29",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_enum_metadata_access",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_enum.inc.c",
+          "symbol": "XR_ENUM_METADATA_ACCESS_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_coll.h",
+          "symbol": "xrt_enum_metadata_access_variant_at"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_enum_metadata_access_variant_at"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_enum_metadata_access_adapter_name"
         }
       ]
     },

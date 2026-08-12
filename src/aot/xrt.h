@@ -39,6 +39,7 @@
 #include "../shared/xr_raw_memory_core.h"  // L0: unsafe non-overlapping memory copy
 #include "../shared/xr_bits_core.h"        // L0: exact-width compiler bit intrinsics
 #include "../shared/xr_range_core.h"       // L0: canonical Range semantics
+#include "../shared/xr_enum_metadata_core.h" // L0: checked enum metadata views
 #include "../shared/xr_numeric_core.h"     // L0: canonical numeric negation
 #include "../shared/xr_numeric_conversion_core.h"  // L0: deterministic scalar narrowing
 #define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
