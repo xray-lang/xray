@@ -103,19 +103,19 @@ TEST(map_getk_missing_key_throws_e0431) {
     ASSERT_NOT_NULL(map);
     xr_map_set(map, xr_string_value(present), xr_int(7));
 
-    XrProto *proto = xr_vm_proto_new();
+    XrProto *proto = xr_instruction_unit_new();
     ASSERT_NOT_NULL(proto);
     proto->source_file = "<test-op-map-getk-missing-key>";
     proto->maxstacksize = 4;
 
-    int map_k = xr_vm_proto_add_constant(proto, XR_FROM_PTR(map));
-    int missing_k = xr_vm_proto_add_constant(proto, xr_string_value(missing));
+    int map_k = xr_instruction_unit_add_constant(proto, XR_FROM_PTR(map));
+    int missing_k = xr_instruction_unit_add_constant(proto, xr_string_value(missing));
     ASSERT_EQ_INT(map_k, 0);
     ASSERT_EQ_INT(missing_k, 1);
 
-    xr_vm_proto_write(proto, CREATE_ABx(OP_LOADK, 0, (uint32_t) map_k), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_MAP_GETK, 1, 0, (uint32_t) missing_k), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN1, 1, 0, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_LOADK, 0, (uint32_t) map_k), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_MAP_GETK, 1, 0, (uint32_t) missing_k), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN1, 1, 0, 0), 1);
 
     XrVMResult result = xr_vm_interpret_proto(iso, proto);
     ASSERT_EQ_INT(result, XR_VM_RUNTIME_ERROR);

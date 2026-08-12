@@ -63,7 +63,7 @@ static XrClass *make_dynamic_root(uint16_t capacity) {
 }
 
 static XrProto *make_proto_with_upvalues(int count) {
-    XrProto *proto = xr_vm_proto_new();
+    XrProto *proto = xr_instruction_unit_new();
     if (!proto)
         return NULL;
     for (int i = 0; i < count; i++) {

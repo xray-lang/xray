@@ -322,7 +322,7 @@ typedef struct XrProto {
 
     struct XrType *return_type_info;  // full return type (NULL = void/any)
 
-    // Parent proto: set by xr_vm_proto_add_proto when this proto is added as a
+    // Parent proto: set by xr_instruction_unit_add_child when this proto is added as a
     // child. Used to walk up to the module root and build the shared_protos
     // mapping for CALL_KNOWN optimization.
     struct XrProto *enclosing;
@@ -357,15 +357,15 @@ typedef struct XrProto {
 #define PROTO_LOCVAR_COUNT(p) DYNARRAY_COUNT(&(p)->locvars)
 
 // XrProto Operations
-XR_FUNC XrProto *xr_vm_proto_new(void);
+XR_FUNC XrProto *xr_instruction_unit_new(void);
 XR_FUNC void xr_instruction_unit_free(XrProto *proto);
-XR_FUNC void xr_vm_proto_set_ir_free_fn(XrProtoOpaqueFreeFn free_fn);
+XR_FUNC void xr_instruction_unit_set_ir_free_fn(XrProtoOpaqueFreeFn free_fn);
 
 // Bytecode Operations
-XR_FUNC void xr_vm_proto_write(XrProto *proto, XrInstruction inst, int line);
-XR_FUNC int xr_vm_proto_add_constant(XrProto *proto, XrValue value);
-XR_FUNC int xr_vm_proto_add_proto(XrProto *proto, XrProto *child);
-XR_FUNC int xr_vm_proto_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode,
+XR_FUNC void xr_instruction_unit_write(XrProto *proto, XrInstruction inst, int line);
+XR_FUNC int xr_instruction_unit_add_constant(XrProto *proto, XrValue value);
+XR_FUNC int xr_instruction_unit_add_child(XrProto *proto, XrProto *child);
+XR_FUNC int xr_instruction_unit_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode,
                                     uint8_t is_const, uint8_t slot_type, uint8_t source,
                                     uint8_t capture_action, struct XrType *type_info);
 XR_FUNC bool xr_vm_entry_plan_derive(XrProto *root);

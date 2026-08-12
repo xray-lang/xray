@@ -39,13 +39,13 @@
 /* Create a proto holding `n_insts` dummy instructions so the IC table
  * sized to PROTO_CODE_COUNT(proto) lines up with the assertions in
  * the production VM dispatch code. The instruction encoding does not
- * matter; xr_vm_proto_write just appends to the dynarray. */
+ * matter; xr_instruction_unit_write just appends to the dynarray. */
 static XrProto *make_proto_with_insts(int n_insts) {
-    XrProto *p = xr_vm_proto_new();
+    XrProto *p = xr_instruction_unit_new();
     if (!p)
         return NULL;
     for (int i = 0; i < n_insts; i++) {
-        xr_vm_proto_write(p, (XrInstruction) 0, 1);
+        xr_instruction_unit_write(p, (XrInstruction) 0, 1);
     }
     return p;
 }

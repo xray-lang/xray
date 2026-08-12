@@ -47,7 +47,7 @@ XR_FUNC int current_pc(EmitCtx *ctx) {
 }
 
 XR_FUNC void emit_inst(EmitCtx *ctx, XrInstruction inst) {
-    xr_vm_proto_write(ctx->proto, inst, ctx->current_line);
+    xr_instruction_unit_write(ctx->proto, inst, ctx->current_line);
 }
 
 XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const XrAggregateLayout *layout,
@@ -324,7 +324,7 @@ XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid) {
 /* Add constant to pool, return index. */
 XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val) {
     XrValue xv = xr_make_int_val(val, XR_TAG_I64);
-    int idx = xr_vm_proto_add_constant(ctx->proto, xv);
+    int idx = xr_instruction_unit_add_constant(ctx->proto, xv);
     if (idx < 0 || (uint64_t) idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
     }
@@ -333,7 +333,7 @@ XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val) {
 
 XR_FUNC int add_const_float(EmitCtx *ctx, double val) {
     XrValue xv = xr_make_float_val(val, XR_TAG_F64);
-    int idx = xr_vm_proto_add_constant(ctx->proto, xv);
+    int idx = xr_instruction_unit_add_constant(ctx->proto, xv);
     if (idx < 0 || (uint64_t) idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
     }
@@ -342,7 +342,7 @@ XR_FUNC int add_const_float(EmitCtx *ctx, double val) {
 
 XR_FUNC int add_const_char(EmitCtx *ctx, uint32_t cp) {
     XrValue xv = xr_rune(cp);
-    int idx = xr_vm_proto_add_constant(ctx->proto, xv);
+    int idx = xr_instruction_unit_add_constant(ctx->proto, xv);
     if (idx < 0 || (uint64_t) idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
     }
@@ -365,7 +365,7 @@ XR_FUNC int add_const_string_n(EmitCtx *ctx, const char *str, size_t len) {
          * instruction sequences, not constant pool values. */
         xv = xr_null();
     }
-    int idx = xr_vm_proto_add_constant(ctx->proto, xv);
+    int idx = xr_instruction_unit_add_constant(ctx->proto, xv);
     if (idx < 0 || (uint64_t) idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
     }
@@ -508,7 +508,7 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
                 if (core)
                     bi->klass = core->bigintClass;
                 XrValue xv = XR_FROM_PTR(bi);
-                int ki = xr_vm_proto_add_constant(ctx->proto, xv);
+                int ki = xr_instruction_unit_add_constant(ctx->proto, xv);
                 if (ki < 0 || (uint64_t) ki > MAXARG_Bx) {
                     emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
                     return;
@@ -526,7 +526,7 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
                             : v->aux;
             if (ptr) {
                 XrValue xv = XR_FROM_PTR(ptr);
-                int ki = xr_vm_proto_add_constant(ctx->proto, xv);
+                int ki = xr_instruction_unit_add_constant(ctx->proto, xv);
                 if (ki < 0 || (uint64_t) ki > MAXARG_Bx) {
                     emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
                     return;
@@ -803,7 +803,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;
     }
-    ctx.proto = xr_vm_proto_new();
+    ctx.proto = xr_instruction_unit_new();
     if (!ctx.proto) {
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;

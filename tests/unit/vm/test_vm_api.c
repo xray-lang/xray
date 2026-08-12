@@ -170,7 +170,7 @@ TEST(vm_bind_proto_shared_slots_is_vm_owned) {
     ASSERT_NOT_NULL(iso1);
     ASSERT_NOT_NULL(iso2);
 
-    XrProto *proto = xr_vm_proto_new();
+    XrProto *proto = xr_instruction_unit_new();
     ASSERT_NOT_NULL(proto);
     proto->shared_count = 2;
 

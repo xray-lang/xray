@@ -39,7 +39,7 @@ static void free_xi_func_opaque(void *ptr) {
 static xr_once_t compiler_proto_hooks_once = XR_ONCE_INITIALIZER;
 
 static void init_compiler_proto_hooks(void) {
-    xr_vm_proto_set_ir_free_fn(free_xi_func_opaque);
+    xr_instruction_unit_set_ir_free_fn(free_xi_func_opaque);
 }
 
 static void ensure_compiler_proto_hooks(void) {

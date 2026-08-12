@@ -1129,7 +1129,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         } else {
             uv_index = cap->index;
         }
-        xr_vm_proto_add_upvalue(child_proto, uv_index, 0, 0, 0, cap->source,
+        xr_instruction_unit_add_upvalue(child_proto, uv_index, 0, 0, 0, cap->source,
                                 (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
     }
 
@@ -1137,7 +1137,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
      * xi_emit_attach_ir then validates and commits the whole tree atomically,
      * so a SemanticPlanned graph can make one whole-tree Repped transition. */
 
-    int proto_idx = xr_vm_proto_add_proto(ctx->proto, child_proto);
+    int proto_idx = xr_instruction_unit_add_child(ctx->proto, child_proto);
     emit_inst(ctx, CREATE_ABx(OP_CLOSURE, dst, proto_idx));
 }
 
@@ -1536,11 +1536,11 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
         } else {
             uv_idx = cap->index;
         }
-        xr_vm_proto_add_upvalue(child_proto, uv_idx, 0, 0, 0, cap->source,
+        xr_instruction_unit_add_upvalue(child_proto, uv_idx, 0, 0, 0, cap->source,
                                 (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
     }
 
-    return xr_vm_proto_add_proto(ctx->proto, child_proto);
+    return xr_instruction_unit_add_child(ctx->proto, child_proto);
 }
 
 static uint32_t emit_decl_derive_flags(XrAttribute **attrs, int count) {
@@ -1688,7 +1688,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
 
     /* Add descriptor to constant pool and emit bytecode */
     XrValue desc_val = XR_FROM_PTR(desc);
-    int desc_idx = xr_vm_proto_add_constant(ctx->proto, desc_val);
+    int desc_idx = xr_instruction_unit_add_constant(ctx->proto, desc_val);
     if (desc_idx < 0 || (uint64_t) desc_idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
         return;

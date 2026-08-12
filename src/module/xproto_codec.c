@@ -1910,7 +1910,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     }
     // Allocate Proto through the canonical constructor so runtime metadata
     // such as proto_id stays unique for inline-cache indexing.
-    XrProto *proto = xr_vm_proto_new();
+    XrProto *proto = xr_instruction_unit_new();
     if (!proto) {
         r->error = XR_BC_ERR_ALLOC;
         return NULL;
@@ -2088,7 +2088,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
         XrProto *sub = bc_read_proto_depth(r, depth + 1);
         if (!sub)
             goto fail;
-        xr_vm_proto_add_proto(proto, sub);
+        xr_instruction_unit_add_child(proto, sub);
     }
 
     // 9. Per-function symbol table

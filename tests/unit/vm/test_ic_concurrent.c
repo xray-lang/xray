@@ -125,10 +125,10 @@ static void *ic_stress_worker(void *raw) {
 }
 
 TEST(ic_concurrent_workers_stay_isolated) {
-    XrProto *shared = xr_vm_proto_new();
+    XrProto *shared = xr_instruction_unit_new();
     ASSERT_NOT_NULL(shared);
     for (int i = 0; i < IC_STRESS_PROTO_INSTS; i++) {
-        xr_vm_proto_write(shared, (XrInstruction) 0, 1);
+        xr_instruction_unit_write(shared, (XrInstruction) 0, 1);
     }
 
     xr_thread_t threads[IC_STRESS_THREADS];
@@ -154,7 +154,7 @@ TEST(ic_concurrent_workers_stay_isolated) {
 }
 
 /* A second case targets the proto_id allocation hot path: every
- * thread spins through xr_vm_proto_new / xr_instruction_unit_free creating
+ * thread spins through xr_instruction_unit_new / xr_instruction_unit_free creating
  * fresh protos. The atomic counter underneath proto_id must hand
  * each thread a unique id, so collisions show up as duplicates in
  * the merged set.
@@ -172,7 +172,7 @@ typedef struct {
 static void *proto_id_alloc_worker(void *raw) {
     IdRecord *rec = (IdRecord *) raw;
     for (int i = 0; i < IC_PROTO_ID_PER_THREAD; i++) {
-        XrProto *p = xr_vm_proto_new();
+        XrProto *p = xr_instruction_unit_new();
         rec->ids[i] = p ? p->proto_id : 0u;
         xr_instruction_unit_free(p);
     }

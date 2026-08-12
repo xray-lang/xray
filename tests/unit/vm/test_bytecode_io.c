@@ -159,14 +159,14 @@ static bool find_nested_key_offset(const uint8_t *bytes, size_t size, size_t *ou
 }
 
 static XrProto *make_minimal_proto(void) {
-    XrProto *proto = xr_vm_proto_new();
+    XrProto *proto = xr_instruction_unit_new();
     if (!proto)
         return NULL;
     /* XrProto owns source_file (freed in xr_instruction_unit_free), so it must be
      * heap-allocated — never a string literal. */
     proto->source_file = xr_strdup("<bytecode-io-test>");
     proto->maxstacksize = 1;
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 0, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 0, 0), 1);
     return proto;
 }
 
@@ -212,9 +212,9 @@ TEST(bytecode_roundtrips_reachable_entry_plan) {
     ASSERT_NOT_NULL(child);
     child->code.count = 0;
     child->lineinfo.count = 0;
-    xr_vm_proto_write(child, CREATE_ABC(OP_GO, 0, 0, 0), 1);
-    xr_vm_proto_write(child, CREATE_ABC(OP_RETURN, 0, 0, 0), 1);
-    ASSERT_EQ_INT(xr_vm_proto_add_proto(root, child), 0);
+    xr_instruction_unit_write(child, CREATE_ABC(OP_GO, 0, 0, 0), 1);
+    xr_instruction_unit_write(child, CREATE_ABC(OP_RETURN, 0, 0, 0), 1);
+    ASSERT_EQ_INT(xr_instruction_unit_add_child(root, child), 0);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(iso, root, 0, &size, NULL);
@@ -405,7 +405,7 @@ TEST(bytecode_reader_assigns_unique_proto_ids) {
 
     XrProto *child = make_minimal_proto();
     ASSERT_NOT_NULL(child);
-    ASSERT_EQ_INT(xr_vm_proto_add_proto(proto, child), 0);
+    ASSERT_EQ_INT(xr_instruction_unit_add_child(proto, child), 0);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
@@ -481,8 +481,8 @@ TEST(bytecode_roundtrips_exact_structural_shape_across_isolates) {
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     proto->maxstacksize = 1;
-    xr_vm_proto_write(proto, CREATE_ABC(OP_NEWOBJECT, 0, kidx, 0), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_NEWOBJECT, 0, kidx, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
@@ -565,8 +565,8 @@ TEST(bytecode_roundtrips_typed_object_decode_shape) {
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     proto->maxstacksize = 2;
-    xr_vm_proto_write(proto, CREATE_ABC(OP_JSON_DECODE, 0, 1, kidx), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_JSON_DECODE, 0, 1, kidx), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
@@ -648,8 +648,8 @@ TEST(bytecode_roundtrips_typed_json_root_schema) {
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     proto->maxstacksize = 2;
-    xr_vm_proto_write(proto, CREATE_ABC(OP_JSON_DECODE, 0, 1, kidx), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_JSON_DECODE, 0, 1, kidx), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
@@ -712,8 +712,8 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     proto->maxstacksize = 1;
-    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, kidx), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, kidx), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
@@ -836,11 +836,11 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_distinct)), 3);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
-    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
-    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 1), 1);
-    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 2), 1);
-    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 3), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 1), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 2), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 3), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size_a = 0;
     size_t size_b = 0;
@@ -914,8 +914,8 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc)), 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
-    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
@@ -970,8 +970,8 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&nested_desc)), 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
-    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
     bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
     size_t nested_key_offset = 0;
@@ -1002,8 +1002,8 @@ TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth) {
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc)), 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
-    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
     size_t size = 0;
     XrBcError error = XR_BC_OK;
     ASSERT_NULL(xr_bytecode_write(iso, proto, 0, &size, &error));
@@ -1026,8 +1026,8 @@ TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth) {
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc)), 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
-    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
     ASSERT_NULL(xr_bytecode_write(iso, proto, 0, &size, &error));
     ASSERT_EQ_INT(error, XR_BC_ERR_METADATA);
 
@@ -1095,8 +1095,8 @@ TEST(bytecode_roundtrips_enum_type_constants) {
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     proto->maxstacksize = 1;
-    xr_vm_proto_write(proto, CREATE_ABx(OP_LOADK, 0, kidx), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_LOADK, 0, kidx), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
@@ -1168,8 +1168,8 @@ TEST(bytecode_preserves_native_stdlib_enum_nominal_identity_across_modules) {
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     proto->maxstacksize = 1;
-    xr_vm_proto_write(proto, CREATE_ABx(OP_LOADK, 0, kidx), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_LOADK, 0, kidx), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
     XrBcError error = XR_BC_OK;
@@ -1218,7 +1218,7 @@ TEST(bytecode_roundtrips_u16_upvalue_index) {
 
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-    ASSERT_EQ_INT(xr_vm_proto_add_upvalue(proto, 300, 0, 1, 0, UPVAL_SRC_REG,
+    ASSERT_EQ_INT(xr_instruction_unit_add_upvalue(proto, 300, 0, 1, 0, UPVAL_SRC_REG,
                                           XR_TRANSFER_EXPLICIT_COPY, NULL),
                   0);
 
@@ -1274,7 +1274,7 @@ TEST(bytecode_roundtrips_symbol_index_above_255) {
     XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *proto = xr_vm_proto_new();
+    XrProto *proto = xr_instruction_unit_new();
     ASSERT_NOT_NULL(proto);
     /* XrProto owns source_file (freed in xr_instruction_unit_free); use a heap copy. */
     proto->source_file = xr_strdup("<bytecode-symbol-test>");
@@ -1294,8 +1294,8 @@ TEST(bytecode_roundtrips_symbol_index_above_255) {
     }
     ASSERT_EQ_INT(local_idx, 300);
     ASSERT_EQ_INT(PROTO_SYMBOL_COUNT(proto), 301);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_GETPROP, 1, 0, local_idx), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 1, 2, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_GETPROP, 1, 0, local_idx), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 1, 2, 0), 1);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);

@@ -85,7 +85,7 @@ int xr_valuearray_add(ValueArray *array, XrValue value) {
 // ========== XrProto Operations ==========
 
 // Create new function prototype
-XrProto *xr_vm_proto_new(void) {
+XrProto *xr_instruction_unit_new(void) {
     XrProto *proto = (XrProto *) xr_calloc(1, sizeof(XrProto));
     if (proto == NULL) {
         return NULL;
@@ -107,7 +107,7 @@ XrProto *xr_vm_proto_new(void) {
     return proto;
 }
 
-void xr_vm_proto_set_ir_free_fn(XrProtoOpaqueFreeFn free_fn) {
+void xr_instruction_unit_set_ir_free_fn(XrProtoOpaqueFreeFn free_fn) {
     s_ir_free_fn = free_fn;
 }
 
@@ -222,7 +222,7 @@ int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
 }
 
 // Write one instruction
-void xr_vm_proto_write(XrProto *proto, XrInstruction inst, int line) {
+void xr_instruction_unit_write(XrProto *proto, XrInstruction inst, int line) {
     XR_DCHECK(proto != NULL, "proto_write: NULL proto");
     XR_DCHECK(line >= 0, "proto_write: negative line number");
     // Add instruction
@@ -234,14 +234,14 @@ void xr_vm_proto_write(XrProto *proto, XrInstruction inst, int line) {
 
 // Add constant to constant pool
 // Returns constant index
-int xr_vm_proto_add_constant(XrProto *proto, XrValue value) {
+int xr_instruction_unit_add_constant(XrProto *proto, XrValue value) {
     XR_DCHECK(proto != NULL, "proto_add_constant: NULL proto");
     return xr_valuearray_add(&proto->constants, value);
 }
 
 // Add nested function prototype
 // Returns prototype index
-int xr_vm_proto_add_proto(XrProto *proto, XrProto *child) {
+int xr_instruction_unit_add_child(XrProto *proto, XrProto *child) {
     XR_DCHECK(proto != NULL, "proto_add_proto: NULL proto");
     XR_DCHECK(child != NULL, "proto_add_proto: NULL child");
     child->enclosing = proto;
@@ -250,7 +250,7 @@ int xr_vm_proto_add_proto(XrProto *proto, XrProto *child) {
 
 // Add upvalue info
 // Returns upvalue index
-int xr_vm_proto_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode, uint8_t is_const,
+int xr_instruction_unit_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode, uint8_t is_const,
                             uint8_t slot_type, uint8_t source, uint8_t capture_action,
                             struct XrType *type_info) {
     XR_DCHECK(proto != NULL, "proto_add_upvalue: NULL proto");

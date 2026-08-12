@@ -30,20 +30,20 @@ static XrVMRuntime *new_test_isolate(void) {
 }
 
 static XrProto *make_zero_comparator_proto(void) {
-    XrProto *proto = xr_vm_proto_new();
+    XrProto *proto = xr_instruction_unit_new();
     if (!proto)
         return NULL;
     proto->source_file = xr_strdup("<ffi-callback-test>");
     proto->numparams = 2;
     proto->min_params = 2;
     proto->maxstacksize = 3;
-    xr_vm_proto_write(proto, CREATE_AsBx(OP_LOADI, 2, 0), 1);
-    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN1, 2, 0, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_AsBx(OP_LOADI, 2, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN1, 2, 0, 0), 1);
     return proto;
 }
 
 static XrProto *make_bsearch_proto(void) {
-    XrProto *proto = xr_vm_proto_new();
+    XrProto *proto = xr_instruction_unit_new();
     if (!proto)
         return NULL;
     proto->source_file = xr_strdup("<ffi-bsearch>");
