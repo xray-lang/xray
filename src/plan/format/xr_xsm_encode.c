@@ -169,7 +169,7 @@ static void encode_operations(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u32(writer, record->metadata_begin);
         xr_xsm_put_u16(writer, record->metadata_count);
         xr_xsm_put_u8(writer, record->auxiliary_kind);
-        xr_xsm_put_u8(writer, 0);
+        xr_xsm_put_u8(writer, record->import_resolution);
         xr_xsm_put_u32(writer, record->effects);
         xr_xsm_put_u32(writer, record->source_line);
         xr_xsm_put_string(writer, record->source_file);

@@ -961,6 +961,11 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
             operation->opcode == XI_CLOSURE_NEW ||
             (operation->opcode == XI_STACK_ALLOC &&
              operation->semantic_immediate == XI_CLOSURE_NEW);
+        bool import_ref = operation->opcode == XI_IMPORT_REF;
+        bool import_resolution_valid =
+            operation->import_resolution < XR_SEM_IMPORT_RESOLUTION_COUNT &&
+            (import_ref ? operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE
+                        : operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE);
         if (!verify_id(operation->canonical_key, operation->id) || !function ||
             operation->block >= plan->block_count ||
             plan->blocks[operation->block].function != operation->function ||
@@ -975,7 +980,7 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
             (explicit_call &&
              (operation->operand_count == 0 || operation->operand_count > INT16_MAX + 1u)) ||
             (operation->opcode == XI_CALL_BUILTIN && operation->operand_count > INT16_MAX) ||
-            operation->effects != contract->effects ||
+            !import_resolution_valid || operation->effects != contract->effects ||
             operation->ownership_use != contract->ownership_use ||
             operation->result_ownership >= XR_SEM_RESULT_OWNERSHIP_COUNT ||
             (contract->result_ownership == XR_SEM_RESULT_OWNERSHIP_NONE &&
@@ -998,6 +1003,22 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
              (operation->callable_function >= plan->function_count ||
               plan->functions[operation->callable_function].parent != operation->function))) {
             return report(error, error_size, "XR_SEM_0015", "operation record is invalid");
+        }
+        if (import_ref) {
+            if (operation->metadata_count != 2 ||
+                operation->metadata_begin > plan->metadata_count ||
+                operation->metadata_count >
+                    plan->metadata_count - operation->metadata_begin) {
+                return report(error, error_size, "XR_SEM_0019",
+                              "import resolution has incomplete metadata");
+            }
+            const char *module = plan->metadata[operation->metadata_begin];
+            if (operation->import_resolution ==
+                    XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB &&
+                !xr_stdlib_metadata_module_known(module)) {
+                return report(error, error_size, "XR_SEM_0019",
+                              "native import resolution is not registry grounded");
+            }
         }
         if (!operation_debug_span_valid(plan, i))
             return report(error, error_size, "XR_SEM_0019", "operation debug span is invalid");
@@ -1074,19 +1095,80 @@ static uint32_t resolve_frozen_closure_value(const XrSemanticPlan *plan,
     return XR_SEMANTIC_INDEX_NONE;
 }
 
-static bool find_frozen_shared_store(const XrSemanticPlan *plan, uint32_t owner,
-                                     int64_t slot, uint32_t *store) {
-    *store = XR_SEMANTIC_INDEX_NONE;
+typedef struct XrFrozenSharedStoreRow {
+    uint32_t owner;
+    int64_t slot;
+    uint32_t operation;
+} XrFrozenSharedStoreRow;
+
+typedef struct XrFrozenSharedStoreIndex {
+    XrFrozenSharedStoreRow *rows;
+    uint32_t count;
+} XrFrozenSharedStoreIndex;
+
+static int compare_frozen_shared_store_rows(const void *left_value,
+                                            const void *right_value) {
+    const XrFrozenSharedStoreRow *left =
+        (const XrFrozenSharedStoreRow *) left_value;
+    const XrFrozenSharedStoreRow *right =
+        (const XrFrozenSharedStoreRow *) right_value;
+    if (left->owner != right->owner)
+        return left->owner < right->owner ? -1 : 1;
+    if (left->slot != right->slot)
+        return left->slot < right->slot ? -1 : 1;
+    if (left->operation != right->operation)
+        return left->operation < right->operation ? -1 : 1;
+    return 0;
+}
+
+static bool frozen_shared_store_index_build(const XrSemanticPlan *plan,
+                                            XrFrozenSharedStoreIndex *index) {
+    memset(index, 0, sizeof(*index));
     for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
-        const XrSemanticOperationRecord *candidate = &plan->operations[operation];
-        if (candidate->function != owner || candidate->opcode != XI_SET_SHARED ||
-            candidate->semantic_immediate != slot)
-            continue;
-        if (*store != XR_SEMANTIC_INDEX_NONE)
-            return false;
-        *store = operation;
+        if (plan->operations[operation].opcode == XI_SET_SHARED)
+            index->count++;
     }
+    if (index->count == 0)
+        return true;
+    index->rows = (XrFrozenSharedStoreRow *) xr_malloc(
+        (size_t) index->count * sizeof(*index->rows));
+    if (!index->rows)
+        return false;
+    uint32_t cursor = 0;
+    for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
+        const XrSemanticOperationRecord *record = &plan->operations[operation];
+        if (record->opcode != XI_SET_SHARED)
+            continue;
+        index->rows[cursor++] = (XrFrozenSharedStoreRow) {
+            .owner = record->function,
+            .slot = record->semantic_immediate,
+            .operation = operation,
+        };
+    }
+    qsort(index->rows, index->count, sizeof(*index->rows),
+          compare_frozen_shared_store_rows);
     return true;
+}
+
+static bool find_frozen_shared_store(const XrFrozenSharedStoreIndex *index,
+                                     uint32_t owner, int64_t slot, uint32_t *store) {
+    uint32_t lower = 0;
+    uint32_t upper = index->count;
+    while (lower < upper) {
+        uint32_t middle = lower + (upper - lower) / 2u;
+        const XrFrozenSharedStoreRow *row = &index->rows[middle];
+        if (row->owner < owner || (row->owner == owner && row->slot < slot))
+            lower = middle + 1u;
+        else
+            upper = middle;
+    }
+    *store = XR_SEMANTIC_INDEX_NONE;
+    if (lower == index->count || index->rows[lower].owner != owner ||
+        index->rows[lower].slot != slot)
+        return true;
+    *store = index->rows[lower].operation;
+    return lower + 1u == index->count || index->rows[lower + 1u].owner != owner ||
+           index->rows[lower + 1u].slot != slot;
 }
 
 static bool operation_can_cross_activation_boundary(
@@ -1116,12 +1198,13 @@ static bool root_store_precedes_activation(const XrSemanticPlan *plan, uint32_t 
 static uint32_t resolve_frozen_shared_target(const XrSemanticPlan *plan,
                                              const uint32_t *definitions,
                                              const XrSemanticGraph *graph,
+                                             const XrFrozenSharedStoreIndex *stores,
                                              uint32_t value_count, uint32_t caller,
                                              uint32_t load, int64_t slot) {
     for (uint32_t owner = caller; owner != XR_SEMANTIC_INDEX_NONE;
          owner = plan->functions[owner].parent) {
         uint32_t store;
-        if (!find_frozen_shared_store(plan, owner, slot, &store))
+        if (!find_frozen_shared_store(stores, owner, slot, &store))
             return XR_SEMANTIC_INDEX_NONE;
         if (store == XR_SEMANTIC_INDEX_NONE)
             continue;
@@ -1147,6 +1230,7 @@ static uint32_t resolve_frozen_shared_target(const XrSemanticPlan *plan,
 static uint32_t resolve_frozen_direct_call_target(const XrSemanticPlan *plan,
                                                   const uint32_t *definitions,
                                                   const XrSemanticGraph *graph,
+                                                  const XrFrozenSharedStoreIndex *stores,
                                                   uint32_t value_count,
                                                   uint32_t operation_index) {
     const XrSemanticOperationRecord *call = &plan->operations[operation_index];
@@ -1170,8 +1254,8 @@ static uint32_t resolve_frozen_direct_call_target(const XrSemanticPlan *plan,
         if (closure_binding)
             return producer->callable_function;
         if (producer->opcode == XI_GET_SHARED && producer->semantic_immediate >= 0)
-            return resolve_frozen_shared_target(plan, definitions, graph, value_count,
-                                                call->function, producer_index,
+            return resolve_frozen_shared_target(plan, definitions, graph, stores,
+                                                value_count, call->function, producer_index,
                                                 producer->semantic_immediate);
         if (producer->opcode != XI_COPY ||
             producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
@@ -1206,6 +1290,9 @@ static bool resolve_frozen_native_yieldable_target(const XrSemanticPlan *plan,
             if (producer->metadata_count != 2 ||
                 producer->metadata_begin > plan->metadata_count ||
                 producer->metadata_count > plan->metadata_count - producer->metadata_begin)
+                return false;
+            if (producer->import_resolution !=
+                XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB)
                 return false;
             const char *candidate_module = plan->metadata[producer->metadata_begin];
             const char *candidate_member = plan->metadata[producer->metadata_begin + 1];
@@ -1275,7 +1362,8 @@ static uint32_t resolve_frozen_indirect_callable_type(
 
 static bool resolve_frozen_source_namespace_target(
     const XrSemanticPlan *plan, const uint32_t *definitions, uint32_t value_count,
-    uint32_t operation_index, const char **module_path, const char **selector) {
+    const XrFrozenSharedStoreIndex *stores, uint32_t operation_index,
+    const char **module_path, const char **selector) {
     const XrSemanticOperationRecord *call = &plan->operations[operation_index];
     if (call->opcode != XI_CALL_METHOD || (call->semantic_immediate & 1) != 0 ||
         call->operand_count == 0 || call->metadata_count != 1 ||
@@ -1306,7 +1394,7 @@ static bool resolve_frozen_source_namespace_target(
     for (uint32_t owner = call->function; owner != XR_SEMANTIC_INDEX_NONE;
          owner = plan->functions[owner].parent) {
         uint32_t candidate = XR_SEMANTIC_INDEX_NONE;
-        if (!find_frozen_shared_store(plan, owner, slot, &candidate))
+        if (!find_frozen_shared_store(stores, owner, slot, &candidate))
             return false;
         if (candidate == XR_SEMANTIC_INDEX_NONE)
             continue;
@@ -1329,12 +1417,104 @@ static bool resolve_frozen_source_namespace_target(
             if (producer->metadata_count != 2 ||
                 producer->metadata_begin > plan->metadata_count ||
                 producer->metadata_count > plan->metadata_count - producer->metadata_begin ||
+                producer->import_resolution !=
+                    XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
                 plan->metadata[producer->metadata_begin][0] == '\0' ||
                 plan->metadata[producer->metadata_begin + 1][0] != '\0')
                 return false;
             *module_path = plan->metadata[producer->metadata_begin];
             *selector = plan->metadata[call->metadata_begin];
             return (*selector)[0] != '\0';
+        }
+        if (producer->opcode != XI_COPY ||
+            producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
+            producer->operand_count != 1 || producer->result_alias_operand != 0)
+            return false;
+        value = plan->operands[producer->operand_begin].value;
+    }
+    return false;
+}
+
+static bool resolve_frozen_native_namespace_yieldable_target(
+    const XrSemanticPlan *plan, const uint32_t *definitions,
+    uint32_t value_count, const XrFrozenSharedStoreIndex *stores,
+    uint32_t operation_index, const char **module_path, const char **selector) {
+    const XrSemanticOperationRecord *call = &plan->operations[operation_index];
+    if (call->opcode != XI_CALL_METHOD || (call->semantic_immediate & 1) != 0 ||
+        call->operand_count == 0 || call->metadata_count != 1 ||
+        plan->operands[call->operand_begin].role != XR_SEM_OPERAND_RECEIVER)
+        return false;
+    uint32_t value = plan->operands[call->operand_begin].value;
+    uint32_t load = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
+        if (value >= value_count || definitions[value] >= plan->operation_count)
+            return false;
+        const XrSemanticOperationRecord *producer =
+            &plan->operations[definitions[value]];
+        if (producer->function != call->function)
+            return false;
+        if (producer->opcode == XI_GET_SHARED &&
+            producer->semantic_immediate >= 0) {
+            load = definitions[value];
+            break;
+        }
+        if (producer->opcode != XI_COPY ||
+            producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
+            producer->operand_count != 1 || producer->result_alias_operand != 0)
+            return false;
+        value = plan->operands[producer->operand_begin].value;
+    }
+    if (load == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    int64_t slot = plan->operations[load].semantic_immediate;
+    uint32_t store = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t owner = call->function; owner != XR_SEMANTIC_INDEX_NONE;
+         owner = plan->functions[owner].parent) {
+        uint32_t candidate = XR_SEMANTIC_INDEX_NONE;
+        if (!find_frozen_shared_store(stores, owner, slot, &candidate))
+            return false;
+        if (candidate == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        if (owner != 0 || plan->functions[0].parent != XR_SEMANTIC_INDEX_NONE ||
+            !root_store_precedes_activation(plan, candidate))
+            return false;
+        store = candidate;
+        break;
+    }
+    if (store == XR_SEMANTIC_INDEX_NONE ||
+        plan->operations[store].operand_count != 1)
+        return false;
+    value = plan->operands[plan->operations[store].operand_begin].value;
+    for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
+        if (value >= value_count || definitions[value] >= plan->operation_count)
+            return false;
+        const XrSemanticOperationRecord *producer =
+            &plan->operations[definitions[value]];
+        if (producer->function != 0)
+            return false;
+        if (producer->opcode == XI_IMPORT_REF) {
+            if (producer->metadata_count != 2 ||
+                producer->metadata_begin > plan->metadata_count ||
+                producer->metadata_count >
+                    plan->metadata_count - producer->metadata_begin ||
+                producer->import_resolution !=
+                    XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
+                plan->metadata[producer->metadata_begin][0] == '\0' ||
+                plan->metadata[producer->metadata_begin + 1][0] != '\0')
+                return false;
+            const char *candidate_module =
+                plan->metadata[producer->metadata_begin];
+            const char *candidate_selector = plan->metadata[call->metadata_begin];
+            const XrStdlibDefEntry *binding = xr_stdlib_metadata_unique_func(
+                candidate_module, candidate_selector);
+            if (!binding || !binding->signature || !binding->vm ||
+                !binding->vm_binding ||
+                strcmp(binding->vm_binding, "yieldable") != 0 ||
+                call->operand_count != (uint16_t) (binding->argc + 1u))
+                return false;
+            *module_path = candidate_module;
+            *selector = candidate_selector;
+            return true;
         }
         if (producer->opcode != XI_COPY ||
             producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
@@ -1467,10 +1647,14 @@ static bool verify_source_export_rows(const XrSemanticPlan *plan,
 static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *definitions,
                                 const XrSemanticGraph *graph, uint32_t value_count,
                                 char *error, size_t error_size) {
+    XrFrozenSharedStoreIndex stores;
+    if (!frozen_shared_store_index_build(plan, &stores))
+        return report(error, error_size, "XR_SEM_0019",
+                      "call-target verifier cannot allocate shared-store index");
     uint32_t cursor = 0;
     for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
         uint32_t direct_function = resolve_frozen_direct_call_target(
-            plan, definitions, graph, value_count, operation);
+            plan, definitions, graph, &stores, value_count, operation);
         const char *native_module = NULL;
         const char *native_member = NULL;
         bool native_yieldable = resolve_frozen_native_yieldable_target(
@@ -1478,22 +1662,33 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         const char *source_module = NULL;
         const char *source_selector = NULL;
         bool source_namespace = resolve_frozen_source_namespace_target(
-            plan, definitions, value_count, operation, &source_module, &source_selector);
+            plan, definitions, value_count, &stores, operation, &source_module,
+            &source_selector);
+        const char *native_namespace_module = NULL;
+        const char *native_namespace_selector = NULL;
+        bool native_namespace =
+            resolve_frozen_native_namespace_yieldable_target(
+                plan, definitions, value_count, &stores, operation,
+                &native_namespace_module, &native_namespace_selector);
         uint32_t indirect_type = resolve_frozen_indirect_callable_type(
             plan, definitions, value_count, operation);
         const XrSemanticCallTargetRecord *target =
             cursor < plan->call_target_count && plan->call_targets[cursor].operation == operation
                 ? &plan->call_targets[cursor]
                 : NULL;
-        if (cursor < plan->call_target_count && plan->call_targets[cursor].operation < operation)
+        if (cursor < plan->call_target_count && plan->call_targets[cursor].operation < operation) {
+            xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
                           "call-target table is not in operation order");
+        }
         bool source_export = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable ||
-             indirect_type != XR_SEMANTIC_INDEX_NONE) &&
-            !target)
+             indirect_type != XR_SEMANTIC_INDEX_NONE || native_namespace) &&
+            !target) {
+            xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
                           "provable call has no call-target authority");
+        }
         if (!target)
             continue;
         bool direct = direct_function != XR_SEMANTIC_INDEX_NONE && !native_yieldable &&
@@ -1534,10 +1729,24 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                         stable_id_zero(target->export_identity) &&
                         stable_id_zero(target->callee_function) &&
                         target->callable_type == indirect_type;
-        if ((!direct && !native && !source_shape && !indirect) || target->reserved[0] != 0 ||
-            target->reserved[1] != 0 || target->reserved[2] != 0)
+        bool native_namespace_shape =
+            native_namespace && !source_namespace &&
+            direct_function == XR_SEMANTIC_INDEX_NONE && !native_yieldable &&
+            indirect_type == XR_SEMANTIC_INDEX_NONE &&
+            target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE &&
+            target->function == XR_SEMANTIC_INDEX_NONE &&
+            target->dependency == XR_SEMANTIC_INDEX_NONE &&
+            target->source_export == XR_SEMANTIC_INDEX_NONE &&
+            stable_id_zero(target->export_identity) &&
+            stable_id_zero(target->callee_function) &&
+            target->callable_type == XR_SEMANTIC_INDEX_NONE;
+        if ((!direct && !native && !source_shape && !indirect &&
+             !native_namespace_shape) || target->reserved[0] != 0 ||
+            target->reserved[1] != 0 || target->reserved[2] != 0) {
+            xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
                           "call-target authority disagrees with frozen invocation facts");
+        }
         char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
         char function_id[XR_STABLE_ID_BYTES * 2 + 1];
         char expected_key[320];
@@ -1566,21 +1775,31 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                               "export=%s:function=%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, dependency_id,
                               export_id, callee_id, (unsigned) target->kind);
-        } else {
+        } else if (indirect) {
             char type_id[XR_STABLE_ID_BYTES * 2 + 1];
             xr_stable_id_hex(plan->types[target->callable_type].id, type_id);
             length = snprintf(expected_key, sizeof(expected_key),
                               "call-target-v3:schema=%u:operation=%s:callable-type=%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, type_id,
                               (unsigned) target->kind);
+        } else {
+            length = snprintf(
+                expected_key, sizeof(expected_key),
+                "call-target-v5:schema=%u:operation=%s:native-namespace=%s.%s:kind=%u",
+                XR_SEMANTIC_SCHEMA_VERSION, operation_id,
+                native_namespace_module, native_namespace_selector,
+                (unsigned) target->kind);
         }
         if (length < 0 || (size_t) length >= sizeof(expected_key) ||
             strcmp(target->canonical_key ? target->canonical_key : "", expected_key) != 0 ||
-            !verify_id(target->canonical_key, target->id))
+            !verify_id(target->canonical_key, target->id)) {
+            xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
                           "call-target stable identity is not canonical");
+        }
         cursor++;
     }
+    xr_free(stores.rows);
     return cursor == plan->call_target_count ||
            report(error, error_size, "XR_SEM_0019",
                   "unprovable call-target authority is present");
@@ -1707,6 +1926,18 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
                               "indirect callable call-target shape is invalid");
             }
             work.suspendable[operation->function] = 1;
+        } else if (target->kind ==
+                   XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE) {
+            const XrSemanticOperationRecord *operation =
+                &plan->operations[target->operation];
+            if (target->function != XR_SEMANTIC_INDEX_NONE ||
+                operation->opcode != XI_CALL_METHOD ||
+                operation->function >= plan->function_count) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "native namespace call-target shape is invalid");
+            }
+            work.suspendable[operation->function] = 1;
         }
     }
     for (uint32_t entity_index = 0; entity_index < plan->entity_count; entity_index++) {
@@ -1756,7 +1987,9 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
                   (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
                    work.suspendable[target->function] != 0))) ||
                 (plan->operations[operation].opcode == XI_CALL_METHOD &&
-                 target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT) ||
+                 (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
+                  target->kind ==
+                      XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE)) ||
                 (plan->operations[operation].opcode == XI_CALL &&
                  target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE);
         }

@@ -135,7 +135,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v16\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v17\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -268,6 +268,7 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, op->metadata_begin);
         hash_u64(&ctx, op->metadata_count);
         hash_u64(&ctx, op->auxiliary_kind);
+        hash_u64(&ctx, op->import_resolution);
         hash_u64(&ctx, op->effects);
         hash_u64(&ctx, op->source_line);
         hash_string(&ctx, op->source_file);

@@ -1519,6 +1519,10 @@ static bool resolve_native_yieldable_callee(const XiFunc *caller, const XiValue 
     if (!callee || callee->op != XI_IMPORT_REF || !callee->aux)
         return false;
     const XiImportRef *ref = (const XiImportRef *) callee->aux;
+    if (!ref->resolution_attempted || ref->resolved_mod_index != -1 ||
+        ref->resolved_shared_slot != -1 || ref->resolved_export_slot != -1 ||
+        ref->resolved_func || ref->resolved_module)
+        return false;
     const XrStdlibDefEntry *binding =
         xr_stdlib_metadata_unique_func(ref->module_path, ref->member_name);
     if (!binding || !binding->signature || !binding->vm || !binding->vm_binding ||
@@ -1528,6 +1532,21 @@ static bool resolve_native_yieldable_callee(const XiFunc *caller, const XiValue 
     *module = ref->module_path;
     *member = ref->member_name;
     return true;
+}
+
+static uint8_t classify_import_resolution(const XiImportRef *ref) {
+    if (!ref || !ref->module_path || !ref->module_path[0])
+        return XR_SEM_IMPORT_RESOLUTION_NONE;
+    if (ref->resolved_mod_index >= 0 && ref->resolved_module)
+        return XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE;
+    if (!ref->resolution_attempted)
+        return XR_SEM_IMPORT_RESOLUTION_UNRESOLVED;
+    if (ref->resolved_mod_index == -1 && ref->resolved_shared_slot == -1 &&
+        ref->resolved_export_slot == -1 && !ref->resolved_func &&
+        !ref->resolved_module &&
+        xr_stdlib_metadata_module_known(ref->module_path))
+        return XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB;
+    return XR_SEM_IMPORT_RESOLUTION_UNRESOLVED;
 }
 
 static bool prepare_root_shared_store_index(XrSemanticBuildContext *ctx,
@@ -1845,6 +1864,88 @@ static const XiImportRef *resolve_namespace_import_receiver(
     return dependency_present ? ref : NULL;
 }
 
+static const XiImportRef *resolve_native_namespace_import_receiver(
+    const XrSemanticBuildContext *ctx, const XiFunc *caller,
+    const XiValue *receiver) {
+    receiver = strip_identity_copies(caller, receiver);
+    if (!receiver || !receiver->block || receiver->block->func != caller ||
+        receiver->op != XI_GET_SHARED || receiver->aux_int < 0)
+        return NULL;
+    const XiFunc *root = caller;
+    while (root->parent_func)
+        root = root->parent_func;
+    bool ambiguous = false;
+    const XiValue *store = indexed_root_shared_store(
+        ctx, receiver->aux_int, &ambiguous);
+    if (ambiguous || !store || store->nargs != 1 ||
+        !root_store_precedes_activation(root, store))
+        return NULL;
+    const XiValue *source = strip_identity_copies(root, store->args[0]);
+    if (!source || source->op != XI_IMPORT_REF || !source->aux)
+        return NULL;
+    const XiImportRef *ref = (const XiImportRef *) source->aux;
+    return (!ref->member_name || ref->member_name[0] == '\0') &&
+                   classify_import_resolution(ref) ==
+                       XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB
+               ? ref
+               : NULL;
+}
+
+static bool append_native_namespace_call_target(XrSemanticBuildContext *ctx,
+                                                const XiValue *value,
+                                                uint32_t operation) {
+    if (!value || value->op != XI_CALL_METHOD || value->nargs == 0 ||
+        !value->aux || (value->aux_int & 1) != 0)
+        return true;
+    const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
+    const XiFunc *caller = ctx->functions[call->function].source;
+    const XiImportRef *ref = resolve_native_namespace_import_receiver(
+        ctx, caller, value->args[0]);
+    const char *selector = (const char *) value->aux;
+    const XrStdlibDefEntry *binding =
+        ref ? xr_stdlib_metadata_unique_func(ref->module_path, selector) : NULL;
+    if (!binding || !binding->signature || !binding->vm ||
+        !binding->vm_binding || strcmp(binding->vm_binding, "yieldable") != 0 ||
+        value->nargs != (uint16_t) (binding->argc + 1u))
+        return true;
+    if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
+        !reserve_array((void **) &ctx->plan->call_targets,
+                       &ctx->plan->call_target_capacity,
+                       ctx->plan->call_target_count + 1,
+                       sizeof(*ctx->plan->call_targets),
+                       XR_SEMANTIC_MAX_CALL_TARGETS))
+        return fail(ctx, "XR_EXEC_5003", "semantic call-target budget exhausted");
+    XrSemanticCallTargetRecord *record =
+        &ctx->plan->call_targets[ctx->plan->call_target_count++];
+    memset(record, 0, sizeof(*record));
+    record->operation = operation;
+    record->function = XR_SEMANTIC_INDEX_NONE;
+    record->dependency = XR_SEMANTIC_INDEX_NONE;
+    record->source_export = XR_SEMANTIC_INDEX_NONE;
+    record->callable_type = XR_SEMANTIC_INDEX_NONE;
+    record->kind = XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+    XrTextBuilder key = {0};
+    bool valid = text_append_format(
+                     &key, "call-target-v5:schema=%u:operation=",
+                     XR_SEMANTIC_SCHEMA_VERSION) &&
+                 text_append_stable_id(
+                     &key, ctx->plan->operations[operation].id) &&
+                 text_append(&key, ":native-namespace=") &&
+                 text_append(&key, ref->module_path) && text_append(&key, ".") &&
+                 text_append(&key, selector) &&
+                 text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    if (valid)
+        record->canonical_key =
+            xr_semantic_plan_copy_string(ctx->plan, key.data);
+    text_dispose(&key);
+    XrFingerprint digest;
+    if (!valid || !record->canonical_key ||
+        !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+        return fail(ctx, "XR_EXEC_5003",
+                    "semantic native namespace identity allocation failed");
+    return true;
+}
+
 static bool append_source_export_call_target(XrSemanticBuildContext *ctx,
                                              const XiValue *value,
                                              uint32_t operation) {
@@ -1916,8 +2017,14 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
                                uint32_t operation) {
     if (!value || operation >= ctx->plan->operation_count || value->nargs == 0)
         return true;
-    if (value->op == XI_CALL_METHOD)
-        return append_source_export_call_target(ctx, value, operation);
+    if (value->op == XI_CALL_METHOD) {
+        uint32_t before = ctx->plan->call_target_count;
+        if (!append_source_export_call_target(ctx, value, operation))
+            return false;
+        return ctx->plan->call_target_count != before
+                   ? true
+                   : append_native_namespace_call_target(ctx, value, operation);
+    }
     if (value->op != XI_CALL && value->op != XI_TAIL_CALL)
         return true;
     uint32_t caller = ctx->plan->operations[operation].function;
@@ -2028,6 +2135,10 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->metadata_begin = ctx->plan->metadata_count;
     record->callable_function = XR_SEMANTIC_INDEX_NONE;
     record->auxiliary_kind = value->aux_kind;
+    record->import_resolution =
+        value->op == XI_IMPORT_REF
+            ? classify_import_resolution((const XiImportRef *) value->aux)
+            : XR_SEM_IMPORT_RESOLUTION_NONE;
     record->effects = xi_generated_op_effects(value->op);
     record->source_line = value->line;
     if (!xi_source_span_is_empty(value->source_span)) {

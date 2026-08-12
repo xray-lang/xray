@@ -75,6 +75,17 @@ xr_stdlib_metadata_unique_func(const char *module, const char *name) {
     return found;
 }
 
+static inline bool xr_stdlib_metadata_module_known(const char *module) {
+    if (!module || !module[0] || module[0] == '.')
+        return false;
+    for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibDefEntry *entry = &xr_stdlib_def_entries[i];
+        if (entry->module && strcmp(entry->module, module) == 0)
+            return true;
+    }
+    return false;
+}
+
 static inline bool xr_stdlib_metadata_link_dependency_module_known(const char *name) {
     if (!name || !name[0] || name[0] == '.')
         return false;

@@ -765,6 +765,7 @@ typedef struct XiImportRef {
     int resolved_export_slot;         /* dense VM runtime export slot, -1 = unresolved */
     struct XiFunc *resolved_func;     /* exported function this member ref binds to, or NULL */
     struct XiModule *resolved_module; /* target module (namespace refs included), or NULL */
+    bool resolution_attempted;        /* module-graph resolver completed exact lookup */
 } XiImportRef;
 
 typedef struct XiResolvedReexport {

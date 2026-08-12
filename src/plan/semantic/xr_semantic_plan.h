@@ -68,8 +68,17 @@ typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_NATIVE_YIELDABLE,
     XR_SEM_CALL_TARGET_SOURCE_EXPORT,
     XR_SEM_CALL_TARGET_INDIRECT_CALLABLE,
+    XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
+
+typedef enum XrSemanticImportResolution {
+    XR_SEM_IMPORT_RESOLUTION_NONE = 0,
+    XR_SEM_IMPORT_RESOLUTION_UNRESOLVED,
+    XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE,
+    XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB,
+    XR_SEM_IMPORT_RESOLUTION_COUNT,
+} XrSemanticImportResolution;
 
 typedef enum XrSemanticTypeFlag {
     XR_SEM_TYPE_NULLABLE = 1u << 0,
@@ -268,7 +277,7 @@ typedef struct XrSemanticOperationRecord {
     uint32_t metadata_begin;
     uint16_t metadata_count;
     uint8_t auxiliary_kind;
-    uint8_t reserved;
+    uint8_t import_resolution;
     uint32_t effects;
     uint32_t source_line;
     const char *source_file;
@@ -336,7 +345,9 @@ typedef struct XrSemanticOperandRecord {
  * SOURCE_EXPORT is completed only by the ordered module-set verifier against
  * the dependency's public export table. INDIRECT_CALLABLE freezes only an
  * open function-value dispatch domain and its conservative state obligation;
- * it is not a target identity or execution authority. All four kinds
+ * it is not a target identity or execution authority. NATIVE_NAMESPACE_YIELDABLE
+ * is rebuilt from a resolver-proven native whole-module import plus the
+ * canonical stdlib registry. All five kinds
  * independently authorize coroutine state creation without retaining Xi data.
  */
 typedef struct XrSemanticCallTargetRecord {

@@ -313,6 +313,7 @@ static void resolve_func_imports(XiFunc *f, const XrModuleGraph *graph, const ch
             XiImportRef *ref = (XiImportRef *) v->aux;
             if (!ref || !ref->module_path)
                 continue;
+            ref->resolution_attempted = true;
             /* An early (pre-ARC) pass runs while the driver's module array is
              * still filling, so a ref can carry a resolved index from that
              * pass while its module/function pointers are still missing.

@@ -483,7 +483,7 @@ static void decode_operations(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->metadata_begin = xr_xsm_take_u32(reader);
         record->metadata_count = xr_xsm_take_u16(reader);
         record->auxiliary_kind = xr_xsm_take_u8(reader);
-        record->reserved = xr_xsm_take_u8(reader);
+        record->import_resolution = xr_xsm_take_u8(reader);
         record->effects = xr_xsm_take_u32(reader);
         record->source_line = xr_xsm_take_u32(reader);
         record->source_file = take_plan_string(reader, plan, true);

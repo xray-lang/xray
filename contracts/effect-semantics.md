@@ -9,7 +9,7 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 16 preserves the pointer-free `DIRECT_LOCAL` call-target
+SemanticPlan schema 17 preserves the pointer-free `DIRECT_LOCAL` call-target
 authority to lexical shared slots. Direct SSA callees still resolve only
 through exact identity copies to a closure/function binding. A shared callee
 must be a `GET_SHARED(slot)` whose first lexical owner, found by walking the
@@ -41,7 +41,7 @@ exact argument count. The full generated stdlib registry is fingerprinted into
 SemanticPlan and XSM; the independent verifier repeats the name, shape,
 argument, registry-fingerprint, and coroutine-state proof. Tail calls, relative
 imports, unknown or duplicate definitions remain absent and fail closed.
-Schema 16 additionally admits `SOURCE_EXPORT` only for a non-super method call
+Schema 17 additionally admits `SOURCE_EXPORT` only for a non-super method call
 whose receiver independently resolves through identity copies and one
 root-initializer `SET_SHARED` to a whole-module `XI_IMPORT_REF`. The import path,
 selector, dependency module stable identity, exact dependency SemanticPlan
@@ -53,7 +53,7 @@ such a plan fails closed; module-set decoding requires the exact canonical
 ordered vector of verified dependency plans and repeats every relation. This
 follows a public Xray wrapper such as
 `net.writeBytes`; it never reinterprets it as private native `net.__writeBytes`.
-Schema 16 also freezes one `INDIRECT_CALLABLE` row for an ordinary `XI_CALL`
+Schema 17 also freezes one `INDIRECT_CALLABLE` row for an ordinary `XI_CALL`
 whose callee operand has an exact frozen function type but whose runtime
 function-value producer is open. The row records only that function-type stable
 identity and the exact coroutine-state obligation; all target function,
@@ -64,6 +64,23 @@ native imports, source exports, lexical shared-slot resolution, method calls,
 builtin calls, and tail calls retain their more specific authority or remain
 unavailable. An indirect row neither enumerates a target set nor authorizes
 dispatch or execution in TargetPlan.
+Schema 17 replaces the operation wire's reserved byte with one exact import
+resolution kind: unresolved, source module, or native stdlib fallback. A native
+fallback is publishable only after the module-graph resolver has completed the
+lookup, found no graph module, left every source-export binding empty, and the
+bare module exists in the generated stdlib registry. `aux_int == -1`, an import
+spelling, or registry membership alone is never resolution authority. The
+builder may then publish `NATIVE_NAMESPACE_YIELDABLE` for a non-super
+`XI_CALL_METHOD` only when its receiver independently follows exact identity
+copies through one canonical root-initializer shared-slot store to that
+whole-module import, and the selector and argument count match one complete
+yieldable registry definition. The verifier reconstructs the shared-store,
+root-prefix, import-resolution, registry, arity, and one-to-one coroutine-state
+relation from frozen rows. Source-module shadowing, unresolved imports,
+selective imports, private-wrapper substitution, builtin calls, tail calls,
+ordinary methods, and non-yieldable definitions remain unavailable. This
+family freezes coroutine obligation only; TargetPlan dispatch and execution
+continue to fail closed until a separate target family consumes it.
 Function declarations publish their immutable binding capability and lexical
 storage domain with the rest of analyzer ownership evidence. Closure lowering
 may copy those facts into SemanticPlan capture records but may not infer them
@@ -218,7 +235,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 47c711827b9cb6
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 266c952fd177c41a2b288a44f3b9b699e3eb5821bb9cc3359a5638f1aeb99cd3
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 02940d35a66fa77ad3e67a9a7b11322f48c87a7af6a2829760ad514f65985b50
 anchor-sha256: src/runtime/value/xtype.h e0f9c44c615d8a91f501d3952b1804c793abe68e3eba39744c9a000ae00f10cf
-anchor-sha256: src/ir/xi.h ba511eb08a10401b340144f30436a781926ea7f1c11a93504bdd8aa0127c3360
+anchor-sha256: src/ir/xi.h a4facfe831fdb521a7e56ce0c6e5fb1068b55e7431c725e37abfbc5bdaceb863
 anchor-sha256: src/ir/xi_lower.c 0962fcb33924583e91031aa5668f2b9d3dd4659829db717d55f806985fb3b59b
 anchor-sha256: src/app/cli/xcmd_verify.c 5fd6d66c6bc2c4be29cb121963eea94682cb48ea20f42aacdeb52fb2a2285b9b
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
@@ -228,13 +245,13 @@ anchor-sha256: tests/unit/ir/test_xi_lower.c fbcb2ea7d98487c81c049b936716158b209
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 8ac0559b635cba3f51a6027b9fb49b0f1e7c24f5d13d5525dc151bf66b8fa6bf
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef875074bfbe67aa4c0ffcb9c6cda031741
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
-anchor-sha256: src/plan/format/xr_xsm_encode.c 574b264ede180037e26f2e8d140c968d6dba2c070ee85f606cb9dab5ec1ee84c
+anchor-sha256: src/plan/format/xr_xsm_encode.c 022b73e6b08c9e2cff678848ecd46a7beba028373273fe1c7b680318dcb09324
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c f1d11b31371dc0e92461ce57dd6f43f22a3d82f0c8d74b94cc661f3e67f54366
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h 2a4e542e6c347371678df6765fefb8a2892b551c64bdeb6e02318eccec3dad43
-anchor-sha256: src/plan/semantic/xr_semantic_plan.c dc440e8adf682914d4d4823d969479d86825494ea7bb7a93ad238a8c93760640
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h ec131ea8b7df7715c5538da3f22942325bb9a66ed41d5a96f74015932ea1a3b0
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 5b5c01849d95cdaaa8a0689667c7745e531badd03f077ac4bcae201b48d0b12c
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h ef0e6256b1298b68b14448dbc2be352f6f63243b6a7b78096b5d31b5a9628788
+anchor-sha256: src/plan/semantic/xr_semantic_plan.c a9eb04e592a6ff487266251a4c16f94d7030f548772e040d90d97d46482b0650
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 4276c3c8c099cb497292b72f607312e06b48c5408fc02fb012d05096d331e580
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 290c011774c28fd8c86c0c67fbb4775c92d3de1bff8f8636b3ad896194049d06
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c c5f59b124dad61ec0c9b07a57a3be1ea638b87748f7116c7609d559ac08da2dc
-anchor-sha256: src/stdlib/xstdlib_metadata.h 85ee76561c9ed7b5d1d43028881b355fe8580b47ea0f1ef1a797a878a5078a11
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 7691d6f79d61aa74624b5e31a35f47f2cd0ef085d1fb3a10fb1963cb375e5dd5
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 3c74407b0232b4b3373c87468a459973b0fa239c12acc41274991ea32c8e7578
+anchor-sha256: src/stdlib/xstdlib_metadata.h 4f0d9628ff18ec6522c48bf602a9ba738813cb1a11f2d059dc7d9c7daf179c14
+anchor-sha256: tests/unit/plan/test_semantic_plan.c f3c8e3e8f45cf1373caeca608ce53f228937dc933a35f46df138ba97a3de5bfd
