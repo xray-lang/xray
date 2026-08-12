@@ -177,6 +177,7 @@
   "input_identity": {
     "algorithm": "sha256",
     "files": [
+      ".gitattributes",
       "CMakeLists.txt",
       "contracts/ownership-audit-foundation.md",
       "contracts/typed-target-plan-execution.md",
@@ -220,7 +221,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "35d79b656c3762a6db00425d8e46c5f1da74f8ebe4be9085cf3ff569758b2d22"
+    "sha256": "d3961ec330e52950facc1dd7d2f322ddbbafed9022f04edd6f164a050b633f51"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",

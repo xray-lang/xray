@@ -33,20 +33,24 @@ log digest pass the independent verifier; manifest verification fails closed
 when any retained log is absent.  A timeout, malformed result, stale or dirty
 identity, high variance, source-root residue, or failed lane remains `failed`;
 the protocol has no skip, allowlist, dirty, or fallback state.
+The three governed performance fixture files are explicitly checked out with
+LF bytes on every host.  Their policy and contract digests therefore identify
+the exact executed input instead of the caller's `core.autocrlf` preference.
 
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 8c6b7d726d3f76841c825b9583e85561d396ceaa6abed59ff07fa50d15c8a757
+anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json ed154719e9c45d7461f7cf400ca4444fa3540bc28edc88045f35a7890ffca993
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json f97884b9074f8bf8134a958f34d46aac137fedbd9a9660c60255726ac36ff090
-anchor-sha256: contracts/target-machine/legacy-vm-inventory.json eda4ba928edcc1547002ee59cb84852ad1183b37ffb34aada75d799837e478e4
-anchor-sha256: contracts/target-machine/legacy-product-residue.json 2caffbcb4e67d700eb39c221fe1c2d7801720d49bfbbf3b89e6313253a7c9440
+anchor-sha256: contracts/target-machine/legacy-vm-inventory.json c45d10b27c890963bfb49110537660d70b39b2b17fdd3baa57f7f366ef96e5e8
+anchor-sha256: contracts/target-machine/legacy-product-residue.json 6f292fd3f122ce7458993a82f8b672d04644671cc4884d157c064d5bcade0ac5
 anchor-sha256: contracts/target-machine/object-extent-inventory.json 619445a5d19eea3beb79d230905f9ccd219bd7201209f0a339d16d72f1624f9a
 anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc66576441dcdfa3b8b52ee606fb6256abefefa2e848310aed
 anchor-sha256: contracts/target-machine/baseline-manifest.json 9264ec82b4e58d421c7b285e3bc2ff598ef09587622110de6cf72d79cbf7ddef
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 54ee3affe064aabfb89fe1cc75ef5642837fd14b6e7e575a0badb4fc670efd74
 anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
-anchor-sha256: scripts/target_machine_phase0.py 6834e7d3b066437795b367bd0fa4ae7a01f12f8da8576c1ec7395ff226c528ab
+anchor-sha256: scripts/target_machine_phase0.py 35f864600a92c5fa58eca81b2874c6e2a9b5a8fd9432c9238d206eb85c25e6c0
 anchor-sha256: scripts/check_legacy_product_residue.py a47409257b92ad57e90ac23bb28a6c3cb29866c102741ceeaff37f079d0d13cf
 anchor-sha256: scripts/check_runtime_header_dependencies.py 917a82b6ecff974005edfad476b18ed5653be50ccc75952451de5ec2ae9afdd2
-anchor-sha256: tests/target-machine/phase0/run_baseline.py 24128c9f2b7a8733488ce03b190eef02965a88050cc915d63296be602a7577b1
+anchor-sha256: tests/target-machine/phase0/run_baseline.py d8ac40519305d9394b1857311eac49599a4532ab44226bc2f4323184047ce195
 anchor-sha256: tests/benchmarks/target-machine/source_run/main.xr ab5ebc43d7c39edc5e2d3c6cee282e4f103e411b52006d21eef8f4e65e4e1b52
 anchor-sha256: tests/benchmarks/target-machine/source_run/helper.xr b58a381ae7f36b1533178d9debc359d6386a179cacf828445bd7feaa03824995
 anchor-sha256: tests/benchmarks/target-machine/source_run/helper.edited.txt 5e8b2152e52314bf013be19e4c6ebf39051b3dd254301a6df793e9a867d33359

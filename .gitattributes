@@ -16,6 +16,14 @@
 *.xr   linguist-detectable=true
 *.xrc  linguist-detectable=true
 
+# Baseline fixture digests bind the exact bytes executed on every host.  Keep
+# these three governed inputs LF-only even when a Windows checkout enables
+# core.autocrlf, so policy validation and performance evidence share one
+# platform-independent identity.
+tests/benchmarks/target-machine/source_run/main.xr text eol=lf
+tests/benchmarks/target-machine/source_run/helper.xr text eol=lf
+tests/benchmarks/target-machine/source_run/helper.edited.txt text eol=lf
+
 # Mark xisagen-generated files so GitHub auto-collapses them in PRs.
 # These are derived from xisa/*.def and xisa/arch/*.isa — single source of truth
 # is the .def/.isa file; CI freshness check enforces consistency.

@@ -94,6 +94,33 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def git_blob_sha256(root: Path, path: Path) -> str:
+    try:
+        relative = path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError as error:
+        raise RuntimeError(f"governed input escapes source root: {path}") from error
+    result = subprocess.run(
+        ["git", "show", f"HEAD:{relative}"], cwd=root,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"cannot read governed Git blob {relative}: {detail}")
+    return sha256_bytes(result.stdout)
+
+
+def fixture_sha256(root: Path, path: Path) -> str:
+    blob = git_blob_sha256(root, path)
+    working = sha256(path)
+    if path.suffix.lower() in {".xr", ".txt"}:
+        normalized = sha256_bytes(path.read_bytes().replace(b"\r\n", b"\n"))
+        if normalized != blob:
+            raise RuntimeError(f"working fixture differs from governed Git blob: {path}")
+    elif working != blob:
+        raise RuntimeError(f"working fixture differs from governed Git blob: {path}")
+    return blob
+
+
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -261,8 +288,14 @@ def validate_policy(root: Path, policy: dict[str, Any]) -> list[str]:
                 errors.append("performance fixture inventory row is malformed")
             elif not path.is_file():
                 errors.append(f"performance fixture is missing: {path}")
-            elif sha256(path) != expected:
-                errors.append(f"performance fixture digest drift: {relative}")
+            else:
+                try:
+                    actual = fixture_sha256(root, path)
+                except RuntimeError as error:
+                    errors.append(str(error))
+                else:
+                    if actual != expected:
+                        errors.append(f"performance fixture digest drift: {relative}")
     for key in ("entry", "edit_file", "edited_source", "base_stdout", "edited_stdout"):
         if not isinstance(fixture.get(key), str):
             errors.append(f"performance fixture {key} is missing")
@@ -1569,6 +1602,14 @@ def self_test(root: Path, policy_path: Path) -> int:
         malformed_policy = json.loads(json.dumps(policy))
         malformed_policy["performance"]["fixture"]["files"][0]["sha256"] = "0" * 64
         self_check(bool(validate_policy(root, malformed_policy)), "fixture inventory drift")
+        main_fixture = (
+            root / policy["performance"]["fixture"]["directory"] / "main.xr"
+        )
+        self_check(
+            fixture_sha256(root, main_fixture)
+            == policy["performance"]["fixture"]["files"][0]["sha256"],
+            "cross-platform fixture identity",
+        )
     print("target-machine baseline runner self-test: PASS")
     return 0
 

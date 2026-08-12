@@ -217,6 +217,7 @@ CONTRACT_SPECS = (
     ContractSpec(
         "unified-target-machine-discovery.md",
         (
+            ".gitattributes",
             "contracts/target-machine/semantic-owner-inventory.json",
             "contracts/target-machine/aot-plan-destination-inventory.json",
             "contracts/target-machine/legacy-vm-inventory.json",
