@@ -156,6 +156,8 @@ BYTE_SLICE_COMMON_PREFIX_OPERATIONS = {"xi.byte.slice.common.prefix"}
 BYTE_SLICE_FILL_OPERATIONS = {"xi.byte.slice.fill"}
 BYTE_SLICE_COPY_OPERATIONS = {"xi.byte.slice.copy"}
 BYTE_SLICE_REPEAT_OPERATIONS = {"xi.byte.slice.repeat"}
+POD_SLICE_COPY_OPERATIONS = {"xi.slice.copy"}
+POD_SLICE_COMPARE_OPERATIONS = {"xi.slice.compare"}
 RAW_MEMORY_COPY_OPERATIONS = {"xi.ptr.copy.nonoverlap"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
@@ -1730,6 +1732,77 @@ def verify_raw_memory_copy_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    families = (
+        ("shared.pod-slice-copy", POD_SLICE_COPY_OPERATIONS, "COPY", "OP_SLICE_COPY",
+         "xr_pod_slice_copy_core", "xrt_pod_slice_copy_semantics",
+         "xrt_span_copy_checked_raw", "cg_pod_slice_copy_adapter_name", "xicgen_span_copy",
+         ("memcpy(", "memmove(")),
+        ("shared.pod-slice-compare", POD_SLICE_COMPARE_OPERATIONS, "COMPARE", "OP_SLICE_COMPARE",
+         "xr_pod_slice_compare_core", "xrt_pod_slice_compare_semantics",
+         "xrt_span_compare_checked_raw", "cg_pod_slice_compare_adapter_name",
+         "xicgen_span_compare", ("memcmp(", "_left.length <", "_right.length <")),
+    )
+    core_text = (root / "src/shared/xr_pod_slice_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    hosted_text = (root / "src/aot/xrt_coll.h").read_text(encoding="utf-8", errors="strict")
+    freestanding_text = (root / "src/aot/xrt_core_freestanding.h").read_text(
+        encoding="utf-8", errors="strict")
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+
+    for (owner_name, operations, tag, opcode, kernel, semantics, adapter, resolver, emitter,
+         forbidden) in families:
+        marker = owner_macro_prefix(owner_name)
+        owner = next((row for row in registry.get("owners", [])
+                      if row.get("owner") == owner_name), None)
+        if owner is None or set(owner.get("operations", [])) != operations:
+            errors.append(f"semantic owner registry has no exact {owner_name} family")
+        if (f"{marker}_HI" not in core_text or f"{marker}_LO" not in core_text or
+                f"XR_POD_SLICE_{tag}_OWNER_APPLY" not in core_text or kernel not in core_text):
+            errors.append(f"src/shared/xr_pod_slice_core.h: {owner_name} lacks stable kernel")
+
+        start = vm_text.find(f"vmcase({opcode})")
+        end = vm_text.find("vmbreak;", start)
+        vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+        if (f"{marker}_HI" not in vm_body or f"{marker}_LO" not in vm_body or
+                f"XR_POD_SLICE_{tag}_OWNER_APPLY" not in vm_body or kernel not in vm_body or
+                any(token in vm_body for token in forbidden)):
+            errors.append(f"src/vm/xvm_dispatch_collection.inc.c: {owner_name} bypasses owner")
+
+        for relative, text in (("src/aot/xrt_coll.h", hosted_text),
+                               ("src/aot/xrt_core_freestanding.h", freestanding_text)):
+            if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                    f"XR_POD_SLICE_{tag}_OWNER_APPLY" not in text or semantics not in text):
+                errors.append(f"{relative}: {owner_name} adapter bypasses owner")
+            body = extract_c_function(text, adapter) or ""
+            if semantics not in body or any(token in body for token in forbidden):
+                errors.append(f"{relative}: {owner_name} adapter owns semantics")
+        if f"#ifndef {semantics}" in hosted_text or f"#ifndef {semantics}" in freestanding_text:
+            errors.append(f"AOT {owner_name} fallback or alias revived")
+
+        c90_body = extract_c_function(c90_text, adapter) or ""
+        if kernel not in c90_body or any(token in c90_body for token in forbidden):
+            errors.append(f"src/aot/xrt_c90.h: {owner_name} adapter owns semantics")
+
+        resolver_body = extract_c_function(cgen_text, resolver) or ""
+        if (f"{marker}_HI" not in resolver_body or f"{marker}_LO" not in resolver_body or
+                "xr_semantic_owner_cgen_adapter" not in resolver_body):
+            errors.append(f"src/aot/xi_cgen.c: {owner_name} does not resolve stable adapter")
+        emitter_body = extract_c_function(dispatch_text, emitter) or ""
+        if (resolver not in emitter_body or adapter in emitter_body or kernel in emitter_body or
+                any(token in emitter_body for token in forbidden) or "({ xr_span_t" in emitter_body or
+                "((uint" in emitter_body):
+            errors.append(
+                f"src/aot/xi_cgen_dispatch_helpers.inc.c: {owner_name} revived semantics")
+    return errors
+
+
 def verify_operation_registry(root: Path) -> tuple[list[str], int]:
     errors: list[str] = []
     source_path = root / "xisa/xi/ops.def"
@@ -1798,8 +1871,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 28:
-        errors.append(f"shared-core inventory must contain exactly 28 headers, found {len(actual)}")
+    if len(actual) != 29:
+        errors.append(f"shared-core inventory must contain exactly 29 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -1836,6 +1909,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_byte_slice_compare_ratchet(root, registry))
         errors.extend(verify_byte_slice_common_prefix_ratchet(root, registry))
         errors.extend(verify_raw_memory_copy_ratchet(root, registry))
+        errors.extend(verify_pod_slice_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)
     errors.extend(registry_errors)
     return errors

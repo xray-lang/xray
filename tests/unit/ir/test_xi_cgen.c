@@ -7894,6 +7894,24 @@ TEST(cgen_byte_slice_common_prefix_uses_stable_owner_adapter) {
     xi_func_free(ir);
 }
 
+TEST(cgen_pod_slice_copy_compare_use_stable_owner_adapters) {
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
+               XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO, XR_SEM_CONSUMER_CGEN));
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
+               XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO, XR_SEM_CONSUMER_CGEN));
+    assert(strcmp(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
+                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO),
+                  "xrt_span_copy_checked_raw") == 0);
+    assert(strcmp(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
+                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO),
+                  "xrt_span_compare_checked_raw") == 0);
+
+}
+
 TEST(cgen_raw_memory_copy_owner_registry_is_stable) {
     assert(xr_semantic_owner_has_consumer(
                XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
@@ -13176,6 +13194,7 @@ int main(void) {
     run_cgen_byte_slice_fill_uses_stable_owner_adapter();
     run_cgen_byte_slice_mutation_uses_stable_owner_adapters();
     run_cgen_byte_slice_common_prefix_uses_stable_owner_adapter();
+    run_cgen_pod_slice_copy_compare_use_stable_owner_adapters();
     run_cgen_raw_memory_copy_owner_registry_is_stable();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();

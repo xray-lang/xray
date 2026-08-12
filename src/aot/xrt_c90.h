@@ -41,6 +41,7 @@ typedef unsigned long uintptr_t;
 
 #define INT32_C(value) value
 #define UINT32_C(value) value##U
+#define INT64_MAX LONG_MAX
 
 typedef int bool;
 #define false 0
@@ -100,6 +101,10 @@ typedef struct xr_span {
 #undef XR_BYTE_SLICE_SCALAR_C90
 #define xrt_byte_slice_scalar_eval(expression) (expression)
 
+#define XR_POD_SLICE_C90 1
+#include "../shared/xr_pod_slice_core.h"
+#undef XR_POD_SLICE_C90
+
 static xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t value) {
     if (!xr_byte_slice_fill_core(span.data, span.length, XR_ELEM_U8, value))
         abort();
@@ -139,6 +144,23 @@ static int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, xr_span_
     if (!ok)
         abort();
     return prefix;
+}
+
+static xr_span_t xrt_span_copy_checked_raw(xr_span_t dst, xr_span_t src, uint16_t elem_size) {
+    if (xr_pod_slice_copy_core(dst.data, dst.length, elem_size, src.data, src.length, elem_size) !=
+        XR_POD_SLICE_OK)
+        abort();
+    return dst;
+}
+
+static int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t right,
+                                            uint16_t elem_size) {
+    XrPodSliceCompareResult result;
+    result = xr_pod_slice_compare_core(left.data, left.length, elem_size, right.data, right.length,
+                                       elem_size);
+    if (result.status != XR_POD_SLICE_OK)
+        abort();
+    return result.ordering;
 }
 
 /* Restricted generated kernels do not use dynamic values at their public ABI.

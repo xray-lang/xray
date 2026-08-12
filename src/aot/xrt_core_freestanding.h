@@ -50,6 +50,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_obj_header.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_byte_slice_scalar_core.h"
+#include "../shared/xr_pod_slice_core.h"
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_error_messages.h"
 #include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
@@ -116,6 +117,20 @@ int memcmp(const void *a, const void *b, size_t n);
         XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,           \
         xr_byte_slice_repeat_core((data), (length), XR_ELEM_U8, (dst_offset), (distance),        \
                                   (count)))
+#define xrt_pod_slice_copy_semantics(dst_data, dst_length, dst_elem_size, src_data, src_length,   \
+                                     src_elem_size)                                               \
+    XR_POD_SLICE_COPY_OWNER_APPLY(                                                               \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO,     \
+        XR_SEM_CONSUMER_AOT_FREESTANDING,                                                        \
+        xr_pod_slice_copy_core((dst_data), (dst_length), (dst_elem_size), (src_data),            \
+                               (src_length), (src_elem_size)))
+#define xrt_pod_slice_compare_semantics(left_data, left_length, left_elem_size, right_data,       \
+                                        right_length, right_elem_size)                            \
+    XR_POD_SLICE_COMPARE_OWNER_APPLY(                                                            \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,                                             \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,          \
+        xr_pod_slice_compare_core((left_data), (left_length), (left_elem_size), (right_data),    \
+                                  (right_length), (right_elem_size)))
 #define xrt_byte_slice_common_prefix_semantics(left_data, left_length, right_data, right_length,   \
                                                ok)                                                \
     XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(                                                      \
@@ -1097,6 +1112,34 @@ static inline int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, x
     if (!ok)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_NO_DATA_MSG);
     return prefix;
+}
+
+static inline xr_span_t xrt_span_copy_checked_raw(xr_span_t dst, xr_span_t src,
+                                                  uint16_t elem_size) {
+    XrPodSliceStatus status = xrt_pod_slice_copy_semantics(
+        dst.data, dst.length, elem_size, src.data, src.length, elem_size);
+    if (status == XR_POD_SLICE_INVALID_LAYOUT)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "Slice.copyFrom(src) requires static element layout");
+    if (status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) byte length overflow");
+    if (status != XR_POD_SLICE_OK)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
+    return dst;
+}
+
+static inline int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t right,
+                                                   uint16_t elem_size) {
+    XrPodSliceCompareResult result = xrt_pod_slice_compare_semantics(
+        left.data, left.length, elem_size, right.data, right.length, elem_size);
+    if (result.status == XR_POD_SLICE_INVALID_LAYOUT)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "Slice.compare(other) requires static element layout");
+    if (result.status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.compare(other) byte length overflow");
+    if (result.status != XR_POD_SLICE_OK)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) span has no data");
+    return result.ordering;
 }
 
 typedef struct XrArrayCoreRange {

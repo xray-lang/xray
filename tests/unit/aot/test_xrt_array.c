@@ -722,6 +722,28 @@ static void test_hosted_numeric_neg_owner_preserves_scalar_and_bigint_edges(void
     xrt_release(negative);
 }
 
+static void test_hosted_pod_slice_owners_preserve_overlap_and_byte_order(void) {
+    uint32_t words[] = {UINT32_C(0x01020304), UINT32_C(0x11121314), UINT32_C(0x21222324),
+                        UINT32_C(0x31323334)};
+    uint8_t left_bytes[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    uint8_t right_bytes[] = {1, 2, 3, 4, 5, 6, 7, 9};
+    xr_span_t overlap_dst = {words + 1, 3};
+    xr_span_t overlap_src = {words, 3};
+    xr_span_t left = {left_bytes, 2};
+    xr_span_t right = {right_bytes, 2};
+    xr_span_t empty = {NULL, 0};
+
+    ASSERT_TRUE(xrt_span_copy_checked_raw(overlap_dst, overlap_src, sizeof(uint32_t)).data ==
+                    overlap_dst.data,
+                "hosted POD slice copy returns destination span");
+    ASSERT_EQ_INT(words[1], UINT32_C(0x01020304), "hosted POD slice copy is overlap safe");
+    ASSERT_EQ_INT(words[3], UINT32_C(0x21222324), "hosted POD slice copy preserves tail word");
+    ASSERT_EQ_INT(xrt_span_compare_checked_raw(left, right, sizeof(uint32_t)), -1,
+                  "hosted POD slice compare uses byte lexicographic order");
+    ASSERT_EQ_INT(xrt_span_compare_checked_raw(empty, empty, sizeof(uint32_t)), 0,
+                  "hosted POD slice compare accepts empty null spans");
+}
+
 int main(void) {
     test_release_slice_abi_is_data_and_length();
     test_small_array_uses_inline_storage();
@@ -741,6 +763,7 @@ int main(void) {
     test_iterator_release_balances_source_and_arc_object();
     test_stack_closure_borrows_cell_upval();
     test_hosted_numeric_neg_owner_preserves_scalar_and_bigint_edges();
+    test_hosted_pod_slice_owners_preserve_overlap_and_byte_order();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;
 }

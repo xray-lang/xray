@@ -11,5 +11,6 @@ c_contains=xr_array_core_bytes_store_u16(
 c_contains=xrt_byte_slice_copy_checked_raw(
 c_contains=xrt_byte_slice_repeat_from_checked_raw(
 c_contains=for (int64_t _i = 0; _i < _s.length; _i++)
-c_contains=memmove(_dst.data, _src.data
+c_contains=xrt_span_copy_checked_raw(
+c_not_contains=memmove(_dst.data, _src.data
 c_not_contains=xrt_span_is_readonly(

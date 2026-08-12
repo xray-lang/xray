@@ -14584,92 +14584,34 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     (void) prefix;
     if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_SLICE_COPY))
         return;
-    bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
     const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice.copyFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
     }
-    if (!unchecked_access && bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        CgArrayElemInfo helper_info;
-        if (!cg_span_elem_info_from_value(ctx, v->args[0], &helper_info) || !helper_info.ctype) {
-            cg_ctx_set_error(ctx);
-            emit_codegen_abort_expr(out);
-            return;
-        }
-        fprintf(out, "xrt_span_copy_checked_raw(");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_span_ref_expr(out, v->args[1]);
-        fprintf(out, ", (uint16_t)sizeof(%s))", helper_info.ctype);
+    if (bulk && bulk->action != XAOT_BULK_RUNTIME_HELPER &&
+        bulk->action != XAOT_BULK_INLINE_MEMCPY &&
+        bulk->action != XAOT_BULK_INLINE_MEMMOVE && bulk->action != XAOT_BULK_TYPED_LOOP) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
         return;
     }
     CgArrayElemInfo info;
-    bool have_native_info =
-        cg_span_elem_info_from_value(ctx, v->args[0], &info) && info.rep != XR_REP_TAGGED;
-    bool inline_copy =
-        unchecked_access ||
-        (bulk ? bulk->action == XAOT_BULK_INLINE_MEMCPY ||
-                    bulk->action == XAOT_BULK_INLINE_MEMMOVE || bulk->action == XAOT_BULK_TYPED_LOOP
-              : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_SLICE_COPY, XAOT_SLICE_DROP_HELPER));
-    if (inline_copy && have_native_info) {
-        fprintf(out, "({ xr_span_t _dst = ");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, "; xr_span_t _src = ");
-        emit_span_ref_expr(out, v->args[1]);
-        fprintf(out, "; ");
-        if (unchecked_access)
-            fprintf(out,
-                    "/* unchecked Slice.copyFrom access */ "
-                    "XR_ASSUME(_dst.length >= 0 && _src.length >= 0 && _dst.length >= "
-                    "_src.length && _dst.length <= INT64_MAX / (int64_t)sizeof(%s) && "
-                    "_src.length <= INT64_MAX / (int64_t)sizeof(%s) && "
-                    "(_src.length == 0 || (_dst.data && _src.data))); int64_t _dst_bytes = "
-                    "_dst.length * (int64_t)sizeof(%s); int64_t _src_bytes = _src.length * "
-                    "(int64_t)sizeof(%s); ",
-                    info.ctype, info.ctype, info.ctype, info.ctype);
-        else
-            fprintf(out,
-                    "if (XR_UNLIKELY(_dst.length < 0 || _src.length < 0 || _dst.length > "
-                    "INT64_MAX / (int64_t)sizeof(%s) || _src.length > INT64_MAX / "
-                    "(int64_t)sizeof(%s))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                    "\"Slice.copyFrom(src) byte length overflow\"); int64_t _dst_bytes = "
-                    "_dst.length * (int64_t)sizeof(%s); int64_t _src_bytes = _src.length * "
-                    "(int64_t)sizeof(%s); if (XR_UNLIKELY(_src_bytes > _dst_bytes || "
-                    "(_src_bytes > 0 && (!_dst.data || !_src.data)))) xrt_throw_error("
-                    "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Slice.copyFrom(src) range out of bounds\"); ",
-                    info.ctype, info.ctype, info.ctype, info.ctype);
-        if (bulk && bulk->action == XAOT_BULK_INLINE_MEMCPY)
-            fprintf(out, "if (_src_bytes > 0) memcpy(_dst.data, _src.data, (size_t)_src_bytes); ");
-        else if (unchecked_access || !bulk || bulk->action == XAOT_BULK_INLINE_MEMMOVE)
-            fprintf(out, "if (_src_bytes > 0) memmove(_dst.data, _src.data, (size_t)_src_bytes); ");
-        else
-            fprintf(out,
-                    "if (_src.length > 0 && (uintptr_t)_dst.data <= (uintptr_t)_src.data) { "
-                    "for (int64_t _i = 0; _i < _src.length; _i++) "
-                    "((%s*)_dst.data)[_i] = ((const %s*)_src.data)[_i]; } else { "
-                    "for (int64_t _i = _src.length; _i > 0; _i--) "
-                    "((%s*)_dst.data)[_i - 1] = ((const %s*)_src.data)[_i - 1]; } ",
-                    info.ctype, info.ctype, info.ctype, info.ctype);
-        fprintf(out, "_dst; })");
-        return;
-    }
-    if (bulk) {
+    if (!cg_span_elem_info_from_value(ctx, v->args[0], &info) || !info.ctype) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "xrt_span_copy_checked_raw(");
+    const char *adapter = cg_pod_slice_copy_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "%s(", adapter);
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     emit_span_ref_expr(out, v->args[1]);
-    CgArrayElemInfo fallback_info;
-    if (!cg_span_elem_info_from_value(ctx, v->args[0], &fallback_info) || !fallback_info.ctype) {
-        cg_ctx_set_error(ctx);
-        emit_codegen_abort_expr(out);
-        return;
-    }
-    fprintf(out, ", (uint16_t)sizeof(%s))", fallback_info.ctype);
+    fprintf(out, ", (uint16_t)sizeof(%s))", info.ctype);
 }
 
 static void xicgen_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -14680,66 +14622,31 @@ static void xicgen_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         emit_codegen_abort_expr(out);
         return;
     }
+    if (bulk && bulk->action != XAOT_BULK_RUNTIME_HELPER &&
+        bulk->action != XAOT_BULK_INLINE_MEMCMP) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
     CgArrayElemInfo info;
-    if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        if (!cg_span_elem_info_from_value(ctx, v->args[0], &info) || !info.ctype) {
-            cg_ctx_set_error(ctx);
-            emit_codegen_abort_expr(out);
-            emit_conversion_suffix(out, conv_suffix);
-            return;
-        }
-        fprintf(out, "xrt_span_compare_checked_raw(");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_span_ref_expr(out, v->args[1]);
-        fprintf(out, ", (uint16_t)sizeof(%s))", info.ctype);
-        emit_conversion_suffix(out, conv_suffix);
-        return;
-    }
-    bool inline_compare =
-        bulk ? bulk->action == XAOT_BULK_INLINE_MEMCMP
-             : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_SLICE_COMPARE, XAOT_SLICE_DROP_HELPER);
-    if (inline_compare && cg_span_elem_info_from_value(ctx, v->args[0], &info) &&
-        info.rep != XR_REP_TAGGED) {
-        fprintf(out, "({ xr_span_t _left = ");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, "; xr_span_t _right = ");
-        emit_span_ref_expr(out, v->args[1]);
-        fprintf(out,
-                "; if (XR_UNLIKELY(_left.length < 0 || _right.length < 0 || _left.length > "
-                "INT64_MAX / (int64_t)sizeof(%s) || _right.length > INT64_MAX / "
-                "(int64_t)sizeof(%s))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "\"Slice.compare(other) byte length overflow\"); int64_t _left_bytes = "
-                "_left.length * (int64_t)sizeof(%s); int64_t _right_bytes = _right.length * "
-                "(int64_t)sizeof(%s); int64_t _n = _left_bytes < _right_bytes ? _left_bytes : "
-                "_right_bytes; if (XR_UNLIKELY(_n > 0 && (!_left.data || !_right.data))) "
-                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, \"Slice.compare(other) span has no "
-                "data\"); int _cmp = _n > 0 ? memcmp(_left.data, _right.data, (size_t)_n) : "
-                "0; _cmp < 0 ? INT64_C(-1) : (_cmp > 0 ? INT64_C(1) : (_left.length < "
-                "_right.length ? INT64_C(-1) : (_left.length > _right.length ? INT64_C(1) : "
-                "INT64_C(0)))); })",
-                info.ctype, info.ctype, info.ctype, info.ctype);
-        emit_conversion_suffix(out, conv_suffix);
-        return;
-    }
-    if (bulk) {
-        cg_ctx_set_error(ctx);
-        emit_codegen_abort_expr(out);
-        emit_conversion_suffix(out, conv_suffix);
-        return;
-    }
-    fprintf(out, "xrt_span_compare_checked_raw(");
-    emit_span_ref_expr(out, v->args[0]);
-    fprintf(out, ", ");
-    emit_span_ref_expr(out, v->args[1]);
     if (!cg_span_elem_info_from_value(ctx, v->args[0], &info) || !info.ctype) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
+    const char *adapter = cg_pod_slice_compare_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
+    fprintf(out, "%s(", adapter);
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_span_ref_expr(out, v->args[1]);
     fprintf(out, ", (uint16_t)sizeof(%s))", info.ctype);
     emit_conversion_suffix(out, conv_suffix);
 }

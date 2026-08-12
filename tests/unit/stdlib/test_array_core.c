@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "runtime/value/xvalue.h"
 #include "shared/xr_array_core.h"
+#include "shared/xr_pod_slice_core.h"
 #include "shared/xr_sort_core.h"
 
 static void assert_range(XrArrayCoreRange range, int64_t start, int64_t end, int64_t count) {
@@ -886,6 +887,51 @@ TEST(array_core_byte_slice_compare_owns_lexicographic_edges) {
     ASSERT_FALSE(ok);
 }
 
+TEST(pod_slice_owner_copy_and_compare_cover_layout_overlap_and_overflow_edges) {
+    uint32_t words[] = {UINT32_C(0x01020304), UINT32_C(0x11121314), UINT32_C(0x21222324),
+                        UINT32_C(0x31323334)};
+    uint8_t left_bytes[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    uint8_t right_bytes[] = {1, 2, 3, 4, 5, 6, 7, 9};
+    XrPodSliceCompareResult compared;
+
+    ASSERT_EQ_INT(xr_pod_slice_copy_core(words + 1, 3, sizeof(uint32_t), words, 3,
+                                         sizeof(uint32_t)),
+                  XR_POD_SLICE_OK);
+    ASSERT_EQ_INT(words[1], UINT32_C(0x01020304));
+    ASSERT_EQ_INT(words[3], UINT32_C(0x21222324));
+    ASSERT_EQ_INT(xr_pod_slice_copy_core(NULL, 0, sizeof(uint32_t), NULL, 0,
+                                         sizeof(uint32_t)),
+                  XR_POD_SLICE_OK);
+    ASSERT_EQ_INT(xr_pod_slice_copy_core(words, 1, sizeof(uint32_t), words, 2,
+                                         sizeof(uint32_t)),
+                  XR_POD_SLICE_RANGE_ERROR);
+    ASSERT_EQ_INT(xr_pod_slice_copy_core(words, 1, sizeof(uint32_t), words, 1,
+                                         sizeof(uint16_t)),
+                  XR_POD_SLICE_INVALID_LAYOUT);
+    ASSERT_EQ_INT(xr_pod_slice_copy_core(words, INT64_MAX, sizeof(uint32_t), words, 1,
+                                         sizeof(uint32_t)),
+                  XR_POD_SLICE_BYTE_LENGTH_OVERFLOW);
+
+    compared = xr_pod_slice_compare_core(left_bytes, 2, sizeof(uint32_t), right_bytes, 2,
+                                          sizeof(uint32_t));
+    ASSERT_EQ_INT(compared.status, XR_POD_SLICE_OK);
+    ASSERT_EQ_INT(compared.ordering, -1);
+    compared = xr_pod_slice_compare_core(left_bytes, 1, sizeof(uint32_t), left_bytes, 2,
+                                          sizeof(uint32_t));
+    ASSERT_EQ_INT(compared.status, XR_POD_SLICE_OK);
+    ASSERT_EQ_INT(compared.ordering, -1);
+    compared = xr_pod_slice_compare_core(NULL, 0, sizeof(uint32_t), NULL, 0,
+                                          sizeof(uint32_t));
+    ASSERT_EQ_INT(compared.status, XR_POD_SLICE_OK);
+    ASSERT_EQ_INT(compared.ordering, 0);
+    compared = xr_pod_slice_compare_core(NULL, 1, sizeof(uint32_t), words, 1,
+                                          sizeof(uint32_t));
+    ASSERT_EQ_INT(compared.status, XR_POD_SLICE_NO_DATA);
+    compared = xr_pod_slice_compare_core(words, INT64_MAX, sizeof(uint32_t), words, 1,
+                                          sizeof(uint32_t));
+    ASSERT_EQ_INT(compared.status, XR_POD_SLICE_BYTE_LENGTH_OVERFLOW);
+}
+
 TEST(array_core_sort_typed_buffers_in_place) {
     int64_t ints[] = {3, -1, 7, 3, 0};
     ASSERT_TRUE(xr_sort_core_typed(ints, 5, XR_ELEM_I64));
@@ -971,6 +1017,7 @@ RUN_TEST(raw_memory_copy_nonoverlap_owner_handles_boundaries);
 RUN_TEST(array_core_bytes_repeat_from_matches_lz_style_overlap);
 RUN_TEST(array_core_bytes_common_prefix_uses_min_length_and_word_chunks);
 RUN_TEST(array_core_byte_slice_compare_owns_lexicographic_edges);
+RUN_TEST(pod_slice_owner_copy_and_compare_cover_layout_overlap_and_overflow_edges);
 RUN_TEST(array_core_sort_typed_buffers_in_place);
 RUN_TEST(array_core_sort_compare_result_uses_sign);
 RUN_TEST(array_core_sort_default_compare_numbers_and_string_slices);

@@ -33,10 +33,26 @@
 #include "../shared/xr_map_set_abi.h"
 #include "../shared/xr_json_type.h"
 #include "../shared/xobject_shape.h"
+#include "../shared/xr_pod_slice_core.h"
 #include "../shared/xr_range_core.h"
 #include "../shared/xr_typed_ops.h"
 #include <errno.h>
 #include <string.h>
+
+#define xrt_pod_slice_copy_semantics(dst_data, dst_length, dst_elem_size, src_data, src_length,   \
+                                     src_elem_size)                                               \
+    XR_POD_SLICE_COPY_OWNER_APPLY(                                                               \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO,     \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                              \
+        xr_pod_slice_copy_core((dst_data), (dst_length), (dst_elem_size), (src_data),            \
+                               (src_length), (src_elem_size)))
+#define xrt_pod_slice_compare_semantics(left_data, left_length, left_elem_size, right_data,       \
+                                        right_length, right_elem_size)                            \
+    XR_POD_SLICE_COMPARE_OWNER_APPLY(                                                            \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,                                             \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,                \
+        xr_pod_slice_compare_core((left_data), (left_length), (left_elem_size), (right_data),    \
+                                  (right_length), (right_elem_size)))
 
 #define xrt_byte_slice_common_prefix_semantics(left_data, left_length, right_data, right_length,   \
                                                ok)                                                \
@@ -845,49 +861,30 @@ static inline xr_span_t xrt_span_as_bytes_checked_raw(xr_span_t span, uint16_t e
 
 static inline xr_span_t xrt_span_copy_checked_raw(xr_span_t dst, xr_span_t src,
                                                   uint16_t elem_size) {
-    if (elem_size == 0)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.copyFrom(src) requires static element layout");
-    if (dst.length < 0 || src.length < 0 || dst.length > INT64_MAX / (int64_t) elem_size ||
-        src.length > INT64_MAX / (int64_t) elem_size)
+    XrPodSliceStatus status = xrt_pod_slice_copy_semantics(
+        dst.data, dst.length, elem_size, src.data, src.length, elem_size);
+    if (status == XR_POD_SLICE_INVALID_LAYOUT)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "Slice.copyFrom(src) requires static element layout");
+    if (status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) byte length overflow");
-    int64_t dst_bytes = dst.length * (int64_t) elem_size;
-    int64_t src_bytes = src.length * (int64_t) elem_size;
-    if (src_bytes > dst_bytes)
+    if (status != XR_POD_SLICE_OK)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
-    if (src_bytes > 0) {
-        if (!dst.data || !src.data)
-            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
-        memmove(dst.data, src.data, (size_t) src_bytes);
-    }
     return dst;
 }
 
 static inline int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t right,
                                                    uint16_t elem_size) {
-    if (elem_size == 0)
+    XrPodSliceCompareResult result = xrt_pod_slice_compare_semantics(
+        left.data, left.length, elem_size, right.data, right.length, elem_size);
+    if (result.status == XR_POD_SLICE_INVALID_LAYOUT)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         "Slice.compare(other) requires static element layout");
-    if (left.length < 0 || right.length < 0 || left.length > INT64_MAX / (int64_t) elem_size ||
-        right.length > INT64_MAX / (int64_t) elem_size)
+    if (result.status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.compare(other) byte length overflow");
-    int64_t left_bytes = left.length * (int64_t) elem_size;
-    int64_t right_bytes = right.length * (int64_t) elem_size;
-    int64_t n = left_bytes < right_bytes ? left_bytes : right_bytes;
-    int cmp = 0;
-    if (n > 0) {
-        if (!left.data || !right.data)
-            xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) span has no data");
-        cmp = memcmp(left.data, right.data, (size_t) n);
-    }
-    if (cmp < 0)
-        return -1;
-    if (cmp > 0)
-        return 1;
-    if (left.length < right.length)
-        return -1;
-    if (left.length > right.length)
-        return 1;
-    return 0;
+    if (result.status != XR_POD_SLICE_OK)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) span has no data");
+    return result.ordering;
 }
 
 static inline xr_span_t xrt_span_reinterpret_checked_raw(xr_span_t span, uint8_t elem_type,

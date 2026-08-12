@@ -4633,6 +4633,44 @@ static const char *cg_byte_slice_common_prefix_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
+static const char *cg_pod_slice_copy_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
+                                        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: POD-slice copy owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: POD-slice copy owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_pod_slice_compare_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
+                                        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: POD-slice compare owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: POD-slice compare owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
 static const char *cg_raw_memory_copy_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(
             XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,

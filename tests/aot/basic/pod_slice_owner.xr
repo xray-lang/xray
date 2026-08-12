@@ -1,0 +1,33 @@
+// VM/AOT/generated-C KAT for the shared POD slice copy/compare owners.
+
+fn main() {
+    var words = Array<u32>(4, 0)
+    words[0] = 0x01020304
+    words[1] = 0x11121314
+    words[2] = 0x21222324
+    words[3] = 0x31323334
+    var whole: Slice<u32> = words[:]
+    var overlapDst: Slice<u32> = whole[1:4]
+    var overlapSrc: Slice<u32> = whole[0:3]
+    overlapDst.copyFrom(overlapSrc)
+    print(words[0])
+    print(words[1])
+    print(words[3])
+
+    var equal = Array<u32>(2, 0)
+    equal[0] = words[0]
+    equal[1] = words[1]
+    var equalView: Slice<u32> = equal[:]
+    var same: Slice<u32> = whole[0:2]
+    var prefix: Slice<u32> = whole[0:1]
+    print(same.compare(equalView))
+    print(prefix.compare(equalView))
+    equal[1] = equal[1] + 0x01000000
+    print(same.compare(equalView))
+
+    var empty: Slice<u32> = whole[0:0]
+    empty.copyFrom(empty)
+    print(empty.compare(empty))
+}
+
+main()

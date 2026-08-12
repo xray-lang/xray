@@ -1184,20 +1184,19 @@ vmcase(OP_SLICE_COPY) {
     if (dst_reserved & XR_SLICE_VIEW_READONLY) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Slice");
     }
-    if (dst_length < 0 || src_length < 0 || dst_length > INT64_MAX / (int64_t) dst_elem_size ||
-        src_length > INT64_MAX / (int64_t) src_elem_size) {
+    XrPodSliceStatus copy_status = XR_POD_SLICE_COPY_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO,
+        XR_SEM_CONSUMER_VM,
+        xr_pod_slice_copy_core(dst_data, dst_length, dst_elem_size, src_data, src_length,
+                               src_elem_size));
+    if (copy_status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) byte length overflow");
     }
-    int64_t dst_bytes = dst_length * (int64_t) dst_elem_size;
-    int64_t src_bytes = src_length * (int64_t) src_elem_size;
-    if (src_bytes > dst_bytes) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
+    if (copy_status == XR_POD_SLICE_INVALID_LAYOUT) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.copyFrom(src) element type mismatch");
     }
-    if (src_bytes > 0) {
-        if (!dst_data || !src_data) {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
-        }
-        memmove(dst_data, src_data, (size_t) src_bytes);
+    if (copy_status != XR_POD_SLICE_OK) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
     }
     vmbreak;
 }
@@ -1279,29 +1278,21 @@ vmcase(OP_SLICE_COMPARE) {
     if (left_elem_type != right_elem_type || left_elem_size != right_elem_size) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) element type mismatch");
     }
-    if (left_length < 0 || right_length < 0 || left_length > INT64_MAX / (int64_t) left_elem_size ||
-        right_length > INT64_MAX / (int64_t) right_elem_size) {
+    XrPodSliceCompareResult compare_result = XR_POD_SLICE_COMPARE_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO, XR_SEM_CONSUMER_VM,
+        xr_pod_slice_compare_core(left_data, left_length, left_elem_size, right_data, right_length,
+                                  right_elem_size));
+    if (compare_result.status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.compare(other) byte length overflow");
     }
-    int64_t left_bytes = left_length * (int64_t) left_elem_size;
-    int64_t right_bytes = right_length * (int64_t) right_elem_size;
-    int64_t n = left_bytes < right_bytes ? left_bytes : right_bytes;
-    int cmp = 0;
-    if (n > 0) {
-        if (!left_data || !right_data) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) span has no data");
-        }
-        cmp = memcmp(left_data, right_data, (size_t) n);
+    if (compare_result.status == XR_POD_SLICE_INVALID_LAYOUT) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) element type mismatch");
     }
-    if (cmp == 0) {
-        if (left_length < right_length)
-            cmp = -1;
-        else if (left_length > right_length)
-            cmp = 1;
-    } else {
-        cmp = cmp < 0 ? -1 : 1;
+    if (compare_result.status != XR_POD_SLICE_OK) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) span has no data");
     }
-    R(a) = xr_int(cmp);
+    R(a) = xr_int(compare_result.ordering);
     vmbreak;
 }
 
