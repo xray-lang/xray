@@ -1,6 +1,17 @@
 {
   "authorities": [
     {
+      "id": "full-validation-evidence-producer",
+      "path": "scripts/collect_target_machine_full_validation_evidence.py",
+      "required_regex": [
+        "PRODUCER\\s*=\\s*\"target-machine-full-validation-evidence/1\"",
+        "LANE_REGEX",
+        "discovered_test_count",
+        "status\\s*=\\s*\"passed\"\\s+if\\s+all_ok\\s+else\\s+\"failed\"",
+        "os\\.rename\\(staging, output\\)"
+      ]
+    },
+    {
       "id": "activation-generation-evidence-producer",
       "path": "scripts/collect_target_machine_activation_generation_evidence.py",
       "required_regex": [
@@ -154,6 +165,7 @@
       "scripts/collect_target_machine_activation_generation_evidence.py",
       "scripts/check_target_machine_completion.py",
       "scripts/collect_target_machine_dependency_graph_evidence.py",
+      "scripts/collect_target_machine_full_validation_evidence.py",
       "scripts/collect_target_machine_installed_evidence.py",
       "scripts/collect_target_machine_runtime_reachability_evidence.py",
       "scripts/collect_target_machine_symbol_evidence.py",
@@ -176,7 +188,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "cabc0ca6fbbf7f644053034d50d4ee6b720787f08e034d956f3b4c295766c448"
+    "sha256": "7f414ef1d73e48b32c816762b0f0d28e1dd95a82cd25225b07adce03a0a4338b"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
