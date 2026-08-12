@@ -135,7 +135,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v15\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v16\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -302,6 +302,7 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, target->source_export);
         hash_bytes(&ctx, target->export_identity.bytes, sizeof(target->export_identity.bytes));
         hash_bytes(&ctx, target->callee_function.bytes, sizeof(target->callee_function.bytes));
+        hash_u64(&ctx, target->callable_type);
         hash_u64(&ctx, target->kind);
     }
     for (uint32_t i = 0; i < plan->dependency_count; i++) {
@@ -846,7 +847,8 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
         dump_id(out, record->export_identity);
         fputs(" callee-function=", out);
         dump_id(out, record->callee_function);
-        fprintf(out, " kind=%u\n", record->kind);
+        fprintf(out, " callable-type=%u kind=%u\n", record->callable_type,
+                record->kind);
     }
     for (uint32_t i = 0; i < plan->dependency_count; i++) {
         const XrSemanticDependencyRecord *record = &plan->dependencies[i];

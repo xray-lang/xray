@@ -221,7 +221,7 @@ static bool counts_fit_payload_minimum(XrXsmCounts count, size_t remaining) {
     XR_MINIMUM_PAYLOAD(blocks, 56u);
     XR_MINIMUM_PAYLOAD(predecessors, 4u);
     XR_MINIMUM_PAYLOAD(operations, 160u);
-    XR_MINIMUM_PAYLOAD(call_targets, 72u);
+    XR_MINIMUM_PAYLOAD(call_targets, 76u);
     XR_MINIMUM_PAYLOAD(dependencies, 72u);
     XR_MINIMUM_PAYLOAD(source_exports, 32u);
     XR_MINIMUM_PAYLOAD(operands, 19u);
@@ -540,6 +540,7 @@ static void decode_call_targets(XrXsmReader *reader, XrSemanticPlan *plan) {
                           sizeof(record->export_identity.bytes));
         xr_xsm_take_bytes(reader, record->callee_function.bytes,
                           sizeof(record->callee_function.bytes));
+        record->callable_type = xr_xsm_take_u32(reader);
         record->kind = xr_xsm_take_u8(reader);
         record->reserved[0] = xr_xsm_take_u8(reader);
         record->reserved[1] = xr_xsm_take_u8(reader);

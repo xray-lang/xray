@@ -226,6 +226,7 @@ static void encode_call_targets(XrXsmWriter *writer, const XrSemanticPlan *plan)
                          sizeof(record->export_identity.bytes));
         xr_xsm_put_bytes(writer, record->callee_function.bytes,
                          sizeof(record->callee_function.bytes));
+        xr_xsm_put_u32(writer, record->callable_type);
         xr_xsm_put_u8(writer, record->kind);
         xr_xsm_put_u8(writer, 0);
         xr_xsm_put_u8(writer, 0);

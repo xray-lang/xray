@@ -1,10 +1,10 @@
 {
   "authorities": [
     {
-      "id": "semantic-schema-v15",
+      "id": "semantic-schema-v16",
       "path": "src/plan/semantic/xr_semantic_ids.h",
       "required_regex": [
-        "#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(15\\)"
+        "#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(16\\)"
       ]
     },
     {
@@ -106,7 +106,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "1ec2e4e928c78e12428036a82d67377e30e720ad6f10c2ff7de40c4569763b36"
+    "sha256": "5b7e1aa01b18cb86cc63000f47f6e03fc9ad9493884a83c75323e5a66c05b336"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",

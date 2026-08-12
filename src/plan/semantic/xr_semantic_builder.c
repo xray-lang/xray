@@ -1889,6 +1889,7 @@ static bool append_source_export_call_target(XrSemanticBuildContext *ctx,
     record->source_export = source_export;
     record->export_identity = exported->id;
     record->callee_function = callee->id;
+    record->callable_type = XR_SEMANTIC_INDEX_NONE;
     record->kind = XR_SEM_CALL_TARGET_SOURCE_EXPORT;
     XrTextBuilder key = {0};
     bool valid = text_append_format(&key, "call-target-v4:schema=%u:operation=",
@@ -1928,7 +1929,19 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
                             resolve_native_yieldable_callee(
                                 ctx->functions[caller].source, value, &native_module,
                                 &native_member);
-    if (function < 0 && !native_yieldable)
+    const XiValue *indirect_callee = value->args[0];
+    while (indirect_callee && xi_copy_is_identity_alias(indirect_callee) &&
+           indirect_callee->nargs == 1)
+        indirect_callee = indirect_callee->args[0];
+    bool indirect_callable =
+        function < 0 && !native_yieldable && value->op == XI_CALL &&
+        value->args[0] && value->args[0]->type &&
+        value->args[0]->type->kind == XR_KIND_FUNCTION && indirect_callee &&
+        indirect_callee->op != XI_IMPORT_REF && indirect_callee->op != XI_GET_BUILTIN &&
+        indirect_callee->op != XI_GET_SHARED && indirect_callee->op != XI_CLOSURE_NEW &&
+        !(indirect_callee->op == XI_STACK_ALLOC &&
+          indirect_callee->aux_int == XI_CLOSURE_NEW);
+    if (function < 0 && !native_yieldable && !indirect_callable)
         return true;
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
         !reserve_array((void **) &ctx->plan->call_targets,
@@ -1942,8 +1955,15 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     record->function = function >= 0 ? (uint32_t) function : XR_SEMANTIC_INDEX_NONE;
     record->dependency = XR_SEMANTIC_INDEX_NONE;
     record->source_export = XR_SEMANTIC_INDEX_NONE;
-    record->kind = function >= 0 ? XR_SEM_CALL_TARGET_DIRECT_LOCAL
-                                 : XR_SEM_CALL_TARGET_NATIVE_YIELDABLE;
+    record->callable_type = XR_SEMANTIC_INDEX_NONE;
+    record->kind = function >= 0
+                       ? XR_SEM_CALL_TARGET_DIRECT_LOCAL
+                       : native_yieldable ? XR_SEM_CALL_TARGET_NATIVE_YIELDABLE
+                                          : XR_SEM_CALL_TARGET_INDIRECT_CALLABLE;
+    if (indirect_callable) {
+        const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
+        record->callable_type = ctx->plan->operands[call->operand_begin].type;
+    }
     XrTextBuilder key = {0};
     bool valid = text_append_format(&key, "call-target-v3:schema=%u:operation=",
                                     XR_SEMANTIC_SCHEMA_VERSION) &&
@@ -1954,6 +1974,9 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     if (valid && native_yieldable)
         valid = text_append(&key, ":native=") && text_append(&key, native_module) &&
                 text_append(&key, ".") && text_append(&key, native_member);
+    if (valid && indirect_callable)
+        valid = text_append(&key, ":callable-type=") &&
+                text_append_stable_id(&key, ctx->plan->types[record->callable_type].id);
     valid = valid && text_append_format(&key, ":kind=%u", (unsigned) record->kind);
     if (valid)
         record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);

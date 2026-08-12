@@ -104,7 +104,7 @@ roots, or general module activation.
    SemanticPlan verifier before the runtime builds its canonical native
    TargetProfile. They do not guess SemanticPlan or TargetProfile authority
    from a host name, file name, sibling artifact, or caller-authored
-   fingerprint. A dependency-bearing schema-15 XSM cannot be decoded as a
+   fingerprint. A dependency-bearing schema-16 XSM cannot be decoded as a
    standalone artifact: its module-set route must present the canonical ordered
    vector of every exact verified dependency SemanticPlan, and the decoder
    rechecks dependency module IDs, semantic fingerprints, public export IDs,

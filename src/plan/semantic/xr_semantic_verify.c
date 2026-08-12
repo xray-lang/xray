@@ -1228,6 +1228,51 @@ static bool resolve_frozen_native_yieldable_target(const XrSemanticPlan *plan,
     return false;
 }
 
+/* This proof deliberately stops at the open function-value boundary. It says
+ * nothing about the members of the target set and therefore cannot authorize
+ * execution; it only freezes the conservative coroutine-state obligation. */
+static uint32_t resolve_frozen_indirect_callable_type(
+    const XrSemanticPlan *plan, const uint32_t *definitions, uint32_t value_count,
+    uint32_t operation_index) {
+    const XrSemanticOperationRecord *call = &plan->operations[operation_index];
+    if (call->opcode != XI_CALL || call->operand_count == 0 ||
+        call->operand_begin >= plan->operand_count)
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperandRecord *callee = &plan->operands[call->operand_begin];
+    if (callee->role != XR_SEM_OPERAND_CALLEE || callee->type >= plan->type_count ||
+        plan->types[callee->type].kind != XR_KIND_FUNCTION)
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t value = callee->value;
+    for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
+        if (value >= value_count)
+            return XR_SEMANTIC_INDEX_NONE;
+        uint32_t producer_index = definitions[value];
+        if (producer_index >= plan->operation_count) {
+            uint32_t parameter = producer_index - plan->operation_count;
+            return parameter < plan->parameter_count &&
+                           plan->parameters[parameter].function == call->function
+                       ? callee->type
+                       : XR_SEMANTIC_INDEX_NONE;
+        }
+        const XrSemanticOperationRecord *producer = &plan->operations[producer_index];
+        if (producer->function != call->function)
+            return XR_SEMANTIC_INDEX_NONE;
+        if (producer->opcode == XI_COPY &&
+            producer->semantic_immediate == XI_COPY_KIND_IDENTITY &&
+            producer->operand_count == 1 && producer->result_alias_operand == 0) {
+            value = plan->operands[producer->operand_begin].value;
+            continue;
+        }
+        if (producer->opcode == XI_IMPORT_REF || producer->opcode == XI_GET_BUILTIN ||
+            producer->opcode == XI_GET_SHARED || producer->opcode == XI_CLOSURE_NEW ||
+            (producer->opcode == XI_STACK_ALLOC &&
+             producer->semantic_immediate == XI_CLOSURE_NEW))
+            return XR_SEMANTIC_INDEX_NONE;
+        return callee->type;
+    }
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
 static bool resolve_frozen_source_namespace_target(
     const XrSemanticPlan *plan, const uint32_t *definitions, uint32_t value_count,
     uint32_t operation_index, const char **module_path, const char **selector) {
@@ -1434,6 +1479,8 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         const char *source_selector = NULL;
         bool source_namespace = resolve_frozen_source_namespace_target(
             plan, definitions, value_count, operation, &source_module, &source_selector);
+        uint32_t indirect_type = resolve_frozen_indirect_callable_type(
+            plan, definitions, value_count, operation);
         const XrSemanticCallTargetRecord *target =
             cursor < plan->call_target_count && plan->call_targets[cursor].operation == operation
                 ? &plan->call_targets[cursor]
@@ -1442,7 +1489,9 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             return report(error, error_size, "XR_SEM_0019",
                           "call-target table is not in operation order");
         bool source_export = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
-        if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable) && !target)
+        if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable ||
+             indirect_type != XR_SEMANTIC_INDEX_NONE) &&
+            !target)
             return report(error, error_size, "XR_SEM_0019",
                           "provable call has no call-target authority");
         if (!target)
@@ -1454,14 +1503,16 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                       target->dependency == XR_SEMANTIC_INDEX_NONE &&
                       target->source_export == XR_SEMANTIC_INDEX_NONE &&
                       stable_id_zero(target->export_identity) &&
-                      stable_id_zero(target->callee_function);
+                      stable_id_zero(target->callee_function) &&
+                      target->callable_type == XR_SEMANTIC_INDEX_NONE;
         bool native = direct_function == XR_SEMANTIC_INDEX_NONE && native_yieldable &&
                       target->function == XR_SEMANTIC_INDEX_NONE &&
                       target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE &&
                       target->dependency == XR_SEMANTIC_INDEX_NONE &&
                       target->source_export == XR_SEMANTIC_INDEX_NONE &&
                       stable_id_zero(target->export_identity) &&
-                      stable_id_zero(target->callee_function);
+                      stable_id_zero(target->callee_function) &&
+                      target->callable_type == XR_SEMANTIC_INDEX_NONE;
         bool source_shape = source_export && source_namespace &&
                             direct_function == XR_SEMANTIC_INDEX_NONE &&
                             !native_yieldable && target->function == XR_SEMANTIC_INDEX_NONE &&
@@ -1470,9 +1521,20 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                                    source_module) == 0 &&
                             !stable_id_zero(target->export_identity) &&
                             !stable_id_zero(target->callee_function) &&
+                            target->callable_type == XR_SEMANTIC_INDEX_NONE &&
                             plan->operations[operation].opcode == XI_CALL_METHOD &&
                             (plan->operations[operation].semantic_immediate & 1) == 0;
-        if ((!direct && !native && !source_shape) || target->reserved[0] != 0 ||
+        bool indirect = indirect_type != XR_SEMANTIC_INDEX_NONE &&
+                        direct_function == XR_SEMANTIC_INDEX_NONE && !native_yieldable &&
+                        !source_namespace &&
+                        target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE &&
+                        target->function == XR_SEMANTIC_INDEX_NONE &&
+                        target->dependency == XR_SEMANTIC_INDEX_NONE &&
+                        target->source_export == XR_SEMANTIC_INDEX_NONE &&
+                        stable_id_zero(target->export_identity) &&
+                        stable_id_zero(target->callee_function) &&
+                        target->callable_type == indirect_type;
+        if ((!direct && !native && !source_shape && !indirect) || target->reserved[0] != 0 ||
             target->reserved[1] != 0 || target->reserved[2] != 0)
             return report(error, error_size, "XR_SEM_0019",
                           "call-target authority disagrees with frozen invocation facts");
@@ -1492,7 +1554,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                               "call-target-v3:schema=%u:operation=%s:native=%s.%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, native_module,
                               native_member, (unsigned) target->kind);
-        } else {
+        } else if (source_shape) {
             char dependency_id[XR_STABLE_ID_BYTES * 2 + 1];
             char export_id[XR_STABLE_ID_BYTES * 2 + 1];
             char callee_id[XR_STABLE_ID_BYTES * 2 + 1];
@@ -1504,6 +1566,13 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                               "export=%s:function=%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, dependency_id,
                               export_id, callee_id, (unsigned) target->kind);
+        } else {
+            char type_id[XR_STABLE_ID_BYTES * 2 + 1];
+            xr_stable_id_hex(plan->types[target->callable_type].id, type_id);
+            length = snprintf(expected_key, sizeof(expected_key),
+                              "call-target-v3:schema=%u:operation=%s:callable-type=%s:kind=%u",
+                              XR_SEMANTIC_SCHEMA_VERSION, operation_id, type_id,
+                              (unsigned) target->kind);
         }
         if (length < 0 || (size_t) length >= sizeof(expected_key) ||
             strcmp(target->canonical_key ? target->canonical_key : "", expected_key) != 0 ||
@@ -1625,6 +1694,19 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
                               "source-export call-target shape is invalid");
             }
             work.suspendable[operation->function] = 1;
+        } else if (target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE) {
+            const XrSemanticOperationRecord *operation =
+                &plan->operations[target->operation];
+            if (target->function != XR_SEMANTIC_INDEX_NONE ||
+                target->callable_type >= plan->type_count ||
+                plan->types[target->callable_type].kind != XR_KIND_FUNCTION ||
+                operation->opcode != XI_CALL ||
+                operation->function >= plan->function_count) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "indirect callable call-target shape is invalid");
+            }
+            work.suspendable[operation->function] = 1;
         }
     }
     for (uint32_t entity_index = 0; entity_index < plan->entity_count; entity_index++) {
@@ -1674,7 +1756,9 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
                   (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
                    work.suspendable[target->function] != 0))) ||
                 (plan->operations[operation].opcode == XI_CALL_METHOD &&
-                 target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT);
+                 target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT) ||
+                (plan->operations[operation].opcode == XI_CALL &&
+                 target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE);
         }
         bool expected = operation_is_static_suspend(&plan->operations[operation]) ||
                         dynamic_suspend;

@@ -52,6 +52,7 @@ CONTRACT_SPECS = (
             "src/frontend/analyzer/xanalyzer_visitor_stmt.c",
             "src/ir/xi.h",
             "src/ir/xi_lower.c",
+            "src/plan/format/xr_xsm_encode.c",
             "src/plan/format/xr_xsm_schema.h",
             "src/plan/semantic/xr_semantic_builder.c",
             "src/plan/semantic/xr_semantic_ids.h",

@@ -67,6 +67,7 @@ typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_DIRECT_LOCAL = 1,
     XR_SEM_CALL_TARGET_NATIVE_YIELDABLE,
     XR_SEM_CALL_TARGET_SOURCE_EXPORT,
+    XR_SEM_CALL_TARGET_INDIRECT_CALLABLE,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 
@@ -333,8 +334,10 @@ typedef struct XrSemanticOperandRecord {
  * unique lexical SET_SHARED/GET_SHARED slot chain. NATIVE_YIELDABLE is rebuilt
  * from a bare IMPORT_REF and the canonical stdlib binding registry.
  * SOURCE_EXPORT is completed only by the ordered module-set verifier against
- * the dependency's public export table. All three kinds independently
- * authorize coroutine state creation without retaining Xi data.
+ * the dependency's public export table. INDIRECT_CALLABLE freezes only an
+ * open function-value dispatch domain and its conservative state obligation;
+ * it is not a target identity or execution authority. All four kinds
+ * independently authorize coroutine state creation without retaining Xi data.
  */
 typedef struct XrSemanticCallTargetRecord {
     XrStableId id;
@@ -345,6 +348,7 @@ typedef struct XrSemanticCallTargetRecord {
     uint32_t source_export;
     XrStableId export_identity;
     XrStableId callee_function;
+    uint32_t callable_type;
     uint8_t kind;
     uint8_t reserved[3];
 } XrSemanticCallTargetRecord;
