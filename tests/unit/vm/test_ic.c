@@ -71,9 +71,9 @@ TEST(proto_id_is_unique_and_monotonic) {
     ASSERT(b->proto_id > a->proto_id);
     ASSERT(c->proto_id > b->proto_id);
 
-    xr_vm_proto_free(a);
-    xr_vm_proto_free(b);
-    xr_vm_proto_free(c);
+    xr_instruction_unit_free(a);
+    xr_instruction_unit_free(b);
+    xr_instruction_unit_free(c);
 }
 
 /* ========== Lazy allocation ========== */
@@ -93,7 +93,7 @@ TEST(ensure_field_lazy_alloc_is_idempotent) {
     ASSERT(t2 == t1);
 
     xr_vm_ctx_free_ic_tables(&ctx);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(ensure_method_lazy_alloc_is_idempotent) {
@@ -110,7 +110,7 @@ TEST(ensure_method_lazy_alloc_is_idempotent) {
     ASSERT(t2 == t1);
 
     xr_vm_ctx_free_ic_tables(&ctx);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Read-side accessors ========== */
@@ -123,7 +123,7 @@ TEST(get_returns_null_before_ensure) {
     ASSERT(xr_vm_ctx_get_ic_fields(&ctx, p) == NULL);
     ASSERT(xr_vm_ctx_get_ic_methods(&ctx, p) == NULL);
 
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(get_returns_table_after_ensure) {
@@ -137,7 +137,7 @@ TEST(get_returns_table_after_ensure) {
     ASSERT(xr_vm_ctx_get_ic_methods(&ctx, p) == me);
 
     xr_vm_ctx_free_ic_tables(&ctx);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Capacity growth ========== */
@@ -166,8 +166,8 @@ TEST(capacity_grows_for_high_proto_id) {
 
     xr_vm_ctx_free_ic_tables(&ctx);
     for (int i = 0; i < BURN; i++)
-        xr_vm_proto_free(burn[i]);
-    xr_vm_proto_free(high);
+        xr_instruction_unit_free(burn[i]);
+    xr_instruction_unit_free(high);
 }
 
 /* ========== Multi-proto isolation in one ctx ========== */
@@ -192,8 +192,8 @@ TEST(multi_proto_isolation_within_ctx) {
     ASSERT_EQ_INT((int) fb->caches[0].state, (int) XR_IC_FIELD_UNINIT);
 
     xr_vm_ctx_free_ic_tables(&ctx);
-    xr_vm_proto_free(a);
-    xr_vm_proto_free(b);
+    xr_instruction_unit_free(a);
+    xr_instruction_unit_free(b);
 }
 
 /* ========== Snapshot semantics ========== */
@@ -206,7 +206,7 @@ TEST(snapshot_returns_null_before_ensure) {
     ASSERT(xr_vm_ic_fields_snapshot(&ctx, p) == NULL);
     ASSERT(xr_vm_ic_methods_snapshot(&ctx, p) == NULL);
 
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(snapshot_field_is_deep_copy) {
@@ -244,7 +244,7 @@ TEST(snapshot_field_is_deep_copy) {
     ASSERT_EQ_INT(live->caches[1].cached_symbol, 0x0BAD);
 
     xr_vm_ctx_free_ic_tables(&ctx);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(snapshot_method_deep_copies_mega_cache) {
@@ -296,7 +296,7 @@ TEST(snapshot_method_deep_copies_mega_cache) {
      * releases the table (and its mega via xr_ic_method_table_free
      * internally), so nothing else is needed here. */
     xr_vm_ctx_free_ic_tables(&ctx);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Free / reuse ========== */
@@ -323,8 +323,8 @@ TEST(free_ic_tables_resets_state_and_supports_reuse) {
     ASSERT_EQ_INT(fresh->count, 2);
 
     xr_vm_ctx_free_ic_tables(&ctx);
-    xr_vm_proto_free(a);
-    xr_vm_proto_free(b);
+    xr_instruction_unit_free(a);
+    xr_instruction_unit_free(b);
 }
 
 /* ========== Multi-context isolation ========== */
@@ -354,7 +354,7 @@ TEST(two_contexts_keep_ic_state_independent) {
 
     xr_vm_ctx_free_ic_tables(&ctx_a);
     xr_vm_ctx_free_ic_tables(&ctx_b);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Main ========== */

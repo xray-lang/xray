@@ -276,7 +276,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
 
 cleanup:
     if (proto)
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
     xr_free(source);
     if (X) {
         xr_compiler_session_set_module_graph(session, NULL);

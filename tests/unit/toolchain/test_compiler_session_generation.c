@@ -586,7 +586,7 @@ TEST(production_compile_entry_commits_or_aborts_one_operation) {
         xr_compiler_session_incremental_stats(session);
     XrProto *proto = xr_compile_source_with_path(session, "print(42)\n", "session-ok.xr");
     ASSERT_NOT_NULL(proto);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     XrCompilerSessionIncrementalStats succeeded =
         xr_compiler_session_incremental_stats(session);
     ASSERT_EQ_UINT(succeeded.completed_operations, initial.completed_operations + 1u);

@@ -189,7 +189,7 @@ XrValue xr_vm_run_closure_blocking(XrVMRuntime *isolate, XrClosure *closure, XrV
 void xr_free_code(XrVMRuntime *isolate, XrProto *proto) {
     if (proto != NULL) {
         xr_thread_obj_drain_isolate(isolate);
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
     }
 }
 

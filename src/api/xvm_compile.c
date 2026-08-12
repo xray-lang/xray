@@ -109,14 +109,14 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
 
     XrProto *proto = xr_compile(ctx, ast);
     if (proto && !xr_vm_entry_plan_derive(proto)) {
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         proto = NULL;
     }
     if (proto && out_module) {
         XiFunc *ir = (XiFunc *) proto->xi_func;
         *out_module = ir ? ir->module : NULL;
         if (!*out_module) {
-            xr_vm_proto_free(proto);
+            xr_instruction_unit_free(proto);
             proto = NULL;
         }
     }
@@ -134,7 +134,7 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
                               : xr_compiler_session_operation_fail(
                                     &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
     if (!operation_ok && proto) {
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         proto = NULL;
     }
 
@@ -191,7 +191,7 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
     // Compile
     XrProto *proto = xr_compile(ctx, ast);
     if (proto && !xr_vm_entry_plan_derive(proto)) {
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         proto = NULL;
     }
 
@@ -209,7 +209,7 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
                               : xr_compiler_session_operation_fail(
                                     &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
     if (!operation_ok && proto) {
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         proto = NULL;
     }
 

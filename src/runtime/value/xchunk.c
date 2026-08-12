@@ -112,7 +112,7 @@ void xr_vm_proto_set_ir_free_fn(XrProtoOpaqueFreeFn free_fn) {
 }
 
 // Free function prototype
-void xr_vm_proto_free(XrProto *proto) {
+void xr_instruction_unit_free(XrProto *proto) {
     if (proto == NULL) {
         return;
     }
@@ -121,7 +121,7 @@ void xr_vm_proto_free(XrProto *proto) {
     int proto_count = DYNARRAY_COUNT(&proto->protos);
     for (int i = 0; i < proto_count; i++) {
         XrProto *child = DYNARRAY_GET(&proto->protos, i, XrProto *);
-        xr_vm_proto_free(child);
+        xr_instruction_unit_free(child);
     }
 
     // Free all dynamic arrays

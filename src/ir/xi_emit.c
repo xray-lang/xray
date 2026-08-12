@@ -827,7 +827,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     ctx.reg_map_size = f->next_value_id;
     ctx.reg_map = (XiEmitReg *) xr_malloc(ctx.reg_map_size * sizeof(*ctx.reg_map));
     if (!ctx.reg_map) {
-        xr_vm_proto_free(ctx.proto);
+        xr_instruction_unit_free(ctx.proto);
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;
     }
@@ -838,7 +838,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     ctx.block_pc = (int *) xr_malloc(ctx.block_pc_size * sizeof(int));
     if (!ctx.block_pc) {
         xr_free(ctx.reg_map);
-        xr_vm_proto_free(ctx.proto);
+        xr_instruction_unit_free(ctx.proto);
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;
     }
@@ -850,7 +850,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     if (!ctx.last_use) {
         xr_free(ctx.block_pc);
         xr_free(ctx.reg_map);
-        xr_vm_proto_free(ctx.proto);
+        xr_instruction_unit_free(ctx.proto);
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;
     }
@@ -860,7 +860,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
         xr_free(ctx.last_use);
         xr_free(ctx.block_pc);
         xr_free(ctx.reg_map);
-        xr_vm_proto_free(ctx.proto);
+        xr_instruction_unit_free(ctx.proto);
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;
     }
@@ -958,7 +958,7 @@ cleanup:;
     if (result == XI_EMIT_OK) {
         *out_proto = ctx.proto;
     } else {
-        xr_vm_proto_free(ctx.proto);
+        xr_instruction_unit_free(ctx.proto);
     }
     xi_emit_free_var_state(&ctx);
     xr_free(ctx.last_use);

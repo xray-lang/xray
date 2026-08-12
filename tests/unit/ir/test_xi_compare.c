@@ -100,7 +100,7 @@ static void teardown(void) {
     }
     /* Free deferred protos after isolate (and its GC heap) is gone */
     for (int i = 0; i < g_deferred_count; i++)
-        xr_vm_proto_free(g_deferred_protos[i]);
+        xr_instruction_unit_free(g_deferred_protos[i]);
     g_deferred_count = 0;
 }
 
@@ -417,11 +417,11 @@ static void run_compare(CompareSpec spec) {
         /* Xi pipeline may fail for unsupported features */
         if (p_xi == NULL) {
             fprintf(stderr, "  (Xi pipeline not yet supported — OK)\n");
-            xr_vm_proto_free(p_legacy);
+            xr_instruction_unit_free(p_legacy);
             return;
         }
     } else if (p_xi == NULL) {
-        xr_vm_proto_free(p_legacy);
+        xr_instruction_unit_free(p_legacy);
         REQUIRE(false, "Xi pipeline returned NULL for '%s'", spec.label);
     }
 
@@ -500,8 +500,8 @@ static void run_compare(CompareSpec spec) {
         defer_proto_free(p_legacy);
         defer_proto_free(p_xi);
     } else {
-        xr_vm_proto_free(p_legacy);
-        xr_vm_proto_free(p_xi);
+        xr_instruction_unit_free(p_legacy);
+        xr_instruction_unit_free(p_xi);
     }
 }
 
@@ -552,7 +552,7 @@ static void run_fusion(FusionSpec spec) {
 
     XrProto *p_xi = compile_xi(spec.source);
     if (p_xi == NULL) {
-        xr_vm_proto_free(p_legacy);
+        xr_instruction_unit_free(p_legacy);
         REQUIRE(false, "Xi pipeline returned NULL for '%s'", spec.label);
     }
 
@@ -586,8 +586,8 @@ static void run_fusion(FusionSpec spec) {
         defer_proto_free(p_legacy);
         defer_proto_free(p_xi);
     } else {
-        xr_vm_proto_free(p_legacy);
-        xr_vm_proto_free(p_xi);
+        xr_instruction_unit_free(p_legacy);
+        xr_instruction_unit_free(p_xi);
     }
 }
 
@@ -2137,7 +2137,7 @@ TEST(cmp_chan_recv_match_uses_raw_opcode) {
     CHECK(invoke_count == 0, "recv+match must not fall back to method dispatch, got %d OP_INVOKE",
           invoke_count);
 
-    xr_vm_proto_free(p_xi);
+    xr_instruction_unit_free(p_xi);
 }
 
 TEST(cmp_go_simple) {

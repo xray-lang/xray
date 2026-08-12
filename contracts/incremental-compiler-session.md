@@ -79,5 +79,5 @@ artifact authority and operation-local verifier output.
 
 anchor-sha256: src/toolchain/xcompiler_session.h 8dee7c7df5115c2af9f48015dcce11ef6341830de07c06c3b0b5febcce4d8fde
 anchor-sha256: src/toolchain/xcompiler_session.c 5c15ee43fadd472cc0f2e7c577e214f5133360b4930e686b5df29228311ab017
-anchor-sha256: src/api/xrepl.c 5873b544d5291b9a7ef2b4be5ca40afcdf044731c2c2b3b452aa14d114d37187
-anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c 809ca55950acd0593cc1c94fb4da3baa52d202a6f195ead6d06dfe7285e07788
+anchor-sha256: src/api/xrepl.c 0d86b2917567f84268abdf40182661fb7a9567259fec26315cae9bbd272bc17c
+anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c 4b0d4aad37518ed2e90e12ac99df88f6afc7e14c3bf54ac10f5575cc19afffd5

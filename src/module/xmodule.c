@@ -850,7 +850,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
             return false;
         }
         if (proto_has_invalid_class_descriptors(code)) {
-            xr_vm_proto_free(code);
+            xr_instruction_unit_free(code);
             code = NULL;
             XR_DBG_MODULE("load_script_extension: embedded bytecode for %s needs source fallback",
                           module_name);

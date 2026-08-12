@@ -84,7 +84,7 @@ TEST(emit_return_const_int) {
     assert(GET_OPCODE(i1) == OP_RETURN1 && "second should be RETURN1");
     assert(GETARG_A(i1) == GETARG_A(i0) && "return same register as loaded");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -103,7 +103,7 @@ TEST(emit_return_void) {
     assert(count == 1);
     assert(GET_OPCODE(PROTO_CODE(proto, 0)) == OP_RETURN0);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -134,7 +134,7 @@ TEST(emit_target_layout_queries_use_canonical_target_layout) {
     }
     assert(loads == 2);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -150,7 +150,7 @@ TEST(emit_unreachable_is_terminator) {
     assert(GET_OPCODE(PROTO_CODE(proto, 0)) == OP_RETURN0 &&
            "UNREACHABLE bytecode must not fall through");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -169,7 +169,7 @@ TEST(emit_const_bool) {
     XrInstruction i0 = PROTO_CODE(proto, 0);
     assert(GET_OPCODE(i0) == OP_LOADTRUE);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -189,7 +189,7 @@ TEST(emit_const_null) {
     XrInstruction i0 = PROTO_CODE(proto, 0);
     assert(GET_OPCODE(i0) == OP_LOADNULL);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -225,7 +225,7 @@ TEST(emit_add) {
     }
     assert(found_add && "should emit ADD instruction");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -258,7 +258,7 @@ TEST(emit_sub_mul_div) {
     }
     assert(has_sub && has_div && has_mul && "should emit SUB, DIV, MUL");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -284,7 +284,7 @@ TEST(emit_unary_neg) {
     }
     assert(found && "should emit UNM");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -313,7 +313,7 @@ TEST(emit_cmp_eq) {
     }
     assert(found && "should emit CMP_EQ");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -344,7 +344,7 @@ TEST(emit_cmp_gt) {
     }
     assert(found && "should emit CMP_LT for GT");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -372,7 +372,7 @@ TEST(emit_uint64_cmp_uses_unsigned_opcode) {
     }
     assert(found && "u64 compare should emit CMP_LTU");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -418,7 +418,7 @@ TEST(emit_if_then_else) {
     assert(has_jmp && "should emit JMP");
     assert(ret_count == 2 && "should have 2 RETURN1 instructions");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -471,7 +471,7 @@ TEST(emit_reused_cmp_control_materializes_bool) {
     assert(found_cmp && "reused compare must emit a materialized CMP_* bool");
     assert(tests_of_cmp == 2 && "both branches should test the same materialized compare");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -498,7 +498,7 @@ TEST(emit_jump_fallthrough) {
     }
     assert(jmp_count == 0 && "should elide fallthrough JMP");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -528,7 +528,7 @@ TEST(emit_copy_becomes_move) {
     }
     assert(found_move && "COPY should emit MOVE");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -566,7 +566,7 @@ TEST(emit_numeric_conversion_packs_typed_witness) {
     }
     assert(found && "typed integer-to-float witness must reach VM bytecode");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -587,7 +587,7 @@ TEST(emit_const_float_small) {
     XrInstruction i0 = PROTO_CODE(proto, 0);
     assert(GET_OPCODE(i0) == OP_LOADF && "small float should use LOADF");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -607,7 +607,7 @@ TEST(emit_const_float_large) {
     assert(GET_OPCODE(i0) == OP_LOADK && "non-integer float should use LOADK");
     assert(PROTO_CONST_COUNT(proto) == 1 && "should have 1 constant");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -630,7 +630,7 @@ TEST(emit_const_int_large) {
     assert(GETARG_sBx(i0) == 100000);
     assert(PROTO_CONST_COUNT(proto) == 0);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -651,7 +651,7 @@ TEST(emit_const_int_beyond_sbx) {
     assert(GET_OPCODE(i0) == OP_LOADK && "int beyond sBx should use LOADK");
     assert(PROTO_CONST_COUNT(proto) == 1);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -687,7 +687,7 @@ TEST(emit_after_optimization) {
                "ADD should be eliminated by strength reduction");
     }
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -719,7 +719,7 @@ TEST(emit_reg_recycling) {
      * maxstacksize should be at most 4. */
     assert(proto->maxstacksize <= 4 && "register recycling should keep maxstacksize <= 4");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -747,7 +747,7 @@ TEST(emit_reg_pressure) {
      * 2 params + at most 2 temps = 4 regs max. */
     assert(proto->maxstacksize <= 4 && "sequential chain should recycle intermediates");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -770,7 +770,7 @@ TEST(emit_param_register_above_255) {
     assert(GET_OPCODE(ret) == OP_RETURN1);
     assert(GETARG_A(ret) == 300);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -795,7 +795,7 @@ TEST(emit_coalesces_var_id_above_255) {
     assert(GET_OPCODE(ret) == OP_RETURN1);
     assert(GETARG_A(ret) == 0);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -837,7 +837,7 @@ TEST(emit_select_preserves_param_slot_alias) {
     assert(GET_OPCODE(move_inst) == OP_MOVE);
     assert(GETARG_A(move_inst) == 0 && "SELECT result should write back to the parameter slot");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -886,7 +886,7 @@ TEST(emit_symbol_index_above_255) {
     assert(found_getprop && "GETPROP should preserve a proto-local symbol index above 255");
     assert(found_invoke && "INVOKE should preserve a proto-local symbol index above 255");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
     xray_vm_delete(iso);
 }
@@ -918,7 +918,7 @@ TEST(emit_addi_rhs_const) {
     }
     assert(found_addi && "a + 5 should fuse into ADDI");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -945,7 +945,7 @@ TEST(emit_addi_lhs_const) {
     }
     assert(found_addi && "3 + a should fuse into ADDI (commutative)");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -980,7 +980,7 @@ TEST(emit_subi_muli) {
     assert(found_subi && "a - 1 should fuse into SUBI");
     assert(found_muli && "(a-1) * 2 should fuse into MULI");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -1007,7 +1007,7 @@ TEST(emit_addi_negative) {
     }
     assert(found_addi && "a + (-10) should fuse into ADDI");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -1033,7 +1033,7 @@ TEST(emit_addk_large_const) {
     }
     assert(found_addk && "a + 40000 should use ADDK (const pool)");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -1072,7 +1072,7 @@ TEST(emit_str_concat) {
     assert(found_append && "should have STRBUF_APPEND");
     assert(found_finish && "should have STRBUF_FINISH");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -1104,7 +1104,7 @@ TEST(emit_str_concat_uint64_formats_before_append) {
     assert(found_tostring_u64 && "u64 concat part should be formatted before append");
     assert(found_append && "concat should still use StringBuilder append sequence");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -1154,7 +1154,7 @@ TEST(emit_closure_new) {
     }
     assert(found && "CLOSURE_NEW should emit OP_CLOSURE");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -1182,7 +1182,7 @@ TEST(emit_set_new) {
     }
     assert(found && "SET_NEW should emit OP_NEWSET");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -1214,7 +1214,7 @@ TEST(emit_is_check) {
     }
     assert(found && "XI_IS should emit OP_IS");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -1242,7 +1242,7 @@ TEST(emit_identity_as_establishes_owned_result) {
     }
     assert(found_dup && "identity XI_AS must retain its independently owned result");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -1269,7 +1269,7 @@ TEST(emit_cancelled_builtin) {
     }
     assert(found && "CALL_BUILTIN(0) should emit OP_CANCELLED");
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
@@ -1303,7 +1303,7 @@ TEST(emit_local_addr_pins_source_slot) {
     }
     assert(found_addr);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 

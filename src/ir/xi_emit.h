@@ -49,7 +49,7 @@ typedef enum {
 /* Emit Xi IR function to a new XrProto.
  * Returns XI_EMIT_OK on success; on failure, *out_proto is NULL
  * and the status indicates the error kind.
- * Caller owns the returned XrProto (free with xr_vm_proto_free). */
+ * Caller owns the returned XrProto (free with xr_instruction_unit_free). */
 /* isolate is needed for string constant interning (may be NULL for no-string funcs) */
 XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrProto **out_proto);
 
@@ -57,7 +57,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
 XR_FUNC const char *xi_emit_status_str(XiEmitStatus s);
 
 /* Attach Xi IR to proto for AOT direct lowering.
- * Transfers XiFunc ownership: proto will free it in xr_proto_free().
+ * Transfers XiFunc ownership: proto will free it in xr_instruction_unit_free().
  * Must only be called once per proto. */
 XR_FUNC bool xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir);
 

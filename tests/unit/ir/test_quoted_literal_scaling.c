@@ -141,7 +141,7 @@ static bool run_scaling_case(size_t payload_length, ScalingResult *result) {
     }
 
     if (proto)
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
     if (func)
         xi_func_free(func);
     xa_typed_program_free(typed.program);

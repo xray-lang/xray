@@ -162,7 +162,7 @@ static XrProto *make_minimal_proto(void) {
     XrProto *proto = xr_vm_proto_new();
     if (!proto)
         return NULL;
-    /* XrProto owns source_file (freed in xr_vm_proto_free), so it must be
+    /* XrProto owns source_file (freed in xr_instruction_unit_free), so it must be
      * heap-allocated — never a string literal. */
     proto->source_file = xr_strdup("<bytecode-io-test>");
     proto->maxstacksize = 1;
@@ -196,9 +196,9 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
     ASSERT_EQ_UINT(roundtrip->entry_plan.root_representation, XR_ROOT_ELIDED);
     ASSERT_EQ_UINT(roundtrip->entry_plan.scheduler_mode, XR_SCHED_NONE);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -232,9 +232,9 @@ TEST(bytecode_roundtrips_reachable_entry_plan) {
     ASSERT_EQ_UINT(roundtrip->entry_plan.scheduler_mode, XR_SCHED_SINGLE);
     ASSERT_TRUE(xr_vm_entry_plan_validate(roundtrip));
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(root);
+    xr_instruction_unit_free(root);
     xray_vm_delete(iso);
 }
 
@@ -256,9 +256,9 @@ TEST(bytecode_roundtrips_struct_area_size) {
     ASSERT_EQ_INT(error, XR_BC_OK);
     ASSERT_EQ_UINT(roundtrip->struct_area_size, 1024u * 1024u);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -298,9 +298,9 @@ TEST(bytecode_roundtrips_exact_string_constant_lengths) {
     ASSERT_EQ_UINT(XR_TO_STRING(value)->length, sizeof(embedded_nul));
     ASSERT_TRUE(memcmp(XR_TO_STRING(value)->data, embedded_nul, sizeof(embedded_nul)) == 0);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
 }
@@ -328,9 +328,9 @@ TEST(bytecode_roundtrips_rune_constants) {
     ASSERT_TRUE(XR_IS_RUNE(value));
     ASSERT_EQ_UINT(XR_TO_RUNE(value), 0x1F642);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
 }
@@ -388,9 +388,9 @@ TEST(bytecode_roundtrips_bigint_constants) {
         ASSERT_STR_EQ(decoded, cases[i]);
         xr_free(decoded);
 
-        xr_vm_proto_free(roundtrip);
+        xr_instruction_unit_free(roundtrip);
         xr_free(bytes);
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         xray_vm_delete(reader);
         xray_vm_delete(writer);
     }
@@ -422,9 +422,9 @@ TEST(bytecode_reader_assigns_unique_proto_ids) {
     ASSERT_TRUE(roundtrip->proto_id != roundtrip_child->proto_id);
     ASSERT_TRUE(roundtrip_child->enclosing == roundtrip);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -450,7 +450,7 @@ TEST(bytecode_reader_rejects_previous_layout_version) {
     ASSERT_EQ_INT(error, XR_BC_ERR_VERSION);
 
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -509,9 +509,9 @@ TEST(bytecode_roundtrips_exact_structural_shape_across_isolates) {
     ASSERT_STR_EQ(roundtrip_shape->fields[0].name, "host");
     ASSERT_STR_EQ(roundtrip_shape->fields[1].name, "port");
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
 }
@@ -601,9 +601,9 @@ TEST(bytecode_roundtrips_typed_object_decode_shape) {
     ASSERT_EQ_UINT(roundtrip_nested->fields[1].json_value_kind, XR_JSON_VALUE_INT);
     ASSERT_EQ_UINT(roundtrip_shape->fields[2].json_value_kind, XR_JSON_VALUE_ARRAY);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
 }
@@ -678,9 +678,9 @@ TEST(bytecode_roundtrips_typed_json_root_schema) {
     ASSERT_STR_EQ(xr_enum_type_member_name(roundtrip_enum, 1), "Binary");
     ASSERT_TRUE(xr_enum_type_same_nominal(enum_type, roundtrip_enum));
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
 }
@@ -748,11 +748,11 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     xr_free((void *) roundtrip_desc->class_name);
     xr_free((void *) roundtrip_desc->display_name);
     xr_free(roundtrip_desc);
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
     xr_free(desc->instance_fields);
     xr_free(desc);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
 }
@@ -891,10 +891,10 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
     free_minimal_roundtrip_descriptor(read_copy);
     free_minimal_roundtrip_descriptor(read_union);
     free_minimal_roundtrip_descriptor(read_distinct);
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes_b);
     xr_free(bytes_a);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
 }
@@ -955,7 +955,7 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     ASSERT_STR_EQ(xr_bytecode_error_string(XR_BC_ERR_CORRUPT), "corrupt bytecode metadata");
 
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
 
     XrAggregateLayout child = test_layout(XR_AGG_LAYOUT_STRUCT, 1);
     child.fields[0].native_type = XR_NATIVE_U8;
@@ -982,7 +982,7 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
 
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -1008,7 +1008,7 @@ TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth) {
     XrBcError error = XR_BC_OK;
     ASSERT_NULL(xr_bytecode_write(iso, proto, 0, &size, &error));
     ASSERT_EQ_INT(error, XR_BC_ERR_TARGET_ABI);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
 
     XrAggregateLayout chain[18];
     for (uint32_t i = 0; i < 18; i++)
@@ -1031,7 +1031,7 @@ TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth) {
     ASSERT_NULL(xr_bytecode_write(iso, proto, 0, &size, &error));
     ASSERT_EQ_INT(error, XR_BC_ERR_METADATA);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -1132,9 +1132,9 @@ TEST(bytecode_roundtrips_enum_type_constants) {
     ASSERT_TRUE(err_sym > 0);
     ASSERT_EQ_INT(xr_enum_type_find_member_index_by_symbol(roundtrip_enum, err_sym), 1);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
 }
@@ -1184,9 +1184,9 @@ TEST(bytecode_preserves_native_stdlib_enum_nominal_identity_across_modules) {
     ASSERT_TRUE(XR_IS_ENUM_TYPE(PROTO_CONSTANT(roundtrip, 0)));
     ASSERT_TRUE(XR_TO_ENUM_TYPE(PROTO_CONSTANT(roundtrip, 0)) == reader_enum);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
 }
@@ -1208,7 +1208,7 @@ TEST(bytecode_rejects_mismatched_native_stdlib_enum_shape) {
     ASSERT_EQ_UINT(size, 0);
     ASSERT_EQ_INT(error, XR_BC_ERR_METADATA);
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(writer);
 }
 
@@ -1239,9 +1239,9 @@ TEST(bytecode_roundtrips_u16_upvalue_index) {
     ASSERT_EQ_UINT(info.is_const, 1);
     ASSERT_EQ_UINT(info.capture_action, XR_TRANSFER_EXPLICIT_COPY);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -1264,9 +1264,9 @@ TEST(bytecode_roundtrips_declared_shared_count) {
     ASSERT_EQ_INT(roundtrip->shared_count, 4);
     ASSERT_FALSE(roundtrip->shared_slots_bound);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -1276,7 +1276,7 @@ TEST(bytecode_roundtrips_symbol_index_above_255) {
 
     XrProto *proto = xr_vm_proto_new();
     ASSERT_NOT_NULL(proto);
-    /* XrProto owns source_file (freed in xr_vm_proto_free); use a heap copy. */
+    /* XrProto owns source_file (freed in xr_instruction_unit_free); use a heap copy. */
     proto->source_file = xr_strdup("<bytecode-symbol-test>");
     proto->maxstacksize = 2;
 
@@ -1314,9 +1314,9 @@ TEST(bytecode_roundtrips_symbol_index_above_255) {
     ASSERT_NOT_NULL(roundtrip_name);
     ASSERT_STR_EQ(roundtrip_name, "wide_symbol_300");
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -1355,9 +1355,9 @@ TEST(bytecode_roundtrips_extern_ffi_signature) {
     ASSERT_EQ_UINT(roundtrip->ffi_sig->params[1], XR_FFI_T_F64);
     ASSERT_EQ_UINT(roundtrip->ffi_sig->ret, XR_FFI_T_F64);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -1389,9 +1389,9 @@ TEST(bytecode_roundtrips_extern_default_library) {
     ASSERT_NULL(roundtrip->ffi_sig->dylib);
     ASSERT_EQ_UINT(roundtrip->ffi_sig->nparams, 1);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 
@@ -1428,9 +1428,9 @@ TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
     ASSERT_EQ_UINT(roundtrip->ffi_sig->param_cbacks[0]->ret, XR_FFI_T_I32);
     ASSERT_EQ_UINT(roundtrip->ffi_sig->ret, XR_FFI_T_I32);
 
-    xr_vm_proto_free(roundtrip);
+    xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
 

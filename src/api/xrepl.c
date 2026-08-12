@@ -678,7 +678,7 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     XrProto *proto = xr_compile(ctx, ast);
 
     if (proto && !ctx->had_error && !xr_vm_entry_plan_derive(proto)) {
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         proto = NULL;
     }
 

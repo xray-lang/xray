@@ -925,7 +925,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
             if (!next) {
                 xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_REPRESENTATION,
                                       XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
-                xr_vm_proto_free(proto);
+                xr_instruction_unit_free(proto);
                 res.proto = NULL;
                 goto fail;
             }
@@ -938,7 +938,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         res.ir = ir;
         char snapshot_error[256];
         if (!xi_semantic_snapshot_detach_ex(ir, snapshot_error, sizeof(snapshot_error))) {
-            xr_vm_proto_free(proto);
+            xr_instruction_unit_free(proto);
             res.proto = NULL;
             xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_EMIT,
                                   XI_VERIFY_EMISSION, ir, NULL, NULL, snapshot_error);
@@ -947,7 +947,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         /* Transfer Xi IR ownership to proto for AOT direct lowering.
          * Null res.ir so xi_pipeline_result_free won't double-free. */
         if (!xi_emit_attach_ir(proto, ir)) {
-            xr_vm_proto_free(proto);
+            xr_instruction_unit_free(proto);
             res.proto = NULL;
             res.ir = ir;
             xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_EMIT,
@@ -1101,13 +1101,13 @@ XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrVMRuntime *isol
     char snapshot_error[256];
     if (!xi_semantic_snapshot_detach_ex(ir, snapshot_error, sizeof(snapshot_error))) {
         fprintf(stderr, "[xi_pipeline] semantic snapshot failed: %s\n", snapshot_error);
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         return NULL;
     }
 
     /* Transfer IR ownership to proto for AOT direct lowering */
     if (!xi_emit_attach_ir(proto, ir)) {
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         return NULL;
     }
     return proto;

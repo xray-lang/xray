@@ -123,7 +123,7 @@ TEST(e2e_simple_const) {
     XrProto *p = compile_source("var x = 42\nprint(x)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_PRINT));
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_arithmetic) {
@@ -135,7 +135,7 @@ TEST(e2e_arithmetic) {
     /* After optimization, ADD and MUL should be folded away */
     assert(!has_opcode(p, OP_ADD) && "1+2 should be folded");
     assert(!has_opcode(p, OP_MUL) && "3*3 should be folded");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_variable_assignment) {
@@ -146,7 +146,7 @@ TEST(e2e_variable_assignment) {
     assert(p != NULL);
     /* After const folding: x=15, so no ADD */
     assert(!has_opcode(p, OP_ADD) && "10+5 should be folded");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Control Flow Tests ========== */
@@ -157,7 +157,7 @@ TEST(e2e_if_else) {
     assert(p != NULL);
     /* With const folding, the branch may be eliminated */
     assert(has_opcode(p, OP_PRINT));
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_while_loop) {
@@ -167,7 +167,7 @@ TEST(e2e_while_loop) {
     XrProto *p = compile_source("var i = 0\nwhile (i < 3) { i = i + 1 }\nprint(i)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_JMP) && "while loop needs JMP");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Pipeline Configuration Tests ========== */
@@ -182,7 +182,7 @@ TEST(e2e_no_optimize) {
      * Instruction fusion may emit ADDI instead of ADD for small constant args. */
     assert((has_opcode(p, OP_ADD) || has_opcode(p, OP_ADDI)) &&
            "unoptimized should keep ADD or ADDI");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_with_verify) {
@@ -190,7 +190,7 @@ TEST(e2e_with_verify) {
     XiPipelineConfig cfg = xi_pipeline_default_config();
     XrProto *p = compile_source("var x = 42\nprint(x)", &cfg);
     assert(p != NULL);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Boolean & Comparison ========== */
@@ -201,7 +201,7 @@ TEST(e2e_bool_ops) {
      * print(a) */
     XrProto *p = compile_source("var a = true\nvar b = false\nprint(a)", NULL);
     assert(p != NULL);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_comparison) {
@@ -210,7 +210,7 @@ TEST(e2e_comparison) {
      * After const folding: x=true */
     XrProto *p = compile_source("var x = 5 > 3\nprint(x)", NULL);
     assert(p != NULL);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Multiple Statements ========== */
@@ -222,7 +222,7 @@ TEST(e2e_multi_print) {
     XrProto *p = compile_source("print(1)\nprint(2)\nprint(3)", NULL);
     assert(p != NULL);
     assert(count_opcode(p, OP_PRINT) == 3 && "should have 3 PRINT ops");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== String Literals ========== */
@@ -231,7 +231,7 @@ TEST(e2e_string_literal) {
     XrProto *p = compile_source("var s = \"hello\"\nprint(s)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_PRINT));
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Unary Ops ========== */
@@ -241,7 +241,7 @@ TEST(e2e_unary_neg) {
      * After const folding: x = -42 */
     XrProto *p = compile_source("var x = -42\nprint(x)", NULL);
     assert(p != NULL);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== For Loop ========== */
@@ -254,7 +254,7 @@ TEST(e2e_for_loop) {
     assert(p != NULL);
     assert(has_opcode(p, OP_JMP) && "for loop needs backward JMP");
     assert(has_opcode(p, OP_PRINT));
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Function / Closure ========== */
@@ -267,7 +267,7 @@ TEST(e2e_function_decl) {
     assert(p != NULL);
     assert(has_opcode(p, OP_CLOSURE) && "function decl needs CLOSURE");
     assert(PROTO_PROTO_COUNT(p) >= 1 && "should have child proto for add()");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_attached_ir_is_repped) {
@@ -286,7 +286,7 @@ TEST(e2e_attached_ir_is_repped) {
     XiFunc *child_ir = (XiFunc *) child->xi_func;
     assert(child_ir->stage >= XI_STAGE_REPPED);
     assert((child_ir->invariant_mask & XI_INV_REPS_SELECTED) != 0);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_recursive_func) {
@@ -300,7 +300,7 @@ TEST(e2e_recursive_func) {
     /* Child proto should use CALLSELF for recursion */
     XrProto *child = PROTO_PROTO(p, 0);
     assert(has_opcode(child, OP_CALLSELF) && "recursive call should use CALLSELF");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_nested_call) {
@@ -319,7 +319,7 @@ TEST(e2e_nested_call) {
     int ncalls = count_opcode(p, OP_CALL) + count_opcode(p, OP_CALL_STATIC);
     assert(ncalls >= 2 && "nested calls need >= 2 calls");
     assert(!has_opcode(p, OP_CALLSELF) && "main proto must not self-call");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Constant Propagation Chain ========== */
@@ -331,7 +331,7 @@ TEST(e2e_const_prop_chain) {
     assert(p != NULL);
     assert(!has_opcode(p, OP_ADD) && "chain should fold ADD away");
     assert(!has_opcode(p, OP_MUL) && "chain should fold MUL away");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Dead Code Elimination ========== */
@@ -350,7 +350,7 @@ TEST(e2e_dce_unused_var) {
     XrProto *child = DYNARRAY_GET(&p->protos, 0, XrProto *);
     int loads = count_opcode(child, OP_LOADI) + count_opcode(child, OP_LOADK);
     assert(loads <= 1 && "unused y should be eliminated by DCE");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Array Operations ========== */
@@ -360,14 +360,14 @@ TEST(e2e_array_literal) {
     assert(p != NULL);
     assert(has_opcode(p, OP_NEWARRAY) && "array literal needs NEWARRAY");
     assert(has_opcode(p, OP_INDEX_GET) && "arr[1] needs INDEX_GET");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_array_set) {
     XrProto *p = compile_source("var arr = [1, 2, 3]\narr[0] = 99\nprint(arr[0])", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_INDEX_SET) && "arr[0]=99 needs INDEX_SET");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_native_pointer_store_narrows_to_pointee) {
@@ -376,7 +376,7 @@ TEST(e2e_native_pointer_store_narrows_to_pointee) {
                                 "}",
                                 NULL);
     assert(p != NULL && "raw pointer stores must preserve the pointee's native width");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_inlined_ref_forwarding_remaps_place_origin) {
@@ -392,7 +392,7 @@ TEST(e2e_inlined_ref_forwarding_remaps_place_origin) {
                                 "}",
                                 NULL);
     assert(p != NULL && "inlining must remap forwarded ref place origins into the caller");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Bitwise Operations ========== */
@@ -403,13 +403,13 @@ TEST(e2e_bitwise_ops) {
                                 "print(a & b)\nprint(a | b)\nprint(a ^ b)",
                                 NULL);
     assert(p != NULL);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_bitwise_shift) {
     XrProto *p = compile_source("var x = 1\nprint(x << 4)\nprint(x >> 0)", NULL);
     assert(p != NULL);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Compound Assignment ========== */
@@ -418,7 +418,7 @@ TEST(e2e_compound_assign) {
     XrProto *p = compile_source("var x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_PRINT));
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Increment / Decrement ========== */
@@ -426,7 +426,7 @@ TEST(e2e_compound_assign) {
 TEST(e2e_inc_dec) {
     XrProto *p = compile_source("var x = 0\nx++\nx++\nx++\nx--\nprint(x)", NULL);
     assert(p != NULL);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Break / Continue ========== */
@@ -440,7 +440,7 @@ TEST(e2e_break) {
                                 NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_JMP));
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_continue) {
@@ -452,7 +452,7 @@ TEST(e2e_continue) {
                                 "}\nprint(sum)",
                                 NULL);
     assert(p != NULL);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Multi-branch If-Else ========== */
@@ -465,7 +465,7 @@ TEST(e2e_if_else_chain) {
                                 NULL);
     assert(p != NULL);
     /* Multiple branches means multiple conditional jumps */
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Float Constants ========== */
@@ -475,7 +475,7 @@ TEST(e2e_float_arith) {
     XrProto *p = compile_source("var x = 1.5 + 2.5\nprint(x)", NULL);
     assert(p != NULL);
     assert(!has_opcode(p, OP_ADD) && "1.5+2.5 should be folded");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Ternary ========== */
@@ -483,7 +483,7 @@ TEST(e2e_float_arith) {
 TEST(e2e_ternary) {
     XrProto *p = compile_source("var x = 5\nvar r = x > 3 ? 1 : 0\nprint(r)", NULL);
     assert(p != NULL);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Logical Short-Circuit ========== */
@@ -497,7 +497,7 @@ TEST(e2e_short_circuit) {
     assert(p != NULL);
     assert(has_opcode(p, OP_BAND) && "pure && should use eager BAND");
     assert(has_opcode(p, OP_BOR) && "pure || should use eager BOR");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Multiple Functions ========== */
@@ -510,7 +510,7 @@ TEST(e2e_multi_func) {
     assert(p != NULL);
     assert(PROTO_PROTO_COUNT(p) >= 2 && "should have 2 child protos");
     assert(count_opcode(p, OP_CLOSURE) >= 2 && "need 2 CLOSUREs");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== String Concatenation ========== */
@@ -524,7 +524,7 @@ TEST(e2e_string_concat) {
      * or falls back to ADD when types are unknown. Accept either. */
     assert((has_opcode(p, OP_ADD) || has_opcode(p, OP_STRBUF_FINISH)) &&
            "string concat uses ADD or STRBUF");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Map Literal ========== */
@@ -535,7 +535,7 @@ TEST(e2e_map_literal) {
     /* Map creation should emit NEWMAP or NEWJSON + field stores */
     int total = PROTO_CODE_COUNT(p);
     assert(total >= 3 && "map literal needs multiple instructions");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Template String ========== */
@@ -546,7 +546,7 @@ TEST(e2e_template_string) {
     assert(has_opcode(p, OP_STRBUF_NEW) && "template uses STRBUF pipeline");
     assert(has_opcode(p, OP_STRBUF_APPEND));
     assert(has_opcode(p, OP_STRBUF_FINISH));
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Nullish Coalesce ========== */
@@ -557,7 +557,7 @@ TEST(e2e_nullish_coalesce) {
     /* ?? lowers to ISNULL + conditional branch; verify enough instructions */
     int total = PROTO_CODE_COUNT(p);
     assert(total >= 3 && "nullish coalesce needs branch logic");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Match Expression ========== */
@@ -574,7 +574,7 @@ TEST(e2e_match_expr) {
     /* Match lowers to comparisons + branches; verify enough instructions */
     int total = PROTO_CODE_COUNT(p);
     assert(total >= 5 && "match needs comparison + branch logic");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Try-Catch ========== */
@@ -585,7 +585,7 @@ TEST(e2e_try_catch) {
     /* Try-catch should emit SETUP_TRY + POP_TRY or similar */
     int total = PROTO_CODE_COUNT(p);
     assert(total >= 3 && "try-catch requires setup/body/handler");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Slice ========== */
@@ -601,7 +601,7 @@ TEST(e2e_slice) {
     assert(p != NULL);
     assert(PROTO_PROTO_COUNT(p) >= 1);
     assert(has_opcode(PROTO_PROTO(p, 0), OP_SLICE) && "slice expression needs OP_SLICE");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_generator_completion_has_no_normal_return_value) {
@@ -615,7 +615,7 @@ TEST(e2e_generator_completion_has_no_normal_return_value) {
     assert(p != NULL);
     assert(PROTO_PROTO_COUNT(p) >= 1);
     assert(has_opcode(PROTO_PROTO(p, 0), OP_GEN_YIELD));
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Closure (nested function) ========== */
@@ -629,7 +629,7 @@ TEST(e2e_closure) {
     assert(p != NULL);
     assert(has_opcode(p, OP_CLOSURE) && "nested func needs OP_CLOSURE");
     assert(PROTO_PROTO_COUNT(p) >= 1 && "should have child proto");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Type Conversion ========== */
@@ -640,7 +640,7 @@ TEST(e2e_type_convert) {
     /* XI_AS lowers to MOVE; just verify pipeline succeeds */
     int total = PROTO_CODE_COUNT(p);
     assert(total >= 2 && "type conversion pipeline must produce instructions");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Range ========== */
@@ -649,13 +649,13 @@ TEST(e2e_range) {
     XrProto *p = compile_source("var r = 0..10\nprint(r)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_NEWRANGE) && "range expression needs OP_NEWRANGE");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 
     p = compile_source("var r = 0..=10\nprint(r)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_NEWRANGE_INCLUSIVE) &&
            "inclusive range expression needs OP_NEWRANGE_INCLUSIVE");
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Budget Stress Tests ========== */
@@ -738,7 +738,7 @@ TEST(stress_large_sequential_with_budget) {
     assert(elapsed_ms < 5000 && "budget stress should finish in < 5s");
     printf("  200 stmts, 2ms budget -> %llu ms\n", (unsigned long long) elapsed_ms);
 
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
     free(src);
 }
 
@@ -757,7 +757,7 @@ TEST(stress_large_sequential_no_budget) {
     assert(elapsed_ms < 10000 && "no-budget stress should finish in < 10s");
     printf("  200 stmts, no budget -> %llu ms\n", (unsigned long long) elapsed_ms);
 
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
     free(src);
 }
 
@@ -776,7 +776,7 @@ TEST(stress_nested_loops_with_budget) {
     assert(elapsed_ms < 5000 && "nested-loop stress should finish in < 5s");
     printf("  3-deep loops, 5ms budget -> %llu ms\n", (unsigned long long) elapsed_ms);
 
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
     free(src);
 }
 
@@ -795,7 +795,7 @@ TEST(stress_many_functions_with_budget) {
     assert(elapsed_ms < 5000 && "many-func stress should finish in < 5s");
     printf("  20 funcs x 15 stmts, 3ms budget -> %llu ms\n", (unsigned long long) elapsed_ms);
 
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
     free(src);
 }
 
@@ -825,7 +825,7 @@ TEST(stress_budget_truncation_still_valid) {
     int total = PROTO_CODE_COUNT(p);
     assert(total > 0 && "truncated pipeline must still emit bytecode");
 
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
     free(src);
 }
 
@@ -865,7 +865,7 @@ TEST(e2e_time_sleep_uses_dedicated_vm_suspend) {
     assert(xr_vm_entry_plan_derive(p));
     assert(p->entry_plan.root_representation == XR_ROOT_RESUMABLE_FRAME);
     assert(p->entry_plan.scheduler_mode == XR_SCHED_SINGLE);
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 TEST(e2e_generic_this_method_call_uses_frozen_member_identity) {
@@ -879,7 +879,7 @@ TEST(e2e_generic_this_method_call_uses_frozen_member_identity) {
     XrProto *p = compile_source(source, NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_PRINT));
-    xr_vm_proto_free(p);
+    xr_instruction_unit_free(p);
 }
 
 /* ========== Main ========== */

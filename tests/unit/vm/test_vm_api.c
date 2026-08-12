@@ -181,7 +181,7 @@ TEST(vm_bind_proto_shared_slots_is_vm_owned) {
     ASSERT_TRUE(xr_vm_bind_proto_shared_slots(iso1, proto));
     ASSERT_FALSE(xr_vm_bind_proto_shared_slots(iso2, proto));
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     xray_vm_delete(iso2);
     xray_vm_delete(iso1);
 }

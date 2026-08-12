@@ -51,7 +51,7 @@ static XrProto *make_bsearch_proto(void) {
 
     XrFFISig *sig = xr_ffi_sig_new("bsearch", NULL, 5);
     if (!sig) {
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         return NULL;
     }
     sig->params[0] = XR_FFI_T_PTR;
@@ -64,7 +64,7 @@ static XrProto *make_bsearch_proto(void) {
     uint8_t cb_params[2] = {XR_FFI_T_PTR, XR_FFI_T_PTR};
     if (!xr_ffi_sig_set_param_callback_codes(sig, 4, cb_params, 2, XR_FFI_T_I32)) {
         xr_ffi_sig_free(sig);
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         return NULL;
     }
 
@@ -104,8 +104,8 @@ TEST(vm_ffi_bsearch_invokes_xray_cfn_callback) {
     ASSERT_GE(found, start);
     ASSERT_LT(found, end);
 
-    xr_vm_proto_free(bsearch_proto);
-    xr_vm_proto_free(callback_proto);
+    xr_instruction_unit_free(bsearch_proto);
+    xr_instruction_unit_free(callback_proto);
     xr_exec_context_restore(previous);
     xray_vm_delete(iso);
 #endif

@@ -2113,7 +2113,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     return proto;
 
 fail:
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     return NULL;
 }
 
@@ -2337,12 +2337,12 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
     if (proto)
         proto->shared_count = (int) shared_count;
     if (proto && !xr_vm_entry_plan_validate(proto)) {
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         proto = NULL;
         r.error = XR_BC_ERR_CORRUPT;
     }
     if (proto && r.pos != r.size) {
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         proto = NULL;
         r.error = XR_BC_ERR_CORRUPT;
     }
@@ -2366,7 +2366,7 @@ int xr_eval_bytecode(XrVMRuntime *X, const uint8_t *data, size_t size) {
 
     // Use xr_execute which properly initializes coroutine and runtime
     int result = xr_execute(X, proto);
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     return result;
 }
 

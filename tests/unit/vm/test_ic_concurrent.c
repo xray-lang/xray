@@ -150,11 +150,11 @@ TEST(ic_concurrent_workers_stay_isolated) {
     }
     ASSERT_EQ_INT((long long) total_errors, 0LL);
 
-    xr_vm_proto_free(shared);
+    xr_instruction_unit_free(shared);
 }
 
 /* A second case targets the proto_id allocation hot path: every
- * thread spins through xr_vm_proto_new / xr_vm_proto_free creating
+ * thread spins through xr_vm_proto_new / xr_instruction_unit_free creating
  * fresh protos. The atomic counter underneath proto_id must hand
  * each thread a unique id, so collisions show up as duplicates in
  * the merged set.
@@ -174,7 +174,7 @@ static void *proto_id_alloc_worker(void *raw) {
     for (int i = 0; i < IC_PROTO_ID_PER_THREAD; i++) {
         XrProto *p = xr_vm_proto_new();
         rec->ids[i] = p ? p->proto_id : 0u;
-        xr_vm_proto_free(p);
+        xr_instruction_unit_free(p);
     }
     return NULL;
 }

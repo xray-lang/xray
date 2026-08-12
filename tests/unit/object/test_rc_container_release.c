@@ -187,7 +187,7 @@ TEST(closure_destroy_releases_upvals) {
     ASSERT_TRUE(is_dead(&closure->hdr));
     ASSERT_TRUE(is_dead(&child->hdr));
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     teardown();
 }
 
@@ -254,7 +254,7 @@ TEST(closure_cell_cycle_is_not_reclaimed_and_not_freed_early) {
     ASSERT_FALSE(is_dead(&closure->hdr));
     ASSERT_FALSE(is_dead(&cell->hdr));
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
     teardown();
 }
 

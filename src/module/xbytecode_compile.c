@@ -66,7 +66,7 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *canonic
                                                  &bc_error)
                       : xr_bytecode_write(X, proto, flags, &bc_size, &bc_error);
     if (!bc) {
-        xr_vm_proto_free(proto);
+        xr_instruction_unit_free(proto);
         xr_log_warning("compile", "bytecode serialization failed: %s",
                        xr_bytecode_error_string(bc_error));
         (void) xr_compiler_session_operation_fail(
@@ -74,7 +74,7 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *canonic
         return false;
     }
 
-    xr_vm_proto_free(proto);
+    xr_instruction_unit_free(proto);
 
     // Write to file
     FILE *f = fopen(output_file, "wb");

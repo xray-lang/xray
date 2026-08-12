@@ -81,7 +81,7 @@ typedef struct XrFFICallbackSig {
 
 /*
  * Extern call signature. Owned by the XrProto that carries it and freed via
- * xr_ffi_sig_free in xr_proto_free.
+ * xr_ffi_sig_free in xr_instruction_unit_free.
  */
 typedef struct XrFFISig {
     char *symbol;                    /* C symbol to resolve (owned, never NULL) */

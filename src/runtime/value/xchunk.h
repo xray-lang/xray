@@ -328,7 +328,7 @@ typedef struct XrProto {
     struct XrProto *enclosing;
 
     // Retained Xi SSA IR from compilation (XiFunc*), consumed by AOT/REPL
-    // lowering. Freed in xr_proto_free(). NULL if the Xi pipeline was not used.
+    // lowering. Freed in xr_instruction_unit_free(). NULL if the Xi pipeline was not used.
     void *xi_func;  // opaque XiFunc* (owned, freed via xi_func_free)
 } XrProto;
 
@@ -358,7 +358,7 @@ typedef struct XrProto {
 
 // XrProto Operations
 XR_FUNC XrProto *xr_vm_proto_new(void);
-XR_FUNC void xr_vm_proto_free(XrProto *proto);
+XR_FUNC void xr_instruction_unit_free(XrProto *proto);
 XR_FUNC void xr_vm_proto_set_ir_free_fn(XrProtoOpaqueFreeFn free_fn);
 
 // Bytecode Operations
