@@ -5,30 +5,18 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xisolate_runtime.c - Runtime-ABI VM construction for bytecode embedders
+ * xisolate_runtime.c - Runtime prelude enum registration
  *
- * Initializes core runtime ABI classes and scheduler substrate without pulling
- * in the compiler frontend, module loader table, or prelude import graph.
+ * Defines the shared VM prelude enum registry consumed by full isolate
+ * construction without depending on the compiler frontend's source registry.
  */
 
-#include "../base/xlog.h"
 #include "../runtime/xisolate_internal.h"
-#include "../base/xchecks.h"
-#include "../base/xmalloc.h"
-#include "../runtime/class/xclass.h"
-#include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/core/xr_runtime_core.h"
-#include "../runtime/mem/xobj_destroy_ops.h"
-#include "../base/xconfig.h"
-#include "../runtime/class/xtype_registry.h"
-#include "../runtime/symbol/xsymbol_table.h"
-#include "../runtime/value/xtype.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/xisolate_api.h"
-#include "../coro/xscope_transfer.h"
 #include "../base/xglobal_indices.h"
-#include "../../include/xray_vm.h"
 
 static void isolate_bind_builtin(XrVMRuntime *isolate, int32_t index, XrValue value) {
     if (!isolate || index < 0 || index >= XR_USER_GLOBALS_START)
@@ -110,93 +98,4 @@ void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
                              XR_FROM_PTR(compression_error));
     if (crypto_error)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_CRYPTO_ERROR, XR_FROM_PTR(crypto_error));
-}
-
-static void isolate_register_vm_builtins(XrVMRuntime *isolate) {
-    if (!isolate || !isolate->core)
-        return;
-    if (isolate->core->arrayClass)
-        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_ARRAY,
-                             xr_value_from_class(isolate->core->arrayClass));
-    if (isolate->core->setClass)
-        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_SET,
-                             xr_value_from_class(isolate->core->setClass));
-    if (isolate->core->mapClass)
-        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_MAP,
-                             xr_value_from_class(isolate->core->mapClass));
-    if (isolate->core->stringClass)
-        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_STRING,
-                             xr_value_from_class(isolate->core->stringClass));
-    if (isolate->core->jsonClass)
-        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_JSON,
-                             xr_value_from_class(isolate->core->jsonClass));
-    if (isolate->core_rt->native_type_classes[XR_TWORKQUEUE])
-        isolate_bind_builtin(
-            isolate, XR_GLOBAL_VAR_WORKQUEUE,
-            xr_value_from_class(isolate->core_rt->native_type_classes[XR_TWORKQUEUE]));
-    if (isolate->core_rt->native_type_classes[XR_TRESULTGROUP])
-        isolate_bind_builtin(
-            isolate, XR_GLOBAL_VAR_RESULTGROUP,
-            xr_value_from_class(isolate->core_rt->native_type_classes[XR_TRESULTGROUP]));
-    if (isolate->core_rt->native_type_classes[XR_TCOUNTDOWNLATCH])
-        isolate_bind_builtin(
-            isolate, XR_GLOBAL_VAR_COUNTDOWNLATCH,
-            xr_value_from_class(isolate->core_rt->native_type_classes[XR_TCOUNTDOWNLATCH]));
-    if (isolate->core_rt->native_type_classes[XR_TSEMAPHORE])
-        isolate_bind_builtin(
-            isolate, XR_GLOBAL_VAR_SEMAPHORE,
-            xr_value_from_class(isolate->core_rt->native_type_classes[XR_TSEMAPHORE]));
-    if (isolate->core_rt->native_type_classes[XR_TEVENTCOUNT])
-        isolate_bind_builtin(
-            isolate, XR_GLOBAL_VAR_EVENTCOUNT,
-            xr_value_from_class(isolate->core_rt->native_type_classes[XR_TEVENTCOUNT]));
-    xr_isolate_register_runtime_prelude_enums(isolate);
-    if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
-        isolate->vm.builtin_count = XR_USER_GLOBALS_START;
-}
-
-static int isolate_init_runtime(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "isolate_init_runtime: NULL isolate");
-
-    xr_type_global_init();
-    isolate->core_rt->symbol_table = xr_symbol_table_create();
-    if (!isolate->core_rt->symbol_table)
-        return -1;
-    xr_symbol_table_init_builtins((XrSymbolTable *) isolate->core_rt->symbol_table);
-    xr_registry_init(isolate);
-    xr_runtime_core_enable_full_destroy_ops(isolate->core_rt);
-    xr_core_init(isolate);
-    xr_scope_transfer_enable_core(isolate->core_rt);
-
-    isolate_register_vm_builtins(isolate);
-    return 0;
-}
-
-static void isolate_cleanup_runtime(XrVMRuntime *isolate) {
-    if (isolate->core) {
-        xr_core_free(isolate);
-        isolate->core = NULL;
-    }
-    if (isolate->core_rt->type_registry) {
-        xr_registry_free(isolate);
-        isolate->core_rt->type_registry = NULL;
-    }
-    if (isolate->core_rt->symbol_table) {
-        xr_symbol_table_destroy((XrSymbolTable *) isolate->core_rt->symbol_table);
-        isolate->core_rt->symbol_table = NULL;
-    }
-}
-
-XRAY_API XrVMRuntime *xray_vm_new_runtime(const XrVMConfig *params) {
-    XrVMRuntime *isolate = xray_vm_new(params);
-    if (!isolate)
-        return NULL;
-
-    if (isolate_init_runtime(isolate) != 0) {
-        isolate_cleanup_runtime(isolate);
-        xray_vm_delete(isolate);
-        return NULL;
-    }
-    isolate->lifecycle_cleanup = isolate_cleanup_runtime;
-    return isolate;
 }

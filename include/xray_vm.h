@@ -58,7 +58,6 @@ typedef struct {
 XRAY_API void xray_vm_config_init(XrVMConfig *config);
 
 XRAY_API XrVMRuntime *xray_vm_new(const XrVMConfig *config);
-XRAY_API XrVMRuntime *xray_vm_new_runtime(const XrVMConfig *config);
 XRAY_API XrVMRuntime *xray_vm_new_full(const XrVMConfig *config);
 XRAY_API void xray_vm_delete(XrVMRuntime *vm);
 

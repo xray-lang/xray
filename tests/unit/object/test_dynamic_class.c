@@ -133,7 +133,7 @@ TEST(interface_conformance_uses_declaration_list) {
 }
 
 TEST(computed_accessors_are_indexed_by_property_symbol) {
-    XrVMRuntime *runtime = xray_vm_new_runtime(NULL);
+    XrVMRuntime *runtime = xray_vm_new_full(NULL);
     ASSERT_NOT_NULL(runtime);
 
     XrClassBuilder *plain_builder = xr_class_builder_new(runtime, "PlainFields", NULL);

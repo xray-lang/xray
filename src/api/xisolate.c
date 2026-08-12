@@ -20,7 +20,7 @@
  *
  * RELATED MODULES:
  *   - xisolate_full.c: explicit full VM constructor
- *   - xisolate_runtime.c: explicit runtime-ABI VM constructor
+ *   - xisolate_runtime.c: shared runtime prelude enum registration
  *   - xisolate_tls.c: g_current_isolate + enter/exit
  *   - xisolate_params.c: config_init
  *   - xisolate_scripting.c: dostring/dofile (compiler-dependent)
