@@ -1327,15 +1327,11 @@ endif()
 add_library(xray_rt_coro STATIC ${XRAY_RT_CORO_SOURCES})
 add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
 
-set(XRAY_VM_RUNTIME_CORO_SOURCES ${CORO_SRC})
-# Release VM native stdlib fragments execute the canonical generated AOT
-# bodies, so the standalone VM runtime owns the production coroutine adapters.
-# The test-yield hook remains test-only and must not enter the installed runtime.
-list(FILTER XRAY_VM_RUNTIME_CORO_SOURCES EXCLUDE REGEX "xaot_test_yield\\.c$")
-
 # Runtime loading owns a deliberately narrow verifier closure. Encoders and
-# compiler-side builders stay in xray_core; the installed VM archive decodes
-# exact XSM authority and materializes an exact XTP candidate against it.
+# compiler-side builders stay in xray_core. The installed execution archive
+# contains only exact artifact verification, generation lifecycle, and typed
+# dispatch. Source, bytecode, and legacy VM entry points are not linkable from
+# this product boundary.
 set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
     src/plan/format/xr_artifact_kind.c
     src/plan/format/xr_xsm_decode.c
@@ -1360,34 +1356,15 @@ set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
 set(XRAY_VM_RUNTIME_SOURCES
     ${BASE_SRC}
     ${OS_SRC}
-    ${RUNTIME_TOP_SRC}
-    ${RUNTIME_CORE_SRC}
-    ${RUNTIME_VALUE_SRC}
-    ${RUNTIME_MEM_SRC}
-    ${RUNTIME_OBJECT_SRC}
-    ${RUNTIME_CLASS_SRC}
-    ${RUNTIME_CLOSURE_SRC}
-    ${RUNTIME_SYMBOL_SRC}
-    ${XRAY_VM_RUNTIME_CORO_SOURCES}
-    ${IO_SRC}
-    ${VM_SRC}
+    ${RUNTIME_ABI_SRC}
     ${XRAY_VM_TARGET_PLAN_LOAD_SOURCES}
-    src/aot/xrt_runtime_globals.c
-    src/api/xisolate.c
-    src/api/xisolate_params.c
-    src/api/xisolate_runtime.c
-    src/api/xisolate_tls.c
-    src/api/xruntime.c
-    src/api/xvm_exec.c
-    src/module/stdlib_embedded.c
-    src/module/xbytecode_io.c
-    src/module/xlockfile.c
-    src/module/xmodule.c
-    src/module/xmodule_resolver.c
-    src/module/xnative_package.c
-    src/module/xproject.c
-    src/module/xsemver.c
-    ${STDLIB_SRC}
+    src/runtime/xr_module_generation.c
+    src/runtime/xr_module_generation_verify.c
+    src/runtime/xr_runtime_artifact_authority.c
+    src/runtime/xr_runtime_artifact_verify.c
+    src/runtime/xr_target_plan_load.c
+    src/vm/xr_typed_dispatch.c
+    src/vm/xr_typed_frame.c
 )
 list(REMOVE_DUPLICATES XRAY_VM_RUNTIME_SOURCES)
 
@@ -1483,23 +1460,21 @@ if(WIN32)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_core PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_rt_coro PUBLIC ws2_32 synchronization)
-    target_link_libraries(xray_vm_runtime PUBLIC ws2_32 synchronization)
+    target_link_libraries(xray_vm_runtime PUBLIC synchronization)
 else()
     target_link_libraries(xray_core_objs PUBLIC m pthread)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC m pthread)
     target_link_libraries(xray_core PUBLIC m pthread)
     target_link_libraries(xray_rt_coro PUBLIC m pthread)
-    target_link_libraries(xray_vm_runtime PUBLIC m pthread)
+    target_link_libraries(xray_vm_runtime PUBLIC pthread)
 endif()
 if(ZLIB_FOUND)
     target_link_libraries(xray_core_objs PUBLIC ZLIB::ZLIB)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ZLIB::ZLIB)
     target_link_libraries(xray_core PUBLIC ZLIB::ZLIB)
-    target_link_libraries(xray_vm_runtime PUBLIC ZLIB::ZLIB)
     target_compile_definitions(xray_core_objs PRIVATE XR_HAS_ZLIB=1)
     target_compile_definitions(xray_stdlib_bootstrap_core PRIVATE XR_HAS_ZLIB=1)
     target_compile_definitions(xray_core PRIVATE XR_HAS_ZLIB=1)
-    target_compile_definitions(xray_vm_runtime PRIVATE XR_HAS_ZLIB=1)
 endif()
 
 # libffi: FFI / C interop. The bytecode VM marshals extern calls through
@@ -1522,18 +1497,15 @@ if(LIBFFI_FOUND)
     target_include_directories(xray_core_objs PRIVATE ${LIBFFI_INCLUDE_DIRS})
     target_include_directories(xray_stdlib_bootstrap_core PRIVATE ${LIBFFI_INCLUDE_DIRS})
     target_include_directories(xray_core PRIVATE ${LIBFFI_INCLUDE_DIRS})
-    target_include_directories(xray_vm_runtime PRIVATE ${LIBFFI_INCLUDE_DIRS})
     target_link_libraries(xray_core_objs PUBLIC ${LIBFFI_LIBRARIES})
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ${LIBFFI_LIBRARIES})
     target_link_libraries(xray_core PUBLIC ${LIBFFI_LIBRARIES})
-    target_link_libraries(xray_vm_runtime PUBLIC ${LIBFFI_LIBRARIES})
     # PUBLIC: the CLI target builds AOT link commands by hand (invoke_cc) and
     # must know xray_core embeds the libffi-based extern invoker, so a runtime
     # program links -lffi too.
     target_compile_definitions(xray_core_objs PUBLIC XRAY_HAVE_LIBFFI=1)
     target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XRAY_HAVE_LIBFFI=1)
     target_compile_definitions(xray_core PUBLIC XRAY_HAVE_LIBFFI=1)
-    target_compile_definitions(xray_vm_runtime PUBLIC XRAY_HAVE_LIBFFI=1)
 else()
     message(STATUS "libffi: not found (extern calls limited to the AOT backend)")
 endif()
@@ -1541,7 +1513,6 @@ if(NOT WIN32)
     target_link_libraries(xray_core_objs PUBLIC ${CMAKE_DL_LIBS})
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ${CMAKE_DL_LIBS})
     target_link_libraries(xray_core PUBLIC ${CMAKE_DL_LIBS})
-    target_link_libraries(xray_vm_runtime PUBLIC ${CMAKE_DL_LIBS})
 endif()
 
 # OpenSSL support
@@ -1570,21 +1541,17 @@ if(OpenSSL_FOUND)
     target_include_directories(xray_core_objs PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_include_directories(xray_stdlib_bootstrap_core PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_include_directories(xray_core PRIVATE ${OPENSSL_INCLUDE_DIR})
-    target_include_directories(xray_vm_runtime PRIVATE ${OPENSSL_INCLUDE_DIR})
     # Always link libcrypto (needed by ws module for SHA1)
     target_link_libraries(xray_core_objs PUBLIC OpenSSL::Crypto)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::Crypto)
     target_link_libraries(xray_core PUBLIC OpenSSL::Crypto)
-    target_link_libraries(xray_vm_runtime PUBLIC OpenSSL::Crypto)
     if(ENABLE_TLS)
         target_link_libraries(xray_core_objs PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_core PUBLIC OpenSSL::SSL)
-        target_link_libraries(xray_vm_runtime PUBLIC OpenSSL::SSL)
         target_compile_definitions(xray_core_objs PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_core PUBLIC XR_ENABLE_TLS=1)
-        target_compile_definitions(xray_vm_runtime PUBLIC XR_ENABLE_TLS=1)
     endif()
 else()
     message(STATUS "OpenSSL: not found (ws/crypto modules may be limited)")
@@ -1676,22 +1643,19 @@ if(XRAY_STDLIB_VM_FASTPATHS)
     set_source_files_properties(src/stdlib/xstdlib_vm_fastpath_amalgam.c PROPERTIES
         OBJECT_DEPENDS "${XRAY_STDLIB_VM_FASTPATH_C};${XRAY_STDLIB_VM_FASTPATH_REGISTRY}"
     )
-    foreach(_xray_fastpath_runtime IN ITEMS xray_core xray_vm_runtime)
-        target_sources(${_xray_fastpath_runtime} PRIVATE
-            src/stdlib/xstdlib_vm_fastpath.c
-            src/stdlib/xstdlib_vm_fastpath_amalgam.c
-        )
-        target_include_directories(${_xray_fastpath_runtime} PRIVATE
-            ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}
-        )
-        target_compile_definitions(${_xray_fastpath_runtime} PRIVATE
-            XRAY_STDLIB_VM_FASTPATHS=1
-        )
-        add_dependencies(${_xray_fastpath_runtime} gen-stdlib-vm-fastpaths)
-    endforeach()
+    target_sources(xray_core PRIVATE
+        src/stdlib/xstdlib_vm_fastpath.c
+        src/stdlib/xstdlib_vm_fastpath_amalgam.c
+    )
+    target_include_directories(xray_core PRIVATE
+        ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}
+    )
+    target_compile_definitions(xray_core PRIVATE
+        XRAY_STDLIB_VM_FASTPATHS=1
+    )
+    add_dependencies(xray_core gen-stdlib-vm-fastpaths)
 else()
     target_sources(xray_core PRIVATE src/stdlib/xstdlib_vm_fastpath_stub.c)
-    target_sources(xray_vm_runtime PRIVATE src/stdlib/xstdlib_vm_fastpath_stub.c)
 endif()
 
 add_custom_command(
@@ -1718,10 +1682,8 @@ add_custom_target(gen-stdlib-embedded
     DEPENDS gen-stdlib-embedded-sources gen-stdlib-embedded-bytecodes)
 if(XR_STDLIB_FROM_FILE)
     add_dependencies(xray_core gen-stdlib-embedded-sources)
-    add_dependencies(xray_vm_runtime gen-stdlib-embedded-sources)
 else()
     add_dependencies(xray_core gen-stdlib-embedded-bytecodes)
-    add_dependencies(xray_vm_runtime gen-stdlib-embedded-bytecodes)
 endif()
 
 # ============================================================================

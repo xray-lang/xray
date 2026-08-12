@@ -99,7 +99,7 @@ def legacy_symbols(symbols: set[str]) -> set[str]:
     }
 
 
-def inspect(archive: Path, allowed_legacy: set[str]) -> list[str]:
+def inspect(archive: Path) -> list[str]:
     names = binlib.defined_symbol_names(archive)
     if names is None:
         raise AssertionError("no supported symbol inspector is available")
@@ -109,7 +109,7 @@ def inspect(archive: Path, allowed_legacy: set[str]) -> list[str]:
     compiler = sorted(
         symbol for symbol in symbols if symbol.startswith(FORBIDDEN_PREFIXES)
     )
-    unexpected_legacy = sorted(legacy_symbols(symbols) - allowed_legacy)
+    unexpected_legacy = sorted(legacy_symbols(symbols))
     if missing or forbidden or compiler or unexpected_legacy:
         raise AssertionError(
             json.dumps({
@@ -175,13 +175,6 @@ def main() -> int:
         if not dumpbin.is_file():
             raise SystemExit(f"MSVC symbol inspector is missing: {dumpbin}")
         os.environ["DUMPBIN"] = str(dumpbin)
-    inventory = json.loads(
-        (root / "contracts/target-machine/legacy-product-residue.json").read_text(
-            encoding="utf-8", errors="strict"
-        )
-    )
-    allowed_legacy = set(inventory["legacy_symbol_tokens"])
-
     target = run([str(binary), "toolchain", "list", "--target", "native", "--json"])
     host = json.loads(target.stdout)["normalizedTarget"]
     archive_name = "xray_vm_runtime.lib" if os.name == "nt" else "libxray_vm_runtime.a"
@@ -205,7 +198,7 @@ def main() -> int:
             archive = prefix / f"lib/xray/vm/{host}/{archive_name}"
             if not archive.is_file():
                 raise AssertionError(f"installed runtime archive is missing: {archive}")
-            symbol_sets.append(inspect(archive, allowed_legacy))
+            symbol_sets.append(inspect(archive))
             compile_header(cc, prefix, work / directory)
         if symbol_sets[0] != symbol_sets[1]:
             raise AssertionError("Core and full installs expose different runtime symbols")

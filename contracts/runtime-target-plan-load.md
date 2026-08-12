@@ -151,7 +151,7 @@ roots, or general module activation.
    unavailable, rejects compiler and `xi_` symbols, and treats any new `xvm_`
    symbol as uninventoried legacy residue.
 
-anchor-sha256: CMakeLists.txt 5bc3704804c4d746313b6db85e4071e14f8e1cf9818c11d44027200b2617f8a1
+anchor-sha256: CMakeLists.txt 088e47724d9a131e38044d9f14d64d7c0eab27ff1226a69578234c5d59219281
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h 38fd73865e25d62392d8dd0abfd5e6193edf2356803a817349db14c43ccf9874
 anchor-sha256: src/plan/format/xr_artifact_kind.c 289fb506284ed97372e211225dcb5c1d205d7149416ddc96abb2a7f3b8704b39
@@ -184,4 +184,4 @@ anchor-sha256: tests/unit/plan/test_xtp_format.c 5f69974f555b1d9601471299fdc3dbc
 anchor-sha256: tests/unit/CMakeLists.txt a597f6aaafeedb8f9766e5ade1de24bb2b84407b8b9dbf1657907f13881ab295
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 941116a3f679967982230e64e1ecf60a195281edd954d6274728f87a2281287d
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 3ec8c875fcabbaeb42cc83a4a20782b3b2edab52a7912362215483a40da241e6
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py ba2b0af3f6c80fd37f789a0333b11fc8c7bd53be48f3b0d4300aa387f99a2635
