@@ -182,7 +182,7 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
         }
         compiled[ti] = proto;
         size_t bc_size = 0;
-        uint8_t *bc = xr_bytecode_write(X, proto, 0, &bc_size, NULL);
+        uint8_t *bc = xr_bootstrap_container_write(X, proto, 0, &bc_size, NULL);
         if (!bc) {
             xr_log_warning("bundle", "bytecode serialization failed: %s", spec->source_path);
             goto cleanup;

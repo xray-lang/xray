@@ -62,13 +62,13 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *canonic
     size_t bc_size;
     XrBcError bc_error = XR_BC_OK;
     uint8_t *bc = canonical_module
-                      ? xr_bytecode_write_stdlib(X, canonical_module, proto, flags, &bc_size,
+                      ? xr_bootstrap_container_write_stdlib(X, canonical_module, proto, flags, &bc_size,
                                                  &bc_error)
-                      : xr_bytecode_write(X, proto, flags, &bc_size, &bc_error);
+                      : xr_bootstrap_container_write(X, proto, flags, &bc_size, &bc_error);
     if (!bc) {
         xr_instruction_unit_free(proto);
         xr_log_warning("compile", "bytecode serialization failed: %s",
-                       xr_bytecode_error_string(bc_error));
+                       xr_bootstrap_container_error_string(bc_error));
         (void) xr_compiler_session_operation_fail(
             &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return false;

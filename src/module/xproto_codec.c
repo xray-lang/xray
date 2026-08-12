@@ -2119,7 +2119,7 @@ fail:
 
 /* ========== Public API ========== */
 
-const char *xr_bytecode_error_string(XrBcError error) {
+const char *xr_bootstrap_container_error_string(XrBcError error) {
     switch (error) {
         case XR_BC_OK:
             return "ok";
@@ -2215,12 +2215,12 @@ fail:
     return NULL;
 }
 
-uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *out_size,
+uint8_t *xr_bootstrap_container_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *out_size,
                            XrBcError *error) {
     return bytecode_write_impl(X, NULL, proto, flags, out_size, error);
 }
 
-uint8_t *xr_bytecode_write_stdlib(XrVMRuntime *X, const char *canonical_module, XrProto *proto,
+uint8_t *xr_bootstrap_container_write_stdlib(XrVMRuntime *X, const char *canonical_module, XrProto *proto,
                                   int flags, size_t *out_size, XrBcError *error) {
     if (!canonical_module || !canonical_module[0]) {
         if (error)
@@ -2232,7 +2232,7 @@ uint8_t *xr_bytecode_write_stdlib(XrVMRuntime *X, const char *canonical_module, 
     return bytecode_write_impl(X, canonical_module, proto, flags, out_size, error);
 }
 
-XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBcError *error) {
+XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBcError *error) {
     if (!X || !data || size == 0) {
         if (error)
             *error = XR_BC_ERR_TRUNCATED;
@@ -2358,9 +2358,9 @@ int xr_eval_bytecode(XrVMRuntime *X, const uint8_t *data, size_t size) {
     XR_DCHECK(X != NULL, "eval_bytecode: NULL isolate");
     XR_DCHECK(data != NULL, "eval_bytecode: NULL data");
     XrBcError error;
-    XrProto *proto = xr_bytecode_read(X, data, size, &error);
+    XrProto *proto = xr_bootstrap_container_read(X, data, size, &error);
     if (!proto) {
-        xr_log_warning("bytecode", "failed to load: %s", xr_bytecode_error_string(error));
+        xr_log_warning("bytecode", "failed to load: %s", xr_bootstrap_container_error_string(error));
         return -1;
     }
 
@@ -2412,13 +2412,13 @@ XRAY_API int xray_vm_eval_bundle(XrVMRuntime *X, const XrBytecodeBundle *bundle)
 
 /* ========== AOT Bytecode Load (decomposed API) ========== */
 
-XrProto *xr_bytecode_load(XrVMRuntime *X, const uint8_t *data, size_t size) {
+XrProto *xr_bootstrap_container_load(XrVMRuntime *X, const uint8_t *data, size_t size) {
     XR_DCHECK(X != NULL, "bytecode_load: NULL isolate");
     XR_DCHECK(data != NULL, "bytecode_load: NULL data");
     XrBcError error;
-    XrProto *proto = xr_bytecode_read(X, data, size, &error);
+    XrProto *proto = xr_bootstrap_container_read(X, data, size, &error);
     if (!proto) {
-        xr_log_warning("bytecode", "failed to load: %s", xr_bytecode_error_string(error));
+        xr_log_warning("bytecode", "failed to load: %s", xr_bootstrap_container_error_string(error));
         return NULL;
     }
     return proto;
@@ -2484,7 +2484,7 @@ bool xr_output_c_source(XrVMRuntime *X, XrProto *proto, const char *output_file,
                         const char *var_name, int flags) {
     // Serialize
     size_t bc_size;
-    uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size, NULL);
+    uint8_t *bc = xr_bootstrap_container_write(X, proto, flags, &bc_size, NULL);
     if (!bc)
         return false;
 

@@ -64,23 +64,23 @@ typedef enum {
     XR_BC_ERR_TARGET_ABI,
 } XrBcError;
 
-XR_FUNC const char *xr_bytecode_error_string(XrBcError error);
+XR_FUNC const char *xr_bootstrap_container_error_string(XrBcError error);
 
 /* ========== Serialization API ========== */
 
 // Serialize XrProto to byte array, caller must free
-XR_FUNC uint8_t *xr_bytecode_write(struct XrVMRuntime *X, struct XrProto *proto, int flags,
+XR_FUNC uint8_t *xr_bootstrap_container_write(struct XrVMRuntime *X, struct XrProto *proto, int flags,
                                    size_t *out_size, XrBcError *error);
 
 /* Serialize a built-in stdlib module.  The canonical module identity is part
  * of the compilation unit, not inferred from load order: enum constants that
  * also have native producers are encoded as that module's nominal type. */
-XR_FUNC uint8_t *xr_bytecode_write_stdlib(struct XrVMRuntime *X, const char *canonical_module,
+XR_FUNC uint8_t *xr_bootstrap_container_write_stdlib(struct XrVMRuntime *X, const char *canonical_module,
                                           struct XrProto *proto, int flags, size_t *out_size,
                                           XrBcError *error);
 
 // Deserialize XrProto from byte array
-XR_FUNC struct XrProto *xr_bytecode_read(struct XrVMRuntime *X, const uint8_t *data, size_t size,
+XR_FUNC struct XrProto *xr_bootstrap_container_read(struct XrVMRuntime *X, const uint8_t *data, size_t size,
                                          XrBcError *error);
 
 // Execute bytecode directly, returns 0 on success

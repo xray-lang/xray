@@ -18,10 +18,6 @@
   ],
   "generator": "target-machine-phase0/1",
   "legacy_artifact_symbols": [
-    "xr_bytecode_error_string",
-    "xr_bytecode_read",
-    "xr_bytecode_write",
-    "xr_bytecode_write_stdlib",
     "xr_detect_output_format",
     "xr_eval_bytecode",
     "xr_output_c_source"
@@ -3586,7 +3582,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "f3e774115307170949d108b61eeefdf5a38a2611e9e5db92946480af4b259e60",
+  "source_tree_fingerprint": "8cecf72a7bcd4f5a849ba158d6965152e438e5f5d63be31a6a19a80b69df4843",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xvm.c",
