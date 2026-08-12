@@ -100,10 +100,10 @@
       ]
     },
     {
-      "id": "semantic-schema-v19",
+      "id": "semantic-schema-v20",
       "path": "src/plan/semantic/xr_semantic_ids.h",
       "required_regex": [
-        "#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(19\\)"
+        "#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(20\\)"
       ]
     },
     {

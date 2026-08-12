@@ -20,6 +20,7 @@
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
 #include "../../stdlib/xstdlib_metadata.h"
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -576,6 +577,22 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
         const XrSemanticTypeRecord *type = &plan->types[i];
         if (!verify_id(type->canonical_key, type->id))
             return report(error, error_size, "XR_SEM_0002", "type stable identity is invalid");
+        if (type->source_class != XR_SEMANTIC_INDEX_NONE) {
+            if (type->source_class >= plan->source_class_count ||
+                (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
+                return report(error, error_size, "XR_SEM_0002",
+                              "source nominal type authority is invalid");
+            char suffix[64];
+            char class_id[XR_STABLE_ID_BYTES * 2 + 1];
+            xr_stable_id_hex(plan->source_classes[type->source_class].id, class_id);
+            int length = snprintf(suffix, sizeof(suffix), ";source-class:%s", class_id);
+            size_t key_length = strlen(type->canonical_key);
+            if (length <= 0 || (size_t) length >= sizeof(suffix) ||
+                key_length < (size_t) length ||
+                strcmp(type->canonical_key + key_length - (size_t) length, suffix) != 0)
+                return report(error, error_size, "XR_SEM_0002",
+                              "source nominal type identity is not exact");
+        }
         if (!semantic_builtin_type_identity_exact(type))
             return report(error, error_size, "XR_SEM_0002",
                           "builtin type identity is not exact");
@@ -633,24 +650,196 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
                   "type child table is not exactly partitioned");
 }
 
+static bool verifier_key_append(char *buffer, size_t capacity, size_t *used,
+                                const char *format, ...) {
+    if (!buffer || !capacity || !used || *used >= capacity)
+        return false;
+    va_list args;
+    va_start(args, format);
+    int written = vsnprintf(buffer + *used, capacity - *used, format, args);
+    va_end(args);
+    if (written < 0 || (size_t) written >= capacity - *used)
+        return false;
+    *used += (size_t) written;
+    return true;
+}
+
+static bool verifier_key_append_id(char *buffer, size_t capacity, size_t *used,
+                                   XrStableId id) {
+    char hex[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(id, hex);
+    return verifier_key_append(buffer, capacity, used, "%s", hex);
+}
+
+static bool verify_source_classes(const XrSemanticPlan *plan, char *error,
+                                  size_t error_size) {
+    const XrSemanticEntityRecord *module = NULL;
+    for (uint32_t e = 0; e < plan->entity_count; e++) {
+        if (plan->entities[e].kind != XR_SEM_ENTITY_MODULE)
+            continue;
+        if (module)
+            return report(error, error_size, "XR_SEM_0019",
+                          "source-class module identity is ambiguous");
+        module = &plan->entities[e];
+    }
+    for (uint32_t c = 0; c < plan->source_class_count; c++) {
+        const XrSemanticSourceClassRecord *source_class = &plan->source_classes[c];
+        char expected[768];
+        char module_id[XR_STABLE_ID_BYTES * 2 + 1];
+        xr_stable_id_hex(source_class->module, module_id);
+        int length = snprintf(
+            expected, sizeof(expected),
+            "source-class-v1:schema=%u:module=%s:path=%zu:%s:name=%zu:%s:ordinal=%u:methods=%u:flags=%u",
+            XR_SEMANTIC_SCHEMA_VERSION, module_id,
+            source_class->module_path ? strlen(source_class->module_path) : 0u,
+            source_class->module_path ? source_class->module_path : "",
+            source_class->name ? strlen(source_class->name) : 0u,
+            source_class->name ? source_class->name : "", source_class->ordinal,
+            source_class->method_count, source_class->flags);
+        uint8_t allowed = XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL |
+                          XR_SEM_SOURCE_CLASS_RUNTIME_TYPE |
+                          XR_SEM_SOURCE_CLASS_GENERIC;
+        if (!module || !source_class->module_path || !source_class->module_path[0] ||
+            !source_class->name || !source_class->name[0] ||
+            source_class->ordinal != c || source_class->reserved != 0 ||
+            (source_class->flags & (uint8_t) ~allowed) != 0 ||
+            !xr_stable_id_equal(source_class->module, module->id) ||
+            length <= 0 || (size_t) length >= sizeof(expected) ||
+            strcmp(source_class->canonical_key ? source_class->canonical_key : "",
+                   expected) != 0 ||
+            !verify_id(source_class->canonical_key, source_class->id))
+            return report(error, error_size, "XR_SEM_0019",
+                          "source-class stable authority is invalid");
+    }
+    return true;
+}
+
+static bool verify_function_key_exact(const XrSemanticPlan *plan, uint32_t index) {
+    const XrSemanticFunctionRecord *function = &plan->functions[index];
+    if (!function->canonical_key || !function->name ||
+        function->return_type >= plan->type_count ||
+        !range_valid(function->parameter_begin, function->parameter_count,
+                     plan->parameter_count) ||
+        (function->parent != XR_SEMANTIC_INDEX_NONE &&
+         function->parent >= plan->function_count) ||
+        (function->source_class != XR_SEMANTIC_INDEX_NONE &&
+         function->source_class >= plan->source_class_count))
+        return false;
+    size_t capacity = strlen(function->canonical_key) + 1u;
+    char *expected = (char *) xr_malloc(capacity);
+    if (!expected)
+        return false;
+    expected[0] = '\0';
+    size_t used = 0;
+    uint32_t lexical_ordinal = 0;
+    for (uint32_t before = 0; before < index; before++)
+        if (plan->functions[before].parent == function->parent)
+            lexical_ordinal++;
+    bool valid = verifier_key_append(expected, capacity, &used, "function-v3:parent=") &&
+                 (function->parent == XR_SEMANTIC_INDEX_NONE
+                      ? verifier_key_append(expected, capacity, &used, "module-root")
+                      : verifier_key_append_id(expected, capacity, &used,
+                                               plan->functions[function->parent].id)) &&
+                 verifier_key_append(expected, capacity, &used,
+                                     ":ordinal=%u:name=%zu:%s:source-class=",
+                                     lexical_ordinal, strlen(function->name), function->name) &&
+                 (function->source_class == XR_SEMANTIC_INDEX_NONE
+                      ? verifier_key_append(expected, capacity, &used, "none")
+                      : verifier_key_append_id(
+                            expected, capacity, &used,
+                            plan->source_classes[function->source_class].id));
+    if (valid) {
+        if (function->source_member_ordinal == UINT16_MAX)
+            valid = verifier_key_append(expected, capacity, &used,
+                                        ":member=none:source-kind=%u:return=",
+                                        function->source_kind);
+        else
+            valid = verifier_key_append(expected, capacity, &used,
+                                        ":member=%u:source-kind=%u:return=",
+                                        function->source_member_ordinal,
+                                        function->source_kind);
+    }
+    valid = valid &&
+            verifier_key_append_id(expected, capacity, &used,
+                                   plan->types[function->return_type].id) &&
+            verifier_key_append(expected, capacity, &used, ":params=%u",
+                                function->parameter_count);
+    for (uint16_t p = 0; valid && p < function->parameter_count; p++) {
+        const XrSemanticParameterRecord *parameter =
+            &plan->parameters[function->parameter_begin + p];
+        valid = parameter->type < plan->type_count &&
+                verifier_key_append(expected, capacity, &used, ":p%u:mode=%u:type=", p,
+                                    parameter->mode) &&
+                verifier_key_append_id(expected, capacity, &used,
+                                       plan->types[parameter->type].id);
+    }
+    valid = valid && verifier_key_append(expected, capacity, &used,
+                                         ":effects=%u:caps=%u:flags=%u",
+                                         function->semantic_effects,
+                                         function->capability_mask,
+                                         (unsigned) function->flags) &&
+            strcmp(expected, function->canonical_key) == 0;
+    xr_free(expected);
+    return valid;
+}
+
 static bool verify_functions(const XrSemanticPlan *plan, char *error, size_t error_size) {
     uint32_t parameter_cursor = 0;
     uint32_t capture_cursor = 0;
     uint32_t block_cursor = 0;
     uint32_t value_cursor = 0;
     uint32_t *child_counts = (uint32_t *) xr_calloc(plan->function_count, sizeof(*child_counts));
-    if (plan->function_count && !child_counts)
+    uint8_t **source_members = plan->source_class_count
+                                   ? (uint8_t **) xr_calloc(plan->source_class_count,
+                                                           sizeof(*source_members))
+                                   : NULL;
+    if ((plan->function_count && !child_counts) ||
+        (plan->source_class_count && !source_members)) {
+        xr_free(child_counts);
         return report(error, error_size, "XR_EXEC_5003",
                       "function relation verifier budget exhausted");
+    }
+    for (uint32_t c = 0; c < plan->source_class_count; c++) {
+        uint16_t count = plan->source_classes[c].method_count;
+        source_members[c] = count ? (uint8_t *) xr_calloc(count, 1) : NULL;
+        if (count && !source_members[c]) {
+            for (uint32_t before = 0; before < c; before++)
+                xr_free(source_members[before]);
+            xr_free(source_members);
+            xr_free(child_counts);
+            return report(error, error_size, "XR_EXEC_5003",
+                          "source-method verifier budget exhausted");
+        }
+    }
 #define XR_FUNCTION_FAIL(code, detail)                                                             \
     do {                                                                                           \
+        for (uint32_t source_class = 0; source_class < plan->source_class_count; source_class++)   \
+            xr_free(source_members[source_class]);                                                 \
+        xr_free(source_members);                                                                   \
         xr_free(child_counts);                                                                     \
         return report(error, error_size, (code), (detail));                                        \
     } while (0)
     for (uint32_t i = 0; i < plan->function_count; i++) {
         const XrSemanticFunctionRecord *function = &plan->functions[i];
-        if (!verify_id(function->canonical_key, function->id) || !function->name)
+        if (!verify_id(function->canonical_key, function->id) ||
+            !verify_function_key_exact(plan, i))
             XR_FUNCTION_FAIL("XR_SEM_0002", "function identity is invalid");
+        if (function->reserved2 != 0 ||
+            function->source_kind > XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR)
+            XR_FUNCTION_FAIL("XR_SEM_0013", "function source authority is invalid");
+        if (function->source_class == XR_SEMANTIC_INDEX_NONE) {
+            if (function->source_member_ordinal != UINT16_MAX ||
+                function->source_kind != XR_SEM_SOURCE_FUNCTION_NONE)
+                XR_FUNCTION_FAIL("XR_SEM_0013", "free function has source member authority");
+        } else {
+            if (function->source_class >= plan->source_class_count ||
+                function->source_kind == XR_SEM_SOURCE_FUNCTION_NONE ||
+                function->source_member_ordinal >=
+                    plan->source_classes[function->source_class].method_count ||
+                source_members[function->source_class][function->source_member_ordinal] != 0)
+                XR_FUNCTION_FAIL("XR_SEM_0013", "source method authority is invalid");
+            source_members[function->source_class][function->source_member_ordinal] = 1;
+        }
         if ((i == 0 && function->parent != XR_SEMANTIC_INDEX_NONE) ||
             (i > 0 && function->parent >= i) || function->reserved != 0)
             XR_FUNCTION_FAIL("XR_SEM_0013", "function lexical parent is invalid");
@@ -736,6 +925,15 @@ static bool verify_functions(const XrSemanticPlan *plan, char *error, size_t err
         if (child_counts[i] != plan->functions[i].child_count)
             XR_FUNCTION_FAIL("XR_SEM_0013", "function child relation is invalid");
     }
+    for (uint32_t c = 0; c < plan->source_class_count; c++) {
+        for (uint16_t m = 0; m < plan->source_classes[c].method_count; m++)
+            if (source_members[c][m] != 1)
+                XR_FUNCTION_FAIL("XR_SEM_0013",
+                                 "source method coverage is incomplete");
+    }
+    for (uint32_t c = 0; c < plan->source_class_count; c++)
+        xr_free(source_members[c]);
+    xr_free(source_members);
     xr_free(child_counts);
     if (parameter_cursor != plan->parameter_count || capture_cursor != plan->capture_count ||
         block_cursor != plan->block_count)
@@ -1845,10 +2043,97 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                 plan, operation, &builtin_instance_type);
         uint32_t indirect_type = resolve_frozen_indirect_callable_type(
             plan, definitions, value_count, operation);
+        uint32_t source_instance_function = XR_SEMANTIC_INDEX_NONE;
+        uint32_t source_instance_type = XR_SEMANTIC_INDEX_NONE;
+        uint32_t source_instance_class = XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *source_call = &plan->operations[operation];
+        if (source_call->opcode == XI_CALL_METHOD &&
+            (source_call->semantic_immediate & 1) == 0 &&
+            source_call->metadata_count == 1 && source_call->operand_count > 0 &&
+            source_call->function < plan->function_count) {
+            const XrSemanticOperandRecord *receiver =
+                &plan->operands[source_call->operand_begin];
+            if (receiver->role == XR_SEM_OPERAND_RECEIVER &&
+                receiver->type < plan->type_count &&
+                plan->types[receiver->type].source_class < plan->source_class_count) {
+                uint32_t source_class_index =
+                    plan->types[receiver->type].source_class;
+                const XrSemanticSourceClassRecord *source_class =
+                    &plan->source_classes[source_class_index];
+                uint8_t required = XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL |
+                                   XR_SEM_SOURCE_CLASS_RUNTIME_TYPE;
+                if ((source_class->flags & required) == required &&
+                    (source_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) == 0) {
+                    const char *selector = plan->metadata[source_call->metadata_begin];
+                    for (uint32_t f = 0; selector && f < plan->function_count; f++) {
+                        const XrSemanticFunctionRecord *candidate = &plan->functions[f];
+                        if (candidate->source_class != source_class_index ||
+                            candidate->source_kind !=
+                                XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD ||
+                            candidate->parameter_count != source_call->operand_count ||
+                            strcmp(candidate->name, selector) != 0)
+                            continue;
+                        if (source_instance_function != XR_SEMANTIC_INDEX_NONE) {
+                            source_instance_function = XR_SEMANTIC_INDEX_NONE;
+                            break;
+                        }
+                        source_instance_function = f;
+                        source_instance_type = receiver->type;
+                        source_instance_class = source_class_index;
+                    }
+                }
+            }
+        }
         const XrSemanticCallTargetRecord *target =
             cursor < plan->call_target_count && plan->call_targets[cursor].operation == operation
                 ? &plan->call_targets[cursor]
                 : NULL;
+        if (source_instance_function == XR_SEMANTIC_INDEX_NONE &&
+            source_call->opcode == XI_CALL_METHOD &&
+            (source_call->semantic_immediate & 1) == 0 &&
+            source_call->metadata_count == 1 && source_call->operand_count > 0 &&
+            source_call->function < plan->function_count) {
+            const XrSemanticFunctionRecord *caller =
+                &plan->functions[source_call->function];
+            const XrSemanticOperandRecord *receiver =
+                &plan->operands[source_call->operand_begin];
+            uint32_t candidate_class = caller->source_class;
+            const XrSemanticSourceClassRecord *source_class =
+                candidate_class < plan->source_class_count
+                    ? &plan->source_classes[candidate_class]
+                    : NULL;
+            uint8_t required = XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL |
+                               XR_SEM_SOURCE_CLASS_RUNTIME_TYPE;
+            const char *selector = plan->metadata[source_call->metadata_begin];
+            if (source_class && (source_class->flags & required) == required &&
+                (source_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) == 0 &&
+                caller->source_kind == XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD &&
+                caller->parameter_count > 0 &&
+                receiver->role == XR_SEM_OPERAND_RECEIVER &&
+                receiver->type < plan->type_count &&
+                plan->types[receiver->type].source_class == XR_SEMANTIC_INDEX_NONE) {
+                const XrSemanticParameterRecord *self =
+                    &plan->parameters[caller->parameter_begin];
+                if (receiver->value == self->value && receiver->type == self->type) {
+                    for (uint32_t f = 0; selector && f < plan->function_count; f++) {
+                        const XrSemanticFunctionRecord *candidate = &plan->functions[f];
+                        if (candidate->source_class != candidate_class ||
+                            candidate->source_kind !=
+                                XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD ||
+                            candidate->parameter_count != source_call->operand_count ||
+                            strcmp(candidate->name, selector) != 0)
+                            continue;
+                        if (source_instance_function != XR_SEMANTIC_INDEX_NONE) {
+                            source_instance_function = XR_SEMANTIC_INDEX_NONE;
+                            break;
+                        }
+                        source_instance_function = f;
+                        source_instance_type = receiver->type;
+                        source_instance_class = candidate_class;
+                    }
+                }
+            }
+        }
         if (cursor < plan->call_target_count && plan->call_targets[cursor].operation < operation) {
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
@@ -1857,7 +2142,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         bool source_export = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable ||
              indirect_type != XR_SEMANTIC_INDEX_NONE || native_namespace ||
-             builtin_instance) &&
+             builtin_instance || source_instance_function != XR_SEMANTIC_INDEX_NONE) &&
             !target) {
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
@@ -1925,8 +2210,22 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             stable_id_zero(target->export_identity) &&
             stable_id_zero(target->callee_function) &&
             target->callable_type == builtin_instance_type;
+        bool source_instance_shape =
+            source_instance_function != XR_SEMANTIC_INDEX_NONE && !source_namespace &&
+            !native_namespace && !builtin_instance &&
+            direct_function == XR_SEMANTIC_INDEX_NONE && !native_yieldable &&
+            indirect_type == XR_SEMANTIC_INDEX_NONE &&
+            target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL &&
+            target->function == source_instance_function &&
+            target->dependency == XR_SEMANTIC_INDEX_NONE &&
+            target->source_export == XR_SEMANTIC_INDEX_NONE &&
+            stable_id_zero(target->export_identity) &&
+            xr_stable_id_equal(target->callee_function,
+                               plan->functions[source_instance_function].id) &&
+            target->callable_type == source_instance_type;
         if ((!direct && !native && !source_shape && !indirect &&
-             !native_namespace_shape && !builtin_instance_shape) ||
+             !native_namespace_shape && !builtin_instance_shape &&
+             !source_instance_shape) ||
             target->reserved[0] != 0 ||
             target->reserved[1] != 0 || target->reserved[2] != 0) {
             xr_free(stores.rows);
@@ -1975,7 +2274,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                 XR_SEMANTIC_SCHEMA_VERSION, operation_id,
                 native_namespace_module, native_namespace_selector,
                 (unsigned) target->kind);
-        } else {
+        } else if (builtin_instance_shape) {
             char type_id[XR_STABLE_ID_BYTES * 2 + 1];
             xr_stable_id_hex(plan->types[target->callable_type].id, type_id);
             const char *selector =
@@ -1986,6 +2285,20 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                 "type=%s:kind=%u",
                 XR_SEMANTIC_SCHEMA_VERSION, operation_id, builtin_instance,
                 selector, type_id, (unsigned) target->kind);
+        } else {
+            const char *selector =
+                plan->metadata[plan->operations[operation].metadata_begin];
+            char class_id[XR_STABLE_ID_BYTES * 2 + 1];
+            char callee_id[XR_STABLE_ID_BYTES * 2 + 1];
+            char type_id[XR_STABLE_ID_BYTES * 2 + 1];
+            xr_stable_id_hex(plan->source_classes[source_instance_class].id, class_id);
+            xr_stable_id_hex(target->callee_function, callee_id);
+            xr_stable_id_hex(plan->types[target->callable_type].id, type_id);
+            length = snprintf(
+                expected_key, sizeof(expected_key),
+                "call-target-v7:schema=%u:operation=%s:source-class=%s:selector=%zu:%s:function=%s:type=%s:kind=%u",
+                XR_SEMANTIC_SCHEMA_VERSION, operation_id, class_id, strlen(selector),
+                selector, callee_id, type_id, (unsigned) target->kind);
         }
         if (length < 0 || (size_t) length >= sizeof(expected_key) ||
             strcmp(target->canonical_key ? target->canonical_key : "", expected_key) != 0 ||
@@ -2009,7 +2322,8 @@ static bool operation_is_static_suspend(const XrSemanticOperationRecord *operati
 
 static bool operation_propagates_suspend(const XrSemanticOperationRecord *operation) {
     return operation &&
-           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL);
+           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
+            operation->opcode == XI_CALL_METHOD);
 }
 
 typedef struct XrCoroutineAuthorityWork {
@@ -2078,7 +2392,8 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
         }
         work.target_by_operation[target->operation] = target_index;
         work.reverse_next[target_index] = XR_SEMANTIC_INDEX_NONE;
-        if (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+        if ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+             target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) &&
             operation_propagates_suspend(&plan->operations[target->operation])) {
             if (target->function >= plan->function_count) {
                 coroutine_authority_work_dispose(&work);
@@ -2193,9 +2508,11 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
             const XrSemanticCallTargetRecord *target =
                 &plan->call_targets[target_index];
             dynamic_suspend =
-                (plan->operations[operation].opcode == XI_CALL &&
-                 (target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE ||
-                  (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+                ((plan->operations[operation].opcode == XI_CALL ||
+                  plan->operations[operation].opcode == XI_CALL_METHOD) &&
+                 ((target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE) ||
+                  ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+                    target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) &&
                    work.suspendable[target->function] != 0))) ||
                 (plan->operations[operation].opcode == XI_CALL_METHOD &&
                  (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
@@ -2422,7 +2739,8 @@ static bool compute_plan_suspendable_functions(const XrSemanticPlan *plan,
     }
     for (uint32_t i = 0; i < plan->call_target_count; i++) {
         const XrSemanticCallTargetRecord *target = &plan->call_targets[i];
-        if (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+        if ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+             target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) &&
             target->function < plan->function_count && target->operation < plan->operation_count &&
             operation_propagates_suspend(&plan->operations[target->operation])) {
             next[i] = head[target->function];
@@ -2515,6 +2833,7 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
     XrSemanticGraph graph = {0};
     bool verified = xr_semantic_plan_verify_identity_set(plan, error, error_size) &&
                     verify_entities(plan, error, error_size) &&
+                    verify_source_classes(plan, error, error_size) &&
                     verify_types(plan, error, error_size) &&
                     verify_functions(plan, error, error_size) &&
                     verify_edges(plan, block_edge_mask, operation_edge_mask, error, error_size) &&

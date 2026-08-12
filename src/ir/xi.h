@@ -851,6 +851,7 @@ typedef struct XiClassData {
     uint32_t derive_flags;    /* XR_DERIVE_* flags copied from declaration attributes */
     bool is_generic_skeleton; /* template class; concrete instances are separate classes */
     bool is_monomorphized;    /* true for mono-generated classes */
+    bool explicit_final;      /* source-declared final class; preserved past analyzer teardown */
     bool is_cycle_candidate;  /* type graph forms a reference cycle (enables RC cycle collector) */
     /* Does this aggregate need a runtime type identity -- a registered type id,
      * an itable, a name? A class does: instanceof walks it, dispatch needs it.

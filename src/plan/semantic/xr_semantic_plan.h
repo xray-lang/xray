@@ -70,8 +70,22 @@ typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_INDIRECT_CALLABLE,
     XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE,
     XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE,
+    XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
+
+typedef enum XrSemanticSourceClassFlag {
+    XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL = 1u << 0,
+    XR_SEM_SOURCE_CLASS_RUNTIME_TYPE = 1u << 1,
+    XR_SEM_SOURCE_CLASS_GENERIC = 1u << 2,
+} XrSemanticSourceClassFlag;
+
+typedef enum XrSemanticSourceFunctionKind {
+    XR_SEM_SOURCE_FUNCTION_NONE = 0,
+    XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD,
+    XR_SEM_SOURCE_FUNCTION_STATIC_METHOD,
+    XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR,
+} XrSemanticSourceFunctionKind;
 
 typedef enum XrSemanticImportResolution {
     XR_SEM_IMPORT_RESOLUTION_NONE = 0,
@@ -185,6 +199,7 @@ typedef struct XrSemanticTypeRecord {
     const char *canonical_key;
     uint32_t kind;
     uint32_t builtin_type;
+    uint32_t source_class;
     uint32_t child_begin;
     uint32_t aggregate_extent;
     uint32_t aggregate_align;
@@ -192,6 +207,18 @@ typedef struct XrSemanticTypeRecord {
     uint8_t scalar_rep;
     uint8_t flags;
 } XrSemanticTypeRecord;
+
+typedef struct XrSemanticSourceClassRecord {
+    XrStableId id;
+    const char *canonical_key;
+    XrStableId module;
+    const char *module_path;
+    const char *name;
+    uint32_t ordinal;
+    uint16_t method_count;
+    uint8_t flags;
+    uint8_t reserved;
+} XrSemanticSourceClassRecord;
 
 typedef struct XrSemanticFunctionRecord {
     XrStableId id;
@@ -211,9 +238,13 @@ typedef struct XrSemanticFunctionRecord {
     uint32_t value_count;
     uint32_t semantic_effects;
     uint32_t capability_mask;
+    uint32_t source_class;
+    uint16_t source_member_ordinal;
     int16_t return_parameter;
     uint8_t return_provenance;
+    uint8_t source_kind;
     uint8_t flags;
+    uint8_t reserved2;
 } XrSemanticFunctionRecord;
 
 typedef struct XrSemanticParameterRecord {
@@ -398,6 +429,7 @@ XR_FUNC XrFingerprint xr_semantic_plan_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC XrFingerprint xr_semantic_plan_operation_registry_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC XrFingerprint xr_semantic_plan_stdlib_registry_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_type_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_source_class_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_function_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_parameter_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_capture_count(const XrSemanticPlan *plan);
@@ -411,6 +443,8 @@ XR_FUNC size_t xr_semantic_plan_constant_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_entity_count(const XrSemanticPlan *plan);
 XR_FUNC const XrSemanticTypeRecord *xr_semantic_plan_type(const XrSemanticPlan *plan,
                                                           uint32_t index);
+XR_FUNC const XrSemanticSourceClassRecord *xr_semantic_plan_source_class(
+    const XrSemanticPlan *plan, uint32_t index);
 XR_FUNC const XrSemanticFunctionRecord *xr_semantic_plan_function(const XrSemanticPlan *plan,
                                                                   uint32_t index);
 XR_FUNC const XrSemanticParameterRecord *xr_semantic_plan_parameter(const XrSemanticPlan *plan,

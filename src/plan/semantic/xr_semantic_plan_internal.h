@@ -32,6 +32,9 @@ struct XrSemanticPlan {
     XrSemanticTypeRecord *types;
     uint32_t type_count;
     uint32_t type_capacity;
+    XrSemanticSourceClassRecord *source_classes;
+    uint32_t source_class_count;
+    uint32_t source_class_capacity;
     XrSemanticFunctionRecord *functions;
     uint32_t function_count;
     uint32_t function_capacity;

@@ -125,6 +125,96 @@ static XrType stub_string_builder = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .instance = {.class_name = "StringBuilder"},
 };
+static XrClassInfo stub_target_source_class_info = {.name = "FinalTargetWorker"};
+static XrType stub_target_source_instance = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 114,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {
+        .class_name = "FinalTargetWorker",
+        .class_ref = &stub_target_source_class_info,
+    },
+};
+
+static XrSemanticPlan *build_source_instance_method_semantic(void) {
+    XiFunc *root = xi_func_new("target_source_instance_root", &stub_unit);
+    XiFunc *callee = xi_func_new("wait", &stub_unit);
+    XiFunc *caller = xi_func_new("run", &stub_unit);
+    REQUIRE(root != NULL && callee != NULL && caller != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *callee_entry = xi_block_new(callee);
+    XiBlock *caller_entry = xi_block_new(caller);
+    REQUIRE(root_entry != NULL && callee_entry != NULL && caller_entry != NULL);
+    root->children = (XiFunc **) xr_malloc(2u * sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = callee;
+    root->children[1] = caller;
+    root->nchildren = root->children_cap = 2;
+    callee->parent_func = caller->parent_func = root;
+    XiValue *callee_this = xi_param(callee, callee_entry, 0,
+                                    &stub_target_source_instance);
+    XiValue *caller_this = xi_param(caller, caller_entry, 0,
+                                    &stub_target_source_instance);
+    REQUIRE(callee_this != NULL && caller_this != NULL);
+    callee->params = (XiValue **) xr_malloc(sizeof(*callee->params));
+    caller->params = (XiValue **) xr_malloc(sizeof(*caller->params));
+    REQUIRE(callee->params != NULL && caller->params != NULL);
+    callee->params[0] = callee_this;
+    caller->params[0] = caller_this;
+    callee->nparams = caller->nparams = 1;
+    XiValue *yield = xi_value_new(callee, callee_entry, XI_YIELD, &stub_unit, 0);
+    REQUIRE(yield != NULL);
+    xi_block_set_return(callee_entry, yield);
+    XiValue *call = xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, 1);
+    REQUIRE(call != NULL);
+    call->args[0] = caller_this;
+    call->aux = "wait";
+    xi_block_set_return(caller_entry, call);
+    xi_block_set_return(root_entry, NULL);
+    XiCoroSuspendPoint callee_point = {.state_id = 1, .op = yield,
+                                      .kind = XI_CORO_SUSP_YIELD};
+    XiCoroSuspendPoint caller_point = {.state_id = 1, .op = call,
+                                      .kind = XI_CORO_SUSP_CALL};
+    XiCoroPlan callee_coroutine = {.is_coroutine = true, .nstates = 1,
+                                   .points = &callee_point};
+    XiCoroPlan caller_coroutine = {.is_coroutine = true, .nstates = 1,
+                                   .points = &caller_point};
+    callee->coro_plan = &callee_coroutine;
+    caller->coro_plan = &caller_coroutine;
+    root->stage = callee->stage = caller->stage = XI_STAGE_OPTIMIZED;
+    XiModule *module = xi_module_new("pkg/target_source_instance.xr",
+                                    "target_source_instance", root);
+    REQUIRE(module != NULL);
+    root->module = module;
+    XiClassMethod methods[2] = {{.name = "wait"}, {.name = "run"}};
+    uint16_t child_indices[2] = {0, 1};
+    XiClassData source_class = {
+        .class_info = &stub_target_source_class_info,
+        .class_name = "FinalTargetWorker",
+        .methods = methods,
+        .nmethod = 2,
+        .child_idx = child_indices,
+        .ninst = 2,
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
+    REQUIRE(module->classes != NULL);
+    module->classes[0] = &source_class;
+    module->nclasses = 1;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(root, &semantic, error, sizeof(error)));
+    REQUIRE(semantic != NULL && semantic->call_target_count == 1 &&
+            semantic->call_targets[0].kind ==
+                XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL);
+    root->module = NULL;
+    xi_func_free(root);
+    module->init = NULL;
+    xi_module_free(module);
+    return semantic;
+}
 
 static XrSemanticPlan *build_stringbuilder_constructor_semantic(void) {
     XiFunc *function = xi_func_new("target_stringbuilder_constructor", &stub_int);
@@ -922,7 +1012,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "7d5ba75e95ef4e3c227e2b357f4613395a61c8933d5d47c0f6f41cc08e9e7a16") == 0);
+                   "f9002f8dcafc4f5e9264f292b359a328ad52bfe78fc1ee68a5973b9140baf340") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2061,7 +2151,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "29b68feef03015b0056f9ef80af499f68f1bd79cf3b8f87da42ec31a338f4044") == 0);
+                   "21580ad4b04ce45c3d6424e892805d4daa54164c7b853ea5a8178c6869f749cb") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT;
          mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -2257,7 +2347,7 @@ static XrSemanticPlan *build_lowered_tail_coroutine_chain(void) {
     leaf->parent_func = wrapper;
 
     /* Seed XiCoroLower so it materializes the caller state CFG.  The seed is
-     * rewritten below before SemanticPlan is frozen: schema 19 must then
+     * rewritten below before SemanticPlan is frozen: schema 20 must then
      * derive wrapper suspendability solely through the DIRECT_LOCAL tail
      * edge, while the wrapper itself has no state row. */
     XiValue *wrapper_seed =
@@ -2637,7 +2727,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "4d0faa6ecee1561ee5e79b577b31dd0e8080663f58157f3ebd9a5dbb5f7dbb12") == 0);
+                   "07f6fa0d7557c036c5d3d5bce933e38b8749805046f94884a686ed249d61348c") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -2691,6 +2781,17 @@ static void test_direct_local_call_adapter_family(void) {
 
     xr_target_plan_free(second);
     xr_target_plan_free(first);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_source_instance_method_target_fails_closed(void) {
+    XrSemanticPlan *semantic = build_source_instance_method_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    REQUIRE(plan == NULL);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
 }
@@ -2859,7 +2960,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "02899285b107065d888a0c1b61be9766620b4a41906eaf599accad7017a71e1e") == 0);
+                   "1833d9c9c06a4843f5470a04ca68cd11a6f9f5f7ea302b246ab69d8f2a5467c0") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");
@@ -3315,6 +3416,7 @@ int main(void) {
     test_builder_materializes_struct_and_named_aggregates();
     test_unknown_call_target_fails_closed();
     test_direct_local_call_adapter_family();
+    test_source_instance_method_target_fails_closed();
     test_coroutine_state_call_family();
     test_direct_local_future_storage_fails_closed();
     test_structural_mutations_fail_closed();

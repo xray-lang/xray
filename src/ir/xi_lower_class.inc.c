@@ -953,6 +953,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->instance_layout = NULL;
     data->inherited_field_count = 0;
     data->is_cycle_candidate = false;
+    data->explicit_final = cd->explicit_final;
     /* Stamp the evidence class id now.  The semantic snapshot nulls class_info
      * before the backend runs, and a bare-name lookup there would collide with
      * a same-named class from another module.  The class being lowered lives in

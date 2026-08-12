@@ -22,6 +22,7 @@
 
 typedef struct XrXsmCounts {
     uint32_t types;
+    uint32_t source_classes;
     uint32_t functions;
     uint32_t blocks;
     uint32_t operations;
@@ -169,6 +170,7 @@ static bool counts_fit_storage_budget(XrXsmCounts count, size_t *storage_bytes) 
             return false;                                                                          \
     } while (0)
     XR_COUNT_STORAGE(types, XrSemanticTypeRecord);
+    XR_COUNT_STORAGE(source_classes, XrSemanticSourceClassRecord);
     XR_COUNT_STORAGE(functions, XrSemanticFunctionRecord);
     XR_COUNT_STORAGE(blocks, XrSemanticBlockRecord);
     XR_COUNT_STORAGE(operations, XrSemanticOperationRecord);
@@ -213,9 +215,10 @@ static bool counts_fit_payload_minimum(XrXsmCounts count, size_t remaining) {
     } while (0)
     /* Exact fixed-width bytes plus the four-byte length prefix for each possibly-empty string. */
     XR_MINIMUM_PAYLOAD(entities, 36u);
-    XR_MINIMUM_PAYLOAD(types, 44u);
+    XR_MINIMUM_PAYLOAD(source_classes, 52u);
+    XR_MINIMUM_PAYLOAD(types, 48u);
     XR_MINIMUM_PAYLOAD(type_children, 4u);
-    XR_MINIMUM_PAYLOAD(functions, 76u);
+    XR_MINIMUM_PAYLOAD(functions, 84u);
     XR_MINIMUM_PAYLOAD(parameters, 40u);
     XR_MINIMUM_PAYLOAD(captures, 60u);
     XR_MINIMUM_PAYLOAD(blocks, 56u);
@@ -249,6 +252,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
         }                                                                                          \
     } while (0)
     XR_ALLOC_TABLE(types, count.types, XrSemanticTypeRecord);
+    XR_ALLOC_TABLE(source_classes, count.source_classes, XrSemanticSourceClassRecord);
     XR_ALLOC_TABLE(functions, count.functions, XrSemanticFunctionRecord);
     XR_ALLOC_TABLE(blocks, count.blocks, XrSemanticBlockRecord);
     XR_ALLOC_TABLE(operations, count.operations, XrSemanticOperationRecord);
@@ -279,6 +283,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     XR_ALLOC_CERT(loop_invariants, count.loop_invariants, XrOwnershipLoopInvariantRecord);
 #undef XR_ALLOC_CERT
     plan->type_count = plan->type_capacity = count.types;
+    plan->source_class_count = plan->source_class_capacity = count.source_classes;
     plan->function_count = plan->function_capacity = count.functions;
     plan->block_count = plan->block_capacity = count.blocks;
     plan->operation_count = plan->operation_capacity = count.operations;
@@ -304,6 +309,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
 
 static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->types = xr_xsm_take_u32(reader);
+    count->source_classes = xr_xsm_take_u32(reader);
     count->functions = xr_xsm_take_u32(reader);
     count->blocks = xr_xsm_take_u32(reader);
     count->operations = xr_xsm_take_u32(reader);
@@ -323,7 +329,8 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->events = xr_xsm_take_u32(reader);
     count->edge_states = xr_xsm_take_u32(reader);
     count->loop_invariants = xr_xsm_take_u32(reader);
-    return !reader->failed && count->types <= 1000000u && count->functions <= 100000u &&
+    return !reader->failed && count->types <= 1000000u && count->source_classes <= 100000u &&
+           count->functions <= 100000u &&
            count->blocks <= 2000000u && count->operations <= 10000000u &&
            count->call_targets <= count->operations &&
            count->dependencies <= count->functions + count->operations &&
@@ -376,6 +383,7 @@ static void decode_types(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->canonical_key = take_plan_string(reader, plan, false);
         record->kind = xr_xsm_take_u32(reader);
         record->builtin_type = xr_xsm_take_u32(reader);
+        record->source_class = xr_xsm_take_u32(reader);
         record->child_begin = xr_xsm_take_u32(reader);
         record->aggregate_extent = xr_xsm_take_u32(reader);
         record->aggregate_align = xr_xsm_take_u32(reader);
@@ -385,6 +393,22 @@ static void decode_types(XrXsmReader *reader, XrSemanticPlan *plan) {
     }
     for (uint32_t i = 0; i < plan->type_child_count; i++)
         plan->type_children[i] = xr_xsm_take_u32(reader);
+}
+
+static void decode_source_classes(XrXsmReader *reader,
+                                  XrSemanticPlan *plan) {
+    for (uint32_t i = 0; i < plan->source_class_count; i++) {
+        XrSemanticSourceClassRecord *record = &plan->source_classes[i];
+        xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
+        record->canonical_key = take_plan_string(reader, plan, false);
+        xr_xsm_take_bytes(reader, record->module.bytes, sizeof(record->module.bytes));
+        record->module_path = take_plan_string(reader, plan, false);
+        record->name = take_plan_string(reader, plan, false);
+        record->ordinal = xr_xsm_take_u32(reader);
+        record->method_count = xr_xsm_take_u16(reader);
+        record->flags = xr_xsm_take_u8(reader);
+        record->reserved = xr_xsm_take_u8(reader);
+    }
 }
 
 static void decode_functions(XrXsmReader *reader, XrSemanticPlan *plan) {
@@ -407,9 +431,13 @@ static void decode_functions(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->value_count = xr_xsm_take_u32(reader);
         record->semantic_effects = xr_xsm_take_u32(reader);
         record->capability_mask = xr_xsm_take_u32(reader);
+        record->source_class = xr_xsm_take_u32(reader);
+        record->source_member_ordinal = xr_xsm_take_u16(reader);
         record->return_parameter = decode_twos_complement_i16(xr_xsm_take_u16(reader));
         record->return_provenance = xr_xsm_take_u8(reader);
+        record->source_kind = xr_xsm_take_u8(reader);
         record->flags = xr_xsm_take_u8(reader);
+        record->reserved2 = xr_xsm_take_u8(reader);
     }
     for (uint32_t i = 0; i < plan->parameter_count; i++) {
         XrSemanticParameterRecord *record = &plan->parameters[i];
@@ -725,6 +753,7 @@ static bool decode_xsm(const uint8_t *bytes, size_t size,
     }
     reader.allocation_bytes = table_storage + sizeof(*plan) + sizeof(*certificate);
     decode_entities(&reader, plan);
+    decode_source_classes(&reader, plan);
     decode_types(&reader, plan);
     decode_functions(&reader, plan);
     decode_blocks(&reader, plan);

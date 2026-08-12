@@ -57,7 +57,10 @@ typedef struct XrFunctionMapEntry {
     uint32_t value_begin;
     uint32_t block_begin;
     uint32_t parent;
+    uint32_t source_class;
     uint16_t lexical_ordinal;
+    uint16_t source_member_ordinal;
+    uint8_t source_kind;
 } XrFunctionMapEntry;
 
 typedef struct XrSuspendabilityCacheEntry {
@@ -217,6 +220,8 @@ static const char *copy_canonical_source_file(XrSemanticBuildContext *ctx, const
 
 static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stack, uint32_t depth,
                      XrSemanticBuildContext *ctx);
+static uint32_t source_class_for_type(const XrSemanticBuildContext *ctx,
+                                      const XrType *type);
 
 static uint32_t frozen_builtin_type(const XrType *type) {
     if (xr_type_is_builtin_named_class(type, "StringBuilder"))
@@ -324,11 +329,17 @@ static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stac
             return type_key_object(type, key, stack, depth + 1, ctx);
         case XR_KIND_CLASS:
         case XR_KIND_INSTANCE:
-        case XR_KIND_INTERFACE:
-            return text_append(key, ";named:") &&
-                   text_append_component(key, type->instance.class_name) &&
-                   type_key_list(type->instance.type_args, type->instance.type_arg_count, key,
-                                 stack, depth + 1, ctx);
+        case XR_KIND_INTERFACE: {
+            if (!text_append(key, ";named:") ||
+                !text_append_component(key, type->instance.class_name) ||
+                !type_key_list(type->instance.type_args, type->instance.type_arg_count, key,
+                               stack, depth + 1, ctx))
+                return false;
+            uint32_t source_class = source_class_for_type(ctx, type);
+            return source_class == XR_SEMANTIC_INDEX_NONE ||
+                   (text_append(key, ";source-class:") &&
+                    text_append_stable_id(key, ctx->plan->source_classes[source_class].id));
+        }
         case XR_KIND_FUNCTION:
             return type_key_function(type, key, stack, depth + 1, ctx);
         case XR_KIND_TYPE_PARAM:
@@ -542,8 +553,10 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
         return fail(ctx, "XR_EXEC_5003", "semantic type identity allocation failed");
     record->kind = (uint32_t) type->kind;
     record->builtin_type = frozen_builtin_type(type);
+    record->source_class = source_class_for_type(ctx, type);
     record->scalar_rep = type->scalar_rep;
-    bool reference_capable = xi_own_type_is_rc(type);
+    bool reference_capable = frozen_builtin_type(type) != XR_TID_NULL ||
+                             xi_own_type_is_rc(type);
     bool borrow_view = type->kind == XR_KIND_SLICE;
     record->flags =
         (uint8_t) ((type->is_nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
@@ -691,8 +704,9 @@ static bool collect_functions(XrSemanticBuildContext *ctx, const XiFunc *functio
                        sizeof(*ctx->functions), XR_SEMANTIC_MAX_FUNCTIONS))
         return fail(ctx, "XR_EXEC_5003", "semantic function budget exhausted");
     uint32_t index = ctx->function_count;
-    ctx->functions[ctx->function_count++] =
-        (XrFunctionMapEntry) {function, index, 0, 0, parent, lexical_ordinal};
+    ctx->functions[ctx->function_count++] = (XrFunctionMapEntry) {
+        function, index, 0, 0, parent, XR_SEMANTIC_INDEX_NONE, lexical_ordinal,
+        UINT16_MAX, XR_SEM_SOURCE_FUNCTION_NONE};
     for (uint16_t i = 0; i < function->nchildren; i++) {
         if (!collect_functions(ctx, function->children[i], index, i))
             return false;
@@ -840,22 +854,163 @@ static int function_index(const XrSemanticBuildContext *ctx, const XiFunc *funct
     return -1;
 }
 
+static bool module_stable_identity(XrSemanticBuildContext *ctx, const XiFunc *root,
+                                   XrStableId *module_id, const char **module_path_out) {
+    const char *module_name = root->module && root->module->name
+                                  ? root->module->name
+                                  : (root->name ? root->name : "");
+    const char *module_path = root->module && root->module->path
+                                  ? root->module->path
+                                  : (root->source_file ? root->source_file : module_name);
+    XrTextBuilder package_key = {0};
+    XrTextBuilder module_key = {0};
+    XrStableId package_id = {{0}};
+    XrFingerprint digest;
+    bool valid = text_append_format(&package_key, "entity-v1:schema=%u:kind=%u:parent=none:name=",
+                                    XR_SEMANTIC_SCHEMA_VERSION,
+                                    (unsigned) XR_SEM_ENTITY_PACKAGE) &&
+                 text_append_component(&package_key, module_name) &&
+                 xr_stable_id_from_key(package_key.data, &package_id, &digest) &&
+                 text_append_format(&module_key, "entity-v1:schema=%u:kind=%u:parent=",
+                                    XR_SEMANTIC_SCHEMA_VERSION,
+                                    (unsigned) XR_SEM_ENTITY_MODULE) &&
+                 text_append_stable_id(&module_key, package_id) &&
+                 text_append(&module_key, ":name=") &&
+                 text_append_component(&module_key, module_name) &&
+                 text_append(&module_key, ":path=") &&
+                 text_append_path_component(&module_key, module_path) &&
+                 xr_stable_id_from_key(module_key.data, module_id, &digest);
+    const char *frozen_path = valid ? copy_canonical_source_file(ctx, module_path) : NULL;
+    text_dispose(&package_key);
+    text_dispose(&module_key);
+    if (!valid || !frozen_path)
+        return fail(ctx, "XR_SEM_0019", "source-class module identity is incomplete");
+    *module_path_out = frozen_path;
+    return true;
+}
+
+static bool build_source_classes(XrSemanticBuildContext *ctx, const XiFunc *root) {
+    const XiModule *module = root ? root->module : NULL;
+    if (!module)
+        return true;
+    if (module->init != root)
+        return fail(ctx, "XR_SEM_0019", "source-class module ownership is incomplete");
+    if (module->nclasses == 0)
+        return true;
+    XrStableId module_id;
+    const char *module_path = NULL;
+    if (!module_stable_identity(ctx, root, &module_id, &module_path))
+        return false;
+    if (module->nclasses > XR_SEMANTIC_MAX_FUNCTIONS ||
+        (module->nclasses && !module->classes) ||
+        !reserve_array((void **) &ctx->plan->source_classes,
+                       &ctx->plan->source_class_capacity, module->nclasses,
+                       sizeof(*ctx->plan->source_classes), XR_SEMANTIC_MAX_FUNCTIONS))
+        return fail(ctx, "XR_EXEC_5003", "semantic source-class budget exhausted");
+    for (uint16_t c = 0; c < module->nclasses; c++) {
+        const XiClassData *source = module->classes[c];
+        if (!source || !source->class_name || !source->class_name[0] ||
+            source->nmethod != (uint16_t) (source->ninst + source->nstat) ||
+            (source->nmethod && (!source->methods || !source->child_idx)))
+            return fail(ctx, "XR_SEM_0019", "source-class method authority is incomplete");
+        XrSemanticSourceClassRecord *record = &ctx->plan->source_classes[c];
+        memset(record, 0, sizeof(*record));
+        record->module = module_id;
+        record->module_path = module_path;
+        record->name = xr_semantic_plan_copy_string(ctx->plan, source->class_name);
+        record->ordinal = c;
+        record->method_count = source->nmethod;
+        record->flags = (uint8_t) ((source->explicit_final ? XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL : 0u) |
+                                   (source->needs_runtime_type ? XR_SEM_SOURCE_CLASS_RUNTIME_TYPE : 0u) |
+                                   ((source->is_generic_skeleton || source->is_monomorphized ||
+                                     source->mono_type_arg_count != 0)
+                                        ? XR_SEM_SOURCE_CLASS_GENERIC
+                                        : 0u));
+        XrTextBuilder key = {0};
+        bool valid = record->name &&
+                     text_append_format(&key, "source-class-v1:schema=%u:module=",
+                                        XR_SEMANTIC_SCHEMA_VERSION) &&
+                     text_append_stable_id(&key, record->module) &&
+                     text_append(&key, ":path=") &&
+                     text_append_path_component(&key, record->module_path) &&
+                     text_append(&key, ":name=") &&
+                     text_append_component(&key, record->name) &&
+                     text_append_format(&key, ":ordinal=%u:methods=%u:flags=%u",
+                                        record->ordinal, record->method_count, record->flags);
+        if (valid)
+            record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+        text_dispose(&key);
+        XrFingerprint digest;
+        if (!valid || !record->canonical_key ||
+            !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+            return fail(ctx, "XR_SEM_0019", "source-class identity is incomplete");
+        for (uint16_t m = 0; m < source->nmethod; m++) {
+            uint16_t child = source->child_idx[m];
+            if (child >= root->nchildren || !root->children[child] ||
+                !source->methods[m].name)
+                return fail(ctx, "XR_SEM_0019", "source-class method binding is incomplete");
+            int function = function_index(ctx, root->children[child]);
+            if (function < 0 ||
+                ctx->functions[function].source_class != XR_SEMANTIC_INDEX_NONE)
+                return fail(ctx, "XR_SEM_0019", "source-class method binding is ambiguous");
+            XrFunctionMapEntry *mapped = &ctx->functions[function];
+            mapped->source_class = c;
+            mapped->source_member_ordinal = m;
+            mapped->source_kind = source->methods[m].is_constructor
+                                      ? XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR
+                                      : source->methods[m].is_static
+                                            ? XR_SEM_SOURCE_FUNCTION_STATIC_METHOD
+                                            : XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD;
+            if (strcmp(mapped->source->name ? mapped->source->name : "",
+                       source->methods[m].name) != 0)
+                return fail(ctx, "XR_SEM_0019", "source-class method name is inconsistent");
+        }
+    }
+    ctx->plan->source_class_count = module->nclasses;
+    return true;
+}
+
+static uint32_t source_class_for_type(const XrSemanticBuildContext *ctx,
+                                      const XrType *type) {
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+        !type->instance.class_ref)
+        return XR_SEMANTIC_INDEX_NONE;
+    const XiModule *module = ctx->functions[0].source->module;
+    for (uint32_t c = 0; module && c < module->nclasses; c++)
+        if (module->classes[c] &&
+            module->classes[c]->class_info == type->instance.class_ref)
+            return c;
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
 static bool build_function_identity(XrSemanticBuildContext *ctx, uint32_t index,
                                     const XiFunc *source, XrSemanticFunctionRecord *record) {
     record->name = xr_semantic_plan_copy_string(ctx->plan, source->name ? source->name : "");
     if (!record->name || !add_type(ctx, source->return_type, &record->return_type))
         return false;
     record->parameter_count = xi_func_semantic_param_count(source);
+    record->source_class = ctx->functions[index].source_class;
+    record->source_member_ordinal = ctx->functions[index].source_member_ordinal;
+    record->source_kind = ctx->functions[index].source_kind;
     XrTextBuilder key = {0};
     uint32_t parent = ctx->functions[index].parent;
     bool valid =
-        text_append(&key, "function-v2:parent=") &&
+        text_append(&key, "function-v3:parent=") &&
         (parent == XR_SEMANTIC_INDEX_NONE
              ? text_append(&key, "module-root")
              : text_append_stable_id(&key, ctx->plan->functions[parent].id)) &&
         text_append_format(&key, ":ordinal=%u:name=", ctx->functions[index].lexical_ordinal) &&
         text_append_component(&key, source->name) &&
-        text_append_format(&key, ":body=%u:return=", source->xg_body_func_id) &&
+        text_append(&key, ":source-class=") &&
+        (record->source_class == XR_SEMANTIC_INDEX_NONE
+             ? text_append(&key, "none")
+             : text_append_stable_id(&key,
+                                     ctx->plan->source_classes[record->source_class].id)) &&
+        (record->source_member_ordinal == UINT16_MAX
+             ? text_append_format(&key, ":member=none:source-kind=%u:return=",
+                                  record->source_kind)
+             : text_append_format(&key, ":member=%u:source-kind=%u:return=",
+                                  record->source_member_ordinal, record->source_kind)) &&
         text_append_stable_id(&key, ctx->plan->types[record->return_type].id) &&
         text_append_format(&key, ":params=%u", record->parameter_count);
     for (uint16_t p = 0; valid && p < record->parameter_count; p++) {
@@ -866,9 +1021,9 @@ static bool build_function_identity(XrSemanticBuildContext *ctx, uint32_t index,
                 text_append_stable_id(&key, ctx->plan->types[type_index].id);
     }
     valid = valid &&
-            text_append_format(&key, ":effects=%u:unsafe=%u:entry=%u:extern=%u",
-                               source->semantic_effects, source->requires_unsafe_at_call ? 1u : 0u,
-                               (unsigned) source->entry_type, source->is_extern ? 1u : 0u);
+            text_append_format(&key, ":effects=%u:caps=%u:flags=%u",
+                               record->semantic_effects, record->capability_mask,
+                               (unsigned) record->flags);
     if (valid)
         record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
     text_dispose(&key);
@@ -961,6 +1116,12 @@ static bool build_function_records(XrSemanticBuildContext *ctx) {
         XrSemanticFunctionRecord *record = &ctx->plan->functions[i];
         memset(record, 0, sizeof(*record));
         record->parent = ctx->functions[i].parent;
+        record->semantic_effects = source->semantic_effects;
+        record->capability_mask = source->requires_unsafe_at_call ? 1u : 0u;
+        record->flags =
+            (uint8_t) ((source->error_effect_nothrow ? 1u : 0u) |
+                       (source->contains_unsafe_op ? 2u : 0u) |
+                       (source->entry_type == 2 ? 4u : 0u) | (source->is_extern ? 8u : 0u));
         if (!build_function_identity(ctx, i, source, record))
             return false;
         record->parameter_begin = ctx->plan->parameter_count;
@@ -970,13 +1131,7 @@ static bool build_function_records(XrSemanticBuildContext *ctx) {
         record->block_count = source->nblocks;
         record->value_begin = value_cursor;
         record->value_count = source->next_value_id;
-        record->semantic_effects = source->semantic_effects;
-        record->capability_mask = source->requires_unsafe_at_call ? 1u : 0u;
         set_function_return_contract(source, record);
-        record->flags =
-            (uint8_t) ((source->error_effect_nothrow ? 1u : 0u) |
-                       (source->contains_unsafe_op ? 2u : 0u) |
-                       (source->entry_type == 2 ? 4u : 0u) | (source->is_extern ? 8u : 0u));
         ctx->functions[i].value_begin = value_cursor;
         ctx->functions[i].block_begin = block_cursor;
         if (!append_parameter_records(ctx, i, source, record))
@@ -1760,10 +1915,13 @@ static const uint8_t *plan_suspendability(XrSemanticBuildContext *ctx,
     }
     for (uint32_t i = 0; i < plan->call_target_count; i++) {
         const XrSemanticCallTargetRecord *target = &plan->call_targets[i];
-        if (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
-            target->function < plan->function_count && target->operation < plan->operation_count &&
-            (plan->operations[target->operation].opcode == XI_CALL ||
-             plan->operations[target->operation].opcode == XI_TAIL_CALL)) {
+        if (target->function < plan->function_count &&
+            target->operation < plan->operation_count &&
+            ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+              (plan->operations[target->operation].opcode == XI_CALL ||
+               plan->operations[target->operation].opcode == XI_TAIL_CALL)) ||
+             (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL &&
+              plan->operations[target->operation].opcode == XI_CALL_METHOD))) {
             next[i] = head[target->function];
             head[target->function] = i;
         }
@@ -2048,6 +2206,112 @@ static bool append_builtin_instance_yieldable_call_target(
     return true;
 }
 
+static int resolve_source_instance_method_local(const XrSemanticBuildContext *ctx,
+                                                const XiValue *value,
+                                                uint32_t operation,
+                                                uint32_t *receiver_type_out) {
+    if (!value || value->op != XI_CALL_METHOD || value->nargs == 0 ||
+        !value->args[0] || !value->aux || (value->aux_int & 1) != 0 ||
+        operation >= ctx->plan->operation_count)
+        return -1;
+    const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
+    if (call->function >= ctx->function_count || call->operand_count != value->nargs ||
+        call->metadata_count != 1 ||
+        strcmp(ctx->plan->metadata[call->metadata_begin], (const char *) value->aux) != 0)
+        return -1;
+    const XrFunctionMapEntry *caller = &ctx->functions[call->function];
+    const XrSemanticOperandRecord *receiver =
+        &ctx->plan->operands[call->operand_begin];
+    if (receiver->role != XR_SEM_OPERAND_RECEIVER ||
+        receiver->type >= ctx->plan->type_count)
+        return -1;
+    uint32_t source_class_index = ctx->plan->types[receiver->type].source_class;
+    bool exact_self = caller->source_class != XR_SEMANTIC_INDEX_NONE &&
+                      caller->source_kind == XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD &&
+                      caller->source && caller->source->nparams > 0 &&
+                      value->args[0] == caller->source->params[0];
+    if (source_class_index == XR_SEMANTIC_INDEX_NONE && exact_self)
+        source_class_index = caller->source_class;
+    if (source_class_index >= ctx->plan->source_class_count)
+        return -1;
+    const XrSemanticSourceClassRecord *source_class =
+        &ctx->plan->source_classes[source_class_index];
+    uint8_t required = XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL |
+                       XR_SEM_SOURCE_CLASS_RUNTIME_TYPE;
+    if ((source_class->flags & required) != required ||
+        (source_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0)
+        return -1;
+    int match = -1;
+    for (uint32_t f = 0; f < ctx->function_count; f++) {
+        const XrFunctionMapEntry *candidate = &ctx->functions[f];
+        if (candidate->source_class != source_class_index ||
+            candidate->source_kind != XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD ||
+            !candidate->source || !candidate->source->name ||
+            strcmp(candidate->source->name, (const char *) value->aux) != 0 ||
+            xi_func_semantic_param_count(candidate->source) != value->nargs)
+            continue;
+        if (match >= 0)
+            return -1;
+        match = (int) f;
+    }
+    if (match >= 0)
+        *receiver_type_out = receiver->type;
+    return match;
+}
+
+static bool append_source_instance_method_local_call_target(
+    XrSemanticBuildContext *ctx, const XiValue *value, uint32_t operation) {
+    uint32_t receiver_type = XR_SEMANTIC_INDEX_NONE;
+    int function = resolve_source_instance_method_local(ctx, value, operation,
+                                                        &receiver_type);
+    if (function < 0)
+        return true;
+    if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
+        !reserve_array((void **) &ctx->plan->call_targets,
+                       &ctx->plan->call_target_capacity,
+                       ctx->plan->call_target_count + 1,
+                       sizeof(*ctx->plan->call_targets),
+                       XR_SEMANTIC_MAX_CALL_TARGETS))
+        return fail(ctx, "XR_EXEC_5003", "semantic call-target budget exhausted");
+    const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
+    uint32_t source_class = ctx->plan->types[receiver_type].source_class;
+    if (source_class == XR_SEMANTIC_INDEX_NONE)
+        source_class = ctx->functions[call->function].source_class;
+    XrSemanticCallTargetRecord *record =
+        &ctx->plan->call_targets[ctx->plan->call_target_count++];
+    memset(record, 0, sizeof(*record));
+    record->operation = operation;
+    record->function = (uint32_t) function;
+    record->dependency = XR_SEMANTIC_INDEX_NONE;
+    record->source_export = XR_SEMANTIC_INDEX_NONE;
+    record->callee_function = ctx->plan->functions[function].id;
+    record->callable_type = receiver_type;
+    record->kind = XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL;
+    XrTextBuilder key = {0};
+    bool valid = text_append_format(&key, "call-target-v7:schema=%u:operation=",
+                                    XR_SEMANTIC_SCHEMA_VERSION) &&
+                 text_append_stable_id(&key, call->id) &&
+                 text_append(&key, ":source-class=") &&
+                 text_append_stable_id(&key,
+                                       ctx->plan->source_classes[source_class].id) &&
+                 text_append(&key, ":selector=") &&
+                 text_append_component(&key, (const char *) value->aux) &&
+                 text_append(&key, ":function=") &&
+                 text_append_stable_id(&key, record->callee_function) &&
+                 text_append(&key, ":type=") &&
+                 text_append_stable_id(&key, ctx->plan->types[receiver_type].id) &&
+                 text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    if (valid)
+        record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+    text_dispose(&key);
+    XrFingerprint digest;
+    if (!valid || !record->canonical_key ||
+        !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+        return fail(ctx, "XR_SEM_0019",
+                    "source instance method call identity is incomplete");
+    return true;
+}
+
 static bool append_source_export_call_target(XrSemanticBuildContext *ctx,
                                              const XiValue *value,
                                              uint32_t operation) {
@@ -2127,10 +2391,14 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
             return true;
         if (!append_native_namespace_call_target(ctx, value, operation))
             return false;
+        if (ctx->plan->call_target_count != before)
+            return true;
+        if (!append_builtin_instance_yieldable_call_target(ctx, value, operation))
+            return false;
         return ctx->plan->call_target_count != before
                    ? true
-                   : append_builtin_instance_yieldable_call_target(ctx, value,
-                                                                   operation);
+                   : append_source_instance_method_local_call_target(ctx, value,
+                                                                     operation);
     }
     if (value->op != XI_CALL && value->op != XI_TAIL_CALL)
         return true;
@@ -3100,6 +3368,7 @@ static bool semantic_plan_build_with_dependencies(
     ctx.dependency_module_count = dependency_count;
     ctx.plan = xr_semantic_plan_create();
     if (!ctx.plan || !collect_functions(&ctx, root, XR_SEMANTIC_INDEX_NONE, 0) ||
+        !build_source_classes(&ctx, root) ||
         !collect_semantic_types(&ctx) || !refine_value_aggregate_types(&ctx) ||
         !canonicalize_type_table(&ctx) ||
         !build_function_records(&ctx) || !build_capture_records(&ctx) ||

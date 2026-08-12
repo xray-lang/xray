@@ -9,7 +9,7 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 19 preserves the pointer-free `DIRECT_LOCAL` call-target
+SemanticPlan schema 20 preserves the pointer-free `DIRECT_LOCAL` call-target
 authority to lexical shared slots. Direct SSA callees still resolve only
 through exact identity copies to a closure/function binding. A shared callee
 must be a `GET_SHARED(slot)` whose first lexical owner, found by walking the
@@ -105,6 +105,22 @@ execution target, provider spelling, frame layout, or result materialization;
 TargetPlan therefore continues to reject the call until a separate target
 family consumes it. Unknown builtins, user shadows, super calls, wrong arity,
 ordinary methods, and missing states remain fail closed.
+Schema 20 additionally freezes each source class with its stable module entity,
+normalized module path, module-local source ordinal, name, method count, and
+final/runtime/generic flags. Source functions freeze that class identity,
+member ordinal, and method kind; source-instance types freeze the class table
+link. None of these rows may publish analyzer-local class, method, function, or
+module IDs. The builder may publish `SOURCE_INSTANCE_METHOD_LOCAL` only for an
+exact non-super method call whose receiver is a final, runtime, non-generic
+source class in the same module. An erased receiver is accepted only when it is
+exactly parameter zero of a source instance method in that class. Selector and
+arity must identify one unique instance method. The independent verifier
+reconstructs the class and function stable keys, method membership, receiver or
+exact-self proof, selector, arity, callee stable identity, and one-to-one
+coroutine-state relation. Open classes, generic classes, super calls, ambiguous
+methods, unrelated erased receivers, forged targets, and missing states remain
+fail closed. This authority proves suspendability only; TargetPlan still has no
+execution family for source instance dispatch.
 Function declarations publish their immutable binding capability and lexical
 storage domain with the rest of analyzer ownership evidence. Closure lowering
 may copy those facts into SemanticPlan capture records but may not infer them
