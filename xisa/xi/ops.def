@@ -2694,7 +2694,6 @@
     xi.place.store
     xi.ptr.load
     xi.ptr.store
-    xi.ptr.copy.nonoverlap
     xi.agg.new
     xi.agg.get
     xi.agg.set
@@ -2833,6 +2832,7 @@
     xi.byte.slice.store.f64
     xi.byte.slice.compare
     xi.byte.slice.common.prefix
+    xi.ptr.copy.nonoverlap
     xi.json.decode
     xi.go
     xi.await
@@ -3111,6 +3111,25 @@
     (aot-hosted "src/aot/xrt_coll.h" "xrt_byte_slice_common_prefix_semantics")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_byte_slice_common_prefix_semantics")
     (cgen "src/aot/xi_cgen.c" "cg_byte_slice_common_prefix_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.raw-memory-copy
+  :category shared-semantic-kernel
+  :operations (xi.ptr.copy.nonoverlap)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_raw_memory_copy_nonoverlap
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_collection.inc.c" "XR_RAW_MEMORY_COPY_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_raw_memory_copy_nonoverlap")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_raw_memory_copy_nonoverlap")
+    (cgen "src/aot/xi_cgen.c" "cg_raw_memory_copy_adapter_name")
   ))
 
 (define-xi-observable-owner primitive.type-identity

@@ -36,6 +36,7 @@
 #define XRT_H
 
 #include "../shared/xr_raw_scalar_core.h"  // L0: unsafe raw scalar load/store
+#include "../shared/xr_raw_memory_core.h"  // L0: unsafe non-overlapping memory copy
 #include "../shared/xr_bits_core.h"        // L0: exact-width compiler bit intrinsics
 #include "../shared/xr_range_core.h"       // L0: canonical Range semantics
 #include "../shared/xr_numeric_conversion_core.h"  // L0: deterministic scalar narrowing
@@ -63,6 +64,10 @@
     XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI,                                        \
                          XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_AOT_HOSTED, start, end, \
                          inclusive_end)
+#define xrt_raw_memory_copy_nonoverlap(dst, src, count)                                           \
+    XR_RAW_MEMORY_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,                     \
+                                   XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,                     \
+                                   XR_SEM_CONSUMER_AOT_HOSTED, dst, src, count)
 #ifndef xrt_byte_slice_scalar_eval
 #define xrt_byte_slice_scalar_eval(expression)                                                     \
     XR_BYTE_SLICE_SCALAR_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                 \

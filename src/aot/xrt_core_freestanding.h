@@ -46,6 +46,7 @@ void *memset(void *dst, int value, size_t n);
 int memcmp(const void *a, const void *b, size_t n);
 
 #include "../shared/xr_raw_scalar_core.h"
+#include "../shared/xr_raw_memory_core.h"
 #include "../shared/xr_obj_header.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_byte_slice_scalar_core.h"
@@ -79,6 +80,10 @@ int memcmp(const void *a, const void *b, size_t n);
     XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI,                                        \
                          XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,       \
                          start, end, inclusive_end)
+#define xrt_raw_memory_copy_nonoverlap(dst, src, count)                                           \
+    XR_RAW_MEMORY_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,                     \
+                                   XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,                     \
+                                   XR_SEM_CONSUMER_AOT_FREESTANDING, dst, src, count)
 #define xrt_byte_slice_scalar_eval(expression)                                                     \
     XR_BYTE_SLICE_SCALAR_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                 \
                                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO,                 \
@@ -1093,55 +1098,13 @@ static inline bool xr_array_core_memory_ranges_overlap(const void *a, int64_t a_
     return a_begin < b_end && b_begin < a_end;
 }
 
-static inline void xr_array_core_copy_nonoverlap_bytes(void *dst, const void *src, int64_t count) {
-    if (count <= 0)
-        return;
-    if (count <= 16) {
-        uint8_t *dp = (uint8_t *) dst;
-        const uint8_t *sp = (const uint8_t *) src;
-        if (count >= 8) {
-            uint64_t first = 0;
-            memcpy(&first, sp, sizeof(first));
-            memcpy(dp, &first, sizeof(first));
-            if (count > 8) {
-                uint64_t last = 0;
-                memcpy(&last, sp + count - 8, sizeof(last));
-                memcpy(dp + count - 8, &last, sizeof(last));
-            }
-            return;
-        }
-        if (count >= 4) {
-            uint32_t first = 0;
-            memcpy(&first, sp, sizeof(first));
-            memcpy(dp, &first, sizeof(first));
-            if (count > 4) {
-                uint32_t last = 0;
-                memcpy(&last, sp + count - 4, sizeof(last));
-                memcpy(dp + count - 4, &last, sizeof(last));
-            }
-            return;
-        }
-        if (count >= 2) {
-            uint16_t first = 0;
-            memcpy(&first, sp, sizeof(first));
-            memcpy(dp, &first, sizeof(first));
-            if (count > 2)
-                dp[2] = sp[2];
-            return;
-        }
-        dp[0] = sp[0];
-        return;
-    }
-    memcpy(dst, src, (size_t) count);
-}
-
 static inline void xr_array_core_copy_or_move_bytes(void *dst, const void *src, int64_t count) {
     if (count <= 0)
         return;
     if (xr_array_core_memory_ranges_overlap(dst, count, src, count))
         memmove(dst, src, (size_t) count);
     else
-        xr_array_core_copy_nonoverlap_bytes(dst, src, count);
+        xr_raw_memory_copy_nonoverlap(dst, src, count);
 }
 
 static inline uint64_t xr_array_core_repeat_pattern64(const uint8_t *sp, int64_t distance) {
@@ -1187,7 +1150,7 @@ static inline void xr_array_core_bytes_repeat_copy(void *data, int64_t dst_offse
         return;
     }
     if (count <= distance) {
-        xr_array_core_copy_nonoverlap_bytes(dp, sp, count);
+        xr_raw_memory_copy_nonoverlap(dp, sp, count);
         return;
     }
     if (distance == 2 || distance == 4 || distance == 8) {
@@ -1200,30 +1163,30 @@ static inline void xr_array_core_bytes_repeat_copy(void *data, int64_t dst_offse
         return;
     }
     if (distance < 8) {
-        xr_array_core_copy_nonoverlap_bytes(dp, sp, distance);
+        xr_raw_memory_copy_nonoverlap(dp, sp, distance);
         int64_t copied = distance;
         while (copied < count) {
             int64_t chunk = copied;
             int64_t remaining = count - copied;
             if (chunk > remaining)
                 chunk = remaining;
-            xr_array_core_copy_nonoverlap_bytes(dp + copied, dp, chunk);
+            xr_raw_memory_copy_nonoverlap(dp + copied, dp, chunk);
             copied += chunk;
         }
         return;
     }
     if (count <= 16) {
-        xr_array_core_copy_nonoverlap_bytes(dp, sp, count);
+        xr_raw_memory_copy_nonoverlap(dp, sp, count);
         return;
     }
-    xr_array_core_copy_nonoverlap_bytes(dp, sp, distance);
+    xr_raw_memory_copy_nonoverlap(dp, sp, distance);
     int64_t copied = distance;
     while (copied < count) {
         int64_t chunk = copied;
         int64_t remaining = count - copied;
         if (chunk > remaining)
             chunk = remaining;
-        xr_array_core_copy_nonoverlap_bytes(dp + copied, dp, chunk);
+        xr_raw_memory_copy_nonoverlap(dp + copied, dp, chunk);
         copied += chunk;
     }
 }

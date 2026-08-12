@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 253,
+  "operation_count": 254,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -463,6 +463,34 @@
       "observable_contract": "src/shared/xr_range_core.h",
       "observable_edges": [],
       "operation_id": "shared.range",
+      "ownership": "native",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/raw-memory",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_raw_memory_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/raw-memory",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_raw_memory_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.raw-memory",
       "ownership": "native",
       "targets": [
         "vm",
@@ -4497,9 +4525,9 @@
         "raw-pointer",
         "non-overlap"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_raw_memory_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "memory-read",
@@ -4507,10 +4535,10 @@
       ],
       "error_panic_suspend_cancel_publication": [],
       "family": "memory-and-place",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.raw-memory-copy",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_raw_memory_core.h",
       "observable_edges": [
         "raw-memory-copy"
       ],
@@ -6498,5 +6526,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "48b6ee6cbaaa57351625dfea3c796a5444672e670c3c6a124efc44e1027d35ae"
+  "source_tree_fingerprint": "8d6fedb25d61a5ad8c2491e5862f3f877142711f773ce72c9e1cf1bab1816abc"
 }

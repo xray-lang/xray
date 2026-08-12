@@ -126,6 +126,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
+id = "raw-memory"
+header = "src/shared/xr_raw_memory_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "regex"
 header = "src/shared/xr_regex_core.h"
 representation = "native"
@@ -301,6 +308,22 @@ fixtures = [
   "tests/diff/cases/semantics/collections/byte_slice_bulk_ops_shared_core.xr",
 ]
 
+[[operation]]
+id = "raw-memory-copy-nonoverlap"
+observable_contract = "src/shared/xr_raw_memory_core.h"
+semantic_kernel = "src/shared/xr_raw_memory_core.h"
+vm_adapter = "src/vm/xvm_dispatch_collection.inc.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "shared.raw-memory-copy"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_array_core.c",
+  "tests/unit/aot/test_xrt_byte_slice_compare_owner_freestanding.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/aot/basic/array_data_ptr_unchecked.xr",
+  "tests/diff/cases/semantics/ffi/rawptr_copy_nonoverlap_owner.xr",
+]
+
 [[operation_family]]
 id = "arithmetic-conversion"
 canonical_cores = ["arithmetic", "bits", "numeric-conversion", "numeric", "raw-scalar"]
@@ -321,7 +344,7 @@ disposition = "single-owner"
 
 [[operation_family]]
 id = "container-primitives"
-canonical_cores = ["array", "array-sort", "byte-slice-scalar", "range"]
+canonical_cores = ["array", "array-sort", "byte-slice-scalar", "range", "raw-memory"]
 duplicate_sources = [
   "src/runtime/object/xarray_vm.c:retired-private-sort",
   "src/aot/xrt_sort.inc.c:retired-private-sort",

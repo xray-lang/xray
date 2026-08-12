@@ -148,6 +148,7 @@ BYTE_SLICE_SCALAR_OPERATIONS = {
 }
 BYTE_SLICE_COMPARE_OPERATIONS = {"xi.byte.slice.compare"}
 BYTE_SLICE_COMMON_PREFIX_OPERATIONS = {"xi.byte.slice.common.prefix"}
+RAW_MEMORY_COPY_OPERATIONS = {"xi.ptr.copy.nonoverlap"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -1417,6 +1418,75 @@ def verify_byte_slice_common_prefix_ratchet(root: Path, registry: dict) -> list[
     return errors
 
 
+def verify_raw_memory_copy_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.raw-memory-copy")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.raw-memory-copy"), None)
+    if owner is None or set(owner.get("operations", [])) != RAW_MEMORY_COPY_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.raw-memory-copy family")
+
+    core_text = (root / "src/shared/xr_raw_memory_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    if (f"{marker}_HI" not in core_text or f"{marker}_LO" not in core_text or
+            "XR_RAW_MEMORY_COPY_OWNER_APPLY" not in core_text or
+            "xr_raw_memory_copy_nonoverlap" not in core_text or
+            "if (count <= 0)" not in core_text):
+        errors.append("src/shared/xr_raw_memory_core.h: raw copy lacks stable owner kernel")
+
+    retired = "xr_array_core_copy_nonoverlap_bytes"
+    for relative in ("src/shared/xr_array_core.h", "src/aot/xrt_core_freestanding.h",
+                     "src/aot/xi_cgen_array_helpers.inc.c",
+                     "src/vm/xvm_dispatch_collection.inc.c",
+                     "src/aot/xi_cgen_dispatch_helpers.inc.c"):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if retired in text:
+            errors.append(f"{relative}: retired raw-memory copy semantic source remains")
+
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    start = vm_text.find("vmcase(OP_PTR_COPY_NONOVERLAP)")
+    end = vm_text.find("vmbreak;", start)
+    vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+    if (f"{marker}_HI" not in vm_body or f"{marker}_LO" not in vm_body or
+            "XR_RAW_MEMORY_COPY_OWNER_APPLY" not in vm_body or "memcpy(" in vm_body):
+        errors.append("src/vm/xvm_dispatch_collection.inc.c: VM raw copy bypasses stable owner")
+
+    hosted_text = (root / "src/aot/xrt.h").read_text(encoding="utf-8", errors="strict")
+    freestanding_text = (root / "src/aot/xrt_core_freestanding.h").read_text(
+        encoding="utf-8", errors="strict")
+    for relative, text in (("src/aot/xrt.h", hosted_text),
+                           ("src/aot/xrt_core_freestanding.h", freestanding_text)):
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "XR_RAW_MEMORY_COPY_OWNER_APPLY" not in text or
+                "xrt_raw_memory_copy_nonoverlap" not in text):
+            errors.append(f"{relative}: AOT raw-memory copy adapter bypasses stable owner")
+    if ("#ifndef xrt_raw_memory_copy_nonoverlap" in hosted_text or
+            "#ifndef xrt_raw_memory_copy_nonoverlap" in freestanding_text):
+        errors.append("AOT raw-memory copy fallback or alias revived")
+
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    c90_body = extract_c_function(c90_text, "xrt_raw_memory_copy_nonoverlap") or ""
+    if "xr_raw_memory_copy_nonoverlap" not in c90_body or "memcpy(" in c90_body:
+        errors.append("src/aot/xrt_c90.h: C90 raw-memory copy owns semantics")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_raw_memory_copy_adapter_name")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append("src/aot/xi_cgen.c: CGen raw copy does not resolve by stable owner ID")
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    emitter_body = extract_c_function(dispatch_text, "xicgen_ptr_copy_nonoverlap") or ""
+    if ("cg_raw_memory_copy_adapter_name" not in emitter_body or
+            "xrt_raw_memory_copy_nonoverlap" in emitter_body or
+            "xr_raw_memory_copy_nonoverlap" in emitter_body or "memcpy(" in emitter_body or
+            "XR_ASSUME" in emitter_body or "size_t" in emitter_body):
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: CGen raw copy owns semantics")
+    return errors
+
+
 def verify_operation_registry(root: Path) -> tuple[list[str], int]:
     errors: list[str] = []
     source_path = root / "xisa/xi/ops.def"
@@ -1485,8 +1555,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 27:
-        errors.append(f"shared-core inventory must contain exactly 27 headers, found {len(actual)}")
+    if len(actual) != 28:
+        errors.append(f"shared-core inventory must contain exactly 28 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -1519,6 +1589,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
         errors.extend(verify_byte_slice_compare_ratchet(root, registry))
         errors.extend(verify_byte_slice_common_prefix_ratchet(root, registry))
+        errors.extend(verify_raw_memory_copy_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)
     errors.extend(registry_errors)
     return errors

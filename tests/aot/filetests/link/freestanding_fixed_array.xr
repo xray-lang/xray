@@ -92,4 +92,17 @@ fn xray_fixed_array_span_bulk() -> int {
     return window.compare(src) + int(pairs[2])
 }
 
+fn xray_fixed_array_copy_nonoverlap_owner() -> int {
+    var source: [byte; 17] = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+    ]
+    var target: [byte; 17] = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]
+    unsafe {
+        target.mutPtr().copyFromNonOverlapping(source.ptr(), 17)
+    }
+    return int(target[0]) + int(target[16])
+}
+
 xray_fixed_array_copy()

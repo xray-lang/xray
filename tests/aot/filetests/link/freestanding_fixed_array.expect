@@ -24,6 +24,7 @@ c_contains=xr_array_core_bytes_load_f64
 c_contains=xrt_byte_slice_scalar_eval(
 c_contains=xrt_byte_slice_compare_checked_raw(
 c_contains=xrt_byte_slice_common_prefix_checked_raw(
+c_contains=xrt_raw_memory_copy_nonoverlap(
 c_contains=xr_array_core_bytes_repeat_copy
 c_contains=Slice.fill(value) byte length overflow
 c_contains=for (int64_t _i = 0; _i < _s.length; _i++)

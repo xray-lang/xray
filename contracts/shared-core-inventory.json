@@ -66,7 +66,6 @@
         "xr_array_core_bytes_copy_within",
         "xr_array_core_bytes_fill_value",
         "xr_array_core_bytes_repeat_from",
-        "xr_array_core_copy_nonoverlap_bytes",
         "xr_array_core_fill_range",
         "xr_array_core_fill_typed_storage",
         "xr_array_core_hof_every",
@@ -751,6 +750,34 @@
       "test_callers": [
         "tests/unit/aot/test_xrt_range_owner_freestanding.c",
         "tests/unit/stdlib/test_range_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_raw_memory_core.h",
+      "id": "raw-memory",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xrt.h",
+        "src/aot/xrt_c90.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/shared/xr_array_core.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_raw_memory_copy_nonoverlap"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/ir/test_xi_cgen.c",
+        "tests/unit/stdlib/test_array_core.c"
       ]
     },
     {

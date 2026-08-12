@@ -5285,7 +5285,7 @@ static bool emit_byte_array_append_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
         fprintf(out, "for (int64_t _i = 0; _i < _src.length; _i++) "
                      "_dp[_i] = ((const uint8_t*)_src.data)[_i];");
     else
-        fprintf(out, "xr_array_core_copy_nonoverlap_bytes(_dp, _src.data, _src.length);");
+        fprintf(out, "xr_raw_memory_copy_nonoverlap(_dp, _src.data, _src.length);");
     fprintf(out, " } _dst->length = _new_length; } else { _res = "
                  "xrt_byte_array_append_from_span_slow_raw(_dst, _src); } } else { _res = "
                  "xrt_byte_array_append_from_span_slow_raw(_dst, _src); } _res; })");

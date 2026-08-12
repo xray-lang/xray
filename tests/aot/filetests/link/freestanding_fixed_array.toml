@@ -35,3 +35,7 @@ symbol = "xray_fixed_array_byte_slice_bulk"
 [[export.c]]
 xray = "xray_fixed_array_span_bulk"
 symbol = "xray_fixed_array_span_bulk"
+
+[[export.c]]
+xray = "xray_fixed_array_copy_nonoverlap_owner"
+symbol = "xray_fixed_array_copy_nonoverlap_owner"

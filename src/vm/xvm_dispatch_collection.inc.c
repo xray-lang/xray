@@ -1832,8 +1832,11 @@ vmcase(OP_PTR_COPY_NONOVERLAP) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    memcpy((void *) (uintptr_t) (intptr_t) XR_TO_INT(R(a)),
-           (const void *) (uintptr_t) (intptr_t) XR_TO_INT(R(b)), (size_t) XR_TO_INT(R(c)));
+    (void) XR_RAW_MEMORY_COPY_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO, XR_SEM_CONSUMER_VM,
+        (void *) (uintptr_t) (intptr_t) XR_TO_INT(R(a)),
+        (const void *) (uintptr_t) (intptr_t) XR_TO_INT(R(b)), XR_TO_INT(R(c)));
     vmbreak;
 }
 

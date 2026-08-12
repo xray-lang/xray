@@ -650,15 +650,31 @@ TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules) {
         xr_array_core_bytes_copy_from(dst, 6, XR_ELEM_U8, src, 4, XR_ELEM_I64, 0, 0, 1, false));
 }
 
-TEST(array_core_copy_nonoverlap_bytes_handles_all_small_counts) {
-    uint8_t src[24];
-    for (int i = 0; i < 24; i++)
+TEST(raw_memory_copy_nonoverlap_owner_handles_boundaries) {
+    uint8_t src[40];
+    for (int i = 0; i < 40; i++)
         src[i] = (uint8_t) (i + 11);
 
-    for (int count = 1; count <= 16; count++) {
-        uint8_t dst[24];
+    ASSERT_TRUE(xr_semantic_owner_has_consumer(
+        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO, XR_SEM_CONSUMER_VM));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+                      XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO),
+                  "xrt_raw_memory_copy_nonoverlap");
+    ASSERT_EQ_PTR(XR_RAW_MEMORY_COPY_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+                      XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO, XR_SEM_CONSUMER_VM,
+                      NULL, NULL, 0),
+                  NULL);
+    ASSERT_EQ_PTR(xr_raw_memory_copy_nonoverlap(NULL, NULL, -1), NULL);
+
+    const int counts[] = {1, 2, 3, 4, 7, 8, 9, 16, 17, 31};
+    for (size_t n = 0; n < sizeof(counts) / sizeof(counts[0]); n++) {
+        int count = counts[n];
+        uint8_t dst[40];
         memset(dst, 0xCD, sizeof(dst));
-        xr_array_core_copy_nonoverlap_bytes(dst + 3, src + 2, count);
+        ASSERT_EQ_PTR(xr_raw_memory_copy_nonoverlap(dst + 3, src + 2, count), dst + 3);
         for (int i = 0; i < count; i++)
             ASSERT_EQ_INT(dst[3 + i], src[2 + i]);
         ASSERT_EQ_INT(dst[2], 0xCD);
@@ -915,7 +931,7 @@ RUN_TEST(array_core_shift_right_one_handles_empty_and_invalid_data);
 RUN_TEST(array_core_typed_index_of_matches_boxed_tags);
 RUN_TEST(array_core_bytes_loads_little_endian_and_rejects_invalid_ranges);
 RUN_TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules);
-RUN_TEST(array_core_copy_nonoverlap_bytes_handles_all_small_counts);
+RUN_TEST(raw_memory_copy_nonoverlap_owner_handles_boundaries);
 RUN_TEST(array_core_bytes_repeat_from_matches_lz_style_overlap);
 RUN_TEST(array_core_bytes_common_prefix_uses_min_length_and_word_chunks);
 RUN_TEST(array_core_byte_slice_compare_owns_lexicographic_edges);

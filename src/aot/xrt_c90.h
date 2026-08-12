@@ -70,6 +70,15 @@ typedef int bool;
 #define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_NATIVE
 #define XR_ELEM_U8 6
 
+/* Restricted C90 is a mechanical ABI adapter over the raw-memory owner core. */
+#define XR_RAW_MEMORY_C90 1
+#include "../shared/xr_raw_memory_core.h"
+#undef XR_RAW_MEMORY_C90
+
+static void *xrt_raw_memory_copy_nonoverlap(void *dst, const void *src, int64_t count) {
+    return xr_raw_memory_copy_nonoverlap(dst, src, count);
+}
+
 #define XR_BITS_ROTL32(value, count)                                                               \
     ((uint32_t) (((uint32_t) (value) << ((uint32_t) (count) & UINT32_C(31))) |                     \
                  ((uint32_t) (value) >>                                                            \

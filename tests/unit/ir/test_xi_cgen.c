@@ -5124,7 +5124,7 @@ TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
            "Slice<byte>.load<u64>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_store_u16(") > 0 &&
            "Slice<byte>.store<u16> must lower to the plan-driven core store helper");
-    assert(count_between(fn_body, fn_end, "xr_array_core_copy_nonoverlap_bytes(") > 0 &&
+    assert(count_between(fn_body, fn_end, "xr_raw_memory_copy_nonoverlap(") > 0 &&
            "Array<byte>.appendFrom must lower to the inline Array<byte>+Slice<byte> non-overlap "
            "fast path");
     assert(count_between(fn_body, fn_end, "xr_array_core_copy_or_move_bytes(") > 0 &&
@@ -5413,12 +5413,13 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     assert(count_between(fn, fn_end, "xr_raw_store_u8_unaligned(") > 0 &&
            count_between(fn, fn_end, "xr_raw_load_u8_unaligned(") > 0 &&
            "MutPtr<u8>/Ptr<u8> accesses must use alias-safe raw scalar operations");
-    assert(count_between(fn, fn_end, "memcpy(") > 0 &&
-           "MutPtr.copyFromNonOverlapping must lower to raw memcpy");
-    assert(count_between(fn, fn_end, "(size_t)INT64_C(2)") > 0 &&
+    assert(count_between(fn, fn_end, "xrt_raw_memory_copy_nonoverlap(") > 0 &&
+           "MutPtr.copyFromNonOverlapping must lower through the stable owner adapter");
+    assert(count_between(fn, fn_end, "INT64_C(2)") > 0 &&
            "constant-size MutPtr.copyFromNonOverlapping should expose literal byte count");
-    assert(count_between(fn, fn_end, "XR_ASSUME(_xr_dst != NULL && _xr_src != NULL)") > 0 &&
-           "non-empty raw memcpy must preserve the unsafe non-null proof in generated C");
+    assert(count_between(fn, fn_end, "memcpy(") == 0 &&
+           count_between(fn, fn_end, "XR_ASSUME(_xr_dst") == 0 &&
+           "CGen must not recreate raw-memory copy semantics");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
            "Ptr/MutPtr hot locals must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "memcpy((void *)(uintptr_t)") == 0 &&
@@ -5463,6 +5464,8 @@ TEST(cgen_zero_byte_rawptr_copy_accepts_null_without_memcpy) {
     TEST_REQUIRE(fn_end != NULL, "run function body should be bounded");
     TEST_REQUIRE(count_between(fn, fn_end, "memcpy(") == 0,
                  "zero-byte raw-pointer copy must not call C memcpy with null pointers");
+    TEST_REQUIRE(count_between(fn, fn_end, "xrt_raw_memory_copy_nonoverlap(") == 1,
+                 "zero-byte raw-pointer copy must still route through the stable owner adapter");
     TEST_REQUIRE(count_between(fn, fn_end, "XR_ASSUME(_xr_dst") == 0,
                  "zero-byte raw-pointer copy must not establish a false non-null proof");
 
@@ -5522,9 +5525,9 @@ TEST(cgen_rawptr_copy_forwarded_constant_has_no_release_local) {
     TEST_REQUIRE(fn != NULL, "copyTwo definition should exist");
     const char *fn_end = next_static_after(fn);
     TEST_REQUIRE(fn_end != NULL, "copyTwo function body should be bounded");
-    TEST_REQUIRE(contains_between(fn, fn_end, "memcpy(") &&
-                     contains_between(fn, fn_end, "(size_t)INT64_C(2)"),
-                 "forwarded constant copy count must remain literal at memcpy");
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_raw_memory_copy_nonoverlap(") &&
+                     contains_between(fn, fn_end, "INT64_C(2)"),
+                 "forwarded constant copy count must remain literal at the owner adapter");
     TEST_REQUIRE(count_lines_outside_debug_locals_with_prefix(fn, fn_end, "    int64_t v",
                                                               " = INT64_C(2);") == 0 &&
                      count_lines_outside_debug_locals_with_prefix(fn, fn_end, "    v",
@@ -7763,6 +7766,19 @@ TEST(cgen_byte_slice_common_prefix_uses_stable_owner_adapter) {
 
     xr_free(code);
     xi_func_free(ir);
+}
+
+TEST(cgen_raw_memory_copy_owner_registry_is_stable) {
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+               XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO, XR_SEM_CONSUMER_CGEN) &&
+           "raw-memory-copy owner must publish CGen as a mechanical consumer");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO);
+    assert(adapter != NULL && strcmp(adapter, "xrt_raw_memory_copy_nonoverlap") == 0 &&
+           "CGen must resolve the stable raw-memory-copy owner adapter");
+
 }
 
 TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
@@ -13031,6 +13047,7 @@ int main(void) {
     run_cgen_byte_slice_scalar_uses_stable_owner_adapter();
     run_cgen_byte_slice_compare_uses_stable_owner_adapter();
     run_cgen_byte_slice_common_prefix_uses_stable_owner_adapter();
+    run_cgen_raw_memory_copy_owner_registry_is_stable();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();

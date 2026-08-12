@@ -49,8 +49,26 @@ TEST(freestanding_byte_slice_common_prefix_owner_preserves_word_boundaries) {
     ASSERT_EQ_INT(xrt_byte_slice_common_prefix_checked_raw(empty, right), 0);
 }
 
+TEST(freestanding_raw_memory_copy_owner_preserves_boundaries) {
+    uint8_t source[40];
+    uint8_t target[40];
+    const int counts[] = {1, 2, 7, 8, 9, 16, 17, 31};
+    for (int i = 0; i < 40; i++)
+        source[i] = (uint8_t) (i + 19);
+    ASSERT_EQ_PTR(xrt_raw_memory_copy_nonoverlap(NULL, NULL, 0), NULL);
+    for (size_t n = 0; n < sizeof(counts) / sizeof(counts[0]); n++) {
+        int count = counts[n];
+        memset(target, 0xA5, sizeof(target));
+        ASSERT_EQ_PTR(xrt_raw_memory_copy_nonoverlap(target + 2, source + 3, count), target + 2);
+        ASSERT_EQ_INT(target[1], 0xA5);
+        ASSERT_EQ_INT(target[2 + count], 0xA5);
+        ASSERT_TRUE(memcmp(target + 2, source + 3, (size_t) count) == 0);
+    }
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Freestanding Byte Slice Compare Owner");
 RUN_TEST(freestanding_byte_slice_compare_owner_preserves_unsigned_and_prefix_ordering);
 RUN_TEST(freestanding_byte_slice_common_prefix_owner_preserves_word_boundaries);
+RUN_TEST(freestanding_raw_memory_copy_owner_preserves_boundaries);
 TEST_MAIN_END()

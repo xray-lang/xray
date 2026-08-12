@@ -4514,6 +4514,25 @@ static const char *cg_byte_slice_common_prefix_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
+static const char *cg_raw_memory_copy_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(
+            XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+            XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO, XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: raw-memory-copy owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: raw-memory-copy owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
 static void emit_condition_expr_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (xi_copy_is_branch_hint(v) && v->nargs >= 1 && v->args[0]) {
         fprintf(out, "%s(", v->aux_int == XI_COPY_KIND_LIKELY ? "XR_LIKELY" : "XR_UNLIKELY");
@@ -7129,9 +7148,8 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
         }
         case XI_PTR_COPY_NONOVERLAP: {
             int64_t byte_count = 0;
-            /* The memcpy emitter folds an identity-forwarded non-negative
-             * byte count into its size_t literal and never references the
-             * forwarding C local. */
+            /* A forwarded non-negative count is emitted as an adapter-call literal and
+             * therefore does not require a separate C storage local. */
             return arg_index == 2 && user->nargs == 3 &&
                    cg_const_int_value(user->args[2], &byte_count) && byte_count >= 0;
         }
