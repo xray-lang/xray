@@ -173,7 +173,7 @@ static int run_source(const char *source) {
         return 0;
 
     xr_isolate_set_deadline_ms(iso, XR_STDLIB_DATA_FUZZ_DEADLINE_MS);
-    int rc = xray_vm_dostring(iso, source);
+    int rc = xr_isolate_dostring(iso, source);
     bool timed_out = xr_isolate_timed_out(iso);
     xray_vm_delete(iso);
 

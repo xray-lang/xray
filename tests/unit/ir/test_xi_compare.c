@@ -218,7 +218,7 @@ static XrProto *compile_xi(const char *source) {
 
 /* Execute proto and capture stdout into a heap buffer.
  *
- * This must go through xr_execute -- the same entry point xray_vm_dostring
+ * This must go through xr_execute -- the same entry point xr_isolate_dostring
  * uses -- rather than driving the coroutine by hand.  Hand-rolling
  * "closure_new + reset_for_call + main_thread_run" skips four preconditions
  * that xr_execute establishes, and every one of them is silent when missed:

@@ -135,6 +135,7 @@ XR_FUNC XrProto *xr_compile_ast_in_graph(struct XrCompilerSession *session,
                                          struct XiModule **out_module);
 XR_FUNC XrProto *xr_compile_source_with_path(struct XrCompilerSession *session, const char *source,
                                              const char *source_file);
+XR_FUNC int xr_isolate_dostring(XrVMRuntime *isolate, const char *source);
 XR_FUNC int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename);
 XR_FUNC int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename, void **out_proto);
 XR_FUNC int xr_execute(XrVMRuntime *isolate, struct XrProto *code);

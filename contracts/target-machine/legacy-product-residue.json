@@ -1,10 +1,10 @@
 {
   "counts": {
-    "api": 44,
+    "api": 42,
     "build": 65,
-    "cli": 109,
+    "cli": 108,
     "install": 7,
-    "source": 3633
+    "source": 3612
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -72,7 +72,6 @@
     "src/app/mcp/xmcp_server.c",
     "src/app/mcp/xmcp_server.h",
     "src/app/mcp/xmcp_tools_run.c",
-    "src/app/mcp/xmcp_tools_schema.c",
     "src/app/tools/xstdlib_bcgen.c",
     "src/base/xchecks.h",
     "src/base/xforward_decl.h",
@@ -543,7 +542,6 @@
     "xray_vm_current",
     "xray_vm_debug_null_XXXXXX",
     "xray_vm_delete",
-    "xray_vm_dostring",
     "xray_vm_enter",
     "xray_vm_eval_bundle",
     "xray_vm_exit",
@@ -554,7 +552,7 @@
     "xray_vm_new_full",
     "xray_vm_set_script_info"
   ],
-  "owner_count": 727,
+  "owner_count": 714,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -649,9 +647,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "f560439e945650ea9b21ce9405b78601740f857759d2ad1a579d5cf7779d19a2",
+      "evidence_sha256": "16ad0fe22edb2323b47597ea523e82c57b3650e2f07f50b217cea839ac86e066",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 20,
+      "hit_count": 19,
       "path": "include/xray_vm.h",
       "status": "transitional-owner",
       "surface": "api",
@@ -672,18 +670,6 @@
       "surface": "api",
       "tokens": [
         "XrVMRuntime"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "5b36c00bb822345b1093de3cc9884d2d39658690489bdadcbf2af6e4306e20d1",
-      "family": "source-eval-runtime-api",
-      "hit_count": 1,
-      "path": "include/xray_vm.h",
-      "status": "transitional-owner",
-      "surface": "api",
-      "tokens": [
-        "xray_vm_dostring"
       ]
     },
     {
@@ -1372,18 +1358,6 @@
       "surface": "cli",
       "tokens": [
         "XrVMRuntime"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "6a22e76d677e3145a9dd4c781093d896eb45c5e7df8f16c0840e82d9d3fac5d2",
-      "family": "source-eval-runtime-api",
-      "hit_count": 1,
-      "path": "src/app/cli/xcmd_run.c",
-      "status": "transitional-owner",
-      "surface": "cli",
-      "tokens": [
-        "xray_vm_dostring"
       ]
     },
     {
@@ -4174,7 +4148,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "e057956d2f11f4eec7c8149b3412948f0242450cab049ea422959c532a060688",
+      "evidence_sha256": "91e910c31e6d6b391f1861fcf6e6abb781cfd3e94883c1cddf483c95a9ed4061",
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 8,
       "path": "src/api/xisolate_scripting.c",
@@ -6859,9 +6833,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "9b0bc170d401dbbb849c7bb4e033cba348fc1e668983a0a4a40bf73e29d86315",
+      "evidence_sha256": "f931920beb936adeae4bc884fb508d752ff955421c7fde38d0626d3ae6667ff9",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 58,
+      "hit_count": 59,
       "path": "src/runtime/xisolate_api.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -9639,138 +9613,6 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "7ac05463c3f52fa838822359c1019e0b2d2f15180a394bc0dd649895bb7db4be",
-      "family": "source-eval-runtime-api",
-      "hit_count": 3,
-      "path": "src/api/xisolate_scripting.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "1c64ab4f8014c5ff01e8c52284ff689bdef16fda6c0dcc2c109e971818010cf8",
-      "family": "source-eval-runtime-api",
-      "hit_count": 2,
-      "path": "src/app/mcp/xmcp_tools_run.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "77638dd404c54399b25757c84aac636bd49c2845ccf002053c63c34513050f13",
-      "family": "source-eval-runtime-api",
-      "hit_count": 1,
-      "path": "src/app/mcp/xmcp_tools_schema.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "c67132216029f60e02afcd243acd3519fe9332f1c4b8f02ce3448a36468ce1e2",
-      "family": "source-eval-runtime-api",
-      "hit_count": 1,
-      "path": "src/frontend/analyzer/xanalyzer.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "0ccc63a13a2ac00b874ac9d6abb37a356af7b15b4cf22d1fc3a86c2b5a5b111f",
-      "family": "source-eval-runtime-api",
-      "hit_count": 1,
-      "path": "tests/fuzz/fuzz_stdlib_data.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "32050c17d67506e9b5a8d9867a9b60bee211a34f6c98cca858b25cd2ed584991",
-      "family": "source-eval-runtime-api",
-      "hit_count": 2,
-      "path": "tests/unit/api/test_api_defense.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "a9be10f2f1b8f444fbde09934cf93c9a576a196ffa349b175b236fbd92c391a2",
-      "family": "source-eval-runtime-api",
-      "hit_count": 1,
-      "path": "tests/unit/ir/test_xi_compare.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "70184bfc54aeac0fabafa9bcd5e97ca1f2023f33d794011003886d51af935cf8",
-      "family": "source-eval-runtime-api",
-      "hit_count": 1,
-      "path": "tests/unit/stdlib/test_native_type_surface.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "d6c97b56e9c669fb8d5edd0dfdb6f0bf488fc51b4a89bdadbc2324955d828bd8",
-      "family": "source-eval-runtime-api",
-      "hit_count": 5,
-      "path": "tests/unit/vm/test_vm_api.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "97181e3778ea41c31c8217c7a8f17213f4e7d01b0519df1b47f630309d26a30f",
-      "family": "source-eval-runtime-api",
-      "hit_count": 4,
-      "path": "tests/unit/vm/test_vm_exception.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "79fc1ac4f2021dfcfe12d7885fc1971496ce79640dc7ae2f90f2fcd4fe6220b7",
-      "family": "source-eval-runtime-api",
-      "hit_count": 1,
-      "path": "tests/unit/vm/test_vm_parallel_isolate.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
       "evidence_sha256": "9fef8afa887d18db3d30967c6b8805651682e7a42c210db92b79a095edcbb952",
       "family": "xrc-artifact",
       "hit_count": 3,
@@ -9850,6 +9692,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "8980c253cc0632f09d4f5869f1b5ab58649f942efce59d05826126739807c5b1",
-  "total": 3858
+  "source_tree_fingerprint": "d80a1d542bb34eff66528024474a5876962464a5ddacf3a5232401cc017afd23",
+  "total": 3834
 }

@@ -184,7 +184,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
     }
 
     /* Sandbox configuration. Order matters: the allowlist applies to user
-     * imports issued by xray_vm_dostring(); the isolate's own prelude
+     * imports issued by xr_isolate_dostring(); the isolate's own prelude
      * bootstrap already ran during xray_vm_new() and is not affected. */
     xr_isolate_set_stdout(iso, capture.file);
     xr_isolate_set_module_allowlist(iso, RUN_ALLOWED_MODULES, RUN_ALLOWED_MODULES_COUNT);
@@ -195,7 +195,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
      * reductions instead of yielding to a non-existent scheduler. The
      * wall-clock deadline above remains the sole termination guarantee for
      * tight loops. Skipping the runtime saves the per-call thread spin-up. */
-    int exec_result = xray_vm_dostring(iso, code);
+    int exec_result = xr_isolate_dostring(iso, code);
     bool timed_out = xr_isolate_timed_out(iso);
 
     xray_vm_delete(iso);

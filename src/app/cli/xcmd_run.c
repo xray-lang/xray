@@ -326,7 +326,7 @@ static int run_string(const RunOptions *opts, const char *code) {
     if (!iso)
         return 1;
 
-    int result = xray_vm_dostring(iso, code);
+    int result = xr_isolate_dostring(iso, code);
     xray_vm_multicore_destroy(iso);
     xray_vm_delete(iso);
     return (result != 0) ? 1 : 0;

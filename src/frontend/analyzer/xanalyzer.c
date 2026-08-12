@@ -1732,7 +1732,7 @@ char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file)
     if (!analyzer)
         return NULL;
     /* A source with no file is still one module and still owns the nominal
-     * types it declares: `xray eval`, xray_vm_dostring() and `xray run -` all
+     * types it declares: `xray eval`, xr_isolate_dostring() and `xray run -` all
      * compile with source_file == NULL. Returning NULL here made
      * xa_enum_info_new() refuse to build any metadata for such a source, so
      * every enum declared in it came out with zero variants and every member

@@ -48,7 +48,7 @@ TEST(api_isolate_dostring_null_isolate) {
         ASSERT_TRUE(1);
         return;
     }
-    int result = xray_vm_dostring(NULL, "print(1)");
+    int result = xr_isolate_dostring(NULL, "print(1)");
     ASSERT_EQ_INT(result, -1);
 }
 
@@ -66,7 +66,7 @@ TEST(api_isolate_dostring_null_source) {
         return;
     }  // alloc failure
 
-    int result = xray_vm_dostring(iso, NULL);
+    int result = xr_isolate_dostring(iso, NULL);
     ASSERT_EQ_INT(result, -1);
 
     xray_vm_delete(iso);

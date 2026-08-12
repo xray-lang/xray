@@ -280,9 +280,9 @@ static char *read_file_source(const char *filename) {
 
 /* ========== Execution API ========== */
 
-int xray_vm_dostring(XrVMRuntime *isolate, const char *source) {
-    xray_api_checkr(isolate != NULL, "xray_vm_dostring: NULL isolate", -1);
-    xray_api_checkr(source != NULL, "xray_vm_dostring: NULL source", -1);
+int xr_isolate_dostring(XrVMRuntime *isolate, const char *source) {
+    xray_api_checkr(isolate != NULL, "xr_isolate_dostring: NULL isolate", -1);
+    xray_api_checkr(source != NULL, "xr_isolate_dostring: NULL source", -1);
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     if (!session) {

@@ -12,6 +12,7 @@
 #include "../test_framework.h"
 
 #include "xray_vm.h"
+#include "runtime/xisolate_api.h"
 #include "../../../src/frontend/analyzer/xanalyzer_builtins.h"
 #include "../../../src/frontend/analyzer/xanalyzer_native_types.h"
 #include "../../../src/analysis/xglobal_summary.h"
@@ -51,7 +52,7 @@ static const XaBuiltinMember *find_type_member(const char *type_name, const char
 TEST(native_type_methods_match_runtime_tables) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);
-    ASSERT_EQ_INT(xray_vm_dostring(iso, "import mem\n"), 0);
+    ASSERT_EQ_INT(xr_isolate_dostring(iso, "import mem\n"), 0);
 
     int mismatches = xa_native_verify_protocol(iso);
     xray_vm_delete(iso);
