@@ -49,6 +49,23 @@ TEST(freestanding_byte_slice_common_prefix_owner_preserves_word_boundaries) {
     ASSERT_EQ_INT(xrt_byte_slice_common_prefix_checked_raw(empty, right), 0);
 }
 
+TEST(freestanding_byte_slice_fill_owner_preserves_boundaries) {
+    uint8_t bytes[] = {1, 2, 3, 4};
+    xr_span_t span = {bytes, 4};
+    xr_span_t empty = {NULL, 0};
+
+    xrt_byte_slice_fill_checked_raw(span, 511);
+    ASSERT_EQ_INT(bytes[0], 255);
+    ASSERT_EQ_INT(bytes[3], 255);
+    xrt_byte_slice_fill_checked_raw(span, -2);
+    ASSERT_EQ_INT(bytes[0], 254);
+    ASSERT_EQ_INT(bytes[3], 254);
+    ASSERT_EQ_PTR(xrt_byte_slice_fill_checked_raw(empty, 7).data, NULL);
+    ASSERT_FALSE(xr_byte_slice_fill_core(NULL, 1, XR_ELEM_U8, 7));
+    ASSERT_FALSE(xr_byte_slice_fill_core(bytes, -1, XR_ELEM_U8, 7));
+    ASSERT_FALSE(xr_byte_slice_fill_core(bytes, 4, XR_ELEM_I64, 7));
+}
+
 TEST(freestanding_raw_memory_copy_owner_preserves_boundaries) {
     uint8_t source[40];
     uint8_t target[40];
@@ -70,5 +87,6 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Freestanding Byte Slice Compare Owner");
 RUN_TEST(freestanding_byte_slice_compare_owner_preserves_unsigned_and_prefix_ordering);
 RUN_TEST(freestanding_byte_slice_common_prefix_owner_preserves_word_boundaries);
+RUN_TEST(freestanding_byte_slice_fill_owner_preserves_boundaries);
 RUN_TEST(freestanding_raw_memory_copy_owner_preserves_boundaries);
 TEST_MAIN_END()

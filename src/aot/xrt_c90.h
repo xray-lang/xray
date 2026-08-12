@@ -100,6 +100,12 @@ typedef struct xr_span {
 #undef XR_BYTE_SLICE_SCALAR_C90
 #define xrt_byte_slice_scalar_eval(expression) (expression)
 
+static xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t value) {
+    if (!xr_byte_slice_fill_core(span.data, span.length, XR_ELEM_U8, value))
+        abort();
+    return span;
+}
+
 static int64_t xrt_byte_slice_compare_checked_raw(xr_span_t left, xr_span_t right) {
     bool ok = false;
     int64_t ordering;

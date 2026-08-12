@@ -64,7 +64,6 @@
         "xr_array_core_bytes_copy_from",
         "xr_array_core_bytes_copy_from_typed",
         "xr_array_core_bytes_copy_within",
-        "xr_array_core_bytes_fill_value",
         "xr_array_core_bytes_repeat_from",
         "xr_array_core_fill_range",
         "xr_array_core_fill_typed_storage",
@@ -225,6 +224,7 @@
         "xr_byte_slice_common_prefix_core",
         "xr_byte_slice_common_prefix_diff_byte64",
         "xr_byte_slice_compare_core",
+        "xr_byte_slice_fill_core",
         "xr_byte_slice_scalar_copy",
         "xr_byte_slice_scalar_load_u16_unchecked",
         "xr_byte_slice_scalar_load_u32_unchecked",
@@ -235,6 +235,7 @@
       ],
       "status": "production",
       "test_callers": [
+        "tests/unit/aot/test_xrt_byte_slice_compare_owner_freestanding.c",
         "tests/unit/ir/test_xi_cgen.c",
         "tests/unit/stdlib/test_array_core.c"
       ]

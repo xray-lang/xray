@@ -9,6 +9,14 @@
                                      XR_SEM_CONSUMER_AOT_HOSTED, expression)
 #endif
 
+#ifndef xrt_byte_slice_fill_semantics
+#define xrt_byte_slice_fill_semantics(data, length, elem_type, value)                              \
+    XR_BYTE_SLICE_FILL_OWNER_APPLY(                                                               \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO,    \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                               \
+        xr_byte_slice_fill_core((data), (length), (elem_type), (value)))
+#endif
+
 #ifndef xrt_byte_slice_compare_semantics
 #define xrt_byte_slice_compare_semantics(left_data, left_length, right_data, right_length, ok)     \
     XR_BYTE_SLICE_COMPARE_OWNER_APPLY(                                                            \
@@ -333,10 +341,8 @@ static inline void xrt_byte_slice_store_f64_checked_raw(xr_span_t span, int64_t 
 }
 
 static inline xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t value) {
-    if (span.length > 0 && !span.data)
+    if (!xrt_byte_slice_fill_semantics(span.data, span.length, XR_ELEM_U8, value))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG);
-    if (span.length > 0)
-        memset(span.data, (uint8_t) value, (size_t) span.length);
     return span;
 }
 

@@ -153,6 +153,7 @@ BYTE_SLICE_SCALAR_OPERATIONS = {
 }
 BYTE_SLICE_COMPARE_OPERATIONS = {"xi.byte.slice.compare"}
 BYTE_SLICE_COMMON_PREFIX_OPERATIONS = {"xi.byte.slice.common.prefix"}
+BYTE_SLICE_FILL_OPERATIONS = {"xi.byte.slice.fill"}
 RAW_MEMORY_COPY_OPERATIONS = {"xi.ptr.copy.nonoverlap"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
@@ -1428,6 +1429,73 @@ def verify_byte_slice_compare_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_byte_slice_fill_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.byte-slice-fill")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.byte-slice-fill"), None)
+    if owner is None or set(owner.get("operations", [])) != BYTE_SLICE_FILL_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.byte-slice-fill family")
+
+    core_text = (root / "src/shared/xr_byte_slice_scalar_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    if (f"{marker}_HI" not in core_text or f"{marker}_LO" not in core_text or
+            "XR_BYTE_SLICE_FILL_OWNER_APPLY" not in core_text or
+            "xr_byte_slice_fill_core" not in core_text):
+        errors.append(
+            "src/shared/xr_byte_slice_scalar_core.h: byte fill lacks stable owner kernel")
+
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    start = vm_text.find("vmcase(OP_BYTE_SLICE_FILL)")
+    end = vm_text.find("vmbreak;", start)
+    vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+    if (f"{marker}_HI" not in vm_body or f"{marker}_LO" not in vm_body or
+            "XR_BYTE_SLICE_FILL_OWNER_APPLY" not in vm_body or
+            "xr_byte_slice_fill_core" not in vm_body):
+        errors.append("src/vm/xvm_dispatch_collection.inc.c: VM byte fill bypasses stable owner")
+    if "memset(" in vm_body or "xr_array_core_bytes_fill_value" in vm_text:
+        errors.append("src/vm/xvm_dispatch_collection.inc.c: VM revived private byte fill")
+
+    hosted_header = (root / "src/aot/xrt.h").read_text(encoding="utf-8", errors="strict")
+    hosted_runtime = (root / "src/aot/xrt_byte_array.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    freestanding_text = (root / "src/aot/xrt_core_freestanding.h").read_text(
+        encoding="utf-8", errors="strict")
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    for relative, text in (("src/aot/xrt.h", hosted_header),
+                           ("src/aot/xrt_core_freestanding.h", freestanding_text)):
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "XR_BYTE_SLICE_FILL_OWNER_APPLY" not in text or
+                "xrt_byte_slice_fill_semantics" not in text):
+            errors.append(f"{relative}: AOT byte fill adapter bypasses stable owner")
+    hosted_body = extract_c_function(hosted_runtime, "xrt_byte_slice_fill_checked_raw") or ""
+    freestanding_body = extract_c_function(
+        freestanding_text, "xrt_byte_slice_fill_checked_raw") or ""
+    c90_body = extract_c_function(c90_text, "xrt_byte_slice_fill_checked_raw") or ""
+    for relative, body, required in (
+            ("src/aot/xrt_byte_array.inc.c", hosted_body, "xrt_byte_slice_fill_semantics"),
+            ("src/aot/xrt_core_freestanding.h", freestanding_body,
+             "xrt_byte_slice_fill_semantics"),
+            ("src/aot/xrt_c90.h", c90_body, "xr_byte_slice_fill_core")):
+        if required not in body or "memset(" in body or re.search(r"\.length\s*[<>]", body):
+            errors.append(f"{relative}: byte fill adapter owns semantics")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_byte_slice_fill_adapter_name")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append("src/aot/xi_cgen.c: CGen byte fill does not resolve by stable owner ID")
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    emitter_body = extract_c_function(dispatch_text, "xicgen_byte_slice_fill")
+    if (emitter_body is None or "cg_byte_slice_fill_adapter_name" not in emitter_body or
+            "memset(" in emitter_body or "((uint8_t*)" in emitter_body or "({" in emitter_body):
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: CGen byte fill bypasses owner")
+    return errors
+
+
 def verify_byte_slice_common_prefix_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     marker = owner_macro_prefix("shared.byte-slice-common-prefix")
@@ -1693,6 +1761,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_numeric_neg_ratchet(root, registry))
         errors.extend(verify_numeric_width_ratchet(root, registry))
         errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
+        errors.extend(verify_byte_slice_fill_ratchet(root, registry))
         errors.extend(verify_byte_slice_compare_ratchet(root, registry))
         errors.extend(verify_byte_slice_common_prefix_ratchet(root, registry))
         errors.extend(verify_raw_memory_copy_ratchet(root, registry))

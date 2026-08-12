@@ -14253,42 +14253,18 @@ static void xicgen_byte_slice_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         emit_codegen_abort_expr(out);
         return;
     }
-    if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        fprintf(out, "xrt_byte_slice_fill_checked_raw(");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ")");
-        return;
-    }
-    bool inline_memset =
-        bulk ? bulk->action == XAOT_BULK_INLINE_MEMSET
-             : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_FILL, XAOT_SLICE_DROP_HELPER);
-    bool typed_loop = bulk && bulk->action == XAOT_BULK_TYPED_LOOP;
-    if (bulk && !inline_memset && !typed_loop) {
+    if (bulk && bulk->action != XAOT_BULK_RUNTIME_HELPER &&
+        bulk->action != XAOT_BULK_INLINE_MEMSET && bulk->action != XAOT_BULK_TYPED_LOOP) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
     }
-    if (inline_memset || typed_loop) {
-        fprintf(out, "({ xr_span_t _s = ");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, "; ");
-        fprintf(out, "if (XR_UNLIKELY(_s.length < 0 || (_s.length > 0 && !_s.data))) "
-                     "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                     "XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG); if (_s.length > 0) ");
-        if (inline_memset)
-            fprintf(out, "memset(_s.data, (uint8_t)");
-        else
-            fprintf(out, "for (int64_t _i = 0; _i < _s.length; _i++) "
-                         "((uint8_t*)_s.data)[_i] = (uint8_t)");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        if (inline_memset)
-            fprintf(out, ", (size_t)_s.length)");
-        fprintf(out, "; _s; })");
+    const char *adapter = cg_byte_slice_fill_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "xrt_byte_slice_fill_checked_raw(");
+    fprintf(out, "%s(", adapter);
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);

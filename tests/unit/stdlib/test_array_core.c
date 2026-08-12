@@ -386,9 +386,19 @@ TEST(array_core_bytes_constructor_helpers_coerce_and_copy_typed_sources) {
     ASSERT_EQ_INT(xr_array_core_byte_from_value(XR_NULL_VAL), 0);
 
     uint8_t dst[4] = {0, 0, 0, 0};
-    ASSERT_TRUE(xr_array_core_bytes_fill_value(dst, 4, XR_FROM_INT(255)));
+    ASSERT_TRUE(xr_byte_slice_fill_core(dst, 4, XR_ELEM_U8, 255));
     ASSERT_EQ_INT(dst[0], 255);
     ASSERT_EQ_INT(dst[3], 255);
+    ASSERT_TRUE(xr_byte_slice_fill_core(dst, 4, XR_ELEM_U8, 256));
+    ASSERT_EQ_INT(dst[0], 0);
+    ASSERT_EQ_INT(dst[3], 0);
+    ASSERT_TRUE(xr_byte_slice_fill_core(dst, 4, XR_ELEM_U8, -1));
+    ASSERT_EQ_INT(dst[0], 255);
+    ASSERT_EQ_INT(dst[3], 255);
+    ASSERT_TRUE(xr_byte_slice_fill_core(NULL, 0, XR_ELEM_U8, 7));
+    ASSERT_FALSE(xr_byte_slice_fill_core(NULL, 1, XR_ELEM_U8, 7));
+    ASSERT_FALSE(xr_byte_slice_fill_core(dst, -1, XR_ELEM_U8, 7));
+    ASSERT_FALSE(xr_byte_slice_fill_core(dst, 4, XR_ELEM_I64, 7));
 
     int64_t ints[] = {257, -1, 0, 128};
     ASSERT_TRUE(xr_array_core_bytes_copy_from_typed(dst, 4, ints, 4, XR_ELEM_I64));

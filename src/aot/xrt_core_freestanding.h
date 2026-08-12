@@ -99,6 +99,11 @@ int memcmp(const void *a, const void *b, size_t n);
         XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,           \
         xr_byte_slice_compare_core((left_data), (left_length), XR_ELEM_U8, (right_data),          \
                                    (right_length), XR_ELEM_U8, (ok)))
+#define xrt_byte_slice_fill_semantics(data, length, elem_type, value)                              \
+    XR_BYTE_SLICE_FILL_OWNER_APPLY(                                                               \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO,    \
+        XR_SEM_CONSUMER_AOT_FREESTANDING,                                                         \
+        xr_byte_slice_fill_core((data), (length), (elem_type), (value)))
 #define xrt_byte_slice_common_prefix_semantics(left_data, left_length, right_data, right_length,   \
                                                ok)                                                \
     XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(                                                      \
@@ -1052,6 +1057,12 @@ static inline int64_t xrt_byte_slice_compare_checked_raw(xr_span_t left, xr_span
     if (!ok)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMPARE_NO_DATA_MSG);
     return ordering;
+}
+
+static inline xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t value) {
+    if (!xrt_byte_slice_fill_semantics(span.data, span.length, XR_ELEM_U8, value))
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG);
+    return span;
 }
 
 static inline int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, xr_span_t right) {

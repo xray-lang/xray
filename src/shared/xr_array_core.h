@@ -463,16 +463,6 @@ static inline uint8_t xr_array_core_byte_from_value(XrValue value) {
     return 0;
 }
 
-static inline bool xr_array_core_bytes_fill_value(void *dst_data, int64_t length,
-                                                  XrValue fill_value) {
-    if (length <= 0)
-        return true;
-    if (!dst_data)
-        return false;
-    memset(dst_data, xr_array_core_byte_from_value(fill_value), (size_t) length);
-    return true;
-}
-
 static inline bool xr_array_core_bytes_copy_from_typed(void *dst_data, int64_t dst_length,
                                                        const void *src_data, int64_t src_length,
                                                        uint8_t src_elem_type) {

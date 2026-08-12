@@ -1654,14 +1654,16 @@ vmcase(OP_BYTE_SLICE_FILL) {
     uint8_t dst_elem_type = XR_ELEM_ANY;
     VM_BYTE_SLICE_VIEW(R(a), dst_data, dst_length, dst_readonly, dst_elem_type,
                        XR_ERROR_CORE_BYTE_SLICE_FILL_RECEIVER_MSG);
-    (void) dst_elem_type;
     if (dst_readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     }
     if (!XR_IS_INT(R(a + 1))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_FILL_VALUE_EXPECTS_MSG);
     }
-    if (!xr_array_core_bytes_fill_value(dst_data, dst_length, R(a + 1))) {
+    if (!XR_BYTE_SLICE_FILL_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI,
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO, XR_SEM_CONSUMER_VM,
+            xr_byte_slice_fill_core(dst_data, dst_length, dst_elem_type, XR_TO_INT(R(a + 1))))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG);
     }
     vmbreak;

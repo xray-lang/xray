@@ -7774,6 +7774,43 @@ TEST(cgen_byte_slice_compare_uses_stable_owner_adapter) {
     xi_func_free(ir);
 }
 
+TEST(cgen_byte_slice_fill_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI,
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO, XR_SEM_CONSUMER_CGEN) &&
+           "byte-slice fill owner must publish CGen as a mechanical consumer");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO);
+    assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_fill_checked_raw") == 0 &&
+           "CGen must resolve the stable byte-slice fill owner adapter");
+
+    const char *src = "fn fillBytes(value: u8) -> byte {\n"
+                      "    var bytes = Array<byte>(4)\n"
+                      "    var view: Slice<byte> = bytes[:]\n"
+                      "    view.fill(value)\n"
+                      "    return view[0]\n"
+                      "}\n"
+                      "print(fillBytes(255))\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "byte-slice fill IR compilation failed");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "stable-owner byte-slice fill C generation failed");
+    const char *fn = find_static_function_definition(code, "test_fillBytes_");
+    assert(fn != NULL && "byte-slice fill definition must be emitted");
+    const char *fn_end = next_static_after(fn);
+    assert(contains_between(fn, fn_end, "xrt_byte_slice_fill_checked_raw(") &&
+           "generated C must call the stable byte-slice fill owner adapter");
+    assert(!contains_between(fn, fn_end, "memset(_s.data, (uint8_t)") &&
+           !contains_between(fn, fn_end, "((uint8_t*)_s.data)[_i]") &&
+           !contains_between(fn, fn_end, "({ xr_span_t _s =") &&
+           "generated C must not recreate byte-slice fill semantics");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_byte_slice_common_prefix_uses_stable_owner_adapter) {
     assert(xr_semantic_owner_has_consumer(
                XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
@@ -13090,6 +13127,7 @@ int main(void) {
     run_cgen_numeric_width_uses_stable_owner_adapter();
     run_cgen_byte_slice_scalar_uses_stable_owner_adapter();
     run_cgen_byte_slice_compare_uses_stable_owner_adapter();
+    run_cgen_byte_slice_fill_uses_stable_owner_adapter();
     run_cgen_byte_slice_common_prefix_uses_stable_owner_adapter();
     run_cgen_raw_memory_copy_owner_registry_is_stable();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();

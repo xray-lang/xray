@@ -515,6 +515,19 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     for (int64_t i = 0; i < 12; i++)
         xrt_array_push(span_ops_value, XR_FROM_INT(65 + i));
     xr_span_t span_all = xrt_span_from_array_slice(span_ops_value, 0, 12);
+    xrt_byte_slice_fill_checked_raw(span_all, 511);
+    ASSERT_EQ_INT(((uint8_t *) span_ops->data)[0], 255,
+                  "Slice<byte>.fill truncates through the shared owner");
+    ASSERT_EQ_INT(((uint8_t *) span_ops->data)[11], 255,
+                  "Slice<byte>.fill writes the final byte through the shared owner");
+    xr_span_t empty_span = {NULL, 0};
+    xrt_byte_slice_fill_checked_raw(empty_span, 7);
+    xr_span_t invalid_span = {NULL, 1};
+    EXPECT_XRT_ERROR_THROW(xrt_byte_slice_fill_checked_raw(invalid_span, 7),
+                           XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG,
+                           "Slice<byte>.fill rejects a positive length without storage");
+    for (int64_t i = 0; i < 12; i++)
+        ((uint8_t *) span_ops->data)[i] = (uint8_t) (65 + i);
     xrt_byte_slice_repeat_from_checked_raw(span_all, 4, 4, 4);
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[4], 65,
                   "Slice<byte>.repeatFrom writes first repeated byte");
