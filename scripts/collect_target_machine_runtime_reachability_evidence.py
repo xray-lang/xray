@@ -138,6 +138,16 @@ def rejected(code: int, output: str, marker: str | None = None) -> bool:
     return any(value.lower() in lowered for value in REJECTION_MARKERS)
 
 
+def legacy_api_probe_command(compiler: str, source: Path, archive: Path,
+                             executable: Path) -> list[str]:
+    if os.name == "nt":
+        return [
+            compiler, "/nologo", "/std:c11", str(source), str(archive),
+            f"/Fe:{executable}",
+        ]
+    return [compiler, "-std=c11", str(source), str(archive), "-o", str(executable)]
+
+
 def write_lane_log(path: Path, commands: list[list[str]], records: list[tuple[int, str]],
                    detail: list[str]) -> None:
     lines: list[str] = []
@@ -195,6 +205,12 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         work.mkdir()
         source = work / "legacy-source.xr"
         source.write_text('print("legacy-runtime-route")\n', encoding="utf-8")
+        legacy_api_source = work / "legacy-api-probe.c"
+        legacy_api_source.write_text(
+            "extern void xray_vm_config_init(void *);\n"
+            "int main(void) { xray_vm_config_init(0); return 0; }\n",
+            encoding="utf-8",
+        )
         xrc = work / "legacy-route.xrc"
         xsm = work / "runtime-semantic.xsm"
         xtp = work / "runtime-target.xtp"
@@ -216,13 +232,26 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
             ["expected=unknown option rejection"],
         )
 
-        legacy_ok = symbols is not None and not legacy_symbols
+        legacy_api_executable = work / (
+            "legacy-api-probe.exe" if os.name == "nt" else "legacy-api-probe"
+        )
+        legacy_api_argv = legacy_api_probe_command(
+            compiler, legacy_api_source, runtime_archive, legacy_api_executable
+        )
+        legacy_api_record = run_command(legacy_api_argv, work)
+        legacy_link_rejected = (
+            legacy_api_record[0] != 0
+            and "xray_vm_config_init" in legacy_api_record[1]
+            and not legacy_api_executable.is_file()
+        )
+        legacy_ok = symbols is not None and not legacy_symbols and legacy_link_rejected
         lane_inputs["legacy-api-negative"] = (
-            [["defined-symbol-scan", str(runtime_archive)]],
-            [(0 if symbols is not None else 1,
+            [legacy_api_argv, ["defined-symbol-scan", str(runtime_archive)]],
+            [legacy_api_record, (0 if symbols is not None else 1,
               "\n".join(symbols or ["symbol inspector unavailable"]) + "\n")],
             legacy_ok, 0,
-            [f"legacy_api_symbol_count={len(legacy_symbols)}",
+            [f"legacy_api_link_rejected={str(legacy_link_rejected).lower()}",
+             f"legacy_api_symbol_count={len(legacy_symbols)}",
              *[f"legacy_api_symbol={name}" for name in legacy_symbols]],
         )
 

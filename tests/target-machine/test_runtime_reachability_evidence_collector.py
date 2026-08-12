@@ -140,6 +140,8 @@ def fake_runner(mutation: str = "") -> Callable[[list[str], Path], tuple[int, st
             Path(arguments[-2]).write_bytes(b"xsm")
             Path(arguments[-1]).write_bytes(b"xtp")
             return 0, "runtime artifacts written\n"
+        if any(str(value).endswith("legacy-api-probe.c") for value in arguments):
+            return 1, "undefined reference to xray_vm_config_init\n"
         if "--bytecode" in arguments:
             return 2, "unknown option '--bytecode'\n"
         if len(arguments) > 1 and arguments[1] == "eval":
