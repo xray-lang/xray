@@ -25,6 +25,8 @@
 
 typedef struct XrTargetPlanTaskInput {
     const XrSemanticPlan *semantic_plan;
+    const XrSemanticPlan *const *semantic_dependencies;
+    uint32_t semantic_dependency_count;
 } XrTargetPlanTaskInput;
 
 typedef struct XrTargetPlanTaskResult {

@@ -75,6 +75,8 @@ static bool fingerprint_matches(XrFingerprint left, XrFingerprint right) {
 
 static bool validate_requirements(const XrXtpCandidate *candidate,
                                   const XrSemanticPlan *semantic_plan,
+                                  const XrSemanticPlan *const *dependencies,
+                                  uint32_t dependency_count,
                                   const XrTargetProfile *expected_profile,
                                   char *error, size_t error_size) {
     if (!candidate || !semantic_plan || !expected_profile) {
@@ -82,8 +84,22 @@ static bool validate_requirements(const XrXtpCandidate *candidate,
                          "materialization requirements are incomplete");
         return false;
     }
+    if (dependency_count > 1024u ||
+        dependency_count != xr_semantic_plan_dependency_count(semantic_plan)) {
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                         "materialization requirements are not verified");
+        return false;
+    }
     char nested_error[512] = {0};
-    if (!xr_semantic_plan_verify(semantic_plan, nested_error, sizeof(nested_error)) ||
+    bool semantic_verified = dependency_count == 0
+                                 ? xr_semantic_plan_verify(
+                                       semantic_plan, nested_error,
+                                       sizeof(nested_error))
+                                 : xr_semantic_plan_verify_module_set(
+                                       semantic_plan, dependencies,
+                                       dependency_count, nested_error,
+                                       sizeof(nested_error));
+    if (!semantic_verified ||
         !xr_target_profile_verify(expected_profile, nested_error, sizeof(nested_error))) {
         xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
                          "materialization requirements are not verified");
@@ -243,9 +259,13 @@ static uint64_t compute_total_frame_bytes(const XrXtpDecodedTables *tables) {
 
 static XrTargetPlanDraft make_draft(const XrXtpDecodedTables *tables,
                                     const XrSemanticPlan *semantic_plan,
+                                    const XrSemanticPlan *const *dependencies,
+                                    uint32_t dependency_count,
                                     XrTargetProfile *profile) {
     XrTargetPlanDraft draft = {
         .semantic_plan = semantic_plan,
+        .semantic_dependencies = dependencies,
+        .semantic_dependency_count = dependency_count,
         .profile = profile,
         .completed_family_mask = XR_TARGET_REQUIRED_FAMILIES,
 #define XR_XTP_DRAFT_TABLE(name) .name = tables->name, .name##_count = tables->name##_count
@@ -296,10 +316,21 @@ XR_FUNC bool xr_xtp_materialize_target_plan(const XrXtpCandidate *candidate,
                                             const XrTargetProfile *expected_profile,
                                             XrTargetPlan **plan, char *error,
                                             size_t error_size) {
+    return xr_xtp_materialize_target_plan_module_set(
+        candidate, semantic_plan, NULL, 0, expected_profile, plan, error,
+        error_size);
+}
+
+XR_FUNC bool xr_xtp_materialize_target_plan_module_set(
+    const XrXtpCandidate *candidate, const XrSemanticPlan *semantic_plan,
+    const XrSemanticPlan *const *dependencies, uint32_t dependency_count,
+    const XrTargetProfile *expected_profile, XrTargetPlan **plan, char *error,
+    size_t error_size) {
     if (plan)
         *plan = NULL;
-    if (!plan || !validate_requirements(candidate, semantic_plan, expected_profile, error,
-                                        error_size))
+    if (!plan || !validate_requirements(candidate, semantic_plan, dependencies,
+                                        dependency_count, expected_profile,
+                                        error, error_size))
         return false;
     size_t decoded_bytes = 0;
     if (!decoded_storage_within_budget(candidate, &decoded_bytes) ||
@@ -332,7 +363,8 @@ XR_FUNC bool xr_xtp_materialize_target_plan(const XrXtpCandidate *candidate,
                              "decoded target profile identity is invalid");
         return false;
     }
-    XrTargetPlanDraft draft = make_draft(&tables, semantic_plan, decoded_profile);
+    XrTargetPlanDraft draft = make_draft(&tables, semantic_plan, dependencies,
+                                         dependency_count, decoded_profile);
     XrTargetPlan *materialized = NULL;
     bool frozen = xr_target_plan_freeze(&draft, &materialized, error, error_size);
     xr_target_profile_free(decoded_profile);

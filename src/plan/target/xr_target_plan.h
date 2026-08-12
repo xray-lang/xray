@@ -33,6 +33,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE = UINT64_C(1) << 6,
     XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE = UINT64_C(1) << 7,
     XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE = UINT64_C(1) << 8,
+    XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE = UINT64_C(1) << 9,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -60,7 +61,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_STRING_LITERAL_STORAGE |                               \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE |                           \
                  XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |                            \
-                 XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE))
+                 XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |                               \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -173,15 +175,18 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_INVALID = 0,
     XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
     XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE,
+    XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT,
 } XrTargetCallConvention;
 
-/* Target-local dispatch authority. DIRECT_LOCAL deliberately retains the
- * SemanticPlan numeric value, while CHANNEL_CLOSE names a sealed runtime
- * receiver operation and never claims a static callee function. */
+/* Target dispatch authority. SOURCE_EXPORT names only the public dependency
+ * wrapper proven by an ordered SemanticPlan module set; it never identifies a
+ * private implementation or reuses a dependency function index as a local
+ * index. CHANNEL_CLOSE names a sealed runtime receiver operation. */
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
     XR_TARGET_CALL_TARGET_CHANNEL_CLOSE,
+    XR_TARGET_CALL_TARGET_SOURCE_EXPORT,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetCallErrorMode {
@@ -279,6 +284,7 @@ typedef enum XrTargetSlotRole {
 typedef enum XrTargetCoroutineStateFlag {
     XR_TARGET_COROUTINE_DIRECT_CHILD = 1u << 0,
     XR_TARGET_COROUTINE_RESULT_SLOT_BOUND = 1u << 1,
+    XR_TARGET_COROUTINE_SOURCE_CHILD = 1u << 2,
 } XrTargetCoroutineStateFlag;
 
 typedef struct XrTargetMachineRepRecord {
@@ -441,6 +447,10 @@ typedef struct XrTargetCallRecord {
     uint32_t semantic_operation;
     uint32_t caller_function;
     uint32_t callee_function;
+    uint32_t source_dependency;
+    uint32_t source_export;
+    XrStableId source_export_identity;
+    XrStableId source_callee_identity;
     uint32_t result_value;
     uint32_t result_slot;
     uint32_t caller_storage_slot;

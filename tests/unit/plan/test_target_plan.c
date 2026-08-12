@@ -6,6 +6,7 @@
 #include "../../../src/ir/xi_ops_gen.h"
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_stage.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
@@ -111,6 +112,31 @@ static XrType stub_float_channel = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_float},
 };
+static XrType stub_module_namespace = {
+    .kind = XR_KIND_STRUCT_OBJECT,
+    .id = 111,
+    .frozen = true,
+};
+
+static int source_export_call_suspendability(void *ud, const XiFunc *current,
+                                             const XiValue *call) {
+    (void) ud;
+    (void) current;
+    return call && call->op == XI_CALL_METHOD && call->aux &&
+                   strcmp((const char *) call->aux, "writeBytes") == 0
+               ? 1
+               : -1;
+}
+
+static const XiFunc *source_export_resolve_method(void *ud,
+                                                  const XiFunc *current,
+                                                  const XiValue *call) {
+    (void) current;
+    return ud && call && call->op == XI_CALL_METHOD && call->aux &&
+                   strcmp((const char *) call->aux, "writeBytes") == 0
+                ? (const XiFunc *) ud
+                : NULL;
+}
 
 static void fill_foundation_capabilities(XrTargetCapabilityRecord capabilities[2]) {
     capabilities[0] = (XrTargetCapabilityRecord) {
@@ -865,7 +891,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                    "3525d9df3a68879eb8d66712b9bd7d51407e31fb49453865c12ab2580621744c") == 0);
+                    "e41bc8abec1d48f32baa9e3b7785cf2130c68154f36b0cb40bd2a0d2bae3ac1f") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -1724,6 +1750,127 @@ static void test_channel_receive_storage_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static XrSemanticPlan *build_source_export_semantic(
+    XrSemanticPlan **dependency_out) {
+    XiFunc *dependency_root = xi_func_new("net_init", &stub_unit);
+    XiFunc *write_bytes = xi_func_new("writeBytes", &stub_unit);
+    REQUIRE(dependency_root && write_bytes);
+    XiBlock *dependency_entry = xi_block_new(dependency_root);
+    XiBlock *write_entry = xi_block_new(write_bytes);
+    REQUIRE(dependency_entry && write_entry);
+    dependency_entry->sealed = write_entry->sealed = true;
+    dependency_root->children =
+        (XiFunc **) xr_calloc(1, sizeof(*dependency_root->children));
+    REQUIRE(dependency_root->children);
+    dependency_root->children[0] = write_bytes;
+    dependency_root->nchildren = dependency_root->children_cap = 1;
+    write_bytes->parent_func = dependency_root;
+    XiValue *closure = xi_value_new(dependency_root, dependency_entry,
+                                    XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *store = xi_value_new(dependency_root, dependency_entry,
+                                  XI_SET_SHARED, &stub_unit, 1);
+    REQUIRE(closure && store);
+    closure->aux = write_bytes;
+    store->args[0] = closure;
+    store->aux_int = 0;
+    dependency_root->nshared = 1;
+    xi_block_set_return(dependency_entry, NULL);
+    XiValue *yield = xi_value_new(write_bytes, write_entry, XI_YIELD,
+                                  &stub_unit, 0);
+    REQUIRE(yield);
+    xi_block_set_return(write_entry, NULL);
+    dependency_root->stage = write_bytes->stage = XI_STAGE_SEMANTIC_LOWERED;
+    dependency_root->invariant_mask = write_bytes->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(dependency_root, NULL));
+    dependency_root->stage = write_bytes->stage = XI_STAGE_OPTIMIZED;
+    XiModule *dependency_module =
+        xi_module_new("stdlib/net/net.xr", "net", dependency_root);
+    REQUIRE(dependency_module);
+    dependency_root->module = dependency_module;
+    dependency_module->nslots = 1;
+    dependency_module->nexports = 1;
+    dependency_module->exports =
+        (XiModuleExport *) xr_calloc(1, sizeof(*dependency_module->exports));
+    REQUIRE(dependency_module->exports);
+    dependency_module->exports[0].name = "writeBytes";
+    dependency_module->exports[0].shared_slot = 0;
+    dependency_module->exports[0].function = write_bytes;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(dependency_root, error,
+                                              sizeof(error)));
+    XrSemanticPlan *dependency =
+        xr_semantic_plan_retain(dependency_root->semantic_plan);
+    REQUIRE(dependency && xr_semantic_plan_source_export_count(dependency) == 1);
+
+    XiFunc *caller_root = xi_func_new("http_init", &stub_unit);
+    XiFunc *caller = xi_func_new("_serverWriteAll", &stub_unit);
+    REQUIRE(caller_root && caller);
+    XiBlock *root_entry = xi_block_new(caller_root);
+    XiBlock *caller_entry = xi_block_new(caller);
+    REQUIRE(root_entry && caller_entry);
+    root_entry->sealed = caller_entry->sealed = true;
+    caller_root->children =
+        (XiFunc **) xr_calloc(1, sizeof(*caller_root->children));
+    REQUIRE(caller_root->children);
+    caller_root->children[0] = caller;
+    caller_root->nchildren = caller_root->children_cap = 1;
+    caller->parent_func = caller_root;
+    XiImportRef import_ref = {
+        .module_path = "stdlib/net/net.xr",
+        .resolved_mod_index = 0,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolved_module = dependency_module,
+    };
+    XiValue *namespace_ref = xi_value_new(caller_root, root_entry,
+                                          XI_IMPORT_REF,
+                                          &stub_module_namespace, 0);
+    XiValue *namespace_store = xi_value_new(caller_root, root_entry,
+                                            XI_SET_SHARED, &stub_unit, 1);
+    REQUIRE(namespace_ref && namespace_store);
+    namespace_ref->aux = &import_ref;
+    namespace_store->args[0] = namespace_ref;
+    namespace_store->aux_int = 0;
+    caller_root->nshared = 1;
+    xi_block_set_return(root_entry, NULL);
+    XiValue *receiver = xi_value_new(caller, caller_entry, XI_GET_SHARED,
+                                     &stub_module_namespace, 0);
+    XiValue *method = xi_value_new(caller, caller_entry, XI_CALL_METHOD,
+                                   &stub_unit, 1);
+    REQUIRE(receiver && method);
+    receiver->aux_int = 0;
+    method->args[0] = receiver;
+    method->aux = (void *) "writeBytes";
+    method->aux_int = 0;
+    xi_block_set_return(caller_entry, method);
+    caller_root->stage = caller->stage = XI_STAGE_SEMANTIC_LOWERED;
+    caller_root->invariant_mask = caller->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    XiCoroResolver resolver = {
+        .resolve_method = source_export_resolve_method,
+        .call_suspendability = source_export_call_suspendability,
+        .ud = write_bytes,
+    };
+    REQUIRE(xi_coro_lower(caller_root, &resolver));
+    caller_root->stage = caller->stage = XI_STAGE_OPTIMIZED;
+    XiModule *caller_module =
+        xi_module_new("stdlib/http/http.xr", "http", caller_root);
+    REQUIRE(caller_module);
+    caller_root->module = caller_module;
+    caller_module->nslots = 1;
+    XiModule *dependency_modules[] = {dependency_module};
+    REQUIRE(xr_semantic_plan_build_and_attach_module_set(
+        caller_root, dependency_modules, 1, error, sizeof(error)));
+    XrSemanticPlan *semantic =
+        xr_semantic_plan_retain(caller_root->semantic_plan);
+    REQUIRE(semantic);
+    xi_func_free(caller_root);
+    xi_func_free(dependency_root);
+    *dependency_out = dependency;
+    return semantic;
+}
+
 typedef enum ChannelCloseCallMutation {
     CHANNEL_CLOSE_MUTATE_IDENTITY,
     CHANNEL_CLOSE_MUTATE_SEMANTIC_TARGET,
@@ -1874,7 +2021,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "c41f7d802ac014de8b440107ae29c7fc121ed38da8481851e98db53f7e5e3af3") == 0);
+                    "c96b36839d5100f2b9eabe7a373f80eda30e7f4b9d9982ad8ea5ec3c1864af9d") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT;
          mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -2070,7 +2217,7 @@ static XrSemanticPlan *build_lowered_tail_coroutine_chain(void) {
     leaf->parent_func = wrapper;
 
     /* Seed XiCoroLower so it materializes the caller state CFG.  The seed is
-     * rewritten below before SemanticPlan is frozen: schema 13 must then
+     * rewritten below before SemanticPlan is frozen: schema 14 must then
      * derive wrapper suspendability solely through the DIRECT_LOCAL tail
      * edge, while the wrapper itself has no state row. */
     XiValue *wrapper_seed =
@@ -2195,6 +2342,130 @@ static void test_unknown_call_target_fails_closed(void) {
     xr_semantic_plan_free(semantic);
 }
 
+typedef enum SourceExportCallMutation {
+    SOURCE_EXPORT_MUTATE_DEPENDENCY,
+    SOURCE_EXPORT_MUTATE_EXPORT,
+    SOURCE_EXPORT_MUTATE_EXPORT_IDENTITY,
+    SOURCE_EXPORT_MUTATE_CALLEE_IDENTITY,
+    SOURCE_EXPORT_MUTATE_CALLEE_FUNCTION,
+    SOURCE_EXPORT_MUTATE_ARGUMENT_COUNT,
+    SOURCE_EXPORT_MUTATE_FLAGS,
+    SOURCE_EXPORT_MUTATE_CONVENTION,
+    SOURCE_EXPORT_MUTATE_KIND,
+    SOURCE_EXPORT_MUTATION_COUNT,
+} SourceExportCallMutation;
+
+static void mutate_source_export_call(XrTargetCallRecord *call,
+                                      SourceExportCallMutation mutation) {
+    switch (mutation) {
+        case SOURCE_EXPORT_MUTATE_DEPENDENCY:
+            call->source_dependency = XR_SEMANTIC_INDEX_NONE;
+            break;
+        case SOURCE_EXPORT_MUTATE_EXPORT:
+            call->source_export = XR_SEMANTIC_INDEX_NONE;
+            break;
+        case SOURCE_EXPORT_MUTATE_EXPORT_IDENTITY:
+            call->source_export_identity.bytes[0] ^= 1;
+            break;
+        case SOURCE_EXPORT_MUTATE_CALLEE_IDENTITY:
+            call->source_callee_identity.bytes[0] ^= 1;
+            break;
+        case SOURCE_EXPORT_MUTATE_CALLEE_FUNCTION:
+            call->callee_function = 0;
+            break;
+        case SOURCE_EXPORT_MUTATE_ARGUMENT_COUNT:
+            call->argument_begin = 1;
+            break;
+        case SOURCE_EXPORT_MUTATE_FLAGS:
+            call->flags = 0;
+            break;
+        case SOURCE_EXPORT_MUTATE_CONVENTION:
+            call->calling_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL;
+            break;
+        case SOURCE_EXPORT_MUTATE_KIND:
+            call->target_kind = XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
+            break;
+        case SOURCE_EXPORT_MUTATION_COUNT:
+            abort();
+    }
+}
+
+static void test_source_export_call_authority(void) {
+    XrSemanticPlan *dependency = NULL;
+    XrSemanticPlan *semantic = build_source_export_semantic(&dependency);
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error,
+                                  sizeof(error)));
+    REQUIRE(plan == NULL &&
+            strncmp(error, "XR_TARGET_1000", strlen("XR_TARGET_1000")) == 0);
+    const XrSemanticPlan *dependencies[] = {dependency};
+    bool built = xr_target_plan_build_module_set(
+        semantic, dependencies, 1, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-export Target build failed: %s\n", error);
+    REQUIRE(built);
+    REQUIRE(plan && xr_target_plan_verify(plan, error, sizeof(error)));
+    REQUIRE(plan->semantic_dependency_count == 1 &&
+            plan->semantic_dependencies[0] == dependency &&
+            plan->calls_count == 1 && plan->call_arguments_count == 0 &&
+            plan->coroutines_count == 1);
+    XrTargetCallRecord *call = &plan->calls[0];
+    REQUIRE(call->semantic_call_target == 0 &&
+            call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+            call->source_dependency == 0 && call->source_export == 0 &&
+            call->argument_count == 0 &&
+            call->calling_convention ==
+                XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
+            call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
+            call->flags == XR_TARGET_CALL_SUSPEND);
+    const XrSemanticCallTargetRecord *semantic_target =
+        xr_semantic_plan_call_target(semantic, 0);
+    REQUIRE(semantic_target &&
+            xr_stable_id_equal(call->source_export_identity,
+                               semantic_target->export_identity) &&
+            xr_stable_id_equal(call->source_callee_identity,
+                               semantic_target->callee_function));
+    REQUIRE(plan->coroutines[0].direct_call == call->id &&
+            plan->coroutines[0].result_slot == call->result_slot &&
+            plan->coroutines[0].flags ==
+                (XR_TARGET_COROUTINE_DIRECT_CHILD |
+                 XR_TARGET_COROUTINE_SOURCE_CHILD));
+
+    for (uint32_t mutation = 0; mutation < SOURCE_EXPORT_MUTATION_COUNT;
+         mutation++) {
+        XrTargetCallRecord saved = *call;
+        mutate_source_export_call(call, (SourceExportCallMutation) mutation);
+        xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
+        expect_verify_failure(plan, "XR_TARGET_1003");
+        *call = saved;
+    }
+    uint16_t saved_state_flags = plan->coroutines[0].flags;
+    plan->coroutines[0].flags &= ~XR_TARGET_COROUTINE_SOURCE_CHILD;
+    expect_verify_failure(plan, "XR_CORO_4000");
+    plan->coroutines[0].flags = saved_state_flags;
+    uint32_t saved_direct_call = plan->coroutines[0].direct_call;
+    plan->coroutines[0].direct_call = XR_SEMANTIC_INDEX_NONE;
+    expect_verify_failure(plan, "XR_CORO_4000");
+    plan->coroutines[0].direct_call = saved_direct_call;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    XrTargetPlan *failed = NULL;
+    REQUIRE(!xr_target_plan_build_module_set(
+        semantic, NULL, 1, profile, &failed, error, sizeof(error)));
+    REQUIRE(failed == NULL);
+    const XrSemanticPlan *wrong_dependencies[] = {semantic};
+    REQUIRE(!xr_target_plan_build_module_set(
+        semantic, wrong_dependencies, 1, profile, &failed, error,
+        sizeof(error)));
+    REQUIRE(failed == NULL);
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_semantic_plan_free(dependency);
+}
+
 static void test_direct_local_call_adapter_family(void) {
     XrSemanticPlan *semantic = build_direct_local_scalar_calls(XI_CALL);
     XrTargetProfile *profile = build_profile(0);
@@ -2209,7 +2480,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                    "a2d00fbb179d91e3704f63362c9079671b0c81f99ce9bb84abb9aeab6516d165") == 0);
+                    "54ea6ef94fca1da3b61c92c9f940d3b165043f901df78f1aed374a3c3abec34b") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -2431,7 +2702,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                    "46f04e8eddb1844186c4e431afb7dccb3c3b6e6e790e5770f8f1b0d4c7449dd0") == 0);
+                    "a29fb40fad73388f3c31d0583a062d5bb1297a9a02c473d5777269a32de90aa9") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");
@@ -2809,6 +3080,7 @@ static void test_bool_and_nullable_scalar_boundary(void) {
 int main(void) {
     test_channel_receive_storage_authority();
     test_channel_close_call_authority();
+    test_source_export_call_authority();
     test_profile_freeze_and_determinism();
     test_plan_snapshot_and_determinism();
     test_builder_materializes_canonical_scalar_intents();

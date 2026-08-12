@@ -79,6 +79,10 @@ static bool process_task(XrTargetPlanTaskPool *pool, uint32_t index) {
 
     XrCacheXtpArtifactVerifyContext requirements = {
         .semantic_plan = semantic_plan,
+        .semantic_dependencies =
+            pool->inputs[index].semantic_dependencies,
+        .semantic_dependency_count =
+            pool->inputs[index].semantic_dependency_count,
         .target_profile = pool->profile,
         .optimization_budget = pool->optimization_budget,
     };
@@ -114,8 +118,10 @@ static bool process_task(XrTargetPlanTaskPool *pool, uint32_t index) {
     }
 
     if (!plan) {
-        if (!xr_target_plan_build(semantic_plan, pool->profile, &plan,
-                                  result->error, sizeof(result->error)))
+        if (!xr_target_plan_build_module_set(
+                semantic_plan, pool->inputs[index].semantic_dependencies,
+                pool->inputs[index].semantic_dependency_count, pool->profile,
+                &plan, result->error, sizeof(result->error)))
             return false;
         result->built = true;
     }

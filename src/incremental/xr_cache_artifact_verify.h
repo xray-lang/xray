@@ -19,6 +19,8 @@ typedef struct XrTargetProfile XrTargetProfile;
 
 typedef struct XrCacheXtpArtifactVerifyContext {
     const XrSemanticPlan *semantic_plan;
+    const XrSemanticPlan *const *semantic_dependencies;
+    uint32_t semantic_dependency_count;
     const XrTargetProfile *target_profile;
     XrCacheFingerprint optimization_budget;
 } XrCacheXtpArtifactVerifyContext;

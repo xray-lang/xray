@@ -43,7 +43,9 @@ static bool verified_authorities(const XrCacheXtpArtifactVerifyContext *context,
         return false;
     char error[512] = {0};
     if (!xr_semantic_plan_is_verified(context->semantic_plan) ||
-        !xr_semantic_plan_verify(context->semantic_plan, error, sizeof(error)) ||
+        !xr_semantic_plan_verify_module_set(
+            context->semantic_plan, context->semantic_dependencies,
+            context->semantic_dependency_count, error, sizeof(error)) ||
         !xr_target_profile_verify(context->target_profile, error, sizeof(error)))
         return false;
     *profile_facts = xr_target_profile_facts(context->target_profile);
@@ -109,9 +111,11 @@ static bool materialize_verified_xtp(
     if (!xr_xtp_decode_candidate(bytes, size, &candidate, error, sizeof(error)))
         return false;
     XrTargetPlan *plan = NULL;
-    bool materialized = xr_xtp_materialize_target_plan(
-        candidate, requirements->semantic_plan, requirements->target_profile,
-        &plan, error, sizeof(error));
+    bool materialized = xr_xtp_materialize_target_plan_module_set(
+        candidate, requirements->semantic_plan,
+        requirements->semantic_dependencies,
+        requirements->semantic_dependency_count,
+        requirements->target_profile, &plan, error, sizeof(error));
     bool verified = materialized && plan && xr_target_plan_is_verified(plan) &&
                     xr_target_plan_fingerprint_is_intact(plan) &&
                     xr_target_plan_verify(plan, error, sizeof(error));

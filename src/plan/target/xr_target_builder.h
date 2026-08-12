@@ -23,5 +23,13 @@ XR_FUNC bool xr_target_plan_build(const XrSemanticPlan *semantic_plan,
                                   XrTargetPlan **out,
                                   char *error,
                                   size_t error_size);
+XR_FUNC bool xr_target_plan_build_module_set(
+    const XrSemanticPlan *semantic_plan,
+    const XrSemanticPlan *const *dependencies,
+    uint32_t dependency_count,
+    XrTargetProfile *profile,
+    XrTargetPlan **out,
+    char *error,
+    size_t error_size);
 
 #endif  // XR_TARGET_BUILDER_H

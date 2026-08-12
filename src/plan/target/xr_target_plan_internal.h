@@ -17,6 +17,8 @@
 /* Mutable draft storage is private to the unified target builder and tests. */
 typedef struct XrTargetPlanDraft {
     const XrSemanticPlan *semantic_plan;
+    const XrSemanticPlan *const *semantic_dependencies;
+    uint32_t semantic_dependency_count;
     XrTargetProfile *profile;
     uint64_t completed_family_mask;
     const XrTargetMachineRepRecord *machine_reps;
@@ -71,6 +73,8 @@ struct XrTargetPlan {
     XrFingerprint fingerprint;
     XrFingerprint semantic_fingerprint;
     XrSemanticPlan *semantic_plan;
+    XrSemanticPlan **semantic_dependencies;
+    uint32_t semantic_dependency_count;
     XrTargetProfile *profile;
 #define XR_TARGET_TABLE_FIELD(name, type)                                                          \
     type *name;                                                                                    \

@@ -46,16 +46,21 @@ invalidation, compiler-session ownership, or any compatibility reader.
 8. An XTP cache request derives its key from the verified SemanticPlan, exact
    TargetProfile, provider and runtime identities owned by that profile, the
    current planner schema and required-family mask, and the requested
-   optimization budget. A matching object is still only a candidate: the
-   verifier takes an owned XTP snapshot, materializes it against the exact
-   authorities, and independently verifies the resulting TargetPlan before
-   accepting the hit. The production AOT driver consumes that exact owned
-   plan; it does not decode a second time or rebuild semantic rows on a hit.
+   optimization budget. For a dependency-bearing SemanticPlan, its fingerprint
+   already binds the ordered dependency module/fingerprint records, and both
+   cold build and cache-hit materialization additionally require the exact
+   ordered verified dependency SemanticPlan vector. A matching object is still
+   only a candidate: the verifier takes an owned XTP snapshot, materializes it
+   against those exact authorities, and independently verifies the resulting
+   TargetPlan before accepting the hit. The production AOT driver consumes that
+   exact owned plan; it does not decode a second time or rebuild semantic rows
+   on a hit.
    Wrong keys, authority mismatches, old schemas, corrupt bytes, and valid
    artifacts for another semantic or target identity fail closed to
    recomputation.
 9. Parallel TargetPlan workers own disjoint input-indexed result rows. They may
-   read immutable SemanticPlan and TargetProfile authorities and use the
+   read immutable SemanticPlan, its exact ordered dependency-plan vector, and
+   TargetProfile authorities and use the
    synchronized cache store, but they never install a plan into the compiler
    bundle, emit diagnostics, or update shared statistics. The caller joins all
    workers and then verifies, reports, and installs results strictly in input
@@ -70,14 +75,14 @@ mandatory verification is a contract change.
 
 ## Digest anchors
 
-anchor-sha256: src/incremental/xr_cache_artifact_verify.h c70b37fb819f7bf64af9b4b968cb770bae8693011e95353a0c5710e3f1ab6a2e
-anchor-sha256: src/incremental/xr_cache_artifact_verify.c 90cc79eeffe2766ebd494d0056b4b0ede9681b846537714327a7428d01adeced
+anchor-sha256: src/incremental/xr_cache_artifact_verify.h b6e0ca7a521764f981fdd105cabd22b57c291ade973384a39b5e1adb81e5f233
+anchor-sha256: src/incremental/xr_cache_artifact_verify.c 66e1059f2a67229b720bf350399911f21d56d0bef6ceafc371d4783f53603727
 anchor-sha256: src/incremental/xr_cache_store.h f34e4f86ba65f44cbc29356488f32cbc52088c8dda6848ff756a571c78c9b1d9
 anchor-sha256: src/incremental/xr_cache_store.c bb726097541fb71d58d463f106bc7f103c21295ffee344425221b67a094d305b
-anchor-sha256: src/incremental/xr_target_plan_tasks.h dc7f99c3207f141a3b92e0decb4522b4732d9b9f2aa1ad877a48a2ec479fbf2c
-anchor-sha256: src/incremental/xr_target_plan_tasks.c 8abba10c5512aa6a2e1f1410e848ca6e60661f6760b447284c091de4696ecae0
+anchor-sha256: src/incremental/xr_target_plan_tasks.h 5b55f38a787014fa8ee1b625ced5349864e902897144256a4c41134d1bb89025
+anchor-sha256: src/incremental/xr_target_plan_tasks.c 5499c49fb7a461967da5ab1f9766b0ad4dc653a9d6e710e42344089d4cfcc6f0
 anchor-sha256: src/aot/xaot_driver.h ab01aef3334ff626ff1f7e87e715e1a9e02df4bbe1c109bc50ac3f5b79748fa1
-anchor-sha256: src/aot/xaot_driver.c 014cbd126dcc9b96a88826fd4164e7cdb261a09823f3717f50aa5723825ab65e
+anchor-sha256: src/aot/xaot_driver.c 67855495da1496f5ff28bb2bd71eeaa82c757f52396f4c222c7fe7e4095b3d39
 anchor-sha256: src/os/os_fs.h b1a95259a4952a1e33e1d2c109fd0955f5b00bff4db81e6a21abede9ec07fe84
 anchor-sha256: src/os/unix/fs_unix.c 5f86aaa44d1e794ca2cdeea814c1d115bd598e56b3e7dfe47d0c6726da187e54
 anchor-sha256: src/os/win/fs_win.c 4b9195ab156d94761c6c72c10a80fdb62a01838d1ec829ab42bbb5bc9bd71e2f

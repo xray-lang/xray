@@ -162,7 +162,9 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U16, reserved)
 #define XR_XTP_CALL_FIELDS(F)                                                                      \
     F(ID, identity) F(U32, id) F(U32, semantic_call_target) F(U32, semantic_operation)           \
-    F(U32, caller_function) F(U32, callee_function) F(U32, result_value) F(U32, result_slot)     \
+    F(U32, caller_function) F(U32, callee_function) F(U32, source_dependency)                    \
+    F(U32, source_export) F(ID, source_export_identity) F(ID, source_callee_identity)            \
+    F(U32, result_value) F(U32, result_slot)                                                       \
     F(U32, caller_storage_slot) F(U32, error_slot) F(U32, argument_begin) F(U32, adapter_begin)  \
     F(U16, result_register_rep) F(U16, result_memory_rep) F(U16, error_register_rep)             \
     F(U16, error_memory_rep) F(U16, argument_count) F(U16, adapter_count) F(U16, native_abi)     \

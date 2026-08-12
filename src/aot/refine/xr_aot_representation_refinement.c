@@ -15,6 +15,7 @@
 #include "../../ir/xi_opt.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
+#include "../../plan/semantic/xr_semantic_graph.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -579,12 +580,14 @@ typedef struct VerifyAuthority {
     uint32_t *operation_by_value;
     uint32_t *parameter_by_value;
     uint32_t *direct_callee_target_by_value;
+    uint32_t *go_callee_target_by_value;
     const XiValue **live_by_value;
     const XiBlock **live_by_block;
     uint8_t *seen_function;
     uint8_t *seen_block;
     uint8_t *seen_record;
     uint8_t *exact_direct_callee_value;
+    uint8_t *exact_go_callee_value;
     uint8_t *exact_channel_value;
     uint8_t *exact_channel_allocation_value;
     uint64_t bytes;
@@ -629,23 +632,27 @@ static void verify_authority_dispose(VerifyAuthority *ctx) {
     xr_free(ctx->operation_by_value);
     xr_free(ctx->parameter_by_value);
     xr_free(ctx->direct_callee_target_by_value);
+    xr_free(ctx->go_callee_target_by_value);
     xr_free(ctx->live_by_value);
     xr_free(ctx->live_by_block);
     xr_free(ctx->seen_function);
     xr_free(ctx->seen_block);
     xr_free(ctx->seen_record);
     xr_free(ctx->exact_direct_callee_value);
+    xr_free(ctx->exact_go_callee_value);
     xr_free(ctx->exact_channel_value);
     xr_free(ctx->exact_channel_allocation_value);
     ctx->operation_by_value = NULL;
     ctx->parameter_by_value = NULL;
     ctx->direct_callee_target_by_value = NULL;
+    ctx->go_callee_target_by_value = NULL;
     ctx->live_by_value = NULL;
     ctx->live_by_block = NULL;
     ctx->seen_function = NULL;
     ctx->seen_block = NULL;
     ctx->seen_record = NULL;
     ctx->exact_direct_callee_value = NULL;
+    ctx->exact_go_callee_value = NULL;
     ctx->exact_channel_value = NULL;
     ctx->exact_channel_allocation_value = NULL;
 }
@@ -1040,8 +1047,9 @@ static bool aot_index_direct_local_callee_values(VerifyAuthority *ctx) {
     for (uint32_t i = 0; i < target_count; i++) {
         const XrSemanticCallTargetRecord *target =
             xr_semantic_plan_call_target(ctx->semantic, i);
+        if (target && target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            continue;
         if (!target || target->operation >= ctx->operation_count ||
-            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
             target_by_operation[target->operation] !=
                 XR_SEMANTIC_INDEX_NONE)
             goto invalid_authority;
@@ -1139,6 +1147,298 @@ static bool aot_index_direct_local_callee_values(VerifyAuthority *ctx) {
 invalid_authority:
     xr_free(target_by_operation);
     xr_free(use_count);
+    xr_free(invalid);
+    set_diag(ctx->diag,
+             XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+             (uint32_t) ctx->work, 0, 0);
+    return false;
+}
+
+typedef struct AotGoStoreRow {
+    uint32_t function;
+    uint32_t operation;
+    uint16_t slot;
+    uint8_t occupied;
+    uint8_t ambiguous;
+} AotGoStoreRow;
+
+static AotGoStoreRow *aot_go_store_lookup(
+    AotGoStoreRow *rows, uint32_t capacity, uint32_t function,
+    uint16_t slot, bool insert) {
+    uint32_t cursor =
+        (function * UINT32_C(3266489917) ^ (uint32_t) slot) &
+        (capacity - 1u);
+    for (uint32_t probe = 0; probe < capacity; probe++) {
+        AotGoStoreRow *row = &rows[cursor];
+        if (!row->occupied) {
+            if (!insert)
+                return NULL;
+            row->occupied = 1;
+            row->function = function;
+            row->slot = slot;
+            row->operation = XR_SEMANTIC_INDEX_NONE;
+            return row;
+        }
+        if (row->function == function && row->slot == slot)
+            return row;
+        cursor = (cursor + 1u) & (capacity - 1u);
+    }
+    return NULL;
+}
+
+static bool aot_go_store_is_initial_initializer(
+    const XrSemanticPlan *semantic, uint32_t function_index,
+    uint32_t store_index) {
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(semantic, function_index);
+    const XrSemanticOperationRecord *store =
+        xr_semantic_plan_operation(semantic, store_index);
+    const XrSemanticBlockRecord *entry =
+        function ? xr_semantic_plan_block(semantic, function->block_begin) : NULL;
+    if (!function || !store || !entry || entry->function != function_index ||
+        store->block != function->block_begin ||
+        store_index < entry->operation_begin ||
+        store_index >= entry->operation_begin + entry->operation_count)
+        return false;
+    for (uint32_t i = entry->operation_begin; i < store_index; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (!operation || operation->opcode == XI_CALL ||
+            operation->opcode == XI_TAIL_CALL ||
+            operation->opcode == XI_CALL_METHOD ||
+            operation->opcode == XI_CALL_METHOD_DIRECT ||
+            operation->opcode == XI_CALL_BUILTIN ||
+            operation->opcode == XI_GO ||
+            operation->opcode == XI_THREAD_SPAWN)
+            return false;
+    }
+    return true;
+}
+
+/* AOT rebuild is intentionally independent from both Target builder and
+ * Target verifier implementations. */
+static bool aot_index_direct_local_go_callee_values(VerifyAuthority *ctx) {
+    if (!ctx || ctx->operation_count > (1u << 24))
+        return false;
+    uint32_t store_capacity = 1;
+    while (store_capacity < ctx->operation_count * 2u)
+        store_capacity <<= 1u;
+    AotGoStoreRow *stores = NULL;
+    uint32_t *uses = NULL;
+    uint8_t *candidate = NULL;
+    uint8_t *invalid = NULL;
+    XrSemanticGraph graph = {0};
+    bool graph_ready = false;
+    if (!verify_alloc(ctx, store_capacity, sizeof(*stores),
+                      (void **) &stores) ||
+        !verify_alloc(ctx, ctx->value_count, sizeof(*uses),
+                      (void **) &uses) ||
+        !verify_alloc(ctx, ctx->value_count, sizeof(*candidate),
+                      (void **) &candidate) ||
+        !verify_alloc(ctx, ctx->value_count, sizeof(*invalid),
+                      (void **) &invalid) ||
+        !verify_alloc(ctx, ctx->value_count,
+                      sizeof(*ctx->go_callee_target_by_value),
+                      (void **) &ctx->go_callee_target_by_value) ||
+        !verify_alloc(ctx, ctx->value_count,
+                      sizeof(*ctx->exact_go_callee_value),
+                      (void **) &ctx->exact_go_callee_value)) {
+        xr_free(stores);
+        xr_free(uses);
+        xr_free(candidate);
+        xr_free(invalid);
+        return false;
+    }
+    for (uint32_t i = 0; i < ctx->value_count; i++)
+        ctx->go_callee_target_by_value[i] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < ctx->operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(ctx->semantic, i);
+        if (!operation)
+            goto rejected;
+        if (operation->opcode != XI_SET_SHARED ||
+            operation->semantic_immediate < 0 ||
+            operation->semantic_immediate > UINT16_MAX)
+            continue;
+        AotGoStoreRow *row = aot_go_store_lookup(
+            stores, store_capacity, operation->function,
+            (uint16_t) operation->semantic_immediate, true);
+        if (!row)
+            goto rejected;
+        if (row->operation != XR_SEMANTIC_INDEX_NONE)
+            row->ambiguous = 1;
+        else
+            row->operation = i;
+    }
+    char graph_error[128] = {0};
+    if (!xr_semantic_graph_build(ctx->semantic, &graph, graph_error,
+                                 sizeof(graph_error)))
+        goto rejected;
+    graph_ready = true;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(ctx->semantic, &operand_count);
+    for (uint32_t i = 0; i < ctx->operation_count; i++) {
+        const XrSemanticOperationRecord *use =
+            xr_semantic_plan_operation(ctx->semantic, i);
+        if (!use || use->operand_begin > operand_count ||
+            use->operand_count > operand_count - use->operand_begin)
+            goto rejected;
+        for (uint16_t a = 0; a < use->operand_count; a++) {
+            const XrSemanticOperandRecord *operand =
+                &operands[use->operand_begin + a];
+            const XrSemanticOperationRecord *load =
+                operand->value < ctx->value_count &&
+                        ctx->operation_by_value[operand->value] <
+                            ctx->operation_count
+                    ? xr_semantic_plan_operation(
+                          ctx->semantic,
+                          ctx->operation_by_value[operand->value])
+                    : NULL;
+            if (!load || load->opcode != XI_GET_SHARED || use->opcode != XI_GO)
+                continue;
+            uint32_t value = load->result_value;
+            candidate[value] = 1;
+            AotGoStoreRow *row =
+                load->semantic_immediate >= 0 &&
+                        load->semantic_immediate <= UINT16_MAX
+                    ? aot_go_store_lookup(
+                          stores, store_capacity, load->function,
+                          (uint16_t) load->semantic_immediate, false)
+                    : NULL;
+            const XrSemanticOperationRecord *store =
+                row && !row->ambiguous && row->operation < ctx->operation_count
+                    ? xr_semantic_plan_operation(ctx->semantic, row->operation)
+                    : NULL;
+            const XrSemanticOperandRecord *stored =
+                store && store->operand_count == 1 &&
+                        store->operand_begin < operand_count
+                    ? &operands[store->operand_begin]
+                    : NULL;
+            const XrSemanticOperationRecord *closure =
+                stored && stored->value < ctx->value_count &&
+                        ctx->operation_by_value[stored->value] <
+                            ctx->operation_count
+                    ? xr_semantic_plan_operation(
+                          ctx->semantic,
+                          ctx->operation_by_value[stored->value])
+                    : NULL;
+            uint32_t target = closure ? closure->callable_function
+                                      : XR_SEMANTIC_INDEX_NONE;
+            const XrSemanticFunctionRecord *callee =
+                xr_semantic_plan_function(ctx->semantic, target);
+            bool initialized = store &&
+                (store->block == load->block
+                     ? row->operation < ctx->operation_by_value[value]
+                     : xr_semantic_graph_dominates(&graph, store->block,
+                                                   load->block));
+            bool exact = row && !row->ambiguous && store && stored && closure &&
+                callee && a == 0 && initialized &&
+                aot_go_store_is_initial_initializer(
+                    ctx->semantic, store->function, row->operation) &&
+                store->opcode == XI_SET_SHARED &&
+                store->function == load->function &&
+                store->semantic_immediate == load->semantic_immediate &&
+                !store->allocation_key && aot_stable_id_is_zero(store->allocation_id) &&
+                store->constant == XR_SEMANTIC_INDEX_NONE &&
+                store->callable_function == XR_SEMANTIC_INDEX_NONE &&
+                store->effects == xi_generated_op_effects(XI_SET_SHARED) &&
+                store->result_ownership ==
+                    xi_generated_op_result_ownership(XI_SET_SHARED) &&
+                stored->role == XR_SEM_OPERAND_VALUE && stored->parameter == -1 &&
+                stored->transfer_mode == XR_TRANSFER_SHARE &&
+                stored->ownership_action == XR_SEM_OPERAND_CONSUME &&
+                stored->parameter_mode == XR_PARAM_READ &&
+                stored->access == XR_CALL_ARG_PLAIN &&
+                stored->origin == XI_PLACE_ORIGIN_NONE &&
+                stored->lifetime == XI_PLACE_LIFETIME_NONE &&
+                stored->escape == XI_PLACE_ESCAPE_NONE && stored->flags == 0 &&
+                closure->function == store->function &&
+                semantic_heap_closure_is_exact(ctx->semantic, closure) &&
+                use->function == load->function &&
+                use->operand_count == (uint16_t) (callee->parameter_count + 1u) &&
+                !use->allocation_key && aot_stable_id_is_zero(use->allocation_id) &&
+                use->constant == XR_SEMANTIC_INDEX_NONE &&
+                use->callable_function == XR_SEMANTIC_INDEX_NONE &&
+                use->effects == xi_generated_op_effects(XI_GO) &&
+                operand->value == value && operand->type == load->result_type &&
+                operand->role == XR_SEM_OPERAND_VALUE && operand->parameter == -1 &&
+                operand->transfer_mode == XR_TRANSFER_SHARE &&
+                operand->ownership_action == XR_SEM_OPERAND_BORROW &&
+                operand->parameter_mode == XR_PARAM_READ &&
+                operand->access == XR_CALL_ARG_PLAIN &&
+                operand->origin == XI_PLACE_ORIGIN_NONE &&
+                operand->lifetime == XI_PLACE_LIFETIME_NONE &&
+                operand->escape == XI_PLACE_ESCAPE_NONE && operand->flags == 0 &&
+                aot_direct_local_callee_type_is_exact(
+                    ctx->semantic, load, target);
+            for (uint16_t argument = 1; exact && argument < use->operand_count;
+                 argument++) {
+                const XrSemanticOperandRecord *arg =
+                    &operands[use->operand_begin + argument];
+                const XrSemanticParameterRecord *parameter =
+                    xr_semantic_plan_parameter(
+                        ctx->semantic,
+                        callee->parameter_begin + argument - 1u);
+                exact = parameter && arg->type == parameter->type &&
+                        arg->role == XR_SEM_OPERAND_VALUE && arg->parameter == -1 &&
+                        arg->parameter_mode == XR_PARAM_READ &&
+                        arg->access == XR_CALL_ARG_PLAIN &&
+                        arg->origin == XI_PLACE_ORIGIN_NONE &&
+                        arg->lifetime == XI_PLACE_LIFETIME_NONE &&
+                        arg->escape == XI_PLACE_ESCAPE_NONE && arg->flags == 0;
+            }
+            if (!exact ||
+                (ctx->go_callee_target_by_value[value] !=
+                     XR_SEMANTIC_INDEX_NONE &&
+                 ctx->go_callee_target_by_value[value] != target) ||
+                uses[value] == UINT32_MAX) {
+                invalid[value] = 1;
+                continue;
+            }
+            ctx->go_callee_target_by_value[value] = target;
+            uses[value]++;
+        }
+    }
+    for (uint32_t i = 0; i < ctx->operation_count; i++) {
+        const XrSemanticOperationRecord *use =
+            xr_semantic_plan_operation(ctx->semantic, i);
+        for (uint16_t a = 0; use && a < use->operand_count; a++) {
+            uint32_t value = operands[use->operand_begin + a].value;
+            if (value < ctx->value_count && candidate[value] &&
+                (use->opcode != XI_GO || a != 0))
+                invalid[value] = 1;
+        }
+    }
+    for (uint32_t i = 0; i < ctx->block_count; i++) {
+        const XrSemanticBlockRecord *block =
+            xr_semantic_plan_block(ctx->semantic, i);
+        if (block && block->control_value < ctx->value_count &&
+            candidate[block->control_value])
+            invalid[block->control_value] = 1;
+    }
+    xr_semantic_graph_dispose(&graph);
+    graph_ready = false;
+    for (uint32_t i = 0; i < ctx->value_count; i++) {
+        if (!candidate[i])
+            continue;
+        if (invalid[i] || uses[i] == 0 ||
+            ctx->go_callee_target_by_value[i] == XR_SEMANTIC_INDEX_NONE)
+            goto rejected;
+        ctx->exact_go_callee_value[i] = 1;
+    }
+    xr_free(stores);
+    xr_free(uses);
+    xr_free(candidate);
+    xr_free(invalid);
+    return true;
+
+rejected:
+    if (graph_ready)
+        xr_semantic_graph_dispose(&graph);
+    xr_free(stores);
+    xr_free(uses);
+    xr_free(candidate);
     xr_free(invalid);
     set_diag(ctx->diag,
              XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
@@ -1255,16 +1555,17 @@ static bool verify_heap_closure_type_authority(
     return true;
 }
 
-static bool verify_direct_local_callee_type_authority(
+static bool verify_static_shared_callable_type_authority(
     VerifyAuthority *ctx, const XrSemanticOperationRecord *operation,
-    const XiFunc *owner, const XiValue *live) {
+    const XiFunc *owner, const XiValue *live, const uint8_t *exact_values,
+    const uint32_t *targets) {
     if (!ctx || !operation || !owner || !live || !live->type ||
         operation->result_value >= ctx->value_count ||
-        !ctx->exact_direct_callee_value ||
-        !ctx->exact_direct_callee_value[operation->result_value])
+        !exact_values || !targets ||
+        !exact_values[operation->result_value])
         return false;
     uint32_t target_index =
-        ctx->direct_callee_target_by_value[operation->result_value];
+        targets[operation->result_value];
     const XrSemanticTypeRecord *semantic_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
     const XrSemanticFunctionRecord *semantic_target =
@@ -1329,6 +1630,23 @@ static bool verify_direct_local_callee_type_authority(
             return false;
     }
     return true;
+}
+
+
+static bool verify_direct_local_callee_type_authority(
+    VerifyAuthority *ctx, const XrSemanticOperationRecord *operation,
+    const XiFunc *owner, const XiValue *live) {
+    return verify_static_shared_callable_type_authority(
+        ctx, operation, owner, live, ctx->exact_direct_callee_value,
+        ctx->direct_callee_target_by_value);
+}
+
+static bool verify_direct_local_go_callee_type_authority(
+    VerifyAuthority *ctx, const XrSemanticOperationRecord *operation,
+    const XiFunc *owner, const XiValue *live) {
+    return verify_static_shared_callable_type_authority(
+        ctx, operation, owner, live, ctx->exact_go_callee_value,
+        ctx->go_callee_target_by_value);
 }
 
 static bool verify_authority_init(VerifyAuthority *ctx) {
@@ -1414,6 +1732,7 @@ static bool verify_authority_init(VerifyAuthority *ctx) {
         ctx->parameter_by_value[parameter->value] = i;
     }
     return aot_index_direct_local_callee_values(ctx) &&
+           aot_index_direct_local_go_callee_values(ctx) &&
            aot_index_channel_values(ctx);
 }
 
@@ -1623,6 +1942,11 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                                             operation->result_value]
                                   ? verify_direct_local_callee_type_authority(
                                         ctx, operation, function, value)
+                              : operation->result_value < ctx->value_count &&
+                                        ctx->exact_go_callee_value[
+                                            operation->result_value]
+                                  ? verify_direct_local_go_callee_type_authority(
+                                        ctx, operation, function, value)
                               : semantic_string_literal_is_exact(ctx->semantic,
                                                                  operation)
                                   ? verify_string_literal_type_authority(
@@ -1692,6 +2016,15 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                                   value->args[a]) &&
                                   operand->type == source_operation->result_type
                         : source_operation &&
+                                  source_operation->result_value <
+                                      ctx->value_count &&
+                                  ctx->exact_go_callee_value[
+                                      source_operation->result_value]
+                            ? verify_direct_local_go_callee_type_authority(
+                                  ctx, source_operation, function,
+                                  value->args[a]) &&
+                                  operand->type == source_operation->result_type
+                        : source_operation &&
                                   semantic_string_literal_is_exact(
                                       ctx->semantic, source_operation)
                             ? verify_string_literal_type_authority(
@@ -1726,6 +2059,12 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                                     ctx->exact_direct_callee_value[
                                         operation->result_value]
                               ? verify_direct_local_callee_type_authority(
+                                    ctx, operation, function, value)
+                          : operation &&
+                                    operation->result_value < ctx->value_count &&
+                                    ctx->exact_go_callee_value[
+                                        operation->result_value]
+                              ? verify_direct_local_go_callee_type_authority(
                                     ctx, operation, function, value)
                           : operation &&
                                     semantic_string_literal_is_exact(
@@ -2105,6 +2444,72 @@ static bool oracle_static_direct_local_callee_storage(
     return true;
 }
 
+static bool oracle_static_direct_local_go_callee_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind || !ctx->exact_go_callee_value ||
+        !ctx->exact_go_callee_value[semantic_value])
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index < ctx->operation_count
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    uint32_t target = ctx->go_callee_target_by_value[semantic_value];
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (operation && layouts[i].semantic_type == operation->result_type) {
+            if (layout)
+                return false;
+            layout = &layouts[i];
+        }
+    }
+    if (!operation || !binding || !register_rep || !memory_rep || !slot ||
+        !layout || !aot_direct_local_callee_type_is_exact(
+                       ctx->semantic, operation, target) ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static bool oracle_dynamic_channel_storage(
     const VerifyAuthority *ctx, uint32_t semantic_value,
     XrRep *out_storage, uint16_t *out_machine_kind) {
@@ -2205,6 +2610,24 @@ static bool oracle_direct_local_callee_use(
            match->calling_convention ==
                XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
            match->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
+}
+
+static bool oracle_direct_local_go_callee_use(
+    const VerifyAuthority *ctx, uint32_t operation_index,
+    uint16_t operand_index, uint32_t source_value) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    return ctx && operation && operand_index == 0 &&
+           source_value < ctx->value_count && ctx->exact_go_callee_value &&
+           ctx->exact_go_callee_value[source_value] &&
+           operation->opcode == XI_GO && operation->operand_count != 0 &&
+           operation->operand_begin < operand_count &&
+           operands[operation->operand_begin].value == source_value &&
+           ctx->go_callee_target_by_value[source_value] !=
+               XR_SEMANTIC_INDEX_NONE;
 }
 
 /* Rebuild the channel receive boundary from frozen SemanticPlan and
@@ -2369,6 +2792,10 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             if (ctx->exact_direct_callee_value &&
                 ctx->exact_direct_callee_value[semantic_value])
                 return oracle_static_direct_local_callee_storage(
+                    ctx, semantic_value, out_storage, out_machine_kind);
+            if (ctx->exact_go_callee_value &&
+                ctx->exact_go_callee_value[semantic_value])
+                return oracle_static_direct_local_go_callee_storage(
                     ctx, semantic_value, out_storage, out_machine_kind);
             XrRep machine_storage = XR_REP_TAGGED;
             if (!oracle_machine_storage(ctx, semantic_value,
@@ -2545,6 +2972,16 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         case XI_WIDEN_U32:
         case XI_NARROW_F32:
         case XI_WIDEN_F32:
+            return oracle_machine_storage(ctx, source_value, out_storage,
+                                          &ignored_kind);
+        case XI_GO:
+            if (operand_index == 0) {
+                if (!oracle_direct_local_go_callee_use(
+                        ctx, operation_index, operand_index, source_value))
+                    return false;
+                *out_storage = XR_REP_TAGGED;
+                return true;
+            }
             return oracle_machine_storage(ctx, source_value, out_storage,
                                           &ignored_kind);
         case XI_CHAN_NEW:
@@ -2822,10 +3259,13 @@ static bool authority_collect_obligations(CollectContext *ctx) {
         .parameter_by_value = ctx->parameter_by_value,
     };
     bool valid = aot_index_direct_local_callee_values(&oracle) &&
+                 aot_index_direct_local_go_callee_values(&oracle) &&
                  aot_index_channel_values(&oracle) &&
                  authority_collect_obligations_indexed(ctx, &oracle);
     xr_free(oracle.direct_callee_target_by_value);
     xr_free(oracle.exact_direct_callee_value);
+    xr_free(oracle.go_callee_target_by_value);
+    xr_free(oracle.exact_go_callee_value);
     xr_free(oracle.exact_channel_value);
     xr_free(oracle.exact_channel_allocation_value);
     return valid;
@@ -3014,7 +3454,7 @@ static bool index_materialized_callee_authority(
     return true;
 }
 
-static bool verify_direct_local_callee_materialization(
+static bool verify_static_shared_callable_materialization(
     const XrAotRefinementPlanView *view, const XiFunc *root,
     const XrTargetPlan *target_plan, const XiRepPolicy *policy,
     XrAotRefinementDiagnostic *diag) {
@@ -3036,7 +3476,9 @@ static bool verify_direct_local_callee_materialization(
         valid = index_materialized_callee_authority(
             &ctx, root, function_by_index, 0);
     for (uint32_t value = 0; valid && value < ctx.value_count; value++) {
-        if (!ctx.exact_direct_callee_value[value])
+        bool direct = ctx.exact_direct_callee_value[value] != 0;
+        bool go = ctx.exact_go_callee_value[value] != 0;
+        if (!direct && !go)
             continue;
         uint32_t operation_index = ctx.operation_by_value[value];
         const XrSemanticOperationRecord *operation =
@@ -3057,8 +3499,10 @@ static bool verify_direct_local_callee_materialization(
             !materialized_operation_shape_matches(
                 operation, live,
                 value - semantic_function->value_begin) ||
-            !verify_direct_local_callee_type_authority(
-                &ctx, operation, owner, live)) {
+            !(direct ? verify_direct_local_callee_type_authority(
+                           &ctx, operation, owner, live)
+                     : verify_direct_local_go_callee_type_authority(
+                           &ctx, operation, owner, live))) {
             set_diag(diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY,
                      operation_index, value, operation_index);
             valid = false;
@@ -3089,7 +3533,8 @@ static bool verify_direct_local_callee_materialization(
             uint32_t source_value =
                 operands[operation->operand_begin + a].value;
             if (source_value >= ctx.value_count ||
-                !ctx.exact_direct_callee_value[source_value])
+                (!ctx.exact_direct_callee_value[source_value] &&
+                 !ctx.exact_go_callee_value[source_value]))
                 continue;
             uint32_t local_value =
                 operation->result_value - semantic_function->value_begin;
@@ -3097,8 +3542,11 @@ static bool verify_direct_local_callee_materialization(
                              operation, user, local_value) ||
                 !user->args || a >= user->nargs ||
                 user->args[a] != ctx.live_by_value[source_value] ||
-                !oracle_direct_local_callee_use(
-                    &ctx, i, a, source_value)) {
+                !(ctx.exact_direct_callee_value[source_value]
+                      ? oracle_direct_local_callee_use(
+                            &ctx, i, a, source_value)
+                      : oracle_direct_local_go_callee_use(
+                            &ctx, i, a, source_value))) {
                 set_diag(diag, XR_AOT_REFINEMENT_USE_SITE, i,
                          source_value, i);
                 valid = false;
@@ -3209,7 +3657,7 @@ bool xr_aot_representation_materialization_verify(
     if (!verify_immutable_authority_coverage(
             view, target_plan, effective_policy, diag))
         return false;
-    if (!verify_direct_local_callee_materialization(
+    if (!verify_static_shared_callable_materialization(
             view, root, target_plan, effective_policy, diag))
         return false;
     XrFingerprint expected_policy =

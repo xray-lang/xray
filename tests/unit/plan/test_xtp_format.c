@@ -5,6 +5,7 @@
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_stage.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/format/xr_artifact_kind.h"
 #include "../../../src/plan/format/xr_xsm_schema.h"
@@ -33,6 +34,7 @@
 
 typedef struct XtpFixture {
     XrSemanticPlan *semantic;
+    XrSemanticPlan *dependency;
     XrTargetProfile *profile;
     XrTargetPlan *plan;
     uint8_t *bytes;
@@ -59,6 +61,31 @@ static XrType stub_channel = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_int},
 };
+static XrType stub_module_namespace = {
+    .kind = XR_KIND_STRUCT_OBJECT,
+    .id = 5,
+    .frozen = true,
+};
+
+static int source_export_call_suspendability(void *ud, const XiFunc *current,
+                                             const XiValue *call) {
+    (void) ud;
+    (void) current;
+    return call && call->op == XI_CALL_METHOD && call->aux &&
+                   strcmp((const char *) call->aux, "writeBytes") == 0
+               ? 1
+               : -1;
+}
+
+static const XiFunc *source_export_resolve_method(void *ud,
+                                                  const XiFunc *current,
+                                                  const XiValue *call) {
+    (void) current;
+    return ud && call && call->op == XI_CALL_METHOD && call->aux &&
+                   strcmp((const char *) call->aux, "writeBytes") == 0
+               ? (const XiFunc *) ud
+               : NULL;
+}
 
 static XrSemanticPlan *build_semantic_plan(void) {
     XiFunc *function = xi_func_new("xtp_probe", &stub_int);
@@ -147,6 +174,125 @@ static XrSemanticPlan *build_channel_close_semantic_plan(void) {
                                    sizeof(error)));
     REQUIRE(semantic != NULL);
     xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_source_export_semantic_plan(
+    XrSemanticPlan **dependency_out) {
+    XiFunc *dependency_root = xi_func_new("xtp_net_init", &stub_unit);
+    XiFunc *write_bytes = xi_func_new("writeBytes", &stub_unit);
+    REQUIRE(dependency_root && write_bytes);
+    XiBlock *dependency_entry = xi_block_new(dependency_root);
+    XiBlock *write_entry = xi_block_new(write_bytes);
+    REQUIRE(dependency_entry && write_entry);
+    dependency_entry->sealed = write_entry->sealed = true;
+    dependency_root->children =
+        (XiFunc **) xr_calloc(1, sizeof(*dependency_root->children));
+    REQUIRE(dependency_root->children);
+    dependency_root->children[0] = write_bytes;
+    dependency_root->nchildren = dependency_root->children_cap = 1;
+    write_bytes->parent_func = dependency_root;
+    XiValue *closure = xi_value_new(dependency_root, dependency_entry,
+                                    XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *store = xi_value_new(dependency_root, dependency_entry,
+                                  XI_SET_SHARED, &stub_unit, 1);
+    REQUIRE(closure && store);
+    closure->aux = write_bytes;
+    store->args[0] = closure;
+    store->aux_int = 0;
+    dependency_root->nshared = 1;
+    xi_block_set_return(dependency_entry, NULL);
+    REQUIRE(xi_value_new(write_bytes, write_entry, XI_YIELD, &stub_unit, 0));
+    xi_block_set_return(write_entry, NULL);
+    dependency_root->stage = write_bytes->stage = XI_STAGE_SEMANTIC_LOWERED;
+    dependency_root->invariant_mask = write_bytes->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(dependency_root, NULL));
+    dependency_root->stage = write_bytes->stage = XI_STAGE_OPTIMIZED;
+    XiModule *dependency_module =
+        xi_module_new("stdlib/net/net.xr", "net", dependency_root);
+    REQUIRE(dependency_module);
+    dependency_root->module = dependency_module;
+    dependency_module->nslots = 1;
+    dependency_module->nexports = 1;
+    dependency_module->exports =
+        (XiModuleExport *) xr_calloc(1, sizeof(*dependency_module->exports));
+    REQUIRE(dependency_module->exports);
+    dependency_module->exports[0].name = "writeBytes";
+    dependency_module->exports[0].shared_slot = 0;
+    dependency_module->exports[0].function = write_bytes;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(dependency_root, error,
+                                              sizeof(error)));
+    XrSemanticPlan *dependency =
+        xr_semantic_plan_retain(dependency_root->semantic_plan);
+    REQUIRE(dependency);
+
+    XiFunc *caller_root = xi_func_new("xtp_http_init", &stub_unit);
+    XiFunc *caller = xi_func_new("_serverWriteAll", &stub_unit);
+    REQUIRE(caller_root && caller);
+    XiBlock *root_entry = xi_block_new(caller_root);
+    XiBlock *caller_entry = xi_block_new(caller);
+    REQUIRE(root_entry && caller_entry);
+    root_entry->sealed = caller_entry->sealed = true;
+    caller_root->children =
+        (XiFunc **) xr_calloc(1, sizeof(*caller_root->children));
+    REQUIRE(caller_root->children);
+    caller_root->children[0] = caller;
+    caller_root->nchildren = caller_root->children_cap = 1;
+    caller->parent_func = caller_root;
+    XiImportRef import_ref = {
+        .module_path = "stdlib/net/net.xr",
+        .resolved_mod_index = 0,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolved_module = dependency_module,
+    };
+    XiValue *namespace_ref = xi_value_new(caller_root, root_entry,
+                                          XI_IMPORT_REF,
+                                          &stub_module_namespace, 0);
+    XiValue *namespace_store = xi_value_new(caller_root, root_entry,
+                                            XI_SET_SHARED, &stub_unit, 1);
+    REQUIRE(namespace_ref && namespace_store);
+    namespace_ref->aux = &import_ref;
+    namespace_store->args[0] = namespace_ref;
+    namespace_store->aux_int = 0;
+    caller_root->nshared = 1;
+    xi_block_set_return(root_entry, NULL);
+    XiValue *receiver = xi_value_new(caller, caller_entry, XI_GET_SHARED,
+                                     &stub_module_namespace, 0);
+    XiValue *method = xi_value_new(caller, caller_entry, XI_CALL_METHOD,
+                                   &stub_unit, 1);
+    REQUIRE(receiver && method);
+    receiver->aux_int = 0;
+    method->args[0] = receiver;
+    method->aux = (void *) "writeBytes";
+    method->aux_int = 0;
+    xi_block_set_return(caller_entry, method);
+    caller_root->stage = caller->stage = XI_STAGE_SEMANTIC_LOWERED;
+    caller_root->invariant_mask = caller->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    XiCoroResolver resolver = {
+        .resolve_method = source_export_resolve_method,
+        .call_suspendability = source_export_call_suspendability,
+        .ud = write_bytes,
+    };
+    REQUIRE(xi_coro_lower(caller_root, &resolver));
+    caller_root->stage = caller->stage = XI_STAGE_OPTIMIZED;
+    XiModule *caller_module =
+        xi_module_new("stdlib/http/http.xr", "http", caller_root);
+    REQUIRE(caller_module);
+    caller_root->module = caller_module;
+    caller_module->nslots = 1;
+    XiModule *dependency_modules[] = {dependency_module};
+    REQUIRE(xr_semantic_plan_build_and_attach_module_set(
+        caller_root, dependency_modules, 1, error, sizeof(error)));
+    XrSemanticPlan *semantic =
+        xr_semantic_plan_retain(caller_root->semantic_plan);
+    REQUIRE(semantic);
+    xi_func_free(caller_root);
+    xi_func_free(dependency_root);
+    *dependency_out = dependency;
     return semantic;
 }
 
@@ -412,11 +558,29 @@ static XtpFixture make_channel_close_fixture(void) {
     return make_fixture_from_semantic(build_channel_close_semantic_plan());
 }
 
+static XtpFixture make_source_export_fixture(void) {
+    XtpFixture fixture = {0};
+    fixture.semantic =
+        build_source_export_semantic_plan(&fixture.dependency);
+    fixture.profile = build_profile();
+    const XrSemanticPlan *dependencies[] = {fixture.dependency};
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build_module_set(
+        fixture.semantic, dependencies, 1, fixture.profile, &fixture.plan,
+        error, sizeof(error)));
+    REQUIRE(xr_target_plan_is_verified(fixture.plan));
+    REQUIRE(xr_xtp_encode_plan(fixture.plan, &fixture.bytes, &fixture.size,
+                               error, sizeof(error)));
+    REQUIRE(fixture.bytes && fixture.size >= XR_XTP_HEADER_SIZE);
+    return fixture;
+}
+
 static void dispose_fixture(XtpFixture *fixture) {
     xr_xtp_encoded_free(fixture->bytes);
     xr_target_plan_free(fixture->plan);
     xr_target_profile_free(fixture->profile);
     xr_semantic_plan_free(fixture->semantic);
+    xr_semantic_plan_free(fixture->dependency);
     memset(fixture, 0, sizeof(*fixture));
 }
 
@@ -517,11 +681,15 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     xr_target_plan_free(decoded_plan);
     xr_xtp_candidate_release(candidate);
 
-    uint8_t *old_v11 = copy_artifact(&fixture);
-    xr_xtp_put_u32(old_v11 + 4, UINT32_C(11));
-    resign_artifact(old_v11, fixture.size);
-    expect_decode_failure(old_v11, fixture.size);
-    xr_free(old_v11);
+    const uint32_t rejected_schemas[] = {UINT32_C(12), UINT32_C(13)};
+    for (size_t i = 0;
+         i < sizeof(rejected_schemas) / sizeof(rejected_schemas[0]); i++) {
+        uint8_t *old_schema = copy_artifact(&fixture);
+        xr_xtp_put_u32(old_schema + 4, rejected_schemas[i]);
+        resign_artifact(old_schema, fixture.size);
+        expect_decode_failure(old_schema, fixture.size);
+        xr_free(old_schema);
+    }
 
     uint8_t *mutated_profile = copy_artifact(&fixture);
     uint8_t *profile_entry =
@@ -602,12 +770,12 @@ static void test_channel_close_row_roundtrip_and_mutate(void) {
                 XR_SEMANTIC_INDEX_NONE &&
             xr_xtp_take_u32(fixture.bytes + call_offset + 32) ==
                 XR_SEMANTIC_INDEX_NONE &&
-            xr_xtp_take_u32(fixture.bytes + call_offset + 44) ==
+            xr_xtp_take_u32(fixture.bytes + call_offset + 84) ==
                 XR_SEMANTIC_INDEX_NONE &&
-            xr_xtp_take_u16(fixture.bytes + call_offset + 68) == 0 &&
-            fixture.bytes[call_offset + 76] ==
+            xr_xtp_take_u16(fixture.bytes + call_offset + 108) == 0 &&
+            fixture.bytes[call_offset + 116] ==
                 XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
-            fixture.bytes[call_offset + 77] ==
+            fixture.bytes[call_offset + 117] ==
                 XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
 
     XrXtpCandidate *candidate = NULL;
@@ -631,11 +799,11 @@ static void test_channel_close_row_roundtrip_and_mutate(void) {
     static const size_t mutations[] = {
         20, /* semantic_call_target */
         32, /* callee_function */
-        44, /* caller_storage_slot */
-        68, /* argument_count */
-        74, /* flags */
-        76, /* calling_convention */
-        77, /* target_kind */
+        84, /* caller_storage_slot */
+        108, /* argument_count */
+        114, /* flags */
+        116, /* calling_convention */
+        117, /* target_kind */
     };
     for (uint32_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
         uint8_t *copy = copy_artifact(&fixture);
@@ -645,6 +813,78 @@ static void test_channel_close_row_roundtrip_and_mutate(void) {
         resign_section(copy, XR_XTP_SECTION_CALLS);
         resign_artifact(copy, fixture.size);
         expect_materialize_failure(&fixture, copy);
+        xr_free(copy);
+    }
+    dispose_fixture(&fixture);
+}
+
+static void test_source_export_row_roundtrip_and_mutate(void) {
+    XtpFixture fixture = make_source_export_fixture();
+    uint32_t count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(fixture.plan, &count);
+    REQUIRE(calls && count == 1 && calls[0].source_dependency == 0 &&
+            calls[0].source_export == 0 &&
+            calls[0].callee_function == XR_SEMANTIC_INDEX_NONE &&
+            calls[0].argument_count == 0 &&
+            calls[0].calling_convention ==
+                XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
+            calls[0].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
+            calls[0].flags == XR_TARGET_CALL_SUSPEND);
+    const XrSemanticPlan *dependencies[] = {fixture.dependency};
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *decoded = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
+                                    error, sizeof(error)));
+    REQUIRE(!xr_xtp_materialize_target_plan(
+        candidate, fixture.semantic, fixture.profile, &decoded, error,
+        sizeof(error)));
+    REQUIRE(decoded == NULL);
+    REQUIRE(xr_xtp_materialize_target_plan_module_set(
+        candidate, fixture.semantic, dependencies, 1, fixture.profile,
+        &decoded, error, sizeof(error)));
+    const XrTargetCallRecord *decoded_calls =
+        xr_target_plan_calls(decoded, &count);
+    REQUIRE(decoded_calls && count == 1 &&
+            decoded_calls[0].source_dependency == 0 &&
+            xr_stable_id_equal(decoded_calls[0].source_export_identity,
+                               calls[0].source_export_identity) &&
+            xr_stable_id_equal(decoded_calls[0].source_callee_identity,
+                               calls[0].source_callee_identity) &&
+            xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
+                                 xr_target_plan_fingerprint(fixture.plan)));
+    xr_target_plan_free(decoded);
+    xr_xtp_candidate_release(candidate);
+
+    static const size_t mutations[] = {
+        36, /* source_dependency */
+        40, /* source_export */
+        44, /* source_export_identity */
+        60, /* source_callee_identity */
+        76, /* result_value */
+        80, /* result_slot */
+        108, /* argument_count */
+        114, /* flags */
+        116, /* calling_convention */
+        117, /* target_kind */
+    };
+    for (uint32_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
+        uint8_t *copy = copy_artifact(&fixture);
+        uint8_t *entry = directory_entry(copy, XR_XTP_SECTION_CALLS);
+        size_t offset = (size_t) xr_xtp_take_u64(entry + 8);
+        copy[offset + mutations[i]] ^= 1;
+        resign_section(copy, XR_XTP_SECTION_CALLS);
+        resign_artifact(copy, fixture.size);
+        candidate = NULL;
+        REQUIRE(xr_xtp_decode_candidate(copy, fixture.size, &candidate, error,
+                                        sizeof(error)));
+        decoded = (XrTargetPlan *) (uintptr_t) 1;
+        REQUIRE(!xr_xtp_materialize_target_plan_module_set(
+            candidate, fixture.semantic, dependencies, 1, fixture.profile,
+            &decoded, error, sizeof(error)));
+        REQUIRE(decoded == NULL);
+        xr_xtp_candidate_release(candidate);
         xr_free(copy);
     }
     dispose_fixture(&fixture);
@@ -1051,7 +1291,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0, 448, 58, 12, 24, 108, 24, 40, 24, 12,
-        48, 58, 32, 114, 50, 20, 4, 20, 44, 12, 44,
+        48, 58, 32, 154, 50, 20, 4, 20, 44, 12, 44,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {
@@ -1342,6 +1582,7 @@ int main(int argc, char **argv) {
     test_exact_roundtrip_and_owned_candidate();
     test_direct_call_rows_roundtrip_and_mutate();
     test_channel_close_row_roundtrip_and_mutate();
+    test_source_export_row_roundtrip_and_mutate();
     test_coroutine_rows_roundtrip_and_mutate();
     test_header_and_directory_mutations();
     test_identity_and_typed_mutations();

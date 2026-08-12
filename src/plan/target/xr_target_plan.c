@@ -56,7 +56,8 @@ static bool copy_table(void **out, const void *source, uint32_t count, size_t it
 }
 
 static bool draft_within_budget(const XrTargetPlanDraft *draft) {
-    if (!(draft->machine_reps_count <= 256u && draft->value_reps_count <= 40000000u &&
+    if (!(draft->semantic_dependency_count <= 1024u &&
+           draft->machine_reps_count <= 256u && draft->value_reps_count <= 40000000u &&
            draft->extents_count <= 1000000u &&
            draft->layouts_count <= 1000000u && draft->fields_count <= 16000000u &&
            draft->storage_count <= 4000000u && draft->allocations_count <= 10000000u &&
@@ -69,6 +70,11 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
            draft->coroutines_count <= 10000000u))
         return false;
     size_t total = sizeof(XrTargetPlan);
+    if (draft->semantic_dependency_count >
+        (SIZE_MAX - total) / sizeof(*draft->semantic_dependencies))
+        return false;
+    total += (size_t) draft->semantic_dependency_count *
+             sizeof(*draft->semantic_dependencies);
 #define XR_ADD_DRAFT_BYTES(name)                                                                  \
     do {                                                                                          \
         if (draft->name##_count > (SIZE_MAX - total) / sizeof(*draft->name))                      \
@@ -270,6 +276,10 @@ static void hash_call_base(XrSHA256Context *ctx, const XrTargetCallRecord *recor
     hash_u64(ctx, record->semantic_operation);
     hash_u64(ctx, record->caller_function);
     hash_u64(ctx, record->callee_function);
+    hash_u64(ctx, record->source_dependency);
+    hash_u64(ctx, record->source_export);
+    hash_id(ctx, record->source_export_identity);
+    hash_id(ctx, record->source_callee_identity);
     hash_u64(ctx, record->result_value);
     hash_u64(ctx, record->result_slot);
     hash_u64(ctx, record->caller_storage_slot);
@@ -378,7 +388,7 @@ void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t lay
 
 void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_index,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-call-v4\0";
+    static const uint8_t domain[] = "xray-target-call-v5\0";
     const XrTargetCallRecord *call = &plan->calls[call_index];
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
@@ -411,7 +421,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v12\0";
+    static const uint8_t domain[] = "xray-target-plan-v14\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -498,7 +508,16 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         return false;
     }
     char semantic_error[512] = {0};
-    if (!xr_semantic_plan_verify(draft->semantic_plan, semantic_error, sizeof(semantic_error))) {
+    bool semantic_verified = draft->semantic_dependency_count == 0
+                                 ? xr_semantic_plan_verify(
+                                       draft->semantic_plan, semantic_error,
+                                       sizeof(semantic_error))
+                                 : xr_semantic_plan_verify_module_set(
+                                       draft->semantic_plan,
+                                       draft->semantic_dependencies,
+                                       draft->semantic_dependency_count,
+                                       semantic_error, sizeof(semantic_error));
+    if (!semantic_verified) {
         set_error(error, error_size, "XR_TARGET_1000", "semantic plan is not exactly verified");
         return false;
     }
@@ -514,6 +533,23 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
     plan->completed_family_mask = draft->completed_family_mask;
     plan->semantic_plan = xr_semantic_plan_retain((XrSemanticPlan *) draft->semantic_plan);
     plan->semantic_fingerprint = xr_semantic_plan_fingerprint(draft->semantic_plan);
+    plan->semantic_dependency_count = draft->semantic_dependency_count;
+    if (plan->semantic_dependency_count) {
+        if (!draft->semantic_dependencies ||
+            plan->semantic_dependency_count >
+                SIZE_MAX / sizeof(*plan->semantic_dependencies))
+            goto fail;
+        plan->semantic_dependencies = (XrSemanticPlan **) xr_calloc(
+            plan->semantic_dependency_count, sizeof(*plan->semantic_dependencies));
+        if (!plan->semantic_dependencies)
+            goto fail;
+        for (uint32_t i = 0; i < plan->semantic_dependency_count; i++) {
+            plan->semantic_dependencies[i] = xr_semantic_plan_retain(
+                (XrSemanticPlan *) draft->semantic_dependencies[i]);
+            if (!plan->semantic_dependencies[i])
+                goto fail;
+        }
+    }
     plan->profile = xr_target_profile_retain(draft->profile);
     XR_COPY_DRAFT_TABLE(machine_reps, XrTargetMachineRepRecord);
     XR_COPY_DRAFT_TABLE(value_reps, XrTargetValueRepRecord);
@@ -553,10 +589,12 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
         bool channel_close =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
-        if ((!direct_local && !channel_close) ||
+        bool source_export =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
+        if ((!direct_local && !channel_close && !source_export) ||
             plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
-            (direct_local &&
+            ((direct_local || source_export) &&
              plan->calls[i].semantic_call_target >=
                  xr_semantic_plan_call_target_count(plan->semantic_plan)) ||
             (channel_close &&
@@ -612,6 +650,9 @@ void xr_target_plan_free(XrTargetPlan *plan) {
     if (atomic_fetch_sub_explicit(&plan->references, 1, memory_order_acq_rel) != 1)
         return;
     xr_semantic_plan_free(plan->semantic_plan);
+    for (uint32_t i = 0; i < plan->semantic_dependency_count; i++)
+        xr_semantic_plan_free(plan->semantic_dependencies[i]);
+    xr_free(plan->semantic_dependencies);
     xr_target_profile_free(plan->profile);
 #define XR_FREE_TARGET_TABLE(name) xr_free(plan->name)
     XR_FREE_TARGET_TABLE(machine_reps);

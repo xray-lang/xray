@@ -22,6 +22,7 @@
 #endif
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_opt.h"
+#include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/aot/xaot_bundle.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
@@ -115,6 +116,17 @@ typedef struct DirectLocalCalleeStorageFixture {
     XrTargetPlan *target_plan;
 } DirectLocalCalleeStorageFixture;
 
+typedef struct DirectLocalGoCalleeStorageFixture {
+    XiFunc *function;
+    XiFunc *child;
+    XiFunc *decoy;
+    XiBlock *entry;
+    XiValue *load;
+    XiValue *go;
+    XrTargetProfile *target_profile;
+    XrTargetPlan *target_plan;
+} DirectLocalGoCalleeStorageFixture;
+
 typedef struct FailingBackend {
     bool begun;
     bool aborted;
@@ -194,6 +206,17 @@ static XrType opaque_callable = {
     .id = 6,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
+};
+
+static XrType direct_local_go_closure = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 7,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function = {
+        .return_type = &scalar_unit,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
 };
 
 static XrSemanticPlan *build_semantic_plan(void) {
@@ -547,6 +570,106 @@ static void direct_local_callee_storage_fixture_free(
     memset(fixture, 0, sizeof(*fixture));
 }
 
+static DirectLocalGoCalleeStorageFixture
+direct_local_go_callee_storage_fixture_create(bool extra_use,
+                                               bool second_store) {
+    DirectLocalGoCalleeStorageFixture fixture = {0};
+    fixture.function = xi_func_new("direct_local_shared_go", &scalar_unit);
+    fixture.child = xi_func_new("direct_local_go_target", &scalar_unit);
+    fixture.decoy = xi_func_new("direct_local_go_decoy", &scalar_unit);
+    REQUIRE(fixture.function && fixture.child && fixture.decoy);
+    fixture.entry = xi_block_new(fixture.function);
+    XiBlock *child_entry = xi_block_new(fixture.child);
+    XiBlock *decoy_entry = xi_block_new(fixture.decoy);
+    REQUIRE(fixture.entry && child_entry && decoy_entry);
+    xi_block_set_return(child_entry, NULL);
+    xi_block_set_return(decoy_entry, NULL);
+    fixture.function->children =
+        (XiFunc **) xr_calloc(2, sizeof(*fixture.function->children));
+    REQUIRE(fixture.function->children != NULL);
+    fixture.function->children[0] = fixture.child;
+    fixture.function->children[1] = fixture.decoy;
+    fixture.function->nchildren = fixture.function->children_cap = 2;
+    fixture.child->parent_func = fixture.function;
+    fixture.decoy->parent_func = fixture.function;
+    XiValue *closure = xi_value_new(fixture.function, fixture.entry,
+                                    XI_CLOSURE_NEW,
+                                    &direct_local_go_closure, 0);
+    XiValue *store = xi_value_new(fixture.function, fixture.entry,
+                                  XI_SET_SHARED, &scalar_unit, 1);
+    fixture.load = xi_value_new(fixture.function, fixture.entry,
+                                XI_GET_SHARED, &opaque_callable, 0);
+    fixture.go = xi_value_new(fixture.function, fixture.entry,
+                              XI_GO, &scalar_unit, 1);
+    REQUIRE(closure && store && fixture.load && fixture.go);
+    closure->aux = fixture.child;
+    store->aux_int = 0;
+    store->args[0] = closure;
+    if (second_store) {
+        XiValue *decoy_closure = xi_value_new(
+            fixture.function, fixture.entry, XI_CLOSURE_NEW,
+            &direct_local_go_closure, 0);
+        XiValue *duplicate = xi_value_new(
+            fixture.function, fixture.entry, XI_SET_SHARED,
+            &scalar_unit, 1);
+        REQUIRE(decoy_closure && duplicate);
+        decoy_closure->aux = fixture.decoy;
+        duplicate->aux_int = 0;
+        duplicate->args[0] = decoy_closure;
+    }
+    fixture.load->aux_int = 0;
+    fixture.go->args[0] = fixture.load;
+    fixture.go->flags |= XI_FLAG_FIRE_AND_FORGET;
+    if (extra_use) {
+        XiValue *unexpected = xi_value_new(
+            fixture.function, fixture.entry, XI_PRINT, &scalar_unit, 1);
+        REQUIRE(unexpected != NULL);
+        unexpected->args[0] = fixture.load;
+    }
+    xi_block_set_return(fixture.entry, NULL);
+    fixture.function->nshared = 1;
+    fixture.function->shared_slot_funcs = (XiFunc **) xi_func_arena_alloc(
+        fixture.function, sizeof(*fixture.function->shared_slot_funcs));
+    REQUIRE(fixture.function->shared_slot_funcs != NULL);
+    fixture.function->shared_slot_funcs[0] = fixture.child;
+    fixture.function->shared_slot_func_count = 1;
+    fixture.entry->sealed = child_entry->sealed = decoy_entry->sealed = true;
+    fixture.function->stage = fixture.child->stage =
+        fixture.decoy->stage = XI_STAGE_SEMANTIC_LOWERED;
+    fixture.function->invariant_mask = fixture.child->invariant_mask =
+        fixture.decoy->invariant_mask =
+            xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(fixture.function, NULL));
+    fixture.function->stage = fixture.child->stage =
+        fixture.decoy->stage = XI_STAGE_OPTIMIZED;
+    char error[512] = {0};
+    bool semantic_built = xr_semantic_plan_build_and_attach(
+        fixture.function, error, sizeof(error));
+    if (!semantic_built)
+        fprintf(stderr, "go fixture SemanticPlan failed: %s\n", error);
+    REQUIRE(semantic_built);
+    fixture.target_profile = build_target_profile();
+    bool built = xr_target_plan_build(
+        fixture.function->semantic_plan, fixture.target_profile,
+        &fixture.target_plan, error, sizeof(error));
+    if (extra_use || second_store)
+        REQUIRE(!built && fixture.target_plan == NULL);
+    else {
+        if (!built)
+            fprintf(stderr, "go fixture TargetPlan failed: %s\n", error);
+        REQUIRE(built && fixture.target_plan != NULL);
+    }
+    return fixture;
+}
+
+static void direct_local_go_callee_storage_fixture_free(
+    DirectLocalGoCalleeStorageFixture *fixture) {
+    xr_target_plan_free(fixture->target_plan);
+    xr_target_profile_free(fixture->target_profile);
+    xi_func_free(fixture->function);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
 static XrAotRefinementPlan *build_refused_plan(
     const RefinementFixture *fixture, XrAotRefinementDiagnostic *diag) {
     XrAotRefinementBuilder *builder =
@@ -699,7 +822,7 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(xr_aot_backend_run(&view, fixture.target_plan,
                                xr_aot_test_backend_interface(), &test_backend,
                                &stats, &diag));
-    REQUIRE(strstr(emission, "families=00000000000001ff") != NULL);
+    REQUIRE(strstr(emission, "families=00000000000003ff") != NULL);
     REQUIRE(strstr(emission, "transform=direct-call decision=refused") != NULL);
     REQUIRE(strstr(emission,
                    "issue=XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE") != NULL);
@@ -1302,6 +1425,103 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
     DirectLocalCalleeStorageFixture extra_use =
         direct_local_callee_storage_fixture_create(true);
     direct_local_callee_storage_fixture_free(&extra_use);
+}
+
+static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
+    DirectLocalGoCalleeStorageFixture fixture =
+        direct_local_go_callee_storage_fixture_create(false, false);
+    REQUIRE((fixture.target_plan->completed_family_mask &
+             XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE) != 0);
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    char error[512] = {0};
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        fixture.target_plan, fixture.function, fixture.load,
+        &semantic_function, &semantic_value, error, sizeof(error)));
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(fixture.target_plan, semantic_value);
+    const XrTargetMachineRepRecord *machine =
+        binding ? xr_target_plan_machine_rep(fixture.target_plan,
+                                              binding->register_rep)
+                : NULL;
+    REQUIRE(binding && machine &&
+            machine->kind == XR_MACHINE_REP_DYN_VALUE &&
+            machine->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            machine->root_kind == XR_TARGET_ROOT_DYNAMIC);
+
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(
+        fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile),
+        &emission, error, sizeof(error)));
+    XrCValueEmissionView value = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+        emission, semantic_value, &value, error, sizeof(error)));
+    REQUIRE(value.rep == XR_C_VALUE_REP_TAGGED &&
+            value.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
+            strcmp(value.c_type, "XrValue") == 0);
+    xr_c_emission_plan_free(emission);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, &policy, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count == 0);
+    xi_opt_refresh_representations_with_policy(fixture.function, &policy);
+    REQUIRE(fixture.load->rep == XR_REP_TAGGED &&
+            fixture.go->args[0] == fixture.load);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    fixture.function->shared_slot_funcs[0] = fixture.decoy;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY &&
+            diag.semantic_value == semantic_value);
+    fixture.function->shared_slot_funcs[0] = fixture.child;
+    XiValue *saved = fixture.go->args[0];
+    fixture.go->args[0] = fixture.go;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE &&
+            diag.semantic_value == semantic_value);
+    fixture.go->args[0] = saved;
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    uint64_t families = fixture.target_plan->completed_family_mask;
+    XrFingerprint fingerprint = fixture.target_plan->fingerprint;
+    fixture.target_plan->completed_family_mask &=
+        ~XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE;
+    xr_target_plan_compute_fingerprint(fixture.target_plan,
+                                       &fixture.target_plan->fingerprint);
+    REQUIRE(!xr_target_plan_verify(fixture.target_plan, error,
+                                   sizeof(error)));
+    fixture.target_plan->completed_family_mask = families;
+    fixture.target_plan->fingerprint = fingerprint;
+
+    uint32_t machine_rep_index = binding->register_rep;
+    uint16_t ownership =
+        fixture.target_plan->machine_reps[machine_rep_index].ownership;
+    fixture.target_plan->machine_reps[machine_rep_index].ownership =
+        XR_TARGET_OWNERSHIP_OWNED;
+    xr_target_plan_compute_fingerprint(fixture.target_plan,
+                                       &fixture.target_plan->fingerprint);
+    REQUIRE(!xr_target_plan_verify(fixture.target_plan, error,
+                                   sizeof(error)));
+    fixture.target_plan->machine_reps[machine_rep_index].ownership = ownership;
+    fixture.target_plan->fingerprint = fingerprint;
+
+    xr_aot_refinement_plan_free(plan);
+    direct_local_go_callee_storage_fixture_free(&fixture);
+    DirectLocalGoCalleeStorageFixture extra =
+        direct_local_go_callee_storage_fixture_create(true, false);
+    direct_local_go_callee_storage_fixture_free(&extra);
+    DirectLocalGoCalleeStorageFixture duplicate =
+        direct_local_go_callee_storage_fixture_create(false, true);
+    direct_local_go_callee_storage_fixture_free(&duplicate);
 }
 
 static void test_exact_string_literal_storage_is_tagged_and_fail_closed(void) {
@@ -2333,6 +2553,7 @@ int main(void) {
     test_scalar_shared_boundary_is_exact_and_fail_closed();
     test_exact_heap_closure_storage_is_tagged_and_fail_closed();
     test_direct_local_shared_callee_storage_is_exact_and_fail_closed();
+    test_direct_local_go_callee_storage_is_exact_and_fail_closed();
     test_exact_string_literal_storage_is_tagged_and_fail_closed();
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();

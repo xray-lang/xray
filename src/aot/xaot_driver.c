@@ -1653,6 +1653,74 @@ static XrCacheFingerprint xaot_target_plan_optimization_budget(void) {
     return fingerprint;
 }
 
+static const XrSemanticEntityRecord *xaot_semantic_module_entity(
+    const XrSemanticPlan *plan) {
+    const XrSemanticEntityRecord *module = NULL;
+    uint32_t count =
+        plan ? (uint32_t) xr_semantic_plan_entity_count(plan) : 0;
+    for (uint32_t i = 0; i < count; i++) {
+        const XrSemanticEntityRecord *entity =
+            xr_semantic_plan_entity(plan, i);
+        if (!entity || entity->kind != XR_SEM_ENTITY_MODULE)
+            continue;
+        if (module)
+            return NULL;
+        module = entity;
+    }
+    return module;
+}
+
+static bool xaot_resolve_semantic_dependencies(
+    const XaotBundle *bundle, const XrSemanticPlan *semantic,
+    const XrSemanticPlan ***out_dependencies, uint32_t *out_count) {
+    if (out_dependencies)
+        *out_dependencies = NULL;
+    if (out_count)
+        *out_count = 0;
+    if (!bundle || !semantic || !out_dependencies || !out_count)
+        return false;
+    uint32_t count =
+        (uint32_t) xr_semantic_plan_dependency_count(semantic);
+    if (count == 0)
+        return true;
+    if (count > bundle->nmodules ||
+        count > SIZE_MAX / sizeof(const XrSemanticPlan *))
+        return false;
+    const XrSemanticPlan **dependencies = (const XrSemanticPlan **) xr_calloc(
+        count, sizeof(*dependencies));
+    if (!dependencies)
+        return false;
+    bool valid = true;
+    for (uint32_t row = 0; valid && row < count; row++) {
+        const XrSemanticDependencyRecord *record =
+            xr_semantic_plan_dependency(semantic, row);
+        uint32_t matches = 0;
+        for (uint32_t candidate = 0; candidate < bundle->nmodules;
+             candidate++) {
+            const XiModule *module = bundle->modules[candidate];
+            const XrSemanticPlan *plan =
+                module && module->init ? module->init->semantic_plan : NULL;
+            const XrSemanticEntityRecord *entity =
+                xaot_semantic_module_entity(plan);
+            if (!record || !entity ||
+                !xr_stable_id_equal(record->module, entity->id) ||
+                !xr_fingerprint_equal(record->semantic_fingerprint,
+                                      xr_semantic_plan_fingerprint(plan)))
+                continue;
+            dependencies[row] = plan;
+            matches++;
+        }
+        valid = matches == 1;
+    }
+    if (!valid) {
+        xr_free(dependencies);
+        return false;
+    }
+    *out_dependencies = dependencies;
+    *out_count = count;
+    return true;
+}
+
 static bool xaot_build_module_target_plans(
     XaotBundle *bundle, XrTargetProfile *profile, XrCacheStore *cache_store,
     bool rebuild, bool verbose, uint32_t worker_limit,
@@ -1667,7 +1735,11 @@ static bool xaot_build_module_target_plans(
         bundle->nmodules, sizeof(*inputs));
     XrTargetPlanTaskResult *results = (XrTargetPlanTaskResult *) xr_calloc(
         bundle->nmodules, sizeof(*results));
-    if (!inputs || !results) {
+    const XrSemanticPlan ***dependencies =
+        (const XrSemanticPlan ***) xr_calloc(
+            bundle->nmodules, sizeof(*dependencies));
+    if (!inputs || !results || !dependencies) {
+        xr_free(dependencies);
         xr_free(results);
         xr_free(inputs);
         return false;
@@ -1677,6 +1749,20 @@ static bool xaot_build_module_target_plans(
         XiModule *module = bundle->modules[module_index];
         inputs[module_index].semantic_plan =
             module && module->init ? module->init->semantic_plan : NULL;
+        if (!inputs[module_index].semantic_plan ||
+            !xaot_resolve_semantic_dependencies(
+                bundle, inputs[module_index].semantic_plan,
+                &dependencies[module_index],
+                &inputs[module_index].semantic_dependency_count)) {
+            for (uint32_t i = 0; i <= module_index; i++)
+                xr_free(dependencies[i]);
+            xr_free(dependencies);
+            xr_free(results);
+            xr_free(inputs);
+            return false;
+        }
+        inputs[module_index].semantic_dependencies =
+            dependencies[module_index];
     }
 
     XrTargetPlanTaskStats task_stats = {0};
@@ -1707,6 +1793,9 @@ static bool xaot_build_module_target_plans(
         fprintf(stderr, "Error: module TargetPlan task failed for '%s': %s\n",
                 name, error[0] ? error : "unknown error");
         xr_target_plan_task_results_release(results, bundle->nmodules);
+        for (uint32_t i = 0; i < bundle->nmodules; i++)
+            xr_free(dependencies[i]);
+        xr_free(dependencies);
         xr_free(results);
         xr_free(inputs);
         return false;
@@ -1753,6 +1842,9 @@ static bool xaot_build_module_target_plans(
         }
     }
     xr_target_plan_task_results_release(results, bundle->nmodules);
+    for (uint32_t i = 0; i < bundle->nmodules; i++)
+        xr_free(dependencies[i]);
+    xr_free(dependencies);
     xr_free(results);
     xr_free(inputs);
     return installed;
