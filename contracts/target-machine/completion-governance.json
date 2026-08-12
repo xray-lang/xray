@@ -27,8 +27,10 @@
       "path": "scripts/collect_target_machine_symbol_evidence.py",
       "required_regex": [
         "PRODUCER\\s*=\\s*\"target-machine-symbol-evidence/1\"",
+        "REQUIRED_AUTHORITY_SYMBOLS",
         "defined_symbol_names",
         "forbidden_symbols",
+        "missing_authority_symbols",
         "raw_log_identity"
       ]
     },

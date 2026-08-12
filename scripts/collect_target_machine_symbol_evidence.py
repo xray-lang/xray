@@ -30,7 +30,15 @@ TARGET_FILES = {
     "xray-cli": ("xray.exe", "xray"),
     "libxray-exec-core": ("xray_rt_coro.lib", "libxray_rt_coro.a"),
     "libxray-vm": ("xray_vm.lib", "libxray_vm.a"),
-    "libxray-compiler": ("xray_core.lib", "libxray_core.a"),
+    "libxray-compiler": ("xray_compiler.lib", "libxray_compiler.a"),
+}
+REQUIRED_AUTHORITY_SYMBOLS = {
+    "libxray-compiler": {
+        "xr_target_plan_build",
+        "xr_xsm_encode",
+        "xr_xtp_encode_plan",
+        "xr_c_emission_plan_build",
+    },
 }
 LEGACY_EXACT = {
     "xr_eval_bytecode", "xr_run_bytecode_file", "xr_detect_output_format",
@@ -135,7 +143,11 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
                 shutil.copyfile(source, artifact)
                 symbols = binlib.defined_symbol_names(artifact)
             legacy = forbidden_symbols(symbols or [])
-            row_pass = not missing and symbols is not None and not legacy
+            missing_authorities = sorted(
+                REQUIRED_AUTHORITY_SYMBOLS.get(name, set()) - set(symbols or [])
+            )
+            row_pass = (not missing and symbols is not None and not legacy and
+                        not missing_authorities)
             per_row_pass.append(row_pass)
             passed = passed and row_pass
             symbol_relative = f"logs/{name}.symbols.log"
@@ -150,6 +162,11 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
                     f"artifact_sha256={assembler.sha256_file(artifact)}\n"
                     f"defined_symbols={len(symbols)}\n"
                     f"forbidden_symbols={len(legacy)}\n"
+                    f"missing_authority_symbols={len(missing_authorities)}\n"
+                    + "".join(
+                        f"missing_authority={symbol}\n"
+                        for symbol in missing_authorities
+                    )
                     + "\n".join(symbols) + "\n"
                 )
             symbol_log.write_text(symbol_text, encoding="utf-8")

@@ -92,12 +92,17 @@ def initialize(root: Path) -> dict[str, Any]:
     return policy
 
 
-def build_fixture(build: Path, legacy: bool = False) -> None:
+def build_fixture(build: Path, legacy: bool = False,
+                  missing_authority: bool = False) -> None:
     build.mkdir()
     for name, filenames in collector.TARGET_FILES.items():
         path = build / filenames[0 if collector.os.name == "nt" else 1]
-        path.write_text("LEGACY" if legacy and name == "libxray-vm" else "CLEAN",
-                        encoding="utf-8")
+        content = "CLEAN"
+        if legacy and name == "libxray-vm":
+            content = "LEGACY"
+        elif missing_authority and name == "libxray-compiler":
+            content = "MISSING_AUTHORITY"
+        path.write_text(content, encoding="utf-8")
 
 
 def validate(path: Path, root: Path, policy: dict[str, Any], status: str) -> dict[str, Any]:
@@ -136,11 +141,19 @@ def self_test() -> int:
         original_dumpbin = collector.binlib.find_dumpbin
         collector.binlib.find_nm = lambda: "fixture-nm"
         collector.binlib.find_dumpbin = lambda: None
-        collector.binlib.defined_symbol_names = lambda path: (
-            ["xvm_legacy_fixture", "clean_symbol"]
-            if path.read_text(encoding="utf-8") == "LEGACY"
-            else ["clean_symbol"]
-        )
+        def fixture_symbols(path: Path) -> list[str]:
+            content = path.read_text(encoding="utf-8")
+            if content == "LEGACY":
+                return ["xvm_legacy_fixture", "clean_symbol"]
+            symbols = ["clean_symbol"]
+            authorities = sorted(collector.REQUIRED_AUTHORITY_SYMBOLS.get(
+                "libxray-compiler", set()
+            ))
+            symbols.extend(authorities[1:] if content == "MISSING_AUTHORITY"
+                           else authorities)
+            return symbols
+
+        collector.binlib.defined_symbol_names = fixture_symbols
         try:
             clean_build = parent / "clean-build"
             build_fixture(clean_build)
@@ -159,6 +172,25 @@ def self_test() -> int:
             failed = validate(failed_output / "symbol.raw.json", root, policy, "failed")
             if sum(row["forbidden_symbol_count"] for row in failed["payload"]["binaries"]) != 1:
                 raise AssertionError("legacy symbol count is not exact")
+
+            missing_build = parent / "missing-authority-build"
+            build_fixture(missing_build, missing_authority=True)
+            missing_output = parent / "missing-authority"
+            if collector.collect(root, missing_build, missing_output,
+                                 "fixture-owner") != 1:
+                raise AssertionError("missing compiler authority did not fail honestly")
+            missing = validate(
+                missing_output / "symbol.raw.json", root, policy, "failed"
+            )
+            compiler = next(
+                row for row in missing["payload"]["binaries"]
+                if row["name"] == "libxray-compiler"
+            )
+            log = (missing_output / compiler["symbol_log"]).read_text(
+                encoding="utf-8"
+            )
+            if "missing_authority_symbols=1" not in log:
+                raise AssertionError("missing compiler authority was not retained")
             try:
                 collector.collect(root, clean_build, clean_output, "fixture-owner")
             except collector.CollectionError:

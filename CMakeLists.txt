@@ -1272,6 +1272,46 @@ add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs)
 
+# The installed compiler product is the exact backend authority surface, not
+# the CLI's xray_core development aggregate.  Keep source/Xi inputs opaque at
+# this boundary while retaining the complete immutable SemanticPlan ->
+# TargetPlan -> XSM/XTP/CEmission construction and verification closure. Xi ->
+# SemanticPlan construction remains an internal frontend boundary because it
+# depends on mutable compiler IR ownership analysis.
+set(XRAY_COMPILER_BACKEND_SOURCES
+    src/base/xsha256.c
+    src/base/xtarget_data_layout.c
+    ${PLAN_SEMANTIC_SRC}
+    ${PLAN_OWNERSHIP_SRC}
+    src/plan/format/xr_artifact_kind.c
+    src/plan/format/xr_xsm_encode.c
+    src/plan/format/xr_xtp_artifact.c
+    src/plan/format/xr_xtp_encode.c
+    src/plan/format/xr_xtp_rows.c
+    src/plan/target/xr_target_builder.c
+    src/plan/target/xr_target_instruction_verify.c
+    src/plan/target/xr_target_plan.c
+    src/plan/target/xr_target_profile.c
+    src/plan/target/xr_target_verify.c
+    src/aot/emit_c/xr_c_emission_plan.c
+    src/runtime/abi/xr_runtime_contract.c
+    src/runtime/abi/xr_runtime_descriptor.c
+    src/runtime/abi/xr_runtime_object_header.c
+    src/runtime/abi/xr_runtime_string_object.c
+)
+list(FILTER XRAY_COMPILER_BACKEND_SOURCES EXCLUDE REGEX
+    "(^|.*/)src/plan/semantic/xr_semantic_builder\\.c$")
+list(REMOVE_DUPLICATES XRAY_COMPILER_BACKEND_SOURCES)
+
+add_library(xray_compiler STATIC ${XRAY_COMPILER_BACKEND_SOURCES})
+add_dependencies(xray_compiler
+    gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
+    gen-native-type-defs)
+target_include_directories(xray_compiler PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
+
 add_library(xray_aot_core STATIC
     src/aot/xrt_regex_core.c
     ${AOT_RANDOM_SRC}
@@ -1958,6 +1998,23 @@ if(BUILD_TESTS)
         ${XRAY_COMMON_INCLUDES}
     )
     target_link_libraries(xray_package_payload_fixture PRIVATE xray_core)
+
+    add_executable(xray_compiler_archive_link_probe
+        tests/target-machine/compiler_archive_link_probe.c
+    )
+    target_include_directories(xray_compiler_archive_link_probe PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+    )
+    target_link_libraries(xray_compiler_archive_link_probe PRIVATE xray_compiler)
+    add_test(
+        NAME xray_compiler_archive_link_probe
+        COMMAND $<TARGET_FILE:xray_compiler_archive_link_probe>
+    )
+    set_tests_properties(xray_compiler_archive_link_probe PROPERTIES
+        LABELS "compiler;product;target-machine"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
 
     if(LIBFFI_FOUND)
         add_test(
@@ -4333,8 +4390,13 @@ install(TARGETS xray
     COMPONENT XrayCore
 )
 
-# Install public AOT runtime libraries. xray_core remains a build-tree-only
-# aggregate for the CLI and tests; it must not become a public install target.
+# Install the bounded compiler and runtime products. xray_core remains a
+# build-tree-only aggregate for the CLI and tests; it must not become a public
+# install target.
+install(TARGETS xray_compiler
+    ARCHIVE DESTINATION lib/xray/compiler/${XRAY_HOST_TARGET_ABI}
+    COMPONENT XraySDK
+)
 install(TARGETS xray_vm
     ARCHIVE DESTINATION lib/xray/vm/${XRAY_HOST_TARGET_ABI}
     COMPONENT XrayCore

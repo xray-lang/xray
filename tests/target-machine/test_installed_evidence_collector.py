@@ -124,7 +124,7 @@ def populate(prefix: Path) -> None:
     files = {
         "bin/xray.exe": "binary",
         "lib/xray/aot/x86_64-windows-msvc/xray_rt_coro.lib": "exec",
-        "lib/xray/compiler/x86_64-windows-msvc/xray_core.lib": "compiler",
+        "lib/xray/compiler/x86_64-windows-msvc/xray_compiler.lib": "compiler",
         "lib/xray/vm/x86_64-windows-msvc/xray_vm.lib": "vm",
         "include/xray/runtime.h": "#define RUNTIME 1\n",
         "share/xray/install/payload-manifest.json": "",
