@@ -163,6 +163,22 @@ static int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t right,
     return result.ordering;
 }
 
+static xr_span_t xrt_pod_slice_view_checked_raw(
+    xr_span_t span, XrPodSliceViewKind kind, uint16_t source_elem_size, bool source_has_layout,
+    uint16_t target_elem_size, uint16_t target_expected_elem_size, uint16_t target_alignment,
+    bool target_layout_valid, bool target_is_aggregate) {
+    XrPodSliceViewResult result;
+    result = xr_pod_slice_view_core(kind, span.data, span.length, source_elem_size,
+                                    source_has_layout, target_elem_size,
+                                    target_expected_elem_size, target_alignment,
+                                    target_layout_valid, target_is_aggregate);
+    if (result.status != XR_POD_SLICE_VIEW_OK)
+        abort();
+    span.data = result.data;
+    span.length = result.length;
+    return span;
+}
+
 /* Restricted generated kernels do not use dynamic values at their public ABI.
  * The compact compatibility record remains available for fixed-array address
  * projections that the current Xi lowering represents through `.ptr`. */

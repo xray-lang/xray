@@ -887,6 +887,40 @@ TEST(array_core_byte_slice_compare_owns_lexicographic_edges) {
     ASSERT_FALSE(ok);
 }
 
+TEST(array_core_pod_slice_view_owner_covers_layout_edges) {
+    uint32_t words[2] = {UINT32_C(0x01020304), UINT32_C(0x11121314)};
+    XrPodSliceViewResult view = xr_pod_slice_view_core(
+        XR_POD_SLICE_VIEW_AS_BYTES, words, 2, sizeof(uint32_t), true, 0, 0, 0, false, false);
+    ASSERT_EQ_INT(view.status, XR_POD_SLICE_VIEW_OK);
+    ASSERT_EQ_INT(view.length, 8);
+    ASSERT_EQ_PTR(view.data, words);
+
+    view = xr_pod_slice_view_core(XR_POD_SLICE_VIEW_AS_BYTES, words, INT64_MAX,
+                                  sizeof(uint32_t), true, 0, 0, 0, false, false);
+    ASSERT_EQ_INT(view.status, XR_POD_SLICE_VIEW_BYTE_LENGTH_OVERFLOW);
+    view = xr_pod_slice_view_core(XR_POD_SLICE_VIEW_AS_BYTES, words, 2, 0, false, 0, 0, 0,
+                                  false, false);
+    ASSERT_EQ_INT(view.status, XR_POD_SLICE_VIEW_INVALID_SOURCE_LAYOUT);
+
+    view = xr_pod_slice_view_core(XR_POD_SLICE_VIEW_REINTERPRET, words, 8, 1, true, 4, 4, 4,
+                                  true, false);
+    ASSERT_EQ_INT(view.status, XR_POD_SLICE_VIEW_OK);
+    ASSERT_EQ_INT(view.length, 2);
+    view = xr_pod_slice_view_core(XR_POD_SLICE_VIEW_REINTERPRET, words, 7, 1, true, 4, 4, 4,
+                                  true, false);
+    ASSERT_EQ_INT(view.status, XR_POD_SLICE_VIEW_LENGTH_NOT_DIVISIBLE);
+    view = xr_pod_slice_view_core(XR_POD_SLICE_VIEW_REINTERPRET,
+                                  (void *) ((uint8_t *) words + 1), 4, 1, true, 4, 4, 4, true,
+                                  false);
+    ASSERT_EQ_INT(view.status, XR_POD_SLICE_VIEW_MISALIGNED);
+    view = xr_pod_slice_view_core(XR_POD_SLICE_VIEW_REINTERPRET, NULL, 4, 1, true, 4, 4, 4,
+                                  true, false);
+    ASSERT_EQ_INT(view.status, XR_POD_SLICE_VIEW_NO_DATA);
+    view = xr_pod_slice_view_core(XR_POD_SLICE_VIEW_REINTERPRET, words, 8, 1, true, 4, 8, 4,
+                                  true, false);
+    ASSERT_EQ_INT(view.status, XR_POD_SLICE_VIEW_TARGET_SIZE_MISMATCH);
+}
+
 TEST(pod_slice_owner_copy_and_compare_cover_layout_overlap_and_overflow_edges) {
     uint32_t words[] = {UINT32_C(0x01020304), UINT32_C(0x11121314), UINT32_C(0x21222324),
                         UINT32_C(0x31323334)};
@@ -1017,6 +1051,7 @@ RUN_TEST(raw_memory_copy_nonoverlap_owner_handles_boundaries);
 RUN_TEST(array_core_bytes_repeat_from_matches_lz_style_overlap);
 RUN_TEST(array_core_bytes_common_prefix_uses_min_length_and_word_chunks);
 RUN_TEST(array_core_byte_slice_compare_owns_lexicographic_edges);
+RUN_TEST(array_core_pod_slice_view_owner_covers_layout_edges);
 RUN_TEST(pod_slice_owner_copy_and_compare_cover_layout_overlap_and_overflow_edges);
 RUN_TEST(array_core_sort_typed_buffers_in_place);
 RUN_TEST(array_core_sort_compare_result_uses_sign);

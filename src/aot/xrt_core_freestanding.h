@@ -131,6 +131,16 @@ int memcmp(const void *a, const void *b, size_t n);
         XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,          \
         xr_pod_slice_compare_core((left_data), (left_length), (left_elem_size), (right_data),    \
                                   (right_length), (right_elem_size)))
+#define xrt_pod_slice_view_semantics(kind, data, length, source_elem_size, source_has_layout,     \
+                                     target_elem_size, target_expected_elem_size,                 \
+                                     target_alignment, target_layout_valid, target_is_aggregate) \
+    XR_POD_SLICE_VIEW_OWNER_APPLY(                                                               \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO,     \
+        XR_SEM_CONSUMER_AOT_FREESTANDING,                                                        \
+        xr_pod_slice_view_core((kind), (data), (length), (source_elem_size),                    \
+                               (source_has_layout), (target_elem_size),                          \
+                               (target_expected_elem_size), (target_alignment),                 \
+                               (target_layout_valid), (target_is_aggregate)))
 #define xrt_byte_slice_common_prefix_semantics(left_data, left_length, right_data, right_length,   \
                                                ok)                                                \
     XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(                                                      \
@@ -1140,6 +1150,35 @@ static inline int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t rig
     if (result.status != XR_POD_SLICE_OK)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) span has no data");
     return result.ordering;
+}
+
+static inline xr_span_t xrt_pod_slice_view_checked_raw(
+    xr_span_t span, XrPodSliceViewKind kind, uint16_t source_elem_size, bool source_has_layout,
+    uint16_t target_elem_size, uint16_t target_expected_elem_size, uint16_t target_alignment,
+    bool target_layout_valid, bool target_is_aggregate) {
+    XrPodSliceViewResult result = xrt_pod_slice_view_semantics(
+        kind, span.data, span.length, source_elem_size, source_has_layout, target_elem_size,
+        target_expected_elem_size, target_alignment, target_layout_valid, target_is_aggregate);
+    if (kind == XR_POD_SLICE_VIEW_AS_BYTES &&
+        result.status == XR_POD_SLICE_VIEW_INVALID_SOURCE_LAYOUT)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.asBytes() requires POD Slice element type");
+    if (kind == XR_POD_SLICE_VIEW_AS_BYTES && result.status != XR_POD_SLICE_VIEW_OK)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.asBytes() byte length overflow");
+    if (result.status == XR_POD_SLICE_VIEW_INVALID_TARGET_LAYOUT)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_REQUIRES_POD_MSG);
+    if (result.status == XR_POD_SLICE_VIEW_TARGET_SIZE_MISMATCH)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_METADATA_MISMATCH_MSG);
+    if (result.status == XR_POD_SLICE_VIEW_BYTE_LENGTH_OVERFLOW)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_OVERFLOW_MSG);
+    if (result.status == XR_POD_SLICE_VIEW_LENGTH_NOT_DIVISIBLE)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG);
+    if (result.status != XR_POD_SLICE_VIEW_OK)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISALIGNED_MSG);
+    return (xr_span_t) {.data = result.data, .length = result.length};
 }
 
 typedef struct XrArrayCoreRange {

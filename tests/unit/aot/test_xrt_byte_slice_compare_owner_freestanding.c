@@ -125,6 +125,20 @@ TEST(freestanding_pod_slice_owners_preserve_overlap_and_byte_order) {
     ASSERT_EQ_INT(xrt_span_compare_checked_raw(empty, empty, sizeof(uint32_t)), 0);
 }
 
+TEST(freestanding_pod_slice_view_owner_preserves_layout_edges) {
+    uint32_t words[] = {UINT32_C(0x01020304), UINT32_C(0x11121314)};
+    xr_span_t word_span = {words, 2};
+    xr_span_t bytes = xrt_pod_slice_view_checked_raw(
+        word_span, XR_POD_SLICE_VIEW_AS_BYTES, sizeof(uint32_t), true, 0, 0, 0, false, false);
+    ASSERT_EQ_PTR(bytes.data, words);
+    ASSERT_EQ_INT(bytes.length, 8);
+    xr_span_t roundtrip = xrt_pod_slice_view_checked_raw(
+        bytes, XR_POD_SLICE_VIEW_REINTERPRET, 1, true, sizeof(uint32_t), sizeof(uint32_t),
+        _Alignof(uint32_t), true, false);
+    ASSERT_EQ_PTR(roundtrip.data, words);
+    ASSERT_EQ_INT(roundtrip.length, 2);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Freestanding Byte Slice Compare Owner");
 RUN_TEST(freestanding_byte_slice_compare_owner_preserves_unsigned_and_prefix_ordering);
@@ -133,4 +147,5 @@ RUN_TEST(freestanding_byte_slice_fill_owner_preserves_boundaries);
 RUN_TEST(freestanding_byte_slice_mutation_owners_preserve_overlap_and_boundaries);
 RUN_TEST(freestanding_raw_memory_copy_owner_preserves_boundaries);
 RUN_TEST(freestanding_pod_slice_owners_preserve_overlap_and_byte_order);
+RUN_TEST(freestanding_pod_slice_view_owner_preserves_layout_edges);
 TEST_MAIN_END()

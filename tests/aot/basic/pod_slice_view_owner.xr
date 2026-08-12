@@ -1,0 +1,36 @@
+// VM/AOT/generated-C KAT for the shared POD slice borrowed-view owner.
+
+fn main() {
+    var words = Array<u32>(2, 0)
+    words[0] = 0x01020304
+    words[1] = 0x11121314
+    var wordView: Slice<u32> = words[:]
+    var bytes: Slice<byte> = wordView.asBytes()
+    print(len(bytes))
+    print(bytes[0])
+    print(bytes[3])
+
+    var roundtrip: Slice<u32> = bytes.reinterpret<u32>()
+    print(len(roundtrip))
+    print(roundtrip[0])
+
+    try {
+        var shortBytes: Slice<byte> = bytes[0:7]
+        var rejected: Slice<u32> = shortBytes.reinterpret<u32>()
+        print(len(rejected))
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+
+    try {
+        var shifted: Slice<byte> = bytes[1:5]
+        var rejected: Slice<u32> = shifted.reinterpret<u32>()
+        print(len(rejected))
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+main()

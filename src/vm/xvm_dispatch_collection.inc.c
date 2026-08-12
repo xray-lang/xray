@@ -1125,17 +1125,23 @@ vmcase(OP_SLICE_AS_BYTES) {
     (void) elem_tid;
     (void) contains_refs;
     uint16_t layout_id = XR_IS_SLICE_REF(R(b)) ? XR_SLICE_REF_LAYOUT_ID(R(b)) : 0;
-    if ((elem_type == XR_ELEM_ANY && layout_id == 0) || elem_type >= XR_ELEM_COUNT ||
-        elem_size == 0) {
+    XrPodSliceViewResult view_result = XR_POD_SLICE_VIEW_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO,
+        XR_SEM_CONSUMER_VM,
+        xr_pod_slice_view_core(XR_POD_SLICE_VIEW_AS_BYTES, data, length, elem_size,
+                               elem_type < XR_ELEM_COUNT &&
+                                   (elem_type != XR_ELEM_ANY || layout_id != 0),
+                               0, 0, 0, false, false));
+    if (view_result.status == XR_POD_SLICE_VIEW_INVALID_SOURCE_LAYOUT) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                          "Slice.asArray<byte>() requires POD Slice element type");
     }
-    if (length < 0 || (elem_size > 0 && length > INT64_MAX / (int64_t) elem_size)) {
+    if (view_result.status != XR_POD_SLICE_VIEW_OK) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.asArray<byte>() byte length overflow");
     }
     XrSliceView *span = VM_SLICE_SLOT(R(c));
-    span->data = data;
-    span->length = length * (int64_t) elem_size;
+    span->data = view_result.data;
+    span->length = view_result.length;
     R(a) =
         xr_span_ref_typed(span, XR_ELEM_U8, 1, 0, 0, (uint8_t) (reserved & XR_SLICE_VIEW_READONLY));
     vmbreak;
@@ -1313,15 +1319,12 @@ vmcase(OP_SLICE_REINTERPRET) {
     XrAggregateLayout *target_layout =
         xr_vm_struct_layout_lookup_stable_key(&isolate->vm, target_layout_key);
     bool target_is_aggregate = target_elem_type == XR_ELEM_ANY && target_layout != NULL;
-    if (target_elem_type >= XR_ELEM_COUNT || target_elem_size == 0 || target_alignment == 0 ||
-        (target_elem_type == XR_ELEM_ANY && !target_is_aggregate)) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_REQUIRES_POD_MSG);
-    }
-    if (!target_is_aggregate && XR_ELEM_SIZES[target_elem_type] != target_elem_size) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_METADATA_MISMATCH_MSG);
-    }
+    bool target_layout_valid =
+        target_elem_type < XR_ELEM_COUNT && (target_elem_type != XR_ELEM_ANY || target_is_aggregate);
+    uint16_t target_expected_elem_size =
+        target_elem_type < XR_ELEM_COUNT && target_elem_type != XR_ELEM_ANY
+            ? XR_ELEM_SIZES[target_elem_type]
+            : target_elem_size;
     void *data = NULL;
     int64_t length = 0;
     uint8_t elem_type = XR_ELEM_ANY;
@@ -1334,23 +1337,39 @@ vmcase(OP_SLICE_REINTERPRET) {
                   guard, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_EXPECTS_MSG);
     (void) elem_tid;
     (void) contains_refs;
-    if (elem_type != XR_ELEM_U8 || elem_size != 1) {
+    XrPodSliceViewResult view_result = XR_POD_SLICE_VIEW_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO,
+        XR_SEM_CONSUMER_VM,
+        xr_pod_slice_view_core(
+            XR_POD_SLICE_VIEW_REINTERPRET, data, length,
+            elem_type == XR_ELEM_U8 ? elem_size : 0, elem_type == XR_ELEM_U8 && elem_size == 1,
+            target_elem_size, target_expected_elem_size, target_alignment, target_layout_valid,
+            target_is_aggregate));
+    if (view_result.status == XR_POD_SLICE_VIEW_INVALID_SOURCE_LAYOUT) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_RECEIVER_MSG);
     }
-    if (length < 0) {
+    if (view_result.status == XR_POD_SLICE_VIEW_INVALID_TARGET_LAYOUT) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_REQUIRES_POD_MSG);
+    }
+    if (view_result.status == XR_POD_SLICE_VIEW_TARGET_SIZE_MISMATCH) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_METADATA_MISMATCH_MSG);
+    }
+    if (view_result.status == XR_POD_SLICE_VIEW_BYTE_LENGTH_OVERFLOW) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
                          XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_OVERFLOW_MSG);
     }
-    if (length % (int64_t) target_elem_size != 0) {
+    if (view_result.status == XR_POD_SLICE_VIEW_LENGTH_NOT_DIVISIBLE) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
                          XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG);
     }
-    if (length > 0 && (!data || ((uintptr_t) data % (uintptr_t) target_alignment) != 0)) {
+    if (view_result.status != XR_POD_SLICE_VIEW_OK) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISALIGNED_MSG);
     }
     XrSliceView *span = VM_SLICE_SLOT(R(c));
-    span->data = data;
-    span->length = length / (int64_t) target_elem_size;
+    span->data = view_result.data;
+    span->length = view_result.length;
     R(a) = xr_span_ref_typed(span, target_elem_type, target_elem_size, target_elem_tid,
                              target_layout ? target_layout->layout_id : 0,
                              (uint8_t) (reserved & XR_SLICE_VIEW_READONLY));

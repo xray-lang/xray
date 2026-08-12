@@ -53,6 +53,16 @@
         XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,                \
         xr_pod_slice_compare_core((left_data), (left_length), (left_elem_size), (right_data),    \
                                   (right_length), (right_elem_size)))
+#define xrt_pod_slice_view_semantics(kind, data, length, source_elem_size, source_has_layout,     \
+                                     target_elem_size, target_expected_elem_size,                 \
+                                     target_alignment, target_layout_valid, target_is_aggregate) \
+    XR_POD_SLICE_VIEW_OWNER_APPLY(                                                               \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO,     \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                              \
+        xr_pod_slice_view_core((kind), (data), (length), (source_elem_size),                    \
+                               (source_has_layout), (target_elem_size),                          \
+                               (target_expected_elem_size), (target_alignment),                 \
+                               (target_layout_valid), (target_is_aggregate)))
 
 #define xrt_byte_slice_common_prefix_semantics(left_data, left_length, right_data, right_length,   \
                                                ok)                                                \
@@ -848,14 +858,33 @@ static inline xr_span_t xrt_span_from_string_bytes(XrValue str) {
     return out;
 }
 
-static inline xr_span_t xrt_span_as_bytes_checked_raw(xr_span_t span, uint16_t elem_size,
-                                                      bool has_static_layout) {
-    if (!has_static_layout || elem_size == 0)
+static inline xr_span_t xrt_pod_slice_view_checked_raw(
+    xr_span_t span, XrPodSliceViewKind kind, uint16_t source_elem_size, bool source_has_layout,
+    uint16_t target_elem_size, uint16_t target_expected_elem_size, uint16_t target_alignment,
+    bool target_layout_valid, bool target_is_aggregate) {
+    XrPodSliceViewResult result = xrt_pod_slice_view_semantics(
+        kind, span.data, span.length, source_elem_size, source_has_layout, target_elem_size,
+        target_expected_elem_size, target_alignment, target_layout_valid, target_is_aggregate);
+    if (kind == XR_POD_SLICE_VIEW_AS_BYTES &&
+        result.status == XR_POD_SLICE_VIEW_INVALID_SOURCE_LAYOUT)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.asBytes() requires POD Slice element type");
-    if (span.length < 0 || span.length > INT64_MAX / (int64_t) elem_size)
+    if (kind == XR_POD_SLICE_VIEW_AS_BYTES && result.status != XR_POD_SLICE_VIEW_OK)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.asBytes() byte length overflow");
-    xr_span_t out = span;
-    out.length = span.length * (int64_t) elem_size;
+    if (result.status == XR_POD_SLICE_VIEW_INVALID_TARGET_LAYOUT)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_REQUIRES_POD_MSG);
+    if (result.status == XR_POD_SLICE_VIEW_TARGET_SIZE_MISMATCH)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_METADATA_MISMATCH_MSG);
+    if (result.status == XR_POD_SLICE_VIEW_BYTE_LENGTH_OVERFLOW)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_OVERFLOW_MSG);
+    if (result.status == XR_POD_SLICE_VIEW_LENGTH_NOT_DIVISIBLE)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG);
+    if (result.status != XR_POD_SLICE_VIEW_OK)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISALIGNED_MSG);
+    xr_span_t out = {.data = result.data, .length = result.length};
     return out;
 }
 
@@ -885,33 +914,6 @@ static inline int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t rig
     if (result.status != XR_POD_SLICE_OK)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) span has no data");
     return result.ordering;
-}
-
-static inline xr_span_t xrt_span_reinterpret_checked_raw(xr_span_t span, uint8_t elem_type,
-                                                         uint16_t elem_size, uint8_t elem_tid,
-                                                         uint16_t alignment,
-                                                         uint16_t layout_marker) {
-    bool is_aggregate = elem_type == XR_ELEM_ANY && layout_marker != 0;
-    if (elem_type >= XR_ELEM_COUNT || elem_size == 0 || alignment == 0 ||
-        (elem_type == XR_ELEM_ANY && !is_aggregate))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_REQUIRES_POD_MSG);
-    if (!is_aggregate && XR_ELEM_SIZES[elem_type] != elem_size)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_METADATA_MISMATCH_MSG);
-    if (span.length < 0)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_OVERFLOW_MSG);
-    if (span.length % (int64_t) elem_size != 0)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG);
-    if (span.length > 0 && (!span.data || ((uintptr_t) span.data % (uintptr_t) alignment) != 0))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISALIGNED_MSG);
-    xr_span_t out = span;
-    out.length = span.length / (int64_t) elem_size;
-    (void) elem_tid;
-    (void) layout_marker;
-    return out;
 }
 
 static inline XrValue xrt_span_to_owned_array(xr_span_t span, uint8_t elem_type, uint16_t elem_size,

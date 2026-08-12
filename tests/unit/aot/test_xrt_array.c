@@ -744,6 +744,21 @@ static void test_hosted_pod_slice_owners_preserve_overlap_and_byte_order(void) {
                   "hosted POD slice compare accepts empty null spans");
 }
 
+static void test_hosted_pod_slice_view_owner_preserves_layout_edges(void) {
+    uint32_t words[] = {UINT32_C(0x01020304), UINT32_C(0x11121314)};
+    xr_span_t word_span = {words, 2};
+    xr_span_t bytes = xrt_pod_slice_view_checked_raw(
+        word_span, XR_POD_SLICE_VIEW_AS_BYTES, sizeof(uint32_t), true, 0, 0, 0, false, false);
+    xr_span_t roundtrip = xrt_pod_slice_view_checked_raw(
+        bytes, XR_POD_SLICE_VIEW_REINTERPRET, 1, true, sizeof(uint32_t), sizeof(uint32_t),
+        _Alignof(uint32_t), true, false);
+
+    ASSERT_TRUE(bytes.data == words, "hosted POD byte view borrows source storage");
+    ASSERT_EQ_INT(bytes.length, 8, "hosted POD byte view uses owner-planned byte length");
+    ASSERT_TRUE(roundtrip.data == words, "hosted POD reinterpret view borrows source storage");
+    ASSERT_EQ_INT(roundtrip.length, 2, "hosted POD reinterpret uses owner-planned length");
+}
+
 int main(void) {
     test_release_slice_abi_is_data_and_length();
     test_small_array_uses_inline_storage();
@@ -764,6 +779,7 @@ int main(void) {
     test_stack_closure_borrows_cell_upval();
     test_hosted_numeric_neg_owner_preserves_scalar_and_bigint_edges();
     test_hosted_pod_slice_owners_preserve_overlap_and_byte_order();
+    test_hosted_pod_slice_view_owner_preserves_layout_edges();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;
 }

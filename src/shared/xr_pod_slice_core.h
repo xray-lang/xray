@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_pod_slice_core.h - Runtime-neutral POD slice copy and comparison semantics.
+ * xr_pod_slice_core.h - Runtime-neutral POD slice and borrowed-view semantics.
  */
 
 #ifndef XR_POD_SLICE_CORE_H
@@ -33,6 +33,28 @@ typedef struct XrPodSliceCompareResult {
     int64_t ordering;
     XrPodSliceStatus status;
 } XrPodSliceCompareResult;
+
+typedef enum XrPodSliceViewKind {
+    XR_POD_SLICE_VIEW_AS_BYTES = 0,
+    XR_POD_SLICE_VIEW_REINTERPRET = 1
+} XrPodSliceViewKind;
+
+typedef enum XrPodSliceViewStatus {
+    XR_POD_SLICE_VIEW_OK = 0,
+    XR_POD_SLICE_VIEW_INVALID_SOURCE_LAYOUT = 1,
+    XR_POD_SLICE_VIEW_BYTE_LENGTH_OVERFLOW = 2,
+    XR_POD_SLICE_VIEW_INVALID_TARGET_LAYOUT = 3,
+    XR_POD_SLICE_VIEW_TARGET_SIZE_MISMATCH = 4,
+    XR_POD_SLICE_VIEW_LENGTH_NOT_DIVISIBLE = 5,
+    XR_POD_SLICE_VIEW_NO_DATA = 6,
+    XR_POD_SLICE_VIEW_MISALIGNED = 7
+} XrPodSliceViewStatus;
+
+typedef struct XrPodSliceViewResult {
+    void *data;
+    int64_t length;
+    XrPodSliceViewStatus status;
+} XrPodSliceViewResult;
 
 #if !defined(XR_POD_SLICE_C90)
 #define XR_POD_SLICE_COPY_OWNER_GUARD(owner_hi, owner_lo)                                       \
@@ -80,7 +102,82 @@ typedef struct XrPodSliceCompareResult {
 #define XR_POD_SLICE_COMPARE_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)           \
     (XR_POD_SLICE_COMPARE_OWNER_GUARD((owner_hi), (owner_lo)),                                   \
      XR_POD_SLICE_COMPARE_CONSUMER_GUARD((consumer_bit)), (expression))
+
+#define XR_POD_SLICE_VIEW_OWNER_GUARD(owner_hi, owner_lo)                                       \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_pod_slice_view                                     \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI &&            \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO)               \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_POD_SLICE_VIEW_CONSUMER_GUARD(consumer_bit)                                          \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_pod_slice_view                        \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_CONSUMERS &                               \
+                 (uint32_t) (consumer_bit)) != 0)                                                 \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_POD_SLICE_VIEW_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)              \
+    (XR_POD_SLICE_VIEW_OWNER_GUARD((owner_hi), (owner_lo)),                                      \
+     XR_POD_SLICE_VIEW_CONSUMER_GUARD((consumer_bit)), (expression))
 #endif
+
+XR_POD_SLICE_INLINE XrPodSliceViewResult xr_pod_slice_view_core(
+    XrPodSliceViewKind kind, void *data, int64_t length, uint16_t source_elem_size,
+    bool source_has_static_layout, uint16_t target_elem_size, uint16_t target_expected_elem_size,
+    uint16_t target_alignment, bool target_layout_valid, bool target_is_aggregate) {
+    XrPodSliceViewResult result;
+    result.data = data;
+    result.length = 0;
+    result.status = XR_POD_SLICE_VIEW_OK;
+    if (kind == XR_POD_SLICE_VIEW_AS_BYTES) {
+        if (!source_has_static_layout || source_elem_size == 0) {
+            result.status = XR_POD_SLICE_VIEW_INVALID_SOURCE_LAYOUT;
+            return result;
+        }
+        if (length < 0 || length > INT64_MAX / (int64_t) source_elem_size) {
+            result.status = XR_POD_SLICE_VIEW_BYTE_LENGTH_OVERFLOW;
+            return result;
+        }
+        result.length = length * (int64_t) source_elem_size;
+        return result;
+    }
+    if (kind != XR_POD_SLICE_VIEW_REINTERPRET || source_elem_size != 1) {
+        result.status = XR_POD_SLICE_VIEW_INVALID_SOURCE_LAYOUT;
+        return result;
+    }
+    if (!target_layout_valid || target_elem_size == 0 || target_alignment == 0) {
+        result.status = XR_POD_SLICE_VIEW_INVALID_TARGET_LAYOUT;
+        return result;
+    }
+    if (!target_is_aggregate && target_expected_elem_size != target_elem_size) {
+        result.status = XR_POD_SLICE_VIEW_TARGET_SIZE_MISMATCH;
+        return result;
+    }
+    if (length < 0) {
+        result.status = XR_POD_SLICE_VIEW_BYTE_LENGTH_OVERFLOW;
+        return result;
+    }
+    if (length % (int64_t) target_elem_size != 0) {
+        result.status = XR_POD_SLICE_VIEW_LENGTH_NOT_DIVISIBLE;
+        return result;
+    }
+    if (length > 0 && !data) {
+        result.status = XR_POD_SLICE_VIEW_NO_DATA;
+        return result;
+    }
+    if (length > 0 && ((uintptr_t) data % (uintptr_t) target_alignment) != 0) {
+        result.status = XR_POD_SLICE_VIEW_MISALIGNED;
+        return result;
+    }
+    result.length = length / (int64_t) target_elem_size;
+    return result;
+}
 
 XR_POD_SLICE_INLINE XrPodSliceStatus xr_pod_slice_copy_core(
     void *dst_data, int64_t dst_length, uint16_t dst_elem_size, const void *src_data,

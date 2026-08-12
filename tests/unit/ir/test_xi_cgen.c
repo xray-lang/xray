@@ -7912,6 +7912,39 @@ TEST(cgen_pod_slice_copy_compare_use_stable_owner_adapters) {
 
 }
 
+TEST(cgen_pod_slice_view_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI,
+               XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO, XR_SEM_CONSUMER_CGEN));
+    assert(strcmp(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI,
+                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO),
+                  "xrt_pod_slice_view_checked_raw") == 0);
+
+    const char *src = "fn views(values: Array<u32>) -> int {\n"
+                      "    var words: Slice<u32> = values[:]\n"
+                      "    var bytes: Slice<byte> = words.asBytes()\n"
+                      "    var roundtrip: Slice<u32> = bytes.reinterpret<u32>()\n"
+                      "    return len(roundtrip)\n"
+                      "}\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "POD view owner fixture compiled");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "POD view owner fixture generated C");
+    const char *fn = find_static_function_definition(code, "test_views_");
+    TEST_REQUIRE(fn != NULL, "POD view owner function emitted");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(count_between(fn, fn_end, "xrt_pod_slice_view_checked_raw(") == 2,
+                 "both POD view operations call the stable owner adapter");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "_s.length *") &&
+                     !contains_between(fn, fn_end, "_s.length /") &&
+                     !contains_between(fn, fn_end, "_s.length %"),
+                 "generated C does not recreate POD view semantics");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_raw_memory_copy_owner_registry_is_stable) {
     assert(xr_semantic_owner_has_consumer(
                XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
@@ -13195,6 +13228,7 @@ int main(void) {
     run_cgen_byte_slice_mutation_uses_stable_owner_adapters();
     run_cgen_byte_slice_common_prefix_uses_stable_owner_adapter();
     run_cgen_pod_slice_copy_compare_use_stable_owner_adapters();
+    run_cgen_pod_slice_view_uses_stable_owner_adapter();
     run_cgen_raw_memory_copy_owner_registry_is_stable();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();

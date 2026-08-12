@@ -158,6 +158,7 @@ BYTE_SLICE_COPY_OPERATIONS = {"xi.byte.slice.copy"}
 BYTE_SLICE_REPEAT_OPERATIONS = {"xi.byte.slice.repeat"}
 POD_SLICE_COPY_OPERATIONS = {"xi.slice.copy"}
 POD_SLICE_COMPARE_OPERATIONS = {"xi.slice.compare"}
+POD_SLICE_VIEW_OPERATIONS = {"xi.slice.as.bytes", "xi.slice.reinterpret"}
 RAW_MEMORY_COPY_OPERATIONS = {"xi.ptr.copy.nonoverlap"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
@@ -1803,6 +1804,73 @@ def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_pod_slice_view_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.pod-slice-view"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != POD_SLICE_VIEW_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.pod-slice-view family")
+    core_text = (root / "src/shared/xr_pod_slice_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    if (f"{marker}_HI" not in core_text or f"{marker}_LO" not in core_text or
+            "XR_POD_SLICE_VIEW_OWNER_APPLY" not in core_text or
+            "xr_pod_slice_view_core" not in core_text):
+        errors.append("src/shared/xr_pod_slice_core.h: POD view family lacks stable kernel")
+
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for opcode in ("OP_SLICE_AS_BYTES", "OP_SLICE_REINTERPRET"):
+        start = vm_text.find(f"vmcase({opcode})")
+        end = vm_text.find("vmbreak;", start)
+        body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+        if (f"{marker}_HI" not in body or f"{marker}_LO" not in body or
+                "XR_POD_SLICE_VIEW_OWNER_APPLY" not in body or
+                "xr_pod_slice_view_core" not in body or
+                "length * (int64_t) elem_size" in body or
+                "length % (int64_t) target_elem_size" in body or
+                "length / (int64_t) target_elem_size" in body or
+                "(uintptr_t) data %" in body):
+            errors.append(f"src/vm/xvm_dispatch_collection.inc.c: {opcode} bypasses POD view owner")
+
+    hosted_text = (root / "src/aot/xrt_coll.h").read_text(encoding="utf-8", errors="strict")
+    freestanding_text = (root / "src/aot/xrt_core_freestanding.h").read_text(
+        encoding="utf-8", errors="strict")
+    for relative, text in (("src/aot/xrt_coll.h", hosted_text),
+                           ("src/aot/xrt_core_freestanding.h", freestanding_text)):
+        body = extract_c_function(text, "xrt_pod_slice_view_checked_raw") or ""
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "XR_POD_SLICE_VIEW_OWNER_APPLY" not in text or
+                "xrt_pod_slice_view_semantics" not in body or
+                "% (int64_t)" in body or "/ (int64_t)" in body or
+                "* (int64_t)" in body or "(uintptr_t)" in body):
+            errors.append(f"{relative}: POD view adapter owns semantics")
+        if "#ifndef xrt_pod_slice_view_semantics" in text:
+            errors.append(f"{relative}: POD view fallback or alias revived")
+
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    c90_body = extract_c_function(c90_text, "xrt_pod_slice_view_checked_raw") or ""
+    if "xr_pod_slice_view_core" not in c90_body or "% (int64_t)" in c90_body or \
+            "/ (int64_t)" in c90_body or "* (int64_t)" in c90_body:
+        errors.append("src/aot/xrt_c90.h: C90 POD view adapter owns semantics")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_pod_slice_view_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: POD view CGen adapter is not owner-resolved")
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    forbidden = ("xrt_pod_slice_view_checked_raw", "xr_pod_slice_view_core", "({ xr_span_t",
+                 "_s.length *", "_s.length /", "_s.length %", "(uintptr_t)_s.data %")
+    for emitter in ("xicgen_span_as_bytes", "xicgen_span_reinterpret"):
+        body = extract_c_function(dispatch_text, emitter) or ""
+        if "cg_pod_slice_view_adapter_name" not in body or any(token in body for token in forbidden):
+            errors.append(f"src/aot/xi_cgen_dispatch_helpers.inc.c: {emitter} revived semantics")
+    return errors
+
+
 def verify_operation_registry(root: Path) -> tuple[list[str], int]:
     errors: list[str] = []
     source_path = root / "xisa/xi/ops.def"
@@ -1910,6 +1978,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_byte_slice_common_prefix_ratchet(root, registry))
         errors.extend(verify_raw_memory_copy_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))
+        errors.extend(verify_pod_slice_view_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)
     errors.extend(registry_errors)
     return errors

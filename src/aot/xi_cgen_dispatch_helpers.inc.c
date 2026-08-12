@@ -14493,32 +14493,24 @@ static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                                  const char *prefix) {
     (void) f;
     (void) prefix;
-    const XaotSliceAccessPlan *plan = cg_span_access_plan(ctx, v, XAOT_SLICE_ACCESS_SLICE_AS_BYTES);
+    (void) cg_span_access_plan(ctx, v, XAOT_SLICE_ACCESS_SLICE_AS_BYTES);
     CgArrayElemInfo info;
     if (!cg_span_elem_info_from_value(ctx, v->args[0], &info) || !info.ctype) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
     }
-    if (plan && (plan->eliminated_checks & XAOT_SLICE_DROP_HELPER) == XAOT_SLICE_DROP_HELPER) {
-        bool overflow_check_dropped =
-            (plan->eliminated_checks & XAOT_SLICE_DROP_OVERFLOW) == XAOT_SLICE_DROP_OVERFLOW;
-        fprintf(out, "({ xr_span_t _s = ");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, "; if (XR_UNLIKELY(_s.length < 0");
-        if (!overflow_check_dropped)
-            fprintf(out, " || _s.length > INT64_MAX / (int64_t)sizeof(%s)", info.ctype);
-        fprintf(out,
-                ")) xrt_throw_error("
-                "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Slice.asArray<byte>() byte length overflow\"); "
-                "xr_span_t _out = _s; _out.length = _s.length * (int64_t)sizeof(%s); "
-                "_out; })",
-                info.ctype);
+    const char *adapter = cg_pod_slice_view_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "xrt_span_as_bytes_checked_raw(");
+    fprintf(out, "%s(", adapter);
     emit_span_ref_expr(out, v->args[0]);
-    fprintf(out, ", (uint16_t)sizeof(%s), true)", info.ctype);
+    fprintf(out,
+            ", XR_POD_SLICE_VIEW_AS_BYTES, (uint16_t)sizeof(%s), true, "
+            "(uint16_t)0, (uint16_t)0, (uint16_t)0, false, false)",
+            info.ctype);
 }
 
 static void xicgen_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -14660,43 +14652,25 @@ static void xicgen_span_reinterpret(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     uint8_t elem_tid = (uint8_t) ((v->aux_int >> 24) & 0xff);
     uint16_t alignment = (uint16_t) ((v->aux_int >> 32) & 0xffff);
     uint16_t layout_marker = v->aux ? 1u : 0u;
-    const XaotSliceAccessPlan *plan = cg_span_access_plan(ctx, v, XAOT_SLICE_ACCESS_REINTERPRET);
-    if (plan && (plan->eliminated_checks & XAOT_SLICE_DROP_HELPER) == XAOT_SLICE_DROP_HELPER) {
-        bool overflow_check_dropped =
-            (plan->eliminated_checks & XAOT_SLICE_DROP_OVERFLOW) == XAOT_SLICE_DROP_OVERFLOW;
-        bool length_rel_proven = (plan->evidence & XAOT_SLICE_EV_LENGTH_REL_PROVEN) != 0;
-        fprintf(out, "({ xr_span_t _s = ");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, "; ");
-        if (!overflow_check_dropped) {
-            fprintf(out, "if (XR_UNLIKELY(_s.length < 0)) "
-                         "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                         "XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_OVERFLOW_MSG); ");
-        }
-        if (!length_rel_proven) {
-            fprintf(out,
-                    "if (XR_UNLIKELY(_s.length %% (int64_t)%u != 0)) "
-                    "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                    "XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG); ",
-                    (unsigned) elem_size);
-        }
-        if (alignment > 1) {
-            fprintf(out,
-                    "if (XR_UNLIKELY(_s.length > 0 && (!_s.data || "
-                    "((uintptr_t)_s.data %% (uintptr_t)%u) != 0))) "
-                    "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
-                    "XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISALIGNED_MSG); ",
-                    (unsigned) alignment);
-        }
-        fprintf(out, "xr_span_t _out = _s; _out.length = _s.length / (int64_t)%u; _out; })",
-                (unsigned) elem_size);
+    (void) cg_span_access_plan(ctx, v, XAOT_SLICE_ACCESS_REINTERPRET);
+    const char *adapter = cg_pod_slice_view_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "xrt_span_reinterpret_checked_raw(");
+    uint16_t expected_elem_size =
+        elem_type < XR_ELEM_COUNT && elem_type != XR_ELEM_ANY ? XR_ELEM_SIZES[elem_type]
+                                                              : elem_size;
+    bool target_layout_valid = elem_type < XR_ELEM_COUNT &&
+                               (elem_type != XR_ELEM_ANY || layout_marker != 0);
+    fprintf(out, "%s(", adapter);
     emit_span_ref_expr(out, v->args[0]);
-    fprintf(out, ", (uint8_t)%u, (uint16_t)%u, (uint8_t)%u, (uint16_t)%u, (uint16_t)%u)",
-            (unsigned) elem_type, (unsigned) elem_size, (unsigned) elem_tid, (unsigned) alignment,
-            (unsigned) layout_marker);
+    fprintf(out,
+            ", XR_POD_SLICE_VIEW_REINTERPRET, (uint16_t)1, true, "
+            "(uint16_t)%u, (uint16_t)%u, (uint16_t)%u, %s, %s)",
+            (unsigned) elem_size, (unsigned) expected_elem_size, (unsigned) alignment,
+            target_layout_valid ? "true" : "false", layout_marker ? "true" : "false");
+    (void) elem_tid;
 }
 
 static void xicgen_byte_array_copy_within(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
