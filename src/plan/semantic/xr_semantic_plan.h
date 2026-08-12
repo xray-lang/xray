@@ -69,6 +69,7 @@ typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_SOURCE_EXPORT,
     XR_SEM_CALL_TARGET_INDIRECT_CALLABLE,
     XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE,
+    XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 
@@ -183,6 +184,7 @@ typedef struct XrSemanticTypeRecord {
     XrStableId id;
     const char *canonical_key;
     uint32_t kind;
+    uint32_t builtin_type;
     uint32_t child_begin;
     uint32_t aggregate_extent;
     uint32_t aggregate_align;
@@ -347,7 +349,9 @@ typedef struct XrSemanticOperandRecord {
  * open function-value dispatch domain and its conservative state obligation;
  * it is not a target identity or execution authority. NATIVE_NAMESPACE_YIELDABLE
  * is rebuilt from a resolver-proven native whole-module import plus the
- * canonical stdlib registry. All five kinds
+ * canonical stdlib registry. BUILTIN_INSTANCE_YIELDABLE binds a reserved
+ * builtin instance type, selector, and arity without asserting a machine call
+ * target. All six kinds
  * independently authorize coroutine state creation without retaining Xi data.
  */
 typedef struct XrSemanticCallTargetRecord {

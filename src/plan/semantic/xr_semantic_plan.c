@@ -172,6 +172,7 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_bytes(&ctx, type->id.bytes, sizeof(type->id.bytes));
         hash_string(&ctx, type->canonical_key);
         hash_u64(&ctx, type->kind);
+        hash_u64(&ctx, type->builtin_type);
         hash_u64(&ctx, type->child_begin);
         hash_u64(&ctx, type->aggregate_extent);
         hash_u64(&ctx, type->aggregate_align);
@@ -721,8 +722,9 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
         dump_id(out, record->id);
         fputs(" key=", out);
         dump_text(out, record->canonical_key);
-        fprintf(out, " kind=%u scalar=%u flags=%u aggregate=%u:%u children=[", record->kind,
-                record->scalar_rep, record->flags, record->aggregate_extent,
+        fprintf(out, " kind=%u builtin=%u scalar=%u flags=%u aggregate=%u:%u children=[",
+                record->kind, record->builtin_type, record->scalar_rep, record->flags,
+                record->aggregate_extent,
                 record->aggregate_align);
         for (uint16_t c = 0; c < record->child_count; c++)
             fprintf(out, "%s%u", c ? "," : "", plan->type_children[record->child_begin + c]);

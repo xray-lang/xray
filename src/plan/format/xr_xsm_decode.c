@@ -213,7 +213,7 @@ static bool counts_fit_payload_minimum(XrXsmCounts count, size_t remaining) {
     } while (0)
     /* Exact fixed-width bytes plus the four-byte length prefix for each possibly-empty string. */
     XR_MINIMUM_PAYLOAD(entities, 36u);
-    XR_MINIMUM_PAYLOAD(types, 40u);
+    XR_MINIMUM_PAYLOAD(types, 44u);
     XR_MINIMUM_PAYLOAD(type_children, 4u);
     XR_MINIMUM_PAYLOAD(functions, 76u);
     XR_MINIMUM_PAYLOAD(parameters, 40u);
@@ -375,6 +375,7 @@ static void decode_types(XrXsmReader *reader, XrSemanticPlan *plan) {
         xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
         record->canonical_key = take_plan_string(reader, plan, false);
         record->kind = xr_xsm_take_u32(reader);
+        record->builtin_type = xr_xsm_take_u32(reader);
         record->child_begin = xr_xsm_take_u32(reader);
         record->aggregate_extent = xr_xsm_take_u32(reader);
         record->aggregate_align = xr_xsm_take_u32(reader);

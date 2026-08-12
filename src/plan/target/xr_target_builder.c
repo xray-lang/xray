@@ -845,10 +845,12 @@ static bool semantic_stringbuilder_constructor_is_exact(
         xr_semantic_plan_type(plan, operation->result_type);
     int written = snprintf(
         expected_type_key, sizeof(expected_type_key),
-        "type-v2:%u:0:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
-        (unsigned) XR_KIND_INSTANCE, (unsigned) XR_SCALAR_REP_NONE);
+        "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
+        (unsigned) XR_KIND_INSTANCE, (unsigned) XR_TID_STRINGBUILDER,
+        (unsigned) XR_SCALAR_REP_NONE);
     return type && written > 0 && (size_t) written < sizeof(expected_type_key) &&
-           type->kind == XR_KIND_INSTANCE && type->child_count == 0 &&
+           type->kind == XR_KIND_INSTANCE && type->builtin_type == XR_TID_STRINGBUILDER &&
+           type->child_count == 0 &&
            type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->scalar_rep == XR_SCALAR_REP_NONE &&
            type->flags ==

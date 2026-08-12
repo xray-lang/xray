@@ -17,6 +17,7 @@
 #include "../../ir/xi_ops_gen.h"
 #include "../../plan/semantic/xr_semantic_graph.h"
 #include "../../runtime/value/xtype.h"
+#include "../../runtime/value/xtype_names.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,10 +56,31 @@ static void set_diag(XrAotRefinementDiagnostic *diag, uint32_t issue,
     diag->semantic_operation = operation;
 }
 
+static uint32_t live_builtin_type(const XrType *type) {
+    static const struct {
+        const char *name;
+        uint32_t id;
+    } builtins[] = {
+        {"StringBuilder", XR_TID_STRINGBUILDER},
+        {"Task", XR_TID_COROUTINE},
+        {"WorkQueue", XR_TID_WORKQUEUE},
+        {"ResultGroup", XR_TID_RESULTGROUP},
+        {"CountdownLatch", XR_TID_COUNTDOWNLATCH},
+        {"Semaphore", XR_TID_SEMAPHORE},
+        {"EventCount", XR_TID_EVENTCOUNT},
+    };
+    for (size_t index = 0; index < sizeof(builtins) / sizeof(builtins[0]);
+         index++)
+        if (xr_type_is_builtin_named_class(type, builtins[index].name))
+            return builtins[index].id;
+    return XR_TID_NULL;
+}
+
 static bool source_type_matches(const XrType *live,
                                 const XrSemanticTypeRecord *semantic) {
     if (!live || !semantic || (uint32_t) live->kind != semantic->kind ||
-        live->scalar_rep != semantic->scalar_rep)
+        live->scalar_rep != semantic->scalar_rep ||
+        live_builtin_type(live) != semantic->builtin_type)
         return false;
     uint8_t flags =
         (uint8_t) ((live->is_nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
@@ -717,8 +739,8 @@ static bool verify_scalar_type_authority(VerifyAuthority *ctx,
     char prefix[256];
     int prefix_length = snprintf(
         prefix, sizeof(prefix),
-        "type-v2:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:",
-        (unsigned) live->kind, live->semantic_type_id,
+        "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:",
+        (unsigned) live->kind, live->semantic_type_id, live_builtin_type(live),
         live->is_nullable ? 1u : 0u, live->is_const ? 1u : 0u,
         live->is_value_type ? 1u : 0u, live->is_literal ? 1u : 0u,
         live->is_cycle_candidate ? 1u : 0u, live->ptr_is_mut ? 1u : 0u,
@@ -841,8 +863,9 @@ static bool aot_stringbuilder_constructor_is_exact(
         ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
     int written = snprintf(
         expected_type_key, sizeof(expected_type_key),
-        "type-v2:%u:0:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
-        (unsigned) XR_KIND_INSTANCE, (unsigned) XR_SCALAR_REP_NONE);
+        "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
+        (unsigned) XR_KIND_INSTANCE, (unsigned) XR_TID_STRINGBUILDER,
+        (unsigned) XR_SCALAR_REP_NONE);
     return semantic && operation && type && written > 0 &&
            (size_t) written < sizeof(expected_type_key) &&
            operation->opcode == XI_CALL_BUILTIN &&
@@ -865,7 +888,9 @@ static bool aot_stringbuilder_constructor_is_exact(
            operation->return_provenance == XR_SEM_RETURN_OWNED &&
            operation->return_parameter == -1 && operation->return_complete == 1 &&
            semantic_allocation_identity_is_canonical(operation) &&
-           type->kind == XR_KIND_INSTANCE && type->child_count == 0 &&
+           type->kind == XR_KIND_INSTANCE &&
+           type->builtin_type == XR_TID_STRINGBUILDER &&
+           type->child_count == 0 &&
            type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->scalar_rep == XR_SCALAR_REP_NONE &&
            type->flags ==
@@ -1902,8 +1927,9 @@ static bool verify_string_literal_type_authority(
     char prefix[256];
     int prefix_length = snprintf(
         prefix, sizeof(prefix),
-        "type-v2:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:",
+        "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:",
         (unsigned) live->type->kind, live->type->semantic_type_id,
+        live_builtin_type(live->type),
         live->type->is_nullable ? 1u : 0u,
         live->type->is_const ? 1u : 0u,
         live->type->is_value_type ? 1u : 0u,

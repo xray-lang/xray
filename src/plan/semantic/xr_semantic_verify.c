@@ -38,6 +38,71 @@ static bool is_power_of_two_u32(uint32_t value) {
     return value != 0 && (value & (value - 1u)) == 0;
 }
 
+static const char *frozen_builtin_type_name(uint32_t builtin_type) {
+    switch (builtin_type) {
+        case XR_TID_STRINGBUILDER:
+            return "StringBuilder";
+        case XR_TID_COROUTINE:
+            return "Task";
+        case XR_TID_WORKQUEUE:
+            return "WorkQueue";
+        case XR_TID_RESULTGROUP:
+            return "ResultGroup";
+        case XR_TID_COUNTDOWNLATCH:
+            return "CountdownLatch";
+        case XR_TID_SEMAPHORE:
+            return "Semaphore";
+        case XR_TID_EVENTCOUNT:
+            return "EventCount";
+        default:
+            return NULL;
+    }
+}
+
+static bool semantic_builtin_type_identity_exact(const XrSemanticTypeRecord *type) {
+    if (!type || !type->canonical_key)
+        return false;
+    unsigned key_kind = 0;
+    unsigned key_semantic_type = 0;
+    unsigned key_builtin_type = 0;
+    unsigned nullable = 0, is_const = 0, is_value = 0, is_literal = 0;
+    unsigned cycle_candidate = 0, pointer_mutable = 0, scalar_rep = 0;
+    size_t alias_length = 0;
+    int consumed = 0;
+    if (sscanf(type->canonical_key,
+               "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:%n",
+               &key_kind, &key_semantic_type, &key_builtin_type, &nullable,
+               &is_const, &is_value, &is_literal, &cycle_candidate,
+               &pointer_mutable, &scalar_rep, &alias_length, &consumed) != 11 ||
+        consumed <= 0 ||
+        key_kind != type->kind || key_builtin_type != type->builtin_type)
+        return false;
+    if (type->builtin_type == XR_TID_NULL)
+        return true;
+    const char *name = frozen_builtin_type_name(type->builtin_type);
+    uint8_t expected_flags =
+        (uint8_t) ((nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
+                   (is_const ? XR_SEM_TYPE_CONST : 0u) |
+                   (is_value ? XR_SEM_TYPE_VALUE : 0u) |
+                   (is_literal ? XR_SEM_TYPE_LITERAL : 0u) |
+                   XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT);
+    size_t key_length = strlen(type->canonical_key);
+    if (!name || type->kind != XR_KIND_INSTANCE || key_semantic_type != 0 ||
+        cycle_candidate != 0 || pointer_mutable != 0 ||
+        scalar_rep != XR_SCALAR_REP_NONE || type->scalar_rep != scalar_rep ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->flags != expected_flags || alias_length > key_length - (size_t) consumed)
+        return false;
+    const char *named = type->canonical_key + consumed + alias_length;
+    char expected[96];
+    int length = snprintf(
+        expected, sizeof(expected),
+        ";named:%zu:%s[%u", strlen(name), name, (unsigned) type->child_count);
+    return length > 0 && (size_t) length < sizeof(expected) &&
+           strncmp(named, expected, (size_t) length) == 0 &&
+           key_length > (size_t) length && type->canonical_key[key_length - 1u] == ']';
+}
+
 static bool verify_id(const char *key, XrStableId actual) {
     XrStableId expected;
     XrFingerprint digest;
@@ -511,6 +576,9 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
         const XrSemanticTypeRecord *type = &plan->types[i];
         if (!verify_id(type->canonical_key, type->id))
             return report(error, error_size, "XR_SEM_0002", "type stable identity is invalid");
+        if (!semantic_builtin_type_identity_exact(type))
+            return report(error, error_size, "XR_SEM_0002",
+                          "builtin type identity is not exact");
         if (type->kind >= XR_KIND_COUNT)
             return report(error, error_size, "XR_SEM_0005", "plan contains an invalid type kind");
         if ((type->flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0 &&
@@ -945,10 +1013,12 @@ static bool build_definition_map(const XrSemanticPlan *plan, uint32_t **out,
 static bool semantic_type_is_exact_string_builder(const XrSemanticTypeRecord *type) {
     char expected[160];
     int length = snprintf(expected, sizeof(expected),
-                          "type-v2:%u:0:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
-                          (unsigned) XR_KIND_INSTANCE, (unsigned) XR_SCALAR_REP_NONE);
+                          "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
+                          (unsigned) XR_KIND_INSTANCE, (unsigned) XR_TID_STRINGBUILDER,
+                          (unsigned) XR_SCALAR_REP_NONE);
     return type && length > 0 && (size_t) length < sizeof(expected) &&
-           type->kind == XR_KIND_INSTANCE && type->child_count == 0 &&
+           type->kind == XR_KIND_INSTANCE && type->builtin_type == XR_TID_STRINGBUILDER &&
+           type->child_count == 0 &&
            type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->scalar_rep == XR_SCALAR_REP_NONE &&
            type->flags ==
@@ -1589,6 +1659,41 @@ static bool resolve_frozen_native_namespace_yieldable_target(
     return false;
 }
 
+static const char *resolve_frozen_builtin_instance_yieldable_target(
+    const XrSemanticPlan *plan, uint32_t operation_index, uint32_t *receiver_type) {
+    const XrSemanticOperationRecord *call = &plan->operations[operation_index];
+    if (call->opcode != XI_CALL_METHOD || (call->semantic_immediate & 1) != 0 ||
+        call->operand_count == 0 || call->metadata_count != 1 ||
+        plan->operands[call->operand_begin].role != XR_SEM_OPERAND_RECEIVER)
+        return NULL;
+    const XrSemanticOperandRecord *receiver = &plan->operands[call->operand_begin];
+    if (receiver->type >= plan->type_count)
+        return NULL;
+    const XrSemanticTypeRecord *type = &plan->types[receiver->type];
+    if (!semantic_builtin_type_identity_exact(type))
+        return NULL;
+    const char *selector = plan->metadata[call->metadata_begin];
+    uint16_t argument_count = (uint16_t) (call->operand_count - 1u);
+    bool exact =
+        (type->builtin_type == XR_TID_COROUTINE &&
+         ((strcmp(selector, "awaitResult") == 0 && argument_count == 0) ||
+          (strcmp(selector, "awaitTimeout") == 0 && argument_count == 1))) ||
+        (type->builtin_type == XR_TID_WORKQUEUE && strcmp(selector, "pop") == 0 &&
+         argument_count <= 1) ||
+        (type->builtin_type == XR_TID_RESULTGROUP && strcmp(selector, "recv") == 0 &&
+         argument_count == 0) ||
+        (type->builtin_type == XR_TID_COUNTDOWNLATCH && strcmp(selector, "wait") == 0 &&
+         argument_count == 0) ||
+        (type->builtin_type == XR_TID_SEMAPHORE && strcmp(selector, "acquire") == 0 &&
+         argument_count == 0) ||
+        (type->builtin_type == XR_TID_EVENTCOUNT && strcmp(selector, "wait") == 0 &&
+         argument_count >= 1 && argument_count <= 2);
+    if (!exact)
+        return NULL;
+    *receiver_type = receiver->type;
+    return frozen_builtin_type_name(type->builtin_type);
+}
+
 static bool stable_id_zero(XrStableId id) {
     XrStableId zero = {{0}};
     return xr_stable_id_equal(id, zero);
@@ -1734,6 +1839,10 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             resolve_frozen_native_namespace_yieldable_target(
                 plan, definitions, value_count, &stores, operation,
                 &native_namespace_module, &native_namespace_selector);
+        uint32_t builtin_instance_type = XR_SEMANTIC_INDEX_NONE;
+        const char *builtin_instance =
+            resolve_frozen_builtin_instance_yieldable_target(
+                plan, operation, &builtin_instance_type);
         uint32_t indirect_type = resolve_frozen_indirect_callable_type(
             plan, definitions, value_count, operation);
         const XrSemanticCallTargetRecord *target =
@@ -1747,7 +1856,8 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         }
         bool source_export = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable ||
-             indirect_type != XR_SEMANTIC_INDEX_NONE || native_namespace) &&
+             indirect_type != XR_SEMANTIC_INDEX_NONE || native_namespace ||
+             builtin_instance) &&
             !target) {
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
@@ -1804,8 +1914,20 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             stable_id_zero(target->export_identity) &&
             stable_id_zero(target->callee_function) &&
             target->callable_type == XR_SEMANTIC_INDEX_NONE;
+        bool builtin_instance_shape =
+            builtin_instance && !source_namespace && !native_namespace &&
+            direct_function == XR_SEMANTIC_INDEX_NONE && !native_yieldable &&
+            indirect_type == XR_SEMANTIC_INDEX_NONE &&
+            target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE &&
+            target->function == XR_SEMANTIC_INDEX_NONE &&
+            target->dependency == XR_SEMANTIC_INDEX_NONE &&
+            target->source_export == XR_SEMANTIC_INDEX_NONE &&
+            stable_id_zero(target->export_identity) &&
+            stable_id_zero(target->callee_function) &&
+            target->callable_type == builtin_instance_type;
         if ((!direct && !native && !source_shape && !indirect &&
-             !native_namespace_shape) || target->reserved[0] != 0 ||
+             !native_namespace_shape && !builtin_instance_shape) ||
+            target->reserved[0] != 0 ||
             target->reserved[1] != 0 || target->reserved[2] != 0) {
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
@@ -1846,13 +1968,24 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                               "call-target-v3:schema=%u:operation=%s:callable-type=%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, type_id,
                               (unsigned) target->kind);
-        } else {
+        } else if (native_namespace_shape) {
             length = snprintf(
                 expected_key, sizeof(expected_key),
                 "call-target-v5:schema=%u:operation=%s:native-namespace=%s.%s:kind=%u",
                 XR_SEMANTIC_SCHEMA_VERSION, operation_id,
                 native_namespace_module, native_namespace_selector,
                 (unsigned) target->kind);
+        } else {
+            char type_id[XR_STABLE_ID_BYTES * 2 + 1];
+            xr_stable_id_hex(plan->types[target->callable_type].id, type_id);
+            const char *selector =
+                plan->metadata[plan->operations[operation].metadata_begin];
+            length = snprintf(
+                expected_key, sizeof(expected_key),
+                "call-target-v6:schema=%u:operation=%s:builtin-instance=%s.%s:"
+                "type=%s:kind=%u",
+                XR_SEMANTIC_SCHEMA_VERSION, operation_id, builtin_instance,
+                selector, type_id, (unsigned) target->kind);
         }
         if (length < 0 || (size_t) length >= sizeof(expected_key) ||
             strcmp(target->canonical_key ? target->canonical_key : "", expected_key) != 0 ||
@@ -2002,6 +2135,20 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
                               "native namespace call-target shape is invalid");
             }
             work.suspendable[operation->function] = 1;
+        } else if (target->kind ==
+                   XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE) {
+            const XrSemanticOperationRecord *operation =
+                &plan->operations[target->operation];
+            if (target->function != XR_SEMANTIC_INDEX_NONE ||
+                target->callable_type >= plan->type_count ||
+                plan->types[target->callable_type].builtin_type == XR_TID_NULL ||
+                operation->opcode != XI_CALL_METHOD ||
+                operation->function >= plan->function_count) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "builtin instance call-target shape is invalid");
+            }
+            work.suspendable[operation->function] = 1;
         }
     }
     for (uint32_t entity_index = 0; entity_index < plan->entity_count; entity_index++) {
@@ -2053,7 +2200,9 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
                 (plan->operations[operation].opcode == XI_CALL_METHOD &&
                  (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
                   target->kind ==
-                      XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE)) ||
+                      XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE ||
+                  target->kind ==
+                      XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE)) ||
                 (plan->operations[operation].opcode == XI_CALL &&
                  target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE);
         }

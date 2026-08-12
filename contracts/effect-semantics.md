@@ -9,7 +9,7 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 18 preserves the pointer-free `DIRECT_LOCAL` call-target
+SemanticPlan schema 19 preserves the pointer-free `DIRECT_LOCAL` call-target
 authority to lexical shared slots. Direct SSA callees still resolve only
 through exact identity copies to a closure/function binding. A shared callee
 must be a `GET_SHARED(slot)` whose first lexical owner, found by walking the
@@ -92,6 +92,19 @@ Missing allocation coverage, a forged key or ID, a shadowed type, or any
 partial constructor shape fails closed. The generic builtin-call effect row is
 unchanged, and no TargetPlan or AOT execution authority follows from this
 SemanticPlan prerequisite alone.
+Schema 19 freezes a canonical builtin declaration identity in every semantic
+type row and in the `type-v3` canonical key. A user class with the same display
+name has builtin identity zero and cannot collide with a runtime builtin. The
+builder may publish `BUILTIN_INSTANCE_YIELDABLE` only for an exact non-super
+`XI_CALL_METHOD` on the frozen builtin receiver type when the selector and
+arity match the bounded Task, WorkQueue, ResultGroup, CountdownLatch,
+Semaphore, or EventCount yieldable-method table. The independent verifier
+rebuilds the receiver operand, builtin identity, selector, arity, canonical
+call identity, and one-to-one coroutine-state relation. It does not freeze an
+execution target, provider spelling, frame layout, or result materialization;
+TargetPlan therefore continues to reject the call until a separate target
+family consumes it. Unknown builtins, user shadows, super calls, wrong arity,
+ordinary methods, and missing states remain fail closed.
 Function declarations publish their immutable binding capability and lexical
 storage domain with the rest of analyzer ownership evidence. Closure lowering
 may copy those facts into SemanticPlan capture records but may not infer them
@@ -256,13 +269,13 @@ anchor-sha256: tests/unit/ir/test_xi_lower.c fbcb2ea7d98487c81c049b936716158b209
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 8ac0559b635cba3f51a6027b9fb49b0f1e7c24f5d13d5525dc151bf66b8fa6bf
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef875074bfbe67aa4c0ffcb9c6cda031741
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
-anchor-sha256: src/plan/format/xr_xsm_encode.c 022b73e6b08c9e2cff678848ecd46a7beba028373273fe1c7b680318dcb09324
+anchor-sha256: src/plan/format/xr_xsm_encode.c 291724ad33a060a893a118ea141e8a3ac1171fecfd493f6f54759359888a2472
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 52132ab3bdeecfb13de7a7a32dbfbea3d088c0e1a0d60b9c798eef0b0b61856f
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h ff3ff309c7476fb5875ebc732ccb068ff9e3de6b70a53f3d8669a7f6f9e502ed
-anchor-sha256: src/plan/semantic/xr_semantic_plan.c a9eb04e592a6ff487266251a4c16f94d7030f548772e040d90d97d46482b0650
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 4276c3c8c099cb497292b72f607312e06b48c5408fc02fb012d05096d331e580
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 9eacd2175711a544ec117c04f24a6eefa03af79894f03dc989cc44dbb823853b
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h c8e86501d9226465450d4679e201515574dec433e17d6e75e5db596e93b7acac
+anchor-sha256: src/plan/semantic/xr_semantic_plan.c 542f42b33d6a8a48dd40189f6c6b27dd233ab6d06e7d9b2f6c5beec1df92ccbf
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 352674b9c19cb48de2f3483ff7087bf491b3ed42c759fe5c8c179f2cd0d25f1e
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 290c011774c28fd8c86c0c67fbb4775c92d3de1bff8f8636b3ad896194049d06
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 332a3fbc73089bebc80a8c58eedc11309e7bcc025104198d8d3a03b9ac03798b
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c f8823db60d9d38dce670657f7751aeb12e5860f9a0938b420254b66fb65ceb0b
 anchor-sha256: src/stdlib/xstdlib_metadata.h 4f0d9628ff18ec6522c48bf602a9ba738813cb1a11f2d059dc7d9c7daf179c14
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 7b860d189bb621cf0d97caa5407655b09be31b6582444ca052874f34840cd809
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 30194ce91fae58ba6dfb5310501fcb02cb8b20bd17e486996b536250bdfd8697

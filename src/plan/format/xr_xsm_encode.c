@@ -61,6 +61,7 @@ static void encode_types(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
         xr_xsm_put_string(writer, record->canonical_key);
         xr_xsm_put_u32(writer, record->kind);
+        xr_xsm_put_u32(writer, record->builtin_type);
         xr_xsm_put_u32(writer, record->child_begin);
         xr_xsm_put_u32(writer, record->aggregate_extent);
         xr_xsm_put_u32(writer, record->aggregate_align);

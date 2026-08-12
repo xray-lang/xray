@@ -218,6 +218,24 @@ static const char *copy_canonical_source_file(XrSemanticBuildContext *ctx, const
 static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stack, uint32_t depth,
                      XrSemanticBuildContext *ctx);
 
+static uint32_t frozen_builtin_type(const XrType *type) {
+    if (xr_type_is_builtin_named_class(type, "StringBuilder"))
+        return XR_TID_STRINGBUILDER;
+    if (xr_type_is_builtin_named_class(type, "Task"))
+        return XR_TID_COROUTINE;
+    if (xr_type_is_builtin_named_class(type, "WorkQueue"))
+        return XR_TID_WORKQUEUE;
+    if (xr_type_is_builtin_named_class(type, "ResultGroup"))
+        return XR_TID_RESULTGROUP;
+    if (xr_type_is_builtin_named_class(type, "CountdownLatch"))
+        return XR_TID_COUNTDOWNLATCH;
+    if (xr_type_is_builtin_named_class(type, "Semaphore"))
+        return XR_TID_SEMAPHORE;
+    if (xr_type_is_builtin_named_class(type, "EventCount"))
+        return XR_TID_EVENTCOUNT;
+    return XR_TID_NULL;
+}
+
 static bool type_key_list(XrType *const *types, int count, XrTextBuilder *key, const XrType **stack,
                           uint32_t depth, XrSemanticBuildContext *ctx) {
     if (count < 0 || (count > 0 && !types) || !text_append_format(key, "[%d", count))
@@ -282,8 +300,9 @@ static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stac
         return text_append_format(key, "cycle:%u", type->semantic_type_id);
     }
     stack[depth] = type;
-    if (!text_append_format(key, "type-v2:%u:%u:%u:%u:%u:%u:%u:%u:%u:", (unsigned) type->kind,
-                            type->semantic_type_id, type->is_nullable ? 1u : 0u,
+    if (!text_append_format(key, "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:",
+                            (unsigned) type->kind, type->semantic_type_id,
+                            frozen_builtin_type(type), type->is_nullable ? 1u : 0u,
                             type->is_const ? 1u : 0u, type->is_value_type ? 1u : 0u,
                             type->is_literal ? 1u : 0u, type->is_cycle_candidate ? 1u : 0u,
                             type->ptr_is_mut ? 1u : 0u, (unsigned) type->scalar_rep) ||
@@ -522,6 +541,7 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
         !xr_stable_id_from_key(record->canonical_key, &record->id, &(XrFingerprint) {{0}}))
         return fail(ctx, "XR_EXEC_5003", "semantic type identity allocation failed");
     record->kind = (uint32_t) type->kind;
+    record->builtin_type = frozen_builtin_type(type);
     record->scalar_rep = type->scalar_rep;
     bool reference_capable = xi_own_type_is_rc(type);
     bool borrow_view = type->kind == XR_KIND_SLICE;
@@ -1946,6 +1966,88 @@ static bool append_native_namespace_call_target(XrSemanticBuildContext *ctx,
     return true;
 }
 
+static const char *builtin_instance_yieldable_name(const XrType *type,
+                                                   const char *selector,
+                                                   uint16_t argument_count) {
+    if (!type || !selector || type->kind != XR_KIND_INSTANCE)
+        return NULL;
+    if (xr_type_is_builtin_named_class(type, "Task") &&
+        ((strcmp(selector, "awaitResult") == 0 && argument_count == 0) ||
+         (strcmp(selector, "awaitTimeout") == 0 && argument_count == 1)))
+        return "Task";
+    if (xr_type_is_builtin_named_class(type, "WorkQueue") &&
+        strcmp(selector, "pop") == 0 && argument_count <= 1)
+        return "WorkQueue";
+    if (xr_type_is_builtin_named_class(type, "ResultGroup") &&
+        strcmp(selector, "recv") == 0 && argument_count == 0)
+        return "ResultGroup";
+    if (xr_type_is_builtin_named_class(type, "CountdownLatch") &&
+        strcmp(selector, "wait") == 0 && argument_count == 0)
+        return "CountdownLatch";
+    if (xr_type_is_builtin_named_class(type, "Semaphore") &&
+        strcmp(selector, "acquire") == 0 && argument_count == 0)
+        return "Semaphore";
+    if (xr_type_is_builtin_named_class(type, "EventCount") &&
+        strcmp(selector, "wait") == 0 && argument_count >= 1 && argument_count <= 2)
+        return "EventCount";
+    return NULL;
+}
+
+static bool append_builtin_instance_yieldable_call_target(
+    XrSemanticBuildContext *ctx, const XiValue *value, uint32_t operation) {
+    if (!value || value->op != XI_CALL_METHOD || value->nargs == 0 ||
+        !value->args[0] || !value->args[0]->type || !value->aux ||
+        (value->aux_int & 1) != 0)
+        return true;
+    const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
+    const char *selector = (const char *) value->aux;
+    const char *builtin = builtin_instance_yieldable_name(
+        value->args[0]->type, selector, (uint16_t) (value->nargs - 1u));
+    if (!builtin || call->metadata_count != 1 ||
+        strcmp(ctx->plan->metadata[call->metadata_begin], selector) != 0 ||
+        call->operand_count != value->nargs)
+        return true;
+    uint32_t receiver_type = ctx->plan->operands[call->operand_begin].type;
+    if (receiver_type >= ctx->plan->type_count ||
+        ctx->plan->operands[call->operand_begin].role != XR_SEM_OPERAND_RECEIVER)
+        return true;
+    if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
+        !reserve_array((void **) &ctx->plan->call_targets,
+                       &ctx->plan->call_target_capacity,
+                       ctx->plan->call_target_count + 1,
+                       sizeof(*ctx->plan->call_targets),
+                       XR_SEMANTIC_MAX_CALL_TARGETS))
+        return fail(ctx, "XR_EXEC_5003", "semantic call-target budget exhausted");
+    XrSemanticCallTargetRecord *record =
+        &ctx->plan->call_targets[ctx->plan->call_target_count++];
+    memset(record, 0, sizeof(*record));
+    record->operation = operation;
+    record->function = XR_SEMANTIC_INDEX_NONE;
+    record->dependency = XR_SEMANTIC_INDEX_NONE;
+    record->source_export = XR_SEMANTIC_INDEX_NONE;
+    record->callable_type = receiver_type;
+    record->kind = XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE;
+    XrTextBuilder key = {0};
+    bool valid = text_append_format(
+                     &key, "call-target-v6:schema=%u:operation=",
+                     XR_SEMANTIC_SCHEMA_VERSION) &&
+                 text_append_stable_id(&key, call->id) &&
+                 text_append(&key, ":builtin-instance=") &&
+                 text_append(&key, builtin) && text_append(&key, ".") &&
+                 text_append(&key, selector) && text_append(&key, ":type=") &&
+                 text_append_stable_id(&key, ctx->plan->types[receiver_type].id) &&
+                 text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    if (valid)
+        record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+    text_dispose(&key);
+    XrFingerprint digest;
+    if (!valid || !record->canonical_key ||
+        !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+        return fail(ctx, "XR_EXEC_5003",
+                    "semantic builtin instance identity allocation failed");
+    return true;
+}
+
 static bool append_source_export_call_target(XrSemanticBuildContext *ctx,
                                              const XiValue *value,
                                              uint32_t operation) {
@@ -2021,9 +2123,14 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
         uint32_t before = ctx->plan->call_target_count;
         if (!append_source_export_call_target(ctx, value, operation))
             return false;
+        if (ctx->plan->call_target_count != before)
+            return true;
+        if (!append_native_namespace_call_target(ctx, value, operation))
+            return false;
         return ctx->plan->call_target_count != before
                    ? true
-                   : append_native_namespace_call_target(ctx, value, operation);
+                   : append_builtin_instance_yieldable_call_target(ctx, value,
+                                                                   operation);
     }
     if (value->op != XI_CALL && value->op != XI_TAIL_CALL)
         return true;
@@ -2123,10 +2230,12 @@ static bool xi_string_builder_constructor_exact(const XiValue *value) {
 static bool semantic_string_builder_type_exact(const XrSemanticTypeRecord *type) {
     char expected[160];
     int length = snprintf(expected, sizeof(expected),
-                          "type-v2:%u:0:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
-                          (unsigned) XR_KIND_INSTANCE, (unsigned) XR_SCALAR_REP_NONE);
+                          "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
+                          (unsigned) XR_KIND_INSTANCE, (unsigned) XR_TID_STRINGBUILDER,
+                          (unsigned) XR_SCALAR_REP_NONE);
     return type && length > 0 && (size_t) length < sizeof(expected) &&
-           type->kind == XR_KIND_INSTANCE && type->child_count == 0 &&
+           type->kind == XR_KIND_INSTANCE && type->builtin_type == XR_TID_STRINGBUILDER &&
+           type->child_count == 0 &&
            type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->scalar_rep == XR_SCALAR_REP_NONE &&
            type->flags ==
