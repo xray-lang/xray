@@ -329,12 +329,3 @@ void *xray_vm_get_userdata(XrVMRuntime *isolate) {
     xray_api_checkr(isolate != NULL, "xray_vm_get_userdata: NULL isolate", NULL);
     return isolate->core_rt ? isolate->core_rt->userdata : NULL;
 }
-
-/* ========== Statistics and Debugging ========== */
-
-void xray_vm_get_stats(XrVMRuntime *isolate, size_t *bytes_allocated) {
-    xray_api_check(isolate != NULL, "xray_vm_get_stats: NULL isolate");
-    if (bytes_allocated)
-        *bytes_allocated =
-            isolate->core_rt ? (size_t) isolate->core_rt->fixed_heap.totalbytes : (size_t) 0;
-}

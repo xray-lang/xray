@@ -120,17 +120,6 @@ TEST(api_isolate_get_userdata_null) {
     ASSERT_NULL(ud);
 }
 
-TEST(api_isolate_get_stats_null) {
-    if (SKIP_NULL_RETURN_TESTS) {
-        ASSERT_TRUE(1);
-        return;
-    }
-    size_t bytes = 999;
-    xray_vm_get_stats(NULL, &bytes);
-    // After NULL guard returns early, values should be unchanged
-    ASSERT_EQ_UINT(bytes, 999);
-}
-
 /* ========== Isolate Lifecycle (valid) ========== */
 
 TEST(api_isolate_create_destroy) {
@@ -157,20 +146,6 @@ TEST(api_isolate_userdata_roundtrip) {
     xray_vm_delete(iso);
 }
 
-TEST(api_isolate_stats_valid) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
-    XrVMRuntime *iso = xray_vm_new(&params);
-    ASSERT_NOT_NULL(iso);
-
-    size_t bytes = 0;
-    xray_vm_get_stats(iso, &bytes);
-    // After creation, some memory should be allocated
-    ASSERT_GE(bytes, 0);
-
-    xray_vm_delete(iso);
-}
-
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -184,11 +159,9 @@ RUN_TEST(api_isolate_dofile_null_isolate);
 RUN_TEST(api_isolate_dofile_null_filename);
 RUN_TEST(api_isolate_set_userdata_null);
 RUN_TEST(api_isolate_get_userdata_null);
-RUN_TEST(api_isolate_get_stats_null);
 
 RUN_TEST_SUITE("API Lifecycle - Valid Operations");
 RUN_TEST(api_isolate_create_destroy);
 RUN_TEST(api_isolate_userdata_roundtrip);
-RUN_TEST(api_isolate_stats_valid);
 
 TEST_MAIN_END()
