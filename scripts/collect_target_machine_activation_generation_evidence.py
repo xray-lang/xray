@@ -135,6 +135,8 @@ def evaluate(codes: dict[str, int], identities: dict[str, str] | None,
     archive_ok = codes["archive"] == 0 and identities is not None
     xtp_ok = codes["xtp"] == 0
     cli_ok = codes["cli"] == 0
+    hosted_ok = codes["hosted-fragment"] == 0
+    native_ok = codes["target-plan-to-native"] == 0
     lifecycle = {
         name: {"result": "passed" if lifecycle_ok else "failed",
                "log": "logs/runtime-generation.log"}
@@ -154,6 +156,17 @@ def evaluate(codes: dict[str, int], identities: dict[str, str] | None,
         routes.append("runtime-only-embed")
     if lifecycle_ok:
         routes.append("generation-lifecycle")
+    if hosted_ok:
+        routes.append("hosted-fragment")
+    if native_ok:
+        routes.append("target-plan-to-native")
+    route_proofs = {
+        name: {
+            "result": "passed" if codes[name] == 0 else "failed",
+            "log": f"logs/{name}.log",
+        }
+        for name in ("hosted-fragment", "target-plan-to-native")
+    }
     payload = {
         "producer": PRODUCER,
         "lifecycle": lifecycle,
@@ -163,9 +176,11 @@ def evaluate(codes: dict[str, int], identities: dict[str, str] | None,
         "runtime_only_compiler_symbols": compiler_symbols,
         "artifact_routes": sorted(set(routes)),
         "missing_artifact_routes": sorted(set(required_routes) - set(routes)),
+        "route_proofs": route_proofs,
     }
     passed = (
-        lifecycle_ok and archive_ok and xtp_ok and cli_ok and compiler_symbols == 0
+        lifecycle_ok and archive_ok and xtp_ok and cli_ok and hosted_ok and native_ok
+        and compiler_symbols == 0
         and not payload["missing_artifact_routes"]
         and all(value == "rejected-before-activation"
                 for value in negative_mismatches.values())
@@ -205,7 +220,11 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         ))
         logs = staging / "logs"
         logs.mkdir()
+        artifacts = staging / "artifacts"
+        artifacts.mkdir()
         identity_path = staging / "runtime-identities.json"
+        hosted_output = artifacts / "hosted-fragment.c"
+        route_fixture = root / "tests/aot/filetests/cgen/string_literal_representation_authority.xr"
         commands = {
             "generation": [str(generation)],
             "archive": [str(archive), "--evidence-json", str(identity_path)],
@@ -215,11 +234,39 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
                 str(root / "tests/cli/run_target_artifact_boundary_tests.py"),
                 "--binary", str(xray), "--xtp-writer", str(xtp),
             ],
+            "hosted-fragment": [
+                str(xray), "build", "--native", "--artifact", "hosted-fragment",
+                "--c-only", "-o", str(hosted_output), str(route_fixture),
+            ],
+            "target-plan-to-native": [
+                sys.executable,
+                str(root / "tests/aot/run_string_literal_representation.py"),
+                "--xray", str(xray), "--root", str(root),
+            ],
         }
         codes: dict[str, int] = {}
         outputs: dict[str, str] = {}
         for name, command in commands.items():
             codes[name], outputs[name] = run(command, root)
+            if name == "hosted-fragment" and codes[name] == 0:
+                try:
+                    generated = hosted_output.read_text(encoding="utf-8", errors="strict")
+                except (OSError, UnicodeError) as error:
+                    codes[name] = 1
+                    outputs[name] += f"\nhosted fragment output is unreadable: {error}\n"
+                else:
+                    required_shape = (
+                        '#include "xray_hosted_fragment_abi.h"',
+                        "uint32_t xr_hosted_fragment_abi_version(void)",
+                        "bool xr_hosted_fragment_initialize(",
+                    )
+                    missing_shape = [token for token in required_shape if token not in generated]
+                    if missing_shape:
+                        codes[name] = 1
+                        outputs[name] += "\nhosted fragment ABI shape is incomplete: " + ", ".join(missing_shape) + "\n"
+                    else:
+                        outputs[name] += (f"\nhosted_fragment_sha256="
+                                          f"{assembler.sha256_file(hosted_output)}\n")
             (logs / f"{name if name != 'generation' else 'runtime-generation'}.log").write_text(
                 f"argv={json.dumps(command, ensure_ascii=False)}\n"
                 f"exit_code={codes[name]}\n{outputs[name]}", encoding="utf-8",

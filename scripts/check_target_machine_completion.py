@@ -821,6 +821,20 @@ def activation_findings(data: dict[str, Any], verified: set[str],
         findings.append(finding("TM-COMP-ACTIVATION-ROUTES", "activation-generation",
                                 "activation evidence omits required artifact routes",
                                 len(missing), missing))
+    route_proofs = data.get("route_proofs")
+    required_route_proofs = {"hosted-fragment", "target-plan-to-native"}
+    if not isinstance(route_proofs, dict) or set(route_proofs) != required_route_proofs:
+        findings.append(finding("TM-COMP-ACTIVATION-ROUTE-PROOFS", "activation-generation",
+                                "native artifact route proofs are incomplete"))
+    else:
+        for name, row in route_proofs.items():
+            if not isinstance(row, dict) or row.get("result") != "passed":
+                findings.append(finding("TM-COMP-ACTIVATION-ROUTE-PROOF",
+                                        "activation-generation",
+                                        f"artifact route {name} did not pass"))
+            else:
+                check_log_reference(findings, "activation-generation", verified,
+                                    row.get("log"), name)
     return findings
 
 
@@ -1188,6 +1202,10 @@ def self_test(manifest_path: Path) -> int:
                                for name in ("artifact", "generation", "semantic", "target")},
                 "activation_before_verify": 0, "runtime_only_compiler_symbols": 0,
                 "artifact_routes": manifest["matrix"]["required_artifact_routes"],
+                "route_proofs": {
+                    name: {"result": "passed", "log": activation_log}
+                    for name in ("hosted-fragment", "target-plan-to-native")
+                },
             })
             common, verified = common_evidence_findings(
                 activation, "activation-generation", evidence_root, identity, input_sha256
