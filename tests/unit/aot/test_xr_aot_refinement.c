@@ -84,6 +84,9 @@ typedef struct MaterializationFixture {
     XrTargetPlan *target_plan;
 } MaterializationFixture;
 
+static XrTargetPlan *build_attached_target_plan(
+    XiFunc *function, XrTargetProfile **out_profile);
+
 typedef struct SharedScalarFixture {
     XiFunc *function;
     XiBlock *entry;
@@ -1996,6 +1999,63 @@ static void test_exact_string_literal_storage_is_tagged_and_fail_closed(void) {
     xi_func_free(function);
 }
 
+static void test_stringbuilder_constructor_refinement_is_exact(void) {
+    XrType stringbuilder_type = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 701,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .instance = {.class_name = "StringBuilder"},
+    };
+    XiFunc *function =
+        xi_func_new("stringbuilder_refinement", &scalar_unit);
+    XiBlock *entry = xi_block_new(function);
+    XiValue *builder =
+        xi_value_new(function, entry, XI_CALL_BUILTIN, &stringbuilder_type, 0);
+    XiValue *release =
+        xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
+    REQUIRE(function && entry && builder && release);
+    builder->aux = (void *) "StringBuilder";
+    release->args[0] = builder;
+    xi_block_set_return(entry, NULL);
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build(
+        function, target, &policy, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified);
+    xi_opt_refresh_representations_with_policy(function, &policy);
+    REQUIRE(builder->rep == XR_REP_TAGGED);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+
+    XrStableId saved_identity = target->calls[0].identity;
+    target->calls[0].identity.bytes[0] ^= 1u;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    target->calls[0].identity = saved_identity;
+    uint8_t saved_convention = target->calls[0].calling_convention;
+    target->calls[0].calling_convention = XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    target->calls[0].calling_convention = saved_convention;
+    uint16_t saved_rep = target->calls[0].result_register_rep;
+    target->calls[0].result_register_rep = target->calls[0].error_register_rep;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    target->calls[0].result_register_rep = saved_rep;
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+
+    xr_aot_refinement_plan_free(plan);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_bundle_owns_empty_policy_bound_authority(void) {
     MaterializationFixture fixture = materialization_fixture_create();
     XiRepPolicy policy = xi_rep_policy_native_boundary();
@@ -2944,6 +3004,7 @@ int main(void) {
     test_direct_local_go_callee_storage_is_exact_and_fail_closed();
     test_source_namespace_storage_is_exact_and_fail_closed();
     test_exact_string_literal_storage_is_tagged_and_fail_closed();
+    test_stringbuilder_constructor_refinement_is_exact();
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();
     test_independent_verifier_requires_exact_coverage();

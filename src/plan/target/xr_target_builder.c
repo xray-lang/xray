@@ -813,6 +813,50 @@ static bool semantic_string_literal_is_exact(
                 XR_SEM_TYPE_OWNERSHIP_ROOT);
 }
 
+static bool semantic_stringbuilder_constructor_is_exact(
+    const XrSemanticPlan *plan,
+    const XrSemanticOperationRecord *operation) {
+    char expected_type_key[160];
+    uint32_t metadata_count = 0;
+    const char *const *metadata =
+        xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!plan || !operation || operation->opcode != XI_CALL_BUILTIN ||
+        operation->operand_count != 0 || operation->metadata_count != 1 ||
+        operation->metadata_begin >= metadata_count || !metadata ||
+        strcmp(metadata[operation->metadata_begin], "StringBuilder") != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_BUILTIN) ||
+        operation->flags != xi_generated_op_default_flags(XI_CALL_BUILTIN) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_BUILTIN) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->transfer_mode != XR_TRANSFER_SHARE ||
+        operation->parameter_mode != XR_PARAM_READ ||
+        operation->parameter_ownership != XI_OWN_NONE ||
+        operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        !semantic_allocation_identity_is_canonical(operation))
+        return false;
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(plan, operation->result_type);
+    int written = snprintf(
+        expected_type_key, sizeof(expected_type_key),
+        "type-v2:%u:0:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
+        (unsigned) XR_KIND_INSTANCE, (unsigned) XR_SCALAR_REP_NONE);
+    return type && written > 0 && (size_t) written < sizeof(expected_type_key) &&
+           type->kind == XR_KIND_INSTANCE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags ==
+               (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->canonical_key &&
+           strcmp(type->canonical_key, expected_type_key) == 0;
+}
+
 static bool stable_id_is_zero(XrStableId id) {
     for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++)
         if (id.bytes[i] != 0)
@@ -1728,6 +1772,71 @@ static bool note_string_literal_storage_value(
         .role = XR_TARGET_SLOT_TEMPORARY,
         .root_kind = rep.root_kind,
         .ownership = rep.ownership,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[operation->result_type] &&
+         !append_layout_intent(builder, operation->result_type,
+                               XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                               error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    analysis->type_rep_kinds[operation->result_type] =
+        XR_MACHINE_REP_DYN_VALUE;
+    analysis->used_types[operation->result_type] = 1;
+    return true;
+}
+
+static bool note_stringbuilder_constructor_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan,
+                                   semantic_operation);
+    if (!semantic_stringbuilder_constructor_is_exact(builder->semantic_plan,
+                                                      operation) ||
+        operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >=
+            xr_semantic_plan_function_count(builder->semantic_plan) ||
+        analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "StringBuilder constructor result authority is incomplete");
+    XrTargetMachineRepRecord rep;
+    if (!make_dynamic_value_rep(
+            xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "target profile cannot materialize StringBuilder constructor result");
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function,
+                            XR_TARGET_SLOT_TEMPORARY, operation->id,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "StringBuilder constructor result slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_OWNED,
         .debug_variable = XR_SEMANTIC_INDEX_NONE,
     };
     XrTargetValueIntent value = {
@@ -3421,6 +3530,38 @@ static bool collect_channel_close_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_stringbuilder_constructor_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error,
+    size_t error_size) {
+    if (!semantic_stringbuilder_constructor_is_exact(builder->semantic_plan,
+                                                      operation))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "StringBuilder constructor dispatch authority is incomplete");
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_RETURN_OWNED,
+        .calling_convention =
+            XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR,
+        .target_kind = XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR,
+    };
+    if (!stable_identity_from_pair("xray-target-stringbuilder-constructor-v1",
+                                   operation->id, operation->allocation_id, 0,
+                                   &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "StringBuilder constructor call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
                                              uint32_t target_index,
                                              const XrSemanticCallTargetRecord *target,
@@ -3596,6 +3737,7 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         (uint32_t) operation_count, sizeof(*target_by_operation));
     uint8_t *state_by_operation = (uint8_t *) allocate_records(
         (uint32_t) operation_count, sizeof(*state_by_operation));
+    XrTargetValueStorageAnalysis stringbuilder_values = {0};
     uint32_t function_count =
         (uint32_t) xr_semantic_plan_function_count(plan);
     uint8_t *suspendable = (uint8_t *) allocate_records(
@@ -3618,7 +3760,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         builder->poisoned = true;
         return fail(error, error_size, "XR_EXEC_5003", "call coverage allocation failed");
     }
-    bool valid = true;
+    bool valid = value_storage_analysis_init(
+        builder->semantic_plan, &stringbuilder_values, error, error_size);
     for (uint32_t operation = 0; operation < (uint32_t) operation_count;
          operation++)
         target_by_operation[operation] = XR_SEMANTIC_INDEX_NONE;
@@ -3727,6 +3870,11 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_operation_is_exact_channel_close(plan, operation, NULL)) {
             valid = collect_channel_close_call_intent(builder, i, operation,
                                                        error, error_size);
+        } else if (semantic_stringbuilder_constructor_is_exact(plan, operation)) {
+            valid = note_stringbuilder_constructor_storage_value(
+                        builder, &stringbuilder_values, i, error, error_size) &&
+                    collect_stringbuilder_constructor_call_intent(
+                        builder, i, operation, error, error_size);
         } else if (semantic_operation_is_call_shaped(plan, operation)) {
             valid = fail(error, error_size, "XR_TARGET_1003",
                          "call-shaped operation has no exact target authority");
@@ -3738,6 +3886,7 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
     xr_free(reverse_head);
     xr_free(reverse_next);
     xr_free(queue);
+    value_storage_analysis_dispose(&stringbuilder_values);
     if (!valid) {
         builder->poisoned = true;
         return false;

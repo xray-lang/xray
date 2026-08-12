@@ -118,6 +118,36 @@ static XrType stub_module_namespace = {
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
 };
+static XrType stub_string_builder = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 113,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {.class_name = "StringBuilder"},
+};
+
+static XrSemanticPlan *build_stringbuilder_constructor_semantic(void) {
+    XiFunc *function = xi_func_new("target_stringbuilder_constructor", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *builder =
+        xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_string_builder, 0);
+    REQUIRE(builder != NULL);
+    builder->aux = (void *) "StringBuilder";
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = builder;
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
 
 static int source_export_call_suspendability(void *ud, const XiFunc *current,
                                              const XiValue *call) {
@@ -892,7 +922,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                     "f31a728ee30990e2ea0e8e3195e31c8cb10673730bc9a7c6ef70c892d05433ac") == 0);
+                     "5be2ec2ada4b166fdd28e586ecd2e4763e9a5950293b0a139c8ed2b11138f542") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2852,6 +2882,72 @@ static void test_direct_local_future_storage_fails_closed(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_stringbuilder_constructor_call_authority(void) {
+    XrSemanticPlan *semantic = build_stringbuilder_constructor_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error,
+                                      sizeof(error));
+    if (!built)
+        fprintf(stderr, "StringBuilder TargetPlan failed: %s\n", error);
+    REQUIRE(built);
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(semantic, i);
+        if (candidate && candidate->opcode == XI_CALL_BUILTIN) {
+            operation = candidate;
+            operation_index = i;
+        }
+    }
+    REQUIRE(operation && plan->calls_count == 1);
+    XrTargetCallRecord *call = &plan->calls[0];
+    REQUIRE(call->semantic_operation == operation_index &&
+            call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+            call->result_value == operation->result_value &&
+            call->argument_count == 0 && call->flags == 0 &&
+            call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+            call->calling_convention ==
+                XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR &&
+            call->target_kind ==
+                XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR);
+    const XrTargetValueRepRecord *result =
+        xr_target_plan_value_rep(plan, operation->result_value);
+    REQUIRE(result && result->slot == call->result_slot &&
+            plan->machine_reps[result->register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+
+    XrStableId saved_identity = call->identity;
+    call->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->identity = saved_identity;
+    uint8_t saved_convention = call->calling_convention;
+    call->calling_convention = XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->calling_convention = saved_convention;
+    uint8_t saved_kind = call->target_kind;
+    call->target_kind = XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->target_kind = saved_kind;
+    uint8_t saved_ownership = call->result_ownership;
+    call->result_ownership = XR_TARGET_CALL_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_ownership = saved_ownership;
+    uint16_t saved_rep = call->result_register_rep;
+    call->result_register_rep = call->error_register_rep;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_register_rep = saved_rep;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_structural_mutations_fail_closed(void) {
     XrSemanticPlan *semantic = build_semantic_plan();
     XrTargetProfile *profile = build_profile(0);
@@ -3205,6 +3301,7 @@ static void test_bool_and_nullable_scalar_boundary(void) {
 }
 
 int main(void) {
+    test_stringbuilder_constructor_call_authority();
     test_channel_receive_storage_authority();
     test_channel_close_call_authority();
     test_source_export_call_authority();

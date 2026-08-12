@@ -67,6 +67,36 @@ static XrType stub_module_namespace = {
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
 };
+static XrType stub_stringbuilder = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 6,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {.class_name = "StringBuilder"},
+};
+
+static XrSemanticPlan *build_stringbuilder_semantic_plan(void) {
+    XiFunc *function = xi_func_new("xtp_stringbuilder", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *builder =
+        xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_stringbuilder, 0);
+    REQUIRE(builder != NULL);
+    builder->aux = (void *) "StringBuilder";
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = builder;
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
 
 static int source_export_call_suspendability(void *ud, const XiFunc *current,
                                              const XiValue *call) {
@@ -559,6 +589,10 @@ static XtpFixture make_channel_close_fixture(void) {
     return make_fixture_from_semantic(build_channel_close_semantic_plan());
 }
 
+static XtpFixture make_stringbuilder_fixture(void) {
+    return make_fixture_from_semantic(build_stringbuilder_semantic_plan());
+}
+
 static XtpFixture make_source_export_fixture(void) {
     XtpFixture fixture = {0};
     fixture.semantic =
@@ -806,6 +840,60 @@ static void test_channel_close_row_roundtrip_and_mutate(void) {
         114, /* flags */
         116, /* calling_convention */
         117, /* target_kind */
+    };
+    for (uint32_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
+        uint8_t *copy = copy_artifact(&fixture);
+        uint8_t *entry = directory_entry(copy, XR_XTP_SECTION_CALLS);
+        size_t offset = (size_t) xr_xtp_take_u64(entry + 8);
+        copy[offset + mutations[i]] ^= 1;
+        resign_section(copy, XR_XTP_SECTION_CALLS);
+        resign_artifact(copy, fixture.size);
+        expect_materialize_failure(&fixture, copy);
+        xr_free(copy);
+    }
+    dispose_fixture(&fixture);
+}
+
+static void test_stringbuilder_row_roundtrip_and_mutate(void) {
+    XtpFixture fixture = make_stringbuilder_fixture();
+    uint32_t count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(fixture.plan, &count);
+    REQUIRE(calls && count == 1 &&
+            calls[0].semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+            calls[0].argument_count == 0 && calls[0].flags == 0 &&
+            calls[0].result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+            calls[0].calling_convention ==
+                XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR &&
+            calls[0].target_kind ==
+                XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR);
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *decoded = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
+                                    error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
+                                            fixture.profile, &decoded, error,
+                                            sizeof(error)));
+    const XrTargetCallRecord *decoded_calls =
+        xr_target_plan_calls(decoded, &count);
+    REQUIRE(decoded_calls && count == 1 &&
+            decoded_calls[0].target_kind ==
+                XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR &&
+            decoded_calls[0].result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+            xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
+                                 xr_target_plan_fingerprint(fixture.plan)));
+    xr_target_plan_free(decoded);
+    xr_xtp_candidate_release(candidate);
+
+    static const size_t mutations[] = {
+        0,   /* identity */
+        20,  /* semantic_call_target */
+        76,  /* result_slot */
+        96,  /* result_register_rep */
+        116, /* calling_convention */
+        117, /* target_kind */
+        119, /* result_ownership */
     };
     for (uint32_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
         uint8_t *copy = copy_artifact(&fixture);
@@ -1611,6 +1699,7 @@ int main(int argc, char **argv) {
     test_exact_roundtrip_and_owned_candidate();
     test_direct_call_rows_roundtrip_and_mutate();
     test_channel_close_row_roundtrip_and_mutate();
+    test_stringbuilder_row_roundtrip_and_mutate();
     test_source_export_row_roundtrip_and_mutate();
     test_coroutine_rows_roundtrip_and_mutate();
     test_header_and_directory_mutations();

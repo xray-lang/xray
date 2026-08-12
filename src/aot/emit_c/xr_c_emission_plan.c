@@ -14,12 +14,14 @@
 #include "../../base/xsha256.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
+#include "../../ir/xi_own.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(9)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(10)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
+#define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
 #define XR_C_CHANNEL_RECV_FLOAT_SYMBOL "XR_TO_FLOAT"
 #define XR_C_CHANNEL_RECV_BOOL_SYMBOL "XR_TO_BOOL"
@@ -136,6 +138,121 @@ static const XrSemanticOperationRecord *binding_operation(
     return operation < xr_semantic_plan_operation_count(semantic)
                ? xr_semantic_plan_operation(semantic, operation)
                : NULL;
+}
+
+static bool emission_allocation_identity_is_canonical(
+    const XrSemanticOperationRecord *operation) {
+    static const char suffix[] = "/allocation";
+    if (!operation || !operation->canonical_key || !operation->allocation_key)
+        return false;
+    size_t canonical_length = strlen(operation->canonical_key);
+    size_t allocation_length = strlen(operation->allocation_key);
+    if (canonical_length > SIZE_MAX - sizeof(suffix) ||
+        allocation_length != canonical_length + sizeof(suffix) - 1u ||
+        memcmp(operation->allocation_key, operation->canonical_key,
+               canonical_length) != 0 ||
+        memcmp(operation->allocation_key + canonical_length, suffix,
+               sizeof(suffix)) != 0)
+        return false;
+    XrStableId expected;
+    XrFingerprint digest;
+    return xr_stable_id_from_key(operation->allocation_key, &expected,
+                                 &digest) &&
+           xr_stable_id_equal(expected, operation->allocation_id);
+}
+
+static const XrTargetCallRecord *stringbuilder_constructor_call(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding) {
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    if (!operation || !binding || !slots || binding->slot >= slot_count)
+        return NULL;
+    uint32_t semantic_operation = slots[binding->slot].semantic_operation;
+    const XrTargetCallRecord *match = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        const XrTargetCallRecord *call = &calls[i];
+        if (call->semantic_operation != semantic_operation)
+            continue;
+        if (match || call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+            call->caller_function != operation->function ||
+            call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+            call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+            call->source_export != XR_SEMANTIC_INDEX_NONE ||
+            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_callee_identity) ||
+            call->result_value != binding->semantic_value ||
+            call->result_slot != binding->slot ||
+            call->result_register_rep != binding->register_rep ||
+            call->result_memory_rep != binding->memory_rep ||
+            call->argument_count != 0 || call->adapter_count != 0 ||
+            call->flags != 0 || call->result_mode != XR_TARGET_CALL_VALUE ||
+            call->result_ownership != XR_TARGET_CALL_RETURN_OWNED ||
+            call->calling_convention !=
+                XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR ||
+            call->target_kind !=
+                XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR)
+            return NULL;
+        match = call;
+    }
+    return match;
+}
+
+static bool exact_stringbuilder_new_recipe(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding) {
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t metadata_count = 0;
+    const char *const *metadata =
+        xr_semantic_plan_metadata(semantic, &metadata_count);
+    const XrSemanticTypeRecord *type = operation
+        ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
+    char expected_type_key[160];
+    int written = snprintf(
+        expected_type_key, sizeof(expected_type_key),
+        "type-v2:%u:0:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
+        (unsigned) XR_KIND_INSTANCE, (unsigned) XR_SCALAR_REP_NONE);
+    return operation && type && written > 0 &&
+           (size_t) written < sizeof(expected_type_key) &&
+           stringbuilder_constructor_call(target_plan, binding) &&
+           operation->opcode == XI_CALL_BUILTIN &&
+           operation->result_value == binding->semantic_value &&
+           operation->operand_count == 0 && operation->metadata_count == 1 &&
+           operation->metadata_begin < metadata_count && metadata &&
+           strcmp(metadata[operation->metadata_begin], "StringBuilder") == 0 &&
+           operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+           operation->semantic_immediate == 0 &&
+           operation->constant == XR_SEMANTIC_INDEX_NONE &&
+           operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
+           operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+           operation->effects == xi_generated_op_effects(XI_CALL_BUILTIN) &&
+           operation->flags == xi_generated_op_default_flags(XI_CALL_BUILTIN) &&
+           operation->ownership_use == xi_generated_op_own_use(XI_CALL_BUILTIN) &&
+           operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+           operation->transfer_mode == XR_TRANSFER_SHARE &&
+           operation->parameter_mode == XR_PARAM_READ &&
+           operation->parameter_ownership == XI_OWN_NONE &&
+           operation->result_alias_operand == -1 &&
+           operation->return_provenance == XR_SEM_RETURN_OWNED &&
+           operation->return_parameter == -1 &&
+           operation->return_complete == 1 &&
+           emission_allocation_identity_is_canonical(operation) &&
+           type->kind == XR_KIND_INSTANCE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags ==
+               (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->canonical_key &&
+           strcmp(type->canonical_key, expected_type_key) == 0;
 }
 
 /* Builder-side recipe collector. It reconstructs the literal authority from
@@ -481,7 +598,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v9\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v10\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -629,6 +746,15 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        strcmp(value->recipe_symbol,
                               channel_receive_symbol(
                                   value->target_register_kind)) == 0;
+    if (value->materialization ==
+        XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW)
+        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value == UINT32_MAX &&
+                       value->recipe_symbol &&
+                       strcmp(value->recipe_symbol,
+                              XR_C_STRINGBUILDER_NEW_SYMBOL) == 0;
     return expected_rep == (XrCValueRep) value->rep && value->c_type &&
            value->reserved == 0 && recipe_valid &&
            strcmp(value->c_type, expected_c_type) == 0 &&
@@ -817,13 +943,17 @@ bool xr_c_emission_plan_verify(
         const char *expected_receive_symbol =
             verify_channel_receive_recipe(target_plan, binding,
                                            &expected_receiver);
+        bool expected_stringbuilder =
+            exact_stringbuilder_new_recipe(target_plan, binding);
         uint8_t expected_recipe = expected_literal
                                       ? XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW
                                       : expected_channel
                                             ? XR_C_VALUE_MATERIALIZATION_CHANNEL_NEW
                                             : expected_receive_symbol
                                                   ? XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD
-                                                  : XR_C_VALUE_MATERIALIZATION_NONE;
+                                                  : expected_stringbuilder
+                                                        ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW
+                                                        : XR_C_VALUE_MATERIALIZATION_NONE;
         uint32_t expected_operand = expected_channel
                                         ? expected_capacity
                                         : expected_receive_symbol
@@ -831,7 +961,11 @@ bool xr_c_emission_plan_verify(
                                               : UINT32_MAX;
         const char *expected_symbol = expected_channel
                                           ? XR_C_CHANNEL_NEW_SYMBOL
-                                          : expected_receive_symbol;
+                                          : expected_receive_symbol
+                                                ? expected_receive_symbol
+                                                : expected_stringbuilder
+                                                      ? XR_C_STRINGBUILDER_NEW_SYMBOL
+                                                      : NULL;
         size_t expected_length = expected_literal ? strlen(expected_literal) : 0;
         if (row->materialization != expected_recipe || row->reserved != 0 ||
             row->literal_byte_length != expected_length ||
@@ -1015,6 +1149,22 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     value->materialization =
                         XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD;
                     value->recipe_operand_value = receiver;
+                    value->recipe_symbol = owned;
+                } else if (exact_stringbuilder_new_recipe(target_plan,
+                                                          binding)) {
+                    size_t symbol_length =
+                        sizeof(XR_C_STRINGBUILDER_NEW_SYMBOL);
+                    char *owned = (char *) xr_malloc(symbol_length);
+                    if (!owned) {
+                        xr_c_emission_plan_free(plan);
+                        return emission_error(
+                            error, error_size, "XR_EXEC_5003",
+                            "StringBuilder recipe symbol allocation failed");
+                    }
+                    memcpy(owned, XR_C_STRINGBUILDER_NEW_SYMBOL,
+                           symbol_length);
+                    value->materialization =
+                        XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW;
                     value->recipe_symbol = owned;
                 }
             }

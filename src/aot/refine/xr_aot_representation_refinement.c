@@ -830,6 +830,50 @@ static bool semantic_string_literal_is_exact(
            (type->flags & required) == required;
 }
 
+static bool aot_stringbuilder_constructor_is_exact(
+    const XrSemanticPlan *semantic,
+    const XrSemanticOperationRecord *operation) {
+    char expected_type_key[160];
+    uint32_t metadata_count = 0;
+    const char *const *metadata =
+        xr_semantic_plan_metadata(semantic, &metadata_count);
+    const XrSemanticTypeRecord *type = operation
+        ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
+    int written = snprintf(
+        expected_type_key, sizeof(expected_type_key),
+        "type-v2:%u:0:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
+        (unsigned) XR_KIND_INSTANCE, (unsigned) XR_SCALAR_REP_NONE);
+    return semantic && operation && type && written > 0 &&
+           (size_t) written < sizeof(expected_type_key) &&
+           operation->opcode == XI_CALL_BUILTIN &&
+           operation->operand_count == 0 && operation->metadata_count == 1 &&
+           operation->metadata_begin < metadata_count && metadata &&
+           strcmp(metadata[operation->metadata_begin], "StringBuilder") == 0 &&
+           operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+           operation->semantic_immediate == 0 &&
+           operation->constant == XR_SEMANTIC_INDEX_NONE &&
+           operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
+           operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+           operation->effects == xi_generated_op_effects(XI_CALL_BUILTIN) &&
+           operation->flags == xi_generated_op_default_flags(XI_CALL_BUILTIN) &&
+           operation->ownership_use == xi_generated_op_own_use(XI_CALL_BUILTIN) &&
+           operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+           operation->transfer_mode == XR_TRANSFER_SHARE &&
+           operation->parameter_mode == XR_PARAM_READ &&
+           operation->parameter_ownership == XI_OWN_NONE &&
+           operation->result_alias_operand == -1 &&
+           operation->return_provenance == XR_SEM_RETURN_OWNED &&
+           operation->return_parameter == -1 && operation->return_complete == 1 &&
+           semantic_allocation_identity_is_canonical(operation) &&
+           type->kind == XR_KIND_INSTANCE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags ==
+               (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->canonical_key &&
+           strcmp(type->canonical_key, expected_type_key) == 0;
+}
+
 static bool aot_stable_id_is_zero(XrStableId id) {
     for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++)
         if (id.bytes[i] != 0)
@@ -2843,6 +2887,97 @@ static bool oracle_dynamic_string_literal_storage(
     return true;
 }
 
+static bool oracle_dynamic_stringbuilder_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index < ctx->operation_count
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep = binding
+        ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep)
+        : NULL;
+    const XrTargetMachineRepRecord *memory_rep = binding
+        ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep)
+        : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(ctx->target_plan, &call_count);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (call)
+            return false;
+        call = &calls[i];
+    }
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; operation && i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    char first_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char second_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[192];
+    XrStableId expected_call;
+    XrFingerprint digest;
+    xr_stable_id_hex(operation ? operation->id : (XrStableId) {{0}},
+                     first_hex);
+    xr_stable_id_hex(operation ? operation->allocation_id :
+                                 (XrStableId) {{0}}, second_hex);
+    int written = snprintf(
+        key, sizeof(key),
+        "xray-target-stringbuilder-constructor-v1:first=%s:second=%s:ordinal=0",
+        first_hex, second_hex);
+    if (!operation || !binding || !register_rep || !memory_rep || !slot ||
+        !layout || !call ||
+        !aot_stringbuilder_constructor_is_exact(ctx->semantic, operation) ||
+        written <= 0 || (size_t) written >= sizeof(key) ||
+        !xr_stable_id_from_key(key, &expected_call, &digest) ||
+        !xr_stable_id_equal(call->identity, expected_call) ||
+        call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->caller_function != operation->function ||
+        call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        call->result_value != semantic_value || call->result_slot != binding->slot ||
+        call->argument_count != 0 || call->flags != 0 ||
+        call->result_ownership != XR_TARGET_CALL_RETURN_OWNED ||
+        call->calling_convention !=
+            XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR ||
+        call->target_kind != XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static bool oracle_static_direct_local_callee_storage(
     const VerifyAuthority *ctx, uint32_t semantic_value,
     XrRep *out_storage, uint16_t *out_machine_kind) {
@@ -3321,6 +3456,11 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
             return true;
         case XI_CALL_BUILTIN:
+            if (aot_stringbuilder_constructor_is_exact(ctx->semantic,
+                                                       operation))
+                return oracle_dynamic_stringbuilder_storage(
+                    ctx, semantic_value, out_storage, out_machine_kind);
+            return false;
         case XI_CHAN_RECV:
         case XI_ENUM_DESCRIPTOR_BOX:
             *out_storage = XR_REP_TAGGED;
@@ -3445,6 +3585,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             XrRep literal_storage = XR_REP_TAGGED;
             if (!oracle_dynamic_string_literal_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
+                !oracle_dynamic_stringbuilder_storage(
+                    ctx, source_value, &literal_storage, &ignored_kind) &&
                 !(ctx->exact_channel_allocation_value &&
                   ctx->exact_channel_allocation_value[source_value] &&
                   oracle_dynamic_channel_storage(
@@ -3466,6 +3608,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                                                 &machine_storage,
                                                 &ignored_kind) &&
                 !oracle_dynamic_string_literal_storage(
+                    ctx, source_value, &machine_storage, &ignored_kind) &&
+                !oracle_dynamic_stringbuilder_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_channel_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&

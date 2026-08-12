@@ -421,7 +421,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v15\0";
+    static const uint8_t domain[] = "xray-target-plan-v16\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -591,13 +591,17 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
         bool source_export =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
-        if ((!direct_local && !channel_close && !source_export) ||
+        bool stringbuilder_constructor =
+            plan->calls[i].target_kind ==
+            XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR;
+        if ((!direct_local && !channel_close && !source_export &&
+             !stringbuilder_constructor) ||
             plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
             ((direct_local || source_export) &&
              plan->calls[i].semantic_call_target >=
                  xr_semantic_plan_call_target_count(plan->semantic_plan)) ||
-            (channel_close &&
+            ((channel_close || stringbuilder_constructor) &&
              plan->calls[i].semantic_call_target != XR_SEMANTIC_INDEX_NONE) ||
             plan->calls[i].result_register_rep >= plan->machine_reps_count ||
             plan->calls[i].result_memory_rep >= plan->machine_reps_count ||

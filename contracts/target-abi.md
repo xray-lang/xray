@@ -86,13 +86,19 @@ materialization. AOT prepare runs only after every required BOX or UNBOX is
 present at its recorded source and use, and rejects a missing, extra, reordered,
 or stale adapter before ABI planning. This adds no public value representation,
 layout, or calling-convention change.
-The C emission projection schema 9 additionally owns an exact materialization
-recipe and immutable byte payload for every verified String literal row. CGen
+The C emission projection schema 10 preserves the exact materialization recipe
+and immutable byte payload for every verified String literal row. CGen
 mechanically consumes that row and cannot recover literal bytes, a dynamic
 tag, field spelling, or ownership from mutable Xi values. Missing, extra,
 reordered, stale, or incorrectly spelled rows fail before emission; this does
 not authorize general owned Strings, tuples, or object bodies.
-Schema 9 also projects an exact borrowed `TAGGED`/`XrValue` row for a frozen
+Schema 10 additionally projects the sealed `StringBuilder()` Target call as an
+owned `TAGGED`/`XrValue` result with the fixed zero-argument `xrt_strbuf_new`
+recipe. Ordinary and coroutine CGen mechanically consume that recipe; neither
+may rediscover the builtin by Xi auxiliary text or fall back to generic
+allocation. The recipe grants no generic builtin, object layout, root-map,
+cleanup, alias, or allocation-table authority.
+Schema 10 also preserves the exact borrowed `TAGGED`/`XrValue` row for a frozen
 direct-local shared callee token. CGen consumes that immutable row mechanically;
 it cannot infer callable representation from Xi type or representation state.
 The live materialization verifier walks the caller parent chain to the frozen
@@ -100,7 +106,7 @@ callee's first lexical shared-slot owner and requires that owner's unique child
 and slot pointer to match, so root-owned sibling helpers are accepted without
 name or type guessing. The row grants no closure body, allocation, root, or
 cleanup authority.
-For an exact scalar `XI_CHAN_TRY_RECV`, schema 9 owns the receiver semantic
+For an exact scalar `XI_CHAN_TRY_RECV`, schema 10 preserves the receiver semantic
 value and exact scalar unbox helper spelling. Sync and coroutine CGen consume
 that recipe mechanically; they cannot infer it from Xi type/representation or
 fall back to a legacy adapter. This grants no Channel object layout, receive
@@ -307,7 +313,7 @@ anchor-sha256: src/aot/xaot_prepare.c 14065b3961b50a4fee75ddfb5ca9ede64d2fb4c351
 anchor-sha256: src/aot/xaot_verify.c dd20098c80d32cd67944e347a39de93b4f38126a6b989890fce6ce355a4211b6
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 591cd0f4e85d5b95aa667ba815a4fc7f166e96d5df1fc35d60fa4c1f56bacae5
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 11e99944b4cf4a3cddad2830bb60f364731489d6ec6b8be4e8df584312e852da
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ccec059ed8b75429153d376188bd3f88b8effcc42c253e0b494e8bac32759436
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c bbeb8f0957240ba6df4296089cf4219c90701c8c068376ce4849d11aac710cf0
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c b4201c02fc214411accff3be9a6f92b394c9116f86b79fc2b41a5e576a4a7d65
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 9011332cab0c4cff0952d954c9dd04a6bd45160df9d9549b08828dc13d7af422
 anchor-sha256: src/aot/xi_cgen.c 421ae06d2594e603957a48ca40dde590d2a405ab47088ec52f87a82260c02529

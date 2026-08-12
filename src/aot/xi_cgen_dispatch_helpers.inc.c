@@ -7248,7 +7248,21 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
             emit_conversion_suffix(out, conv_suffix);
         }
     } else if (strcmp(bn, "StringBuilder") == 0) {
-        fprintf(out, "xrt_strbuf_new()");
+        XrCValueEmissionView emission = {0};
+        if (cg_value_emission_view(ctx, f, v, &emission) !=
+                CG_VALUE_EMISSION_FOUND ||
+            emission.rep != XR_C_VALUE_REP_TAGGED ||
+            emission.materialization !=
+                XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW ||
+            !emission.recipe_symbol ||
+            emission.recipe_operand_value != UINT32_MAX || v->nargs != 0) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: immutable StringBuilder materialization recipe is missing\n");
+            emit_codegen_abort_expr(out);
+            cg_ctx_set_error(ctx);
+            return;
+        }
+        fprintf(out, "%s()", emission.recipe_symbol);
     } else if (strcmp(bn, "map_new") == 0) {
         xicgen_map_new(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "set_new") == 0) {

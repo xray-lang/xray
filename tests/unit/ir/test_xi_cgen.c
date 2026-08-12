@@ -4922,6 +4922,42 @@ TEST(cgen_checked_typed_array_store_proves_nonnull_data) {
     xi_func_free(ir);
 }
 
+TEST(cgen_stringbuilder_constructor_consumes_emission_recipe) {
+    XiFunc *ir = compile_to_ir("var out = StringBuilder()\n");
+    assert(ir != NULL && "StringBuilder constructor IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "stringbuilder_sync", &had_error);
+    assert(code != NULL && "StringBuilder constructor C generation failed");
+    assert(!had_error && "sealed StringBuilder constructor recipe should generate");
+    assert(count_between(code, code + strlen(code), "xrt_strbuf_new()") == 1 &&
+           "ordinary CGen must consume exactly one fixed StringBuilder allocation recipe");
+    assert(!contains(code, "xrt_call_builtin") &&
+           "StringBuilder construction must not use a generic builtin fallback");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_stringbuilder_constructor_consumes_emission_recipe) {
+    XiFunc *ir = compile_to_ir("var out = StringBuilder()\nCoro.yield()\n");
+    assert(ir != NULL && "coroutine StringBuilder constructor IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "stringbuilder_coro", &had_error);
+    assert(code != NULL && "coroutine StringBuilder constructor C generation failed");
+    assert(!had_error && "sealed coroutine StringBuilder constructor recipe should generate");
+    assert(contains(code, "_aot_resume") &&
+           "StringBuilder coroutine fixture must exercise the resume-body emitter");
+    assert(count_between(code, code + strlen(code), "xrt_strbuf_new()") == 1 &&
+           "coroutine CGen must consume exactly one fixed StringBuilder allocation recipe");
+    assert(!contains(code, "xrt_call_builtin") &&
+           "coroutine StringBuilder construction must not use a generic builtin fallback");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_builtin_iterator_pull_methods_preserve_error_polls) {
     const char *src = "fn copyRunes(text: string) -> string {\n"
                       "    var out = StringBuilder()\n"
@@ -13208,6 +13244,8 @@ int main(void) {
     run_cgen_parallel_for_body_closure_stack_allocates();
     run_cgen_typed_array_uses_raw_storage_fast_path();
     run_cgen_checked_typed_array_store_proves_nonnull_data();
+    run_cgen_stringbuilder_constructor_consumes_emission_recipe();
+    run_cgen_coro_stringbuilder_constructor_consumes_emission_recipe();
     run_cgen_builtin_iterator_pull_methods_preserve_error_polls();
     run_cgen_err_check_releases_live_arc_owners_on_cold_edge();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
