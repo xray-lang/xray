@@ -71,6 +71,7 @@ typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE,
     XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE,
     XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL,
+    XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 
@@ -86,6 +87,11 @@ typedef enum XrSemanticSourceFunctionKind {
     XR_SEM_SOURCE_FUNCTION_STATIC_METHOD,
     XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR,
 } XrSemanticSourceFunctionKind;
+
+typedef enum XrSemanticSourceMethodFlag {
+    XR_SEM_SOURCE_METHOD_INSTANCE = 1u << 0,
+    XR_SEM_SOURCE_METHOD_OPEN_DOMAIN = 1u << 1,
+} XrSemanticSourceMethodFlag;
 
 typedef enum XrSemanticImportResolution {
     XR_SEM_IMPORT_RESOLUTION_NONE = 0,
@@ -200,6 +206,7 @@ typedef struct XrSemanticTypeRecord {
     uint32_t kind;
     uint32_t builtin_type;
     uint32_t source_class;
+    XrStableId source_class_identity;
     uint32_t child_begin;
     uint32_t aggregate_extent;
     uint32_t aggregate_align;
@@ -219,6 +226,20 @@ typedef struct XrSemanticSourceClassRecord {
     uint8_t flags;
     uint8_t reserved;
 } XrSemanticSourceClassRecord;
+
+/* Stable source declaration and its open-world dispatch domain.  The function
+ * and class indexes are plan-local; the ID is the cross-XSM authority. */
+typedef struct XrSemanticSourceMethodRecord {
+    XrStableId id;
+    const char *canonical_key;
+    const char *name;
+    uint32_t source_class;
+    uint32_t function;
+    uint16_t member_ordinal;
+    uint16_t parameter_count;
+    uint8_t flags;
+    uint8_t reserved[3];
+} XrSemanticSourceMethodRecord;
 
 typedef struct XrSemanticFunctionRecord {
     XrStableId id;
@@ -382,8 +403,10 @@ typedef struct XrSemanticOperandRecord {
  * is rebuilt from a resolver-proven native whole-module import plus the
  * canonical stdlib registry. BUILTIN_INSTANCE_YIELDABLE binds a reserved
  * builtin instance type, selector, and arity without asserting a machine call
- * target. All six kinds
- * independently authorize coroutine state creation without retaining Xi data.
+ * target. SOURCE_INSTANCE_METHOD_LOCAL is an exact final-class declaration;
+ * SOURCE_INSTANCE_METHOD_OPEN is a dependency-verified open dispatch domain,
+ * not an execution target. All eight kinds independently authorize coroutine
+ * state creation without retaining Xi data.
  */
 typedef struct XrSemanticCallTargetRecord {
     XrStableId id;
@@ -430,6 +453,7 @@ XR_FUNC XrFingerprint xr_semantic_plan_operation_registry_fingerprint(const XrSe
 XR_FUNC XrFingerprint xr_semantic_plan_stdlib_registry_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_type_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_source_class_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_source_method_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_function_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_parameter_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_capture_count(const XrSemanticPlan *plan);
@@ -443,8 +467,10 @@ XR_FUNC size_t xr_semantic_plan_constant_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_entity_count(const XrSemanticPlan *plan);
 XR_FUNC const XrSemanticTypeRecord *xr_semantic_plan_type(const XrSemanticPlan *plan,
                                                           uint32_t index);
-XR_FUNC const XrSemanticSourceClassRecord *xr_semantic_plan_source_class(
-    const XrSemanticPlan *plan, uint32_t index);
+XR_FUNC const XrSemanticSourceClassRecord *xr_semantic_plan_source_class(const XrSemanticPlan *plan,
+                                                                         uint32_t index);
+XR_FUNC const XrSemanticSourceMethodRecord *
+xr_semantic_plan_source_method(const XrSemanticPlan *plan, uint32_t index);
 XR_FUNC const XrSemanticFunctionRecord *xr_semantic_plan_function(const XrSemanticPlan *plan,
                                                                   uint32_t index);
 XR_FUNC const XrSemanticParameterRecord *xr_semantic_plan_parameter(const XrSemanticPlan *plan,
@@ -455,12 +481,12 @@ XR_FUNC const XrSemanticBlockRecord *xr_semantic_plan_block(const XrSemanticPlan
                                                             uint32_t index);
 XR_FUNC const XrSemanticOperationRecord *xr_semantic_plan_operation(const XrSemanticPlan *plan,
                                                                     uint32_t index);
-XR_FUNC const XrSemanticCallTargetRecord *xr_semantic_plan_call_target(
-    const XrSemanticPlan *plan, uint32_t index);
-XR_FUNC const XrSemanticDependencyRecord *xr_semantic_plan_dependency(
-    const XrSemanticPlan *plan, uint32_t index);
-XR_FUNC const XrSemanticSourceExportRecord *xr_semantic_plan_source_export(
-    const XrSemanticPlan *plan, uint32_t index);
+XR_FUNC const XrSemanticCallTargetRecord *xr_semantic_plan_call_target(const XrSemanticPlan *plan,
+                                                                       uint32_t index);
+XR_FUNC const XrSemanticDependencyRecord *xr_semantic_plan_dependency(const XrSemanticPlan *plan,
+                                                                      uint32_t index);
+XR_FUNC const XrSemanticSourceExportRecord *
+xr_semantic_plan_source_export(const XrSemanticPlan *plan, uint32_t index);
 XR_FUNC const XrSemanticEdgeRecord *xr_semantic_plan_edge(const XrSemanticPlan *plan,
                                                           uint32_t index);
 XR_FUNC const XrSemanticConstantRecord *xr_semantic_plan_constant(const XrSemanticPlan *plan,

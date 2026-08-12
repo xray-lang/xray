@@ -9,7 +9,7 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 20 preserves the pointer-free `DIRECT_LOCAL` call-target
+SemanticPlan schema 21 preserves the pointer-free `DIRECT_LOCAL` call-target
 authority to lexical shared slots. Direct SSA callees still resolve only
 through exact identity copies to a closure/function binding. A shared callee
 must be a `GET_SHARED(slot)` whose first lexical owner, found by walking the
@@ -121,6 +121,23 @@ coroutine-state relation. Open classes, generic classes, super calls, ambiguous
 methods, unrelated erased receivers, forged targets, and missing states remain
 fail closed. This authority proves suspendability only; TargetPlan still has no
 execution family for source instance dispatch.
+Schema 21 additionally freezes every source instance-method declaration as a
+stable source-class identity, module-local member ordinal, selector, function
+identity, parameter count, and final/open-domain flag. Imported source nominal
+types carry only that dependency class stable identity across XSM; analyzer
+class IDs and pointers may locate a dependency row during construction but are
+never serialized or hashed as authority. `SOURCE_INSTANCE_METHOD_OPEN` is
+published only for an exact non-super call on a dependency's open, runtime,
+non-generic source class when the declaration selector and arity are unique and
+the dependency's verified SemanticPlan independently proves that declaration
+suspendable. Module-set verification repeats the class, method, function,
+selector, arity, flags, and suspendability proof against the exact ordered
+dependency plans. It authorizes the conservative coroutine-state obligation
+for the open dispatch domain, not a closed target set or execution target;
+TargetPlan therefore remains fail closed. Inherited declarations, generic
+classes, ambiguous dependency identities, synchronous declarations, super
+calls, missing states, standalone dependency decoding, and forged class or
+method IDs remain unavailable.
 Function declarations publish their immutable binding capability and lexical
 storage domain with the rest of analyzer ownership evidence. Closure lowering
 may copy those facts into SemanticPlan capture records but may not infer them
@@ -285,13 +302,13 @@ anchor-sha256: tests/unit/ir/test_xi_lower.c fbcb2ea7d98487c81c049b936716158b209
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 8ac0559b635cba3f51a6027b9fb49b0f1e7c24f5d13d5525dc151bf66b8fa6bf
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef875074bfbe67aa4c0ffcb9c6cda031741
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
-anchor-sha256: src/plan/format/xr_xsm_encode.c 7cb579a998055d4696f0ff070885a7276ecda9fb1c245c6a507e1ec340a53767
+anchor-sha256: src/plan/format/xr_xsm_encode.c b87a959ec9421005d44e798402016c4b07e82c057c076392f1997e4cc39e8f13
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c f236b1b68ae3ad352cf86dae5e6e344ac03cc5bbf9a4ab7b9f77b3e0c3727572
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h d1c6901b496753f2b64b13a6173cefc6d64580137dc07c54d0e7f6c29031603e
-anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f98b0949e463571fc94bbcb64bb00e671794da3ebbc7807364a5f6b65673537
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 256e725478024b129e2ef1d588b3aadf7a7dbea5002759dfee9c5013521d56b9
-anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 4bd8dfe79a1f8ea1d00f8411e34ee13b1cc87bb2d64a5724d40412c72ef8157b
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c b88af3c64d3e9a7a49800a1eaa65996b166792b5c8d91bf881020d740d5853d6
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c b7f2e800a5d81128f7a02949dbbae38ccb09dce038b34a2d6e11662fcef86853
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h 7231ec62e4302c4e452cb10b56e2a5dc07d2c58fa3582fb6fd2bb94f2aec6bfe
+anchor-sha256: src/plan/semantic/xr_semantic_plan.c d7d4e95f4cd0f69bda9c8c791d9e6d50f47fa9994e9e14e9d1fc5cf4782f5957
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 006ea3939f195883df421b2afd16b30bf43bf0d3e9e8d8867c36e2bd59231ff1
+anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h fecc0db9a6aeb71875b0bed840816f750e7712405d61dce846ddcc59d9fccb7c
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c ac397057e78b413ea61277bb221bce6e6402bb768b99af812bac37dbae1a17c3
 anchor-sha256: src/stdlib/xstdlib_metadata.h 4f0d9628ff18ec6522c48bf602a9ba738813cb1a11f2d059dc7d9c7daf179c14
-anchor-sha256: tests/unit/plan/test_semantic_plan.c c3b660a3d72ff2557a163aaa0427201a257577dcb63180dd85a8cb4940223bac
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 7ec0bb539e505a1bd2cdf6fecc99287d75bb06951ce3aac5e756a7213d7d158a

@@ -209,7 +209,7 @@ fallback.
 
 anchor-sha256: src/base/xstable_id.h 3a7abe4d53ba0771a8b064e5d7c395d883253a1a9c65cc46a284872f7119c3b1
 anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h d1c6901b496753f2b64b13a6173cefc6d64580137dc07c54d0e7f6c29031603e
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h 7231ec62e4302c4e452cb10b56e2a5dc07d2c58fa3582fb6fd2bb94f2aec6bfe
 anchor-sha256: src/runtime/abi/xr_runtime_descriptor.h ce4f02055de60da60e1e36e04f522508fc0259ada826b29bc39c4bcb9ee0478b
 anchor-sha256: src/runtime/abi/xr_runtime_descriptor.c 1d755ca9d0bf8d830273dbaad86c2390ed74c35464913aba6127e0a1c9b4e423
 anchor-sha256: src/runtime/abi/xr_target_runtime_profile.h a56ff378754654905ae53e2570e267f46ca749ad0b789058ba26b097f3d2b99e

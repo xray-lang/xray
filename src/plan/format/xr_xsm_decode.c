@@ -23,6 +23,7 @@
 typedef struct XrXsmCounts {
     uint32_t types;
     uint32_t source_classes;
+    uint32_t source_methods;
     uint32_t functions;
     uint32_t blocks;
     uint32_t operations;
@@ -171,6 +172,7 @@ static bool counts_fit_storage_budget(XrXsmCounts count, size_t *storage_bytes) 
     } while (0)
     XR_COUNT_STORAGE(types, XrSemanticTypeRecord);
     XR_COUNT_STORAGE(source_classes, XrSemanticSourceClassRecord);
+    XR_COUNT_STORAGE(source_methods, XrSemanticSourceMethodRecord);
     XR_COUNT_STORAGE(functions, XrSemanticFunctionRecord);
     XR_COUNT_STORAGE(blocks, XrSemanticBlockRecord);
     XR_COUNT_STORAGE(operations, XrSemanticOperationRecord);
@@ -208,15 +210,16 @@ static bool checked_payload_minimum_add(size_t *total, uint32_t count, size_t re
 
 static bool counts_fit_payload_minimum(XrXsmCounts count, size_t remaining) {
     size_t minimum = 0;
-#define XR_MINIMUM_PAYLOAD(field, bytes)                                                          \
-    do {                                                                                          \
-        if (!checked_payload_minimum_add(&minimum, count.field, (bytes)))                         \
-            return false;                                                                         \
+#define XR_MINIMUM_PAYLOAD(field, bytes)                                                           \
+    do {                                                                                           \
+        if (!checked_payload_minimum_add(&minimum, count.field, (bytes)))                          \
+            return false;                                                                          \
     } while (0)
     /* Exact fixed-width bytes plus the four-byte length prefix for each possibly-empty string. */
     XR_MINIMUM_PAYLOAD(entities, 36u);
     XR_MINIMUM_PAYLOAD(source_classes, 52u);
-    XR_MINIMUM_PAYLOAD(types, 48u);
+    XR_MINIMUM_PAYLOAD(source_methods, 40u);
+    XR_MINIMUM_PAYLOAD(types, 64u);
     XR_MINIMUM_PAYLOAD(type_children, 4u);
     XR_MINIMUM_PAYLOAD(functions, 84u);
     XR_MINIMUM_PAYLOAD(parameters, 40u);
@@ -253,6 +256,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     } while (0)
     XR_ALLOC_TABLE(types, count.types, XrSemanticTypeRecord);
     XR_ALLOC_TABLE(source_classes, count.source_classes, XrSemanticSourceClassRecord);
+    XR_ALLOC_TABLE(source_methods, count.source_methods, XrSemanticSourceMethodRecord);
     XR_ALLOC_TABLE(functions, count.functions, XrSemanticFunctionRecord);
     XR_ALLOC_TABLE(blocks, count.blocks, XrSemanticBlockRecord);
     XR_ALLOC_TABLE(operations, count.operations, XrSemanticOperationRecord);
@@ -284,6 +288,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
 #undef XR_ALLOC_CERT
     plan->type_count = plan->type_capacity = count.types;
     plan->source_class_count = plan->source_class_capacity = count.source_classes;
+    plan->source_method_count = plan->source_method_capacity = count.source_methods;
     plan->function_count = plan->function_capacity = count.functions;
     plan->block_count = plan->block_capacity = count.blocks;
     plan->operation_count = plan->operation_capacity = count.operations;
@@ -310,6 +315,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
 static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->types = xr_xsm_take_u32(reader);
     count->source_classes = xr_xsm_take_u32(reader);
+    count->source_methods = xr_xsm_take_u32(reader);
     count->functions = xr_xsm_take_u32(reader);
     count->blocks = xr_xsm_take_u32(reader);
     count->operations = xr_xsm_take_u32(reader);
@@ -330,13 +336,12 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->edge_states = xr_xsm_take_u32(reader);
     count->loop_invariants = xr_xsm_take_u32(reader);
     return !reader->failed && count->types <= 1000000u && count->source_classes <= 100000u &&
-           count->functions <= 100000u &&
+           count->source_methods <= 100000u && count->functions <= 100000u &&
            count->blocks <= 2000000u && count->operations <= 10000000u &&
            count->call_targets <= count->operations &&
            count->dependencies <= count->functions + count->operations &&
-           count->source_exports <= count->functions &&
-           count->edges <= 40000000u && count->constants <= 10000000u &&
-           count->entities <= 80000000u &&
+           count->source_exports <= count->functions && count->edges <= 40000000u &&
+           count->constants <= 10000000u && count->entities <= 80000000u &&
            count->type_children <= 8000000u && count->parameters <= 25600000u &&
            count->captures <= 6400000u && count->predecessors <= 16000000u &&
            count->operands <= 40000000u && count->metadata <= 80000000u &&
@@ -384,6 +389,8 @@ static void decode_types(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->kind = xr_xsm_take_u32(reader);
         record->builtin_type = xr_xsm_take_u32(reader);
         record->source_class = xr_xsm_take_u32(reader);
+        xr_xsm_take_bytes(reader, record->source_class_identity.bytes,
+                          sizeof(record->source_class_identity.bytes));
         record->child_begin = xr_xsm_take_u32(reader);
         record->aggregate_extent = xr_xsm_take_u32(reader);
         record->aggregate_align = xr_xsm_take_u32(reader);
@@ -395,8 +402,7 @@ static void decode_types(XrXsmReader *reader, XrSemanticPlan *plan) {
         plan->type_children[i] = xr_xsm_take_u32(reader);
 }
 
-static void decode_source_classes(XrXsmReader *reader,
-                                  XrSemanticPlan *plan) {
+static void decode_source_classes(XrXsmReader *reader, XrSemanticPlan *plan) {
     for (uint32_t i = 0; i < plan->source_class_count; i++) {
         XrSemanticSourceClassRecord *record = &plan->source_classes[i];
         xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
@@ -408,6 +414,23 @@ static void decode_source_classes(XrXsmReader *reader,
         record->method_count = xr_xsm_take_u16(reader);
         record->flags = xr_xsm_take_u8(reader);
         record->reserved = xr_xsm_take_u8(reader);
+    }
+}
+
+static void decode_source_methods(XrXsmReader *reader, XrSemanticPlan *plan) {
+    for (uint32_t i = 0; i < plan->source_method_count; i++) {
+        XrSemanticSourceMethodRecord *record = &plan->source_methods[i];
+        xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
+        record->canonical_key = take_plan_string(reader, plan, false);
+        record->name = take_plan_string(reader, plan, false);
+        record->source_class = xr_xsm_take_u32(reader);
+        record->function = xr_xsm_take_u32(reader);
+        record->member_ordinal = xr_xsm_take_u16(reader);
+        record->parameter_count = xr_xsm_take_u16(reader);
+        record->flags = xr_xsm_take_u8(reader);
+        record->reserved[0] = xr_xsm_take_u8(reader);
+        record->reserved[1] = xr_xsm_take_u8(reader);
+        record->reserved[2] = xr_xsm_take_u8(reader);
     }
 }
 
@@ -577,8 +600,7 @@ static void decode_call_targets(XrXsmReader *reader, XrSemanticPlan *plan) {
     }
 }
 
-static void decode_dependencies_and_exports(XrXsmReader *reader,
-                                            XrSemanticPlan *plan) {
+static void decode_dependencies_and_exports(XrXsmReader *reader, XrSemanticPlan *plan) {
     for (uint32_t i = 0; i < plan->dependency_count; i++) {
         XrSemanticDependencyRecord *record = &plan->dependencies[i];
         xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
@@ -678,10 +700,9 @@ static void decode_ownership(XrXsmReader *reader, XrOwnershipCertificate *certif
     }
 }
 
-static bool decode_xsm(const uint8_t *bytes, size_t size,
-                       const XrSemanticPlan *const *dependencies,
-                       uint32_t dependency_count, bool module_set,
-                       XrSemanticPlan **out, char *error, size_t error_size) {
+static bool decode_xsm(const uint8_t *bytes, size_t size, const XrSemanticPlan *const *dependencies,
+                       uint32_t dependency_count, bool module_set, XrSemanticPlan **out,
+                       char *error, size_t error_size) {
     if (out)
         *out = NULL;
     if (!bytes || !out || size < XR_XSM_HEADER_SIZE)
@@ -702,9 +723,7 @@ static bool decode_xsm(const uint8_t *bytes, size_t size,
     xr_xsm_take_bytes(&header, expected_stdlib_registry_fingerprint.bytes,
                       sizeof(expected_stdlib_registry_fingerprint.bytes));
     xr_xsm_take_bytes(&header, expected_fingerprint.bytes, sizeof(expected_fingerprint.bytes));
-    if (header.failed ||
-        memcmp(magic, xr_xsm_artifact_magic,
-               XR_XSM_ARTIFACT_MAGIC_SIZE) != 0 ||
+    if (header.failed || memcmp(magic, xr_xsm_artifact_magic, XR_XSM_ARTIFACT_MAGIC_SIZE) != 0 ||
         schema != XR_SEMANTIC_SCHEMA_VERSION || header_size != XR_XSM_HEADER_SIZE)
         return report(error, error_size, "XR_ARTIFACT_2000", "XSM schema is not exactly supported");
     if (payload_size != size - XR_XSM_HEADER_SIZE)
@@ -754,6 +773,7 @@ static bool decode_xsm(const uint8_t *bytes, size_t size,
     reader.allocation_bytes = table_storage + sizeof(*plan) + sizeof(*certificate);
     decode_entities(&reader, plan);
     decode_source_classes(&reader, plan);
+    decode_source_methods(&reader, plan);
     decode_types(&reader, plan);
     decode_functions(&reader, plan);
     decode_blocks(&reader, plan);
@@ -778,8 +798,8 @@ static bool decode_xsm(const uint8_t *bytes, size_t size,
         return false;
     }
     if (plan->dependency_count != 0 &&
-        (!module_set || !xr_semantic_plan_verify_module_set(
-                            plan, dependencies, dependency_count, error, error_size))) {
+        (!module_set || !xr_semantic_plan_verify_module_set(plan, dependencies, dependency_count,
+                                                            error, error_size))) {
         if (!module_set)
             report(error, error_size, "XR_ARTIFACT_2004",
                    "dependency-bearing XSM requires exact module-set authority");
@@ -803,9 +823,7 @@ bool xr_xsm_decode(const uint8_t *bytes, size_t size, XrSemanticPlan **out, char
 }
 
 bool xr_xsm_decode_module_set(const uint8_t *bytes, size_t size,
-                              const XrSemanticPlan *const *dependencies,
-                              uint32_t dependency_count, XrSemanticPlan **out,
-                              char *error, size_t error_size) {
-    return decode_xsm(bytes, size, dependencies, dependency_count, true, out, error,
-                      error_size);
+                              const XrSemanticPlan *const *dependencies, uint32_t dependency_count,
+                              XrSemanticPlan **out, char *error, size_t error_size) {
+    return decode_xsm(bytes, size, dependencies, dependency_count, true, out, error, error_size);
 }

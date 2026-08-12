@@ -21,6 +21,7 @@
 static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->type_count);
     xr_xsm_put_u32(writer, plan->source_class_count);
+    xr_xsm_put_u32(writer, plan->source_method_count);
     xr_xsm_put_u32(writer, plan->function_count);
     xr_xsm_put_u32(writer, plan->block_count);
     xr_xsm_put_u32(writer, plan->operation_count);
@@ -42,8 +43,24 @@ static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->ownership->loop_invariant_count);
 }
 
-static void encode_source_classes(XrXsmWriter *writer,
-                                  const XrSemanticPlan *plan) {
+static void encode_source_methods(XrXsmWriter *writer, const XrSemanticPlan *plan) {
+    for (uint32_t i = 0; i < plan->source_method_count; i++) {
+        const XrSemanticSourceMethodRecord *record = &plan->source_methods[i];
+        xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
+        xr_xsm_put_string(writer, record->canonical_key);
+        xr_xsm_put_string(writer, record->name);
+        xr_xsm_put_u32(writer, record->source_class);
+        xr_xsm_put_u32(writer, record->function);
+        xr_xsm_put_u16(writer, record->member_ordinal);
+        xr_xsm_put_u16(writer, record->parameter_count);
+        xr_xsm_put_u8(writer, record->flags);
+        xr_xsm_put_u8(writer, 0);
+        xr_xsm_put_u8(writer, 0);
+        xr_xsm_put_u8(writer, 0);
+    }
+}
+
+static void encode_source_classes(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     for (uint32_t i = 0; i < plan->source_class_count; i++) {
         const XrSemanticSourceClassRecord *record = &plan->source_classes[i];
         xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
@@ -80,6 +97,8 @@ static void encode_types(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u32(writer, record->kind);
         xr_xsm_put_u32(writer, record->builtin_type);
         xr_xsm_put_u32(writer, record->source_class);
+        xr_xsm_put_bytes(writer, record->source_class_identity.bytes,
+                         sizeof(record->source_class_identity.bytes));
         xr_xsm_put_u32(writer, record->child_begin);
         xr_xsm_put_u32(writer, record->aggregate_extent);
         xr_xsm_put_u32(writer, record->aggregate_align);
@@ -257,8 +276,7 @@ static void encode_call_targets(XrXsmWriter *writer, const XrSemanticPlan *plan)
     }
 }
 
-static void encode_dependencies_and_exports(XrXsmWriter *writer,
-                                            const XrSemanticPlan *plan) {
+static void encode_dependencies_and_exports(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     for (uint32_t i = 0; i < plan->dependency_count; i++) {
         const XrSemanticDependencyRecord *record = &plan->dependencies[i];
         xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
@@ -376,6 +394,7 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
     encode_counts(&payload, plan);
     encode_entities(&payload, plan);
     encode_source_classes(&payload, plan);
+    encode_source_methods(&payload, plan);
     encode_types(&payload, plan);
     encode_functions(&payload, plan);
     encode_blocks(&payload, plan);
@@ -394,8 +413,7 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
     uint8_t digest[32];
     xr_sha256(payload.data, payload.size, digest);
     XrXsmWriter artifact = {.limit = XR_XSM_MAX_ARTIFACT_SIZE};
-    xr_xsm_put_bytes(&artifact, xr_xsm_artifact_magic,
-                     XR_XSM_ARTIFACT_MAGIC_SIZE);
+    xr_xsm_put_bytes(&artifact, xr_xsm_artifact_magic, XR_XSM_ARTIFACT_MAGIC_SIZE);
     xr_xsm_put_u32(&artifact, XR_SEMANTIC_SCHEMA_VERSION);
     xr_xsm_put_u32(&artifact, XR_XSM_HEADER_SIZE);
     xr_xsm_put_u64(&artifact, payload.size);
