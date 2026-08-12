@@ -612,15 +612,6 @@ static inline xrt_array_t *xrt_byte_array_copy_checked_raw(
     return dst;
 }
 
-static inline xrt_array_t *xrt_byte_array_repeat_from_raw(xrt_array_t *a, int64_t dst,
-                                                          int64_t distance, int64_t count) {
-    if (!a || a->elem_type != XR_ELEM_U8 || dst < 0 || distance <= 0 || count < 0 ||
-        dst - distance < 0 || count > a->length || dst > a->length - count)
-        return a;
-    xr_byte_slice_repeat_unchecked(a->data, dst, distance, count);
-    return a;
-}
-
 static inline xrt_array_t *xrt_byte_array_append_from_span_slow_raw(xrt_array_t *dst,
                                                                     xr_span_t src) {
     if (!dst || dst->elem_type != XR_ELEM_U8)
@@ -678,21 +669,36 @@ static inline xrt_array_t *xrt_byte_array_append_from_span_raw(xrt_array_t *dst,
     return xrt_byte_array_append_from_span_slow_raw(dst, src);
 }
 
+static bool xrt_byte_array_repeat_reserve(void *ctx, XrByteArrayRepeatView *view,
+                                          int64_t capacity) {
+    xrt_array_t *a = (xrt_array_t *) ctx;
+    if (!a || !view)
+        return false;
+    xrt_array_reserve_trusted_raw(a, capacity);
+    view->data = a->data;
+    view->capacity = a->capacity;
+    return a->capacity >= capacity && (capacity == 0 || a->data != NULL);
+}
+
 static inline xrt_array_t *xrt_byte_array_repeat_from_tail_raw(xrt_array_t *a, int64_t distance,
                                                                int64_t count) {
-    if (!a || a->elem_type != XR_ELEM_U8)
+    XrByteArrayRepeatView view = {0};
+    if (a) {
+        view.data = a->data;
+        view.length = a->length;
+        view.capacity = a->capacity;
+        view.elem_type = a->elem_type;
+        view.resizable = a->data_storage != XR_ARRAY_DATA_BORROWED;
+    }
+    XrByteArrayRepeatResult result = xrt_byte_array_repeat_semantics(
+        a ? &view : NULL, distance, count, xrt_byte_array_repeat_reserve, a);
+    if (result.status == XR_BYTE_ARRAY_REPEAT_WRONG_ELEMENT_TYPE || !a)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG);
-    if (a->data_storage == XR_ARRAY_DATA_BORROWED || distance <= 0 || count < 0 ||
-        distance > a->length || count > INT64_MAX - a->length)
+    if (result.status != XR_BYTE_ARRAY_REPEAT_OK)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG);
-    int64_t dst = a->length;
-    int64_t new_length = dst + count;
-    if (new_length > a->capacity)
-        xrt_array_reserve_trusted_raw(a, new_length);
-    if (new_length > a->capacity || (new_length > 0 && !a->data))
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG);
-    xr_byte_slice_repeat_unchecked(a->data, dst, distance, count);
-    a->length = new_length;
+    a->length = view.length;
+    if (result.changed)
+        XR_ARRAY_MARK_MUTATED(a);
     return a;
 }
 
@@ -730,20 +736,6 @@ static inline XrValue xrt_byte_array_load_u64_le(XrValue arr_value, XrValue offs
     if (!xrt_byte_array_range_ok(a, off, 8))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG);
     return XR_FROM_INT((int64_t) xrt_byte_array_load_u64_le_raw(a, off));
-}
-
-static inline XrValue xrt_byte_array_repeat_from_value(XrValue arr_value, XrValue dst_value,
-                                                       XrValue distance_value,
-                                                       XrValue count_value) {
-    if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG);
-    if (!XR_IS_INT(dst_value) || !XR_IS_INT(distance_value) || !XR_IS_INT(count_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_EXPECTS_MSG);
-    int64_t dst = xr_value_to_int64_coerce(dst_value);
-    int64_t distance = xr_value_to_int64_coerce(distance_value);
-    int64_t count = xr_value_to_int64_coerce(count_value);
-    xrt_byte_array_repeat_from_raw((xrt_array_t *) arr_value.ptr, dst, distance, count);
-    return arr_value;
 }
 
 static inline XrValue xrt_byte_array_append_from_value(XrValue arr_value, XrValue src_value) {

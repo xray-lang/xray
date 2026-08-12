@@ -201,6 +201,31 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_byte_array_repeat_core.h",
+      "id": "byte-array-repeat",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_coll.h",
+        "src/runtime/object/xarray.c",
+        "src/runtime/object/xarray.h",
+        "src/vm/xvm.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_byte_array_repeat_tail_core"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_byte_array_repeat_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_byte_slice_scalar_core.h",
       "id": "byte-slice-scalar",
       "owner": "shared-kernel",
@@ -213,6 +238,7 @@
         "src/aot/xrt_core_freestanding.h",
         "src/runtime/object/xarray.c",
         "src/shared/xr_array_core.h",
+        "src/shared/xr_byte_array_repeat_core.h",
         "src/vm/xvm_dispatch_collection.inc.c"
       ],
       "profiles": [

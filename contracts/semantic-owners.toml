@@ -42,6 +42,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
+id = "byte-array-repeat"
+header = "src/shared/xr_byte_array_repeat_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
 id = "cell-access"
 header = "src/shared/xr_cell_access_core.h"
 representation = "tagged"
@@ -420,6 +427,23 @@ fixtures = [
   "tests/unit/aot/test_xrt_byte_array_copy_owner_freestanding.c",
   "tests/unit/aot/test_xrt_byte_array_copy_owner_c90.c",
   "tests/unit/ir/test_xi_cgen.c",
+]
+
+[[operation]]
+id = "byte-array-repeat"
+observable_contract = "src/shared/xr_byte_array_repeat_core.h"
+semantic_kernel = "src/shared/xr_byte_array_repeat_core.h"
+vm_adapter = "src/vm/xvm_dispatch_collection.inc.c"
+aot_adapter = "src/aot/xrt_coll.h"
+typed_plan = "shared.byte-array-repeat"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_byte_array_repeat_core.c",
+  "tests/unit/aot/test_xrt_array.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/diff/cases/semantics/collections/byte_array_append_repeat_safe_shared_core.xr",
+  "tests/aot/filetests/container/byte_array_append_repeat_safe_storage.xr",
+  "tests/aot/filetests/link/no_alloc_byte_array_repeat_from_reject.xr",
 ]
 
 [[operation]]

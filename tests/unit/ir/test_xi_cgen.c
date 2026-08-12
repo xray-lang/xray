@@ -5217,7 +5217,10 @@ TEST(cgen_byte_slice_safe_methods_use_stable_owners) {
     assert(count_between(fn_body, fn_end, "xrt_byte_array_append_from_span_raw(") == 0 &&
            "Array<byte>.appendFrom hot path must not call the large raw helper");
     assert(count_between(fn_body, fn_end, "xrt_byte_array_repeat_from_tail_raw(") > 0 &&
-           "Array<byte>.repeatFrom must lower to the raw tail repeat helper");
+           "Array<byte>.repeatFrom must lower through the stable owner adapter");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_copy(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") == 0 &&
+           "Array<byte>.repeatFrom CGen must not recreate repeat or reserve semantics");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_repeat_from_checked_raw(") > 0 &&
            "Slice<byte>.repeatFrom must lower through the stable owner adapter");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_from(") == 0 &&

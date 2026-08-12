@@ -5316,40 +5316,22 @@ static bool emit_byte_array_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
         return true;
     }
 
+    const char *adapter = cg_byte_array_repeat_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+
     bool boxed = cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
-    if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP) {
-        fprintf(out, "({ xrt_array_t *_a = ");
-        emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
-        fprintf(out, "; int64_t _distance = ");
-        emit_value_as_rep(out, call->args[1], XR_REP_I64);
-        fprintf(out, "; int64_t _count = ");
-        emit_value_as_rep(out, call->args[2], XR_REP_I64);
-        fprintf(out,
-                "; if (XR_UNLIKELY(!_a || _a->elem_type != XR_ELEM_U8)) "
-                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
-                "XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG); if (XR_UNLIKELY("
-                "_a->data_storage == XR_ARRAY_DATA_BORROWED || _distance <= 0 || _count < 0 || "
-                "_distance > _a->length || _count > INT64_MAX - _a->length)) "
-                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG); int64_t _dst = _a->length; "
-                "int64_t _new_length = _dst + _count; if (_new_length > _a->capacity) "
-                "xrt_array_reserve_trusted_raw(_a, _new_length); if (XR_UNLIKELY("
-                "_new_length > _a->capacity || (_new_length > 0 && !_a->data))) "
-                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG); "
-                "xr_array_core_bytes_repeat_copy(_a->data, _dst, _distance, _count); "
-                "_a->length = _new_length; _a; })");
-    } else {
-        fprintf(out, "xrt_byte_array_repeat_from_tail_raw(");
-        emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, call->args[1], XR_REP_I64);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, call->args[2], XR_REP_I64);
-        fprintf(out, ")");
-    }
+    fprintf(out, "%s(", adapter);
+    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, call->args[1], XR_REP_I64);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, call->args[2], XR_REP_I64);
+    fprintf(out, ")");
     emit_byte_array_result_suffix(out, boxed);
     return true;
 }

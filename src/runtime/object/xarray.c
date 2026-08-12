@@ -1088,13 +1088,6 @@ uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok) {
     return xr_array_core_bytes_load_u64_le(arr->data, arr->length, arr->elem_type, offset, ok);
 }
 
-bool xr_byte_array_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance, int32_t count) {
-    if (!arr)
-        return false;
-    return xr_array_core_bytes_repeat_from(arr->data, arr->length, arr->elem_type, dst_offset,
-                                           distance, count);
-}
-
 bool xr_byte_array_append_from_span(XrArray *dst, const void *src_data, int64_t src_length,
                                     const void *src_guard) {
     if (!dst || dst->elem_type != XR_ELEM_U8 || xr_array_is_slice(dst))
@@ -1138,25 +1131,35 @@ bool xr_byte_array_append_from_span(XrArray *dst, const void *src_data, int64_t 
     return true;
 }
 
-bool xr_byte_array_repeat_from_tail(XrArray *arr, int64_t distance, int64_t count) {
-    if (!arr || arr->elem_type != XR_ELEM_U8 || xr_array_is_slice(arr))
+static bool xr_byte_array_repeat_reserve(void *ctx, XrByteArrayRepeatView *view,
+                                         int64_t capacity) {
+    XrArray *arr = (XrArray *) ctx;
+    if (!arr || !view || capacity < 0 || capacity > INT32_MAX)
         return false;
-    if (distance <= 0 || count < 0 || distance > arr->length)
-        return false;
-    if (count > INT32_MAX || arr->length > INT32_MAX - count)
-        return false;
-    int64_t dst = arr->length;
-    int64_t new_length = dst + count;
-    if (new_length > arr->capacity) {
-        xr_array_ensure_capacity(arr, (int) new_length);
-        if (arr->capacity < new_length || (new_length > 0 && !arr->data))
-            return false;
+    xr_array_ensure_capacity(arr, (int) capacity);
+    view->data = arr->data;
+    view->capacity = arr->capacity;
+    return arr->capacity >= capacity && (capacity == 0 || arr->data != NULL);
+}
+
+XrByteArrayRepeatResult xr_byte_array_repeat_from_tail_adapter(XrArray *arr, int64_t distance,
+                                                                int64_t count) {
+    XrByteArrayRepeatView view = {0};
+    if (arr) {
+        view.data = arr->data;
+        view.length = arr->length;
+        view.capacity = arr->capacity;
+        view.elem_type = arr->elem_type;
+        view.resizable = !xr_array_is_slice(arr);
     }
-    if (!xr_array_core_bytes_repeat_from(arr->data, new_length, arr->elem_type, dst, distance,
-                                         count))
-        return false;
-    arr->length = (int32_t) new_length;
-    return true;
+    XrByteArrayRepeatResult result = xr_byte_array_repeat_tail_core(
+        arr ? &view : NULL, distance, count, xr_byte_array_repeat_reserve, arr);
+    if (arr && result.status == XR_BYTE_ARRAY_REPEAT_OK) {
+        arr->length = (int32_t) view.length;
+        if (result.changed)
+            XR_ARRAY_MARK_MUTATED(arr);
+    }
+    return result;
 }
 
 void xr_array_append_data(XrArray *arr, const uint8_t *src_data, int32_t len) {

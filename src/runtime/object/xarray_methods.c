@@ -279,7 +279,11 @@ static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
-    if (!xr_byte_array_repeat_from_tail(arr, XR_TO_INT(args[0]), XR_TO_INT(args[1]))) {
+    XrByteArrayRepeatResult result = XR_BYTE_ARRAY_REPEAT_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_LO, XR_SEM_CONSUMER_RUNTIME,
+        xr_byte_array_repeat_from_tail_adapter(arr, XR_TO_INT(args[0]), XR_TO_INT(args[1])));
+    if (result.status != XR_BYTE_ARRAY_REPEAT_OK) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
                                          XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG);
         xr_vm_unwind_with_trace(iso, exc);

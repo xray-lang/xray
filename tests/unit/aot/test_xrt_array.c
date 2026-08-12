@@ -495,7 +495,8 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     uint8_t seed[] = {65, 66, 67, 0, 0, 0, 0, 0, 0};
     for (int64_t i = 0; i < 9; i++)
         xrt_array_push(rep_value, XR_FROM_INT(seed[i]));
-    xrt_byte_array_repeat_from_raw(rep, 3, 3, 6);
+    ASSERT_TRUE(xrt_byte_slice_repeat_semantics(rep->data, rep->length, 3, 3, 6),
+                "bounded repeat helper accepts a valid overlap");
     ASSERT_EQ_INT(((uint8_t *) rep->data)[3], 65, "repeatFrom writes first repeat byte");
     ASSERT_EQ_INT(((uint8_t *) rep->data)[4], 66, "repeatFrom writes second repeat byte");
     ASSERT_EQ_INT(((uint8_t *) rep->data)[5], 67, "repeatFrom writes third repeat byte");
@@ -610,11 +611,6 @@ static void test_byte_runtime_u8_guards_are_defensive(void) {
         xrt_byte_array_repeat_from_tail_value(int_value, XR_FROM_INT(1), XR_FROM_INT(1)),
         XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG,
         "AOT defensive repeatFrom rejects non-U8 receiver");
-    EXPECT_XRT_ERROR_THROW(xrt_byte_array_repeat_from_value(XR_FROM_INT(0), XR_FROM_INT(0),
-                                                            XR_FROM_INT(1), XR_FROM_INT(1)),
-                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG,
-                           "AOT defensive repeat op rejects non-array receiver");
-
     ASSERT_EQ_INT(bytes->elem_type, XR_ELEM_U8, "valid byte storage remains U8");
     ASSERT_EQ_INT(ints->elem_type, XR_ELEM_I64, "invalid test receiver remains non-U8");
 

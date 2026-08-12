@@ -3578,7 +3578,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "ead831e5cb16499762e452b7b3fdbb0d156d9d2332be41e1269476e71d9c0a1c",
+  "source_tree_fingerprint": "237d7901f5c823af4c2409c527c70de9e8e5830161caa202e9aa9d356dbfef7c",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xvm.c",

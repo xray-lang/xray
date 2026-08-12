@@ -1916,7 +1916,12 @@ vmcase(OP_BYTE_ARRAY_REPEAT_FROM) {
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG);
-    if (!xr_byte_array_repeat_from_tail(arr, XR_TO_INT(R(a + 1)), XR_TO_INT(R(a + 2)))) {
+    XrByteArrayRepeatResult repeat_result = XR_BYTE_ARRAY_REPEAT_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_LO, XR_SEM_CONSUMER_VM,
+        xr_byte_array_repeat_from_tail_adapter(arr, XR_TO_INT(R(a + 1)),
+                                               XR_TO_INT(R(a + 2))));
+    if (repeat_result.status != XR_BYTE_ARRAY_REPEAT_OK) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG);
     }
     vmbreak;
