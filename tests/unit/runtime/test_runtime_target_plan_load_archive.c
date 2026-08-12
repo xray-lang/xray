@@ -8,7 +8,42 @@
 #include <stdio.h>
 #include <string.h>
 
-int main(void) {
+static void hex_bytes(const uint8_t *bytes, size_t size, char *hex) {
+    static const char digits[] = "0123456789abcdef";
+    for (size_t i = 0; i < size; i++) {
+        hex[i * 2] = digits[bytes[i] >> 4];
+        hex[i * 2 + 1] = digits[bytes[i] & 15u];
+    }
+    hex[size * 2] = '\0';
+}
+
+static int write_evidence(const char *path,
+                          const XrRuntimeArtifactAuthorityIdentity *authority,
+                          const XrModuleGenerationIdentity *generation) {
+    char artifact[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE * 2 + 1];
+    char semantic[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE * 2 + 1];
+    char target[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE * 2 + 1];
+    char generation_id[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE * 2 + 1];
+    hex_bytes(authority->authority_fingerprint,
+              XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE, artifact);
+    hex_bytes(authority->semantic_fingerprint,
+              XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE, semantic);
+    hex_bytes(generation->target_plan_fingerprint,
+              XR_RUNTIME_GENERATION_FINGERPRINT_SIZE, target);
+    hex_bytes(generation->generation_fingerprint,
+              XR_RUNTIME_GENERATION_FINGERPRINT_SIZE, generation_id);
+    FILE *output = fopen(path, "wb");
+    if (!output)
+        return 0;
+    int written = fprintf(
+        output,
+        "{\"schema\":1,\"artifact\":\"%s\",\"generation\":\"%s\","
+        "\"semantic\":\"%s\",\"target\":\"%s\"}\n",
+        artifact, generation_id, semantic, target);
+    return fclose(output) == 0 && written > 0;
+}
+
+int main(int argc, char **argv) {
     XrTargetPlan *plan = (XrTargetPlan *) (uintptr_t) 1;
     XrRuntimeArtifactAuthority *authority =
         (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
@@ -43,6 +78,12 @@ int main(void) {
         xr_runtime_artifact_authority_free(authority);
         return 1;
     }
+    if (!xr_runtime_artifact_authority_identity(authority, &identity)) {
+        fprintf(stderr, "runtime artifact identity unavailable\n");
+        xr_target_plan_free(plan);
+        xr_runtime_artifact_authority_free(authority);
+        return 1;
+    }
 
     XrRuntimeGenerationBudget budget = {
         .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
@@ -53,6 +94,8 @@ int main(void) {
     };
     XrRuntimeGenerationAuthority *generation_authority = NULL;
     XrLoadedModuleGeneration *generation = NULL;
+    XrModuleGenerationSnapshot active_snapshot;
+    memset(&active_snapshot, 0, sizeof(active_snapshot));
     int64_t result = 0;
     bool executed = xr_runtime_generation_authority_create(
                         &budget, &generation_authority, diagnostic,
@@ -68,6 +111,8 @@ int main(void) {
                         generation, &result, diagnostic,
                         sizeof(diagnostic)) &&
                     result == 42 &&
+                    xr_module_generation_snapshot(generation,
+                                                  &active_snapshot) &&
                     xr_module_generation_begin_drain(
                         generation, diagnostic, sizeof(diagnostic)) &&
                     xr_module_generation_retire(
@@ -81,6 +126,15 @@ int main(void) {
     if (!executed) {
         fprintf(stderr, "runtime scalar artifact execution failed: %s\n",
                 diagnostic);
+        return 1;
+    }
+    if (argc == 3 && strcmp(argv[1], "--evidence-json") == 0 &&
+        !write_evidence(argv[2], &identity, &active_snapshot.identity)) {
+        fprintf(stderr, "runtime scalar evidence write failed\n");
+        return 1;
+    }
+    if (argc != 1 && argc != 3) {
+        fprintf(stderr, "usage: %s [--evidence-json <path>]\n", argv[0]);
         return 1;
     }
     puts("runtime scalar artifact load and execution passed");
