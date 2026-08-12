@@ -180,9 +180,9 @@ static void *watch_thread_func(void *arg) {
     return NULL;
 }
 
-// ========== Public API ==========
+// ========== CLI monitor entry point ==========
 
-void xray_vm_coro_monitor_start(XrVMRuntime *X, int watch_interval_ms, int http_port) {
+void xr_coro_monitor_start(XrVMRuntime *X, int watch_interval_ms, int http_port) {
     XR_DCHECK(X != NULL, "coro_monitor_start: NULL isolate");
     tls_monitor_isolate = X;
     tls_watch_interval_ms = watch_interval_ms;

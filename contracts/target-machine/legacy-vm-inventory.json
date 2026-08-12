@@ -3582,7 +3582,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "5954fad443fd821a45d150dd57ffb551ca0a07394751bfd07fcd90f5c9ce0ffc",
+  "source_tree_fingerprint": "76154255a20b295e574da5f79a3d8fea7d3b13bc81e37badde5191cf01cbe1f0",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xvm.c",
@@ -4153,7 +4153,6 @@
   ],
   "vm_public_api_symbols": [
     "xray_vm_config_init",
-    "xray_vm_coro_monitor_start",
     "xray_vm_delete",
     "xray_vm_dofile",
     "xray_vm_dofile_debug",

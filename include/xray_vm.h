@@ -71,8 +71,6 @@ XRAY_API void xray_vm_set_script_info(XrVMRuntime *vm, const char *script_file, 
 
 XRAY_API void xray_vm_multicore_init(XrVMRuntime *vm, int num_workers);
 XRAY_API void xray_vm_multicore_destroy(XrVMRuntime *vm);
-XRAY_API void xray_vm_coro_monitor_start(XrVMRuntime *vm, int watch_interval_ms, int http_port);
-
 #ifdef __cplusplus
 }
 #endif

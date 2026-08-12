@@ -14,6 +14,6 @@
 #include "../base/xdefs.h"
 #include "../base/xforward_decl.h"
 
-XR_FUNC void xray_vm_coro_monitor_start(XrVMRuntime *X, int watch_interval_ms, int http_port);
+XR_FUNC void xr_coro_monitor_start(XrVMRuntime *X, int watch_interval_ms, int http_port);
 
 #endif  // XCORO_MONITOR_H

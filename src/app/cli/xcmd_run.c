@@ -23,6 +23,7 @@
 #include "../../module/xmodule_resolver.h"
 #include "../../module/xproject.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../coro/xcoro_monitor.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
@@ -549,7 +550,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
     /* Start coroutine monitor (if enabled) */
     if (opts.coro_watch_interval > 0 || opts.coro_http_port > 0) {
-        xray_vm_coro_monitor_start(iso, opts.coro_watch_interval, opts.coro_http_port);
+        xr_coro_monitor_start(iso, opts.coro_watch_interval, opts.coro_http_port);
     }
 
     /* Execute file */

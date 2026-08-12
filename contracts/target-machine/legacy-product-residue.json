@@ -1,10 +1,10 @@
 {
   "counts": {
-    "api": 50,
+    "api": 48,
     "build": 65,
-    "cli": 116,
+    "cli": 115,
     "install": 7,
-    "source": 3652
+    "source": 3650
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -541,7 +541,6 @@
     "xr_vm_vm_init",
     "xr_vm_yieldable_cfunction_new",
     "xray_vm_config_init",
-    "xray_vm_coro_monitor_start",
     "xray_vm_current",
     "xray_vm_debug_null_XXXXXX",
     "xray_vm_delete",
@@ -558,7 +557,7 @@
     "xray_vm_new_full",
     "xray_vm_set_script_info"
   ],
-  "owner_count": 732,
+  "owner_count": 730,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -599,16 +598,15 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "dea3e038c0b59a905d67b40f3c09e0c38a6843ea0024f39dc339e23adbcfb0f2",
+      "evidence_sha256": "7129a7ecbc3f4db739a32e287ddc9384eb13eaa153d456adf4048da39e6c94bb",
       "family": "legacy-vm-api",
-      "hit_count": 10,
+      "hit_count": 9,
       "path": "include/xray_vm.h",
       "status": "transitional-owner",
       "surface": "api",
       "tokens": [
         "XRAY_VM_H",
         "xray_vm_config_init",
-        "xray_vm_coro_monitor_start",
         "xray_vm_delete",
         "xray_vm_eval_bundle",
         "xray_vm_multicore_destroy",
@@ -654,9 +652,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "51f5166534ad59c90e57e69d556727db48989d792daa1c7385649e1b27ad39fe",
+      "evidence_sha256": "2e559a137903dc4d55fbf621ebebf7e6b046b24a0a0f5f259acf8230a30c8264",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 23,
+      "hit_count": 22,
       "path": "include/xray_vm.h",
       "status": "transitional-owner",
       "surface": "api",
@@ -1207,14 +1205,13 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "b695137626a44afad35dea73c78a3b891cec2c7a88ae129a80f5bfb9f9ea0f45",
+      "evidence_sha256": "3de6ae2f06039788ed9144b21d8ca44f65e4e16094b21bb3ad4755cdad32cdc3",
       "family": "legacy-vm-api",
-      "hit_count": 18,
+      "hit_count": 17,
       "path": "src/app/cli/xcmd_run.c",
       "status": "transitional-owner",
       "surface": "cli",
       "tokens": [
-        "xray_vm_coro_monitor_start",
         "xray_vm_delete",
         "xray_vm_multicore_destroy",
         "xray_vm_set_script_info"
@@ -3311,30 +3308,6 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "95f6d401d4d5652f0f14c7af50435d0c3783590207703b06642cc2d67e55c42d",
-      "family": "legacy-vm-api",
-      "hit_count": 1,
-      "path": "src/coro/xcoro_monitor.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_coro_monitor_start"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "7251ba06fbfbe3d90b688649374b44dceaa4e6e363fa7d1d815b88cc01bbce3f",
-      "family": "legacy-vm-api",
-      "hit_count": 1,
-      "path": "src/coro/xcoro_monitor.h",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_coro_monitor_start"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
       "evidence_sha256": "a3dd20fc32741e7c1049e499eac2ad115f67794fe99251e4f0cbfc618f22f9c1",
       "family": "legacy-vm-api",
       "hit_count": 2,
@@ -4651,7 +4624,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "dfc22cf0056fc5f94a4ed1a9937c0aa46ed89253dda0b31903e469a95e1edd86",
+      "evidence_sha256": "5baa7eef9f0f497bad22d404830b7390ff99f350919b0f9b4d745cf364c75dcd",
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 6,
       "path": "src/coro/xcoro_monitor.c",
@@ -4663,7 +4636,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "318fe8b61708c2331b55618227de85829d23f8963ed4e0a134789d138f74bfe6",
+      "evidence_sha256": "5df0c9ebf5fe235e27622cb014598214308de5c02490f0bbbd8b55fbfba6ddc6",
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 1,
       "path": "src/coro/xcoro_monitor.h",
@@ -9932,6 +9905,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "b86719fd69dd42b3f91c63307e9fbff6addd38713b12ea6fb8e3572fd88c871b",
-  "total": 3890
+  "source_tree_fingerprint": "bebf325d74624c7519faecd3dc58daa2579445d5d7c38af17deb2469c74203e7",
+  "total": 3885
 }
