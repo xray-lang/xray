@@ -186,6 +186,7 @@ def main() -> int:
             (full / f"lib/xray/aot/{host_target}/manifest.json", "installed runtime manifest"),
             (full / f"lib/xray/vm/{host_target}/{static_prefix}xray_vm{static_suffix}", "installed xray_vm archive"),
             (full / "lib/xray/sdk/src/aot/xrt.h", "installed private AOT SDK"),
+            (full / "share/xray/install/aot-sdk-closure.json", "installed exact AOT SDK manifest"),
             (full / "include/xray/runtime.h", "installed runtime API header"),
             (full / "include/xray/xray_target_plan_load.h", "installed TargetPlan load header"),
             (full / "include/xray/xray_runtime_generation.h", "installed generation authority header"),
@@ -197,6 +198,16 @@ def main() -> int:
             gate.record(path.is_file(), name, f"missing {path}")
         gate.record(not (full / "include/xray/xray_runtime.h").exists(),
                     "installed tree excludes old runtime header name")
+        gate.record(not (full / "include/xray/xray_vm.h").exists(),
+                    "installed tree excludes the legacy VM public header")
+        gate.record(not (full / "include/xray/xray.h").exists(),
+                    "installed tree excludes the legacy VM umbrella header")
+        gate.record(not (full / "include/xray/xray_module_sdk.h").exists(),
+                    "installed tree excludes the legacy native-module SDK header")
+        gate.record(not (full / "lib/xray/sdk/src/runtime/xisolate_api.h").exists(),
+                    "installed AOT SDK excludes unrelated isolate internals")
+        gate.record(not (full / "lib/xray/sdk/src/runtime/value/xopcode_def.h").exists(),
+                    "installed AOT SDK excludes legacy opcode internals")
 
         verify = run(
             [

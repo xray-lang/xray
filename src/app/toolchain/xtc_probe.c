@@ -39,8 +39,7 @@
 
 static const char xtc_probe_minimal_c[] = "int main(void) { return 0; }\n";
 static const char xtc_probe_sdk_c[] =
-    "#include \"xray.h\"\n"
-    "#include \"xrt_core_freestanding.h\"\n"
+    "#include \"xrt.h\"\n"
     "typedef struct XtcDialectPair { int first; int second; } XtcDialectPair;\n"
     "static XtcDialectPair xtc_pair(int value) {\n"
     "  return (XtcDialectPair){ value, value + 1 };\n"
@@ -53,8 +52,7 @@ static const char xtc_probe_sdk_c[] =
     "done:\n"
     "  return pair.first + expression_value - 1;\n"
     "}\n"
-    "int xray_sdk_probe(void) { return XRAY_VERSION_MAJOR >= 0 && sizeof(XrValue) > 0 "
-    "? xray_cgen_dialect_probe() : 1; }\n";
+    "int xray_sdk_probe(void) { return sizeof(XrValue) > 0 ? xray_cgen_dialect_probe() : 1; }\n";
 static const char xtc_probe_freestanding_sdk_c[] =
     "#include \"xrt_core_freestanding.h\"\n"
     "typedef struct XtcDialectPair { int first; int second; } XtcDialectPair;\n"

@@ -224,7 +224,8 @@ elseif(WIN32)
     # COFF archives. Zig is the managed fallback for generated C that uses
     # GNU/Clang expression extensions unavailable in cl.exe.
     set(XRAY_RUNTIME_PROVIDERS_JSON "\\\"msvc\\\",\\\"zig\\\"")
-    set(XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON "\\\"ws2_32\\\",\\\"synchronization\\\"")
+    set(XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON
+        "\\\"ws2_32\\\",\\\"api-ms-win-core-synch-l1-2-0\\\"")
 else()
     string(TOLOWER "${CMAKE_SYSTEM_NAME}" _XRAY_RELEASE_OS)
     set(XRAY_RELEASE_TARGET "${_XRAY_RELEASE_OS}-${_XRAY_RELEASE_ARCH}")
@@ -4122,6 +4123,28 @@ if(BUILD_TESTS)
         TIMEOUT 180
     )
 
+    add_custom_target(aot_sdk_closure_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_aot_sdk_closure.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Checking the exact generated-C SDK header closure"
+        VERBATIM
+    )
+
+    add_test(
+        NAME aot_sdk_closure_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_aot_sdk_closure.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_sdk_closure_self_test PROPERTIES
+        LABELS "meta;target-machine;governance;evidence;installed;aot"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
     add_custom_target(target_machine_activation_generation_evidence_self_test
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_activation_generation_evidence_collector.py
@@ -4420,30 +4443,50 @@ install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/GenerateRuntimeManifest.cmake"
     ALL_COMPONENTS
 )
 
-# Install the public C API headers.
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
-    DESTINATION include/xray
-    COMPONENT XraySDK
-    FILES_MATCHING PATTERN "*.h"
-    PATTERN "xray_export.h" EXCLUDE
-    PATTERN "xray_target_plan_load.h" EXCLUDE
-    PATTERN "xray_runtime_generation.h" EXCLUDE
+# Generated AOT C has six possible entry headers. Derive their complete quoted-
+# include closure at configure time, reject legacy/product headers in that
+# closure, and install no unrelated compiler or VM internals.
+set(_XRAY_AOT_SDK_CMAKE "${_XRAY_INSTALL_METADATA_DIR}/AotSdkClosure.cmake")
+set(_XRAY_AOT_SDK_MANIFEST "${_XRAY_INSTALL_METADATA_DIR}/aot-sdk-closure.json")
+execute_process(
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/derive_aot_sdk_closure.py
+        --root ${CMAKE_SOURCE_DIR}
+        --cmake-output ${_XRAY_AOT_SDK_CMAKE}
+        --manifest-output ${_XRAY_AOT_SDK_MANIFEST}
+    RESULT_VARIABLE _XRAY_AOT_SDK_RESULT
+    OUTPUT_VARIABLE _XRAY_AOT_SDK_OUTPUT
+    ERROR_VARIABLE _XRAY_AOT_SDK_ERROR
+)
+if(NOT _XRAY_AOT_SDK_RESULT EQUAL 0)
+    message(FATAL_ERROR
+        "Unable to derive the exact generated-C SDK closure:\n"
+        "${_XRAY_AOT_SDK_OUTPUT}${_XRAY_AOT_SDK_ERROR}")
+endif()
+include("${_XRAY_AOT_SDK_CMAKE}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${XRAY_AOT_SDK_PUBLIC_FILES}
+    ${XRAY_AOT_SDK_PRIVATE_FILES}
+    ${CMAKE_SOURCE_DIR}/scripts/derive_aot_sdk_closure.py
 )
 
-# Generated AOT C includes xrt headers whose relative includes reach into the
-# shared runtime tree.  Keep that tree compiler-private and preserve its source
-# layout so an installed xray can compile without a source checkout.
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/
-    DESTINATION lib/xray/sdk/src
+foreach(_XRAY_AOT_SDK_PUBLIC IN LISTS XRAY_AOT_SDK_PUBLIC_FILES)
+    install(FILES "${CMAKE_SOURCE_DIR}/${_XRAY_AOT_SDK_PUBLIC}"
+        DESTINATION include/xray
+        COMPONENT XraySDK
+    )
+endforeach()
+foreach(_XRAY_AOT_SDK_PRIVATE IN LISTS XRAY_AOT_SDK_PRIVATE_FILES)
+    get_filename_component(_XRAY_AOT_SDK_DIRECTORY
+        "${_XRAY_AOT_SDK_PRIVATE}" DIRECTORY)
+    install(FILES "${CMAKE_SOURCE_DIR}/${_XRAY_AOT_SDK_PRIVATE}"
+        DESTINATION "lib/xray/sdk/${_XRAY_AOT_SDK_DIRECTORY}"
+        COMPONENT XraySDK
+    )
+endforeach()
+install(FILES "${_XRAY_AOT_SDK_MANIFEST}"
+    DESTINATION share/xray/install
     COMPONENT XraySDK
-    FILES_MATCHING
-        PATTERN "*.h"
-        PATTERN "*.inc.c"
-        PATTERN "*.def"
-        # The legacy proto container codec remains a source-tree compiler
-        # implementation detail.  Generated AOT C never includes it, so the
-        # installed SDK must not expose this retired runtime-product route.
-        PATTERN "xproto_codec.h" EXCLUDE
 )
 
 # Install stdlib source files

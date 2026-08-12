@@ -127,6 +127,7 @@ def populate(prefix: Path) -> None:
         "lib/xray/compiler/x86_64-windows-msvc/xray_compiler.lib": "compiler",
         "lib/xray/vm/x86_64-windows-msvc/xray_vm.lib": "vm",
         "include/xray/runtime.h": "#define RUNTIME 1\n",
+        "share/xray/install/aot-sdk-closure.json": "",
         "share/xray/install/payload-manifest.json": "",
     }
     for relative, text in files.items():
@@ -135,6 +136,16 @@ def populate(prefix: Path) -> None:
         if relative.endswith("payload-manifest.json"):
             continue
         path.write_text(text, encoding="utf-8")
+    runtime = prefix / "include/xray/runtime.h"
+    write_json(prefix / "share/xray/install/aot-sdk-closure.json", {
+        "schema": 1,
+        "generator": "xray-aot-sdk-header-closure/1",
+        "entries": [{
+            "source_path": "include/runtime.h",
+            "install_path": "include/xray/runtime.h",
+            "sha256": assembler.sha256_file(runtime),
+        }],
+    })
 
 
 def fake_install(mutation: str = "") -> Callable[[Path, Path], tuple[int, list[str], str]]:
@@ -155,6 +166,10 @@ def fake_install(mutation: str = "") -> Callable[[Path, Path], tuple[int, list[s
             path = prefix / "lib/xray/legacy.xrc"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("LEGACY_INSTALL_TEXT\n", encoding="utf-8")
+        if mutation == "sdk-extra":
+            path = prefix / "lib/xray/sdk/src/unexpected.h"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("#define UNEXPECTED 1\n", encoding="utf-8")
         if mutation == "replay" and calls == 2:
             (prefix / "share/replayed.txt").parent.mkdir(parents=True, exist_ok=True)
             (prefix / "share/replayed.txt").write_text("changed\n", encoding="utf-8")
@@ -225,6 +240,7 @@ def self_test() -> int:
                 ("missing", "missing", "absent_public_headers"),
                 ("residue", "residue", "residue_count"),
                 ("replay", "replay", "no_work_replay"),
+                ("sdk-extra", "sdk-extra", "aot_sdk_closure"),
             ):
                 collector.run_install = fake_install(mutation)
                 output = parent / name
@@ -237,6 +253,8 @@ def self_test() -> int:
                     raise AssertionError("missing header mutation was not reported")
                 if field == "no_work_replay" and failed["payload"][field] != "failed":
                     raise AssertionError("no-work mutation was not reported")
+                if field == "aot_sdk_closure" and failed["payload"][field] != "failed":
+                    raise AssertionError("unexpected SDK file mutation was not reported")
 
             try:
                 collector.run_install = fake_install()

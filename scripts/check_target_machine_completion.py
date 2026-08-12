@@ -606,6 +606,44 @@ def installed_findings(data: dict[str, Any], verified: set[str], evidence_root: 
         findings.append(finding("TM-COMP-INSTALLED-ROOT", "installed",
                                 "installed evidence root is missing"))
         return findings
+    sdk_manifest_path = install_root / "share/xray/install/aot-sdk-closure.json"
+    sdk_manifest = read_json(sdk_manifest_path) if sdk_manifest_path.is_file() else None
+    if (not isinstance(sdk_manifest, dict)
+            or set(sdk_manifest) != {"schema", "generator", "entries"}
+            or sdk_manifest.get("schema") != 1
+            or sdk_manifest.get("generator") != "xray-aot-sdk-header-closure/1"
+            or not isinstance(sdk_manifest.get("entries"), list)
+            or not sdk_manifest["entries"]):
+        findings.append(finding("TM-COMP-INSTALLED-SDK-CLOSURE", "installed",
+                                "exact AOT SDK closure manifest is missing or invalid"))
+    else:
+        expected: dict[str, str] = {}
+        invalid = False
+        for row in sdk_manifest["entries"]:
+            if (not isinstance(row, dict)
+                    or set(row) != {"install_path", "sha256", "source_path"}
+                    or not isinstance(row.get("install_path"), str)
+                    or not exact_sha256(row.get("sha256"))
+                    or not isinstance(row.get("source_path"), str)
+                    or row["install_path"] in expected):
+                invalid = True
+                continue
+            expected[row["install_path"]] = row["sha256"]
+        actual = {
+            path.relative_to(install_root).as_posix(): sha256_file(path)
+            for base in (install_root / "include/xray", install_root / "lib/xray/sdk")
+            if base.is_dir()
+            for path in base.rglob("*") if path.is_file()
+        }
+        if invalid or actual != expected:
+            samples = sorted(set(expected) ^ set(actual))[:MAX_SAMPLES]
+            samples.extend(
+                relative for relative in sorted(set(expected) & set(actual))
+                if expected[relative] != actual[relative]
+            )
+            findings.append(finding("TM-COMP-INSTALLED-SDK-CLOSURE", "installed",
+                                    "installed SDK is not the exact declared header closure",
+                                    len(samples), samples[:MAX_SAMPLES]))
     path_regex = re.compile(manifest["installed"]["forbidden_path_regex"])
     text_regex = re.compile(manifest["installed"]["forbidden_text_regex"])
     samples: list[str] = []
@@ -1042,6 +1080,15 @@ def self_test(manifest_path: Path) -> int:
                 "public_headers": manifest["installed"]["required_public_headers"],
                 "install_root": "install", "inventory_log": installed["logs"][0]["path"],
             })
+            sdk_header = install_root / "include/xray/runtime.h"
+            write_json(install_root / "share/xray/install/aot-sdk-closure.json", {
+                "schema": 1, "generator": "xray-aot-sdk-header-closure/1",
+                "entries": [{
+                    "source_path": "include/runtime.h",
+                    "install_path": "include/xray/runtime.h",
+                    "sha256": sha256_file(sdk_header),
+                }],
+            })
             common, verified = common_evidence_findings(
                 installed, "installed", evidence_root, identity, input_sha256
             )
@@ -1050,6 +1097,13 @@ def self_test(manifest_path: Path) -> int:
             (install_root / "legacy.xrc").write_bytes(b"legacy")
             expect_mutation(results, "installed", installed_findings(
                 installed, verified, evidence_root, manifest), "TM-COMP-INSTALLED-RESIDUE")
+            (install_root / "legacy.xrc").unlink()
+            (install_root / "lib/xray/sdk/src/extra.h").parent.mkdir(parents=True)
+            (install_root / "lib/xray/sdk/src/extra.h").write_text("/* extra */\n",
+                                                                    encoding="utf-8")
+            expect_mutation(results, "installed-sdk", installed_findings(
+                installed, verified, evidence_root, manifest),
+                "TM-COMP-INSTALLED-SDK-CLOSURE")
 
             runtime = fixture_envelope(
                 evidence_root, "runtime-reachability", identity, input_sha256
@@ -1211,7 +1265,7 @@ def self_test(manifest_path: Path) -> int:
 
         required_labels = {
             "xrc-source", "vm-include", "opcode-build", "tagged-frame", "xaot-plan",
-            "identity-log", "dependency-graph", "symbol", "installed", "runtime",
+            "identity-log", "dependency-graph", "symbol", "installed", "installed-sdk", "runtime",
             "matrix", "activation-generation", "full-validation", "dual-owner",
             "terminal-inventory",
         }

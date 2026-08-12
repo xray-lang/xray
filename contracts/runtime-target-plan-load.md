@@ -156,8 +156,18 @@ roots, or general module activation.
    growth fail. The installed archive gate fails when inspection is
    unavailable, rejects compiler and `xi_` symbols, and treats any new `xvm_`
    symbol as uninventoried legacy residue.
+10. The installed SDK is not a recursive copy of compiler, VM, or runtime
+    headers. Configure derives the exact quoted-include closure of every
+    generated-C entry header, rejects legacy product paths and text while
+    deriving it, and emits a digest-bound closure manifest. The installer
+    publishes exactly that manifest's public and private header set. Both the
+    raw installed-evidence producer and the final completion checker rescan
+    the published tree and reject missing, additional, or digest-mismatched
+    SDK files. In particular, the old VM umbrella/API, native-module SDK,
+    opcode definitions, isolate internals, and proto container codec are not
+    installed aliases or compatibility surfaces.
 
-anchor-sha256: CMakeLists.txt b3377be596c1a3dd83c28af931d9fadeb86343b3f243f76b2b61498e1161a0a3
+anchor-sha256: CMakeLists.txt 2da1a12281ef1ab8ce2d33d574a3d26eca06623bf8d26e2666700490c37fc0b0
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h 38fd73865e25d62392d8dd0abfd5e6193edf2356803a817349db14c43ccf9874
 anchor-sha256: src/plan/format/xr_artifact_kind.c 289fb506284ed97372e211225dcb5c1d205d7149416ddc96abb2a7f3b8704b39
