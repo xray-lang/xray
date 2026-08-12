@@ -23,17 +23,12 @@
 #define XR_ARTIFACT_PROBE_SIZE 8u
 #define XR_XSM_ARTIFACT_MAGIC_SIZE 8u
 #define XR_XTP_ARTIFACT_MAGIC_SIZE 4u
-#define XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE 4u
-#define XR_LEGACY_XRC_HEADER_IDENTITY_SIZE 6u
-#define XR_LEGACY_XRC_VERSION UINT16_C(30)
 
 XR_DATA const uint8_t xr_xsm_artifact_magic[XR_XSM_ARTIFACT_MAGIC_SIZE];
 XR_DATA const uint8_t xr_xtp_artifact_magic[XR_XTP_ARTIFACT_MAGIC_SIZE];
-XR_DATA const uint8_t xr_legacy_xrc_artifact_magic[XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE];
 
 typedef enum XrArtifactKind {
     XR_ARTIFACT_KIND_SOURCE = 0,
-    XR_ARTIFACT_KIND_LEGACY_XRC,
     XR_ARTIFACT_KIND_XSM,
     XR_ARTIFACT_KIND_XTP,
 } XrArtifactKind;

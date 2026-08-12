@@ -7,11 +7,12 @@ contract does not claim provider registration, an entry cell, exports, calls,
 roots, or general module activation.
 
 1. Artifact identity comes from bytes. The probe reports match, need-more,
-   unknown-reserved, or extension conflict. XSM and removed XTP prefixes are
-   resolved before legacy XRC, and XRC requires its full magic plus exact
-   format version solely so the product can reject it before runtime creation.
-   A file name can only confirm an identity or conflict with it; it cannot
-   create one.
+   unknown-reserved, or extension conflict. Only exact XSM and XTP identities
+   are recognized compiled artifacts. Every retired `XRAY...` container prefix
+   is an unknown reserved identity and fails before runtime creation; the
+   public classifier carries no legacy XRC kind, version, reader, or extension
+   alias. A file name can only confirm XSM/XTP identity or conflict with it; it
+   cannot create one.
 2. XTP candidate decoding copies caller bytes into owned immutable storage
    before parsing any header, directory, digest, or typed row. Candidate
    materialization reads only that snapshot. The shared hard peak covers the
@@ -167,10 +168,10 @@ roots, or general module activation.
     opcode definitions, isolate internals, and proto container codec are not
     installed aliases or compatibility surfaces.
 
-anchor-sha256: CMakeLists.txt ec8b3c0ed301297b23b9b342d855fd022358644c5aa320afdb2cc9b6befedb0a
+anchor-sha256: CMakeLists.txt 2e0c46e9e146e7585519f156666bc742cea4d6d713e208e6a246ffadbb3d1cf3
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
-anchor-sha256: src/plan/format/xr_artifact_kind.h 38fd73865e25d62392d8dd0abfd5e6193edf2356803a817349db14c43ccf9874
-anchor-sha256: src/plan/format/xr_artifact_kind.c 289fb506284ed97372e211225dcb5c1d205d7149416ddc96abb2a7f3b8704b39
+anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
+anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
 anchor-sha256: src/plan/format/xr_xsm_decode.c 3f2c5ca0effe61f5239eddca228ee74911808f04b0f86f1c9f6a4e9b27ef0095
 anchor-sha256: src/plan/format/xr_xtp_schema.h 1267b8734e2780e0ced0e2ef931c09aec8ebaaaeb966accc2c79a83531bea678
@@ -192,11 +193,11 @@ anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad3
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
 anchor-sha256: src/runtime/xr_target_plan_load.c f48ff435aedf73dc30588af42bb6bf288282feb10a81762ad4ede9375b06d7c8
-anchor-sha256: src/app/cli/xcmd_run.c 0a8e2be195caff4b859d68f8876ab3a76ec701de62da71a127d50c0ff3dca771
+anchor-sha256: src/app/cli/xcmd_run.c 9609aa982a60917924cf73e109c03116ba33e589f2024a6edcce2e87d3e1cf07
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 6f292fd3f122ce7458993a82f8b672d04644671cc4884d157c064d5bcade0ac5
 anchor-sha256: scripts/check_legacy_product_residue.py a47409257b92ad57e90ac23bb28a6c3cb29866c102741ceeaff37f079d0d13cf
 anchor-sha256: tests/unit/plan/test_target_plan.c 087c905330402b3bff20b267a3252ac2a9ccc81626145662cd445ec6da97e627
-anchor-sha256: tests/unit/plan/test_xtp_format.c 5f69974f555b1d9601471299fdc3dbc109af50a919ab89ab65c9e8a787db0cf9
+anchor-sha256: tests/unit/plan/test_xtp_format.c ab7a3766a721d1aa2e6fc2ca67031e77ad1f7b44f974d5e8b532067f58705801
 anchor-sha256: tests/unit/CMakeLists.txt 4bb45a04f3870b87299478fc7dfbcc5148fca06f4a403692b02bd39ca507305b
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py b17583c038c751f8c6cad33a82ff13730442e74bfeb7e6165804fb7e57f7241a

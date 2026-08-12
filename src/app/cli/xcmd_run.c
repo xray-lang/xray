@@ -105,11 +105,6 @@ static int reject_non_executable_artifact(const char *path,
                 "XR_ARTIFACT_2005: semantic module artifacts are planning inputs and are not executable\n");
         return XR_CLI_EXIT_FAIL;
     }
-    if (probe.kind == XR_ARTIFACT_KIND_LEGACY_XRC) {
-        fprintf(stderr,
-                "XR_ARTIFACT_2000: legacy XRC execution is removed; use exact XSM/XTP artifacts\n");
-        return XR_CLI_EXIT_FAIL;
-    }
     if (probe.kind != XR_ARTIFACT_KIND_XTP)
         return -1;
 

@@ -8,12 +8,12 @@
  * xproto_codec.c - Compiler-internal proto container codec implementation
  *
  * KEY CONCEPT:
- *   Serializes XrProto to portable bytecode format (.xrc) and loads it back.
+ *   Serializes XrProto to the compiler-internal bootstrap container and loads
+ *   it back.
  *   Handles symbol table remapping for cross-compilation compatibility.
  */
 
 #include "xproto_codec.h"
-#include "../plan/format/xr_artifact_kind.h"
 #include "xmodule.h"
 #include "../../stdlib/stdlib_cache.h"
 #include "../base/xmalloc.h"
@@ -23,6 +23,9 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xexec_state.h"
 #include "../runtime/value/xchunk.h"
+
+static const uint8_t xr_bootstrap_container_magic[XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE] = {
+    'X', 'R', 'A', 'Y'};
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../runtime/value/xtype.h"
@@ -2171,10 +2174,10 @@ static uint8_t *bytecode_write_impl(XrVMRuntime *X, const char *stdlib_module, X
         proto->shared_count > used_shared_count ? proto->shared_count : used_shared_count;
 
     // Write header
-    if (!bc_put_bytes(&w, xr_legacy_xrc_artifact_magic,
-                      XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE))
+    if (!bc_put_bytes(&w, xr_bootstrap_container_magic,
+                      XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE))
         goto fail;
-    if (!bc_put_u16(&w, XR_LEGACY_XRC_VERSION))
+    if (!bc_put_u16(&w, XR_BOOTSTRAP_CONTAINER_VERSION))
         goto fail;
     if (!bc_put_u16(&w, (uint16_t) flags))
         goto fail;
@@ -2240,18 +2243,18 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
     bc_reader_init(&r, X, data, size);
 
     // Read header
-    if (!bc_has_bytes(&r, XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE)) {
+    if (!bc_has_bytes(&r, XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE)) {
         if (error)
             *error = XR_BC_ERR_TRUNCATED;
         return NULL;
     }
-    if (memcmp(r.buf + r.pos, xr_legacy_xrc_artifact_magic,
-               XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE) != 0) {
+    if (memcmp(r.buf + r.pos, xr_bootstrap_container_magic,
+               XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE) != 0) {
         if (error)
             *error = XR_BC_ERR_MAGIC;
         return NULL;
     }
-    r.pos += XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE;
+    r.pos += XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE;
 
     uint16_t version = bc_get_u16(&r);
     if (r.error != XR_BC_OK) {
@@ -2259,7 +2262,7 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
             *error = r.error;
         return NULL;
     }
-    if (version != XR_LEGACY_XRC_VERSION) {
+    if (version != XR_BOOTSTRAP_CONTAINER_VERSION) {
         if (error)
             *error = XR_BC_ERR_VERSION;
         return NULL;

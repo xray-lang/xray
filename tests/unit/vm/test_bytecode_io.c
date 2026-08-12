@@ -182,7 +182,7 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
     uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
     ASSERT_GT(size, 16);
-    ASSERT_EQ_UINT(read_le16(bytes + 4), XR_LEGACY_XRC_VERSION);
+    ASSERT_EQ_UINT(read_le16(bytes + 4), XR_BOOTSTRAP_CONTAINER_VERSION);
 
     XrBcError error = XR_BC_OK;
     XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
@@ -440,7 +440,7 @@ TEST(bytecode_reader_rejects_previous_layout_version) {
     ASSERT_NOT_NULL(bytes);
     ASSERT_GT(size, 16);
 
-    uint16_t previous_version = (uint16_t) (XR_LEGACY_XRC_VERSION - 1);
+    uint16_t previous_version = (uint16_t) (XR_BOOTSTRAP_CONTAINER_VERSION - 1);
     bytes[4] = (uint8_t) (previous_version & 0xff);
     bytes[5] = (uint8_t) (previous_version >> 8);
 

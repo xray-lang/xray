@@ -16,9 +16,6 @@ XR_DATADEF const uint8_t xr_xsm_artifact_magic[XR_XSM_ARTIFACT_MAGIC_SIZE] = {
     'X', 'R', 'A', 'Y', 'X', 'S', 'M', 0};
 XR_DATADEF const uint8_t xr_xtp_artifact_magic[XR_XTP_ARTIFACT_MAGIC_SIZE] = {
     'X', 'T', 'P', 'F'};
-XR_DATADEF const uint8_t
-    xr_legacy_xrc_artifact_magic[XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE] = {
-        'X', 'R', 'A', 'Y'};
 
 static bool has_extension(const char *path, const char *extension) {
     if (!path || !extension)
@@ -34,8 +31,6 @@ static XrArtifactKind extension_claim(const char *path) {
         return XR_ARTIFACT_KIND_XSM;
     if (has_extension(path, ".xtp"))
         return XR_ARTIFACT_KIND_XTP;
-    if (has_extension(path, ".xrc"))
-        return XR_ARTIFACT_KIND_LEGACY_XRC;
     return XR_ARTIFACT_KIND_SOURCE;
 }
 
@@ -87,22 +82,10 @@ static XrArtifactProbeResult magic_identity(const uint8_t *prefix,
                          XR_XTP_ARTIFACT_MAGIC_SIZE))
         return result(XR_ARTIFACT_PROBE_NEED_MORE,
                       XR_ARTIFACT_KIND_SOURCE, XR_XTP_ARTIFACT_MAGIC_SIZE);
-    if (prefix_size >= XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE &&
-        memcmp(prefix, xr_legacy_xrc_artifact_magic,
-               XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE) == 0) {
-        if (prefix_size < XR_LEGACY_XRC_HEADER_IDENTITY_SIZE)
-            return result(XR_ARTIFACT_PROBE_NEED_MORE,
-                          XR_ARTIFACT_KIND_SOURCE,
-                          XR_LEGACY_XRC_HEADER_IDENTITY_SIZE);
-        uint16_t version = (uint16_t) prefix[4] |
-                           ((uint16_t) prefix[5] << 8);
-        if (version == XR_LEGACY_XRC_VERSION)
-            return result(XR_ARTIFACT_PROBE_MATCH,
-                          XR_ARTIFACT_KIND_LEGACY_XRC,
-                          XR_LEGACY_XRC_HEADER_IDENTITY_SIZE);
+    if (prefix_size >= 4u && memcmp(prefix, "XRAY", 4u) == 0) {
         return result(XR_ARTIFACT_PROBE_UNKNOWN_RESERVED,
                       XR_ARTIFACT_KIND_SOURCE,
-                      XR_LEGACY_XRC_HEADER_IDENTITY_SIZE);
+                      4u);
     }
     return result(XR_ARTIFACT_PROBE_MATCH, XR_ARTIFACT_KIND_SOURCE, 0);
 }

@@ -1028,15 +1028,12 @@ static void test_artifact_classifier(void) {
     static const uint8_t source[] = "print(1)";
     static const uint8_t removed_xtp_v1[] = {
         'X', 'R', 'A', 'Y', 'X', 'T', 'P', 0};
-    static const uint8_t legacy_xrc[] = {
-        'X', 'R', 'A', 'Y', (uint8_t) XR_LEGACY_XRC_VERSION,
-        (uint8_t) (XR_LEGACY_XRC_VERSION >> 8)};
+    static const uint8_t removed_xray_container[] = {
+        'X', 'R', 'A', 'Y', 30, 0};
     static const uint8_t corrupt_removed[] = {
         'X', 'R', 'A', 'Y', 'X', 'T', 'P', 1};
     static const uint8_t unknown_reserved[] = {
         'X', 'R', 'A', 'Y', 'Q', 'Q', 'Q', 0};
-    static const uint8_t wrong_xrc_version[] = {
-        'X', 'R', 'A', 'Y', (uint8_t) (XR_LEGACY_XRC_VERSION - 1u), 0};
     XrArtifactProbeResult probe =
         xr_artifact_probe("renamed.bin", xr_xsm_artifact_magic,
                           XR_XSM_ARTIFACT_MAGIC_SIZE);
@@ -1046,10 +1043,12 @@ static void test_artifact_classifier(void) {
                               XR_XTP_ARTIFACT_MAGIC_SIZE);
     REQUIRE(probe.status == XR_ARTIFACT_PROBE_MATCH &&
             probe.kind == XR_ARTIFACT_KIND_XTP);
-    probe = xr_artifact_probe("renamed.bin", legacy_xrc,
-                              sizeof(legacy_xrc));
-    REQUIRE(probe.status == XR_ARTIFACT_PROBE_MATCH &&
-            probe.kind == XR_ARTIFACT_KIND_LEGACY_XRC);
+    probe = xr_artifact_probe("renamed.bin", removed_xray_container,
+                              sizeof(removed_xray_container));
+    REQUIRE(probe.status == XR_ARTIFACT_PROBE_UNKNOWN_RESERVED);
+    REQUIRE(xr_artifact_probe("removed.container", source,
+                              sizeof(source) - 1).status ==
+            XR_ARTIFACT_PROBE_MATCH);
     probe = xr_artifact_probe("program.xr", source, sizeof(source) - 1);
     REQUIRE(probe.status == XR_ARTIFACT_PROBE_MATCH &&
             probe.kind == XR_ARTIFACT_KIND_SOURCE);
@@ -1066,9 +1065,6 @@ static void test_artifact_classifier(void) {
             XR_ARTIFACT_PROBE_UNKNOWN_RESERVED);
     REQUIRE(xr_artifact_probe("renamed.bin", unknown_reserved,
                               sizeof(unknown_reserved)).status ==
-            XR_ARTIFACT_PROBE_UNKNOWN_RESERVED);
-    REQUIRE(xr_artifact_probe("renamed.bin", wrong_xrc_version,
-                              sizeof(wrong_xrc_version)).status ==
             XR_ARTIFACT_PROBE_UNKNOWN_RESERVED);
     for (size_t size = 5; size < XR_XSM_ARTIFACT_MAGIC_SIZE; size++)
         REQUIRE(xr_artifact_probe("renamed.bin", xr_xsm_artifact_magic,

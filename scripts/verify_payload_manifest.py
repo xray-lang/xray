@@ -78,7 +78,6 @@ def verify(root: Path, binary: Path | None) -> None:
         "dirty": bool,
         "target": str,
         "buildProfile": str,
-        "bytecodeVersion": int,
         "moduleAbiVersion": int,
         "toolchainProtocol": int,
         "preferredZig": str,

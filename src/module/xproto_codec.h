@@ -11,7 +11,7 @@
  *   Serializes XrProto to portable bytecode format and loads it back.
  *   Supports stripping debug info and embedding as C source.
  *
- * FILE FORMAT (.xrc), all integers little-endian:
+ * INTERNAL PROTO CONTAINER, all integers little-endian:
  *   +----------------------------------------+
  *   | Header (20 bytes)                      |
  *   |   Magic: "XRAY" (4)                    |
@@ -43,6 +43,11 @@
 struct XrVMRuntime;
 struct XrCompilerSession;
 struct XrProto;
+
+/* Internal compiler/bootstrap container identity.  This is not an installed
+ * artifact kind and is never accepted by the public runtime loader. */
+#define XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE 4u
+#define XR_BOOTSTRAP_CONTAINER_VERSION UINT16_C(30)
 
 // Serialization flags
 #define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)
