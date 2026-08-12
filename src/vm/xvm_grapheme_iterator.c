@@ -1,20 +1,24 @@
 #include "xvm_grapheme_iterator.h"
 
 #include "../base/xchecks.h"
-#include "../runtime/mem/xcoro_heap.h"
+#include "../runtime/mem/xruntime_object_heap.h"
 #include "../shared/xr_elem_type.h"
 
 bool xr_vm_grapheme_iterator_init(XrVmGraphemeIterator *iterator, XrString *source) {
     if (!iterator || !source)
         return false;
     iterator->source = source;
-    xr_rc_retain((XrObjHeader *) source);
+    XR_CHECK(xr_runtime_object_header_retain(&source->header) ==
+                 XR_RUNTIME_ABI_OK,
+             "VM grapheme iterator rejected canonical string retain");
     xr_grapheme_cursor_init(&iterator->cursor, (const uint8_t *) source->data, source->length);
     return true;
 }
 
-void xr_vm_grapheme_iterator_dispose(XrVmGraphemeIterator *iterator, XrCoroHeap *heap) {
+void xr_vm_grapheme_iterator_dispose(XrVmGraphemeIterator *iterator) {
     XrString *source;
+    bool last = false;
+    XrRuntimeAbiStatus status;
     if (!iterator || !iterator->source)
         return;
     source = iterator->source;
@@ -24,7 +28,14 @@ void xr_vm_grapheme_iterator_dispose(XrVmGraphemeIterator *iterator, XrCoroHeap 
     iterator->cursor.offset = 0;
     iterator->cursor.state = 0;
     iterator->cursor.last_rule = XR_GRAPHEME_RULE_NONE;
-    xr_rc_release(heap, (XrObjHeader *) source);
+    status = xr_runtime_object_header_release(&source->header, &last);
+    XR_CHECK(status == XR_RUNTIME_ABI_OK,
+             "VM grapheme iterator rejected canonical string release");
+    if (last) {
+        status = xr_runtime_object_reclaim(&source->header);
+        XR_CHECK(status == XR_RUNTIME_ABI_OK,
+                 "VM grapheme iterator rejected canonical string reclaim");
+    }
 }
 
 bool xr_vm_grapheme_iterator_next(XrVmGraphemeIterator *iterator, XrSliceView *out_span,

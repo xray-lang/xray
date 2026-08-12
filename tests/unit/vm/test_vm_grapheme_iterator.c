@@ -25,6 +25,15 @@ static void teardown(void) {
     }
 }
 
+static void release_string(XrString *string) {
+    bool last = false;
+    ASSERT_EQ_INT(xr_runtime_object_header_release(&string->header, &last),
+                  XR_RUNTIME_ABI_OK);
+    if (last)
+        ASSERT_EQ_INT(xr_runtime_object_reclaim(&string->header),
+                      XR_RUNTIME_ABI_OK);
+}
+
 TEST(vm_grapheme_iterator_keeps_source_alive_without_slice_owner) {
     static const char text[] = "a\xcc\x88"
                                "b";
@@ -41,16 +50,15 @@ TEST(vm_grapheme_iterator_keeps_source_alive_without_slice_owner) {
     source = xr_string_new(X, text, sizeof(text) - 1);
     ASSERT_NOT_NULL(source);
     object_count = heap->object_count;
-    ASSERT_EQ_INT(source->hdr.refcount, 0);
+    ASSERT_EQ_INT(atomic_load_explicit(&source->header.rc, memory_order_relaxed), 1);
 
     ASSERT_TRUE(xr_vm_grapheme_iterator_init(&iterator, source));
-    ASSERT_EQ_INT(source->hdr.refcount, 1);
+    ASSERT_EQ_INT(atomic_load_explicit(&source->header.rc, memory_order_relaxed), 2);
 
     /* Drop the caller's owner: the internal iterator is now the sole source
      * root, and its next range must remain valid. */
-    xr_rc_release(heap, (XrObjHeader *) source);
-    ASSERT_EQ_INT(source->hdr.refcount, 0);
-    ASSERT_FALSE((source->hdr.extra & XR_OBJ_DEAD) != 0);
+    release_string(source);
+    ASSERT_EQ_INT(atomic_load_explicit(&source->header.rc, memory_order_relaxed), 1);
 
     ASSERT_TRUE(xr_vm_grapheme_iterator_next(&iterator, &span, &range));
     ASSERT_EQ_UINT(range.start, 0);
@@ -68,8 +76,8 @@ TEST(vm_grapheme_iterator_keeps_source_alive_without_slice_owner) {
     ASSERT_EQ_UINT(heap->object_count, object_count);
     ASSERT_FALSE(xr_vm_grapheme_iterator_next(&iterator, &span, &range));
 
-    xr_vm_grapheme_iterator_dispose(&iterator, heap);
-    ASSERT_TRUE((source->hdr.extra & XR_OBJ_DEAD) != 0);
+    xr_vm_grapheme_iterator_dispose(&iterator);
+    ASSERT_EQ_UINT(heap->object_count, object_count - 1);
     teardown();
 }
 
@@ -85,8 +93,8 @@ TEST(vm_grapheme_iterator_empty_source) {
     ASSERT_NOT_NULL(source);
     ASSERT_TRUE(xr_vm_grapheme_iterator_init(&iterator, source));
     ASSERT_FALSE(xr_vm_grapheme_iterator_next(&iterator, &span, NULL));
-    xr_vm_grapheme_iterator_dispose(&iterator, heap);
-    xr_rc_release(heap, (XrObjHeader *) source);
+    xr_vm_grapheme_iterator_dispose(&iterator);
+    release_string(source);
     teardown();
 }
 

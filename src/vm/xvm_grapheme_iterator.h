@@ -7,8 +7,6 @@
 #include "../runtime/value/xvalue.h"
 #include "../shared/xr_unicode_grapheme.h"
 
-struct XrCoroHeap;
-
 typedef struct XrVmGraphemeIterator {
     XrString *source;
     XrGraphemeCursor cursor;
@@ -18,8 +16,7 @@ typedef struct XrVmGraphemeIterator {
  * internal stack/value object; public Iterator/Slice provenance is deferred to
  * task 197 and task 199 P4. */
 XR_FUNC bool xr_vm_grapheme_iterator_init(XrVmGraphemeIterator *iterator, XrString *source);
-XR_FUNC void xr_vm_grapheme_iterator_dispose(XrVmGraphemeIterator *iterator,
-                                             struct XrCoroHeap *heap);
+XR_FUNC void xr_vm_grapheme_iterator_dispose(XrVmGraphemeIterator *iterator);
 
 /* Fill a caller-owned frame-local span slot. No iterator, substring, span, or
  * owner object is allocated. out_range may be NULL. */
