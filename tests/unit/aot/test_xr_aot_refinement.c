@@ -135,8 +135,10 @@ typedef struct SourceNamespaceStorageFixture {
     XiModule *dependency_module;
     XiImportRef import_ref;
     XiValue *namespace_ref;
+    XiValue *namespace_alias;
     XiValue *namespace_store;
     XiValue *receiver;
+    XiValue *receiver_alias;
     XiValue *call;
     XrSemanticPlan *dependency;
     XrTargetProfile *target_profile;
@@ -696,16 +698,22 @@ static SourceNamespaceStorageFixture source_namespace_storage_fixture_create(
     fixture.namespace_ref = xi_value_new(fixture.function, root_entry,
                                           XI_IMPORT_REF,
                                           &module_namespace, 0);
+    fixture.namespace_alias = xi_value_new(fixture.function, root_entry,
+                                            XI_COPY,
+                                            &module_namespace, 1);
     fixture.namespace_store = xi_value_new(fixture.function, root_entry,
                                             XI_SET_SHARED,
                                             &scalar_unit, 1);
-    REQUIRE(fixture.namespace_ref && fixture.namespace_store);
+    REQUIRE(fixture.namespace_ref && fixture.namespace_alias &&
+            fixture.namespace_store);
     XiImportRef *live_import = (XiImportRef *) xi_func_arena_alloc(
         fixture.function, sizeof(*live_import));
     REQUIRE(live_import);
     *live_import = fixture.import_ref;
     fixture.namespace_ref->aux = live_import;
-    fixture.namespace_store->args[0] = fixture.namespace_ref;
+    fixture.namespace_alias->args[0] = fixture.namespace_ref;
+    fixture.namespace_alias->aux_int = XI_COPY_KIND_IDENTITY;
+    fixture.namespace_store->args[0] = fixture.namespace_alias;
     fixture.namespace_store->aux_int = 0;
     if (extra_use) {
         XiValue *unexpected = xi_value_new(fixture.function, root_entry,
@@ -717,11 +725,15 @@ static SourceNamespaceStorageFixture source_namespace_storage_fixture_create(
     xi_block_set_return(root_entry, NULL);
     fixture.receiver = xi_value_new(fixture.caller, caller_entry,
                                      XI_GET_SHARED, &module_namespace, 0);
+    fixture.receiver_alias = xi_value_new(fixture.caller, caller_entry,
+                                          XI_COPY, &module_namespace, 1);
     fixture.call = xi_value_new(fixture.caller, caller_entry,
                                 XI_CALL_METHOD, &scalar_unit, 1);
-    REQUIRE(fixture.receiver && fixture.call);
+    REQUIRE(fixture.receiver && fixture.receiver_alias && fixture.call);
     fixture.receiver->aux_int = 0;
-    fixture.call->args[0] = fixture.receiver;
+    fixture.receiver_alias->args[0] = fixture.receiver;
+    fixture.receiver_alias->aux_int = XI_COPY_KIND_IDENTITY;
+    fixture.call->args[0] = fixture.receiver_alias;
     fixture.call->aux = (void *) "worker";
     fixture.call->aux_int = 0;
     xi_block_set_return(caller_entry, NULL);
@@ -1860,9 +1872,9 @@ static void test_source_namespace_storage_is_exact_and_fail_closed(void) {
     REQUIRE(view.frozen && view.verified && view.record_count == 0);
     xi_opt_refresh_representations_with_policy(fixture.function, &policy);
     REQUIRE(fixture.namespace_ref->rep == XR_REP_TAGGED &&
+            fixture.namespace_alias->rep == XR_REP_TAGGED &&
             fixture.receiver->rep == XR_REP_TAGGED &&
-            fixture.namespace_store->args[0] == fixture.namespace_ref &&
-            fixture.call->args[0] == fixture.receiver);
+            fixture.receiver_alias->rep == XR_REP_TAGGED);
     REQUIRE(xr_aot_representation_materialization_verify(
         &view, fixture.function, fixture.target_plan, &policy, &diag));
 
@@ -1886,6 +1898,10 @@ static void test_source_namespace_storage_is_exact_and_fail_closed(void) {
         &view, fixture.function, fixture.target_plan, &policy, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
     fixture.call->args[0] = saved_receiver;
+    /* Representation refresh has mechanically propagated and eliminated the
+     * frozen identity COPY nodes.  Their exactness is proven by the frozen
+     * Target authority; the live verifier instead rejects mutations of the
+     * retained producer and consumer edges above. */
     REQUIRE(xr_aot_representation_materialization_verify(
         &view, fixture.function, fixture.target_plan, &policy, &diag));
 

@@ -1204,12 +1204,63 @@ static bool aot_source_namespace_operation_is_exact(
              operation->metadata_count == 0));
 }
 
+static bool aot_source_namespace_identity_copy_is_exact(
+    const XrSemanticPlan *semantic,
+    const XrSemanticOperationRecord *operation,
+    const XrSemanticOperandRecord *operands, uint32_t operand_count) {
+    const XrSemanticTypeRecord *type = operation
+        ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
+    if (!semantic || !operation || !operands || !type ||
+        operation->opcode != XI_COPY || operation->operand_count != 1 ||
+        operation->operand_begin >= operand_count ||
+        operation->semantic_immediate != XI_COPY_KIND_IDENTITY ||
+        operation->allocation_key ||
+        !aot_stable_id_is_zero(operation->allocation_id) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != 0 || operation->metadata_count != 0 ||
+        operation->effects != xi_generated_op_effects(XI_COPY) ||
+        operation->flags != xi_generated_op_default_flags(XI_COPY) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_COPY) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        operation->result_alias_operand != 0 ||
+        operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                        XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    const XrSemanticOperandRecord *source =
+        &operands[operation->operand_begin];
+    return source->role == XR_SEM_OPERAND_VALUE && source->parameter == -1 &&
+           source->type == operation->result_type && source->flags == 0;
+}
+
+static bool aot_source_namespace_value_operation_is_exact(
+    const XrSemanticPlan *semantic,
+    const XrSemanticOperationRecord *operation) {
+    if (!operation)
+        return false;
+    if (operation->opcode == XI_IMPORT_REF ||
+        operation->opcode == XI_GET_SHARED)
+        return aot_source_namespace_operation_is_exact(
+            semantic, operation, operation->opcode);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    return aot_source_namespace_identity_copy_is_exact(
+        semantic, operation, operands, operand_count);
+}
+
 /* Independent from both Target collectors: derive the complete frozen
  * IMPORT_REF -> SET_SHARED -> GET_SHARED -> SOURCE_EXPORT receiver chain. */
 static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
     uint32_t *target_by_operation = NULL;
-    uint32_t *uses = NULL;
-    uint32_t *store_by_value = NULL;
+    uint32_t *expected_uses = NULL;
+    uint32_t *retain_uses = NULL;
+    uint32_t *consumer = NULL;
+    uint32_t *visit_epoch = NULL;
     uint8_t *candidate = NULL;
     if (!verify_alloc(ctx, ctx->value_count,
                       sizeof(*ctx->exact_source_namespace_value),
@@ -1220,19 +1271,24 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
         !verify_alloc(ctx, ctx->operation_count,
                       sizeof(*target_by_operation),
                       (void **) &target_by_operation) ||
-        !verify_alloc(ctx, ctx->value_count, sizeof(*uses),
-                      (void **) &uses) ||
-        !verify_alloc(ctx, ctx->value_count, sizeof(*store_by_value),
-                      (void **) &store_by_value) ||
+        !verify_alloc(ctx, ctx->value_count, sizeof(*expected_uses),
+                      (void **) &expected_uses) ||
+        !verify_alloc(ctx, ctx->value_count, sizeof(*retain_uses),
+                      (void **) &retain_uses) ||
+        !verify_alloc(ctx, ctx->value_count, sizeof(*consumer),
+                      (void **) &consumer) ||
+        !verify_alloc(ctx, ctx->value_count, sizeof(*visit_epoch),
+                      (void **) &visit_epoch) ||
         !verify_alloc(ctx, ctx->value_count, sizeof(*candidate),
                       (void **) &candidate)) {
-        xr_free(target_by_operation); xr_free(uses);
-        xr_free(store_by_value); xr_free(candidate);
+        xr_free(target_by_operation); xr_free(expected_uses);
+        xr_free(retain_uses); xr_free(consumer);
+        xr_free(visit_epoch); xr_free(candidate);
         return false;
     }
     for (uint32_t i = 0; i < ctx->value_count; i++) {
         ctx->source_namespace_dependency_by_value[i] = XR_SEMANTIC_INDEX_NONE;
-        store_by_value[i] = XR_SEMANTIC_INDEX_NONE;
+        consumer[i] = XR_SEMANTIC_INDEX_NONE;
     }
     for (uint32_t i = 0; i < ctx->operation_count; i++)
         target_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
@@ -1255,6 +1311,7 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
         xr_semantic_plan_operands(ctx->semantic, &operand_count);
     const char *const *metadata =
         xr_semantic_plan_metadata(ctx->semantic, &metadata_count);
+    uint32_t next_epoch = 1;
     for (uint32_t i = 0; i < ctx->operation_count; i++) {
         uint32_t target_index = target_by_operation[i];
         if (target_index == XR_SEMANTIC_INDEX_NONE)
@@ -1267,21 +1324,60 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             call->operand_count == 0 || call->operand_begin >= operand_count)
             goto invalid;
         const XrSemanticOperandRecord *receiver = &operands[call->operand_begin];
-        const XrSemanticOperationRecord *load =
-            receiver->value < ctx->value_count &&
-                    ctx->operation_by_value[receiver->value] != XR_SEMANTIC_INDEX_NONE
-                ? xr_semantic_plan_operation(
-                      ctx->semantic, ctx->operation_by_value[receiver->value])
-                : NULL;
-        if (!aot_source_namespace_operation_is_exact(
-                ctx->semantic, load, XI_GET_SHARED) ||
-            receiver->role != XR_SEM_OPERAND_RECEIVER ||
-            receiver->parameter != -1 || receiver->type != load->result_type ||
+        if (receiver->role != XR_SEM_OPERAND_RECEIVER ||
+            receiver->parameter != -1 ||
             receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
             receiver->parameter_mode != XR_PARAM_READ ||
             receiver->access != XR_CALL_ARG_PLAIN ||
             (receiver->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0)
             goto invalid;
+        const XrSemanticOperationRecord *load = NULL;
+        uint32_t current_value = receiver->value;
+        uint32_t consumer_index = i;
+        uint32_t namespace_type = receiver->type;
+        uint32_t epoch = next_epoch++;
+        if (epoch == 0) {
+            memset(visit_epoch, 0,
+                   ctx->value_count * sizeof(*visit_epoch));
+            epoch = next_epoch++;
+        }
+        for (uint32_t depth = 0;; depth++) {
+            if (depth >= ctx->operation_count ||
+                current_value >= ctx->value_count ||
+                visit_epoch[current_value] == epoch)
+                goto invalid;
+            visit_epoch[current_value] = epoch;
+            uint32_t definition_index = ctx->operation_by_value[current_value];
+            const XrSemanticOperationRecord *source =
+                definition_index != XR_SEMANTIC_INDEX_NONE
+                    ? xr_semantic_plan_operation(ctx->semantic,
+                                                 definition_index)
+                    : NULL;
+            if (!source || source->result_value != current_value ||
+                source->result_type != namespace_type ||
+                source->function != call->function ||
+                (candidate[current_value] &&
+                 (ctx->source_namespace_dependency_by_value[current_value] !=
+                      target->dependency ||
+                  consumer[current_value] != consumer_index)))
+                goto invalid;
+            candidate[current_value] = 1;
+            ctx->source_namespace_dependency_by_value[current_value] =
+                target->dependency;
+            consumer[current_value] = consumer_index;
+            if (aot_source_namespace_operation_is_exact(
+                    ctx->semantic, source, XI_GET_SHARED)) {
+                load = source;
+                break;
+            }
+            if (!aot_source_namespace_identity_copy_is_exact(
+                    ctx->semantic, source, operands, operand_count))
+                goto invalid;
+            const XrSemanticOperandRecord *input =
+                &operands[source->operand_begin];
+            consumer_index = definition_index;
+            current_value = input->value;
+        }
         uint32_t store_index = XR_SEMANTIC_INDEX_NONE;
         for (uint32_t j = 0; j < ctx->operation_count; j++) {
             const XrSemanticOperationRecord *store =
@@ -1300,16 +1396,56 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             store->operand_begin >= operand_count)
             goto invalid;
         const XrSemanticOperandRecord *stored = &operands[store->operand_begin];
-        const XrSemanticOperationRecord *import =
-            stored->value < ctx->value_count &&
-                    ctx->operation_by_value[stored->value] != XR_SEMANTIC_INDEX_NONE
-                ? xr_semantic_plan_operation(
-                      ctx->semantic, ctx->operation_by_value[stored->value])
-                : NULL;
+        const XrSemanticOperationRecord *import = NULL;
+        current_value = stored->value;
+        consumer_index = store_index;
+        namespace_type = stored->type;
+        epoch = next_epoch++;
+        if (epoch == 0) {
+            memset(visit_epoch, 0,
+                   ctx->value_count * sizeof(*visit_epoch));
+            epoch = next_epoch++;
+        }
+        for (uint32_t depth = 0;; depth++) {
+            if (depth >= ctx->operation_count ||
+                current_value >= ctx->value_count ||
+                visit_epoch[current_value] == epoch)
+                goto invalid;
+            visit_epoch[current_value] = epoch;
+            uint32_t definition_index = ctx->operation_by_value[current_value];
+            const XrSemanticOperationRecord *source =
+                definition_index != XR_SEMANTIC_INDEX_NONE
+                    ? xr_semantic_plan_operation(ctx->semantic,
+                                                 definition_index)
+                    : NULL;
+            if (!source || source->result_value != current_value ||
+                source->result_type != namespace_type ||
+                source->function != 0 ||
+                (candidate[current_value] &&
+                 (ctx->source_namespace_dependency_by_value[current_value] !=
+                      target->dependency ||
+                  consumer[current_value] != consumer_index)))
+                goto invalid;
+            candidate[current_value] = 1;
+            ctx->source_namespace_dependency_by_value[current_value] =
+                target->dependency;
+            consumer[current_value] = consumer_index;
+            if (aot_source_namespace_operation_is_exact(
+                    ctx->semantic, source, XI_IMPORT_REF)) {
+                import = source;
+                break;
+            }
+            if (!aot_source_namespace_identity_copy_is_exact(
+                    ctx->semantic, source, operands, operand_count))
+                goto invalid;
+            const XrSemanticOperandRecord *input =
+                &operands[source->operand_begin];
+            consumer_index = definition_index;
+            current_value = input->value;
+        }
         const XrSemanticDependencyRecord *dependency =
             xr_semantic_plan_dependency(ctx->semantic, target->dependency);
-        if (!aot_source_namespace_operation_is_exact(
-                ctx->semantic, import, XI_IMPORT_REF) ||
+        if (!import || !load || receiver->type != load->result_type ||
             import->function != 0 || load->function != call->function ||
             store->function != 0 ||
             store->semantic_immediate != load->semantic_immediate ||
@@ -1324,22 +1460,6 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             strcmp(metadata[import->metadata_begin], dependency->module_path) != 0 ||
             metadata[import->metadata_begin + 1u][0] != '\0')
             goto invalid;
-        uint32_t import_value = import->result_value;
-        uint32_t load_value = load->result_value;
-        if ((candidate[import_value] &&
-             ctx->source_namespace_dependency_by_value[import_value] !=
-                 target->dependency) ||
-            (candidate[load_value] &&
-             ctx->source_namespace_dependency_by_value[load_value] !=
-                 target->dependency) ||
-            (store_by_value[import_value] != XR_SEMANTIC_INDEX_NONE &&
-             store_by_value[import_value] != store_index))
-            goto invalid;
-        candidate[import_value] = candidate[load_value] = 1;
-        ctx->source_namespace_dependency_by_value[import_value] =
-            ctx->source_namespace_dependency_by_value[load_value] =
-                target->dependency;
-        store_by_value[import_value] = store_index;
     }
     for (uint32_t i = 0; i < ctx->operation_count; i++) {
         const XrSemanticOperationRecord *use =
@@ -1354,22 +1474,33 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             const XrSemanticOperationRecord *source =
                 xr_semantic_plan_operation(
                     ctx->semantic, ctx->operation_by_value[operand->value]);
-            bool allowed = source->opcode == XI_IMPORT_REF
-                ? a == 0 && ((use->opcode == XI_RETAIN &&
-                              use->function == source->function) ||
-                             (i == store_by_value[operand->value] &&
-                              use->opcode == XI_SET_SHARED &&
-                              use->function == 0))
-                : a == 0 && use->opcode == XI_CALL_METHOD &&
-                      target_by_operation[i] != XR_SEMANTIC_INDEX_NONE &&
-                      xr_semantic_plan_call_target(
-                          ctx->semantic, target_by_operation[i])->dependency ==
-                          ctx->source_namespace_dependency_by_value[operand->value] &&
-                      operand->role == XR_SEM_OPERAND_RECEIVER;
-            uint32_t max_uses = source->opcode == XI_IMPORT_REF ? 2u : 1u;
-            if (!allowed || uses[operand->value] >= max_uses)
+            bool expected = i == consumer[operand->value] && a == 0;
+            if (expected && use->opcode == XI_CALL_METHOD)
+                expected = target_by_operation[i] != XR_SEMANTIC_INDEX_NONE &&
+                           xr_semantic_plan_call_target(
+                               ctx->semantic, target_by_operation[i])->dependency ==
+                               ctx->source_namespace_dependency_by_value[
+                                   operand->value] &&
+                           operand->role == XR_SEM_OPERAND_RECEIVER;
+            else if (expected)
+                expected = (use->opcode == XI_COPY ||
+                            use->opcode == XI_SET_SHARED) &&
+                           operand->role == XR_SEM_OPERAND_VALUE;
+            if (expected) {
+                if (expected_uses[operand->value] != 0)
+                    goto invalid;
+                expected_uses[operand->value] = 1;
+                continue;
+            }
+            bool retain = source && source->opcode == XI_IMPORT_REF &&
+                          use->opcode == XI_RETAIN && a == 0 &&
+                          use->function == source->function &&
+                          operand->role == XR_SEM_OPERAND_VALUE &&
+                          operand->type == source->result_type &&
+                          operand->parameter == -1 && operand->flags == 0;
+            if (!retain || retain_uses[operand->value] != 0)
                 goto invalid;
-            uses[operand->value]++;
+            retain_uses[operand->value] = 1;
         }
     }
     uint32_t block_count =
@@ -1387,20 +1518,18 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             continue;
         const XrSemanticOperationRecord *source = xr_semantic_plan_operation(
             ctx->semantic, ctx->operation_by_value[i]);
-        if (!source ||
-            (source->opcode == XI_IMPORT_REF &&
-             store_by_value[i] == XR_SEMANTIC_INDEX_NONE) ||
-            (source->opcode == XI_IMPORT_REF && uses[i] < 1) ||
-            (source->opcode == XI_GET_SHARED && uses[i] != 1))
+        if (!source || expected_uses[i] != 1)
             goto invalid;
         ctx->exact_source_namespace_value[i] = 1;
     }
-    xr_free(target_by_operation); xr_free(uses);
-    xr_free(store_by_value); xr_free(candidate);
+    xr_free(target_by_operation); xr_free(expected_uses);
+    xr_free(retain_uses); xr_free(consumer);
+    xr_free(visit_epoch); xr_free(candidate);
     return true;
 invalid:
-    xr_free(target_by_operation); xr_free(uses);
-    xr_free(store_by_value); xr_free(candidate);
+    xr_free(target_by_operation); xr_free(expected_uses);
+    xr_free(retain_uses); xr_free(consumer);
+    xr_free(visit_epoch); xr_free(candidate);
     set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
              (uint32_t) ctx->work, 0, 0);
     return false;
@@ -1924,8 +2053,8 @@ static bool verify_source_namespace_type_authority(
         operation->result_value >= ctx->value_count ||
         !ctx->exact_source_namespace_value ||
         !ctx->exact_source_namespace_value[operation->result_value] ||
-        !aot_source_namespace_operation_is_exact(
-            ctx->semantic, operation, operation->opcode) ||
+        !aot_source_namespace_value_operation_is_exact(
+            ctx->semantic, operation) ||
         !source_type_matches(
             live->type,
             xr_semantic_plan_type(ctx->semantic, operation->result_type)))
@@ -1944,6 +2073,26 @@ static bool verify_source_namespace_type_authority(
                       metadata[operation->metadata_begin]) == 0 &&
                strcmp(member ? member : "",
                       metadata[operation->metadata_begin + 1u]) == 0;
+    }
+    if (operation->opcode == XI_COPY) {
+        uint32_t operand_count = 0;
+        const XrSemanticOperandRecord *operands =
+            xr_semantic_plan_operands(ctx->semantic, &operand_count);
+        const XrSemanticFunctionRecord *function =
+            xr_semantic_plan_function(ctx->semantic, operation->function);
+        if (!operands || !function || operation->operand_begin >= operand_count)
+            return false;
+        uint32_t source_value = operands[operation->operand_begin].value;
+        return source_value < ctx->value_count && live->op == XI_COPY &&
+               live->aux_int == XI_COPY_KIND_IDENTITY && live->nargs == 1 &&
+               live->args && live->block && live->block->func &&
+               live->block->func->semantic_plan_function_index ==
+                   operation->function &&
+               source_value >= function->value_begin &&
+               source_value - function->value_begin < function->value_count &&
+               live->args[0] == ctx->live_by_value[source_value] &&
+               live->args[0] && live->args[0]->block &&
+               live->args[0]->block->func == live->block->func;
     }
     return operation->opcode == XI_GET_SHARED && live->op == XI_GET_SHARED &&
            live->aux_int == operation->semantic_immediate;
@@ -2801,8 +2950,8 @@ static bool oracle_source_namespace_storage(
         }
     }
     if (!operation || !binding || !register_rep || !memory_rep || !slot ||
-        !layout || !aot_source_namespace_operation_is_exact(
-                       ctx->semantic, operation, operation->opcode) ||
+        !layout || !aot_source_namespace_value_operation_is_exact(
+                       ctx->semantic, operation) ||
         register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
         memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
         register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
@@ -3799,6 +3948,40 @@ static bool materialized_operation_shape_matches(
            operation->result_alias_operand == value->result_alias_operand;
 }
 
+/* Representation refresh mechanically propagates and DCEs identity COPY
+ * nodes.  Resolve an exact frozen namespace COPY to the nearest retained
+ * materialized value so the verifier checks the published graph rather than
+ * requiring an optimizer-dead Xi node to survive. */
+static const XiValue *materialized_source_namespace_value(
+    const VerifyAuthority *ctx, uint32_t semantic_value) {
+    if (!ctx || semantic_value >= ctx->value_count)
+        return NULL;
+    for (uint32_t depth = 0; depth < ctx->operation_count; depth++) {
+        const XiValue *live = ctx->live_by_value[semantic_value];
+        if (live)
+            return live;
+        if (!ctx->exact_source_namespace_value ||
+            !ctx->exact_source_namespace_value[semantic_value])
+            return NULL;
+        uint32_t operation_index = ctx->operation_by_value[semantic_value];
+        const XrSemanticOperationRecord *operation =
+            operation_index != XR_SEMANTIC_INDEX_NONE
+                ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+                : NULL;
+        uint32_t operand_count = 0;
+        const XrSemanticOperandRecord *operands =
+            xr_semantic_plan_operands(ctx->semantic, &operand_count);
+        if (!operation || operation->opcode != XI_COPY || !operands ||
+            operation->operand_count != 1 ||
+            operation->operand_begin >= operand_count)
+            return NULL;
+        semantic_value = operands[operation->operand_begin].value;
+        if (semantic_value >= ctx->value_count)
+            return NULL;
+    }
+    return NULL;
+}
+
 static bool index_materialized_callee_authority(
     VerifyAuthority *ctx, const XiFunc *function,
     const XiFunc **function_by_index, uint32_t depth) {
@@ -3898,19 +4081,33 @@ static bool verify_exact_dynamic_storage_materialization(
                                                    operation->function)
                       : NULL;
         const XiValue *live = ctx.live_by_value[value];
-        if (!operation || !semantic_function || !owner || !live ||
+        bool elided_source_copy = source_namespace && operation &&
+                                  operation->opcode == XI_COPY && !live;
+        const XiValue *effective = elided_source_copy
+            ? materialized_source_namespace_value(&ctx, value) : live;
+        bool shape_ok = operation && semantic_function && owner && effective &&
+                        value >= semantic_function->value_begin &&
+                        (elided_source_copy ||
+                         materialized_operation_shape_matches(
+                             operation, live,
+                             value - semantic_function->value_begin));
+        bool authority_ok = shape_ok && (elided_source_copy
+            ? source_type_matches(
+                  effective->type,
+                  xr_semantic_plan_type(ctx.semantic, operation->result_type))
+            :
+            (direct
+                 ? verify_direct_local_callee_type_authority(
+                       &ctx, operation, owner, live)
+             : go
+                 ? verify_direct_local_go_callee_type_authority(
+                       &ctx, operation, owner, live)
+                 : verify_source_namespace_type_authority(
+                       &ctx, operation, live)));
+        if (!operation || !semantic_function || !owner || !effective ||
             value < semantic_function->value_begin ||
-            !materialized_operation_shape_matches(
-                operation, live,
-                value - semantic_function->value_begin) ||
-            !(direct
-                  ? verify_direct_local_callee_type_authority(
-                        &ctx, operation, owner, live)
-              : go
-                  ? verify_direct_local_go_callee_type_authority(
-                        &ctx, operation, owner, live)
-                  : verify_source_namespace_type_authority(
-                        &ctx, operation, live))) {
+            !shape_ok ||
+            !authority_ok) {
             set_diag(diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY,
                      operation_index, value, operation_index);
             valid = false;
@@ -3930,6 +4127,10 @@ static bool verify_exact_dynamic_storage_materialization(
             operation && operation->result_value < ctx.value_count
                 ? ctx.live_by_value[operation->result_value]
                 : NULL;
+        bool elided_source_copy = operation && operation->opcode == XI_COPY &&
+            operation->result_value < ctx.value_count && !user &&
+            ctx.exact_source_namespace_value &&
+            ctx.exact_source_namespace_value[operation->result_value];
         if (!operation || !semantic_function ||
             operation->result_value < semantic_function->value_begin ||
             operation->operand_begin > operand_count ||
@@ -3946,20 +4147,26 @@ static bool verify_exact_dynamic_storage_materialization(
                  !(ctx.exact_source_namespace_value &&
                    ctx.exact_source_namespace_value[source_value])))
                 continue;
+            if (elided_source_copy)
+                continue;
             uint32_t local_value =
                 operation->result_value - semantic_function->value_begin;
+            const XiValue *materialized_source =
+                materialized_source_namespace_value(&ctx, source_value);
             if (!user || !materialized_operation_shape_matches(
                              operation, user, local_value) ||
                 !user->args || a >= user->nargs ||
-                user->args[a] != ctx.live_by_value[source_value] ||
+                user->args[a] != (materialized_source
+                                      ? materialized_source
+                                      : ctx.live_by_value[source_value]) ||
                 !(ctx.exact_direct_callee_value[source_value]
                       ? oracle_direct_local_callee_use(
                             &ctx, i, a, source_value)
                   : ctx.exact_go_callee_value[source_value]
                       ? oracle_direct_local_go_callee_use(
                             &ctx, i, a, source_value)
-                      : ctx.live_by_value[source_value] &&
-                            user->args[a] == ctx.live_by_value[source_value])) {
+                      : materialized_source &&
+                            user->args[a] == materialized_source)) {
                 set_diag(diag, XR_AOT_REFINEMENT_USE_SITE, i,
                          source_value, i);
                 valid = false;

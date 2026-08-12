@@ -892,7 +892,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                    "8eda2fe31eac890336809db130b3b95c02faca3477b931a58477c792678cc65d") == 0);
+                    "5b89fff165deadc992da979530b2d2febb3b0deccc861e6e04f18e862063000b") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -1827,21 +1827,30 @@ static XrSemanticPlan *build_source_export_semantic(
     XiValue *namespace_ref = xi_value_new(caller_root, root_entry,
                                           XI_IMPORT_REF,
                                           &stub_module_namespace, 0);
+    XiValue *namespace_alias = xi_value_new(caller_root, root_entry,
+                                            XI_COPY,
+                                            &stub_module_namespace, 1);
     XiValue *namespace_store = xi_value_new(caller_root, root_entry,
                                             XI_SET_SHARED, &stub_unit, 1);
-    REQUIRE(namespace_ref && namespace_store);
+    REQUIRE(namespace_ref && namespace_alias && namespace_store);
     namespace_ref->aux = &import_ref;
-    namespace_store->args[0] = namespace_ref;
+    namespace_alias->args[0] = namespace_ref;
+    namespace_alias->aux_int = XI_COPY_KIND_IDENTITY;
+    namespace_store->args[0] = namespace_alias;
     namespace_store->aux_int = 0;
     caller_root->nshared = 1;
     xi_block_set_return(root_entry, NULL);
     XiValue *receiver = xi_value_new(caller, caller_entry, XI_GET_SHARED,
                                      &stub_module_namespace, 0);
+    XiValue *receiver_alias = xi_value_new(caller, caller_entry, XI_COPY,
+                                           &stub_module_namespace, 1);
     XiValue *method = xi_value_new(caller, caller_entry, XI_CALL_METHOD,
                                    &stub_unit, 1);
-    REQUIRE(receiver && method);
+    REQUIRE(receiver && receiver_alias && method);
     receiver->aux_int = 0;
-    method->args[0] = receiver;
+    receiver_alias->args[0] = receiver;
+    receiver_alias->aux_int = XI_COPY_KIND_IDENTITY;
+    method->args[0] = receiver_alias;
     method->aux = (void *) "writeBytes";
     method->aux_int = 0;
     xi_block_set_return(caller_entry, method);
@@ -2022,7 +2031,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "95e5ee17d9aac203708328ede4a013e7c49c467f2af5af7dfcf1f4de1bc64714") == 0);
+                   "14c505f22fae1578699712906d55fca05c96376ddf5cca51a059445b2f3d87e7") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT;
          mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -2437,6 +2446,11 @@ static void test_source_export_call_authority(void) {
              XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE) != 0);
     uint32_t import_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t load_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t copy_values[2] = {XR_SEMANTIC_INDEX_NONE,
+                               XR_SEMANTIC_INDEX_NONE};
+    uint32_t copy_operations[2] = {XR_SEMANTIC_INDEX_NONE,
+                                   XR_SEMANTIC_INDEX_NONE};
+    uint32_t copy_count = 0;
     uint32_t import_operation = XR_SEMANTIC_INDEX_NONE;
     uint32_t load_operation = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
@@ -2450,6 +2464,10 @@ static void test_source_export_call_authority(void) {
             REQUIRE(load_value == XR_SEMANTIC_INDEX_NONE);
             load_value = operation->result_value;
             load_operation = i;
+        } else if (operation && operation->opcode == XI_COPY) {
+            REQUIRE(copy_count < 2);
+            copy_values[copy_count] = operation->result_value;
+            copy_operations[copy_count++] = i;
         }
     }
     const XrTargetValueRepRecord *import_binding =
@@ -2472,6 +2490,22 @@ static void test_source_export_call_authority(void) {
                 XR_MACHINE_REP_DYN_VALUE &&
             plan->machine_reps[load_binding->register_rep].kind ==
                 XR_MACHINE_REP_DYN_VALUE);
+    REQUIRE(copy_count == 2);
+    for (uint32_t i = 0; i < copy_count; i++) {
+        const XrTargetValueRepRecord *copy_binding =
+            xr_target_plan_value_rep(plan, copy_values[i]);
+        REQUIRE(copy_binding && copy_binding->slot < plan->slots_count &&
+                plan->slots[copy_binding->slot].semantic_operation ==
+                    copy_operations[i] &&
+                plan->slots[copy_binding->slot].semantic_value ==
+                    copy_values[i] &&
+                plan->slots[copy_binding->slot].ownership ==
+                    XR_TARGET_OWNERSHIP_BORROWED &&
+                plan->slots[copy_binding->slot].root_kind ==
+                    XR_TARGET_ROOT_DYNAMIC &&
+                plan->machine_reps[copy_binding->register_rep].kind ==
+                    XR_MACHINE_REP_DYN_VALUE);
+    }
 
     uint64_t saved_mask = plan->completed_family_mask;
     plan->completed_family_mask &=
@@ -2519,6 +2553,41 @@ static void test_source_export_call_authority(void) {
         sizeof(error)));
     REQUIRE(failed == NULL);
     xr_target_plan_free(plan);
+
+    XrSemanticOperationRecord saved_copy =
+        semantic->operations[copy_operations[1]];
+    semantic->operations[copy_operations[1]].semantic_immediate =
+        XI_COPY_KIND_VALUE_CLONE;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    REQUIRE(!xr_target_plan_build_module_set(
+        semantic, dependencies, 1, profile, &failed, error, sizeof(error)));
+    REQUIRE(failed == NULL);
+    semantic->operations[copy_operations[1]] = saved_copy;
+
+    semantic->operations[copy_operations[1]].function = 0;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    REQUIRE(!xr_target_plan_build_module_set(
+        semantic, dependencies, 1, profile, &failed, error, sizeof(error)));
+    REQUIRE(failed == NULL);
+    semantic->operations[copy_operations[1]] = saved_copy;
+
+    uint32_t copy_operand = saved_copy.operand_begin;
+    XrSemanticOperandRecord saved_operand = semantic->operands[copy_operand];
+    semantic->operands[copy_operand].value = saved_copy.result_value;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    REQUIRE(!xr_target_plan_build_module_set(
+        semantic, dependencies, 1, profile, &failed, error, sizeof(error)));
+    REQUIRE(failed == NULL);
+    semantic->operands[copy_operand] = saved_operand;
+
+    uint32_t saved_control = semantic->blocks[0].control_value;
+    semantic->blocks[0].control_value = copy_values[0];
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    REQUIRE(!xr_target_plan_build_module_set(
+        semantic, dependencies, 1, profile, &failed, error, sizeof(error)));
+    REQUIRE(failed == NULL);
+    semantic->blocks[0].control_value = saved_control;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
     xr_semantic_plan_free(dependency);
@@ -2538,7 +2607,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "2b894a51e57aeb7e3b12ffaca5d292e213b4ea85bb0149ead978771baaebcc4a") == 0);
+                   "f2a64852b2b3b1328b44701f580e485b4844be9b68c266390257b62b1f76699a") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -2760,7 +2829,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "16b98fc392c6a176251fabe46673660e52ed679170b4c77d7c550d82fb5f0782") == 0);
+                   "25aa0233102c3e4e5dc03d3876efc47627cb8d5646c9f593905062162d9e75e7") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");

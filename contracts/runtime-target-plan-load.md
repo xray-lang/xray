@@ -77,11 +77,13 @@ roots, or general module activation.
    authorize Channel object layout, receive scheduling, ownership transfer,
    aggregate payloads, tuple payloads, roots, or cleanup.
    SOURCE-namespace storage covers only the borrowed dynamic outer `XrValue`
-   for the canonical `IMPORT_REF -> SET_SHARED -> GET_SHARED` namespace token
-   consumed as operand zero of exact SOURCE_EXPORT calls into one frozen
-   dependency. Builder, Target verifier, and AOT materialization verifier
-   independently reconstruct the ordered dependency, module identity, shared
-   slot, exact import/store/load use sets, and call receiver binding. This row
+   tokens in the exact
+   `IMPORT_REF -> identity COPY* -> SET_SHARED -> GET_SHARED -> identity COPY*`
+   chain consumed as SOURCE_EXPORT call receivers. Identity-COPY chains are
+   bounded, acyclic, and same-function; every endpoint and COPY keeps its own
+   exact slot identity and unique expected consumer. Builder, Target verifier,
+   and AOT materialization verifier independently reconstruct the ordered
+   dependency, module identity, shared slot, complete use sets, and receiver binding. This row
    grants no imported module object body, allocation, root, cleanup, member
    lookup, argument ABI, dependency activation, or cross-module frame.
    Foundation capability masks are also exact. Allocator and panic
@@ -163,8 +165,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h ec795265cca3a1ccbe82cdd1dda13
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
 anchor-sha256: src/plan/target/xr_target_plan.h 9cc8176a48d405c78ddfecf8c4a86173b21ee34ad5fa83e0ccbf04da1161b6c4
 anchor-sha256: src/plan/target/xr_target_plan.c 2080e5263d00cbc2777c413c6db64b177bb90bc56a1629cbbebea1e94de0b2b4
-anchor-sha256: src/plan/target/xr_target_builder.c 9427acc993d0b4a2fa42fb3379a91f0577649fb9f5e8124f89c74a90d1172bf3
-anchor-sha256: src/plan/target/xr_target_verify.c f1d4dbb4e7484012d7f78fdefd256f9fad8c974bacd8c73fbe96ce7c6339832c
+anchor-sha256: src/plan/target/xr_target_builder.c 0c9a50a51b87752508d636ed74c6fa33e3c93150a5e91222b4806c268a6e49f9
+anchor-sha256: src/plan/target/xr_target_verify.c 89afa39c28564d8df840956ef8ed07c72e1ee2cd1173c4d5fd238a7d05043765
 anchor-sha256: src/plan/target/xr_xtp_materialize.c c43b819e15e02784e50911b46ad3ec228b2069c114a7691216abbf59ab6bcdbf
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
@@ -173,7 +175,7 @@ anchor-sha256: src/runtime/xr_target_plan_load.c 274c5ce32727b7c6bf6d956d65c2f6b
 anchor-sha256: src/app/cli/xcmd_run.c 804778d75ab7c3e806dc9258637f96d9c96786c07d742a6cd115afefa3bf8488
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 052cac030a7f91c22c7c4a40e2571f3d9f0a274661aa1396a13f5c5bf4600827
 anchor-sha256: scripts/check_legacy_product_residue.py 0388d636da6384ea62bfaf8401764955541be24b207511727c33af2d85f3a11f
-anchor-sha256: tests/unit/plan/test_target_plan.c d71b938b995341540dc3b87e5ec24caf54784cd91db0d09f5c713a785e1ff04c
+anchor-sha256: tests/unit/plan/test_target_plan.c 1299a5a2aad0591e99b87b2ef7b438d7dfc306857d1a5c230f2bad5d346e37a2
 anchor-sha256: tests/unit/plan/test_xtp_format.c ea7a494431d2d26185a649ed9b6641daa1ac07a92d69c6f538e3c57245597329
 anchor-sha256: tests/unit/CMakeLists.txt 23c9e8a7fdac7c760c712bc08dcc5a88651ced5eb5910261583c8bc3440cf383
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 2f1c3edbdb31af5e60f63d8333bad6685d4b415b09f02c03a89f11e816f6bbfb

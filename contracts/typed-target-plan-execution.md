@@ -77,10 +77,13 @@ cross-module argument slots, private/native callee, child frame, roots,
 cleanup, drop, cancel, or executable call ABI. Standalone materialization and
 all ungrounded method calls remain fail closed.
 The dedicated SOURCE-namespace-storage rows cover only the borrowed dynamic
-outer `XrValue` tokens in the exact `IMPORT_REF -> SET_SHARED -> GET_SHARED`
-chain used as SOURCE_EXPORT call receivers. Three independent reconstructions
-prove dependency/module identity, unique shared slot, complete use sets, and
-receiver binding. They grant no imported module object body, allocation,
+outer `XrValue` tokens in the exact
+`IMPORT_REF -> identity COPY* -> SET_SHARED -> GET_SHARED -> identity COPY*`
+chain used as SOURCE_EXPORT call receivers. Identity-COPY chains are bounded,
+acyclic, and same-function; every endpoint and COPY keeps its own exact slot
+identity and unique expected consumer. Three independent reconstructions prove
+dependency/module identity, unique shared slot, complete use sets, and receiver
+binding. They grant no imported module object body, allocation,
 root, cleanup, member lookup, dependency activation, argument ABI, or
 cross-module frame.
 The C emission projection schema 9 mechanically spells all verified dynamic
@@ -130,10 +133,10 @@ Evidence:
 
 anchor-sha256: src/plan/target/xr_target_plan.h 9cc8176a48d405c78ddfecf8c4a86173b21ee34ad5fa83e0ccbf04da1161b6c4
 anchor-sha256: src/plan/target/xr_target_plan.c 2080e5263d00cbc2777c413c6db64b177bb90bc56a1629cbbebea1e94de0b2b4
-anchor-sha256: src/plan/target/xr_target_builder.c 9427acc993d0b4a2fa42fb3379a91f0577649fb9f5e8124f89c74a90d1172bf3
+anchor-sha256: src/plan/target/xr_target_builder.c 0c9a50a51b87752508d636ed74c6fa33e3c93150a5e91222b4806c268a6e49f9
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 5eea43c77cf0e3802e30eacf12ca7e1a105b7b32de0497635cf7048de1b3438b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c af74c69df7296ff561d3a3abbf4d42a4016e6db54762a750c6da2ad8b4f2ee07
-anchor-sha256: src/plan/target/xr_target_verify.c f1d4dbb4e7484012d7f78fdefd256f9fad8c974bacd8c73fbe96ce7c6339832c
+anchor-sha256: src/plan/target/xr_target_verify.c 89afa39c28564d8df840956ef8ed07c72e1ee2cd1173c4d5fd238a7d05043765
 anchor-sha256: src/plan/format/xr_xtp_schema.h e9c410961d012cee5003c53d75ad9b22381983eeda2850f8e8f95da5e6d56dd1
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 8cb0983494ace434ec1d1f7389f19d4780ad82f6f88460144e04a9e28c1502bc
