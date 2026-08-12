@@ -211,7 +211,12 @@ def payload(kind: str, log: str, raw: Path) -> dict[str, Any]:
             },
         }
     if kind == "full-validation":
-        return {"lanes": []}
+        return {
+            "producer": "target-machine-full-validation-evidence/2",
+            "baseline_runner": "target-machine-baseline/3",
+            "baseline_manifest": log,
+            "lanes": [],
+        }
     raise AssertionError(f"unhandled fixture kind: {kind}")
 
 

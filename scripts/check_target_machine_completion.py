@@ -79,6 +79,11 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def selection_identity(names: list[str]) -> str:
+    payload = json.dumps(names, ensure_ascii=False, separators=(",", ":"))
+    return sha256_bytes(payload.encode("utf-8"))
+
+
 def exact_sha256(value: Any) -> bool:
     return isinstance(value, str) and SHA256_RE.fullmatch(value) is not None
 
@@ -841,6 +846,12 @@ def activation_findings(data: dict[str, Any], verified: set[str],
 def full_validation_findings(data: dict[str, Any], verified: set[str],
                              manifest: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
+    if (data.get("producer") != "target-machine-full-validation-evidence/2"
+            or data.get("baseline_runner") != "target-machine-baseline/3"):
+        findings.append(finding("TM-COMP-VALIDATION-PRODUCER", "full-validation",
+                                "full validation producer/baseline identity is not exact"))
+    check_log_reference(findings, "full-validation", verified,
+                        data.get("baseline_manifest"), "baseline manifest")
     rows = data.get("lanes")
     required = set(manifest["validation"]["required_lanes"])
     if not isinstance(rows, list):
@@ -864,6 +875,16 @@ def full_validation_findings(data: dict[str, Any], verified: set[str],
         if row.get("status") != "passed" or not row.get("command") or not row.get("platform"):
             findings.append(finding("TM-COMP-VALIDATION-RESULT", "full-validation",
                                     f"validation lane {name} lacks a passed command/platform result"))
+        selected = row.get("selected_tests")
+        if (not isinstance(selected, list) or not selected
+                or any(not isinstance(value, str) or not value for value in selected)
+                or len(selected) != len(set(selected))
+                or row.get("selection_sha256") != selection_identity(selected)):
+            findings.append(finding("TM-COMP-VALIDATION-SELECTION", "full-validation",
+                                    f"validation lane {name} lacks an exact test selection"))
+        if row.get("execution") != "governed-full-baseline":
+            findings.append(finding("TM-COMP-VALIDATION-EXECUTION", "full-validation",
+                                    f"validation lane {name} lacks governed full-baseline execution"))
         check_log_reference(findings, "full-validation", verified, row.get("log"), name)
     return findings
 
@@ -1219,9 +1240,17 @@ def self_test(manifest_path: Path) -> int:
 
             validation = fixture_envelope(evidence_root, "full-validation", identity, input_sha256)
             validation_log = validation["logs"][0]["path"]
+            validation.update({
+                "producer": "target-machine-full-validation-evidence/2",
+                "baseline_runner": "target-machine-baseline/3",
+                "baseline_manifest": validation_log,
+            })
             validation["lanes"] = [{
                 "name": name, "status": "passed", "command": f"run {name}",
                 "platform": "fixture", "log": validation_log,
+                "selected_tests": [f"test-{name}"],
+                "selection_sha256": selection_identity([f"test-{name}"]),
+                "execution": "governed-full-baseline",
             } for name in manifest["validation"]["required_lanes"]]
             common, verified = common_evidence_findings(
                 validation, "full-validation", evidence_root, identity, input_sha256
@@ -1232,6 +1261,18 @@ def self_test(manifest_path: Path) -> int:
             broken["lanes"][0]["status"] = "failed"
             expect_mutation(results, "full-validation", full_validation_findings(
                 broken, verified, manifest), "TM-COMP-VALIDATION-RESULT")
+            broken = copy.deepcopy(validation)
+            broken["lanes"][0]["selected_tests"].append("unhashed")
+            expect_mutation(results, "full-validation-selection", full_validation_findings(
+                broken, verified, manifest), "TM-COMP-VALIDATION-SELECTION")
+            broken = copy.deepcopy(validation)
+            broken["lanes"][0]["execution"] = "ad-hoc"
+            expect_mutation(results, "full-validation-execution", full_validation_findings(
+                broken, verified, manifest), "TM-COMP-VALIDATION-EXECUTION")
+            broken = copy.deepcopy(validation)
+            broken["baseline_runner"] = "ad-hoc"
+            expect_mutation(results, "full-validation-producer", full_validation_findings(
+                broken, verified, manifest), "TM-COMP-VALIDATION-PRODUCER")
 
             owner_root = root / "owner"
             (owner_root / "contracts/target-machine").mkdir(parents=True)
@@ -1284,7 +1325,9 @@ def self_test(manifest_path: Path) -> int:
         required_labels = {
             "xrc-source", "vm-include", "opcode-build", "tagged-frame", "xaot-plan",
             "identity-log", "dependency-graph", "symbol", "installed", "installed-sdk", "runtime",
-            "matrix", "activation-generation", "full-validation", "dual-owner",
+            "matrix", "activation-generation", "full-validation",
+            "full-validation-selection", "full-validation-execution",
+            "full-validation-producer", "dual-owner",
             "terminal-inventory",
         }
         observed = {item.split("->", 1)[0] for item in results}

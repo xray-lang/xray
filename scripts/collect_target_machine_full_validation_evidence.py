@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Collect identity-bound raw evidence for every mandatory validation lane."""
+"""Collect identity-bound raw evidence from the governed full validation run."""
 
 from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import platform as host_platform
-import re
-import signal
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -24,8 +24,10 @@ import assemble_target_machine_completion_evidence as assembler  # noqa: E402
 import check_target_machine_completion as completion  # noqa: E402
 
 
-PRODUCER = "target-machine-full-validation-evidence/1"
+PRODUCER = "target-machine-full-validation-evidence/2"
 KIND = "full-validation"
+BASELINE_RUNNER = "tests/target-machine/phase0/run_baseline.py"
+BASELINE_POLICY = "contracts/target-machine/baseline-manifest.json"
 LANE_REGEX = {
     "unit": r"^(test_semantic_plan|test_target_plan|test_xtp_format|test_runtime_generation)$",
     "regression": r"backend_diff|regression",
@@ -41,13 +43,12 @@ LANE_REGEX = {
     "asan-ubsan": r"asan_focused|ubsan",
     "tsan": r"tsan_focused|tsan",
     "fuzz": r"fuzz",
-    "model-stress": r"model_stress|model-stress|stress_model",
     "portability": r"freestanding|c90|portability",
     "performance": r"performance|benchmark",
     "runtime-embedding": r"runtime_(target_plan_load|generation|typed_frame).*archive",
     "installer-package": r"install_public_artifact_smoke|installed_runtime_symbol_inventory|installer",
 }
-TOTAL_RE = re.compile(r"Total Tests:\s*(\d+)")
+BASELINE_ONLY_LANE = "model-stress"
 
 
 class CollectionError(ValueError):
@@ -74,7 +75,7 @@ def platform_identity(build: Path) -> dict[str, str]:
     return {
         "os": host_platform.system() or "unknown-os",
         "arch": host_platform.machine() or "unknown-arch",
-        "toolchain": f"ctest-full-validation; compiler={compiler}",
+        "toolchain": f"target-machine-baseline/3; compiler={compiler}",
     }
 
 
@@ -111,21 +112,126 @@ def run(command: list[str], root: Path, timeout: int) -> tuple[int, str]:
             stdout, stderr = process.communicate()
         else:
             stdout, stderr = "", ""
-        return 124, stdout + stderr + "\nvalidation lane timed out\n"
+        return 124, stdout + stderr + "\nfull validation timed out\n"
     except OSError as error:
-        return 127, f"validation lane could not start: {error}\n"
+        return 127, f"full validation could not start: {error}\n"
 
 
-def discovered_test_count(output: str) -> int:
-    match = TOTAL_RE.search(output)
-    return int(match.group(1)) if match else 0
+def parse_ctest_discovery(output: str) -> tuple[str, ...]:
+    try:
+        document = json.loads(output)
+    except json.JSONDecodeError as error:
+        raise CollectionError(f"CTest discovery is not JSON: {error}") from error
+    tests = document.get("tests") if isinstance(document, dict) else None
+    if not isinstance(tests, list):
+        raise CollectionError("CTest discovery has no tests array")
+    names: list[str] = []
+    for index, row in enumerate(tests):
+        name = row.get("name") if isinstance(row, dict) else None
+        if not isinstance(name, str) or not name:
+            raise CollectionError(f"CTest discovery test {index} has no exact name")
+        names.append(name)
+    if len(names) != len(set(names)):
+        raise CollectionError("CTest discovery contains duplicate test names")
+    return tuple(sorted(names))
 
 
-def lane_result(preflight_code: int, preflight_output: str,
-                run_code: int) -> tuple[str, int]:
-    count = discovered_test_count(preflight_output)
-    passed = preflight_code == 0 and count > 0 and run_code == 0
-    return ("passed" if passed else "failed", count)
+def selection_sha256(names: tuple[str, ...]) -> str:
+    payload = json.dumps(list(names), ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def discover_lanes(root: Path, build: Path,
+                   required: list[str]) -> tuple[dict[str, tuple[str, ...]], str, bool]:
+    selections: dict[str, tuple[str, ...]] = {}
+    logs: list[str] = []
+    all_ok = True
+    for name in required:
+        if name == BASELINE_ONLY_LANE:
+            continue
+        regex = LANE_REGEX[name]
+        command = [
+            "ctest", "--test-dir", str(build), "-C", "Release", "-R", regex,
+            "-N", "--show-only=json-v1",
+        ]
+        code, output = run(command, root, 120)
+        logs.append(
+            f"lane={name}\nargv={json.dumps(command, ensure_ascii=False)}\n"
+            f"exit_code={code}\n{output}\n"
+        )
+        if code != 0:
+            all_ok = False
+            selections[name] = ()
+            continue
+        try:
+            names = parse_ctest_discovery(output)
+        except CollectionError as error:
+            logs.append(f"discovery_error={error}\n")
+            all_ok = False
+            names = ()
+        if not names:
+            all_ok = False
+        selections[name] = names
+    return selections, "\n".join(logs), all_ok
+
+
+def load_baseline(path: Path) -> dict[str, Any]:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8", errors="strict"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise CollectionError(f"cannot read baseline evidence: {error}") from error
+    if not isinstance(document, dict):
+        raise CollectionError("baseline evidence is not an object")
+    return document
+
+
+def baseline_lane_statuses(document: dict[str, Any]) -> dict[str, bool]:
+    correctness = document.get("correctness_lanes")
+    performance = document.get("performance_lanes")
+    if not isinstance(correctness, list) or not isinstance(performance, list):
+        raise CollectionError("baseline evidence lacks lane collections")
+    correctness_by_name = {
+        row.get("name"): row for row in correctness
+        if isinstance(row, dict) and isinstance(row.get("name"), str)
+    }
+    performance_rows = [row for row in performance if isinstance(row, dict)]
+    repeated = [
+        row for row in correctness_by_name.values()
+        if row.get("repeat_policy") == "three-or-more"
+    ]
+    performance_ok = bool(performance_rows) and all(
+        row.get("status") == "passed"
+        and isinstance(row.get("variance"), dict)
+        and row["variance"].get("status") == "passed"
+        for row in performance_rows
+    )
+    suite_ok = correctness_by_name.get("non-sanitizer-suite", {}).get("status") == "passed"
+    statuses = {name: suite_ok for name in LANE_REGEX}
+    statuses["asan-ubsan"] = correctness_by_name.get("asan-ubsan", {}).get("status") == "passed"
+    statuses["tsan"] = correctness_by_name.get("tsan", {}).get("status") == "passed"
+    statuses["performance"] = performance_ok
+    statuses[BASELINE_ONLY_LANE] = (
+        document.get("result") == "passed"
+        and bool(repeated)
+        and all(row.get("status") == "passed" for row in repeated)
+        and performance_ok
+    )
+    return statuses
+
+
+def baseline_selection(document: dict[str, Any]) -> tuple[str, ...]:
+    correctness = document.get("correctness_lanes", [])
+    performance = document.get("performance_lanes", [])
+    names = [
+        f"correctness:{row['name']}"
+        for row in correctness if isinstance(row, dict) and isinstance(row.get("name"), str)
+    ] + [
+        f"performance:{row['name']}"
+        for row in performance if isinstance(row, dict) and isinstance(row.get("name"), str)
+    ]
+    if len(names) != len(set(names)) or not names:
+        raise CollectionError("baseline evidence lane names are missing or duplicate")
+    return tuple(sorted(names))
 
 
 def collect(root: Path, build: Path, output: Path, owner: str,
@@ -134,17 +240,18 @@ def collect(root: Path, build: Path, output: Path, owner: str,
     if completion.validate_manifest(governance):
         raise CollectionError("completion governance manifest is invalid")
     required = governance["validation"]["required_lanes"]
-    if set(required) != set(LANE_REGEX) or len(required) != len(LANE_REGEX):
+    expected = set(LANE_REGEX) | {BASELINE_ONLY_LANE}
+    if set(required) != expected or len(required) != len(expected):
         raise CollectionError("full-validation lane authority is not exact")
     if not (build / "CTestTestfile.cmake").is_file():
         raise CollectionError("full-validation evidence requires a configured CTest build")
+    if output.exists() or output.is_symlink():
+        raise CollectionError("raw evidence package already exists; collection never overwrites")
     identity = repository_identity(root)
     governance_hash = governance["input_identity"]["sha256"]
     actual_governance = completion.framed_tree_hash(
         root, governance["input_identity"]["files"]
     )
-    if output.exists() or output.is_symlink():
-        raise CollectionError("raw evidence package already exists; collection never overwrites")
     output.parent.mkdir(parents=True, exist_ok=True)
     lock = output.with_name(f".{output.name}.collect-lock")
     try:
@@ -158,47 +265,75 @@ def collect(root: Path, build: Path, output: Path, owner: str,
         ))
         logs = staging / "logs"
         logs.mkdir()
+        selections, discovery_output, discovery_ok = discover_lanes(root, build, required)
+        discovery_log = logs / "ctest-discovery.log"
+        discovery_log.write_text(discovery_output, encoding="utf-8")
+
+        baseline_root = logs / "baseline"
+        baseline_command = [
+            sys.executable, str((root / BASELINE_RUNNER).resolve()),
+            "--root", str(root), "--build-dir", str(build),
+            "--output-dir", str(baseline_root), "--policy", BASELINE_POLICY,
+            "--scope", "full",
+        ]
+        baseline_code, baseline_output = run(baseline_command, root, lane_timeout)
+        baseline_stdout = logs / "baseline-run.log"
+        baseline_stdout.write_text(
+            f"argv={json.dumps(baseline_command, ensure_ascii=False)}\n"
+            f"exit_code={baseline_code}\n{baseline_output}",
+            encoding="utf-8",
+        )
+        baseline_manifest = baseline_root / "baseline-evidence.json"
+        try:
+            baseline = load_baseline(baseline_manifest)
+            statuses = baseline_lane_statuses(baseline)
+            model_selection = baseline_selection(baseline)
+            baseline_ok = baseline_code == 0 and baseline.get("result") == "passed"
+        except CollectionError as error:
+            baseline = {}
+            statuses = {name: False for name in required}
+            model_selection = ()
+            baseline_ok = False
+            with baseline_stdout.open("a", encoding="utf-8") as stream:
+                stream.write(f"\nbaseline_evidence_error={error}\n")
+
+        platform = platform_identity(build)
         lanes: list[dict[str, Any]] = []
-        raw_log_sources: list[tuple[str, Path, bool]] = []
-        all_ok = actual_governance == governance_hash
         for name in required:
-            regex = LANE_REGEX[name]
-            base = ["ctest", "--test-dir", str(build), "-C", "Release", "-R", regex]
-            preflight = base + ["-N"]
-            preflight_code, preflight_output = run(preflight, root, 120)
-            count = discovered_test_count(preflight_output)
-            command = base + ["--output-on-failure"]
-            if preflight_code == 0 and count > 0:
-                run_code, run_output = run(command, root, lane_timeout)
-            else:
-                run_code, run_output = 125, "lane has no discovered tests; execution refused\n"
-            status, count = lane_result(preflight_code, preflight_output, run_code)
-            ok = status == "passed"
-            all_ok = all_ok and ok
-            relative = f"logs/{name}.log"
-            log = staging / relative
-            log.write_text(
-                f"preflight_argv={json.dumps(preflight, ensure_ascii=False)}\n"
-                f"preflight_exit={preflight_code}\ndiscovered_tests={count}\n"
-                f"argv={json.dumps(command, ensure_ascii=False)}\nexit_code={run_code}\n"
-                f"--- preflight ---\n{preflight_output}\n--- execution ---\n{run_output}",
-                encoding="utf-8",
-            )
+            selected = model_selection if name == BASELINE_ONLY_LANE else selections[name]
+            passed = baseline_ok and discovery_ok and bool(selected) and statuses.get(name, False)
             lanes.append({
-                "name": name, "status": status, "command": command,
-                "platform": platform_identity(build), "log": relative,
-                "discovered_tests": count, "exit_code": run_code,
+                "name": name,
+                "status": "passed" if passed else "failed",
+                "command": baseline_command,
+                "platform": platform,
+                "log": "logs/baseline-run.log",
+                "selected_tests": list(selected),
+                "selection_sha256": selection_sha256(selected),
+                "execution": "governed-full-baseline",
             })
-            raw_log_sources.append((relative, log, ok))
+
+        all_ok = (
+            actual_governance == governance_hash
+            and baseline_ok and discovery_ok
+            and all(row["status"] == "passed" for row in lanes)
+        )
         status = "passed" if all_ok else "failed"
         exit_code = 0 if all_ok else 1
         generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace(
             "+00:00", "Z"
         )
         collector_command = canonical_command(root, build, output, owner)
-        platform = platform_identity(build)
+        raw_log_sources = [discovery_log, baseline_stdout]
+        if baseline_root.is_dir():
+            raw_log_sources.extend(sorted(path for path in baseline_root.rglob("*") if path.is_file()))
         raw_logs: list[dict[str, Any]] = []
-        for relative, log, ok in raw_log_sources:
+        seen: set[str] = set()
+        for log in raw_log_sources:
+            relative = log.relative_to(staging).as_posix()
+            if relative in seen:
+                continue
+            seen.add(relative)
             digest = assembler.sha256_file(log)
             raw_logs.append({
                 "path": relative, "sha256": digest,
@@ -207,7 +342,7 @@ def collect(root: Path, build: Path, output: Path, owner: str,
                     governance_hash, relative, digest, owner, generated_at,
                     collector_command, platform, exit_code, status,
                 ),
-                "result": "passed" if ok else "failed",
+                "result": "passed" if all_ok else "failed",
             })
         raw = {
             "schema": assembler.RAW_SCHEMA, "kind": KIND,
@@ -217,7 +352,12 @@ def collect(root: Path, build: Path, output: Path, owner: str,
             "governance_input_sha256": governance_hash,
             "owner": owner, "generated_at": generated_at,
             "command": collector_command, "platform": platform,
-            "payload": {"producer": PRODUCER, "lanes": lanes},
+            "payload": {
+                "producer": PRODUCER,
+                "baseline_runner": "target-machine-baseline/3",
+                "baseline_manifest": "logs/baseline/baseline-evidence.json",
+                "lanes": lanes,
+            },
             "logs": raw_logs,
         }
         assembler.write_object(staging / "full-validation.raw.json", raw)
@@ -239,7 +379,7 @@ def main() -> int:
     parser.add_argument("--build", default="build")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--owner", required=True)
-    parser.add_argument("--lane-timeout", type=int, default=1800)
+    parser.add_argument("--lane-timeout", type=int, default=14400)
     args = parser.parse_args()
     root = Path(args.root).resolve()
     build = Path(args.build)

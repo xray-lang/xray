@@ -4,9 +4,13 @@
       "id": "full-validation-evidence-producer",
       "path": "scripts/collect_target_machine_full_validation_evidence.py",
       "required_regex": [
-        "PRODUCER\\s*=\\s*\"target-machine-full-validation-evidence/1\"",
+        "PRODUCER\\s*=\\s*\"target-machine-full-validation-evidence/2\"",
         "LANE_REGEX",
-        "discovered_test_count",
+        "BASELINE_RUNNER",
+        "parse_ctest_discovery",
+        "baseline_lane_statuses",
+        "selection_sha256",
+        "governed-full-baseline",
         "status\\s*=\\s*\"passed\"\\s+if\\s+all_ok\\s+else\\s+\"failed\"",
         "os\\.rename\\(staging, output\\)"
       ]
@@ -195,6 +199,8 @@
       "scripts/collect_target_machine_runtime_reachability_evidence.py",
       "scripts/collect_target_machine_matrix_evidence.py",
       "scripts/collect_target_machine_symbol_evidence.py",
+      "tests/target-machine/phase0/run_baseline.py",
+      "tests/target-machine/test_full_validation_evidence_collector.py",
       "src/plan/format/xr_xtp_schema.h",
       "src/plan/semantic/xr_semantic_ids.h",
       "src/plan/target/xr_target_plan.h",
@@ -214,7 +220,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "50859b40a7707ffa9b27a96f9d58c78d37283ab624d1d3c502bf89c20482896f"
+    "sha256": "35d79b656c3762a6db00425d8e46c5f1da74f8ebe4be9085cf3ff569758b2d22"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
