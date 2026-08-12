@@ -1,6 +1,16 @@
 {
   "authorities": [
     {
+      "id": "completion-evidence-assembler",
+      "path": "scripts/assemble_target_machine_completion_evidence.py",
+      "required_regex": [
+        "ASSEMBLER\\s*=\\s*\"target-machine-completion-evidence-assembler/1\"",
+        "validate_terminal_inventories",
+        "run_final_verifier",
+        "os\\.rename\\(temporary, output\\)"
+      ]
+    },
+    {
       "id": "semantic-schema-v17",
       "path": "src/plan/semantic/xr_semantic_ids.h",
       "required_regex": [
@@ -21,7 +31,7 @@
       "id": "exact-xtp-artifact",
       "path": "src/plan/format/xr_xtp_schema.h",
       "required_regex": [
-        "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(15\\)",
+        "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(14\\)",
         "XR_XTP_MAX_ARTIFACT_SIZE",
         "xr_xtp_decode_candidate"
       ]
@@ -48,7 +58,7 @@
       "id": "runtime-xtp-load-boundary",
       "path": "src/runtime/xr_target_plan_load.c",
       "required_regex": [
-        "accepts only XTP v15 bytes",
+        "accepts only XTP v14 bytes",
         "xr_runtime_artifact_authority_bind_candidate",
         "xr_runtime_artifact_authority_bind_plan"
       ]
@@ -86,6 +96,7 @@
       "contracts/target-machine/object-extent-inventory.json",
       "contracts/target-machine/semantic-owner-inventory.json",
       "contracts/target-machine/validation-matrix.json",
+      "scripts/assemble_target_machine_completion_evidence.py",
       "scripts/check_target_machine_completion.py",
       "src/plan/format/xr_xtp_schema.h",
       "src/plan/semantic/xr_semantic_ids.h",
@@ -106,7 +117,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "f4e078d6f90e6cd28f2b91204148a490cceae2c995836eb1f129d01893699d46"
+    "sha256": "baae26b4698048de8504e8a0b0d26943a083c1d4c6a23a9eafb069ae213f84af"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",

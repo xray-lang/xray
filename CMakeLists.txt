@@ -4113,6 +4113,28 @@ if(BUILD_TESTS)
         TIMEOUT 180
     )
 
+    add_custom_target(target_machine_completion_evidence_assembler_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_completion_evidence_assembler.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Checking fail-closed target-machine evidence assembly"
+        VERBATIM
+    )
+
+    add_test(
+        NAME target_machine_completion_evidence_assembler_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_completion_evidence_assembler.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_machine_completion_evidence_assembler_self_test PROPERTIES
+        LABELS "meta;target-machine;governance;evidence"
+        PROCESSORS 1
+        TIMEOUT 180
+    )
+
     add_test(
         NAME target_machine_baseline_runner_self_test
         COMMAND ${XRAY_PYTHON}
