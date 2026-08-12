@@ -19,6 +19,7 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
+#include "../../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1181,6 +1182,52 @@ static uint32_t resolve_frozen_direct_call_target(const XrSemanticPlan *plan,
     return XR_SEMANTIC_INDEX_NONE;
 }
 
+static bool resolve_frozen_native_yieldable_target(const XrSemanticPlan *plan,
+                                                   const uint32_t *definitions,
+                                                   uint32_t value_count,
+                                                   uint32_t operation_index,
+                                                   const char **module,
+                                                   const char **member) {
+    const XrSemanticOperationRecord *call = &plan->operations[operation_index];
+    if (call->opcode != XI_CALL || call->operand_count == 0 ||
+        plan->operands[call->operand_begin].role != XR_SEM_OPERAND_CALLEE)
+        return false;
+    uint32_t value = plan->operands[call->operand_begin].value;
+    for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
+        if (value >= value_count)
+            return false;
+        uint32_t producer_index = definitions[value];
+        if (producer_index >= plan->operation_count)
+            return false;
+        const XrSemanticOperationRecord *producer = &plan->operations[producer_index];
+        if (producer->function != call->function)
+            return false;
+        if (producer->opcode == XI_IMPORT_REF) {
+            if (producer->metadata_count != 2 ||
+                producer->metadata_begin > plan->metadata_count ||
+                producer->metadata_count > plan->metadata_count - producer->metadata_begin)
+                return false;
+            const char *candidate_module = plan->metadata[producer->metadata_begin];
+            const char *candidate_member = plan->metadata[producer->metadata_begin + 1];
+            const XrStdlibDefEntry *binding =
+                xr_stdlib_metadata_unique_func(candidate_module, candidate_member);
+            if (!binding || !binding->signature || !binding->vm || !binding->vm_binding ||
+                strcmp(binding->vm_binding, "yieldable") != 0 ||
+                call->operand_count != (uint16_t) (binding->argc + 1u))
+                return false;
+            *module = candidate_module;
+            *member = candidate_member;
+            return true;
+        }
+        if (producer->opcode != XI_COPY ||
+            producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
+            producer->operand_count != 1 || producer->result_alias_operand != 0)
+            return false;
+        value = plan->operands[producer->operand_begin].value;
+    }
+    return false;
+}
+
 static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *definitions,
                                 const XrSemanticGraph *graph, uint32_t value_count,
                                 char *error, size_t error_size) {
@@ -1188,6 +1235,10 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
     for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
         uint32_t direct_function = resolve_frozen_direct_call_target(
             plan, definitions, graph, value_count, operation);
+        const char *native_module = NULL;
+        const char *native_member = NULL;
+        bool native_yieldable = resolve_frozen_native_yieldable_target(
+            plan, definitions, value_count, operation, &native_module, &native_member);
         const XrSemanticCallTargetRecord *target =
             cursor < plan->call_target_count && plan->call_targets[cursor].operation == operation
                 ? &plan->call_targets[cursor]
@@ -1195,26 +1246,39 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         if (cursor < plan->call_target_count && plan->call_targets[cursor].operation < operation)
             return report(error, error_size, "XR_SEM_0019",
                           "call-target table is not in operation order");
-        if (direct_function != XR_SEMANTIC_INDEX_NONE && !target)
+        if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable) && !target)
             return report(error, error_size, "XR_SEM_0019",
-                          "provable direct call has no call-target authority");
+                          "provable call has no call-target authority");
         if (!target)
             continue;
-        if (direct_function == XR_SEMANTIC_INDEX_NONE ||
-            target->function != direct_function || target->function >= plan->function_count ||
-            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
-            target->reserved[0] != 0 || target->reserved[1] != 0 || target->reserved[2] != 0)
+        bool direct = direct_function != XR_SEMANTIC_INDEX_NONE && !native_yieldable &&
+                      target->function == direct_function &&
+                      target->function < plan->function_count &&
+                      target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
+        bool native = direct_function == XR_SEMANTIC_INDEX_NONE && native_yieldable &&
+                      target->function == XR_SEMANTIC_INDEX_NONE &&
+                      target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE;
+        if ((!direct && !native) || target->reserved[0] != 0 ||
+            target->reserved[1] != 0 || target->reserved[2] != 0)
             return report(error, error_size, "XR_SEM_0019",
                           "call-target authority disagrees with frozen invocation facts");
         char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
         char function_id[XR_STABLE_ID_BYTES * 2 + 1];
         char expected_key[192];
         xr_stable_id_hex(plan->operations[operation].id, operation_id);
-        xr_stable_id_hex(plan->functions[target->function].id, function_id);
-        int length = snprintf(expected_key, sizeof(expected_key),
-                              "call-target-v2:schema=%u:operation=%s:function=%s:kind=%u",
+        int length;
+        if (direct) {
+            xr_stable_id_hex(plan->functions[target->function].id, function_id);
+            length = snprintf(expected_key, sizeof(expected_key),
+                              "call-target-v3:schema=%u:operation=%s:function=%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, function_id,
                               (unsigned) target->kind);
+        } else {
+            length = snprintf(expected_key, sizeof(expected_key),
+                              "call-target-v3:schema=%u:operation=%s:native=%s.%s:kind=%u",
+                              XR_SEMANTIC_SCHEMA_VERSION, operation_id, native_module,
+                              native_member, (unsigned) target->kind);
+        }
         if (length < 0 || (size_t) length >= sizeof(expected_key) ||
             strcmp(target->canonical_key ? target->canonical_key : "", expected_key) != 0 ||
             !verify_id(target->canonical_key, target->id))
@@ -1303,9 +1367,26 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
         }
         work.target_by_operation[target->operation] = target_index;
         work.reverse_next[target_index] = XR_SEMANTIC_INDEX_NONE;
-        if (operation_propagates_suspend(&plan->operations[target->operation])) {
+        if (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+            operation_propagates_suspend(&plan->operations[target->operation])) {
+            if (target->function >= plan->function_count) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "direct call-target function is out of range");
+            }
             work.reverse_next[target_index] = work.reverse_head[target->function];
             work.reverse_head[target->function] = target_index;
+        } else if (target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE) {
+            const XrSemanticOperationRecord *operation =
+                &plan->operations[target->operation];
+            if (target->function != XR_SEMANTIC_INDEX_NONE ||
+                operation->opcode != XI_CALL ||
+                operation->function >= plan->function_count) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "native yieldable call-target shape is invalid");
+            }
+            work.suspendable[operation->function] = 1;
         }
     }
     for (uint32_t entity_index = 0; entity_index < plan->entity_count; entity_index++) {
@@ -1319,16 +1400,16 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
                           "coroutine state operation relation is not one-to-one");
         }
     }
-    uint32_t queue_begin = 0;
-    uint32_t queue_end = 0;
     for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
         uint32_t function = plan->operations[operation].function;
-        if (operation_is_static_suspend(&plan->operations[operation]) &&
-            !work.suspendable[function]) {
+        if (operation_is_static_suspend(&plan->operations[operation]))
             work.suspendable[function] = 1;
-            work.queue[queue_end++] = function;
-        }
     }
+    uint32_t queue_begin = 0;
+    uint32_t queue_end = 0;
+    for (uint32_t function = 0; function < plan->function_count; function++)
+        if (work.suspendable[function])
+            work.queue[queue_end++] = function;
     while (queue_begin < queue_end) {
         uint32_t callee = work.queue[queue_begin++];
         for (uint32_t target_index = work.reverse_head[callee];
@@ -1343,22 +1424,34 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error,
         }
     }
 
-    bool valid = true;
-    for (uint32_t operation = 0; operation < plan->operation_count && valid; operation++) {
+    for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
         uint32_t target_index = work.target_by_operation[operation];
         bool dynamic_suspend = false;
-        if (target_index != XR_SEMANTIC_INDEX_NONE &&
-            plan->operations[operation].opcode == XI_CALL) {
+        if (target_index != XR_SEMANTIC_INDEX_NONE) {
+            const XrSemanticCallTargetRecord *target =
+                &plan->call_targets[target_index];
             dynamic_suspend =
-                work.suspendable[plan->call_targets[target_index].function] != 0;
+                plan->operations[operation].opcode == XI_CALL &&
+                (target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE ||
+                 (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+                  work.suspendable[target->function] != 0));
         }
         bool expected = operation_is_static_suspend(&plan->operations[operation]) ||
                         dynamic_suspend;
-        valid = work.state_counts[operation] == (uint8_t) expected;
+        if (work.state_counts[operation] != (uint8_t) expected) {
+            char detail[192];
+            const XrSemanticOperationRecord *record = &plan->operations[operation];
+            snprintf(detail, sizeof(detail),
+                     "coroutine state count disagrees with grounded call authority "
+                     "function=%u operation=%u opcode=%u expected=%u actual=%u",
+                     record->function, operation, record->opcode, expected ? 1u : 0u,
+                     work.state_counts[operation]);
+            coroutine_authority_work_dispose(&work);
+            return report(error, error_size, "XR_SEM_0019", detail);
+        }
     }
     coroutine_authority_work_dispose(&work);
-    return valid || report(error, error_size, "XR_SEM_0019",
-                           "coroutine states lack grounded suspend authority");
+    return true;
 }
 
 static bool verify_parameter_and_capture_definitions(const XrSemanticPlan *plan,
@@ -1522,12 +1615,15 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
     if (!plan || !plan->frozen || plan->schema != XR_SEMANTIC_SCHEMA_VERSION)
         return report(error, error_size, "XR_SEM_0004",
                       "verifier requires a frozen exact-version SemanticPlan");
-    XrFingerprint current_registry;
+    XrFingerprint current_registry, current_stdlib_registry;
     xr_semantic_op_registry_fingerprint(&current_registry);
+    xr_stdlib_metadata_registry_fingerprint(&current_stdlib_registry);
     if (!xr_semantic_op_registry_verify(error, error_size) ||
-        !xr_fingerprint_equal(plan->operation_registry_fingerprint, current_registry))
+        !xr_fingerprint_equal(plan->operation_registry_fingerprint, current_registry) ||
+        !xr_fingerprint_equal(plan->stdlib_registry_fingerprint,
+                              current_stdlib_registry))
         return report(error, error_size, "XR_SEM_0017",
-                      "SemanticPlan operation registry is missing or incompatible");
+                      "SemanticPlan registry authority is missing or incompatible");
     if (plan->type_count > 1000000u || plan->function_count > 100000u ||
         plan->block_count > 2000000u || plan->operation_count > 10000000u ||
         plan->parameter_count > 25600000u || plan->capture_count > 6400000u ||

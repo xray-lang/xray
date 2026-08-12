@@ -9,7 +9,7 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 13 extends the pointer-free `DIRECT_LOCAL` call-target
+SemanticPlan schema 14 preserves the pointer-free `DIRECT_LOCAL` call-target
 authority to lexical shared slots. Direct SSA callees still resolve only
 through exact identity copies to a closure/function binding. A shared callee
 must be a `GET_SHARED(slot)` whose first lexical owner, found by walking the
@@ -32,9 +32,18 @@ static suspend operation (or `XI_GO`), the same row also authorizes exactly one
 coroutine-state entity for an ordinary call. A direct tail-call edge propagates
 the target's suspendability to its caller but has no resume state of its own.
 The record never copies caller-authored
-effects, provider spellings, symbols, pointers, or raw digests. Unknown,
-multi-write, imported, method, native, and unresolved targets remain absent and
-therefore fail closed until their own authority families exist.
+effects, provider spellings, symbols, pointers, or raw digests. Schema 14 adds
+one separate `NATIVE_YIELDABLE` authority for an ordinary `XI_CALL` whose
+callee resolves through exact identity copies to a bare canonical
+`XI_IMPORT_REF`. The module/member pair must name exactly one generated stdlib
+definition with a complete signature, VM binding, yieldable contract, and
+exact argument count. The full generated stdlib registry is fingerprinted into
+SemanticPlan and XSM; the independent verifier repeats the name, shape,
+argument, registry-fingerprint, and coroutine-state proof. Tail calls, methods,
+relative imports, unknown or duplicate definitions, and source-level wrapper
+exports remain absent and fail closed. In particular, a public Xray wrapper
+such as `net.writeBytes` is not reinterpreted as private native
+`net.__writeBytes`.
 Function declarations publish their immutable binding capability and lexical
 storage domain with the rest of analyzer ownership evidence. Closure lowering
 may copy those facts into SemanticPlan capture records but may not infer them
@@ -199,3 +208,12 @@ anchor-sha256: tests/unit/ir/test_xi_lower.c fbcb2ea7d98487c81c049b936716158b209
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 8ac0559b635cba3f51a6027b9fb49b0f1e7c24f5d13d5525dc151bf66b8fa6bf
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef875074bfbe67aa4c0ffcb9c6cda031741
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
+anchor-sha256: src/plan/format/xr_xsm_schema.h 88dfd41f4086139d40f40cc991861137ef5020f5a428ea1fb0ba99a7adca05b0
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c cd9695373eca7c9bf77163f4b9a7cd2b710d17598f30f017fcd066087f999491
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h 0d3c90639d0112359830ff3e599d9cb80df283e13fe812c913a243abe334e969
+anchor-sha256: src/plan/semantic/xr_semantic_plan.c 73c96a100d90c7b72de7c01de69c804a694e19c2413a3c9cf586c6e26c4bf9bf
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h cb6b20cff5f2c1e4f6e92edeb0b34789af61a1603511da37681cfb7a320c1ccb
+anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 4792284f6ca79d64322897a37f24ec4309db1e6a16aaa2bf0ab5a7f6b5842749
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 826b73827bc9d8eac1a0363d0461422e2c2aacd4c8876e85eea69d98986da5c1
+anchor-sha256: src/stdlib/xstdlib_metadata.h 85ee76561c9ed7b5d1d43028881b355fe8580b47ea0f1ef1a797a878a5078a11
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 27c8de786352ba0a009d724c84ee9287145d2c51ff13491a42fc227411cc72cd

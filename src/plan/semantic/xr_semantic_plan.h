@@ -65,6 +65,7 @@ typedef enum XrSemanticOperandFlag {
 
 typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_DIRECT_LOCAL = 1,
+    XR_SEM_CALL_TARGET_NATIVE_YIELDABLE,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 
@@ -328,8 +329,9 @@ typedef struct XrSemanticOperandRecord {
 
 /*
  * Exact call-site authority. DIRECT_LOCAL is rebuilt from frozen SSA or from a
- * unique lexical SET_SHARED/GET_SHARED slot chain. The target's canonical
- * static suspend facts can independently authorize a coroutine state.
+ * unique lexical SET_SHARED/GET_SHARED slot chain. NATIVE_YIELDABLE is rebuilt
+ * from a bare IMPORT_REF and the canonical stdlib binding registry. Both kinds
+ * independently authorize coroutine state creation without retaining Xi data.
  */
 typedef struct XrSemanticCallTargetRecord {
     XrStableId id;
@@ -347,6 +349,7 @@ XR_FUNC bool xr_semantic_plan_is_verified(const XrSemanticPlan *plan);
 XR_FUNC uint32_t xr_semantic_plan_schema(const XrSemanticPlan *plan);
 XR_FUNC XrFingerprint xr_semantic_plan_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC XrFingerprint xr_semantic_plan_operation_registry_fingerprint(const XrSemanticPlan *plan);
+XR_FUNC XrFingerprint xr_semantic_plan_stdlib_registry_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_type_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_function_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_parameter_count(const XrSemanticPlan *plan);

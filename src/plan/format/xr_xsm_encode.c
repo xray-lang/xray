@@ -346,6 +346,8 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
     xr_xsm_put_bytes(&artifact, digest, sizeof(digest));
     xr_xsm_put_bytes(&artifact, plan->operation_registry_fingerprint.bytes,
                      sizeof(plan->operation_registry_fingerprint.bytes));
+    xr_xsm_put_bytes(&artifact, plan->stdlib_registry_fingerprint.bytes,
+                     sizeof(plan->stdlib_registry_fingerprint.bytes));
     xr_xsm_put_bytes(&artifact, plan->fingerprint.bytes, sizeof(plan->fingerprint.bytes));
     xr_xsm_put_bytes(&artifact, payload.data, payload.size);
     xr_free(payload.data);

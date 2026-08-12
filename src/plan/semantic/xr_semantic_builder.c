@@ -22,6 +22,7 @@
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/class/xclass_info.h"
+#include "../../stdlib/xstdlib_metadata.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1458,6 +1459,26 @@ static int resolve_direct_local_callee(const XrSemanticBuildContext *ctx,
     return -1;
 }
 
+static bool resolve_native_yieldable_callee(const XiFunc *caller, const XiValue *call,
+                                            const char **module, const char **member) {
+    if (!call || call->op != XI_CALL || call->nargs == 0)
+        return false;
+    const XiValue *callee = call->args[0];
+    callee = strip_identity_copies(caller, callee);
+    if (!callee || callee->op != XI_IMPORT_REF || !callee->aux)
+        return false;
+    const XiImportRef *ref = (const XiImportRef *) callee->aux;
+    const XrStdlibDefEntry *binding =
+        xr_stdlib_metadata_unique_func(ref->module_path, ref->member_name);
+    if (!binding || !binding->signature || !binding->vm || !binding->vm_binding ||
+        strcmp(binding->vm_binding, "yieldable") != 0 ||
+        call->nargs != (uint16_t) (binding->argc + 1u))
+        return false;
+    *module = ref->module_path;
+    *member = ref->member_name;
+    return true;
+}
+
 static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value,
                                uint32_t operation) {
     if (!value || operation >= ctx->plan->operation_count || value->nargs == 0)
@@ -1467,7 +1488,13 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     uint32_t caller = ctx->plan->operations[operation].function;
     int function = resolve_direct_local_callee(ctx, ctx->functions[caller].source,
                                                value->args[0]);
-    if (function < 0)
+    const char *native_module = NULL;
+    const char *native_member = NULL;
+    bool native_yieldable = function < 0 &&
+                            resolve_native_yieldable_callee(
+                                ctx->functions[caller].source, value, &native_module,
+                                &native_member);
+    if (function < 0 && !native_yieldable)
         return true;
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
         !reserve_array((void **) &ctx->plan->call_targets,
@@ -1478,15 +1505,20 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
         &ctx->plan->call_targets[ctx->plan->call_target_count++];
     memset(record, 0, sizeof(*record));
     record->operation = operation;
-    record->function = (uint32_t) function;
-    record->kind = XR_SEM_CALL_TARGET_DIRECT_LOCAL;
+    record->function = function >= 0 ? (uint32_t) function : XR_SEMANTIC_INDEX_NONE;
+    record->kind = function >= 0 ? XR_SEM_CALL_TARGET_DIRECT_LOCAL
+                                 : XR_SEM_CALL_TARGET_NATIVE_YIELDABLE;
     XrTextBuilder key = {0};
-    bool valid = text_append_format(&key, "call-target-v2:schema=%u:operation=",
+    bool valid = text_append_format(&key, "call-target-v3:schema=%u:operation=",
                                     XR_SEMANTIC_SCHEMA_VERSION) &&
-                 text_append_stable_id(&key, ctx->plan->operations[operation].id) &&
-                 text_append(&key, ":function=") &&
-                 text_append_stable_id(&key, ctx->plan->functions[function].id) &&
-                 text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+                 text_append_stable_id(&key, ctx->plan->operations[operation].id);
+    if (valid && function >= 0)
+        valid = text_append(&key, ":function=") &&
+                text_append_stable_id(&key, ctx->plan->functions[function].id);
+    if (valid && native_yieldable)
+        valid = text_append(&key, ":native=") && text_append(&key, native_module) &&
+                text_append(&key, ".") && text_append(&key, native_member);
+    valid = valid && text_append_format(&key, ":kind=%u", (unsigned) record->kind);
     if (valid)
         record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
     text_dispose(&key);

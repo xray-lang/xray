@@ -10,6 +10,7 @@
 
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_ops.h"
+#include "../../stdlib/xstdlib_metadata.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
@@ -130,13 +131,15 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v13\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v14\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
     hash_u64(&ctx, plan->schema);
     hash_bytes(&ctx, plan->operation_registry_fingerprint.bytes,
                sizeof(plan->operation_registry_fingerprint.bytes));
+    hash_bytes(&ctx, plan->stdlib_registry_fingerprint.bytes,
+               sizeof(plan->stdlib_registry_fingerprint.bytes));
     hash_u64(&ctx, plan->type_count);
     hash_u64(&ctx, plan->function_count);
     hash_u64(&ctx, plan->parameter_count);
@@ -390,6 +393,7 @@ XrSemanticPlan *xr_semantic_plan_create(void) {
         atomic_init(&plan->references, 1);
         plan->schema = XR_SEMANTIC_SCHEMA_VERSION;
         xr_semantic_op_registry_fingerprint(&plan->operation_registry_fingerprint);
+        xr_stdlib_metadata_registry_fingerprint(&plan->stdlib_registry_fingerprint);
     }
     return plan;
 }
@@ -432,13 +436,20 @@ bool xr_semantic_plan_freeze(XrSemanticPlan *plan, char *error, size_t error_siz
         set_error(error, error_size, "XR_OWN_3001", "semantic plan has no ownership certificate");
         return false;
     }
-    XrFingerprint current_registry;
+    XrFingerprint current_registry, current_stdlib_registry;
     xr_semantic_op_registry_fingerprint(&current_registry);
+    xr_stdlib_metadata_registry_fingerprint(&current_stdlib_registry);
     if (!xr_semantic_op_registry_verify(error, error_size))
         return false;
     if (!xr_fingerprint_equal(plan->operation_registry_fingerprint, current_registry)) {
         set_error(error, error_size, "XR_SEM_0017",
                   "operation registry fingerprint does not match the compiler");
+        return false;
+    }
+    if (!xr_fingerprint_equal(plan->stdlib_registry_fingerprint,
+                              current_stdlib_registry)) {
+        set_error(error, error_size, "XR_SEM_0017",
+                  "stdlib registry fingerprint does not match the compiler");
         return false;
     }
     if (!xr_semantic_plan_verify_identity_set(plan, error, error_size))
@@ -503,6 +514,11 @@ XrFingerprint xr_semantic_plan_fingerprint(const XrSemanticPlan *plan) {
 XrFingerprint xr_semantic_plan_operation_registry_fingerprint(const XrSemanticPlan *plan) {
     XrFingerprint zero = {{0}};
     return plan ? plan->operation_registry_fingerprint : zero;
+}
+
+XrFingerprint xr_semantic_plan_stdlib_registry_fingerprint(const XrSemanticPlan *plan) {
+    XrFingerprint zero = {{0}};
+    return plan ? plan->stdlib_registry_fingerprint : zero;
 }
 
 #define XR_PLAN_COUNT_ACCESSOR(name, field)                                                        \
@@ -631,10 +647,15 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
         return false;
     char fingerprint[XR_FINGERPRINT_BYTES * 2 + 1];
     char registry_fingerprint[XR_FINGERPRINT_BYTES * 2 + 1];
+    char stdlib_registry_fingerprint[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->fingerprint, fingerprint);
     xr_fingerprint_hex(plan->operation_registry_fingerprint, registry_fingerprint);
-    fprintf(out, "semantic-plan schema=%u frozen=%u fingerprint=%s operation-registry=%s\n",
-            plan->schema, plan->frozen ? 1u : 0u, fingerprint, registry_fingerprint);
+    xr_fingerprint_hex(plan->stdlib_registry_fingerprint, stdlib_registry_fingerprint);
+    fprintf(out,
+            "semantic-plan schema=%u frozen=%u fingerprint=%s operation-registry=%s "
+            "stdlib-registry=%s\n",
+            plan->schema, plan->frozen ? 1u : 0u, fingerprint, registry_fingerprint,
+            stdlib_registry_fingerprint);
     fprintf(out,
             "  types=%u functions=%u parameters=%u captures=%u blocks=%u operations=%u "
             "call-targets=%u edges=%u constants=%u entities=%u\n",
