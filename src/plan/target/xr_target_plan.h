@@ -34,6 +34,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE = UINT64_C(1) << 7,
     XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE = UINT64_C(1) << 8,
     XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE = UINT64_C(1) << 9,
+    XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE = UINT64_C(1) << 10,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -62,7 +63,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE |                           \
                  XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |                            \
                  XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |                               \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE))
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE |                         \
+                 XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,

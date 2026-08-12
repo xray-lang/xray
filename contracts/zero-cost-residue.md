@@ -78,6 +78,10 @@ symbol, does not assert effects, and is withheld when the ordinary inline
 policy observes loops, allocation, suspension, runtime calls, or local stack
 aggregates; reads of already-materialized module/global fixed arrays are not
 local stack aggregates.
+Module initializers are a separate-compilation ABI exception: dependency
+translation units must emit an ordinary hidden external definition, never an
+external inline-only definition whose provider may omit the linkable symbol.
+This linkage rule does not add a runtime call or change any residue category.
 
 The default allowance set is empty. A backend contract may name explicit
 categories in its typed `shape.allow` list; unknown names are rejected.
@@ -104,6 +108,6 @@ stack, or runtime push/pop helper is a contract violation.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f91b93971b6123b498f964986df49ff2991a0863c22eb5c6e7a6e7d51494008b
-anchor-sha256: src/aot/xi_cgen.c 3034425cf42d5629db6fa427fb6514be6ce3d5efac5c9ed1d16c12919fa603ea
+anchor-sha256: src/aot/xi_cgen.c 988f2bdc97378db61d14b19fd31d25ea79ad553335f26c879b60e95c3b4fc05c
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c ddf3b8d501ef8beb8999c06970d6ac2b178e11f6ff38ac28cb4c8570a7d4182c
 anchor-sha256: src/app/cli/xcmd_verify.c 5fd6d66c6bc2c4be29cb121963eea94682cb48ea20f42aacdeb52fb2a2285b9b

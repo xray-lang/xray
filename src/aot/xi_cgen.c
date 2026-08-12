@@ -1294,6 +1294,12 @@ static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *
     if (cg_func_needs_external_linkage(ctx, f, prefix)) {
         if (cg_func_should_noinline(f))
             return "XRT_INTERNAL XR_NOINLINE ";
+        /* A module initializer is part of the separate-compilation ABI: the
+         * entry translation unit invokes every dependency initializer.  An
+         * external C inline definition is not required to emit a linkable
+         * symbol (notably under MSVC), so never attach FORCEINLINE here. */
+        if (ctx && ctx->module && ctx->module->init == f)
+            return "XRT_INTERNAL ";
         return cg_func_should_force_inline(ctx, f) ? "XRT_INTERNAL XR_FORCEINLINE "
                                                    : "XRT_INTERNAL ";
     }

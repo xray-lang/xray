@@ -116,6 +116,7 @@ static XrType stub_module_namespace = {
     .kind = XR_KIND_STRUCT_OBJECT,
     .id = 111,
     .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
 };
 
 static int source_export_call_suspendability(void *ud, const XiFunc *current,
@@ -891,7 +892,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "0aba8cd8cae9bf105a8e02d5153835e17445d6f0c139d7c91ad8ccfc29e1ce8a") == 0);
+                    "8eda2fe31eac890336809db130b3b95c02faca3477b931a58477c792678cc65d") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2021,7 +2022,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "157d30aba49f0daeba7737c1309b09c6c1eaa5ddab719bf5ec3bbae31c527ae3") == 0);
+                   "95e5ee17d9aac203708328ede4a013e7c49c467f2af5af7dfcf1f4de1bc64714") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT;
          mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -2217,7 +2218,7 @@ static XrSemanticPlan *build_lowered_tail_coroutine_chain(void) {
     leaf->parent_func = wrapper;
 
     /* Seed XiCoroLower so it materializes the caller state CFG.  The seed is
-     * rewritten below before SemanticPlan is frozen: schema 14 must then
+     * rewritten below before SemanticPlan is frozen: schema 17 must then
      * derive wrapper suspendability solely through the DIRECT_LOCAL tail
      * edge, while the wrapper itself has no state row. */
     XiValue *wrapper_seed =
@@ -2432,6 +2433,63 @@ static void test_source_export_call_authority(void) {
             plan->coroutines[0].flags ==
                 (XR_TARGET_COROUTINE_DIRECT_CHILD |
                  XR_TARGET_COROUTINE_SOURCE_CHILD));
+    REQUIRE((plan->completed_family_mask &
+             XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE) != 0);
+    uint32_t import_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t load_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t import_operation = XR_SEMANTIC_INDEX_NONE;
+    uint32_t load_operation = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (operation && operation->opcode == XI_IMPORT_REF) {
+            REQUIRE(import_value == XR_SEMANTIC_INDEX_NONE);
+            import_value = operation->result_value;
+            import_operation = i;
+        } else if (operation && operation->opcode == XI_GET_SHARED) {
+            REQUIRE(load_value == XR_SEMANTIC_INDEX_NONE);
+            load_value = operation->result_value;
+            load_operation = i;
+        }
+    }
+    const XrTargetValueRepRecord *import_binding =
+        xr_target_plan_value_rep(plan, import_value);
+    const XrTargetValueRepRecord *load_binding =
+        xr_target_plan_value_rep(plan, load_value);
+    REQUIRE(import_binding && load_binding &&
+            import_binding->slot < plan->slots_count &&
+            load_binding->slot < plan->slots_count);
+    const XrTargetSlotRecord *import_slot =
+        &plan->slots[import_binding->slot];
+    const XrTargetSlotRecord *load_slot = &plan->slots[load_binding->slot];
+    REQUIRE(import_slot->semantic_operation == import_operation &&
+            load_slot->semantic_operation == load_operation &&
+            import_slot->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            load_slot->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            import_slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            load_slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->machine_reps[import_binding->register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[load_binding->register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE);
+
+    uint64_t saved_mask = plan->completed_family_mask;
+    plan->completed_family_mask &=
+        ~XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->completed_family_mask = saved_mask;
+    uint16_t saved_ownership =
+        plan->machine_reps[import_binding->register_rep].ownership;
+    plan->machine_reps[import_binding->register_rep].ownership =
+        XR_TARGET_OWNERSHIP_OWNED;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->machine_reps[import_binding->register_rep].ownership =
+        saved_ownership;
+    uint32_t saved_operation =
+        plan->slots[import_binding->slot].semantic_operation;
+    plan->slots[import_binding->slot].semantic_operation = load_operation;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->slots[import_binding->slot].semantic_operation = saved_operation;
 
     for (uint32_t mutation = 0; mutation < SOURCE_EXPORT_MUTATION_COUNT;
          mutation++) {
@@ -2480,7 +2538,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "9aac4f7de519bca3a295ffd4c0c185cb7603c1e5c94d1326c97beba48935bf3d") == 0);
+                   "2b894a51e57aeb7e3b12ffaca5d292e213b4ea85bb0149ead978771baaebcc4a") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -2702,7 +2760,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "0cf86bcff8628da2d7b20c57691bf4956fc02e4944fff33222d2b4bbe18fb4e2") == 0);
+                   "16b98fc392c6a176251fabe46673660e52ed679170b4c77d7c550d82fb5f0782") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");

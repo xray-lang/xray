@@ -127,6 +127,21 @@ typedef struct DirectLocalGoCalleeStorageFixture {
     XrTargetPlan *target_plan;
 } DirectLocalGoCalleeStorageFixture;
 
+typedef struct SourceNamespaceStorageFixture {
+    XiFunc *function;
+    XiFunc *caller;
+    XiModule *module;
+    XiModule *dependency_module;
+    XiImportRef import_ref;
+    XiValue *namespace_ref;
+    XiValue *namespace_store;
+    XiValue *receiver;
+    XiValue *call;
+    XrSemanticPlan *dependency;
+    XrTargetProfile *target_profile;
+    XrTargetPlan *target_plan;
+} SourceNamespaceStorageFixture;
+
 typedef struct FailingBackend {
     bool begun;
     bool aborted;
@@ -217,6 +232,13 @@ static XrType direct_local_go_closure = {
         .return_type = &scalar_unit,
         .throw_effect = XR_FN_EFFECT_NO_THROW,
     },
+};
+
+static XrType module_namespace = {
+    .kind = XR_KIND_STRUCT_OBJECT,
+    .id = 8,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
 };
 
 static XrSemanticPlan *build_semantic_plan(void) {
@@ -570,6 +592,189 @@ static void direct_local_callee_storage_fixture_free(
     memset(fixture, 0, sizeof(*fixture));
 }
 
+static int source_namespace_suspendability(void *ud, const XiFunc *current,
+                                           const XiValue *call) {
+    (void) ud;
+    (void) current;
+    return call && call->op == XI_CALL_METHOD && call->aux &&
+                   strcmp((const char *) call->aux, "worker") == 0
+               ? 1
+               : -1;
+}
+
+static const XiFunc *source_namespace_resolve_method(
+    void *ud, const XiFunc *current, const XiValue *call) {
+    (void) current;
+    return ud && call && call->op == XI_CALL_METHOD && call->aux &&
+                   strcmp((const char *) call->aux, "worker") == 0
+               ? (const XiFunc *) ud
+               : NULL;
+}
+
+static SourceNamespaceStorageFixture source_namespace_storage_fixture_create(
+    bool extra_use) {
+    SourceNamespaceStorageFixture fixture = {0};
+    XiFunc *dependency_root =
+        xi_func_new("source_namespace_dependency_init", &scalar_unit);
+    XiFunc *worker = xi_func_new("worker", &scalar_unit);
+    XiBlock *dependency_entry = xi_block_new(dependency_root);
+    XiBlock *worker_entry = xi_block_new(worker);
+    REQUIRE(dependency_root && worker && dependency_entry && worker_entry);
+    dependency_entry->sealed = worker_entry->sealed = true;
+    dependency_root->children =
+        (XiFunc **) xr_calloc(1, sizeof(*dependency_root->children));
+    REQUIRE(dependency_root->children);
+    dependency_root->children[0] = worker;
+    dependency_root->nchildren = dependency_root->children_cap = 1;
+    worker->parent_func = dependency_root;
+    XiValue *closure = xi_value_new(dependency_root, dependency_entry,
+                                    XI_CLOSURE_NEW, &scalar_closure, 0);
+    XiValue *store = xi_value_new(dependency_root, dependency_entry,
+                                  XI_SET_SHARED, &scalar_unit, 1);
+    REQUIRE(closure && store);
+    closure->aux = worker;
+    store->args[0] = closure;
+    store->aux_int = 0;
+    dependency_root->nshared = 1;
+    xi_block_set_return(dependency_entry, NULL);
+    XiValue *yield = xi_value_new(worker, worker_entry, XI_YIELD,
+                                  &scalar_unit, 0);
+    REQUIRE(yield);
+    xi_block_set_return(worker_entry, NULL);
+    dependency_root->stage = worker->stage = XI_STAGE_SEMANTIC_LOWERED;
+    dependency_root->invariant_mask = worker->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(dependency_root, NULL));
+    dependency_root->stage = worker->stage = XI_STAGE_OPTIMIZED;
+    fixture.dependency_module = xi_module_new(
+        "fixture/source_namespace_dependency.xr", "source_namespace_dependency",
+        dependency_root);
+    REQUIRE(fixture.dependency_module);
+    dependency_root->module = fixture.dependency_module;
+    fixture.dependency_module->nslots = 1;
+    fixture.dependency_module->nexports = 1;
+    fixture.dependency_module->exports = (XiModuleExport *) xr_calloc(
+        1, sizeof(*fixture.dependency_module->exports));
+    REQUIRE(fixture.dependency_module->exports);
+    fixture.dependency_module->exports[0].name = "worker";
+    fixture.dependency_module->exports[0].shared_slot = 0;
+    fixture.dependency_module->exports[0].function = worker;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(dependency_root, error,
+                                              sizeof(error)));
+    fixture.dependency =
+        xr_semantic_plan_retain(dependency_root->semantic_plan);
+
+    fixture.function =
+        xi_func_new("source_namespace_caller_init", &scalar_unit);
+    fixture.caller = xi_func_new("source_namespace_caller", &scalar_unit);
+    XiBlock *root_entry = xi_block_new(fixture.function);
+    XiBlock *caller_entry = xi_block_new(fixture.caller);
+    REQUIRE(fixture.function && fixture.caller && root_entry && caller_entry);
+    root_entry->sealed = caller_entry->sealed = true;
+    fixture.function->children =
+        (XiFunc **) xr_calloc(1, sizeof(*fixture.function->children));
+    REQUIRE(fixture.function->children);
+    fixture.function->children[0] = fixture.caller;
+    fixture.function->nchildren = fixture.function->children_cap = 1;
+    fixture.caller->parent_func = fixture.function;
+    fixture.import_ref = (XiImportRef) {
+        .module_path = "fixture/source_namespace_dependency.xr",
+        .resolved_mod_index = 0,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolved_module = fixture.dependency_module,
+    };
+    fixture.namespace_ref = xi_value_new(fixture.function, root_entry,
+                                          XI_IMPORT_REF,
+                                          &module_namespace, 0);
+    fixture.namespace_store = xi_value_new(fixture.function, root_entry,
+                                            XI_SET_SHARED,
+                                            &scalar_unit, 1);
+    REQUIRE(fixture.namespace_ref && fixture.namespace_store);
+    XiImportRef *live_import = (XiImportRef *) xi_func_arena_alloc(
+        fixture.function, sizeof(*live_import));
+    REQUIRE(live_import);
+    *live_import = fixture.import_ref;
+    fixture.namespace_ref->aux = live_import;
+    fixture.namespace_store->args[0] = fixture.namespace_ref;
+    fixture.namespace_store->aux_int = 0;
+    if (extra_use) {
+        XiValue *unexpected = xi_value_new(fixture.function, root_entry,
+                                           XI_PRINT, &scalar_unit, 1);
+        REQUIRE(unexpected);
+        unexpected->args[0] = fixture.namespace_ref;
+    }
+    fixture.function->nshared = 1;
+    xi_block_set_return(root_entry, NULL);
+    fixture.receiver = xi_value_new(fixture.caller, caller_entry,
+                                     XI_GET_SHARED, &module_namespace, 0);
+    fixture.call = xi_value_new(fixture.caller, caller_entry,
+                                XI_CALL_METHOD, &scalar_unit, 1);
+    REQUIRE(fixture.receiver && fixture.call);
+    fixture.receiver->aux_int = 0;
+    fixture.call->args[0] = fixture.receiver;
+    fixture.call->aux = (void *) "worker";
+    fixture.call->aux_int = 0;
+    xi_block_set_return(caller_entry, NULL);
+    fixture.function->stage = fixture.caller->stage =
+        XI_STAGE_SEMANTIC_LOWERED;
+    fixture.function->invariant_mask = fixture.caller->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    XiCoroResolver resolver = {
+        .resolve_method = source_namespace_resolve_method,
+        .call_suspendability = source_namespace_suspendability,
+        .ud = worker,
+    };
+    REQUIRE(xi_coro_lower(fixture.function, &resolver));
+    fixture.function->stage = fixture.caller->stage = XI_STAGE_OPTIMIZED;
+    fixture.module = xi_module_new("fixture/source_namespace_caller.xr",
+                                   "source_namespace_caller",
+                                   fixture.function);
+    REQUIRE(fixture.module);
+    fixture.function->module = fixture.module;
+    fixture.module->nslots = 1;
+    XiModule *dependencies[] = {fixture.dependency_module};
+    REQUIRE(xr_semantic_plan_build_and_attach_module_set(
+        fixture.function, dependencies, 1, error, sizeof(error)));
+
+    fixture.target_profile = build_target_profile();
+    const XrSemanticPlan *semantic_dependencies[] = {fixture.dependency};
+    bool built = xr_target_plan_build_module_set(
+        fixture.function->semantic_plan, semantic_dependencies, 1,
+        fixture.target_profile, &fixture.target_plan, error, sizeof(error));
+    if (extra_use) {
+        REQUIRE(!built && fixture.target_plan == NULL);
+    } else {
+        if (!built) {
+            char semantic_error[512] = {0};
+            bool semantic_verified = xr_semantic_plan_verify_module_set(
+                fixture.function->semantic_plan, semantic_dependencies, 1,
+                semantic_error, sizeof(semantic_error));
+            fprintf(stderr, "source namespace TargetPlan build failed: %s\n",
+                    error);
+            fprintf(stderr, "source namespace semantic verify=%d: %s\n",
+                    semantic_verified, semantic_error);
+        }
+        REQUIRE(built && fixture.target_plan);
+    }
+    return fixture;
+}
+
+static void source_namespace_storage_fixture_free(
+    SourceNamespaceStorageFixture *fixture) {
+    XiFunc *dependency_function = fixture->dependency_module
+                                      ? fixture->dependency_module->init
+                                      : NULL;
+    xr_target_plan_free(fixture->target_plan);
+    xr_target_profile_free(fixture->target_profile);
+    xi_func_free(fixture->function);
+    xi_func_free(dependency_function);
+    xr_semantic_plan_free(fixture->dependency);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
 static DirectLocalGoCalleeStorageFixture
 direct_local_go_callee_storage_fixture_create(bool extra_use,
                                                bool second_store) {
@@ -822,7 +1027,7 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(xr_aot_backend_run(&view, fixture.target_plan,
                                xr_aot_test_backend_interface(), &test_backend,
                                &stats, &diag));
-    REQUIRE(strstr(emission, "families=00000000000003ff") != NULL);
+    REQUIRE(strstr(emission, "families=00000000000007ff") != NULL);
     REQUIRE(strstr(emission, "transform=direct-call decision=refused") != NULL);
     REQUIRE(strstr(emission,
                    "issue=XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE") != NULL);
@@ -1522,6 +1727,148 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
     DirectLocalGoCalleeStorageFixture duplicate =
         direct_local_go_callee_storage_fixture_create(false, true);
     direct_local_go_callee_storage_fixture_free(&duplicate);
+}
+
+static void test_source_namespace_storage_is_exact_and_fail_closed(void) {
+    SourceNamespaceStorageFixture fixture =
+        source_namespace_storage_fixture_create(false);
+    REQUIRE((fixture.target_plan->completed_family_mask &
+             XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE) != 0);
+    uint32_t import_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t load_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_operation_count(
+                 fixture.function->semantic_plan);
+         i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(fixture.function->semantic_plan, i);
+        if (operation && operation->opcode == XI_IMPORT_REF)
+            import_value = operation->result_value;
+        else if (operation && operation->opcode == XI_GET_SHARED)
+            load_value = operation->result_value;
+    }
+    REQUIRE(import_value != XR_SEMANTIC_INDEX_NONE &&
+            load_value != XR_SEMANTIC_INDEX_NONE);
+    const XrTargetValueRepRecord *import_binding =
+        xr_target_plan_value_rep(fixture.target_plan, import_value);
+    const XrTargetValueRepRecord *load_binding =
+        xr_target_plan_value_rep(fixture.target_plan, load_value);
+    REQUIRE(import_binding && load_binding &&
+            fixture.target_plan->machine_reps[
+                import_binding->register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            fixture.target_plan->machine_reps[
+                load_binding->register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            fixture.target_plan->machine_reps[
+                import_binding->register_rep].ownership ==
+                XR_TARGET_OWNERSHIP_BORROWED &&
+            fixture.target_plan->machine_reps[
+                load_binding->register_rep].ownership ==
+                XR_TARGET_OWNERSHIP_BORROWED);
+
+    char error[512] = {0};
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(
+        fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile),
+        &emission, error, sizeof(error)));
+    XrCValueEmissionView import_view = {0};
+    XrCValueEmissionView load_view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+                emission, import_value, &import_view, error, sizeof(error)) &&
+            xr_c_emission_plan_value_view(
+                emission, load_value, &load_view, error, sizeof(error)));
+    REQUIRE(import_view.rep == XR_C_VALUE_REP_TAGGED &&
+            load_view.rep == XR_C_VALUE_REP_TAGGED &&
+            import_view.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
+            load_view.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
+            strcmp(import_view.c_type, "XrValue") == 0 &&
+            strcmp(load_view.c_type, "XrValue") == 0);
+    uint32_t source_row = UINT32_MAX;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == load_value)
+            source_row = i;
+    REQUIRE(source_row != UINT32_MAX);
+    uint16_t saved_kind = emission->values[source_row].target_register_kind;
+    emission->values[source_row].target_register_kind = XR_MACHINE_REP_I64;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    emission->values[source_row].target_register_kind = saved_kind;
+    const char *saved_c_type = emission->values[source_row].c_type;
+    emission->values[source_row].c_type = "int64_t";
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    emission->values[source_row].c_type = saved_c_type;
+    uint32_t saved_count = emission->value_count;
+    XrCValueEmissionView saved_row = emission->values[source_row];
+    memmove(&emission->values[source_row],
+            &emission->values[source_row + 1u],
+            (saved_count - source_row - 1u) * sizeof(*emission->values));
+    emission->value_count--;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    memmove(&emission->values[source_row + 1u],
+            &emission->values[source_row],
+            (saved_count - source_row - 1u) * sizeof(*emission->values));
+    emission->values[source_row] = saved_row;
+    emission->value_count = saved_count;
+    REQUIRE(xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    xr_c_emission_plan_free(emission);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    bool refined = xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, &policy, &plan, &diag);
+    REQUIRE(refined);
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count == 0);
+    xi_opt_refresh_representations_with_policy(fixture.function, &policy);
+    REQUIRE(fixture.namespace_ref->rep == XR_REP_TAGGED &&
+            fixture.receiver->rep == XR_REP_TAGGED &&
+            fixture.namespace_store->args[0] == fixture.namespace_ref &&
+            fixture.call->args[0] == fixture.receiver);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    XiImportRef *live_import = (XiImportRef *) fixture.namespace_ref->aux;
+    const char *saved_module_path = live_import->module_path;
+    live_import->module_path = "fixture/forged_dependency.xr";
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY ||
+            diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    live_import->module_path = saved_module_path;
+    int64_t saved_slot = fixture.receiver->aux_int;
+    fixture.receiver->aux_int++;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+    fixture.receiver->aux_int = saved_slot;
+    XiValue *saved_receiver = fixture.call->args[0];
+    fixture.call->args[0] = fixture.call;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
+    fixture.call->args[0] = saved_receiver;
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    xr_aot_refinement_plan_free(plan);
+    source_namespace_storage_fixture_free(&fixture);
+    SourceNamespaceStorageFixture extra =
+        source_namespace_storage_fixture_create(true);
+    source_namespace_storage_fixture_free(&extra);
 }
 
 static void test_exact_string_literal_storage_is_tagged_and_fail_closed(void) {
@@ -2554,6 +2901,7 @@ int main(void) {
     test_exact_heap_closure_storage_is_tagged_and_fail_closed();
     test_direct_local_shared_callee_storage_is_exact_and_fail_closed();
     test_direct_local_go_callee_storage_is_exact_and_fail_closed();
+    test_source_namespace_storage_is_exact_and_fail_closed();
     test_exact_string_literal_storage_is_tagged_and_fail_closed();
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();

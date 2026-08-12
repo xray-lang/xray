@@ -145,6 +145,12 @@ typedef struct XrDirectLocalGoCalleeStorageAnalysis {
     XrSemanticGraph graph;
 } XrDirectLocalGoCalleeStorageAnalysis;
 
+typedef struct XrSourceNamespaceStorageAnalysis {
+    uint8_t *exact_value;
+    uint32_t *dependency_by_value;
+    uint32_t value_count;
+} XrSourceNamespaceStorageAnalysis;
+
 typedef struct XrTargetMaterializedPlan {
     XrTargetMachineRepRecord *machine_reps;
     uint32_t machine_rep_count;
@@ -2451,6 +2457,383 @@ static bool builder_add_channel_receive_storage(
     return true;
 }
 
+static bool note_source_namespace_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *values,
+    const XrSourceNamespaceStorageAnalysis *namespaces,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan,
+                                   semantic_operation);
+    if (!operation || operation->result_value >= namespaces->value_count ||
+        !namespaces->exact_value[operation->result_value] ||
+        (operation->opcode != XI_IMPORT_REF &&
+         operation->opcode != XI_GET_SHARED) ||
+        operation->result_value >= values->total_values ||
+        operation->result_type >= values->type_count ||
+        operation->function >=
+            xr_semantic_plan_function_count(builder->semantic_plan) ||
+        values->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "source namespace storage identity is incomplete");
+    XrTargetMachineRepRecord rep;
+    if (!make_borrowed_dynamic_value_rep(
+            xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize source namespace storage");
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function,
+                            XR_TARGET_SLOT_TEMPORARY, operation->id,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "source namespace slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_BORROWED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!values->used_types[operation->result_type] &&
+         !append_layout_intent(builder, operation->result_type,
+                               XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                               error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    values->defined_values[operation->result_value] = 1;
+    values->value_types[operation->result_value] = operation->result_type;
+    values->value_functions[operation->result_value] = operation->function;
+    values->type_rep_kinds[operation->result_type] =
+        XR_MACHINE_REP_DYN_VALUE;
+    values->used_types[operation->result_type] = 1;
+    return true;
+}
+
+static bool source_namespace_type_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint16_t opcode) {
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (!plan || !operation || !type || operation->opcode != opcode ||
+        operation->allocation_key || !stable_id_is_zero(operation->allocation_id) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != 0 ||
+        operation->effects != xi_generated_op_effects(opcode) ||
+        operation->flags != xi_generated_op_default_flags(opcode) ||
+        operation->ownership_use != xi_generated_op_own_use(opcode) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE ||
+        type->child_count != 0 || type->aggregate_extent != 0 ||
+        type->aggregate_align != 0 ||
+        type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                        XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    return opcode == XI_IMPORT_REF
+               ? operation->operand_count == 0 &&
+                     operation->semantic_immediate >= -1 &&
+                     operation->semantic_immediate <= UINT16_MAX &&
+                     operation->metadata_count == 2
+               : opcode == XI_GET_SHARED && operation->operand_count == 0 &&
+                     operation->semantic_immediate >= 0 &&
+                     operation->semantic_immediate <= UINT16_MAX &&
+                     operation->metadata_count == 0;
+}
+
+static void source_namespace_storage_analysis_dispose(
+    XrSourceNamespaceStorageAnalysis *analysis) {
+    if (!analysis)
+        return;
+    xr_free(analysis->exact_value);
+    xr_free(analysis->dependency_by_value);
+    memset(analysis, 0, sizeof(*analysis));
+}
+
+static bool source_namespace_storage_analysis_init(
+    const XrSemanticPlan *plan, const XrTargetValueStorageAnalysis *values,
+    XrSourceNamespaceStorageAnalysis *analysis, char *error,
+    size_t error_size) {
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(plan);
+    uint32_t target_count =
+        (uint32_t) xr_semantic_plan_call_target_count(plan);
+    analysis->value_count = values->total_values;
+    analysis->exact_value = (uint8_t *) allocate_records(
+        analysis->value_count, sizeof(*analysis->exact_value));
+    analysis->dependency_by_value = (uint32_t *) allocate_records(
+        analysis->value_count, sizeof(*analysis->dependency_by_value));
+    uint32_t *source_target_by_operation = (uint32_t *) allocate_records(
+        operation_count, sizeof(*source_target_by_operation));
+    uint32_t *allowed_uses = (uint32_t *) allocate_records(
+        analysis->value_count, sizeof(*allowed_uses));
+    uint32_t *store_by_value = (uint32_t *) allocate_records(
+        analysis->value_count, sizeof(*store_by_value));
+    uint8_t *candidate = (uint8_t *) allocate_records(
+        analysis->value_count, sizeof(*candidate));
+    if ((analysis->value_count &&
+         (!analysis->exact_value || !analysis->dependency_by_value ||
+          !allowed_uses || !store_by_value || !candidate)) ||
+        (operation_count && !source_target_by_operation)) {
+        xr_free(source_target_by_operation);
+        xr_free(allowed_uses);
+        xr_free(store_by_value);
+        xr_free(candidate);
+        source_namespace_storage_analysis_dispose(analysis);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "source namespace storage analysis allocation failed");
+    }
+    for (uint32_t i = 0; i < analysis->value_count; i++) {
+        analysis->dependency_by_value[i] = XR_SEMANTIC_INDEX_NONE;
+        store_by_value[i] = XR_SEMANTIC_INDEX_NONE;
+    }
+    for (uint32_t i = 0; i < operation_count; i++)
+        source_target_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(plan, i);
+        if (!target || target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+            continue;
+        if (target->operation >= operation_count ||
+            target->dependency >= xr_semantic_plan_dependency_count(plan) ||
+            source_target_by_operation[target->operation] !=
+                XR_SEMANTIC_INDEX_NONE)
+            goto invalid;
+        source_target_by_operation[target->operation] = i;
+    }
+    uint32_t operand_count = 0;
+    uint32_t metadata_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata =
+        xr_semantic_plan_metadata(plan, &metadata_count);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        uint32_t target_index = source_target_by_operation[i];
+        if (target_index == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(plan, target_index);
+        const XrSemanticOperationRecord *call =
+            xr_semantic_plan_operation(plan, i);
+        if (!target || !call || call->opcode != XI_CALL_METHOD ||
+            call->operand_count == 0 || call->operand_begin >= operand_count)
+            goto invalid;
+        const XrSemanticOperandRecord *receiver =
+            &operands[call->operand_begin];
+        uint32_t load_index = receiver->value < analysis->value_count
+                                  ? values->value_operations[receiver->value]
+                                  : XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *load =
+            load_index != XR_SEMANTIC_INDEX_NONE
+                ? xr_semantic_plan_operation(plan, load_index)
+                : NULL;
+        if (!source_namespace_type_is_exact(plan, load, XI_GET_SHARED) ||
+            receiver->role != XR_SEM_OPERAND_RECEIVER ||
+            receiver->parameter != -1 || receiver->type != load->result_type ||
+            receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+            receiver->parameter_mode != XR_PARAM_READ ||
+            receiver->access != XR_CALL_ARG_PLAIN ||
+            (receiver->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0)
+            goto invalid;
+        uint32_t store_index = XR_SEMANTIC_INDEX_NONE;
+        for (uint32_t j = 0; j < operation_count; j++) {
+            const XrSemanticOperationRecord *candidate_store =
+                xr_semantic_plan_operation(plan, j);
+            if (!candidate_store || candidate_store->function != 0 ||
+                candidate_store->opcode != XI_SET_SHARED ||
+                candidate_store->semantic_immediate !=
+                    load->semantic_immediate)
+                continue;
+            if (store_index != XR_SEMANTIC_INDEX_NONE)
+                goto invalid;
+            store_index = j;
+        }
+        const XrSemanticOperationRecord *store =
+            store_index != XR_SEMANTIC_INDEX_NONE
+                ? xr_semantic_plan_operation(plan, store_index)
+                : NULL;
+        if (!store || store->operand_count != 1 ||
+            store->operand_begin >= operand_count)
+            goto invalid;
+        const XrSemanticOperandRecord *stored =
+            &operands[store->operand_begin];
+        uint32_t import_index = stored->value < analysis->value_count
+                                    ? values->value_operations[stored->value]
+                                    : XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *import =
+            import_index != XR_SEMANTIC_INDEX_NONE
+                ? xr_semantic_plan_operation(plan, import_index)
+                : NULL;
+        const XrSemanticDependencyRecord *dependency =
+            xr_semantic_plan_dependency(plan, target->dependency);
+        if (!source_namespace_type_is_exact(plan, import, XI_IMPORT_REF) ||
+            import->function != 0 || load->function != call->function ||
+            store->function != 0 || stored->type != import->result_type ||
+            store->semantic_immediate != load->semantic_immediate ||
+            stored->role != XR_SEM_OPERAND_VALUE || stored->parameter != -1 ||
+            stored->ownership_action != XR_SEM_OPERAND_CONSUME ||
+            stored->parameter_mode != XR_PARAM_READ ||
+            stored->access != XR_CALL_ARG_PLAIN || stored->flags != 0 ||
+            load->result_type != import->result_type || !dependency ||
+            import->metadata_begin > metadata_count ||
+            import->metadata_count > metadata_count - import->metadata_begin ||
+            !metadata || !metadata[import->metadata_begin] ||
+            !metadata[import->metadata_begin + 1u] ||
+            strcmp(metadata[import->metadata_begin],
+                   dependency->module_path) != 0 ||
+            metadata[import->metadata_begin + 1u][0] != '\0')
+            goto invalid;
+        uint32_t import_value = import->result_value;
+        uint32_t load_value = load->result_value;
+        if ((candidate[import_value] &&
+             analysis->dependency_by_value[import_value] != target->dependency) ||
+            (candidate[load_value] &&
+             analysis->dependency_by_value[load_value] != target->dependency) ||
+            (store_by_value[import_value] != XR_SEMANTIC_INDEX_NONE &&
+             store_by_value[import_value] != store_index))
+            goto invalid;
+        candidate[import_value] = 1;
+        candidate[load_value] = 1;
+        analysis->dependency_by_value[import_value] = target->dependency;
+        analysis->dependency_by_value[load_value] = target->dependency;
+        store_by_value[import_value] = store_index;
+    }
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *use =
+            xr_semantic_plan_operation(plan, i);
+        if (!use || use->operand_begin > operand_count ||
+            use->operand_count > operand_count - use->operand_begin)
+            goto invalid;
+        for (uint16_t a = 0; a < use->operand_count; a++) {
+            const XrSemanticOperandRecord *operand =
+                &operands[use->operand_begin + a];
+            if (operand->value >= analysis->value_count ||
+                !candidate[operand->value])
+                continue;
+            uint32_t definition_index =
+                values->value_operations[operand->value];
+            const XrSemanticOperationRecord *definition =
+                xr_semantic_plan_operation(plan, definition_index);
+            bool exact = false;
+            if (definition->opcode == XI_IMPORT_REF) {
+                exact = a == 0 &&
+                        ((use->opcode == XI_RETAIN &&
+                          use->function == definition->function) ||
+                         (i == store_by_value[operand->value] &&
+                          use->opcode == XI_SET_SHARED &&
+                          use->function == 0 &&
+                          use->semantic_immediate >= 0));
+            } else if (definition->opcode == XI_GET_SHARED) {
+                uint32_t target_index = source_target_by_operation[i];
+                const XrSemanticCallTargetRecord *target =
+                    target_index != XR_SEMANTIC_INDEX_NONE
+                        ? xr_semantic_plan_call_target(plan, target_index)
+                        : NULL;
+                exact = a == 0 && use->opcode == XI_CALL_METHOD && target &&
+                        target->dependency ==
+                            analysis->dependency_by_value[operand->value] &&
+                        operand->role == XR_SEM_OPERAND_RECEIVER;
+            }
+            uint32_t max_uses = definition->opcode == XI_IMPORT_REF ? 2u : 1u;
+            if (!exact || allowed_uses[operand->value] >= max_uses)
+                goto invalid;
+            allowed_uses[operand->value]++;
+        }
+    }
+    uint32_t block_count =
+        (uint32_t) xr_semantic_plan_block_count(plan);
+    for (uint32_t i = 0; i < block_count; i++) {
+        const XrSemanticBlockRecord *block = xr_semantic_plan_block(plan, i);
+        if (!block || (block->control_value != XR_SEMANTIC_INDEX_NONE &&
+                       (block->control_value >= analysis->value_count ||
+                        candidate[block->control_value])))
+            goto invalid;
+    }
+    for (uint32_t i = 0; i < analysis->value_count; i++) {
+        if (!candidate[i])
+            continue;
+        const XrSemanticOperationRecord *definition =
+            xr_semantic_plan_operation(plan, values->value_operations[i]);
+        if (!definition ||
+            (definition->opcode == XI_IMPORT_REF &&
+             store_by_value[i] == XR_SEMANTIC_INDEX_NONE) ||
+            (definition->opcode == XI_IMPORT_REF && allowed_uses[i] < 1) ||
+            (definition->opcode == XI_GET_SHARED && allowed_uses[i] != 1))
+            goto invalid;
+        analysis->exact_value[i] = 1;
+    }
+    xr_free(source_target_by_operation);
+    xr_free(allowed_uses);
+    xr_free(store_by_value);
+    xr_free(candidate);
+    return true;
+
+invalid:
+    xr_free(source_target_by_operation);
+    xr_free(allowed_uses);
+    xr_free(store_by_value);
+    xr_free(candidate);
+    source_namespace_storage_analysis_dispose(analysis);
+    return fail(error, error_size, "XR_TARGET_1001",
+                "source namespace storage authority is not exact");
+}
+
+static bool builder_add_source_namespace_storage(
+    XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+    if (!builder_begin_family(builder,
+                              XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis values = {0};
+    XrSourceNamespaceStorageAnalysis namespaces = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &values,
+                                              error, error_size) &&
+                 index_value_operations(builder->semantic_plan, &values, error,
+                                        error_size) &&
+                 source_namespace_storage_analysis_init(
+                     builder->semantic_plan, &values, &namespaces, error,
+                     error_size);
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation || operation->result_value >= namespaces.value_count)
+            continue;
+        if (!namespaces.exact_value[operation->result_value])
+            continue;
+        valid = note_source_namespace_storage_value(
+            builder, &values, &namespaces, i, error, error_size);
+    }
+    source_namespace_storage_analysis_dispose(&namespaces);
+    value_storage_analysis_dispose(&values);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |=
+        XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE;
+    return true;
+}
+
 static int classify_aggregate_type(const XrSemanticTypeRecord *type) {
     if (!type)
         return -1;
@@ -2826,7 +3209,8 @@ static bool call_type_is_exact_scalar(const XrSemanticPlan *plan, uint32_t type_
                XR_TARGET_SCALAR_VALUE;
 }
 
-/* Schema 14 already owns every fact needed to name Channel.close without a
+/* The frozen TargetPlan contract already owns every fact needed to name
+ * Channel.close without a
  * backend registry lookup: receiver type, source selector, non-super symbol
  * encoding, arity, result type, and instance suspension flags. The receiver
  * is the dispatch target, not a source argument; its machine slot remains a
@@ -4504,6 +4888,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_direct_local_go_callee_storage(builder, error, error_size) ||
         !builder_add_channel_allocation_storage(builder, error, error_size) ||
         !builder_add_channel_receive_storage(builder, error, error_size) ||
+        !builder_add_source_namespace_storage(builder, error, error_size) ||
         !builder_add_aggregates(builder, error, error_size) ||
         !builder_add_calls_and_adapters(builder, error, error_size) ||
         !builder_add_coroutine_state_calls(builder, error, error_size)) {

@@ -65,6 +65,7 @@ static XrType stub_module_namespace = {
     .kind = XR_KIND_STRUCT_OBJECT,
     .id = 5,
     .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
 };
 
 static int source_export_call_suspendability(void *ud, const XiFunc *current,
@@ -681,7 +682,8 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     xr_target_plan_free(decoded_plan);
     xr_xtp_candidate_release(candidate);
 
-    const uint32_t rejected_schemas[] = {UINT32_C(12), UINT32_C(13)};
+    const uint32_t rejected_schemas[] = {UINT32_C(12), UINT32_C(13),
+                                         UINT32_C(14)};
     for (size_t i = 0;
          i < sizeof(rejected_schemas) / sizeof(rejected_schemas[0]); i++) {
         uint8_t *old_schema = copy_artifact(&fixture);

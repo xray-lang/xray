@@ -1,12 +1,13 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 14 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 15 with the complete
 scalar, aggregate, direct-local call, closure-storage, minimal coroutine
 state-call, String-literal-storage, direct-local-callee-storage, and
 Channel-allocation-storage, Channel-receive-storage, and
-direct-local-GO-callee-storage family mask. Schema 14 is a breaking hard
-cutover: schema 13 and earlier and a plan missing any required family fact are rejected
+direct-local-GO-callee-storage and SOURCE-namespace-storage family mask.
+Schema 15 is a breaking hard cutover: schema 14 and earlier and a plan missing
+any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
 compatibility logic.
@@ -46,6 +47,11 @@ slot for an exact `XI_CHAN_TRY_RECV` whose Channel allocation identity and
 element type have been independently frozen. It adds no Channel object layout,
 receive scheduling, ownership transfer, aggregate payload, tuple payload,
 root, or cleanup authority.
+The SOURCE-namespace-storage family describes only borrowed dynamic outer
+`XrValue` tokens in an exact import/store/load chain whose load is consumed as
+the receiver of a SOURCE_EXPORT call. It grants no imported module object
+body, allocation, root, cleanup, dependency activation, argument ABI, or
+cross-module frame and remains outside the trivial frame allocator.
 SOURCE_EXPORT rows bind only an exact dependency public wrapper and its
 coroutine state/result relation. They deliberately contain no local callee
 index or cross-module argument/frame storage, so this typed frame grants them
@@ -87,9 +93,9 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 21f02d03a1dc54b1078f37d82b2eb4ea4c80debfb0f3a3c174cea8f30910d4b7
-anchor-sha256: src/vm/xr_typed_frame.h b9776f1b65e625fcd8d343d657773d8d3ad11d875dfe340b6e44cb754778f9ad
+anchor-sha256: src/plan/target/xr_target_plan.h 9cc8176a48d405c78ddfecf8c4a86173b21ee34ad5fa83e0ccbf04da1161b6c4
+anchor-sha256: src/vm/xr_typed_frame.h 3dc41f1359f864fbc8c489ce25065869bc9f02edfc93bf32c1b9085ecb3bf821
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c ec524851384230dc1cd076b9a3e7356d259fde9fb294fc13576ac10b42348470
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 567315c3b06d807c27beb656744aa1ffd56aaeb298903458f4191e04abbd054c
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7

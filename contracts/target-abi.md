@@ -86,17 +86,17 @@ materialization. AOT prepare runs only after every required BOX or UNBOX is
 present at its recorded source and use, and rejects a missing, extra, reordered,
 or stale adapter before ABI planning. This adds no public value representation,
 layout, or calling-convention change.
-The C emission projection schema 8 additionally owns an exact materialization
+The C emission projection schema 9 additionally owns an exact materialization
 recipe and immutable byte payload for every verified String literal row. CGen
 mechanically consumes that row and cannot recover literal bytes, a dynamic
 tag, field spelling, or ownership from mutable Xi values. Missing, extra,
 reordered, stale, or incorrectly spelled rows fail before emission; this does
 not authorize general owned Strings, tuples, or object bodies.
-Schema 8 also projects an exact borrowed `TAGGED`/`XrValue` row for a frozen
+Schema 9 also projects an exact borrowed `TAGGED`/`XrValue` row for a frozen
 direct-local shared callee token. CGen consumes that immutable row mechanically;
 it cannot infer callable representation from Xi type or representation state,
 and the row grants no closure body, allocation, root, or cleanup authority.
-For an exact scalar `XI_CHAN_TRY_RECV`, schema 8 owns the receiver semantic
+For an exact scalar `XI_CHAN_TRY_RECV`, schema 9 owns the receiver semantic
 value and exact scalar unbox helper spelling. Sync and coroutine CGen consume
 that recipe mechanically; they cannot infer it from Xi type/representation or
 fall back to a legacy adapter. This grants no Channel object layout, receive
@@ -156,6 +156,10 @@ emission rather than falling back to compiler-host layout.
   retains hidden external linkage plus the native always-inline contract; a
   runtime-dispatch wrapper remains baseline and calls separately attributed
   feature leaves.
+  A module initializer is always emitted as an ordinary hidden external
+  definition because a separately generated entry translation unit invokes
+  dependency initializers. It never uses external inline-only linkage; this
+  preserves an exact linkable provider on MSVC and every other C provider.
 - T4b: `loongarch64-linux-musl` defaults to scalar because LSX is not implied
   by the base target triple. Explicit `--simd lsx` or `--simd native` adds
   `-mlsx`, uses the portable 128-bit lane contract, and may publish native
@@ -302,7 +306,7 @@ anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 11e99944b4cf4a3cddad28
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 6afa63379b45eb6264df2890888bc0daf154adb65125b9e4b8506aaa3fa0a62a
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c b4201c02fc214411accff3be9a6f92b394c9116f86b79fc2b41a5e576a4a7d65
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 9011332cab0c4cff0952d954c9dd04a6bd45160df9d9549b08828dc13d7af422
-anchor-sha256: src/aot/xi_cgen.c 3034425cf42d5629db6fa427fb6514be6ce3d5efac5c9ed1d16c12919fa603ea
+anchor-sha256: src/aot/xi_cgen.c 988f2bdc97378db61d14b19fd31d25ea79ad553335f26c879b60e95c3b4fc05c
 anchor-sha256: src/aot/xrt_coll.h 53ca66e14d15457155d2d14e0a6c6a6553343db2cce8adff7394b5f927bfee08
 anchor-sha256: src/aot/xrt_core_freestanding.h 781aaa6cacebd6f07c919dc4908fd894a5eae8ada88b7e858ff8c179d8c11bde
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
