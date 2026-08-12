@@ -36,6 +36,7 @@
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
+#include "../shared/xr_numeric_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
@@ -3305,7 +3306,7 @@ static bool cg_const_int_value_matches_bits(const XiValue *value, uint64_t bits)
     if (v->op == XI_NEG && v->nargs >= 1) {
         const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
         return arg && arg->op == XI_CONST && arg->type && arg->type->kind == XR_KIND_INT &&
-               (UINT64_C(0) - (uint64_t) arg->aux_int) == bits;
+               (uint64_t) xr_numeric_neg_eval(XR_NUMERIC_NEG_I64, arg->aux_int, 0.0).i64 == bits;
     }
     return false;
 }
@@ -3322,7 +3323,7 @@ static bool cg_const_float_value_matches_literal(const XiValue *value, double ex
         if (!arg || arg->op != XI_CONST || !arg->type || arg->type->kind != XR_KIND_FLOAT)
             return false;
         memcpy(&actual, &arg->aux_int, sizeof(double));
-        actual = -actual;
+        actual = xr_numeric_neg_eval(XR_NUMERIC_NEG_F64, 0, actual).f64;
     } else {
         return false;
     }
@@ -4285,6 +4286,24 @@ static const char *cg_bitwise_binary_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI, XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: bitwise-binary owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_numeric_neg_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI,
+                                        XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: numeric-neg owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: numeric-neg owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }

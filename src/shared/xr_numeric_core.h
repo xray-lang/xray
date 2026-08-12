@@ -12,10 +12,104 @@
 #define XR_NUMERIC_CORE_H
 
 #include "../base/xconstants.h"
+#include "xr_semantic_owner_ids_gen.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
+
+typedef enum XrNumericNegKind {
+    XR_NUMERIC_NEG_I64 = 0,
+    XR_NUMERIC_NEG_F64 = 1,
+} XrNumericNegKind;
+
+typedef struct XrNumericNegResult {
+    int64_t i64;
+    double f64;
+} XrNumericNegResult;
+
+typedef struct XrNumericNegBigIntPlan {
+    uint32_t length;
+    int8_t result_sign;
+    uint8_t valid;
+} XrNumericNegBigIntPlan;
+
+/* Canonical xi.neg scalar semantics. Integer negation wraps in the two's-
+ * complement i64 domain. Floating negation toggles the IEEE-754 sign bit, so
+ * signed zero, infinities, and NaN payloads are preserved exactly. */
+static inline XrNumericNegResult xr_numeric_neg_eval(XrNumericNegKind kind, int64_t i64,
+                                                     double f64) {
+    XrNumericNegResult result = {0, 0.0};
+    if (kind == XR_NUMERIC_NEG_I64) {
+        result.i64 = (int64_t) (UINT64_C(0) - (uint64_t) i64);
+        return result;
+    }
+    if (kind == XR_NUMERIC_NEG_F64) {
+        uint64_t bits = 0;
+        memcpy(&bits, &f64, sizeof(bits));
+        bits ^= UINT64_C(1) << 63;
+        memcpy(&result.f64, &bits, sizeof(result.f64));
+    }
+    return result;
+}
+
+/* BigInt adapters own allocation and copying only. This plan is the unique
+ * rule for canonical zero and sign inversion over normalized magnitude limbs. */
+static inline XrNumericNegBigIntPlan xr_numeric_neg_bigint_plan(const uint32_t *limbs,
+                                                                uint32_t length, int8_t sign) {
+    XrNumericNegBigIntPlan plan = {length, 1, 0};
+    if (!limbs || length == 0 || (sign != 1 && sign != -1))
+        return plan;
+    if (length > 1 && limbs[length - 1] == 0)
+        return plan;
+    bool zero = true;
+    for (uint32_t i = 0; i < length; i++) {
+        if (limbs[i] != 0) {
+            zero = false;
+            break;
+        }
+    }
+    plan.result_sign = zero ? 1 : (int8_t) -sign;
+    plan.valid = 1;
+    return plan;
+}
+
+#define XR_NUMERIC_NEG_OWNER_GUARD(owner_hi, owner_lo)                                            \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_numeric_neg                                          \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI &&                 \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO)                   \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_NUMERIC_NEG_CONSUMER_GUARD(consumer_bit)                                               \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_numeric_neg                             \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&           \
+                (XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_CONSUMERS & (uint32_t) (consumer_bit)) != 0) \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_NUMERIC_NEG_KIND_GUARD(kind)                                                           \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int kind_must_be_numeric_neg_i64_or_f64                                         \
+            : (((kind) == XR_NUMERIC_NEG_I64 || (kind) == XR_NUMERIC_NEG_F64) ? 1 : -1);         \
+    }))
+
+#define XR_NUMERIC_NEG_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, kind, i64, f64)              \
+    (XR_NUMERIC_NEG_OWNER_GUARD((owner_hi), (owner_lo)),                                           \
+     XR_NUMERIC_NEG_CONSUMER_GUARD((consumer_bit)),                                                \
+     XR_NUMERIC_NEG_KIND_GUARD((kind)),                                                            \
+     xr_numeric_neg_eval((XrNumericNegKind) (kind), (int64_t) (i64), (double) (f64)))
+
+#define XR_NUMERIC_NEG_BIGINT_OWNER_PLAN(owner_hi, owner_lo, consumer_bit, limbs, length, sign)   \
+    (XR_NUMERIC_NEG_OWNER_GUARD((owner_hi), (owner_lo)),                                           \
+     XR_NUMERIC_NEG_CONSUMER_GUARD((consumer_bit)),                                                \
+     xr_numeric_neg_bigint_plan((limbs), (uint32_t) (length), (int8_t) (sign)))
 
 static inline uint64_t xr_numeric_core_i64_abs_magnitude(int64_t value) {
     if (value >= 0)
@@ -60,7 +154,7 @@ static inline int64_t xr_numeric_core_i64_mul_wrap(int64_t a, int64_t b) {
 }
 
 static inline int64_t xr_numeric_core_i64_neg_wrap(int64_t value) {
-    return (int64_t) (-(uint64_t) value);
+    return xr_numeric_neg_eval(XR_NUMERIC_NEG_I64, value, 0.0).i64;
 }
 
 static inline int64_t xr_numeric_core_i64_div_wrap(int64_t a, int64_t b) {

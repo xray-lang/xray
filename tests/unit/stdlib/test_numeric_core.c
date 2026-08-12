@@ -78,6 +78,48 @@ TEST(numeric_core_integer_arithmetic_wraps) {
     ASSERT_EQ_INT(xr_numeric_core_i64_neg_wrap(INT64_MIN), INT64_MIN);
 }
 
+TEST(numeric_neg_owner_freezes_scalar_bits_and_bigint_sign) {
+    XrNumericNegResult scalar = XR_NUMERIC_NEG_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,
+        XR_SEM_CONSUMER_VM, XR_NUMERIC_NEG_I64, INT64_MIN, 0.0);
+    ASSERT_EQ_INT(scalar.i64, INT64_MIN);
+    scalar = XR_NUMERIC_NEG_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, XR_NUMERIC_NEG_I64, INT64_MAX, 0.0);
+    ASSERT_EQ_INT(scalar.i64, -INT64_MAX);
+
+    uint64_t input_bits = UINT64_C(0x0000000000000000);
+    double input = 0.0;
+    memcpy(&input, &input_bits, sizeof(input));
+    scalar = xr_numeric_neg_eval(XR_NUMERIC_NEG_F64, 0, input);
+    uint64_t result_bits = 0;
+    memcpy(&result_bits, &scalar.f64, sizeof(result_bits));
+    ASSERT_EQ_UINT(result_bits, UINT64_C(0x8000000000000000));
+
+    input_bits = UINT64_C(0xfff8123456789abc);
+    memcpy(&input, &input_bits, sizeof(input));
+    scalar = xr_numeric_neg_eval(XR_NUMERIC_NEG_F64, 0, input);
+    memcpy(&result_bits, &scalar.f64, sizeof(result_bits));
+    ASSERT_EQ_UINT(result_bits, UINT64_C(0x7ff8123456789abc));
+
+    const uint32_t positive[2] = {0, 1};
+    const uint32_t zero[1] = {0};
+    const uint32_t denormalized[2] = {1, 0};
+    XrNumericNegBigIntPlan plan = XR_NUMERIC_NEG_BIGINT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,
+        XR_SEM_CONSUMER_RUNTIME, positive, 2, 1);
+    ASSERT_TRUE(plan.valid);
+    ASSERT_EQ_INT(plan.length, 2);
+    ASSERT_EQ_INT(plan.result_sign, -1);
+    plan = xr_numeric_neg_bigint_plan(positive, 2, -1);
+    ASSERT_TRUE(plan.valid);
+    ASSERT_EQ_INT(plan.result_sign, 1);
+    plan = xr_numeric_neg_bigint_plan(zero, 1, 1);
+    ASSERT_TRUE(plan.valid);
+    ASSERT_EQ_INT(plan.result_sign, 1);
+    ASSERT_FALSE(xr_numeric_neg_bigint_plan(denormalized, 2, 1).valid);
+}
+
 TEST(numeric_core_integer_div_mod_edges_match_language) {
     ASSERT_EQ_INT(xr_numeric_core_i64_div_wrap(INT64_MIN, -1), INT64_MIN);
     ASSERT_EQ_INT(xr_numeric_core_i64_mod_wrap(INT64_MIN, -1), 0);
@@ -468,6 +510,7 @@ RUN_TEST(numeric_core_hex_matches_signed_magnitude_rule);
 RUN_TEST(numeric_core_abs_wraps_int64_min);
 RUN_TEST(numeric_core_math_abs_preserves_int_or_promotes_min);
 RUN_TEST(numeric_core_integer_arithmetic_wraps);
+RUN_TEST(numeric_neg_owner_freezes_scalar_bits_and_bigint_sign);
 RUN_TEST(numeric_core_integer_div_mod_edges_match_language);
 RUN_TEST(numeric_core_shift_counts_are_mod64);
 RUN_TEST(bitwise_binary_owner_freezes_scalar_and_bigint_edges);

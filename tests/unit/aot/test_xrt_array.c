@@ -69,6 +69,7 @@ static void test_free_aligned(void *ptr) {
 #pragma clang diagnostic ignored "-Wunused-function"
 #endif
 #include "../../../src/aot/xrt_coll.h"
+#include "../../../src/aot/xrt_arith.h"
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -674,6 +675,30 @@ static void test_stack_closure_borrows_cell_upval(void) {
     xrt_release(cell);
 }
 
+static void test_hosted_numeric_neg_owner_preserves_scalar_and_bigint_edges(void) {
+    XrValue integer = xrt_neg(XR_FROM_INT(INT64_MIN));
+    ASSERT_EQ_INT(integer.i, INT64_MIN, "hosted integer negation wraps through shared owner");
+
+    uint64_t input_bits = UINT64_C(0x7ff8000000001234);
+    double input = 0.0;
+    memcpy(&input, &input_bits, sizeof(input));
+    XrValue floating = xrt_neg(XR_FROM_FLOAT(input));
+    uint64_t output_bits = 0;
+    memcpy(&output_bits, &floating.f, sizeof(output_bits));
+    ASSERT_TRUE(output_bits == UINT64_C(0xfff8000000001234),
+                "hosted float negation toggles only the sign bit");
+
+    XrValue positive = xrt_bigint_from_small(INT64_C(4294967296));
+    XrValue negative = xrt_neg(positive);
+    const xrt_bigint_view_t *view = xrt_bigint_view(negative);
+    ASSERT_EQ_INT(view->sign, -1, "hosted BigInt negation gets owner-planned negative sign");
+    ASSERT_EQ_INT(view->len, 2, "hosted BigInt negation preserves magnitude length");
+    ASSERT_EQ_INT(view->limbs[0], 0, "hosted BigInt negation preserves low limb");
+    ASSERT_EQ_INT(view->limbs[1], 1, "hosted BigInt negation preserves high limb");
+    xrt_release(positive);
+    xrt_release(negative);
+}
+
 int main(void) {
     test_release_slice_abi_is_data_and_length();
     test_small_array_uses_inline_storage();
@@ -692,6 +717,7 @@ int main(void) {
     test_stringbuilder_release_frees_arc_object_and_buffer();
     test_iterator_release_balances_source_and_arc_object();
     test_stack_closure_borrows_cell_upval();
+    test_hosted_numeric_neg_owner_preserves_scalar_and_bigint_edges();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;
 }

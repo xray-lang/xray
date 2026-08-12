@@ -3994,7 +3994,8 @@ if(BUILD_TESTS)
     set_tests_properties(semantic_owner_inventory PROPERTIES
         LABELS "meta;semantic-owner;shared-core"
         PROCESSORS 1
-        TIMEOUT 30
+        COST 51
+        TIMEOUT 120
     )
 
     add_test(

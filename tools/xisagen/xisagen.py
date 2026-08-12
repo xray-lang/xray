@@ -1832,7 +1832,7 @@ XI_VM_TEMPLATE_BITWISE_UNARY = {
 }
 
 XI_VM_TEMPLATE_UNARY = {
-    'xi.neg': ('XVM_TEMPLATE_UNARY_NEG_CASE', '"-"'),
+    'xi.neg': ('XVM_TEMPLATE_UNARY_NEG_CASE', None),
     'xi.not': ('XVM_TEMPLATE_UNARY_NOT_CASE', '"!"'),
 }
 
@@ -2382,7 +2382,10 @@ def generate_xi_vm_template_unary_dispatch(entries: list[XiLoweringDef]) -> str:
     for entry in unary_entries:
         opcode = XI_VM_TEMPLATE_OPCODES[entry.op_name]
         macro, op_name = XI_VM_TEMPLATE_UNARY[entry.op_name]
-        lines.append(f'{macro}({opcode}, {op_name})')
+        if op_name is None:
+            lines.append(f'{macro}({opcode})')
+        else:
+            lines.append(f'{macro}({opcode}, {op_name})')
     lines.append('')
     return '\n'.join(lines)
 
@@ -4327,7 +4330,8 @@ def _test_xi_lowering_parser():
                       {'vm-bytecode': 'xi_emit_arith'}, {}, {},
                       template='value-unary'),
     ])
-    assert 'XVM_TEMPLATE_UNARY_NEG_CASE(OP_UNM, "-")' in vm_unary
+    assert 'XVM_TEMPLATE_UNARY_NEG_CASE(OP_UNM)' in vm_unary
+    assert '"-"' not in vm_unary
     assert 'XVM_TEMPLATE_UNARY_NOT_CASE(OP_NOT, "!")' in vm_unary
     vm_arith_binary = generate_xi_vm_template_arith_binary_dispatch([
         XiLoweringDef('xi.add', 'ADD', ['vm-bytecode'], ['vm-bytecode'],

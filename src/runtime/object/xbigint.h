@@ -33,6 +33,7 @@
 #include "../mem/xobj_header.h"
 #include "../../base/xdefs.h"
 #include "../../shared/xr_bits_core.h"
+#include "../../shared/xr_numeric_core.h"
 #include <stdint.h>
 #include <stdbool.h>
 

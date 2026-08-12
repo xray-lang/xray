@@ -162,14 +162,17 @@ static inline XrValue xrt_bigint_addsub(XrValue av, XrValue bv, int subtract) {
 
 static inline XrValue xrt_bigint_neg_val(XrValue av) {
     const xrt_bigint_view_t *a = xrt_bigint_view(av);
+    XrNumericNegBigIntPlan plan = XR_NUMERIC_NEG_BIGINT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, a ? a->limbs : NULL, a ? a->len : 0, a ? a->sign : 0);
+    if (!plan.valid)
+        xrt_throw_exc(xr_box_str("E0404: invalid BigInt operand"));
     XrValue rv;
-    uint32_t n = (a && a->len) ? a->len : 1;
+    uint32_t n = plan.length;
     xrt_bigint_view_t *r = xrt_bigint_new(n, &rv);
-    if (a) {
-        memcpy(r->limbs, a->limbs, (size_t) a->len * sizeof(uint32_t));
-        r->len = a->len ? a->len : 1;
-        r->sign = xrt_bigint_is_zero_v(a) ? 1 : (int8_t) -(a->sign < 0 ? -1 : 1);
-    }
+    memcpy(r->limbs, a->limbs, (size_t) plan.length * sizeof(uint32_t));
+    r->len = plan.length;
+    r->sign = plan.result_sign;
     xrt_bigint_norm(r);
     return rv;
 }
@@ -599,13 +602,21 @@ static inline XrValue xrt_mod(XrValue a, XrValue b) {
 }
 
 static inline XrValue xrt_neg(XrValue a) {
-    if (a.tag == XR_TAG_I64)
-        return XR_FROM_INT(xr_i64_neg_wrap(a.i));
+    if (a.tag == XR_TAG_I64) {
+        XrNumericNegResult result = XR_NUMERIC_NEG_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,
+            XR_SEM_CONSUMER_AOT_HOSTED, XR_NUMERIC_NEG_I64, a.i, 0.0);
+        return XR_FROM_INT(result.i64);
+    }
     if (a.tag == XR_TAG_BIGINT)
         return xrt_bigint_neg_val(a);
-    if (a.tag == XR_TAG_F64)
-        return XR_FROM_FLOAT(-a.f);
-    return XR_FROM_INT(0);
+    if (a.tag == XR_TAG_F64) {
+        XrNumericNegResult result = XR_NUMERIC_NEG_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,
+            XR_SEM_CONSUMER_AOT_HOSTED, XR_NUMERIC_NEG_F64, 0, a.f);
+        return XR_FROM_FLOAT(result.f64);
+    }
+    xrt_throw_exc(xr_box_str("E0404: operand must be numeric"));
 }
 
 /* =========================================================================

@@ -9,5 +9,5 @@
 #error "XVM_TEMPLATE_UNARY_NOT_CASE must be defined before including this file"
 #endif
 
-XVM_TEMPLATE_UNARY_NEG_CASE(OP_UNM, "-")
+XVM_TEMPLATE_UNARY_NEG_CASE(OP_UNM)
 XVM_TEMPLATE_UNARY_NOT_CASE(OP_NOT, "!")

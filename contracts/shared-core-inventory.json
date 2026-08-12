@@ -633,10 +633,17 @@
       "id": "numeric",
       "owner": "shared-kernel",
       "production_callers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xrt.h",
+        "src/aot/xrt_core_freestanding.h",
         "src/aot/xrt_method.h",
         "src/aot/xrt_value.h",
+        "src/ir/xi_opt.c",
+        "src/ir/xi_opt_sccp.c",
+        "src/runtime/object/xbigint.h",
         "src/runtime/value/xfloat_methods.h",
         "src/runtime/xstrbuf.c",
+        "src/vm/xvm.c",
         "stdlib/math/math.c"
       ],
       "profiles": [
@@ -659,7 +666,9 @@
         "xr_numeric_core_i64_mul_wrap",
         "xr_numeric_core_i64_neg_wrap",
         "xr_numeric_core_i64_sub_wrap",
-        "xr_numeric_core_to_fixed_decimals"
+        "xr_numeric_core_to_fixed_decimals",
+        "xr_numeric_neg_bigint_plan",
+        "xr_numeric_neg_eval"
       ],
       "status": "production",
       "test_callers": [

@@ -7650,6 +7650,36 @@ TEST(cgen_bits_not_uses_stable_owner_adapter) {
     xi_func_free(ir);
 }
 
+TEST(cgen_numeric_neg_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI,
+                                          XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
+           "numeric-neg owner must publish CGen as a mechanical consumer");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO);
+    assert(adapter != NULL && strcmp(adapter, "xrt_numeric_neg_eval") == 0 &&
+           "CGen must resolve the stable numeric-neg owner adapter");
+
+    const char *src = "fn negInt(value: int) -> int { return -value }\n"
+                      "fn negFloat(value: float) -> float { return -value }\n"
+                      "fn negBig(value: BigInt) -> BigInt { return -value }\n"
+                      "print(negInt(42))\n"
+                      "print(negFloat(1.5))\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "numeric-neg IR compilation failed");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "stable-owner numeric-neg C generation failed");
+    assert(contains(code, "xrt_numeric_neg_eval(XR_NUMERIC_NEG_I64") &&
+           contains(code, "xrt_numeric_neg_eval(XR_NUMERIC_NEG_F64") &&
+           "generated scalar C must call the numeric-neg owner adapter");
+    assert(!contains(code, "-(uint64_t)") &&
+           "generated C must not recreate integer negation semantics");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_bitwise_binary_uses_stable_owner_adapter) {
     assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,
                                           XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,
@@ -13055,6 +13085,7 @@ int main(void) {
     run_cgen_typeid_uses_stable_owner_adapter();
     run_cgen_exact_bits_use_stable_owner_adapter();
     run_cgen_bits_not_uses_stable_owner_adapter();
+    run_cgen_numeric_neg_uses_stable_owner_adapter();
     run_cgen_bitwise_binary_uses_stable_owner_adapter();
     run_cgen_numeric_width_uses_stable_owner_adapter();
     run_cgen_byte_slice_scalar_uses_stable_owner_adapter();

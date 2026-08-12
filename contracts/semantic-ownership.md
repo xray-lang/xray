@@ -64,6 +64,15 @@ freestanding AOT, CGen, and runtime code may only adapt representation,
 allocation, and errors; reviving private shift helpers or raw CGen shift
 emission fails the owner ratchet.
 
+`shared.numeric-neg` owns `xi.neg` across signed 64-bit integers, IEEE-754
+floats, and normalized BigInts. Integer negation wraps at `INT64_MIN`; floating
+negation toggles only the sign bit and therefore preserves signed zero and NaN
+payloads; BigInt zero normalization and sign inversion come from the shared
+plan. VM, optimizer, hosted and freestanding AOT, CGen, and runtime code may
+only adapt value representation, allocation, and errors. Operator overloads,
+raw C unary negation, private constant folding, and backend-local BigInt sign
+rules are forbidden by the owner ratchet.
+
 Higher-order array operations retain the existing native typed fast path for
 pure uncaptured callbacks. Captured, dynamic, generic, cross-module, and tagged
 forms follow the explicit matrix in `hof-shape-matrix.toml`; unknown target or
@@ -71,9 +80,9 @@ effect evidence cannot be guessed inside CGen.
 
 ## Digest anchors
 
-anchor-sha256: contracts/semantic-owners.toml e01f67078d6b0f7e856972edb66839f6511c9169cea27c18bda7d1497f8911c0
-anchor-sha256: contracts/semantic-owner-registry.json bc186ca20bab6a32b6b910ca3c58724a525a8e2ceeb5eb41de64ae06eb975217
+anchor-sha256: contracts/semantic-owners.toml 24226e03b60ecb2d60b7b7223a1573597bccada1c3eb5b1d3eb081c0b200821b
+anchor-sha256: contracts/semantic-owner-registry.json 4856f8f4977aa0dd0a100d60f2eb19eceaff9829840186f30c47728a439d5d8f
 anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
-anchor-sha256: contracts/shared-core-inventory.json 079cffccae81c6161cdf3f6eadb974b32366e6a866ca961d7e19530c9c9a660a
-anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h 591ba3da92b0e036ac441d33c6cd01e38eb54e6ecbe2c1297d03c649cf546482
-anchor-sha256: scripts/check_semantic_owners.py c10d76ef2c6506830a2f4567644a9e59f2de67fd5c7d37ab2d865ba528ebee24
+anchor-sha256: contracts/shared-core-inventory.json 06d8ee71482be4a2243e2fe158b922f2ee2478e98dace6028b714386fba845e6
+anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h af139a21c4654f68583252be4c84b7054d259c186a44fd62bdf6e85feb19512f
+anchor-sha256: scripts/check_semantic_owners.py a3dc140669d0ddf1f18d6bd9915b2764b5d5dfd7ca484d0318aced105717bb71

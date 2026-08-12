@@ -39,6 +39,7 @@
 #include "../shared/xr_raw_memory_core.h"  // L0: unsafe non-overlapping memory copy
 #include "../shared/xr_bits_core.h"        // L0: exact-width compiler bit intrinsics
 #include "../shared/xr_range_core.h"       // L0: canonical Range semantics
+#include "../shared/xr_numeric_core.h"     // L0: canonical numeric negation
 #include "../shared/xr_numeric_conversion_core.h"  // L0: deterministic scalar narrowing
 #define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
@@ -64,6 +65,10 @@
     XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI,                                        \
                          XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_AOT_HOSTED, start, end, \
                          inclusive_end)
+#define xrt_numeric_neg_eval(kind, i64, f64)                                                       \
+    XR_NUMERIC_NEG_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI,                             \
+                               XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,                             \
+                               XR_SEM_CONSUMER_AOT_HOSTED, kind, i64, f64)
 #define xrt_raw_memory_copy_nonoverlap(dst, src, count)                                           \
     XR_RAW_MEMORY_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,                     \
                                    XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,                     \

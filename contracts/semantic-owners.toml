@@ -277,6 +277,23 @@ fixtures = [
 ]
 
 [[operation]]
+id = "numeric-neg"
+observable_contract = "src/shared/xr_numeric_core.h"
+semantic_kernel = "src/shared/xr_numeric_core.h"
+vm_adapter = "src/vm/xvm_dispatch_arith.inc.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "shared.numeric-neg"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_numeric_core.c",
+  "tests/unit/aot/test_xrt_numeric_neg_owner_freestanding.c",
+  "tests/unit/aot/test_xrt_array.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/regression/03_operators/0397_numeric_neg_owner_edges.xr",
+  "tests/aot/basic/numeric_neg_owner.xr",
+]
+
+[[operation]]
 id = "byte-slice-compare"
 observable_contract = "src/shared/xr_byte_slice_scalar_core.h"
 semantic_kernel = "src/shared/xr_byte_slice_scalar_core.h"

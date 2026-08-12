@@ -1032,10 +1032,13 @@ XrBigInt *xr_bigint_mod(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
 
 XrBigInt *xr_bigint_neg(struct XrCoroutine *coro, XrBigInt *a) {
     XR_DCHECK(a != NULL, "bigint_neg: NULL a");
+    XrNumericNegBigIntPlan plan = XR_NUMERIC_NEG_BIGINT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,
+        XR_SEM_CONSUMER_RUNTIME, a->limbs, a->len, a->sign);
+    XR_DCHECK(plan.valid, "bigint_neg: invalid normalized BigInt");
     XrBigInt *result = xr_bigint_copy(coro, a);
-    if (result && !(result->len == 1 && result->limbs[0] == 0)) {
-        result->sign = -result->sign;
-    }
+    if (result)
+        result->sign = plan.result_sign;
     return result;
 }
 

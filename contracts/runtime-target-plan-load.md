@@ -114,7 +114,7 @@ roots, or general module activation.
    unavailable, rejects compiler and `xi_` symbols, and treats any new `xvm_`
    symbol as uninventoried legacy residue.
 
-anchor-sha256: CMakeLists.txt c3c9d9c6d90e8f449f169a907438f2b12e3eb6baab2cf965a6fcf1c0f504a8b3
+anchor-sha256: CMakeLists.txt fc14912490a1910dd4fc5f94f978e050c50e3a1d6d213c2f8a98ea2cd6c95b85
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h 38fd73865e25d62392d8dd0abfd5e6193edf2356803a817349db14c43ccf9874
 anchor-sha256: src/plan/format/xr_artifact_kind.c 289fb506284ed97372e211225dcb5c1d205d7149416ddc96abb2a7f3b8704b39
@@ -144,7 +144,7 @@ anchor-sha256: contracts/target-machine/legacy-product-residue.json 052cac030a7f
 anchor-sha256: scripts/check_legacy_product_residue.py 0388d636da6384ea62bfaf8401764955541be24b207511727c33af2d85f3a11f
 anchor-sha256: tests/unit/plan/test_target_plan.c db5b273e531a8c476689fc54377ed67614a8c872fb4828fcd2e18c3b1cec7995
 anchor-sha256: tests/unit/plan/test_xtp_format.c fd37dc7a7082ad57e5c6d414eb8d9a7d25f9d3901d33483653fe1aff88e82fdf
-anchor-sha256: tests/unit/CMakeLists.txt b52683af52142a11c35dd0e610c897057f9b52ce544e1f4ea18402b54c7fac16
+anchor-sha256: tests/unit/CMakeLists.txt 23c9e8a7fdac7c760c712bc08dcc5a88651ced5eb5910261583c8bc3440cf383
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 2f1c3edbdb31af5e60f63d8333bad6685d4b415b09f02c03a89f11e816f6bbfb
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 821fa25b6c00814378bfcee1b9f49a8bad528f06fb28f3af0a374166c182feee
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 3ec8c875fcabbaeb42cc83a4a20782b3b2edab52a7912362215483a40da241e6

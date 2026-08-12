@@ -109,6 +109,11 @@ SHIFT_AOT_BINDINGS = (
     "src/aot/xrt.h",
     "src/aot/xrt_core_freestanding.h",
 )
+NUMERIC_NEG_OPERATIONS = {"xi.neg"}
+NUMERIC_NEG_AOT_BINDINGS = (
+    "src/aot/xrt.h",
+    "src/aot/xrt_core_freestanding.h",
+)
 NUMERIC_WIDTH_OPERATIONS = {
     "xi.narrow.i8",
     "xi.narrow.u8",
@@ -947,6 +952,106 @@ def verify_shift_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_numeric_neg_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.numeric-neg")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.numeric-neg"), None)
+    if owner is None or set(owner.get("operations", [])) != NUMERIC_NEG_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.numeric-neg operation family")
+
+    core_text = (root / "src/shared/xr_numeric_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_NUMERIC_NEG_OWNER_APPLY",
+                  "XR_NUMERIC_NEG_BIGINT_OWNER_PLAN", "XR_NUMERIC_NEG_KIND_GUARD",
+                  "xr_numeric_neg_eval",
+                  "xr_numeric_neg_bigint_plan"):
+        if token not in core_text:
+            errors.append(f"src/shared/xr_numeric_core.h: shared numeric-neg owner lacks {token}")
+
+    vm_text = (root / "src/vm/xvm_dispatch_arith.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    vm_start = vm_text.find("#define XVM_TEMPLATE_UNARY_NEG_CASE")
+    vm_end = vm_text.find("#define XVM_TEMPLATE_UNARY_NOT_CASE", vm_start)
+    vm_body = vm_text[vm_start:vm_end] if vm_start >= 0 and vm_end > vm_start else ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_NUMERIC_NEG_OWNER_APPLY",
+                  "xr_bigint_neg"):
+        if token not in vm_body:
+            errors.append(f"src/vm/xvm_dispatch_arith.inc.c: VM numeric neg lacks {token}")
+    for token in ("XVM_TRY_UNARY_OP_OVERLOAD", "-(uint64_t)", "-XR_TO_FLOAT"):
+        if token in vm_body:
+            errors.append(
+                f"src/vm/xvm_dispatch_arith.inc.c: retired numeric-neg semantics revived: {token}")
+
+    vm_generated = (root / "src/vm/xvm_template_unary_gen.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    if "XVM_TEMPLATE_UNARY_NEG_CASE(OP_UNM)" not in vm_generated or \
+            'XVM_TEMPLATE_UNARY_NEG_CASE(OP_UNM, "-")' in vm_generated:
+        errors.append("src/vm/xvm_template_unary_gen.inc.c: numeric-neg operator alias revived")
+
+    runtime_text = (root / "src/runtime/object/xbigint.c").read_text(
+        encoding="utf-8", errors="strict")
+    runtime_body = extract_c_function(runtime_text, "xr_bigint_neg")
+    if runtime_body is None or "XR_NUMERIC_NEG_BIGINT_OWNER_PLAN" not in runtime_body:
+        errors.append("src/runtime/object/xbigint.c: BigInt neg bypasses shared owner")
+    elif "result->sign = -" in runtime_body or "result->sign = -result->sign" in runtime_body:
+        errors.append("src/runtime/object/xbigint.c: private BigInt sign negation revived")
+
+    hosted_arith = (root / "src/aot/xrt_arith.h").read_text(
+        encoding="utf-8", errors="strict")
+    hosted_neg = extract_c_function(hosted_arith, "xrt_neg")
+    hosted_bigint_neg = extract_c_function(hosted_arith, "xrt_bigint_neg_val")
+    if hosted_neg is None or hosted_neg.count("XR_NUMERIC_NEG_OWNER_APPLY") != 2:
+        errors.append("src/aot/xrt_arith.h: hosted scalar neg bypasses shared owner")
+    elif any(token in hosted_neg for token in ("xr_i64_neg_wrap", "-a.f",
+                                                "return XR_FROM_INT(0)")):
+        errors.append("src/aot/xrt_arith.h: retired hosted scalar neg semantics revived")
+    if hosted_bigint_neg is None or "XR_NUMERIC_NEG_BIGINT_OWNER_PLAN" not in hosted_bigint_neg:
+        errors.append("src/aot/xrt_arith.h: hosted BigInt neg bypasses shared owner")
+    elif "r->sign = -" in hosted_bigint_neg or "xrt_bigint_is_zero_v" in hosted_bigint_neg:
+        errors.append("src/aot/xrt_arith.h: private hosted BigInt neg semantics revived")
+
+    for relative in NUMERIC_NEG_AOT_BINDINGS:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "XR_NUMERIC_NEG_OWNER_APPLY" not in text or
+                "xrt_numeric_neg_eval" not in text):
+            errors.append(f"{relative}: AOT numeric-neg adapter bypasses stable owner")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(
+        encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_numeric_neg_adapter_name")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append("src/aot/xi_cgen.c: CGen numeric-neg does not resolve by stable owner ID")
+    for function_name in ("cg_const_int_value_matches_bits",
+                          "cg_const_float_value_matches_literal"):
+        body = extract_c_function(cgen_text, function_name)
+        if body is None or "xr_numeric_neg_eval" not in body:
+            errors.append(f"src/aot/xi_cgen.c: {function_name} bypasses shared numeric-neg core")
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    emitter_body = extract_c_function(dispatch_text, "xicgen_neg")
+    if emitter_body is None or "cg_numeric_neg_adapter_name" not in emitter_body or \
+            "xrt_neg" not in emitter_body:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: numeric-neg bypasses owner adapters")
+    elif any(token in emitter_body for token in
+             ("-(uint64_t)", 'fprintf(out, "-")', "xicgen_emit_bigint_literal_value")):
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: raw numeric-neg semantics revived")
+
+    optimizer_text = (root / "src/ir/xi_opt.c").read_text(encoding="utf-8", errors="strict")
+    optimizer_body = extract_c_function(optimizer_text, "xi_opt_const_fold")
+    if optimizer_body is None or optimizer_body.count("xr_numeric_neg_eval") < 2:
+        errors.append("src/ir/xi_opt.c: numeric-neg constant folding bypasses shared core")
+    sccp_text = (root / "src/ir/xi_opt_sccp.c").read_text(encoding="utf-8", errors="strict")
+    sccp_body = extract_c_function(sccp_text, "eval_unary")
+    if sccp_body is None or sccp_body.count("xr_numeric_neg_eval") < 2:
+        errors.append("src/ir/xi_opt_sccp.c: SCCP numeric-neg bypasses shared core")
+    return errors
+
+
 def verify_bitwise_binary_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     marker = owner_macro_prefix("shared.bitwise-binary")
@@ -1585,6 +1690,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_range_ratchet(root, registry))
         errors.extend(verify_bitwise_binary_ratchet(root, registry))
         errors.extend(verify_shift_ratchet(root, registry))
+        errors.extend(verify_numeric_neg_ratchet(root, registry))
         errors.extend(verify_numeric_width_ratchet(root, registry))
         errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
         errors.extend(verify_byte_slice_compare_ratchet(root, registry))

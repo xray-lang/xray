@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "a8cbe9613aa51b14cf2c9ce61c0857264566b2b26715a32d68bd35eb915e13d6",
+  "canonical_fingerprint": "54fbfdf6157b9487f3c4d0611f469ac2ab6673c66a680b379f9e1f5e05e27a96",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -418,6 +418,58 @@
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
           "symbol": "cg_numeric_width_adapter_name"
+        }
+      ]
+    },
+    {
+      "owner": "shared.numeric-neg",
+      "owner_id": "6b56ca99f6f6f6ab5def55389e5c70b3",
+      "owner_id_hi": "0x6b56ca99f6f6f6ab",
+      "owner_id_lo": "0x5def55389e5c70b3",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.neg"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen",
+        "runtime"
+      ],
+      "consumer_bits": "0x0000003f",
+      "cgen_adapter": "xrt_numeric_neg_eval",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_arith.inc.c",
+          "symbol": "XR_NUMERIC_NEG_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_neg_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_neg_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_neg_adapter_name"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/object/xbigint.c",
+          "symbol": "XR_NUMERIC_NEG_BIGINT_OWNER_PLAN"
         }
       ]
     },
@@ -2797,28 +2849,6 @@
       ]
     },
     {
-      "owner": "xi.neg",
-      "owner_id": "11734ea02eb6de121243534fdaa56e4a",
-      "owner_id_hi": "0x11734ea02eb6de12",
-      "owner_id_lo": "0x1243534fdaa56e4a",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.neg"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
       "owner": "xi.object.get.f",
       "owner_id": "2fc870f04255d036e6f5622cee0599c2",
       "owner_id_hi": "0x2fc870f04255d036",
@@ -4927,21 +4957,51 @@
       "operation_id": "11734ea02eb6de121243534fdaa56e4a",
       "operation_id_hi": "0x11734ea02eb6de12",
       "operation_id_lo": "0x1243534fdaa56e4a",
-      "owner": "xi.neg",
-      "owner_id": "11734ea02eb6de121243534fdaa56e4a",
-      "owner_id_hi": "0x11734ea02eb6de12",
-      "owner_id_lo": "0x1243534fdaa56e4a",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-neg",
+      "owner_id": "6b56ca99f6f6f6ab5def55389e5c70b3",
+      "owner_id_hi": "0x6b56ca99f6f6f6ab",
+      "owner_id_lo": "0x5def55389e5c70b3",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen",
+        "runtime"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000003f",
+      "cgen_adapter": "xrt_numeric_neg_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_arith.inc.c",
+          "symbol": "XR_NUMERIC_NEG_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_neg_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_neg_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_neg_adapter_name"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/object/xbigint.c",
+          "symbol": "XR_NUMERIC_NEG_BIGINT_OWNER_PLAN"
         }
       ]
     },

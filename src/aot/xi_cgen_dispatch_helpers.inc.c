@@ -1012,36 +1012,31 @@ static void xicgen_neg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                        const char *prefix) {
     (void) f;
     (void) prefix;
-    if (v && xr_type_is_builtin_named_class(v->type, "BigInt")) {
-        const XiValue *arg = v->nargs > 0 ? v->args[0] : NULL;
-        if (arg && arg->op == XI_CONST && arg->aux &&
-            xr_type_is_builtin_named_class(arg->type, "BigInt")) {
-            xicgen_emit_bigint_literal_value(ctx, out, arg, true);
-            return;
-        }
-        if (ctx)
-            ctx->error = true;
-        fprintf(stderr,
-                "[xi_cgen] ERROR: AOT BigInt unary negation requires allocation at line %u\n",
-                (unsigned) (v ? v->line : 0));
+    const char *adapter = cg_numeric_neg_adapter_name(ctx);
+    if (!adapter || !v || v->nargs != 1 || !v->args[0] ||
+        (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)) {
+        cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
     }
     XrRep result_rep = cg_rep(v);
     XrRep a_rep = cg_rep(v->args[0]);
-    if (result_rep == XR_REP_TAGGED || a_rep == XR_REP_TAGGED) {
+    if (xr_type_is_builtin_named_class(v->type, "BigInt") || result_rep == XR_REP_TAGGED ||
+        a_rep == XR_REP_TAGGED) {
         fprintf(out, "xrt_neg(");
-        emit_vref(out, v->args[0]);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (result_rep == XR_REP_I64) {
-        // -INT64_MIN is signed UB in C; negate via uint64 (wrap, matches
-        // tagged xrt_neg).
-        fprintf(out, "(int64_t) (-(uint64_t) (");
-        emit_vref(out, v->args[0]);
-        fprintf(out, "))");
+        fprintf(out, "%s(XR_NUMERIC_NEG_I64, ", adapter);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        fprintf(out, ", 0.0).i64");
+    } else if (result_rep == XR_REP_F64) {
+        fprintf(out, "%s(XR_NUMERIC_NEG_F64, 0, ", adapter);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_F64);
+        fprintf(out, ").f64");
     } else {
-        fprintf(out, "-");
-        emit_vref(out, v->args[0]);
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
     }
 }
 

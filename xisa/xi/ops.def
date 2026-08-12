@@ -2648,7 +2648,6 @@
     xi.mul
     xi.div
     xi.mod
-    xi.neg
     xi.codegen.opaque
     xi.codegen.compiler-fence
     xi.eq
@@ -2792,6 +2791,7 @@
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
     xi.range
+    xi.neg
     xi.not
     xi.bnot
     xi.band
@@ -2895,6 +2895,27 @@
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xr_truthy")
     (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")
     (runtime "src/runtime/value/xvalue_truthy.c" "xr_value_is_truthy")
+  ))
+
+(define-xi-observable-owner shared.numeric-neg
+  :category shared-semantic-kernel
+  :operations (xi.neg)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+    runtime
+  )
+  :cgen-adapter xrt_numeric_neg_eval
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_arith.inc.c" "XR_NUMERIC_NEG_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_numeric_neg_eval")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_numeric_neg_eval")
+    (cgen "src/aot/xi_cgen.c" "cg_numeric_neg_adapter_name")
+    (runtime "src/runtime/object/xbigint.c" "XR_NUMERIC_NEG_BIGINT_OWNER_PLAN")
   ))
 
 (define-xi-observable-owner shared.range

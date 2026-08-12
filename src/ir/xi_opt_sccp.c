@@ -30,6 +30,7 @@
 #include "../base/xmalloc.h"
 #include "../shared/xr_int_arith.h"
 #include "../shared/xr_bits_core.h"
+#include "../shared/xr_numeric_core.h"
 #include "../runtime/value/xtype.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include <string.h>
@@ -326,9 +327,9 @@ static SccpCell eval_unary(uint16_t op, SccpCell a) {
     switch (op) {
         case XI_NEG:
             if (a.kind == SCCP_CONST_INT)
-                return sccp_int((int64_t) (-(uint64_t) a.ival));
+                return sccp_int(xr_numeric_neg_eval(XR_NUMERIC_NEG_I64, a.ival, 0.0).i64);
             if (a.kind == SCCP_CONST_FLOAT)
-                return sccp_float(-a.fval);
+                return sccp_float(xr_numeric_neg_eval(XR_NUMERIC_NEG_F64, 0, a.fval).f64);
             return sccp_bot();
         case XI_BNOT:
             if (a.kind == SCCP_CONST_INT)

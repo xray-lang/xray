@@ -535,17 +535,23 @@ vmcase(OP_MOD_U) {
         }                                                                                          \
     } while (0)
 
-#define XVM_TEMPLATE_UNARY_NEG_CASE(op, op_name)                                                   \
+#define XVM_TEMPLATE_UNARY_NEG_CASE(op)                                                            \
     vmcase(op) {                                                                                   \
         int a = GETARG_A(i);                                                                       \
         int b = GETARG_B(i);                                                                       \
         XrValue vb = R(b);                                                                         \
         if (XR_IS_INT(vb)) {                                                                       \
-            XR_SET_INT(R(a), (int64_t) (-(uint64_t) XR_TO_INT(vb)));                               \
+            XrNumericNegResult neg = XR_NUMERIC_NEG_OWNER_APPLY(                                  \
+                XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,     \
+                XR_SEM_CONSUMER_VM, XR_NUMERIC_NEG_I64, XR_TO_INT(vb), 0.0);                      \
+            XR_SET_INT(R(a), neg.i64);                                                             \
             vmbreak;                                                                               \
         }                                                                                          \
         if (XR_IS_FLOAT(vb)) {                                                                     \
-            R(a) = xr_float(-XR_TO_FLOAT(vb));                                                     \
+            XrNumericNegResult neg = XR_NUMERIC_NEG_OWNER_APPLY(                                  \
+                XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,     \
+                XR_SEM_CONSUMER_VM, XR_NUMERIC_NEG_F64, 0, XR_TO_FLOAT(vb));                      \
+            R(a) = xr_float(neg.f64);                                                              \
             vmbreak;                                                                               \
         }                                                                                          \
         if (XR_IS_BIGINT(vb)) {                                                                    \
@@ -554,7 +560,6 @@ vmcase(OP_MOD_U) {
             R(a) = XR_FROM_PTR(result);                                                            \
             vmbreak;                                                                               \
         }                                                                                          \
-        XVM_TRY_UNARY_OP_OVERLOAD(vb, a, op_name);                                                 \
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "operand must be numeric");                         \
     }
 

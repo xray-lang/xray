@@ -43,6 +43,7 @@
 #include "../os/os_thread.h"
 #include "../shared/xr_int_arith.h"
 #include "../shared/xr_bits_core.h"
+#include "../shared/xr_numeric_core.h"
 #include "xi_analysis.h"
 #include "xi_analysis_manager.h"
 #include "xi_edit.h"
@@ -725,7 +726,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
              * to preserve wrap-on-overflow semantics (matches VM and AOT). */
             int64_t unary_i = 0;
             if (v->op == XI_NEG && v->nargs == 1 && const_int_value(v->args[0], &unary_i)) {
-                rewrite_to_const_int(v, (int64_t) (0u - (uint64_t) unary_i));
+                rewrite_to_const_int(v, xr_numeric_neg_eval(XR_NUMERIC_NEG_I64, unary_i, 0.0).i64);
                 chg.values_changed = true;
                 continue;
             }
@@ -733,9 +734,8 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             /* Fold unary NEG on const float */
             double unary_f = 0.0;
             if (v->op == XI_NEG && v->nargs == 1 && const_float_value(v->args[0], &unary_f)) {
-                double val = unary_f;
-                val = -val;
-                rewrite_to_const_float(v, val);
+                rewrite_to_const_float(
+                    v, xr_numeric_neg_eval(XR_NUMERIC_NEG_F64, 0, unary_f).f64);
                 chg.values_changed = true;
                 continue;
             }

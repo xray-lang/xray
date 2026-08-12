@@ -1,0 +1,15 @@
+// VM/AOT/generated-C differential KAT for shared.numeric-neg.
+var min: int = -9223372036854775807 - 1
+var dynamic: int = 42
+print(-min)
+print(-dynamic)
+
+var floating: float = 1.5
+print(-floating)
+
+var positive = 4294967296.toBigInt()
+var negative = (-4294967296).toBigInt()
+var zero = 0.toBigInt()
+print((-positive).toString())
+print((-negative).toString())
+print((-zero).toString())

@@ -56,6 +56,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
 #include "../shared/xr_range_core.h"
+#include "../shared/xr_numeric_core.h"
 #define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
                               XR_SEM_OWNER_ID_SHARED_BITS_LO,                                     \
@@ -80,6 +81,10 @@ int memcmp(const void *a, const void *b, size_t n);
     XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI,                                        \
                          XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,       \
                          start, end, inclusive_end)
+#define xrt_numeric_neg_eval(kind, i64, f64)                                                       \
+    XR_NUMERIC_NEG_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI,                             \
+                               XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,                             \
+                               XR_SEM_CONSUMER_AOT_FREESTANDING, kind, i64, f64)
 #define xrt_raw_memory_copy_nonoverlap(dst, src, count)                                           \
     XR_RAW_MEMORY_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,                     \
                                    XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,                     \
@@ -1708,11 +1713,16 @@ static inline XrValue xrt_mod(XrValue a, XrValue b) {
 }
 
 static inline XrValue xrt_neg(XrValue a) {
-    if (XR_IS_INT(a))
-        return XR_FROM_INT(xrt_i64_neg(a.i));
-    if (XR_IS_FLOAT(a))
-        return XR_FROM_FLOAT(-a.f);
-    return XR_FROM_INT(0);
+    if (XR_IS_INT(a)) {
+        XrNumericNegResult result = xrt_numeric_neg_eval(XR_NUMERIC_NEG_I64, a.i, 0.0);
+        return XR_FROM_INT(result.i64);
+    }
+    if (XR_IS_FLOAT(a)) {
+        XrNumericNegResult result = xrt_numeric_neg_eval(XR_NUMERIC_NEG_F64, 0, a.f);
+        return XR_FROM_FLOAT(result.f64);
+    }
+    xrt_freestanding_trap("operand must be numeric");
+    return XR_NULL_VAL;
 }
 
 static inline void xrt_arc_init(void) {
