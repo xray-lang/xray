@@ -54,6 +54,15 @@ invalidation, compiler-session ownership, or any compatibility reader.
    Wrong keys, authority mismatches, old schemas, corrupt bytes, and valid
    artifacts for another semantic or target identity fail closed to
    recomputation.
+9. Parallel TargetPlan workers own disjoint input-indexed result rows. They may
+   read immutable SemanticPlan and TargetProfile authorities and use the
+   synchronized cache store, but they never install a plan into the compiler
+   bundle, emit diagnostics, or update shared statistics. The caller joins all
+   workers and then verifies, reports, and installs results strictly in input
+   order. Worker completion order therefore cannot change XTP bytes,
+   fingerprints, diagnostics, cache counters, or bundle order. Failure is
+   reported at the lowest canonical input index after all started workers have
+   joined and every independently owned plan is released.
 
 Changing the root-lock coverage, rejected-snapshot identity, quota reservation
 order, atomic publication sequence, directory/link boundary, lock cleanup, or
@@ -65,10 +74,16 @@ anchor-sha256: src/incremental/xr_cache_artifact_verify.h c70b37fb819f7bf64af9b4
 anchor-sha256: src/incremental/xr_cache_artifact_verify.c 90cc79eeffe2766ebd494d0056b4b0ede9681b846537714327a7428d01adeced
 anchor-sha256: src/incremental/xr_cache_store.h f34e4f86ba65f44cbc29356488f32cbc52088c8dda6848ff756a571c78c9b1d9
 anchor-sha256: src/incremental/xr_cache_store.c bb726097541fb71d58d463f106bc7f103c21295ffee344425221b67a094d305b
+anchor-sha256: src/incremental/xr_target_plan_tasks.h dc7f99c3207f141a3b92e0decb4522b4732d9b9f2aa1ad877a48a2ec479fbf2c
+anchor-sha256: src/incremental/xr_target_plan_tasks.c 8abba10c5512aa6a2e1f1410e848ca6e60661f6760b447284c091de4696ecae0
+anchor-sha256: src/aot/xaot_driver.h ab01aef3334ff626ff1f7e87e715e1a9e02df4bbe1c109bc50ac3f5b79748fa1
+anchor-sha256: src/aot/xaot_driver.c 014cbd126dcc9b96a88826fd4164e7cdb261a09823f3717f50aa5723825ab65e
 anchor-sha256: src/os/os_fs.h b1a95259a4952a1e33e1d2c109fd0955f5b00bff4db81e6a21abede9ec07fe84
 anchor-sha256: src/os/unix/fs_unix.c 5f86aaa44d1e794ca2cdeea814c1d115bd598e56b3e7dfe47d0c6726da187e54
 anchor-sha256: src/os/win/fs_win.c 4b9195ab156d94761c6c72c10a80fdb62a01838d1ec829ab42bbb5bc9bd71e2f
-anchor-sha256: tests/unit/CMakeLists.txt 3b70eacbac8d8c3001e6020c12c30103d55d630830949e0ab40af5ef18a8524a
+anchor-sha256: tests/unit/CMakeLists.txt b52683af52142a11c35dd0e610c897057f9b52ce544e1f4ea18402b54c7fac16
 anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c 8a7a0f35523e2f7b846a84e22f42521d43c2e70d0eb4342d4a3d13c58dfc1fb4
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
+anchor-sha256: tests/unit/incremental/test_target_plan_tasks.c e0f43f52131f25a93775c1d0726e7dfeacedba5a8dd4d25f82ce96ca8f1dd4af
+anchor-sha256: tests/unit/aot/test_xaot_driver.c a1ce878c1a582042f04b2d37415b431e89e069acbc070e91a28af464e2163892
 anchor-sha256: tests/unit/os/test_fs_atomic.c f8f6ee065dcb3c4b75ae24edb4e96d95253c540f5a40252cf79a10aa140ddb5f

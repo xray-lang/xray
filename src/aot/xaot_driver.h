@@ -111,6 +111,7 @@ typedef struct {
 } XaotModuleSource;
 
 typedef struct XaotTargetPlanCacheStats {
+    uint32_t workers;
     uint32_t hits;
     uint32_t misses;
     uint32_t rejected;
@@ -163,6 +164,7 @@ typedef struct XaotBuildOptions {
     const char *incremental_cache_dir;
     bool incremental_cache_rebuild;
     bool incremental_cache_verbose;
+    uint32_t target_plan_workers; /* zero selects the host CPU count */
     const char *const *imported_summary_payloads;
     uint32_t imported_summary_payload_count;
 } XaotBuildOptions;

@@ -57,6 +57,7 @@
 #include "../toolchain/xcompiler_session.h"
 #include "../incremental/xr_cache_artifact_verify.h"
 #include "../incremental/xr_cache_store.h"
+#include "../incremental/xr_target_plan_tasks.h"
 #include "../plan/format/xr_xtp_schema.h"
 #include "../plan/target/xr_target_builder.h"
 #include <stdio.h>
@@ -1654,120 +1655,91 @@ static XrCacheFingerprint xaot_target_plan_optimization_budget(void) {
 
 static bool xaot_build_module_target_plans(
     XaotBundle *bundle, XrTargetProfile *profile, XrCacheStore *cache_store,
-    bool rebuild, bool verbose, XaotTargetPlanCacheStats *stats) {
+    bool rebuild, bool verbose, uint32_t worker_limit,
+    XaotTargetPlanCacheStats *stats) {
     if (!bundle || !profile || !bundle->modules ||
         bundle->nmodules == 0 || !stats ||
+        bundle->nmodules > SIZE_MAX / sizeof(XrTargetPlanTaskInput) ||
+        bundle->nmodules > SIZE_MAX / sizeof(XrTargetPlanTaskResult) ||
         !xr_target_profile_verify(profile, NULL, 0))
         return false;
+    XrTargetPlanTaskInput *inputs = (XrTargetPlanTaskInput *) xr_calloc(
+        bundle->nmodules, sizeof(*inputs));
+    XrTargetPlanTaskResult *results = (XrTargetPlanTaskResult *) xr_calloc(
+        bundle->nmodules, sizeof(*results));
+    if (!inputs || !results) {
+        xr_free(results);
+        xr_free(inputs);
+        return false;
+    }
     for (uint32_t module_index = 0; module_index < bundle->nmodules;
          module_index++) {
         XiModule *module = bundle->modules[module_index];
-        XrTargetPlan *target_plan = NULL;
-        bool loaded_from_cache = false;
-        char error[512] = {0};
-        if (!module || !module->init || !module->init->semantic_plan) {
-            fprintf(stderr, "Error: module TargetPlan lacks SemanticPlan authority for '%s'\n",
-                    module && module->name ? module->name : "?");
-            return false;
+        inputs[module_index].semantic_plan =
+            module && module->init ? module->init->semantic_plan : NULL;
+    }
+
+    XrTargetPlanTaskStats task_stats = {0};
+    char error[512] = {0};
+    XrTargetPlanTaskBatch batch = {
+        .inputs = inputs,
+        .input_count = bundle->nmodules,
+        .profile = profile,
+        .cache_store = cache_store,
+        .optimization_budget = xaot_target_plan_optimization_budget(),
+        .rebuild = rebuild,
+        .worker_limit = worker_limit,
+        .results = results,
+    };
+    bool planned = xr_target_plan_tasks_run(
+        &batch, &task_stats, error, sizeof(error));
+    stats->workers = task_stats.worker_count;
+    stats->hits = task_stats.hits;
+    stats->misses = task_stats.misses;
+    stats->rejected = task_stats.rejected;
+    stats->published = task_stats.published;
+    if (!planned) {
+        uint32_t failed = task_stats.first_failed_index;
+        const char *name = failed < bundle->nmodules && bundle->modules[failed] &&
+                                   bundle->modules[failed]->name
+                               ? bundle->modules[failed]->name
+                               : "?";
+        fprintf(stderr, "Error: module TargetPlan task failed for '%s': %s\n",
+                name, error[0] ? error : "unknown error");
+        xr_target_plan_task_results_release(results, bundle->nmodules);
+        xr_free(results);
+        xr_free(inputs);
+        return false;
+    }
+
+    bool installed = true;
+    for (uint32_t module_index = 0; module_index < bundle->nmodules;
+         module_index++) {
+        XiModule *module = bundle->modules[module_index];
+        XrTargetPlanTaskResult *task = &results[module_index];
+        const char *name = module && module->name ? module->name : "?";
+        if (verbose && task->cache_enabled) {
+            if (task->cache_hit)
+                fprintf(stderr, "[target-plan-cache] hit %s\n", name);
+            else if (task->rebuild_requested)
+                fprintf(stderr, "[target-plan-cache] rebuild %s\n", name);
+            else
+                fprintf(stderr, "[target-plan-cache] miss %s status=%d\n",
+                        name, (int) task->load_status);
+            if (task->cache_publish_attempted &&
+                task->publish_status == XR_CACHE_PUBLISH_IO_ERROR)
+                fprintf(stderr, "[target-plan-cache] publish unavailable %s\n",
+                        name);
         }
-        XrCacheXtpArtifactVerifyContext requirements = {
-            .semantic_plan = module->init->semantic_plan,
-            .target_profile = profile,
-            .optimization_budget = xaot_target_plan_optimization_budget(),
-        };
-        XrCacheKey key = {{0}};
-        bool has_key = cache_store && xr_cache_xtp_key(&requirements, &key);
-        if (cache_store && !has_key) {
-            fprintf(stderr,
-                    "Error: module TargetPlan cache key authority failed for '%s'\n",
-                    module->name ? module->name : "?");
-            return false;
-        }
-        if (has_key && !rebuild) {
-            XrCacheXtpArtifactLoadContext load = {
-                .requirements = requirements,
-            };
-            XrCacheBlob blob = {0};
-            XrCacheLoadStatus status = xr_cache_store_load(
-                cache_store, XR_CACHE_ARTIFACT_XTP, key,
-                xr_cache_materialize_xtp_artifact, &load, &blob);
-            xr_cache_blob_release(&blob);
-            if (status == XR_CACHE_LOAD_HIT && load.accepted_plan) {
-                target_plan = load.accepted_plan;
-                loaded_from_cache = true;
-                stats->hits++;
-                if (verbose)
-                    fprintf(stderr, "[target-plan-cache] hit %s\n",
-                            module->name ? module->name : "?");
-            } else {
-                xr_target_plan_free(load.accepted_plan);
-                if (status == XR_CACHE_LOAD_REJECTED ||
-                    status == XR_CACHE_LOAD_CORRUPT ||
-                    status == XR_CACHE_LOAD_TOO_LARGE)
-                    stats->rejected++;
-                stats->misses++;
-                if (verbose)
-                    fprintf(stderr, "[target-plan-cache] miss %s status=%d\n",
-                            module->name ? module->name : "?", (int) status);
-            }
-        } else if (has_key) {
-            stats->misses++;
-            if (verbose)
-                fprintf(stderr, "[target-plan-cache] rebuild %s\n",
-                        module->name ? module->name : "?");
-        }
-        if (!target_plan &&
-            !xr_target_plan_build(module->init->semantic_plan, profile,
-                                  &target_plan, error, sizeof(error))) {
-            fprintf(stderr, "Error: module TargetPlan build failed for '%s': %s\n",
-                    module->name ? module->name : "?",
-                    error[0] ? error : "unknown error");
-            return false;
-        }
-        if (has_key && target_plan && !loaded_from_cache) {
-            uint8_t *bytes = NULL;
-            size_t size = 0;
-            if (!xr_xtp_encode_plan(target_plan, &bytes, &size, error,
-                                    sizeof(error))) {
-                fprintf(stderr, "Error: module TargetPlan cache encode failed for '%s': %s\n",
-                        module->name ? module->name : "?",
-                        error[0] ? error : "unknown error");
-                xr_target_plan_free(target_plan);
-                return false;
-            }
-            XrCachePublishStatus publish = xr_cache_store_publish(
-                cache_store, XR_CACHE_ARTIFACT_XTP, key, bytes, size,
-                xr_cache_verify_xtp_artifact, &requirements);
-            xr_xtp_encoded_free(bytes);
-            if (publish == XR_CACHE_PUBLISH_OK)
-                stats->published++;
-            if (publish == XR_CACHE_PUBLISH_REJECTED ||
-                publish == XR_CACHE_PUBLISH_CONFLICT ||
-                publish == XR_CACHE_PUBLISH_TOO_LARGE) {
-                fprintf(stderr,
-                        "Error: module TargetPlan cache publication failed for '%s' status=%d\n",
-                        module->name ? module->name : "?", (int) publish);
-                xr_target_plan_free(target_plan);
-                return false;
-            }
-            if (verbose && publish == XR_CACHE_PUBLISH_IO_ERROR)
-                fprintf(stderr,
-                        "[target-plan-cache] publish unavailable %s\n",
-                        module->name ? module->name : "?");
-        }
-        if (!target_plan ||
-            !xaot_bundle_set_target_plan(bundle, module_index, target_plan)) {
-            fprintf(stderr, "Error: module TargetPlan build failed for '%s': %s\n",
-                    module && module->name ? module->name : "?",
-                    error[0] ? error
-                             : (bundle->error_msg ? bundle->error_msg
-                                                  : "unknown error"));
-            xr_target_plan_free(target_plan);
-            return false;
+        if (!task->plan ||
+            !xaot_bundle_set_target_plan(bundle, module_index, task->plan)) {
+            fprintf(stderr, "Error: module TargetPlan install failed for '%s': %s\n",
+                    name, bundle->error_msg ? bundle->error_msg : "unknown error");
+            installed = false;
+            break;
         }
         const XrTargetPlan *bound =
             xaot_bundle_target_plan_for_module(bundle, module_index);
-        xr_target_plan_free(target_plan);
         if (!bound ||
             !xr_target_profile_require_exact(profile,
                                              xr_target_plan_profile(bound),
@@ -1776,10 +1748,14 @@ static bool xaot_build_module_target_plans(
                     "Error: module TargetPlan profile mismatch for '%s': %s\n",
                     module->name ? module->name : "?",
                     error[0] ? error : "missing exact profile authority");
-            return false;
+            installed = false;
+            break;
         }
     }
-    return true;
+    xr_target_plan_task_results_release(results, bundle->nmodules);
+    xr_free(results);
+    xr_free(inputs);
+    return installed;
 }
 
 static bool xaot_install_module_representation_refinements(
@@ -2405,7 +2381,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     if (!xaot_build_module_target_plans(
             &aot_bundle, options->target_profile,
             xr_compiler_session_cache_store(session), evidence_cache_rebuild,
-            evidence_cache_verbose, &result->target_plan_cache))
+            evidence_cache_verbose, options->target_plan_workers,
+            &result->target_plan_cache))
         goto fail_free_ir;
     if (!xaot_install_module_representation_refinements(
             &aot_bundle, &cfg.rep_policy))

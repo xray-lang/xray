@@ -598,17 +598,20 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
     options.imported_summary_payloads = payloads;
     options.imported_summary_payload_count = 1;
     options.incremental_cache_dir = cache_dir;
+    options.target_plan_workers = 8;
 
     ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
     ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
     ASSERT_TRUE(result.target_plan_cache.misses == 1);
     ASSERT_TRUE(result.target_plan_cache.published == 1);
+    ASSERT_TRUE(result.target_plan_cache.workers == 1);
 
     xaot_build_result_free(&result);
     ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
     ASSERT_TRUE(result.target_plan_cache.hits == 1);
     ASSERT_TRUE(result.target_plan_cache.misses == 0);
+    ASSERT_TRUE(result.target_plan_cache.workers == 1);
     xaot_build_result_free(&result);
     ASSERT_TRUE(corrupt_first_xtp_cache_object(cache_dir));
     ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
@@ -943,7 +946,8 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     passed++;
 }
 
-static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
+static void run_driver_auto_discovers_multiple_package_summary_payloads(
+    bool parallel_probe) {
     char root[XR_TEST_PATH_MAX];
     char home_dir[XR_TEST_PATH_MAX];
     char entry_source[XR_TEST_PATH_MAX];
@@ -989,9 +993,29 @@ static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
     options.incremental_cache_dir = cache_dir;
+    if (!parallel_probe) {
+        ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+        ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump,
+                                              imported_hash));
+    } else {
+        options.target_plan_workers = 1;
+        ASSERT_TRUE(xaot_build(entry_source, &options, &result) != 0);
+        ASSERT_TRUE(result.target_plan_cache.workers == 1);
+        ASSERT_TRUE(result.target_plan_cache.misses == 3);
+        ASSERT_TRUE(result.target_plan_cache.published == 3);
 
-    ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
-    ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
+        xaot_build_result_free(&result);
+        options.target_plan_workers = 2;
+        ASSERT_TRUE(xaot_build(entry_source, &options, &result) != 0);
+        ASSERT_TRUE(result.target_plan_cache.workers == 2);
+        ASSERT_TRUE(result.target_plan_cache.hits == 3);
+
+        xaot_build_result_free(&result);
+        options.target_plan_workers = 8;
+        ASSERT_TRUE(xaot_build(entry_source, &options, &result) != 0);
+        ASSERT_TRUE(result.target_plan_cache.workers == 3);
+        ASSERT_TRUE(result.target_plan_cache.hits == 3);
+    }
 
     xaot_build_result_free(&result);
     release_target_profile(&options);
@@ -1001,6 +1025,14 @@ static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
     xr_free(payload_b);
     xr_test_unlink(entry_source);
     passed++;
+}
+
+static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
+    run_driver_auto_discovers_multiple_package_summary_payloads(false);
+}
+
+static void test_driver_parallel_target_plans_are_canonical(void) {
+    run_driver_auto_discovers_multiple_package_summary_payloads(true);
 }
 
 static void test_driver_auto_discovers_package_dependency_summary_payload(void) {
@@ -1078,6 +1110,11 @@ int main(void) {
     const char *filter = getenv("XRAY_TEST_FILTER");
     if (filter && strcmp(filter, "target_plan_cache") == 0) {
         test_driver_consumes_imported_summary_payload_set();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "parallel_target_plans") == 0) {
+        test_driver_parallel_target_plans_are_canonical();
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
