@@ -358,6 +358,14 @@ CONTRACT_SPECS = (
         ),
     ),
     ContractSpec(
+        "incremental-compiler-session.md",
+        (
+            "src/toolchain/xcompiler_session.h",
+            "src/toolchain/xcompiler_session.c",
+            "tests/unit/toolchain/test_compiler_session_generation.c",
+        ),
+    ),
+    ContractSpec(
         "runtime-generation-lifecycle.md",
         (
             "include/xray_runtime_generation.h",

@@ -10,9 +10,105 @@
 
 #include "../test_framework.h"
 #include "base/xarena.h"
+#include "incremental/xr_cache_invalidate.h"
+#include "incremental/xr_cache_store.h"
+#include "os/os_dir.h"
+#include "os/os_fs.h"
+#include "os/os_temp.h"
 #include "toolchain/xcompiler_session.h"
 
 #include <string.h>
+
+static XrFingerprint test_fingerprint(uint8_t seed) {
+    XrFingerprint fingerprint;
+    for (size_t i = 0; i < sizeof(fingerprint.bytes); i++)
+        fingerprint.bytes[i] = (uint8_t) (seed + (uint8_t) i);
+    return fingerprint;
+}
+
+static bool init_summary(XrModuleSummary *summary, const char *key, uint8_t seed) {
+    if (!xr_module_summary_init(summary, key))
+        return false;
+    for (unsigned facet = 0; facet < XR_MODULE_FACET_COUNT; facet++) {
+        if (!xr_module_summary_set_fingerprint(
+                summary, (XrModuleSummaryFacet) facet,
+                test_fingerprint((uint8_t) (seed + facet)))) {
+            xr_module_summary_finalize(summary);
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool build_session_graph(XrDependencyGraph *graph, XrStableId *root_id,
+                                XrStableId *consumer_id) {
+    XrModuleSummary root = {0};
+    XrModuleSummary consumer = {0};
+    xr_dependency_graph_init(graph);
+    if (!init_summary(&root, "pkg/root", 1) ||
+        !init_summary(&consumer, "pkg/consumer", 40)) {
+        xr_module_summary_finalize(&root);
+        xr_module_summary_finalize(&consumer);
+        return false;
+    }
+    *root_id = root.module_id;
+    *consumer_id = consumer.module_id;
+    bool ok = xr_dependency_graph_add_node(graph, &root) &&
+              xr_dependency_graph_add_node(graph, &consumer);
+    XrModuleFacetMask relation[XR_MODULE_FACET_COUNT] = {0};
+    relation[XR_MODULE_FACET_PUBLIC_SIGNATURE] =
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_PUBLIC_SIGNATURE);
+    if (ok)
+        ok = xr_dependency_graph_add_edge(graph, *consumer_id, *root_id, relation);
+    xr_module_summary_finalize(&consumer);
+    xr_module_summary_finalize(&root);
+    if (!ok) {
+        xr_dependency_graph_finalize(graph);
+        return false;
+    }
+    return xr_dependency_graph_validate(graph);
+}
+
+static bool change_root_signature(XrCompilerSession *session, uint8_t seed) {
+    const XrDependencyGraph *graph = xr_compiler_session_dependency_graph(session);
+    const XrModuleSummary *root =
+        graph && graph->node_count ? xr_dependency_graph_node_at(graph, 0) : NULL;
+    XrModuleSummary replacement;
+    if (!root || !xr_module_summary_copy(&replacement, root))
+        return false;
+    bool ok = xr_module_summary_set_fingerprint(
+        &replacement, XR_MODULE_FACET_PUBLIC_SIGNATURE, test_fingerprint(seed));
+    XrInvalidationEvent event = {
+        .reason = XR_INVALIDATION_SUMMARY_CHANGED,
+        .root_id = root->module_id,
+        .replacement_summary = &replacement,
+    };
+    if (ok)
+        ok = xr_compiler_session_apply_invalidation(session, &event);
+    xr_module_summary_finalize(&replacement);
+    return ok;
+}
+
+static bool verify_cache_artifact(XrCacheArtifactKind kind, XrCacheKey key,
+                                  const uint8_t *bytes, size_t size, void *context) {
+    (void) kind;
+    (void) key;
+    (void) bytes;
+    (void) size;
+    (void) context;
+    return true;
+}
+
+static void remove_empty_cache_root(const char *root) {
+    char path[XR_PATH_MAX];
+    if (snprintf(path, sizeof(path), "%s/xsm", root) > 0)
+        (void) xr_test_rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/xtp", root) > 0)
+        (void) xr_test_rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/.cache-root.lock", root) > 0)
+        (void) xr_test_unlink(path);
+    (void) xr_test_rmdir(root);
+}
 
 static bool snapshots_equal(XrCompilerSessionGenerationSnapshot left,
                             XrCompilerSessionGenerationSnapshot right) {
@@ -163,6 +259,210 @@ TEST(target_and_provider_updates_advance_only_their_generation) {
     xr_compiler_session_delete(session);
 }
 
+TEST(session_owns_dependency_graph_and_isolates_workspaces) {
+    XrDependencyGraph source;
+    XrStableId root_id;
+    XrStableId consumer_id;
+    ASSERT_TRUE(build_session_graph(&source, &root_id, &consumer_id));
+    XrCompilerSession *first = xr_compiler_session_new(NULL);
+    XrCompilerSession *second = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(first);
+    ASSERT_NOT_NULL(second);
+
+    ASSERT_TRUE(xr_compiler_session_publish_dependency_graph(first, &source));
+    ASSERT_TRUE(xr_compiler_session_publish_dependency_graph(second, &source));
+    const XrDependencyGraph *owned = xr_compiler_session_dependency_graph(first);
+    ASSERT_NOT_NULL(owned);
+    ASSERT_NE(owned->nodes, source.nodes);
+    ASSERT_NE(owned->edges, source.edges);
+    ASSERT_NOT_NULL(xr_dependency_graph_find_node(owned, root_id));
+    xr_dependency_graph_finalize(&source);
+    ASSERT_NOT_NULL(xr_dependency_graph_find_node(
+        xr_compiler_session_dependency_graph(first), root_id));
+
+    ASSERT_TRUE(change_root_signature(first, 210));
+    ASSERT_EQ_UINT(xr_compiler_session_incremental_stats(first).invalidation_history_count, 1);
+    ASSERT_EQ_UINT(xr_compiler_session_incremental_stats(second).invalidation_history_count, 0);
+    const XrModuleSummary *unchanged = xr_dependency_graph_find_node(
+        xr_compiler_session_dependency_graph(second), root_id);
+    ASSERT_NOT_NULL(unchanged);
+    ASSERT_MEM_EQ(unchanged->facets[XR_MODULE_FACET_PUBLIC_SIGNATURE].bytes,
+                  test_fingerprint((uint8_t) (1 + XR_MODULE_FACET_PUBLIC_SIGNATURE)).bytes,
+                  sizeof(XrFingerprint));
+    ASSERT_NOT_NULL(xr_dependency_graph_find_node(
+        xr_compiler_session_dependency_graph(second), consumer_id));
+
+    xr_compiler_session_delete(second);
+    xr_compiler_session_delete(first);
+}
+
+TEST(operation_abort_is_transactional_and_invalidates_old_scopes) {
+    XrCompilerSession *session = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(session);
+    ASSERT_TRUE(xr_compiler_session_begin_incremental_operation(session));
+    ASSERT_FALSE(xr_compiler_session_begin_incremental_operation(session));
+
+    XrArena arena;
+    XrCompilerSessionScope scope;
+    xr_arena_init(&arena, 1024);
+    ASSERT_TRUE(xr_compiler_session_push_arena(session, &arena, "cancel.xr", &scope));
+    xr_compiler_session_set_module_graph(session, (struct XrModuleGraph *) (uintptr_t) 7);
+    XrCompileUnitIdentity identity = {
+        .kind = XR_COMPILE_UNIT_USER,
+        .canonical_module = "pkg/cancel",
+    };
+    xr_compiler_session_set_compile_unit_identity(session, &identity);
+    ASSERT_FALSE(xr_compiler_session_finish_incremental_operation(session));
+    XrCompilerSessionGenerationSnapshot before =
+        xr_compiler_session_generation_snapshot(session);
+    ASSERT_TRUE(xr_compiler_session_abort_incremental_operation(
+        session, XR_COMPILER_SESSION_OPERATION_CANCELLED));
+    ASSERT_EQ_UINT(xr_compiler_session_generation_snapshot(session).session_generation,
+                   before.session_generation + 1u);
+    ASSERT_NULL(xr_compiler_session_current_arena(session));
+    ASSERT_NULL(xr_compiler_session_string_pool(session));
+    ASSERT_NULL(xr_compiler_session_module_graph(session));
+    xr_compiler_session_pop_arena(&scope);
+    ASSERT_NULL(xr_compiler_session_current_arena(session));
+
+    XrCompilerSessionIncrementalStats cancelled =
+        xr_compiler_session_incremental_stats(session);
+    ASSERT_EQ_UINT(cancelled.cancelled_operations, 1);
+    ASSERT_EQ_UINT(cancelled.fatal_operations, 0);
+    ASSERT_EQ_UINT(cancelled.last_outcome, XR_COMPILER_SESSION_OPERATION_CANCELLED);
+    ASSERT_FALSE(cancelled.operation_active);
+
+    ASSERT_TRUE(xr_compiler_session_begin_incremental_operation(session));
+    ASSERT_TRUE(xr_compiler_session_abort_incremental_operation(
+        session, XR_COMPILER_SESSION_OPERATION_FATAL));
+    ASSERT_TRUE(xr_compiler_session_begin_incremental_operation(session));
+    ASSERT_TRUE(xr_compiler_session_finish_incremental_operation(session));
+    XrCompilerSessionIncrementalStats final =
+        xr_compiler_session_incremental_stats(session);
+    ASSERT_EQ_UINT(final.completed_operations, 1);
+    ASSERT_EQ_UINT(final.cancelled_operations, 1);
+    ASSERT_EQ_UINT(final.fatal_operations, 1);
+    ASSERT_EQ_UINT(final.last_outcome, XR_COMPILER_SESSION_OPERATION_SUCCEEDED);
+
+    xr_arena_destroy(&arena);
+    xr_compiler_session_delete(session);
+}
+
+TEST(invalidation_history_is_bounded_and_idle_cleanup_is_observable) {
+    XrDependencyGraph source;
+    XrStableId root_id;
+    XrStableId consumer_id;
+    ASSERT_TRUE(build_session_graph(&source, &root_id, &consumer_id));
+    (void) root_id;
+    (void) consumer_id;
+    XrCompilerSession *session = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(session);
+    ASSERT_TRUE(xr_compiler_session_publish_dependency_graph(session, &source));
+    xr_dependency_graph_finalize(&source);
+
+    for (size_t i = 0; i < XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT + 5u; i++)
+        ASSERT_TRUE(change_root_signature(session, (uint8_t) (100u + i)));
+    XrCompilerSessionIncrementalStats full =
+        xr_compiler_session_incremental_stats(session);
+    ASSERT_EQ_UINT(full.invalidation_history_count,
+                   XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT);
+    ASSERT_EQ_UINT(full.invalidation_history_limit,
+                   XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT);
+    ASSERT_GT(full.logical_bytes, 0);
+    ASSERT_GE(full.peak_logical_bytes, full.logical_bytes);
+    ASSERT_NOT_NULL(xr_compiler_session_invalidation_at(
+        session, XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT - 1u));
+    ASSERT_NULL(xr_compiler_session_invalidation_at(
+        session, XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT));
+
+    ASSERT_TRUE(xr_compiler_session_begin_incremental_operation(session));
+    ASSERT_FALSE(xr_compiler_session_incremental_idle_cleanup(session, 2));
+    ASSERT_TRUE(xr_compiler_session_finish_incremental_operation(session));
+    ASSERT_TRUE(xr_compiler_session_incremental_idle_cleanup(session, 2));
+    XrCompilerSessionIncrementalStats trimmed =
+        xr_compiler_session_incremental_stats(session);
+    ASSERT_EQ_UINT(trimmed.invalidation_history_count, 2);
+    ASSERT_LE(trimmed.logical_bytes, full.logical_bytes);
+    ASSERT_EQ_UINT(trimmed.peak_logical_bytes, full.peak_logical_bytes);
+
+    ASSERT_TRUE(xr_compiler_session_reset_incremental(session));
+    XrCompilerSessionIncrementalStats reset =
+        xr_compiler_session_incremental_stats(session);
+    ASSERT_EQ_UINT(reset.module_count, 0);
+    ASSERT_EQ_UINT(reset.dependency_count, 0);
+    ASSERT_EQ_UINT(reset.invalidation_history_count, 0);
+    ASSERT_EQ_UINT(reset.logical_bytes, 0);
+    ASSERT_EQ_UINT(reset.peak_logical_bytes, 0);
+    ASSERT_EQ_UINT(reset.completed_operations, 0);
+    ASSERT_EQ_UINT(reset.cancelled_operations, 0);
+    ASSERT_EQ_UINT(reset.fatal_operations, 0);
+    xr_compiler_session_delete(session);
+}
+
+TEST(rejected_invalidation_preserves_published_state) {
+    XrDependencyGraph source;
+    XrStableId root_id;
+    XrStableId consumer_id;
+    ASSERT_TRUE(build_session_graph(&source, &root_id, &consumer_id));
+    (void) consumer_id;
+    XrCompilerSession *session = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(session);
+    ASSERT_TRUE(xr_compiler_session_publish_dependency_graph(session, &source));
+    xr_dependency_graph_finalize(&source);
+
+    XrFingerprint before_graph;
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(session), &before_graph));
+    XrCompilerSessionGenerationSnapshot before_generation =
+        xr_compiler_session_generation_snapshot(session);
+    XrCompilerSessionIncrementalStats before_stats =
+        xr_compiler_session_incremental_stats(session);
+
+    XrModuleSummary wrong_identity;
+    ASSERT_TRUE(init_summary(&wrong_identity, "pkg/not-root", 190));
+    XrInvalidationEvent forged = {
+        .reason = XR_INVALIDATION_SUMMARY_CHANGED,
+        .root_id = root_id,
+        .replacement_summary = &wrong_identity,
+    };
+    ASSERT_FALSE(xr_compiler_session_apply_invalidation(session, &forged));
+    xr_module_summary_finalize(&wrong_identity);
+
+    XrFingerprint after_graph;
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(session), &after_graph));
+    ASSERT_MEM_EQ(after_graph.bytes, before_graph.bytes, sizeof(before_graph.bytes));
+    ASSERT_TRUE(snapshots_equal(xr_compiler_session_generation_snapshot(session),
+                                before_generation));
+    XrCompilerSessionIncrementalStats after_stats =
+        xr_compiler_session_incremental_stats(session);
+    ASSERT_EQ_UINT(after_stats.invalidation_history_count,
+                   before_stats.invalidation_history_count);
+    ASSERT_EQ_UINT(after_stats.logical_bytes, before_stats.logical_bytes);
+    ASSERT_EQ_UINT(after_stats.peak_logical_bytes, before_stats.peak_logical_bytes);
+    xr_compiler_session_delete(session);
+}
+
+TEST(session_owns_cache_store_handle) {
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-session-cache", root, sizeof(root)), 0);
+    XrCacheStoreConfig cache = {
+        .root = root,
+        .quota_bytes = 1u << 20,
+        .max_entry_bytes = 1u << 16,
+        .stale_temp_age_ns = UINT64_C(1000000000),
+        .verifier = verify_cache_artifact,
+    };
+    XrCompilerSessionConfig config = {.incremental_cache = &cache};
+    XrCompilerSession *session = xr_compiler_session_new(&config);
+    ASSERT_NOT_NULL(session);
+    ASSERT_NOT_NULL(xr_compiler_session_cache_store(session));
+    ASSERT_TRUE(xr_compiler_session_incremental_stats(session).cache_store_open);
+    cache.root = "caller-mutated-invalid-root";
+    xr_compiler_session_delete(session);
+    remove_empty_cache_root(root);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Compiler session generations");
 RUN_TEST(generation_replay_is_deterministic);
@@ -170,4 +470,9 @@ RUN_TEST(generation_changes_are_domain_specific_and_transactional);
 RUN_TEST(incremental_reset_advances_identity_and_clears_transient_state);
 RUN_TEST(session_owns_configuration_paths);
 RUN_TEST(target_and_provider_updates_advance_only_their_generation);
+RUN_TEST(session_owns_dependency_graph_and_isolates_workspaces);
+RUN_TEST(operation_abort_is_transactional_and_invalidates_old_scopes);
+RUN_TEST(invalidation_history_is_bounded_and_idle_cleanup_is_observable);
+RUN_TEST(rejected_invalidation_preserves_published_state);
+RUN_TEST(session_owns_cache_store_handle);
 TEST_MAIN_END()

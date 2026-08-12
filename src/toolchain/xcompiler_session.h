@@ -17,6 +17,11 @@
 
 struct XrArena;
 struct XrCompileStringPool;
+struct XrCacheStore;
+struct XrCacheStoreConfig;
+struct XrDependencyGraph;
+struct XrInvalidationEvent;
+struct XrInvalidationResult;
 struct XrReplSymbolTable;
 struct XrSourceCache;
 struct XrTypePool;
@@ -28,6 +33,7 @@ struct XrTargetProfile;
 typedef struct XrCompilerSession XrCompilerSession;
 
 #define XR_COMPILER_SESSION_INITIAL_GENERATION UINT64_C(1)
+#define XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT 16u
 
 typedef enum XrCompilerSessionGenerationChange {
     XR_COMPILER_SESSION_CHANGE_NONE = 0,
@@ -48,6 +54,28 @@ typedef struct XrCompilerSessionGenerationSnapshot {
     uint64_t target_generation;
     uint64_t provider_generation;
 } XrCompilerSessionGenerationSnapshot;
+
+typedef enum XrCompilerSessionOperationOutcome {
+    XR_COMPILER_SESSION_OPERATION_NONE = 0,
+    XR_COMPILER_SESSION_OPERATION_SUCCEEDED,
+    XR_COMPILER_SESSION_OPERATION_CANCELLED,
+    XR_COMPILER_SESSION_OPERATION_FATAL,
+} XrCompilerSessionOperationOutcome;
+
+typedef struct XrCompilerSessionIncrementalStats {
+    size_t module_count;
+    size_t dependency_count;
+    size_t invalidation_history_count;
+    size_t invalidation_history_limit;
+    size_t logical_bytes;
+    size_t peak_logical_bytes;
+    uint64_t completed_operations;
+    uint64_t cancelled_operations;
+    uint64_t fatal_operations;
+    XrCompilerSessionOperationOutcome last_outcome;
+    bool operation_active;
+    bool cache_store_open;
+} XrCompilerSessionIncrementalStats;
 
 typedef enum XrCompileUnitKind {
     XR_COMPILE_UNIT_USER = 0,
@@ -76,6 +104,10 @@ typedef struct XrCompilerSessionConfig {
     const XrTargetDataLayout *target_data_layout;
     struct XrTargetProfile *target_profile;
     const struct XrNativePackagePlan *native_package_plan; /* borrowed */
+    /* The session opens and owns the configured store. The store copies all
+     * scalar and path configuration; verifier context lifetime remains the
+     * caller's explicit responsibility. */
+    const struct XrCacheStoreConfig *incremental_cache;
 } XrCompilerSessionConfig;
 
 XR_FUNC XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg);
@@ -88,6 +120,27 @@ xr_compiler_session_generation_snapshot(const XrCompilerSession *session);
 XR_FUNC bool xr_compiler_session_apply_generation_change(XrCompilerSession *session,
                                                          uint32_t change_mask);
 XR_FUNC bool xr_compiler_session_reset_incremental(XrCompilerSession *session);
+/* Incremental operations own only transient parser/lowering views. Publishing
+ * a verified dependency graph or applying an invalidation is a separate
+ * atomic transaction performed while no operation is active. */
+XR_FUNC bool xr_compiler_session_begin_incremental_operation(XrCompilerSession *session);
+XR_FUNC bool xr_compiler_session_finish_incremental_operation(XrCompilerSession *session);
+XR_FUNC bool xr_compiler_session_abort_incremental_operation(
+    XrCompilerSession *session, XrCompilerSessionOperationOutcome outcome);
+XR_FUNC bool xr_compiler_session_publish_dependency_graph(
+    XrCompilerSession *session, const struct XrDependencyGraph *graph);
+XR_FUNC bool xr_compiler_session_apply_invalidation(
+    XrCompilerSession *session, const struct XrInvalidationEvent *event);
+XR_FUNC const struct XrDependencyGraph *xr_compiler_session_dependency_graph(
+    const XrCompilerSession *session);
+XR_FUNC const struct XrInvalidationResult *xr_compiler_session_invalidation_at(
+    const XrCompilerSession *session, size_t index);
+XR_FUNC struct XrCacheStore *xr_compiler_session_cache_store(
+    const XrCompilerSession *session);
+XR_FUNC XrCompilerSessionIncrementalStats xr_compiler_session_incremental_stats(
+    const XrCompilerSession *session);
+XR_FUNC bool xr_compiler_session_incremental_idle_cleanup(
+    XrCompilerSession *session, size_t retained_history);
 
 XR_FUNC XrVMRuntime *xr_compiler_session_vm_host(const XrCompilerSession *session);
 XR_FUNC const XrTargetDataLayout *

@@ -17,6 +17,8 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast_api.h"
 #include "../frontend/parser/xstring_pool.h"
+#include "../incremental/xr_cache_invalidate.h"
+#include "../incremental/xr_cache_store.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/value/xtype.h"
@@ -34,6 +36,17 @@ struct XrCompilerSession {
     XrTargetProfile *target_profile;
     const struct XrNativePackagePlan *native_package_plan;
     XrCompilerSessionGenerationSnapshot generations;
+
+    XrDependencyGraph dependency_graph;
+    XrCacheStore *cache_store;
+    XrInvalidationResult invalidation_history[XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT];
+    size_t invalidation_history_count;
+    size_t peak_incremental_logical_bytes;
+    uint64_t completed_operations;
+    uint64_t cancelled_operations;
+    uint64_t fatal_operations;
+    XrCompilerSessionOperationOutcome last_operation_outcome;
+    bool incremental_operation_active;
 
     struct XrArena *current_arena;
     struct XrCompileStringPool *compile_string_pool;
@@ -78,11 +91,104 @@ static bool generation_would_overflow(uint64_t generation, uint32_t change_mask,
     return (change_mask & change) != 0 && generation == UINT64_MAX;
 }
 
+static void clear_transient_operation_state(XrCompilerSession *session) {
+    session->current_arena = NULL;
+    session->compile_string_pool = NULL;
+    session->next_ast_node_id = 0;
+    session->module_graph = NULL;
+    session->compile_unit_identity = (XrCompileUnitIdentity) {0};
+}
+
+static void clear_invalidation_history(XrCompilerSession *session) {
+    for (size_t i = 0; i < session->invalidation_history_count; i++)
+        xr_invalidation_result_finalize(&session->invalidation_history[i]);
+    session->invalidation_history_count = 0;
+}
+
+static bool checked_add_size(size_t *total, size_t value) {
+    if (value > SIZE_MAX - *total)
+        return false;
+    *total += value;
+    return true;
+}
+
+static bool checked_array_size(size_t count, size_t element_size, size_t *out) {
+    if (element_size != 0 && count > SIZE_MAX / element_size)
+        return false;
+    *out = count * element_size;
+    return true;
+}
+
+static size_t incremental_logical_bytes(const XrCompilerSession *session) {
+    size_t node_bytes;
+    size_t edge_bytes;
+    size_t total = 0;
+    if (!checked_array_size(session->dependency_graph.node_capacity,
+                            sizeof(XrModuleSummary), &node_bytes) ||
+        !checked_array_size(session->dependency_graph.edge_capacity,
+                            sizeof(XrDependencyEdge), &edge_bytes) ||
+        !checked_add_size(&total, node_bytes) ||
+        !checked_add_size(&total, edge_bytes)) {
+        return SIZE_MAX;
+    }
+    for (size_t i = 0; i < session->dependency_graph.node_count; i++) {
+        const char *key = session->dependency_graph.nodes[i].canonical_key;
+        if (key) {
+            size_t key_length = strlen(key);
+            if (key_length == SIZE_MAX || !checked_add_size(&total, key_length + 1u))
+                return SIZE_MAX;
+        }
+    }
+    for (size_t i = 0; i < session->invalidation_history_count; i++) {
+        const XrInvalidationResult *result = &session->invalidation_history[i];
+        size_t record_bytes;
+        size_t evidence_bytes;
+        if (!checked_array_size(result->record_count, sizeof(*result->records),
+                                &record_bytes) ||
+            !checked_array_size(result->evidence_count, sizeof(*result->evidence),
+                                &evidence_bytes) ||
+            !checked_add_size(&total, record_bytes) ||
+            !checked_add_size(&total, evidence_bytes)) {
+            return SIZE_MAX;
+        }
+    }
+    return total;
+}
+
+static void refresh_incremental_watermark(XrCompilerSession *session) {
+    size_t current = incremental_logical_bytes(session);
+    if (current > session->peak_incremental_logical_bytes)
+        session->peak_incremental_logical_bytes = current;
+}
+
+static bool copy_dependency_graph(XrDependencyGraph *out, const XrDependencyGraph *source) {
+    xr_dependency_graph_init(out);
+    if (!xr_dependency_graph_validate(source))
+        return false;
+    for (size_t i = 0; i < source->node_count; i++) {
+        if (!xr_dependency_graph_add_node(out, &source->nodes[i]))
+            goto failure;
+    }
+    for (size_t i = 0; i < source->edge_count; i++) {
+        const XrDependencyEdge *edge = &source->edges[i];
+        if (!xr_dependency_graph_add_edge(out, edge->consumer, edge->dependency,
+                                          edge->relation)) {
+            goto failure;
+        }
+    }
+    if (xr_dependency_graph_validate(out))
+        return true;
+failure:
+    xr_dependency_graph_finalize(out);
+    return false;
+}
+
 XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
     XrCompilerSession *session = (XrCompilerSession *) xr_calloc(1, sizeof(XrCompilerSession));
     if (!session)
         return NULL;
     session->generations = XR_INITIAL_GENERATIONS;
+    xr_dependency_graph_init(&session->dependency_graph);
     if (!xr_target_data_layout_init_native(&session->target_data_layout)) {
         xr_free(session);
         return NULL;
@@ -108,6 +214,11 @@ XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
         session->repl_mode = cfg->repl_mode;
         session->emit_aot = cfg->emit_aot;
         session->native_package_plan = cfg->native_package_plan;
+        if (cfg->incremental_cache) {
+            session->cache_store = xr_cache_store_open(cfg->incremental_cache);
+            if (!session->cache_store)
+                goto failure;
+        }
         if (cfg->target_profile) {
             if (!xr_compiler_session_set_target_profile(session, cfg->target_profile))
                 goto failure;
@@ -120,6 +231,8 @@ XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
     return session;
 
 failure:
+    xr_cache_store_close(session->cache_store);
+    xr_dependency_graph_finalize(&session->dependency_graph);
     xr_target_profile_free(session->target_profile);
     xr_free(session->source_file);
     xr_free(session->project_root);
@@ -152,6 +265,9 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
         xr_source_cache_free(session->source_cache);
     if (session->analyzer_pool)
         xr_type_pool_free(session->analyzer_pool);
+    clear_invalidation_history(session);
+    xr_cache_store_close(session->cache_store);
+    xr_dependency_graph_finalize(&session->dependency_graph);
     xr_target_profile_free(session->target_profile);
     xr_free(session->source_file);
     xr_free(session->project_root);
@@ -211,14 +327,149 @@ bool xr_compiler_session_reset_incremental(XrCompilerSession *session) {
             session, XR_COMPILER_SESSION_CHANGE_SESSION | XR_COMPILER_SESSION_CHANGE_WORKSPACE))
         return false;
 
-    /* These pointers are owned by the active compile operation. Clearing the
-     * borrowed views prevents a cancelled operation from becoming the next
-     * operation's implicit state without discarding persistent analysis data. */
-    session->current_arena = NULL;
-    session->compile_string_pool = NULL;
-    session->next_ast_node_id = 0;
-    session->module_graph = NULL;
-    session->compile_unit_identity = (XrCompileUnitIdentity) {0};
+    clear_transient_operation_state(session);
+    session->incremental_operation_active = false;
+    session->last_operation_outcome = XR_COMPILER_SESSION_OPERATION_NONE;
+    session->completed_operations = 0;
+    session->cancelled_operations = 0;
+    session->fatal_operations = 0;
+    clear_invalidation_history(session);
+    xr_dependency_graph_finalize(&session->dependency_graph);
+    xr_dependency_graph_init(&session->dependency_graph);
+    session->peak_incremental_logical_bytes = 0;
+    return true;
+}
+
+bool xr_compiler_session_begin_incremental_operation(XrCompilerSession *session) {
+    if (!session || session->incremental_operation_active || session->current_arena ||
+        session->compile_string_pool || session->module_graph ||
+        session->compile_unit_identity.canonical_module)
+        return false;
+    session->incremental_operation_active = true;
+    session->last_operation_outcome = XR_COMPILER_SESSION_OPERATION_NONE;
+    return true;
+}
+
+bool xr_compiler_session_finish_incremental_operation(XrCompilerSession *session) {
+    if (!session || !session->incremental_operation_active || session->current_arena ||
+        session->compile_string_pool)
+        return false;
+    clear_transient_operation_state(session);
+    session->incremental_operation_active = false;
+    session->last_operation_outcome = XR_COMPILER_SESSION_OPERATION_SUCCEEDED;
+    session->completed_operations++;
+    return true;
+}
+
+bool xr_compiler_session_abort_incremental_operation(
+    XrCompilerSession *session, XrCompilerSessionOperationOutcome outcome) {
+    if (!session || !session->incremental_operation_active ||
+        (outcome != XR_COMPILER_SESSION_OPERATION_CANCELLED &&
+         outcome != XR_COMPILER_SESSION_OPERATION_FATAL) ||
+        session->generations.session_generation == UINT64_MAX) {
+        return false;
+    }
+    clear_transient_operation_state(session);
+    session->generations.session_generation++;
+    session->incremental_operation_active = false;
+    session->last_operation_outcome = outcome;
+    if (outcome == XR_COMPILER_SESSION_OPERATION_CANCELLED)
+        session->cancelled_operations++;
+    else
+        session->fatal_operations++;
+    return true;
+}
+
+bool xr_compiler_session_publish_dependency_graph(XrCompilerSession *session,
+                                                  const XrDependencyGraph *graph) {
+    if (!session || session->incremental_operation_active ||
+        session->generations.workspace_generation == UINT64_MAX)
+        return false;
+    XrDependencyGraph copy;
+    if (!copy_dependency_graph(&copy, graph))
+        return false;
+    XrDependencyGraph previous = session->dependency_graph;
+    session->dependency_graph = copy;
+    session->generations.workspace_generation++;
+    clear_invalidation_history(session);
+    xr_dependency_graph_finalize(&previous);
+    refresh_incremental_watermark(session);
+    return true;
+}
+
+bool xr_compiler_session_apply_invalidation(XrCompilerSession *session,
+                                            const XrInvalidationEvent *event) {
+    if (!session || session->incremental_operation_active || !event ||
+        session->generations.workspace_generation == UINT64_MAX)
+        return false;
+    XrInvalidationResult result;
+    if (!xr_cache_invalidate_apply(&session->dependency_graph, event, &result))
+        return false;
+    if (session->invalidation_history_count ==
+        XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT) {
+        xr_invalidation_result_finalize(&session->invalidation_history[0]);
+        memmove(&session->invalidation_history[0], &session->invalidation_history[1],
+                (XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT - 1u) *
+                    sizeof(session->invalidation_history[0]));
+        session->invalidation_history_count--;
+    }
+    session->invalidation_history[session->invalidation_history_count++] = result;
+    session->generations.workspace_generation++;
+    refresh_incremental_watermark(session);
+    return true;
+}
+
+const XrDependencyGraph *xr_compiler_session_dependency_graph(
+    const XrCompilerSession *session) {
+    return session ? &session->dependency_graph : NULL;
+}
+
+const XrInvalidationResult *xr_compiler_session_invalidation_at(
+    const XrCompilerSession *session, size_t index) {
+    return session && index < session->invalidation_history_count
+               ? &session->invalidation_history[index]
+               : NULL;
+}
+
+XrCacheStore *xr_compiler_session_cache_store(const XrCompilerSession *session) {
+    return session ? session->cache_store : NULL;
+}
+
+XrCompilerSessionIncrementalStats xr_compiler_session_incremental_stats(
+    const XrCompilerSession *session) {
+    if (!session)
+        return (XrCompilerSessionIncrementalStats) {0};
+    return (XrCompilerSessionIncrementalStats) {
+        .module_count = session->dependency_graph.node_count,
+        .dependency_count = session->dependency_graph.edge_count,
+        .invalidation_history_count = session->invalidation_history_count,
+        .invalidation_history_limit = XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT,
+        .logical_bytes = incremental_logical_bytes(session),
+        .peak_logical_bytes = session->peak_incremental_logical_bytes,
+        .completed_operations = session->completed_operations,
+        .cancelled_operations = session->cancelled_operations,
+        .fatal_operations = session->fatal_operations,
+        .last_outcome = session->last_operation_outcome,
+        .operation_active = session->incremental_operation_active,
+        .cache_store_open = session->cache_store != NULL,
+    };
+}
+
+bool xr_compiler_session_incremental_idle_cleanup(XrCompilerSession *session,
+                                                  size_t retained_history) {
+    if (!session || session->incremental_operation_active ||
+        retained_history > XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT)
+        return false;
+    while (session->invalidation_history_count > retained_history) {
+        xr_invalidation_result_finalize(&session->invalidation_history[0]);
+        if (session->invalidation_history_count > 1u) {
+            memmove(&session->invalidation_history[0], &session->invalidation_history[1],
+                    (session->invalidation_history_count - 1u) *
+                        sizeof(session->invalidation_history[0]));
+        }
+        session->invalidation_history_count--;
+    }
+    refresh_incremental_watermark(session);
     return true;
 }
 
