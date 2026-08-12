@@ -60,9 +60,7 @@
       "representation": "tagged",
       "signatures": [
         "xr_array_core_byte_from_value",
-        "xr_array_core_bytes_copy_from",
         "xr_array_core_bytes_copy_from_typed",
-        "xr_array_core_bytes_copy_within",
         "xr_array_core_bytes_repeat_from",
         "xr_array_core_fill_range",
         "xr_array_core_fill_typed_storage",
@@ -170,6 +168,35 @@
       "test_callers": [
         "tests/unit/aot/test_xrt_type_identity_freestanding.c",
         "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_byte_array_copy_core.h",
+      "id": "byte-array-copy",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_c90.h",
+        "src/aot/xrt_coll.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_collection.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_byte_array_copy_core",
+        "xr_byte_array_copy_range_ok"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/ir/test_xi_cgen.c",
+        "tests/unit/stdlib/test_byte_array_copy_core.c"
       ]
     },
     {

@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 259,
+  "operation_count": 260,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -111,6 +111,34 @@
       "observable_contract": "src/shared/xr_bits_core.h",
       "observable_edges": [],
       "operation_id": "shared.bits",
+      "ownership": "native",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/byte-array-copy",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_byte_array_copy_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/byte-array-copy",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_byte_array_copy_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.byte-array-copy",
       "ownership": "native",
       "targets": [
         "vm",
@@ -1752,9 +1780,9 @@
         "bytes",
         "bounds"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_byte_array_copy_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "may-throw",
@@ -1765,10 +1793,10 @@
         "may-throw"
       ],
       "family": "memory-and-place",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.byte-array-copy",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_byte_array_copy_core.h",
       "observable_edges": [
         "in-place-copy"
       ],
@@ -1787,9 +1815,9 @@
         "bounds",
         "overlap-safe"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_byte_array_copy_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "may-throw",
@@ -1800,10 +1828,10 @@
         "may-throw"
       ],
       "family": "memory-and-place",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.byte-array-copy",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_byte_array_copy_core.h",
       "observable_edges": [
         "in-place-copy"
       ],
@@ -6666,5 +6694,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "aeee13f835c13ae74a6803de37ed2f4b838b370495b81e6ead78180640e4ede0"
+  "source_tree_fingerprint": "98a4e51707cc70095d673878bb2705edaee03e158495b68e558a05f5c91e96f9"
 }

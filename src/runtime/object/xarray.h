@@ -201,10 +201,6 @@ XR_FUNC void xr_array_append_data(XrArray *arr, const uint8_t *data, int32_t len
 XR_FUNC uint16_t xr_array_load_u16_le(XrArray *arr, int64_t offset, bool *ok);
 XR_FUNC uint32_t xr_array_load_u32_le(XrArray *arr, int64_t offset, bool *ok);
 XR_FUNC uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok);
-XR_FUNC bool xr_byte_array_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
-                                       int32_t count);
-XR_FUNC bool xr_byte_array_copy_from(XrArray *dst, XrArray *src, int32_t src_offset,
-                                     int32_t dst_offset, int32_t count);
 XR_FUNC bool xr_byte_array_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance,
                                        int32_t count);
 XR_FUNC bool xr_byte_array_append_from_span(XrArray *dst, const void *src_data, int64_t src_length,

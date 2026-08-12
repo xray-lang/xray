@@ -71,6 +71,15 @@ typedef int bool;
 #define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_NATIVE
 #define XR_ELEM_U8 6
 
+#define XR_BYTE_ARRAY_COPY_C90 1
+#include "../shared/xr_byte_array_copy_core.h"
+#undef XR_BYTE_ARRAY_COPY_C90
+
+#define xrt_byte_array_copy_semantics(kind, dst_data, dst_length, dst_elem_type, src_data,        \
+                                      src_length, src_elem_type, src_offset, dst_offset, count)   \
+    xr_byte_array_copy_core((kind), (dst_data), (dst_length), (dst_elem_type), (src_data),       \
+                            (src_length), (src_elem_type), (src_offset), (dst_offset), (count))
+
 /* Restricted C90 mechanically projects the same address/lifetime pair. */
 #define XR_DATA_POINTER_C90 1
 #include "../shared/xr_data_pointer_core.h"

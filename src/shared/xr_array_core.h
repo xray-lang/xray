@@ -640,38 +640,7 @@ static inline int64_t xr_array_core_typed_index_of(const void *data, int64_t len
 
 #undef XR_ARRAY_CORE_INDEXOF_LOOP
 
-static inline bool xr_array_core_bytes_copy_within(void *data, int64_t length, uint8_t elem_type,
-                                                   int64_t dst_offset, int64_t src_offset,
-                                                   int64_t count) {
-    if (!xr_array_core_bytes_range_ok(length, elem_type, src_offset, count) ||
-        !xr_array_core_bytes_range_ok(length, elem_type, dst_offset, count))
-        return false;
-    if (count == 0)
-        return true;
-    if (!data)
-        return false;
-    memmove((uint8_t *) data + dst_offset, (uint8_t *) data + src_offset, (size_t) count);
-    return true;
-}
-
 static XR_AINLINE void xr_array_core_copy_or_move_bytes(void *dst, const void *src, int64_t count);
-
-static inline bool xr_array_core_bytes_copy_from(void *dst_data, int64_t dst_length,
-                                                 uint8_t dst_elem_type, const void *src_data,
-                                                 int64_t src_length, uint8_t src_elem_type,
-                                                 int64_t src_offset, int64_t dst_offset,
-                                                 int64_t count, bool same_array) {
-    (void) same_array;
-    if (!xr_array_core_bytes_range_ok(src_length, src_elem_type, src_offset, count) ||
-        !xr_array_core_bytes_range_ok(dst_length, dst_elem_type, dst_offset, count))
-        return false;
-    if (count == 0)
-        return true;
-    if (!dst_data || !src_data)
-        return false;
-    return xr_byte_slice_copy_core((uint8_t *) dst_data + dst_offset, count, dst_elem_type,
-                                   (const uint8_t *) src_data + src_offset, count, src_elem_type);
-}
 
 static inline bool xr_array_core_memory_ranges_overlap(const void *a, int64_t a_len, const void *b,
                                                        int64_t b_len) {

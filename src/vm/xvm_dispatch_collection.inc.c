@@ -1867,12 +1867,20 @@ vmcase(OP_BYTE_ARRAY_COPY_WITHIN) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_EXPECTS_MSG);
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
-    if (arr->elem_type != XR_ELEM_U8)
+    XrByteArrayCopyResult copy_result = XR_BYTE_ARRAY_COPY_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO, XR_SEM_CONSUMER_VM,
+        xr_byte_array_copy_core(XR_BYTE_ARRAY_COPY_WITHIN, arr->data, arr->length,
+                                arr->elem_type, arr->data, arr->length, arr->elem_type,
+                                XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 1)),
+                                XR_TO_INT(R(a + 3))));
+    if (copy_result.status == XR_BYTE_ARRAY_COPY_WRONG_ELEMENT_TYPE)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG);
-    if (!xr_byte_array_copy_within(arr, (int32_t) XR_TO_INT(R(a + 1)),
-                                   (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
+    if (copy_result.status != XR_BYTE_ARRAY_COPY_OK) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_OOB_MSG);
     }
+    if (copy_result.changed)
+        XR_ARRAY_MARK_MUTATED(arr);
     vmbreak;
 }
 
@@ -1884,12 +1892,19 @@ vmcase(OP_BYTE_ARRAY_COPY_FROM) {
     }
     XrArray *dst = XR_TO_ARRAY(R(a));
     XrArray *src = XR_TO_ARRAY(R(a + 1));
-    if (dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
+    XrByteArrayCopyResult copy_result = XR_BYTE_ARRAY_COPY_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO, XR_SEM_CONSUMER_VM,
+        xr_byte_array_copy_core(XR_BYTE_ARRAY_COPY_FROM, dst->data, dst->length, dst->elem_type,
+                                src->data, src->length, src->elem_type, XR_TO_INT(R(a + 2)),
+                                XR_TO_INT(R(a + 3)), XR_TO_INT(R(a + 4))));
+    if (copy_result.status == XR_BYTE_ARRAY_COPY_WRONG_ELEMENT_TYPE)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG);
-    if (!xr_byte_array_copy_from(dst, src, (int32_t) XR_TO_INT(R(a + 2)),
-                                 (int32_t) XR_TO_INT(R(a + 3)), (int32_t) XR_TO_INT(R(a + 4)))) {
+    if (copy_result.status != XR_BYTE_ARRAY_COPY_OK) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OOB_MSG);
     }
+    if (copy_result.changed)
+        XR_ARRAY_MARK_MUTATED(dst);
     vmbreak;
 }
 

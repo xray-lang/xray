@@ -55,6 +55,7 @@
 #include "../runtime/xglobal_dict.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../shared/xr_array_core.h"
+#include "../shared/xr_byte_array_copy_core.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_error_core.h"
 #include "../shared/xr_error_messages.h"

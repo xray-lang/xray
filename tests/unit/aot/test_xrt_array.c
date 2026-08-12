@@ -450,36 +450,45 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
                   "raw pointer u32 load is little-endian");
     ASSERT_EQ_INT((int64_t) xr_raw_u64_from_le(xr_raw_load_u64_unaligned(raw)),
                   578437695752307201LL, "raw pointer u64 load is little-endian");
-    xrt_byte_array_copy_within_raw(a, 2, 0, 4);
+    uint64_t a_version = a->content_version;
+    xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_WITHIN, a, a, 0, 2, 4);
     ASSERT_EQ_INT(((uint8_t *) a->data)[2], 1, "copyWithin writes first overlap byte");
     ASSERT_EQ_INT(((uint8_t *) a->data)[3], 2, "copyWithin writes second overlap byte");
     ASSERT_EQ_INT(((uint8_t *) a->data)[5], 4, "copyWithin writes last selected byte");
+    ASSERT_EQ_INT(a->content_version, a_version + 1,
+                  "copyWithin marks the destination after a visible write");
+    a_version = a->content_version;
+    xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_WITHIN, a, a, 8, 8, 0);
+    ASSERT_EQ_INT(a->content_version, a_version,
+                  "zero-length copyWithin preserves the mutation version");
 
     XrValue dst_value = xrt_array_new_typed(0, XR_ELEM_U8, 0);
     xrt_array_t *dst = (xrt_array_t *) dst_value.ptr;
     for (int64_t i = 0; i < 6; i++)
         xrt_array_push(dst_value, XR_FROM_INT(0));
-    xrt_byte_array_copy_from_raw(dst, a, 1, 2, 3);
+    uint64_t dst_version = dst->content_version;
+    xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_FROM, dst, a, 1, 2, 3);
     ASSERT_EQ_INT(((uint8_t *) dst->data)[2], 2, "copyFrom writes first source byte");
     ASSERT_EQ_INT(((uint8_t *) dst->data)[3], 1, "copyFrom preserves shared source state");
     ASSERT_EQ_INT(((uint8_t *) dst->data)[4], 2, "copyFrom writes count bytes");
+    ASSERT_EQ_INT(dst->content_version, dst_version + 1,
+                  "copyFrom marks only the destination after a visible write");
 
-    EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_within_checked_raw(a, 7, 0, 2),
+    EXPECT_XRT_ERROR_THROW(
+        xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_WITHIN, a, a, 0, 7, 2),
                            XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_OOB_MSG,
                            "Array<byte> copy-within checked helper throws on range");
     XrValue int_arr_value = xrt_array_new_typed_exact(0, XR_ELEM_I64);
     xrt_array_t *int_arr = (xrt_array_t *) int_arr_value.ptr;
-    EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_checked_raw(dst, int_arr, 0, 0, 1),
+    EXPECT_XRT_ERROR_THROW(
+        xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_FROM, dst, int_arr, 0, 0, 1),
                            XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG,
                            "Array<byte> copy range checked helper throws on typed operand");
-    EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_value(dst_value, value, XR_NULL_VAL,
-                                                          XR_FROM_INT(0), XR_FROM_INT(1)),
-                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_EXPECTS_MSG,
-                           "Array<byte> copy range value helper rejects non-integer offset");
-    EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_value(dst_value, value, XR_FROM_INT(100),
-                                                          XR_FROM_INT(0), XR_FROM_INT(1)),
+    EXPECT_XRT_ERROR_THROW(
+        xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_FROM, dst, a, INT64_C(4294967296), 0,
+                                        1),
                            XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OOB_MSG,
-                           "Array<byte> copy range value helper throws on range");
+                           "Array<byte> copy range preserves 64-bit offsets without wrapping");
 
     XrValue rep_value = xrt_array_new_typed(0, XR_ELEM_U8, 0);
     xrt_array_t *rep = (xrt_array_t *) rep_value.ptr;
@@ -586,12 +595,12 @@ static void test_byte_runtime_u8_guards_are_defensive(void) {
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_load_u32_le(int_value, XR_FROM_INT(0)),
                            XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_RECEIVER_MSG,
                            "AOT defensive byte load rejects non-U8 receiver");
-    EXPECT_XRT_ERROR_THROW(
-        xrt_byte_array_copy_within_value(int_value, XR_FROM_INT(0), XR_FROM_INT(0), XR_FROM_INT(1)),
+    EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_WITHIN, ints, ints, 0,
+                                                           0, 1),
         XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG,
         "AOT defensive byte copy-within rejects non-U8 receiver");
-    EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_value(int_value, bytes_value, XR_FROM_INT(0),
-                                                          XR_FROM_INT(0), XR_FROM_INT(1)),
+    EXPECT_XRT_ERROR_THROW(
+        xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_FROM, ints, bytes, 0, 0, 1),
                            XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG,
                            "AOT defensive byte copy-from rejects non-U8 destination");
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_append_from_value(int_value, bytes_value),

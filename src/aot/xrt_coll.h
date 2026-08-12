@@ -26,6 +26,7 @@
 #include "../shared/xr_array_abi.h"
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_builtin_schema.h"
+#include "../shared/xr_byte_array_copy_core.h"
 #include "../shared/xr_cell_access_core.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_error_core.h"
@@ -39,6 +40,15 @@
 #include "../shared/xr_typed_ops.h"
 #include <errno.h>
 #include <string.h>
+
+#define xrt_byte_array_copy_semantics(kind, dst_data, dst_length, dst_elem_type, src_data,        \
+                                      src_length, src_elem_type, src_offset, dst_offset, count)   \
+    XR_BYTE_ARRAY_COPY_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,                                               \
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO, XR_SEM_CONSUMER_AOT_HOSTED,                  \
+        xr_byte_array_copy_core((kind), (dst_data), (dst_length), (dst_elem_type), (src_data),   \
+                                (src_length), (src_elem_type), (src_offset), (dst_offset),       \
+                                (count)))
 
 #define xrt_pod_slice_copy_semantics(dst_data, dst_length, dst_elem_size, src_data, src_length,   \
                                      src_elem_size)                                               \

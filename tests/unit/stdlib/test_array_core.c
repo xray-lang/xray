@@ -652,34 +652,6 @@ TEST(array_core_bytes_loads_little_endian_and_rejects_invalid_ranges) {
     ASSERT_FALSE(xr_array_core_bytes_store_u64(roundtrip, 24, XR_ELEM_U8, 17, 0, XR_ENDIAN_LE));
 }
 
-TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules) {
-    uint8_t data[] = {1, 2, 3, 4, 5, 6};
-    ASSERT_TRUE(xr_array_core_bytes_copy_within(data, 6, XR_ELEM_U8, 2, 0, 4));
-    ASSERT_EQ_INT(data[0], 1);
-    ASSERT_EQ_INT(data[2], 1);
-    ASSERT_EQ_INT(data[3], 2);
-    ASSERT_EQ_INT(data[5], 4);
-    ASSERT_FALSE(xr_array_core_bytes_copy_within(data, 6, XR_ELEM_U8, 3, 0, 4));
-
-    uint8_t src[] = {9, 8, 7, 6};
-    uint8_t dst[] = {0, 0, 0, 0, 0, 0};
-    ASSERT_TRUE(
-        xr_array_core_bytes_copy_from(dst, 6, XR_ELEM_U8, src, 4, XR_ELEM_U8, 1, 2, 3, false));
-    ASSERT_EQ_INT(dst[2], 8);
-    ASSERT_EQ_INT(dst[3], 7);
-    ASSERT_EQ_INT(dst[4], 6);
-
-    uint8_t overlap[] = {10, 20, 30, 40, 50, 60};
-    ASSERT_TRUE(xr_array_core_bytes_copy_from(overlap, 6, XR_ELEM_U8, overlap, 6, XR_ELEM_U8, 0, 2,
-                                              4, true));
-    ASSERT_EQ_INT(overlap[2], 10);
-    ASSERT_EQ_INT(overlap[3], 20);
-    ASSERT_EQ_INT(overlap[4], 30);
-    ASSERT_EQ_INT(overlap[5], 40);
-    ASSERT_FALSE(
-        xr_array_core_bytes_copy_from(dst, 6, XR_ELEM_U8, src, 4, XR_ELEM_I64, 0, 0, 1, false));
-}
-
 TEST(raw_memory_copy_nonoverlap_owner_handles_boundaries) {
     uint8_t src[40];
     for (int i = 0; i < 40; i++)
@@ -1046,7 +1018,6 @@ RUN_TEST(array_core_shift_right_one_moves_raw_elements_by_size);
 RUN_TEST(array_core_shift_right_one_handles_empty_and_invalid_data);
 RUN_TEST(array_core_typed_index_of_matches_boxed_tags);
 RUN_TEST(array_core_bytes_loads_little_endian_and_rejects_invalid_ranges);
-RUN_TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules);
 RUN_TEST(raw_memory_copy_nonoverlap_owner_handles_boundaries);
 RUN_TEST(array_core_bytes_repeat_from_matches_lz_style_overlap);
 RUN_TEST(array_core_bytes_common_prefix_uses_min_length_and_word_chunks);

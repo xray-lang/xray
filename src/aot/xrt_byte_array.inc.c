@@ -585,44 +585,31 @@ static inline int64_t xrt_byte_slice_load_u64_le_checked_raw(xr_span_t span, int
     return xrt_byte_slice_load_u64_le_unchecked_raw(span, off);
 }
 
-static inline xrt_array_t *xrt_byte_array_copy_within_raw(xrt_array_t *a, int64_t dst, int64_t src,
-                                                          int64_t count) {
-    if (xrt_byte_array_range_ok(a, dst, count) && xrt_byte_array_range_ok(a, src, count) &&
-        count > 0)
-        memmove((uint8_t *) a->data + dst, (uint8_t *) a->data + src, (size_t) count);
-    return a;
-}
-
-static inline xrt_array_t *xrt_byte_array_copy_from_raw(xrt_array_t *dst, xrt_array_t *src,
-                                                        int64_t src_offset, int64_t dst_offset,
-                                                        int64_t count) {
-    if (!xrt_byte_array_range_ok(src, src_offset, count) ||
-        !xrt_byte_array_range_ok(dst, dst_offset, count) || count <= 0)
-        return dst;
-    uint8_t *dp = (uint8_t *) dst->data + dst_offset;
-    uint8_t *sp = (uint8_t *) src->data + src_offset;
-    xr_array_core_copy_or_move_bytes(dp, sp, count);
+static inline xrt_array_t *xrt_byte_array_copy_checked_raw(
+    XrByteArrayCopyKind kind, xrt_array_t *dst, xrt_array_t *src, int64_t src_offset,
+    int64_t dst_offset, int64_t count) {
+    if (!dst || !src)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        kind == XR_BYTE_ARRAY_COPY_WITHIN
+                            ? XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG
+                            : XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG);
+    XrByteArrayCopyResult result = xrt_byte_array_copy_semantics(
+        kind, dst->data, dst->length, dst->elem_type, src->data, src->length, src->elem_type,
+        src_offset, dst_offset, count);
+    if (result.status == XR_BYTE_ARRAY_COPY_WRONG_ELEMENT_TYPE ||
+        result.status == XR_BYTE_ARRAY_COPY_INVALID_KIND)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        kind == XR_BYTE_ARRAY_COPY_WITHIN
+                            ? XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG
+                            : XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG);
+    if (result.status != XR_BYTE_ARRAY_COPY_OK)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        kind == XR_BYTE_ARRAY_COPY_WITHIN
+                            ? XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_OOB_MSG
+                            : XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OOB_MSG);
+    if (result.changed)
+        XR_ARRAY_MARK_MUTATED(dst);
     return dst;
-}
-
-static inline xrt_array_t *xrt_byte_array_copy_within_checked_raw(xrt_array_t *a, int64_t dst,
-                                                                  int64_t src, int64_t count) {
-    if (!a || a->elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG);
-    if (!xrt_byte_array_range_ok(a, dst, count) || !xrt_byte_array_range_ok(a, src, count))
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_OOB_MSG);
-    return xrt_byte_array_copy_within_raw(a, dst, src, count);
-}
-
-static inline xrt_array_t *xrt_byte_array_copy_from_checked_raw(xrt_array_t *dst, xrt_array_t *src,
-                                                                int64_t src_offset,
-                                                                int64_t dst_offset, int64_t count) {
-    if (!dst || !src || dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG);
-    if (!xrt_byte_array_range_ok(src, src_offset, count) ||
-        !xrt_byte_array_range_ok(dst, dst_offset, count))
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OOB_MSG);
-    return xrt_byte_array_copy_from_raw(dst, src, src_offset, dst_offset, count);
 }
 
 static inline xrt_array_t *xrt_byte_array_repeat_from_raw(xrt_array_t *a, int64_t dst,
@@ -743,37 +730,6 @@ static inline XrValue xrt_byte_array_load_u64_le(XrValue arr_value, XrValue offs
     if (!xrt_byte_array_range_ok(a, off, 8))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG);
     return XR_FROM_INT((int64_t) xrt_byte_array_load_u64_le_raw(a, off));
-}
-
-static inline XrValue xrt_byte_array_copy_within_value(XrValue arr_value, XrValue dst_value,
-                                                       XrValue src_value, XrValue count_value) {
-    if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr || !XR_IS_INT(dst_value) ||
-        !XR_IS_INT(src_value) || !XR_IS_INT(count_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_EXPECTS_MSG);
-    xrt_array_t *a = (xrt_array_t *) arr_value.ptr;
-    if (a->elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG);
-    int64_t dst = XR_TO_INT(dst_value);
-    int64_t src = XR_TO_INT(src_value);
-    int64_t count = XR_TO_INT(count_value);
-    xrt_byte_array_copy_within_checked_raw(a, dst, src, count);
-    return arr_value;
-}
-
-static inline XrValue xrt_byte_array_copy_from_value(XrValue dst_value, XrValue src_value,
-                                                     XrValue src_offset_value,
-                                                     XrValue dst_offset_value,
-                                                     XrValue count_value) {
-    if (!XR_IS_ARRAY(dst_value) || !XR_IS_ARRAY(src_value) || !dst_value.ptr || !src_value.ptr ||
-        !XR_IS_INT(src_offset_value) || !XR_IS_INT(dst_offset_value) || !XR_IS_INT(count_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_EXPECTS_MSG);
-    int64_t src_offset = XR_TO_INT(src_offset_value);
-    int64_t dst_offset = XR_TO_INT(dst_offset_value);
-    int64_t count = XR_TO_INT(count_value);
-    xrt_byte_array_copy_from_checked_raw((xrt_array_t *) dst_value.ptr,
-                                         (xrt_array_t *) src_value.ptr, src_offset, dst_offset,
-                                         count);
-    return dst_value;
 }
 
 static inline XrValue xrt_byte_array_repeat_from_value(XrValue arr_value, XrValue dst_value,

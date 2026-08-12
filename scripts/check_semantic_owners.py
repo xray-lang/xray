@@ -23,7 +23,8 @@ from xisagen import parse_xi_ops_def, parse_xi_semantic_owners  # noqa: E402
 
 SOURCE_SUFFIXES = (".c", ".h")
 SIGNATURE_RE = re.compile(
-    r"\b(?:(?:static\s+)?inline|XR_BYTE_SLICE_SCALAR_INLINE|XR_NULL_TEST_INLINE)\s+[^;{}]*?"
+    r"\b(?:(?:static\s+)?inline|XR_BYTE_SLICE_SCALAR_INLINE|XR_BYTE_ARRAY_COPY_INLINE|"
+    r"XR_NULL_TEST_INLINE)\s+[^;{}]*?"
     r"\b(xr_[A-Za-z0-9_]+)\s*\(")
 SORT_OLD_SYMBOLS = (
     "xr_array_hybrid_sort",
@@ -165,6 +166,7 @@ ENUM_METADATA_ACCESS_OPERATIONS = {"xi.enum.variant.at", "xi.enum.payload.at"}
 CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
 NULL_TEST_OPERATIONS = {"xi.isnull"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
+BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -2123,6 +2125,126 @@ def verify_data_pointer_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_byte_array_copy_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.byte-array-copy"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != BYTE_ARRAY_COPY_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.byte-array-copy family")
+
+    core_text = (root / "src/shared/xr_byte_array_copy_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_BYTE_ARRAY_COPY_OWNER_APPLY",
+                  "xr_byte_array_copy_core", "xr_byte_array_copy_range_ok", "memmove(",
+                  "count <= length - offset"):
+        if token not in core_text:
+            errors.append("src/shared/xr_byte_array_copy_core.h: copy contract is incomplete")
+            break
+
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for opcode, kind in (("OP_BYTE_ARRAY_COPY_WITHIN", "XR_BYTE_ARRAY_COPY_WITHIN"),
+                         ("OP_BYTE_ARRAY_COPY_FROM", "XR_BYTE_ARRAY_COPY_FROM")):
+        start = vm_text.find(f"vmcase({opcode})")
+        end = vm_text.find("vmbreak;", start)
+        body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+        for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                      "XR_BYTE_ARRAY_COPY_OWNER_APPLY", "xr_byte_array_copy_core", kind,
+                      "XR_ARRAY_MARK_MUTATED"):
+            if token not in body:
+                errors.append(
+                    f"src/vm/xvm_dispatch_collection.inc.c: {opcode} bypasses copy owner")
+                break
+        if "(int32_t) XR_TO_INT" in body or "memmove(" in body or "range_ok" in body:
+            errors.append(
+                f"src/vm/xvm_dispatch_collection.inc.c: {opcode} owns or truncates semantics")
+
+    retired = (
+        "xr_array_core_bytes_copy_within", "xr_array_core_bytes_copy_from",
+        "xr_byte_array_copy_within", "xr_byte_array_copy_from",
+        "xrt_byte_array_copy_within_raw", "xrt_byte_array_copy_from_raw",
+        "xrt_byte_array_copy_within_checked_raw", "xrt_byte_array_copy_from_checked_raw",
+        "xrt_byte_array_copy_within_value", "xrt_byte_array_copy_from_value",
+    )
+    retired_surfaces = "\n".join(
+        (root / relative).read_text(encoding="utf-8", errors="strict")
+        for relative in ("src/runtime/object/xarray.c", "src/runtime/object/xarray.h",
+                         "src/shared/xr_array_core.h", "src/aot/xrt_byte_array.inc.c")
+    )
+    for symbol in retired:
+        if re.search(rf"\b{re.escape(symbol)}\s*\(", retired_surfaces):
+            errors.append(f"retired byte-array copy surface revived: {symbol}")
+
+    for relative, consumer in (("src/aot/xrt_coll.h", "XR_SEM_CONSUMER_AOT_HOSTED"),
+                               ("src/aot/xrt_core_freestanding.h",
+                                "XR_SEM_CONSUMER_AOT_FREESTANDING")):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for token in (f"{marker}_HI", f"{marker}_LO", consumer,
+                      "XR_BYTE_ARRAY_COPY_OWNER_APPLY", "xrt_byte_array_copy_semantics",
+                      "xr_byte_array_copy_core"):
+            if token not in text:
+                errors.append(f"{relative}: byte-array copy adapter bypasses stable owner")
+                break
+        if "#ifndef xrt_byte_array_copy_semantics" in text:
+            errors.append(f"{relative}: byte-array copy fallback or alias revived")
+
+    hosted_text = (root / "src/aot/xrt_byte_array.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    hosted_body = extract_c_function(hosted_text, "xrt_byte_array_copy_checked_raw") or ""
+    for token in ("xrt_byte_array_copy_semantics", "XR_ARRAY_MARK_MUTATED", "result.changed",
+                  "result.status != XR_BYTE_ARRAY_COPY_OK"):
+        if token not in hosted_body:
+            errors.append("src/aot/xrt_byte_array.inc.c: checked copy adapter is incomplete")
+            break
+    if "memmove(" in hosted_body or "xrt_byte_array_range_ok" in hosted_body:
+        errors.append("src/aot/xrt_byte_array.inc.c: checked copy adapter owns semantics")
+
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    for token in ("XR_BYTE_ARRAY_COPY_C90", "#undef XR_BYTE_ARRAY_COPY_C90",
+                  "xrt_byte_array_copy_semantics", "xr_byte_array_copy_core"):
+        if token not in c90_text:
+            errors.append("src/aot/xrt_c90.h: byte-array copy mechanical adapter is incomplete")
+            break
+    if "memmove(" in c90_text or "xr_byte_array_copy_range_ok(" in c90_text:
+        errors.append("src/aot/xrt_c90.h: C90 byte-array copy adapter owns semantics")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_byte_array_copy_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: byte-array copy does not resolve stable adapter")
+    dispatch = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for emitter, kind in (("xicgen_byte_array_copy_within", "XR_BYTE_ARRAY_COPY_WITHIN"),
+                          ("xicgen_byte_array_copy_from", "XR_BYTE_ARRAY_COPY_FROM")):
+        body = extract_c_function(dispatch, emitter) or ""
+        if ("cg_byte_array_copy_adapter_name" not in body or kind not in body or
+                "xicgen_byte_array_i64_arg" not in body):
+            errors.append(
+                f"src/aot/xi_cgen_dispatch_helpers.inc.c: {emitter} bypasses copy adapter")
+        if ("xr_byte_array_copy_core" in body or "memmove(" in body or "range_ok" in body or
+                any(symbol in body for symbol in retired)):
+            errors.append(
+                f"src/aot/xi_cgen_dispatch_helpers.inc.c: {emitter} owns copy semantics")
+
+    for relative in ("src/ir/xi_opt.c", "src/aot/xaot_prepare.c"):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if ("XI_BYTE_ARRAY_COPY_WITHIN" not in text or "XI_BYTE_ARRAY_COPY_FROM" not in text):
+            errors.append(f"{relative}: byte-array copy mechanical adapter is missing")
+        if "xr_byte_array_copy_core" in text:
+            errors.append(f"{relative}: optimizer or prepare path owns copy semantics")
+
+    cmake_text = (root / "tests/unit/CMakeLists.txt").read_text(
+        encoding="utf-8", errors="strict")
+    for fixture in ("test_byte_array_copy_core", "test_xrt_byte_array_copy_owner_freestanding",
+                    "test_xrt_byte_array_copy_owner_c90"):
+        if fixture not in cmake_text:
+            errors.append(f"tests/unit/CMakeLists.txt: {fixture} is not registered")
+    return errors
+
+
 def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     families = (
@@ -2329,8 +2451,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 33:
-        errors.append(f"shared-core inventory must contain exactly 33 headers, found {len(actual)}")
+    if len(actual) != 34:
+        errors.append(f"shared-core inventory must contain exactly 34 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -2372,6 +2494,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_cell_access_ratchet(root, registry))
         errors.extend(verify_null_test_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
+        errors.extend(verify_byte_array_copy_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))
         errors.extend(verify_pod_slice_view_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)

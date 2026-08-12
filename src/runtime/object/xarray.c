@@ -1088,31 +1088,6 @@ uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok) {
     return xr_array_core_bytes_load_u64_le(arr->data, arr->length, arr->elem_type, offset, ok);
 }
 
-bool xr_byte_array_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
-                               int32_t count) {
-    if (!xr_byte_array_range_ok(arr, src_offset, count) ||
-        !xr_byte_array_range_ok(arr, dst_offset, count))
-        return false;
-    if (count > 0) {
-        uint8_t *data = (uint8_t *) arr->data;
-        memmove(data + dst_offset, data + src_offset, (size_t) count);
-    }
-    return true;
-}
-
-bool xr_byte_array_copy_from(XrArray *dst, XrArray *src, int32_t src_offset, int32_t dst_offset,
-                             int32_t count) {
-    if (!xr_byte_array_range_ok(src, src_offset, count) ||
-        !xr_byte_array_range_ok(dst, dst_offset, count))
-        return false;
-    if (count > 0) {
-        uint8_t *dst_data = (uint8_t *) dst->data + dst_offset;
-        uint8_t *src_data = (uint8_t *) src->data + src_offset;
-        xr_array_core_copy_or_move_bytes(dst_data, src_data, count);
-    }
-    return true;
-}
-
 bool xr_byte_array_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance, int32_t count) {
     if (!arr)
         return false;

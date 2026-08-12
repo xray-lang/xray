@@ -5239,6 +5239,79 @@ TEST(cgen_byte_slice_safe_methods_use_stable_owners) {
     xi_func_free(ir);
 }
 
+TEST(cgen_byte_array_copy_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
+                                          XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO,
+                                          XR_SEM_CONSUMER_CGEN));
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO);
+    TEST_REQUIRE(adapter != NULL && strcmp(adapter, "xrt_byte_array_copy_checked_raw") == 0,
+                 "byte-array copy publishes its stable CGen adapter");
+
+    XrType *array_type = xr_type_new_u8_array(g_iso);
+    XrType int_type = {
+        .kind = XR_KIND_INT, .id = 946, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    TEST_REQUIRE(array_type != NULL, "manual byte-array copy type allocated");
+    XiFunc *ir = xi_func_new("manual_byte_array_copy_owner", array_type);
+    TEST_REQUIRE(ir != NULL, "manual byte-array copy function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual byte-array copy entry allocated");
+    entry->sealed = true;
+    ir->nparams = 2;
+    ir->min_params = 2;
+    ir->params = (XiValue **) xr_calloc(2, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "manual byte-array copy parameters allocated");
+    XiValue *dst = xi_param(ir, entry, 0, array_type);
+    XiValue *src = xi_param(ir, entry, 1, array_type);
+    ir->params[0] = dst;
+    ir->params[1] = src;
+    ir->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(ir, (uint32_t) sizeof(*ir->arc_borrow_sig));
+    TEST_REQUIRE(ir->arc_borrow_sig != NULL, "manual byte-array copy ownership allocated");
+    ir->arc_borrow_sig->nparams = 2;
+    ir->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    ir->arc_borrow_sig->param_own[1] = XI_OWN_BORROWED;
+    ir->arc_borrow_sig->valid = true;
+    ir->arc_return_ownership.kind = XI_RETURN_OWNERSHIP_BORROWED_PARAM;
+    ir->arc_return_ownership.param_index = 0;
+    ir->arc_return_ownership.complete = true;
+    XiValue *zero = xi_const_int(ir, entry, 0, &int_type);
+    XiValue *two = xi_const_int(ir, entry, 2, &int_type);
+    XiValue *within = xi_value_new(ir, entry, XI_BYTE_ARRAY_COPY_WITHIN, array_type, 4);
+    XiValue *from = xi_value_new(ir, entry, XI_BYTE_ARRAY_COPY_FROM, array_type, 5);
+    TEST_REQUIRE(dst != NULL && src != NULL && zero != NULL && two != NULL && within != NULL &&
+                     from != NULL,
+                 "manual byte-array copy values allocated");
+    within->args[0] = dst;
+    within->args[1] = two;
+    within->args[2] = zero;
+    within->args[3] = two;
+    from->args[0] = within;
+    from->args[1] = src;
+    from->args[2] = zero;
+    from->args[3] = zero;
+    from->args[4] = two;
+    xi_block_set_return(entry, from);
+
+    TEST_REQUIRE(test_prepare_backend_ir(ir), "byte-array copy owner fixture reached Backend");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "byte-array copy owner fixture generated C");
+    TEST_REQUIRE(count_between(code, code + strlen(code),
+                               "xrt_byte_array_copy_checked_raw(") == 2,
+                 "both byte-array copy operations call the stable owner adapter");
+    TEST_REQUIRE(contains(code, "XR_BYTE_ARRAY_COPY_WITHIN") &&
+                     contains(code, "XR_BYTE_ARRAY_COPY_FROM"),
+                 "generated C selects the exact copy owner operation");
+    TEST_REQUIRE(!contains(code, "xrt_byte_array_copy_within_raw(") &&
+                     !contains(code, "xrt_byte_array_copy_from_raw(") &&
+                     !contains(code, "xr_byte_array_copy_core("),
+                 "generated C does not recreate or revive copy semantics");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_byte_slice_native_load_elides_endian_box) {
     const char *src =
         "fn roundtrip(view: ref Slice<byte>, value: u64, endian: Endian, flip: bool) -> u64 {\n"
@@ -13335,6 +13408,7 @@ int main(void) {
     run_cgen_string_copy_bytes_preserves_byte_storage_fast_path();
     run_cgen_typed_array_zero_fill_range_uses_memset();
     run_cgen_byte_slice_safe_methods_use_stable_owners();
+    run_cgen_byte_array_copy_uses_stable_owner_adapter();
     run_cgen_byte_slice_native_load_elides_endian_box();
     run_cgen_span_window_and_mem_slice_elide_boxed_operands();
     run_cgen_borrowed_bytes_param_reserve_skips_arc();

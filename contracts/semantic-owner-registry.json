@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "bf06c40fa64d409c314206c975623994711d8c39fb447c59fc33ccaeaae99631",
+  "canonical_fingerprint": "f0e8a0ee4144c07be7b42206bf68d1d54f86774061803eee63b846de2aad1bd4",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -212,6 +212,53 @@
           "consumer": "runtime",
           "path": "src/runtime/object/xbigint.c",
           "symbol": "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY"
+        }
+      ]
+    },
+    {
+      "owner": "shared.byte-array-copy",
+      "owner_id": "bb25374a4853f10d6f88453fb142876f",
+      "owner_id_hi": "0xbb25374a4853f10d",
+      "owner_id_lo": "0x6f88453fb142876f",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.byte.array.copy.within",
+        "xi.byte.array.copy.from"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
+      ],
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_byte_array_copy_checked_raw",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_BYTE_ARRAY_COPY_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_coll.h",
+          "symbol": "xrt_byte_array_copy_semantics"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_byte_array_copy_semantics"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_byte_array_copy_adapter_name"
         }
       ]
     },
@@ -1629,50 +1676,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.byte.array.append.from"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.byte.array.copy.from",
-      "owner_id": "dce702ff85a843002bf9a96e3667ab1b",
-      "owner_id_hi": "0xdce702ff85a84300",
-      "owner_id_lo": "0x2bf9a96e3667ab1b",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.byte.array.copy.from"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.byte.array.copy.within",
-      "owner_id": "a8c4e02af043ead796163bd9090e4ab8",
-      "owner_id_hi": "0xa8c4e02af043ead7",
-      "owner_id_lo": "0x96163bd9090e4ab8",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.byte.array.copy.within"
       ],
       "consumers": [
         "semantic-plan"
@@ -8060,21 +8063,45 @@
       "operation_id": "a8c4e02af043ead796163bd9090e4ab8",
       "operation_id_hi": "0xa8c4e02af043ead7",
       "operation_id_lo": "0x96163bd9090e4ab8",
-      "owner": "xi.byte.array.copy.within",
-      "owner_id": "a8c4e02af043ead796163bd9090e4ab8",
-      "owner_id_hi": "0xa8c4e02af043ead7",
-      "owner_id_lo": "0x96163bd9090e4ab8",
-      "category": "declarative-primitive",
+      "owner": "shared.byte-array-copy",
+      "owner_id": "bb25374a4853f10d6f88453fb142876f",
+      "owner_id_hi": "0xbb25374a4853f10d",
+      "owner_id_lo": "0x6f88453fb142876f",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_byte_array_copy_checked_raw",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_BYTE_ARRAY_COPY_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_coll.h",
+          "symbol": "xrt_byte_array_copy_semantics"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_byte_array_copy_semantics"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_byte_array_copy_adapter_name"
         }
       ]
     },
@@ -8083,21 +8110,45 @@
       "operation_id": "dce702ff85a843002bf9a96e3667ab1b",
       "operation_id_hi": "0xdce702ff85a84300",
       "operation_id_lo": "0x2bf9a96e3667ab1b",
-      "owner": "xi.byte.array.copy.from",
-      "owner_id": "dce702ff85a843002bf9a96e3667ab1b",
-      "owner_id_hi": "0xdce702ff85a84300",
-      "owner_id_lo": "0x2bf9a96e3667ab1b",
-      "category": "declarative-primitive",
+      "owner": "shared.byte-array-copy",
+      "owner_id": "bb25374a4853f10d6f88453fb142876f",
+      "owner_id_hi": "0xbb25374a4853f10d",
+      "owner_id_lo": "0x6f88453fb142876f",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_byte_array_copy_checked_raw",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_BYTE_ARRAY_COPY_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_coll.h",
+          "symbol": "xrt_byte_array_copy_semantics"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_byte_array_copy_semantics"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_byte_array_copy_adapter_name"
         }
       ]
     },

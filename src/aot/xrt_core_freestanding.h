@@ -46,6 +46,7 @@ void *memset(void *dst, int value, size_t n);
 int memcmp(const void *a, const void *b, size_t n);
 
 #include "../shared/xr_raw_scalar_core.h"
+#include "../shared/xr_byte_array_copy_core.h"
 #include "../shared/xr_raw_memory_core.h"
 #include "../shared/xr_data_pointer_core.h"
 #include "../shared/xr_obj_header.h"
@@ -168,6 +169,14 @@ int memcmp(const void *a, const void *b, size_t n);
         XR_SEM_CONSUMER_AOT_FREESTANDING,                                                         \
         xr_byte_slice_copy_core((dst_data), (dst_length), XR_ELEM_U8, (src_data), (src_length),  \
                                 XR_ELEM_U8))
+#define xrt_byte_array_copy_semantics(kind, dst_data, dst_length, dst_elem_type, src_data,        \
+                                      src_length, src_elem_type, src_offset, dst_offset, count)   \
+    XR_BYTE_ARRAY_COPY_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,                                               \
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,            \
+        xr_byte_array_copy_core((kind), (dst_data), (dst_length), (dst_elem_type), (src_data),   \
+                                (src_length), (src_elem_type), (src_offset), (dst_offset),       \
+                                (count)))
 #define xrt_byte_slice_repeat_semantics(data, length, dst_offset, distance, count)                 \
     XR_BYTE_SLICE_REPEAT_OWNER_APPLY(                                                             \
         XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,                                             \
