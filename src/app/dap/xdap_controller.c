@@ -114,14 +114,12 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program, char **ar
     XrVMConfig params;
     xray_vm_config_init(&params);
     params.trace_execution = false;
+    params.userdata = ctrl;
 
     ctrl->isolate = xray_vm_new_full(&params);
     if (!ctrl->isolate) {
         return false;
     }
-
-    // Set userdata to controller for callbacks
-    xray_vm_set_userdata(ctrl->isolate, ctrl);
 
     // Initialize multicore runtime
     xray_vm_multicore_init(ctrl->isolate, 0);

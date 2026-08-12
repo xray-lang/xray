@@ -110,7 +110,7 @@ static void hook_record_stop(XrVMRuntime *isolate, XrDebugState *dbg, const char
     }
 
     // Wire up the controller so the event loop sees PAUSED
-    XdapController *ctrl = (XdapController *) xray_vm_get_userdata(isolate);
+    XdapController *ctrl = (XdapController *) xr_isolate_get_userdata(isolate);
     if (ctrl) {
         ctrl->vm_state = XDAP_VM_PAUSED;
         ctrl->stop_reason = stop_reason;
@@ -133,7 +133,7 @@ static XrDebugAction hook_on_line(XrVMRuntime *isolate, const char *path, int li
     XrDebugAction action = dbg->current_action;
 
     // 1. Pause check (highest priority) — set by controller via atomic flag
-    XdapController *ctrl = (XdapController *) xray_vm_get_userdata(isolate);
+    XdapController *ctrl = (XdapController *) xr_isolate_get_userdata(isolate);
     if (ctrl && atomic_load(&ctrl->cmd_pending)) {
         int cmd = atomic_load(&ctrl->pending_cmd);
         if (cmd == XDAP_CMD_PAUSE) {
@@ -218,7 +218,7 @@ static XrDebugAction hook_on_exception(XrVMRuntime *isolate, const char *message
         dbg->current_action = XR_DBG_ACTION_BREAK;
 
         // Signal controller event loop
-        XdapController *ctrl = (XdapController *) xray_vm_get_userdata(isolate);
+        XdapController *ctrl = (XdapController *) xr_isolate_get_userdata(isolate);
         if (ctrl) {
             ctrl->vm_state = XDAP_VM_PAUSED;
             ctrl->stop_reason = XDAP_STOP_EXCEPTION;

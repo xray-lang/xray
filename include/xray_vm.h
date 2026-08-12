@@ -67,9 +67,6 @@ XRAY_API int xray_vm_dofile_debug(XrVMRuntime *vm, const char *filename, void **
 
 XRAY_API int xray_vm_eval_bundle(XrVMRuntime *vm, const XrBytecodeBundle *bundle);
 
-XRAY_API void xray_vm_set_userdata(XrVMRuntime *vm, void *userdata);
-XRAY_API void *xray_vm_get_userdata(XrVMRuntime *vm);
-
 XRAY_API void xray_vm_set_script_info(XrVMRuntime *vm, const char *script_file, int argc,
                                       char **argv);
 

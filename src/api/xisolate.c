@@ -316,16 +316,3 @@ void xray_vm_delete(XrVMRuntime *isolate) {
 
     xr_free(isolate);
 }
-
-/* ========== Advanced API ========== */
-
-void xray_vm_set_userdata(XrVMRuntime *isolate, void *userdata) {
-    xray_api_check(isolate != NULL, "xray_vm_set_userdata: NULL isolate");
-    if (isolate->core_rt)
-        isolate->core_rt->userdata = userdata;
-}
-
-void *xray_vm_get_userdata(XrVMRuntime *isolate) {
-    xray_api_checkr(isolate != NULL, "xray_vm_get_userdata: NULL isolate", NULL);
-    return isolate->core_rt ? isolate->core_rt->userdata : NULL;
-}

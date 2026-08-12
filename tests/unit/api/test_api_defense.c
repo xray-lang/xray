@@ -99,27 +99,6 @@ TEST(api_isolate_dofile_null_filename) {
     xray_vm_delete(iso);
 }
 
-/* ========== Advanced API NULL Safety ========== */
-
-TEST(api_isolate_set_userdata_null) {
-    if (SKIP_NULL_RETURN_TESTS) {
-        ASSERT_TRUE(1);
-        return;
-    }
-    // Should not crash
-    xray_vm_set_userdata(NULL, (void *) 0x1234);
-    ASSERT_TRUE(1);
-}
-
-TEST(api_isolate_get_userdata_null) {
-    if (SKIP_NULL_RETURN_TESTS) {
-        ASSERT_TRUE(1);
-        return;
-    }
-    void *ud = xray_vm_get_userdata(NULL);
-    ASSERT_NULL(ud);
-}
-
 /* ========== Isolate Lifecycle (valid) ========== */
 
 TEST(api_isolate_create_destroy) {
@@ -128,20 +107,6 @@ TEST(api_isolate_create_destroy) {
 
     XrVMRuntime *iso = xray_vm_new(&params);
     ASSERT_NOT_NULL(iso);
-
-    xray_vm_delete(iso);
-}
-
-TEST(api_isolate_userdata_roundtrip) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
-    XrVMRuntime *iso = xray_vm_new(&params);
-    ASSERT_NOT_NULL(iso);
-
-    void *data = (void *) 0xDEADBEEF;
-    xray_vm_set_userdata(iso, data);
-    void *got = xray_vm_get_userdata(iso);
-    ASSERT_EQ_PTR(got, data);
 
     xray_vm_delete(iso);
 }
@@ -157,11 +122,8 @@ RUN_TEST(api_isolate_dostring_null_isolate);
 RUN_TEST(api_isolate_dostring_null_source);
 RUN_TEST(api_isolate_dofile_null_isolate);
 RUN_TEST(api_isolate_dofile_null_filename);
-RUN_TEST(api_isolate_set_userdata_null);
-RUN_TEST(api_isolate_get_userdata_null);
 
 RUN_TEST_SUITE("API Lifecycle - Valid Operations");
 RUN_TEST(api_isolate_create_destroy);
-RUN_TEST(api_isolate_userdata_roundtrip);
 
 TEST_MAIN_END()
