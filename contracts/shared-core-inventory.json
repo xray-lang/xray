@@ -615,6 +615,36 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_null_test_core.h",
+      "id": "null-test",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt.h",
+        "src/aot/xrt_c90.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/ir/xi_opt.c",
+        "src/ir/xi_opt_sccp.c",
+        "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_compare.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_null_test_pointer_is_null_core",
+        "xr_null_test_tagged_core"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_null_test_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_numeric_conversion_core.h",
       "id": "numeric-conversion",
       "owner": "shared-kernel",

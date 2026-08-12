@@ -31,6 +31,7 @@
 #include "../shared/xr_int_arith.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_numeric_core.h"
+#include "../shared/xr_null_test_core.h"
 #include "../runtime/value/xtype.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include <string.h>
@@ -342,7 +343,7 @@ static SccpCell eval_unary(uint16_t op, SccpCell a) {
         case XI_ISNULL:
             /* A non-null constant is never null. */
             if (a.kind == SCCP_CONST_INT || a.kind == SCCP_CONST_FLOAT || a.kind == SCCP_CONST_BOOL)
-                return sccp_bool(false);
+                return sccp_bool(xr_null_test_tagged_core(UINT8_C(1)));
             return sccp_bot();
         default:
             return sccp_bot();

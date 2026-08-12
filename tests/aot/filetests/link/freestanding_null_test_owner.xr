@@ -1,0 +1,4 @@
+@c_export
+fn xray_null_test_owner(value: int?) -> int {
+    return value ?? 1
+}

@@ -12278,16 +12278,21 @@ static void xicgen_isnull(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
      * XrValue (see xr_type_rep: "null(0) vs non-null(ptr) distinguishable by
      * payload"), so its C storage is a bare pointer and `.tag` would not even
      * compile. Test the pointer instead. Tagged storage keeps the tag test. */
-    XrRep rep = xicgen_value_c_storage_rep(ctx, f, v->args[0]);
-    if (rep == XR_REP_PTR || rep == XR_REP_RAWPTR || rep == XR_REP_STR) {
-        fprintf(out, "(");
-        emit_vref(out, v->args[0]);
-        fprintf(out, " == NULL)");
+    const char *adapter = cg_null_test_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "(");
+    XrRep rep = xicgen_value_c_storage_rep(ctx, f, v->args[0]);
+    if (rep == XR_REP_PTR || rep == XR_REP_RAWPTR || rep == XR_REP_STR) {
+        fprintf(out, "%s_pointer(", adapter);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+        return;
+    }
+    fprintf(out, "%s_tagged(", adapter);
     emit_vref(out, v->args[0]);
-    fprintf(out, ".tag == XR_TAG_NULL)");
+    fprintf(out, ".tag)");
 }
 
 static void xicgen_box(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

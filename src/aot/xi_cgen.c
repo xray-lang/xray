@@ -4772,6 +4772,24 @@ static const char *cg_cell_access_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
+static const char *cg_null_test_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,
+                                        XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: null-test owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI, XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: null-test owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
 static void emit_condition_expr_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (xi_copy_is_branch_hint(v) && v->nargs >= 1 && v->args[0]) {
         fprintf(out, "%s(", v->aux_int == XI_COPY_KIND_LIKELY ? "XR_LIKELY" : "XR_UNLIKELY");

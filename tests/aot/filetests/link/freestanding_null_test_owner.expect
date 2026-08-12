@@ -1,0 +1,8 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_objects": []
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=xrt_null_test_
+c_not_contains=.tag == XR_TAG_NULL
+c_not_contains= == NULL
+c_syntax=pass

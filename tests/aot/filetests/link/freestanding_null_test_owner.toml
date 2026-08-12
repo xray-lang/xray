@@ -1,0 +1,6 @@
+name = "freestanding-null-test-owner"
+profile = "freestanding"
+
+[[modules]]
+name = "freestanding_null_test_owner"
+main = "freestanding_null_test_owner.xr"

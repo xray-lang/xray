@@ -44,6 +44,7 @@
 #include "../shared/xr_int_arith.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_numeric_core.h"
+#include "../shared/xr_null_test_core.h"
 #include "xi_analysis.h"
 #include "xi_analysis_manager.h"
 #include "xi_edit.h"
@@ -3986,7 +3987,7 @@ static bool fold_null_test_over_untagged_box(XiValue *v) {
         default:
             return false;
     }
-    rewrite_to_const_int(v, 0);
+    rewrite_to_const_int(v, xr_null_test_tagged_core(UINT8_C(1)) ? 1 : 0);
     return true;
 }
 

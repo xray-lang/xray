@@ -62,6 +62,7 @@
 #include "../shared/xr_conversion.h"
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_numeric_core.h"
+#include "../shared/xr_null_test_core.h"
 #include "../shared/xr_pod_slice_core.h"
 
 #include "../runtime/mem/xcoro_heap.h"

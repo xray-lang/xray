@@ -192,6 +192,12 @@ typedef struct XrValue {
     uint8_t tag;
 } XrValue;
 
+#define XR_NULL_TEST_C90 1
+#include "../shared/xr_null_test_core.h"
+#undef XR_NULL_TEST_C90
+#define xrt_null_test_tagged(tag) xr_null_test_tagged_core((uint8_t) (tag))
+#define xrt_null_test_pointer(pointer) xr_null_test_pointer_is_null_core((const void *) (pointer))
+
 static XrValue xrt_c90_null_value(void) {
     XrValue value;
     memset(&value, 0, sizeof(value));

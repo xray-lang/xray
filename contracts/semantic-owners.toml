@@ -1,7 +1,7 @@
 schema = 1
 
 [policy]
-observable_owner_count = 6
+observable_owner_count = 7
 unknown_plan = "fail_closed"
 native_kernel_forbids_tagged_value = true
 tagged_and_descriptor_kernels_are_explicit = true
@@ -114,6 +114,13 @@ profiles = ["vm", "aot", "hosted", "freestanding"]
 [[core]]
 id = "numeric"
 header = "src/shared/xr_numeric_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "null-test"
+header = "src/shared/xr_null_test_core.h"
 representation = "native"
 owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
@@ -466,6 +473,23 @@ fixtures = [
 ]
 
 [[operation]]
+id = "null-test"
+observable_contract = "src/shared/xr_null_test_core.h"
+semantic_kernel = "src/shared/xr_null_test_core.h"
+vm_adapter = "src/vm/xvm_dispatch_compare.inc.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "shared.null-test"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_null_test_core.c",
+  "tests/unit/aot/test_xrt_null_test_owner_freestanding.c",
+  "tests/unit/aot/test_xrt_null_test_owner_c90.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/aot/filetests/link/freestanding_null_test_owner.xr",
+  "tests/regression/03_operators/0398_null_test_owner_edges.xr",
+]
+
+[[operation]]
 id = "pod-slice-copy"
 observable_contract = "src/shared/xr_pod_slice_core.h"
 semantic_kernel = "src/shared/xr_pod_slice_core.h"
@@ -517,7 +541,7 @@ fixtures = [
 
 [[operation_family]]
 id = "arithmetic-conversion"
-canonical_cores = ["arithmetic", "bits", "numeric-conversion", "numeric", "raw-scalar"]
+canonical_cores = ["arithmetic", "bits", "null-test", "numeric-conversion", "numeric", "raw-scalar"]
 duplicate_sources = []
 disposition = "single-owner"
 

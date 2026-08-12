@@ -8072,6 +8072,32 @@ TEST(cgen_cell_access_uses_stable_owner_adapter) {
     xi_func_free(ir);
 }
 
+TEST(cgen_null_test_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,
+                                          XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,
+                                          XR_SEM_CONSUMER_CGEN));
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI, XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO);
+    TEST_REQUIRE(adapter != NULL && strcmp(adapter, "xrt_null_test") == 0,
+                 "null test publishes its stable CGen adapter");
+
+    const char *src = "class Box {}\n"
+                      "fn tagged(value: int?) -> int { return value ?? 1 }\n"
+                      "fn pointer(value: Box?) -> Box { return value ?? Box() }\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "null-test owner fixture compiled");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "null-test owner fixture generated C");
+    TEST_REQUIRE(contains(code, "xrt_null_test_tagged(") &&
+                     contains(code, "xrt_null_test_pointer("),
+                 "tagged and pointer null tests call the stable owner adapter");
+    TEST_REQUIRE(!contains(code, ".tag == XR_TAG_NULL") && !contains(code, " == NULL)"),
+                 "generated C does not recreate null-test semantics");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
     const char *src = "fn forceUtf8(data: Array<byte>) -> string {\n"
                       "    return string.fromUtf8(data[:])!\n"
@@ -13348,6 +13374,7 @@ int main(void) {
     run_cgen_raw_memory_copy_owner_registry_is_stable();
     run_cgen_enum_metadata_access_uses_stable_owner_adapter();
     run_cgen_cell_access_uses_stable_owner_adapter();
+    run_cgen_null_test_uses_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();

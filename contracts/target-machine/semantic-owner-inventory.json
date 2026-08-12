@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 257,
+  "operation_count": 258,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -415,6 +415,34 @@
         "vm",
         "aot",
         "hosted"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/null-test",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_null_test_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/null-test",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_null_test_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.null-test",
+      "ownership": "native",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
       ]
     },
     {
@@ -3666,16 +3694,16 @@
     {
       "benchmark_anchor": "target-machine/xi-class-type",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_null_test_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-type",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.null-test",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_null_test_core.h",
       "observable_edges": [],
       "operation_id": "xi.isnull",
       "ownership": "borrow",
@@ -6610,5 +6638,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "e5ef4bae0ae1815b6a704b56437f14ce02699ad5a2330d3ac5e0cb7e9b071269"
+  "source_tree_fingerprint": "fd9f945ef31576dc26da330d7855f111b60f11b2eb6505fcf34264a8c12d3e27"
 }

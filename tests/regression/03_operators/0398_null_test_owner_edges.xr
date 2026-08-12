@@ -1,0 +1,6 @@
+fn choose(value: int?) -> int {
+    return value ?? 41
+}
+
+print(choose(null))
+print(choose(7))

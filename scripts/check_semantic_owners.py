@@ -23,7 +23,7 @@ from xisagen import parse_xi_ops_def, parse_xi_semantic_owners  # noqa: E402
 
 SOURCE_SUFFIXES = (".c", ".h")
 SIGNATURE_RE = re.compile(
-    r"\b(?:(?:static\s+)?inline|XR_BYTE_SLICE_SCALAR_INLINE)\s+[^;{}]*?"
+    r"\b(?:(?:static\s+)?inline|XR_BYTE_SLICE_SCALAR_INLINE|XR_NULL_TEST_INLINE)\s+[^;{}]*?"
     r"\b(xr_[A-Za-z0-9_]+)\s*\(")
 SORT_OLD_SYMBOLS = (
     "xr_array_hybrid_sort",
@@ -163,6 +163,7 @@ RAW_MEMORY_COPY_OPERATIONS = {"xi.ptr.copy.nonoverlap"}
 RAW_SCALAR_ACCESS_OPERATIONS = {"xi.ptr.load", "xi.ptr.store"}
 ENUM_METADATA_ACCESS_OPERATIONS = {"xi.enum.variant.at", "xi.enum.payload.at"}
 CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
+NULL_TEST_OPERATIONS = {"xi.isnull"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -1966,6 +1967,80 @@ def verify_cell_access_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_null_test_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.null-test"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != NULL_TEST_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.null-test family")
+
+    core_text = (root / "src/shared/xr_null_test_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_NULL_TEST_OWNER_APPLY",
+                  "xr_null_test_tagged_core", "xr_null_test_pointer_is_null_core"):
+        if token not in core_text:
+            errors.append("src/shared/xr_null_test_core.h: null test lacks stable owner")
+            break
+
+    vm_text = (root / "src/vm/xvm_dispatch_compare.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for opcode in ("OP_ISNULL", "OP_ISNULL_SET"):
+        start = vm_text.find(f"vmcase({opcode})")
+        end = vm_text.find("vmbreak;", start)
+        body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+        if (f"{marker}_HI" not in body or f"{marker}_LO" not in body or
+                "XR_SEM_CONSUMER_VM" not in body or
+                "XR_NULL_TEST_OWNER_APPLY" not in body or
+                "xr_null_test_tagged_core" not in body):
+            errors.append(f"src/vm/xvm_dispatch_compare.inc.c: {opcode} bypasses null-test owner")
+        if "XR_IS_NULL" in body or ".tag == XR_TAG_NULL" in body:
+            errors.append(f"src/vm/xvm_dispatch_compare.inc.c: {opcode} owns null semantics")
+
+    for relative, consumer in (("src/aot/xrt.h", "XR_SEM_CONSUMER_AOT_HOSTED"),
+                               ("src/aot/xrt_core_freestanding.h",
+                                "XR_SEM_CONSUMER_AOT_FREESTANDING")):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for adapter, kernel in (("xrt_null_test_tagged", "xr_null_test_tagged_core"),
+                                ("xrt_null_test_pointer", "xr_null_test_pointer_is_null_core")):
+            if (adapter not in text or kernel not in text or f"{marker}_HI" not in text or
+                    f"{marker}_LO" not in text or consumer not in text or
+                    "XR_NULL_TEST_OWNER_APPLY" not in text):
+                errors.append(f"{relative}: {adapter} bypasses null-test owner")
+
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    for token in ("XR_NULL_TEST_C90", "#undef XR_NULL_TEST_C90",
+                  "xrt_null_test_tagged", "xrt_null_test_pointer",
+                  "xr_null_test_tagged_core", "xr_null_test_pointer_is_null_core"):
+        if token not in c90_text:
+            errors.append("src/aot/xrt_c90.h: null-test mechanical adapter is incomplete")
+            break
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_null_test_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: null test does not resolve stable adapter")
+    dispatch = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    body = extract_c_function(dispatch, "xicgen_isnull") or ""
+    if ("cg_null_test_adapter_name" not in body or "_tagged(" not in body or
+            "_pointer(" not in body):
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: xicgen_isnull bypasses owner")
+    if ".tag == XR_TAG_NULL" in body or " == NULL" in body:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: xicgen_isnull owns null semantics")
+
+    for relative in ("src/ir/xi_opt.c", "src/ir/xi_opt_sccp.c"):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if "xr_null_test_tagged_core" not in text:
+            errors.append(f"{relative}: constant null fold bypasses null-test core")
+    if "aot/test_xrt_null_test_owner_c90.c" not in (
+            root / "tests/unit/CMakeLists.txt").read_text(encoding="utf-8", errors="strict"):
+        errors.append("tests/unit/CMakeLists.txt: C90 null-test KAT is not registered")
+    return errors
+
+
 def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     families = (
@@ -2172,8 +2247,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 31:
-        errors.append(f"shared-core inventory must contain exactly 31 headers, found {len(actual)}")
+    if len(actual) != 32:
+        errors.append(f"shared-core inventory must contain exactly 32 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -2213,6 +2288,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_raw_scalar_access_ratchet(root, registry))
         errors.extend(verify_enum_metadata_access_ratchet(root, registry))
         errors.extend(verify_cell_access_ratchet(root, registry))
+        errors.extend(verify_null_test_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))
         errors.extend(verify_pod_slice_view_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)

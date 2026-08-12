@@ -608,6 +608,7 @@ add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
 add_xray_unit_test(test_array_core stdlib/test_array_core.c)
 add_xray_unit_test(test_math_core stdlib/test_math_core.c)
 add_xray_unit_test(test_numeric_core stdlib/test_numeric_core.c)
+add_xray_unit_test(test_null_test_core stdlib/test_null_test_core.c)
 add_xray_unit_test(test_range_core stdlib/test_range_core.c)
 add_executable(test_cell_access_core stdlib/test_cell_access_core.c)
 target_include_directories(test_cell_access_core PRIVATE
@@ -642,6 +643,17 @@ target_include_directories(test_xrt_enum_metadata_owner_freestanding PRIVATE
 add_test(NAME test_xrt_enum_metadata_owner_freestanding
     COMMAND $<TARGET_FILE:test_xrt_enum_metadata_owner_freestanding>)
 add_xray_unit_test(test_xrt_numeric_neg_owner_freestanding aot/test_xrt_numeric_neg_owner_freestanding.c)
+add_xray_unit_test(test_xrt_null_test_owner_freestanding aot/test_xrt_null_test_owner_freestanding.c)
+if(NOT WIN32)
+    add_executable(test_xrt_null_test_owner_c90 aot/test_xrt_null_test_owner_c90.c)
+    target_include_directories(test_xrt_null_test_owner_c90 PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_target_properties(test_xrt_null_test_owner_c90 PROPERTIES C_STANDARD 90 C_EXTENSIONS OFF)
+    add_test(NAME test_xrt_null_test_owner_c90 COMMAND $<TARGET_FILE:test_xrt_null_test_owner_c90>)
+endif()
 add_xray_unit_test(test_xrt_byte_slice_compare_owner_freestanding aot/test_xrt_byte_slice_compare_owner_freestanding.c)
 add_xray_unit_test(test_xrt_raw_scalar_owner_freestanding aot/test_xrt_raw_scalar_owner_freestanding.c)
 add_xray_unit_test(test_string_core stdlib/test_string_core.c)

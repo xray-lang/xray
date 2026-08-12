@@ -357,7 +357,9 @@ vmcase(OP_ISNULL) {
     // ISNULL A k: if (R[A] == null) != k then pc++
     XrValue va = R(GETARG_A(i));
     int k_flag = GETARG_B(i);
-    bool is_null = XR_IS_NULL(va);
+    bool is_null = XR_NULL_TEST_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI, XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,
+        XR_SEM_CONSUMER_VM, xr_null_test_tagged_core(va.tag));
     if (is_null != k_flag)
         pc++;
     vmbreak;
@@ -367,6 +369,8 @@ vmcase(OP_ISNULL_SET) {
     // ISNULL_SET A B: R[A] = (R[B] == null)
     int dest = GETARG_A(i);
     int src = GETARG_B(i);
-    R(dest) = xr_bool(XR_IS_NULL(R(src)));
+    R(dest) = xr_bool(XR_NULL_TEST_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI, XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,
+        XR_SEM_CONSUMER_VM, xr_null_test_tagged_core(R(src).tag)));
     vmbreak;
 }

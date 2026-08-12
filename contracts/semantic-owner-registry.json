@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "6051a159d889f61f91b504420328a56ff1bbb5b22350befaf66f65c081a815c6",
+  "canonical_fingerprint": "e525dbb47853aec742d8e66317883932200e5075cb56c118f8f70aa28f3026c8",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -591,6 +591,52 @@
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
           "symbol": "cg_enum_metadata_access_adapter_name"
+        }
+      ]
+    },
+    {
+      "owner": "shared.null-test",
+      "owner_id": "0eef4bb7af611d065dafdae1ffb66d19",
+      "owner_id_hi": "0x0eef4bb7af611d06",
+      "owner_id_lo": "0x5dafdae1ffb66d19",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.isnull"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
+      ],
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_null_test",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_compare.inc.c",
+          "symbol": "XR_NULL_TEST_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_null_test_tagged"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_null_test_tagged"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_null_test_adapter_name"
         }
       ]
     },
@@ -2746,28 +2792,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.is"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.isnull",
-      "owner_id": "cccd5b5c9767cd0d4d958361e5752568",
-      "owner_id_hi": "0xcccd5b5c9767cd0d",
-      "owner_id_lo": "0x4d958361e5752568",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.isnull"
       ],
       "consumers": [
         "semantic-plan"
@@ -10316,21 +10340,45 @@
       "operation_id": "cccd5b5c9767cd0d4d958361e5752568",
       "operation_id_hi": "0xcccd5b5c9767cd0d",
       "operation_id_lo": "0x4d958361e5752568",
-      "owner": "xi.isnull",
-      "owner_id": "cccd5b5c9767cd0d4d958361e5752568",
-      "owner_id_hi": "0xcccd5b5c9767cd0d",
-      "owner_id_lo": "0x4d958361e5752568",
-      "category": "declarative-primitive",
+      "owner": "shared.null-test",
+      "owner_id": "0eef4bb7af611d065dafdae1ffb66d19",
+      "owner_id_hi": "0x0eef4bb7af611d06",
+      "owner_id_lo": "0x5dafdae1ffb66d19",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_null_test",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_compare.inc.c",
+          "symbol": "XR_NULL_TEST_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_null_test_tagged"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_null_test_tagged"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_null_test_adapter_name"
         }
       ]
     },
