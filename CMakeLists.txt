@@ -1977,9 +1977,9 @@ if(BUILD_TESTS)
     endif()
 
     # BigInt literals must survive every execution form. The source run is the
-    # oracle; the compiled .xrc, the embedded-bytecode build and the native
-    # build must reproduce its stdout exactly. Guards the constant serializer
-    # that once degraded BigInt constants to null in built artifacts.
+    # oracle; the embedded-bytecode build and native build must reproduce its
+    # stdout exactly. Guards the constant serializer that once degraded BigInt
+    # constants to null in built artifacts.
     add_test(
         NAME bigint_bytecode_cli_roundtrip
         COMMAND ${XRAY_PYTHON}

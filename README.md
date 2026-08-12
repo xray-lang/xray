@@ -103,7 +103,7 @@ xray fmt app.xr                         # format in place
 xray fmt --check app.xr                 # check formatting without writing
 xray test                               # discover and run @test functions
 xray repl                               # start the interactive REPL
-xray compile app.xr                     # emit bytecode (.xrc by default)
+xray compile app.xr -f c -o app-bytecode.c # emit an offline C bytecode container
 xray build app.xr -o app                # standalone VM-backed executable
 xray build --native app.xr -o app-native # native AOT executable
 xray toolchain doctor                   # validate AOT toolchains

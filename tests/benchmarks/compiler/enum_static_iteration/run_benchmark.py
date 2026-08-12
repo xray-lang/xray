@@ -189,7 +189,7 @@ def measure_case(args: argparse.Namespace, work: Path, count: int, mode: str) ->
     case = work / f"{count}-{mode}"
     case.mkdir(parents=True)
     source = case / "case.xr"
-    bytecode = case / "case.xrb"
+    bytecode_container = case / "case-bytecode-container.c"
     c_file = case / "case.c"
     binary = case / "case"
     source.write_text(program_for(mode, count, args.target_iterations), encoding="utf-8")
@@ -205,12 +205,12 @@ def measure_case(args: argparse.Namespace, work: Path, count: int, mode: str) ->
         "--cache-dir", str(cache), str(source), "-o", str(c_file),
     ]
     subprocess.run(c_command, cwd=ROOT, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    bytecode_command = [
-        str(args.xray), "compile", "-f", "bytecode", "-s", "-S",
-        str(source), "-o", str(bytecode),
+    bytecode_container_command = [
+        str(args.xray), "compile", "-f", "c", "-s", "-S",
+        str(source), "-o", str(bytecode_container),
     ]
-    subprocess.run(bytecode_command, cwd=ROOT, check=True, stdout=subprocess.PIPE,
-                   stderr=subprocess.PIPE)
+    subprocess.run(bytecode_container_command, cwd=ROOT, check=True,
+                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     c_text = c_file.read_text(encoding="utf-8", errors="strict")
 
     forbidden = [symbol for symbol in FORBIDDEN_C_SYMBOLS if symbol in c_text]
@@ -229,7 +229,7 @@ def measure_case(args: argparse.Namespace, work: Path, count: int, mode: str) ->
         "count": count,
         "mode": mode,
         "source_bytes": source.stat().st_size,
-        "bytecode_bytes": bytecode.stat().st_size,
+        "bytecode_container_bytes": bytecode_container.stat().st_size,
         "generated_c_bytes": c_file.stat().st_size,
         "binary_bytes": binary.stat().st_size,
         "compile_wall_ms": round(compile_ms, 3),

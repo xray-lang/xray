@@ -18,7 +18,6 @@
 #include "../../api/xisolate_profile.h"
 
 #include "xray.h"
-#include "../../module/xbytecode_io.h"
 #include "../../module/xmodule.h"
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_resolver.h"
@@ -104,6 +103,11 @@ static int reject_non_executable_artifact(const char *path,
     if (probe.kind == XR_ARTIFACT_KIND_XSM) {
         fprintf(stderr,
                 "XR_ARTIFACT_2005: semantic module artifacts are planning inputs and are not executable\n");
+        return XR_CLI_EXIT_FAIL;
+    }
+    if (probe.kind == XR_ARTIFACT_KIND_LEGACY_XRC) {
+        fprintf(stderr,
+                "XR_ARTIFACT_2000: legacy XRC execution is removed; use exact XSM/XTP artifacts\n");
         return XR_CLI_EXIT_FAIL;
     }
     if (probe.kind != XR_ARTIFACT_KIND_XTP)
@@ -407,17 +411,6 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
     /* Set script info (for args/__file__/__dir__) */
     xray_vm_set_script_info(iso, file, script_argc, script_argv);
-
-    /* Bytecode is identified by its stable magic, not by an extension. This
-     * keeps renamed artifacts executable and never misclassifies text merely
-     * because it happens to end in .xrc. */
-    if (artifact_kind == XR_ARTIFACT_KIND_LEGACY_XRC) {
-        xr_module_system_init_with_script(iso, file);
-        int result = xr_run_bytecode_file(iso, file);
-        xray_vm_multicore_destroy(iso);
-        xray_vm_delete(iso);
-        return result == 0 ? XR_CLI_EXIT_OK : XR_CLI_EXIT_FAIL;
-    }
 
     /* Re-initialize module system (with script path) */
     xr_module_system_init_with_script(iso, file);

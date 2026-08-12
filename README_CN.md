@@ -102,7 +102,7 @@ xray fmt app.xr                         # 原地格式化
 xray fmt --check app.xr                 # 仅检查格式，不写入文件
 xray test                               # 发现并运行 @test 函数
 xray repl                               # 启动交互式 REPL
-xray compile app.xr                     # 生成字节码（默认扩展名 .xrc）
+xray compile app.xr -f c -o app-bytecode.c # 生成离线 C 字节码容器
 xray build app.xr -o app                # 构建由 VM 执行字节码的独立程序
 xray build --native app.xr -o app-native # 构建原生 AOT 程序
 xray toolchain doctor                   # 检查 AOT 工具链

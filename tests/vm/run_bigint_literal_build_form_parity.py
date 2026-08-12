@@ -16,10 +16,9 @@ The same source is driven through all three execution forms:
   3. `xray build --native <src>` -- AOT native backend.
 
 The embedded-bytecode binary must reproduce the oracle byte for byte: that is
-the round-trip this test guards, and it is a hard gate. The bytecode artifact is
-also compiled twice and reloaded via `xray run <artifact>` -- a toolchain-free
-path that exercises the same serializer -- to confirm the BigInt constant
-serializes deterministically and reloads to the oracle output.
+the round-trip this test guards, and it is a hard gate. The offline C container
+is also compiled twice to confirm that the shared bytecode serializer remains
+deterministic without reopening the retired standalone XRC product route.
 
 All three forms are gated across the full BigInt surface: read-only (compare /
 toString / print), arithmetic (+ - * / %, unary minus), bitwise (& | ^), and
@@ -142,23 +141,16 @@ def main(argv: list[str]) -> int:
         if oracle.stdout != EXPECTED:
             return _mismatch("source VM output is not the expected oracle", oracle.stdout)
 
-        # Bytecode artifact: deterministic serialization, and reload parity via
-        # a toolchain-free `xray run <artifact>`. This is the purest exercise of
-        # the constant-pool (de)serializer the fix touches.
-        art_a, art_b = ws.path("forms-a.xrc"), ws.path("forms-b.xrc")
+        # Offline C containers prove deterministic serialization without
+        # publishing or executing a standalone XRC artifact.
+        art_a, art_b = ws.path("forms-a.c"), ws.path("forms-b.c")
         for art in (art_a, art_b):
-            compiled = proc.run([xray, "compile", "-f", "bytecode", "-o", art, src],
+            compiled = proc.run([xray, "compile", "-f", "c", "-o", art, src],
                                 timeout=timeout)
             if not compiled.ok:
-                return _fail("bytecode compilation failed", compiled)
+                return _fail("C-container compilation failed", compiled)
         if art_a.read_bytes() != art_b.read_bytes():
-            return _fail("bytecode is not deterministic: two compilations differ")
-        reload = proc.run([xray, "run", art_a], timeout=timeout)
-        if not reload.ok:
-            return _fail("running the bytecode artifact failed", reload)
-        if reload.stdout != EXPECTED:
-            return _mismatch("bytecode reload dropped or degraded a BigInt literal",
-                             reload.stdout)
+            return _fail("C-container serialization is not deterministic")
 
         # Form 2: default embedded-bytecode build -- the form the fix targets.
         binary = ws.path("bigint_forms_embed")

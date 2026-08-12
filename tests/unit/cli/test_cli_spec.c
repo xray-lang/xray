@@ -169,7 +169,7 @@ TEST(optmap_present_string) {
 
     /* Set "output" (index 0) as present */
     present[0] = true;
-    values[0] = "out.xrc";
+    values[0] = "out.c";
 
     XrCliOptionMap map = {
         .spec = spec->options,
@@ -179,7 +179,7 @@ TEST(optmap_present_string) {
     };
 
     ASSERT_TRUE(xr_cli_opt_present(&map, "output"));
-    ASSERT_STR_EQ(xr_cli_opt_string(&map, "output", NULL), "out.xrc");
+    ASSERT_STR_EQ(xr_cli_opt_string(&map, "output", NULL), "out.c");
 }
 
 TEST(optmap_present_int) {
@@ -578,12 +578,12 @@ TEST(parse_cmd_long_option_with_value) {
 
     XrCliContext ctx = {.program = "xray"};
     XrCliInvocation inv;
-    char *argv[] = {"--output", "out.xrc", "--format", "bytecode", "input.xr"};
+    char *argv[] = {"--output", "out.c", "--format", "c", "input.xr"};
 
     XrCliExitCode rc = xr_cli_parse_command(spec, 5, argv, &ctx, &inv);
     ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "output", NULL), "out.xrc");
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "format", NULL), "bytecode");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "output", NULL), "out.c");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "format", NULL), "c");
     ASSERT_EQ_INT(inv.positional_count, 1);
     ASSERT_STR_EQ(inv.positionals[0], "input.xr");
 
@@ -611,11 +611,11 @@ TEST(parse_cmd_short_with_value) {
 
     XrCliContext ctx = {.program = "xray"};
     XrCliInvocation inv;
-    char *argv[] = {"-oout.xrc", "input.xr"};
+    char *argv[] = {"-oout.c", "input.xr"};
 
     XrCliExitCode rc = xr_cli_parse_command(spec, 2, argv, &ctx, &inv);
     ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "output", NULL), "out.xrc");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "output", NULL), "out.c");
 
     xr_cli_invocation_free(&inv);
 }

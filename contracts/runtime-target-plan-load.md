@@ -9,8 +9,9 @@ roots, or general module activation.
 1. Artifact identity comes from bytes. The probe reports match, need-more,
    unknown-reserved, or extension conflict. XSM and removed XTP prefixes are
    resolved before legacy XRC, and XRC requires its full magic plus exact
-   format version. A file name can only confirm an identity or conflict with
-   it; it cannot create one.
+   format version solely so the product can reject it before runtime creation.
+   A file name can only confirm an identity or conflict with it; it cannot
+   create one.
 2. XTP candidate decoding copies caller bytes into owned immutable storage
    before parsing any header, directory, digest, or typed row. Candidate
    materialization reads only that snapshot. The shared hard peak covers the
@@ -139,6 +140,11 @@ roots, or general module activation.
    the runtime archive. Plans with exports, calls, roots, storage, allocation,
    adapters, or coroutine execution authority still fail PREPARE; this route
    is not general module activation.
+   Standalone XRC generation and execution are retired product routes. The
+   compiler rejects default `.xrc`, `bytecode`, and `bc` outputs before isolate
+   creation, while retaining explicit offline C/header containers for compiler
+   development. The runtime recognizes valid XRC magic only to reject it before
+   isolate creation; renamed artifacts cannot bypass the cutover.
    The retired `.xrc` bytecode-embed runner and its CTest fixtures are not a
    parallel product route: the exact XSM/XTP runtime-archive gates above are
    the sole positive embedded-artifact coverage.
@@ -151,7 +157,7 @@ roots, or general module activation.
    unavailable, rejects compiler and `xi_` symbols, and treats any new `xvm_`
    symbol as uninventoried legacy residue.
 
-anchor-sha256: CMakeLists.txt f32588356fff4f8c59e6f7b4af441071360b9c280d2818419112babe36bd8063
+anchor-sha256: CMakeLists.txt 4e85a1c8251485b56c877766d39d80fb9e8483ccd288e74bd1b06ba362be4e51
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h 38fd73865e25d62392d8dd0abfd5e6193edf2356803a817349db14c43ccf9874
 anchor-sha256: src/plan/format/xr_artifact_kind.c 289fb506284ed97372e211225dcb5c1d205d7149416ddc96abb2a7f3b8704b39
@@ -176,12 +182,12 @@ anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad3
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
 anchor-sha256: src/runtime/xr_target_plan_load.c f48ff435aedf73dc30588af42bb6bf288282feb10a81762ad4ede9375b06d7c8
-anchor-sha256: src/app/cli/xcmd_run.c fe151d345a93053626332944b93bee67e8df9b1781098f24f2922f1b3faae040
-anchor-sha256: contracts/target-machine/legacy-product-residue.json 052cac030a7f91c22c7c4a40e2571f3d9f0a274661aa1396a13f5c5bf4600827
+anchor-sha256: src/app/cli/xcmd_run.c 0a8e2be195caff4b859d68f8876ab3a76ec701de62da71a127d50c0ff3dca771
+anchor-sha256: contracts/target-machine/legacy-product-residue.json 61562d23d15266f6282dd3e3185447c3bbd9ccbd69e22240bbc1e581581f7a39
 anchor-sha256: scripts/check_legacy_product_residue.py 0388d636da6384ea62bfaf8401764955541be24b207511727c33af2d85f3a11f
 anchor-sha256: tests/unit/plan/test_target_plan.c 81df2a456c09ab9d676493559d77c6a5c2710ec3e143c28cb6f2bb963002f38f
 anchor-sha256: tests/unit/plan/test_xtp_format.c 5f69974f555b1d9601471299fdc3dbc109af50a919ab89ab65c9e8a787db0cf9
 anchor-sha256: tests/unit/CMakeLists.txt 14080340a0fc797b44f0ea87b82d2085e5611baa3469e597148b0183c714a759
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
-anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 941116a3f679967982230e64e1ecf60a195281edd954d6274728f87a2281287d
+anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py b17583c038c751f8c6cad33a82ff13730442e74bfeb7e6165804fb7e57f7241a
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py c38e7e7b4d9062bf88f1789633aa7ccccbf53aa681308a006d3b498f4fc0406b

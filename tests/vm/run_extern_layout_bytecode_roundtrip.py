@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""Extern layout survives the bytecode round-trip, deterministically.
+"""Extern layout produces a deterministic offline C bytecode container.
 
-Two properties, and the second is the one worth having:
+Compiling the same source twice must produce byte-identical container bytes, so
+extern layout resolution carries no address, timestamp, or hash-order
+nondeterminism into the artifact.
 
-  1. compiling the same source twice produces byte-identical bytecode -- so
-     extern layout resolution carries no address, timestamp or hash-order
-     nondeterminism into the artifact;
-  2. running the bytecode gives the same output as running the source.
-
-Property 1 is what makes a bytecode artifact cacheable and comparable at all; a
-layout that embedded, say, a pointer would still satisfy property 2 while making
-every build differ.
+The source run remains the semantic smoke test. Standalone XRC execution is a
+retired product route, so this gate compares the two serializer outputs rather
+than publishing or running an XRC artifact.
 
 Usage: run_extern_layout_bytecode_roundtrip.py <xray> <entry.xr> <layout-lib.xr>
 """
@@ -54,31 +51,19 @@ def main(argv: list[str]) -> int:
             sys.stderr.write(source_run.combined_text())
             return 1
 
-        first, second = ws.path("entry-a.xrc"), ws.path("entry-b.xrc")
+        first, second = ws.path("entry-a.c"), ws.path("entry-b.c")
         for out in (first, second):
-            compiled = proc.run([xray, "compile", "-f", "bytecode", "-o", out, entry],
+            compiled = proc.run([xray, "compile", "-f", "c", "-o", out, entry],
                                 timeout=timeout)
             if not compiled.ok:
-                sys.stderr.write("bytecode compilation failed\n")
+                sys.stderr.write("C-container compilation failed\n")
                 sys.stderr.write(compiled.combined_text())
                 return 1
 
         if first.read_bytes() != second.read_bytes():
             sys.stderr.write(
-                "bytecode is not deterministic: two compilations of the same source "
+                "C-container serialization is not deterministic: two compilations "
                 "produced different artifacts\n")
-            return 1
-
-        bytecode_run = proc.run([xray, "run", first], timeout=timeout)
-        if not bytecode_run.ok:
-            sys.stderr.write("running the bytecode failed\n")
-            sys.stderr.write(bytecode_run.combined_text())
-            return 1
-
-        if source_run.stdout != bytecode_run.stdout:
-            sys.stderr.write("source and bytecode runs disagree\n")
-            sys.stderr.write(f"  source:   {source_run.stdout!r}\n")
-            sys.stderr.write(f"  bytecode: {bytecode_run.stdout!r}\n")
             return 1
 
     return 0

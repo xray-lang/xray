@@ -3,16 +3,14 @@
 
 The embedded-bytecode `xray build` once wrote BigInt constants to the constant
 pool as null, so the built binary printed null where `xray run` printed the
-value. A `.xrc` compiled with `xray compile` degraded the same way, because both
-share one constant serializer. The native `xray build -N` backend never touches
-that serializer, so it kept the value.
+value. The native `xray build -N` backend never touches that serializer, so it
+kept the value.
 
-This runner takes the source run as the oracle and requires the other three
+This runner takes the source run as the oracle and requires the other two
 forms to reproduce its stdout exactly:
 
-  1. `xray compile -f bytecode` then `xray run <.xrc>`  -- the pure serializer;
-  2. `xray build`                then run the binary     -- embedded bytecode;
-  3. `xray build -N`             then run the binary     -- native AOT.
+  1. `xray build`    then run the binary -- embedded bytecode;
+  2. `xray build -N` then run the binary -- native AOT.
 
 The fixture prints only BigInt values (no comparisons, no int64-overflowing
 arithmetic) so that every backend is expected to agree; a divergence here is a
@@ -73,19 +71,7 @@ def main(argv: list[str]) -> int:
             return rc
         oracle = source.stdout
 
-        # 1. Pure bytecode serializer: compile to a .xrc, then run it.
-        xrc = ws.path("entry.xrc")
-        compiled = proc.run([xray, "compile", "-f", "bytecode", "-o", xrc, entry],
-                            timeout=timeout)
-        if (rc := _require_ok(compiled, "compiling to bytecode")) is not None:
-            return rc
-        xrc_run = proc.run([xray, "run", xrc], timeout=timeout)
-        if (rc := _require_ok(xrc_run, "running the .xrc")) is not None:
-            return rc
-        if (rc := _require_match(oracle, xrc_run.stdout, "compiled .xrc")) is not None:
-            return rc
-
-        # 2. Embedded-bytecode build (the form that regressed).
+        # 1. Embedded-bytecode build (the form that regressed).
         bc_bin = ws.path(platform.exe_name("entry_bytecode"))
         built = proc.run([xray, "build", "-o", bc_bin, entry], timeout=timeout)
         if (rc := _require_ok(built, "building the embedded-bytecode binary")) is not None:
@@ -96,7 +82,7 @@ def main(argv: list[str]) -> int:
         if (rc := _require_match(oracle, bc_run.stdout, "embedded-bytecode build")) is not None:
             return rc
 
-        # 3. Native AOT build.
+        # 2. Native AOT build.
         native_bin = ws.path(platform.exe_name("entry_native"))
         native_built = proc.run([xray, "build", "-N", "-o", native_bin, entry],
                                 timeout=timeout)

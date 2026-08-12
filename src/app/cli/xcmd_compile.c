@@ -8,8 +8,8 @@
  * xcmd_compile.c - 'xray compile' command implementation
  *
  * KEY CONCEPT:
- *   Compiles source files to bytecode (.xrc) or C source (.c/.h).
- *   Output format is auto-detected from extension or specified via --format.
+ *   Compiles source files to C source/header bytecode containers for compiler
+ *   development. Legacy standalone XRC artifacts are not a product output.
  */
 
 #include "xcli.h"
@@ -62,14 +62,21 @@ static char *generate_var_name(const char *filename) {
 
 // Parse --format argument
 static XrOutputFormat parse_format(const char *fmt) {
-    if (strcmp(fmt, "bytecode") == 0 || strcmp(fmt, "bc") == 0) {
-        return XR_OUTPUT_BYTECODE;
-    } else if (strcmp(fmt, "c") == 0 || strcmp(fmt, "source") == 0) {
+    if (strcmp(fmt, "c") == 0 || strcmp(fmt, "source") == 0) {
         return XR_OUTPUT_C_SOURCE;
     } else if (strcmp(fmt, "h") == 0 || strcmp(fmt, "header") == 0) {
         return XR_OUTPUT_C_HEADER;
     }
     return XR_OUTPUT_AUTO;
+}
+
+static bool has_legacy_xrc_extension(const char *path) {
+    size_t len = path ? strlen(path) : 0;
+    if (len < 4 || path[len - 4] != '.')
+        return false;
+    return (path[len - 3] == 'x' || path[len - 3] == 'X') &&
+           (path[len - 2] == 'r' || path[len - 2] == 'R') &&
+           (path[len - 1] == 'c' || path[len - 1] == 'C');
 }
 
 static bool prepare_compile_graph(XrVMRuntime *X, XrCompilerSession *session,
@@ -168,6 +175,11 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     /* Parse explicit format */
     XrOutputFormat explicit_format = XR_OUTPUT_AUTO;
     if (fmt_str) {
+        if (strcmp(fmt_str, "bytecode") == 0 || strcmp(fmt_str, "bc") == 0) {
+            xr_cli_error("compile",
+                         "XR_ARTIFACT_2000: legacy XRC output format is removed");
+            return XR_CLI_EXIT_USAGE;
+        }
         explicit_format = parse_format(fmt_str);
         if (explicit_format == XR_OUTPUT_AUTO) {
             xr_cli_error("compile", "unknown format '%s'", fmt_str);
@@ -175,19 +187,25 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
         }
     }
 
-    /* Default output file */
-    char default_output[512];
+    /* A C or header extension is mandatory. There is no legacy XRC default. */
     if (!output_file) {
-        const char *base = strrchr(input_file, '/');
-        base = base ? base + 1 : input_file;
-        const char *dot = strrchr(base, '.');
-        size_t len = dot ? (size_t) (dot - base) : strlen(base);
-        snprintf(default_output, sizeof(default_output), "%.*s.xrc", (int) len, base);
-        output_file = default_output;
+        xr_cli_error("compile",
+                     "XR_ARTIFACT_2000: legacy XRC output is removed; use --output FILE.c or FILE.h");
+        return XR_CLI_EXIT_USAGE;
+    }
+    if (has_legacy_xrc_extension(output_file)) {
+        xr_cli_error("compile",
+                     "XR_ARTIFACT_2000: legacy .xrc output is removed; use FILE.c or FILE.h");
+        return XR_CLI_EXIT_USAGE;
     }
 
     /* Determine output format */
     XrOutputFormat format = xr_detect_output_format(output_file, explicit_format);
+    if (format == XR_OUTPUT_BYTECODE || format == XR_OUTPUT_AUTO) {
+        xr_cli_error("compile",
+                     "XR_ARTIFACT_2000: legacy XRC output is removed; use --format c or header");
+        return XR_CLI_EXIT_USAGE;
+    }
 
     /* Resources to clean up */
     int result = XR_CLI_EXIT_FAIL;
@@ -237,39 +255,8 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
 
     /* Output */
     bool success = false;
-    bool output_error_reported = false;
 
     switch (format) {
-        case XR_OUTPUT_BYTECODE: {
-            size_t bc_size;
-            XrBcError bc_error = XR_BC_OK;
-            uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size, &bc_error);
-            if (bc) {
-                FILE *out = fopen(output_file, "wb");
-                if (out) {
-                    bool wrote_all = fwrite(bc, 1, bc_size, out) == bc_size;
-                    bool closed = fclose(out) == 0;
-                    success = wrote_all && closed;
-                    if (success)
-                        printf("Compiled: %s (%zu bytes)\n", output_file, bc_size);
-                    else {
-                        xr_cli_error("compile", "failed to write bytecode output '%s'",
-                                     output_file);
-                        output_error_reported = true;
-                    }
-                } else {
-                    xr_cli_error("compile", "cannot create bytecode output '%s'", output_file);
-                    output_error_reported = true;
-                }
-                xr_free(bc);
-            } else {
-                xr_cli_error("compile", "bytecode serialization failed: %s",
-                             xr_bytecode_error_string(bc_error));
-                output_error_reported = true;
-            }
-            break;
-        }
-
         case XR_OUTPUT_C_SOURCE:
         case XR_OUTPUT_C_HEADER:
             success = xr_output_c_source(X, proto, output_file, var_name, flags);
@@ -283,7 +270,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
             break;
     }
 
-    if (!success && !output_error_reported) {
+    if (!success) {
         xr_cli_error("compile", "cannot write to '%s'", output_file);
     }
 

@@ -163,14 +163,34 @@ def main() -> int:
         source.write_text('print("legacy-route")\n', encoding="utf-8")
         xrc = root / "legacy.xrc"
         compiled = run([str(binary), "compile", str(source), "-o", str(xrc)], cwd=root)
-        require(compiled.returncode == 0 and xrc.is_file(),
-                "transitional XRC fixture compiled", compiled.stdout)
+        require_rejection(compiled, "XR_ARTIFACT_2000",
+                          "legacy XRC compilation is removed")
+        require(not xrc.exists(), "legacy XRC rejection leaves no artifact")
+        for legacy_format in ("bytecode", "bc"):
+            require_rejection(run([
+                str(binary), "compile", str(source), "--format", legacy_format,
+                "--output", str(root / "legacy.c"),
+            ], cwd=root), "XR_ARTIFACT_2000",
+                f"legacy {legacy_format} format is removed")
+        require_rejection(run([
+            str(binary), "compile", str(source), "--format", "c",
+            "--output", str(root / "disguised.XRC"),
+        ], cwd=root), "XR_ARTIFACT_2000",
+            "legacy XRC extension cannot disguise a C container")
+        c_container = root / "offline-container.c"
+        c_compiled = run([
+            str(binary), "compile", str(source), "--format", "c",
+            "--output", str(c_container),
+        ], cwd=root)
+        require(c_compiled.returncode == 0 and c_container.is_file(),
+                "offline C container remains available to compiler development",
+                c_compiled.stdout)
+        xrc.write_bytes(b"XRAY\x1e\x00")
         renamed_xrc = root / "legacy.bin"
         shutil.copyfile(xrc, renamed_xrc)
         executed = run([str(binary), "run", str(renamed_xrc)], cwd=root)
-        require(executed.returncode == 0 and "legacy-route" in executed.stdout,
-                "legacy XRC remains explicitly magic-routed during cutover",
-                executed.stdout)
+        require_rejection(executed, "XR_ARTIFACT_2000",
+                          "legacy XRC magic is rejected before execution")
 
     print("Target artifact CLI boundary tests passed")
     return 0

@@ -161,7 +161,20 @@ def main() -> int:
         gate.record(run([str(core_xray), "test", "--quiet", str(smoke)]).returncode == 0, "Core test smoke")
         bytecode = work / "core_smoke.xrc"
         compile_result = run([str(core_xray), "compile", str(smoke), "-o", str(bytecode)])
-        gate.record(compile_result.returncode == 0 and bytecode.is_file(), "Core compile smoke", compile_result.stdout)
+        gate.record(
+            compile_result.returncode != 0
+            and "XR_ARTIFACT_2000" in compile_result.stdout
+            and not bytecode.exists(),
+            "Core XRC compile route is absent",
+            compile_result.stdout,
+        )
+        c_container = work / "core_smoke.c"
+        c_compile = run([str(core_xray), "compile", str(smoke), "-o", str(c_container)])
+        gate.record(
+            c_compile.returncode == 0 and c_container.is_file(),
+            "Core compiler C-container smoke",
+            c_compile.stdout,
+        )
 
         full_install = install(build, full)
         gate.record(full_install.returncode == 0, "cmake install", full_install.stdout[-4000:])

@@ -37,7 +37,7 @@ the protocol has no skip, allowlist, dirty, or fallback state.
 anchor-sha256: contracts/target-machine/semantic-owner-inventory.json f874ee1dbd6453d2ce2e0474d297a57269c433fc648214018916d9037762064b
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json f97884b9074f8bf8134a958f34d46aac137fedbd9a9660c60255726ac36ff090
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json 12fba57140ea65fa4a19c06eb48b355568d70219223bc6746c10adf0fc99b176
-anchor-sha256: contracts/target-machine/legacy-product-residue.json 052cac030a7f91c22c7c4a40e2571f3d9f0a274661aa1396a13f5c5bf4600827
+anchor-sha256: contracts/target-machine/legacy-product-residue.json 61562d23d15266f6282dd3e3185447c3bbd9ccbd69e22240bbc1e581581f7a39
 anchor-sha256: contracts/target-machine/object-extent-inventory.json fb90582f2b715d297430b6ab59443e58a95b5d38d5c59d112a2db1593c753053
 anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc66576441dcdfa3b8b52ee606fb6256abefefa2e848310aed
 anchor-sha256: contracts/target-machine/baseline-manifest.json 9264ec82b4e58d421c7b285e3bc2ff598ef09587622110de6cf72d79cbf7ddef

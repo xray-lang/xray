@@ -4,7 +4,7 @@
 // so the built binary printed null where `xray run` printed the value. This
 // fixture prints BigInt values (never comparisons or int64-overflowing
 // arithmetic, which exercise unrelated backend paths) so that the source run,
-// the bytecode build, the compiled .xrc and the native build must all agree.
+// embedded-bytecode build, and native build must all agree.
 var a = 123n
 print(a)
 

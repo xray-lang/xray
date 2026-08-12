@@ -77,7 +77,7 @@ static const XrCliOptionSpec fmt_options[] = {
 
 static const XrCliOptionSpec compile_options[] = {
     {"output", 'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
-    {"format", 'f', XR_CLI_VALUE_STRING, false, false, "FMT", "Output format: bytecode, c, header"},
+    {"format", 'f', XR_CLI_VALUE_STRING, false, false, "FMT", "Output format: c or header"},
     {"strip-debug", 's', XR_CLI_VALUE_NONE, false, false, NULL, "Remove debug info"},
     {"strip-source", 'S', XR_CLI_VALUE_NONE, false, false, NULL, "Remove source file path"},
     {"name", 'n', XR_CLI_VALUE_STRING, false, false, "NAME", "C variable name prefix"},
@@ -280,14 +280,14 @@ static const XrCliCommandSpec language_subcommands[] = {
 
 static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
-    {"run", "Run source, bytecode, or project", NULL, run_options, 0, -1, true, false, NULL, NULL,
+    {"run", "Run source, project, or exact target artifacts", NULL, run_options, 0, -1, true, false, NULL, NULL,
      0},
     {"repl", "Interactive environment", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
     /* Artifact commands */
-    {"compile", "Compile to bytecode or C", NULL, compile_options, 1, 1, false, false, NULL, NULL,
+    {"compile", "Compile to a C bytecode container", NULL, compile_options, 1, 1, false, false, NULL, NULL,
      0},
     {"build", "Compile to binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
     {"deps", "Analyze dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
