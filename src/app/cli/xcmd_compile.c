@@ -61,11 +61,11 @@ static char *generate_var_name(const char *filename) {
 }
 
 // Parse --format argument
-static XrOutputFormat parse_format(const char *fmt) {
+static XrBootstrapEmissionFormat parse_format(const char *fmt) {
     if (strcmp(fmt, "c") == 0 || strcmp(fmt, "source") == 0) {
-        return XR_OUTPUT_C_SOURCE;
+        return XR_BOOTSTRAP_EMISSION_C_SOURCE;
     }
-    return XR_OUTPUT_AUTO;
+    return XR_BOOTSTRAP_EMISSION_AUTO;
 }
 
 static bool has_legacy_xrc_extension(const char *path) {
@@ -171,7 +171,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
         flags |= XR_BOOTSTRAP_CONTAINER_STRIP_SOURCE;
 
     /* Parse explicit format */
-    XrOutputFormat explicit_format = XR_OUTPUT_AUTO;
+    XrBootstrapEmissionFormat explicit_format = XR_BOOTSTRAP_EMISSION_AUTO;
     if (fmt_str) {
         if (strcmp(fmt_str, "bytecode") == 0 || strcmp(fmt_str, "bc") == 0 ||
             strcmp(fmt_str, "h") == 0 || strcmp(fmt_str, "header") == 0) {
@@ -180,7 +180,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
             return XR_CLI_EXIT_USAGE;
         }
         explicit_format = parse_format(fmt_str);
-        if (explicit_format == XR_OUTPUT_AUTO) {
+        if (explicit_format == XR_BOOTSTRAP_EMISSION_AUTO) {
             xr_cli_error("compile", "unknown format '%s'", fmt_str);
             return XR_CLI_EXIT_USAGE;
         }
@@ -199,8 +199,9 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     }
 
     /* Determine output format */
-    XrOutputFormat format = xr_detect_output_format(output_file, explicit_format);
-    if (format == XR_OUTPUT_AUTO) {
+    XrBootstrapEmissionFormat format =
+        xr_bootstrap_emission_format_for_path(output_file, explicit_format);
+    if (format == XR_BOOTSTRAP_EMISSION_AUTO) {
         xr_cli_error("compile",
                      "XR_ARTIFACT_2000: legacy XRC output is removed; use --format c");
         return XR_CLI_EXIT_USAGE;
@@ -218,7 +219,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     XrCompilerSessionOperationScope operation_scope = {0};
 
     /* Generate variable name */
-    if (!var_name && format == XR_OUTPUT_C_SOURCE) {
+    if (!var_name && format == XR_BOOTSTRAP_EMISSION_C_SOURCE) {
         gen_var_name = generate_var_name(input_file);
         var_name = gen_var_name;
     }
@@ -256,8 +257,9 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     bool success = false;
 
     switch (format) {
-        case XR_OUTPUT_C_SOURCE:
-            success = xr_output_c_source(X, proto, output_file, var_name, flags);
+        case XR_BOOTSTRAP_EMISSION_C_SOURCE:
+            success = xr_bootstrap_container_emit_c_source(
+                X, proto, output_file, var_name, flags);
             if (success) {
                 printf("Compiled: %s\n", output_file);
             }

@@ -2354,7 +2354,7 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
     return proto;
 }
 
-int xr_eval_bytecode(XrVMRuntime *X, const uint8_t *data, size_t size) {
+int xr_bootstrap_container_execute(XrVMRuntime *X, const uint8_t *data, size_t size) {
     XR_DCHECK(X != NULL, "eval_bytecode: NULL isolate");
     XR_DCHECK(data != NULL, "eval_bytecode: NULL data");
     XrBootstrapContainerError error;
@@ -2407,7 +2407,7 @@ XRAY_API int xray_vm_eval_bundle(XrVMRuntime *X, const XrBytecodeBundle *bundle)
         registry->module_table[i] = xr_value_to_module(value);
     }
 
-    return xr_eval_bytecode(X, entry->bytecode, entry->bytecode_size);
+    return xr_bootstrap_container_execute(X, entry->bytecode, entry->bytecode_size);
 }
 
 /* ========== AOT Bytecode Load (decomposed API) ========== */
@@ -2465,23 +2465,25 @@ void xr_proto_set_param_types(XrProto *p, const uint8_t *ptypes, int nparams, ui
 
 /* ========== Output Format ========== */
 
-XrOutputFormat xr_detect_output_format(const char *filename, XrOutputFormat explicit_fmt) {
-    if (explicit_fmt != XR_OUTPUT_AUTO)
-        return explicit_fmt;
+XrBootstrapEmissionFormat xr_bootstrap_emission_format_for_path(
+    const char *filename, XrBootstrapEmissionFormat explicit_format) {
+    if (explicit_format != XR_BOOTSTRAP_EMISSION_AUTO)
+        return explicit_format;
     if (!filename)
-        return XR_OUTPUT_AUTO;
+        return XR_BOOTSTRAP_EMISSION_AUTO;
 
     const char *ext = strrchr(filename, '.');
     if (!ext)
-        return XR_OUTPUT_AUTO;
+        return XR_BOOTSTRAP_EMISSION_AUTO;
 
     if (strcmp(ext, ".c") == 0)
-        return XR_OUTPUT_C_SOURCE;
-    return XR_OUTPUT_AUTO;
+        return XR_BOOTSTRAP_EMISSION_C_SOURCE;
+    return XR_BOOTSTRAP_EMISSION_AUTO;
 }
 
-bool xr_output_c_source(XrVMRuntime *X, XrProto *proto, const char *output_file,
-                        const char *var_name, int flags) {
+bool xr_bootstrap_container_emit_c_source(XrVMRuntime *X, XrProto *proto,
+                                          const char *output_file,
+                                          const char *var_name, int flags) {
     // Serialize
     size_t bc_size;
     uint8_t *bc = xr_bootstrap_container_write(X, proto, flags, &bc_size, NULL);

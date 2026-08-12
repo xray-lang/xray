@@ -84,8 +84,9 @@ XR_FUNC uint8_t *xr_bootstrap_container_write_stdlib(
 XR_FUNC struct XrProto *xr_bootstrap_container_read(
     struct XrVMRuntime *X, const uint8_t *data, size_t size, XrBootstrapContainerError *error);
 
-// Execute bytecode directly, returns 0 on success
-XR_FUNC int xr_eval_bytecode(struct XrVMRuntime *X, const uint8_t *data, size_t size);
+/* Execute an internal bootstrap container, returning zero on success. */
+XR_FUNC int xr_bootstrap_container_execute(
+    struct XrVMRuntime *X, const uint8_t *data, size_t size);
 
 /* ========== Internal bootstrap file API ========== */
 
@@ -100,14 +101,16 @@ XR_FUNC bool xr_compile_stdlib_to_file(struct XrCompilerSession *session,
 /* ========== Output Format (for compile command) ========== */
 
 typedef enum {
-    XR_OUTPUT_AUTO,
-    XR_OUTPUT_C_SOURCE,
-} XrOutputFormat;
+    XR_BOOTSTRAP_EMISSION_AUTO,
+    XR_BOOTSTRAP_EMISSION_C_SOURCE,
+} XrBootstrapEmissionFormat;
 
-XR_FUNC XrOutputFormat xr_detect_output_format(const char *filename, XrOutputFormat explicit_fmt);
+XR_FUNC XrBootstrapEmissionFormat xr_bootstrap_emission_format_for_path(
+    const char *filename, XrBootstrapEmissionFormat explicit_format);
 
-// Output as C source file
-XR_FUNC bool xr_output_c_source(struct XrVMRuntime *X, struct XrProto *proto,
-                                const char *output_file, const char *var_name, int flags);
+/* Emit an internal bootstrap container as a C source array. */
+XR_FUNC bool xr_bootstrap_container_emit_c_source(
+    struct XrVMRuntime *X, struct XrProto *proto, const char *output_file,
+    const char *var_name, int flags);
 
 #endif  // XPROTO_CODEC_H

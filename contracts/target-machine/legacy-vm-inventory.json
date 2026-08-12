@@ -17,11 +17,7 @@
     "src/vm/xvm_coro_backend.c"
   ],
   "generator": "target-machine-phase0/1",
-  "legacy_artifact_symbols": [
-    "xr_detect_output_format",
-    "xr_eval_bytecode",
-    "xr_output_c_source"
-  ],
+  "legacy_artifact_symbols": [],
   "opcode_count": 296,
   "opcodes": [
     {
@@ -3582,7 +3578,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "77e4719fab979ffa27b03e02d39450426a5a9a1c84ae1e00e7c93ef6bed22c9f",
+  "source_tree_fingerprint": "ead831e5cb16499762e452b7b3fdbb0d156d9d2332be41e1269476e71d9c0a1c",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xvm.c",
