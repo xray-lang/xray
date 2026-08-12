@@ -131,24 +131,6 @@ TEST(api_isolate_get_stats_null) {
     ASSERT_EQ_UINT(bytes, 999);
 }
 
-TEST(api_isolate_set_trace_null) {
-    if (SKIP_NULL_RETURN_TESTS) {
-        ASSERT_TRUE(1);
-        return;
-    }
-    xray_vm_set_trace(NULL, true);
-    ASSERT_TRUE(1);
-}
-
-TEST(api_isolate_set_dump_bytecode_null) {
-    if (SKIP_NULL_RETURN_TESTS) {
-        ASSERT_TRUE(1);
-        return;
-    }
-    xray_vm_set_dump_bytecode(NULL, true);
-    ASSERT_TRUE(1);
-}
-
 /* ========== Isolate Lifecycle (valid) ========== */
 
 TEST(api_isolate_create_destroy) {
@@ -200,12 +182,9 @@ RUN_TEST(api_isolate_dostring_null_isolate);
 RUN_TEST(api_isolate_dostring_null_source);
 RUN_TEST(api_isolate_dofile_null_isolate);
 RUN_TEST(api_isolate_dofile_null_filename);
-RUN_TEST(api_isolate_get_backend_null);
 RUN_TEST(api_isolate_set_userdata_null);
 RUN_TEST(api_isolate_get_userdata_null);
 RUN_TEST(api_isolate_get_stats_null);
-RUN_TEST(api_isolate_set_trace_null);
-RUN_TEST(api_isolate_set_dump_bytecode_null);
 
 RUN_TEST_SUITE("API Lifecycle - Valid Operations");
 RUN_TEST(api_isolate_create_destroy);

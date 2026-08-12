@@ -73,9 +73,6 @@ XRAY_API void *xray_vm_get_userdata(XrVMRuntime *vm);
 
 XRAY_API void xray_vm_get_stats(XrVMRuntime *vm, size_t *bytes_allocated);
 
-XRAY_API void xray_vm_set_trace(XrVMRuntime *vm, bool enable);
-XRAY_API void xray_vm_set_dump_bytecode(XrVMRuntime *vm, bool enable);
-
 XRAY_API void xray_vm_set_script_info(XrVMRuntime *vm, const char *script_file, int argc,
                                       char **argv);
 

@@ -1,10 +1,10 @@
 {
   "counts": {
-    "api": 71,
+    "api": 67,
     "build": 65,
     "cli": 116,
     "install": 7,
-    "source": 3712
+    "source": 3704
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -560,11 +560,9 @@
     "xray_vm_new_full",
     "xray_vm_new_runtime",
     "xray_vm_set_deadline_ms",
-    "xray_vm_set_dump_bytecode",
     "xray_vm_set_module_allowlist",
     "xray_vm_set_script_info",
     "xray_vm_set_stdout",
-    "xray_vm_set_trace",
     "xray_vm_set_userdata",
     "xray_vm_timed_out"
   ],
@@ -610,9 +608,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "bbae483d6ff7488d5c96e57efa0fdbc95e38eb9105d9ff3b689f60cf7805a620",
+      "evidence_sha256": "ed95dc004a30452fe431c85caebbaa509fce381b27a09ad86e00287054e90fe5",
       "family": "legacy-vm-api",
-      "hit_count": 19,
+      "hit_count": 17,
       "path": "include/xray_vm.h",
       "status": "transitional-owner",
       "surface": "api",
@@ -627,11 +625,9 @@
         "xray_vm_multicore_destroy",
         "xray_vm_multicore_init",
         "xray_vm_set_deadline_ms",
-        "xray_vm_set_dump_bytecode",
         "xray_vm_set_module_allowlist",
         "xray_vm_set_script_info",
         "xray_vm_set_stdout",
-        "xray_vm_set_trace",
         "xray_vm_set_userdata",
         "xray_vm_timed_out"
       ]
@@ -674,9 +670,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "fe29517f68790e39f23ec929c84d93ab8ab64bea20742d74f78f1b01beb43a65",
+      "evidence_sha256": "12d9add320e2a18904115d7da8c5b80656b4a4c34eac40b3b7317ef7c370b23e",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 34,
+      "hit_count": 32,
       "path": "include/xray_vm.h",
       "status": "transitional-owner",
       "surface": "api",
@@ -3185,9 +3181,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "6626633f2e2459b81d2b798c6fbfbffae6fcb5b13efabe2d0804e811a42e533f",
+      "evidence_sha256": "6e8ede07a06604b7f9edca5e10847d4fff96ad25a4f08f2d667edee4e4b36fda",
       "family": "legacy-vm-api",
-      "hit_count": 15,
+      "hit_count": 11,
       "path": "src/api/xisolate.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -3199,8 +3195,6 @@
         "xray_vm_get_stats",
         "xray_vm_get_userdata",
         "xray_vm_multicore_destroy",
-        "xray_vm_set_dump_bytecode",
-        "xray_vm_set_trace",
         "xray_vm_set_userdata"
       ]
     },
@@ -3635,9 +3629,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "aaac0fbfc52f831d240226e38e56dc1a470171fa670e3e05ae05a50fa8049628",
+      "evidence_sha256": "20518431f0bd8e262fb90b441c2492efa3dfdc06a24a32b3829aa0cd60515f09",
       "family": "legacy-vm-api",
-      "hit_count": 22,
+      "hit_count": 20,
       "path": "tests/unit/api/test_api_defense.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -3646,8 +3640,6 @@
         "xray_vm_delete",
         "xray_vm_get_stats",
         "xray_vm_get_userdata",
-        "xray_vm_set_dump_bytecode",
-        "xray_vm_set_trace",
         "xray_vm_set_userdata"
       ]
     },
@@ -4269,9 +4261,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "acb5e7095378a0072628a821a2924395e3859d636f561dee129134383b5da9a1",
+      "evidence_sha256": "eb1d816abc7bbc6f01fe04e973e21e90d89269d8dc86a06d1f14e8dcf749f995",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 12,
+      "hit_count": 10,
       "path": "src/api/xisolate.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -10038,6 +10030,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "513833d10a2c1adbdc2e01d0aab614297c8c9e68cfe0cc297b471a530b15f14a",
-  "total": 3971
+  "source_tree_fingerprint": "c9c107a3ca2e66011b7939f8e4158b2dfd75b212b5eff21acd48097978a5a943",
+  "total": 3959
 }

@@ -290,6 +290,14 @@ def self_test() -> int:
         )
         backend_drifted, _ = check(root, collect(root))
         retired_backend.unlink()
+        retired_debug_setters = root / "include/xray_vm.h"
+        retired_debug_setters.write_text(
+            "void xray_vm_set_trace(void *, int);\n"
+            "void xray_vm_set_dump_bytecode(void *, int);\n",
+            encoding="utf-8",
+        )
+        debug_setters_drifted, _ = check(root, collect(root))
+        retired_debug_setters.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -298,7 +306,7 @@ def self_test() -> int:
         (root / "src/new_loader.c").unlink()
         zero = collect(root)
         terminal, _ = check(root, zero)
-    if (not clean or backend_drifted or drifted or not terminal
+    if (not clean or backend_drifted or debug_setters_drifted or drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")
         return 1

@@ -338,14 +338,3 @@ void xray_vm_get_stats(XrVMRuntime *isolate, size_t *bytes_allocated) {
         *bytes_allocated =
             isolate->core_rt ? (size_t) isolate->core_rt->fixed_heap.totalbytes : (size_t) 0;
 }
-
-void xray_vm_set_trace(XrVMRuntime *isolate, bool enable) {
-    xray_api_check(isolate != NULL, "xray_vm_set_trace: NULL isolate");
-    isolate->params.trace_execution = enable;
-    isolate->vm.trace_execution = enable;
-}
-
-void xray_vm_set_dump_bytecode(XrVMRuntime *isolate, bool enable) {
-    xray_api_check(isolate != NULL, "xray_vm_set_dump_bytecode: NULL isolate");
-    isolate->params.dump_bytecode = enable;
-}
