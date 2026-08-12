@@ -74,10 +74,6 @@ XrGlobalObject *xr_isolate_get_global_object(XrVMRuntime *X) {
     return X ? X->global_object : NULL;
 }
 
-struct XrGlobalStringPool *xr_isolate_get_string_pool(XrVMRuntime *X) {
-    return (X && X->core_rt) ? X->core_rt->global_string_pool : NULL;
-}
-
 struct XrStrBuf **xr_isolate_tmp_strbuf_slot(XrVMRuntime *X) {
     return (X && X->core_rt) ? &X->core_rt->tmp_strbuf : NULL;
 }

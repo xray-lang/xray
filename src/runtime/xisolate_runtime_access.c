@@ -51,6 +51,10 @@ void *xr_isolate_get_symbol_table(XrVMRuntime *isolate) {
     return (isolate && isolate->core_rt) ? isolate->core_rt->symbol_table : NULL;
 }
 
+struct XrGlobalStringPool *xr_isolate_get_string_pool(XrVMRuntime *X) {
+    return (X && X->core_rt) ? X->core_rt->global_string_pool : NULL;
+}
+
 XrClass *xr_isolate_get_native_type_class(XrVMRuntime *X, uint8_t type_id) {
     if (!X || !X->core_rt || type_id >= XR_NATIVE_TYPE_MAX)
         return NULL;

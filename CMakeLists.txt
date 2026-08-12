@@ -1357,13 +1357,6 @@ list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xopcode_inf
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/object/(xatomic|xarray_vm|xmap_vm)\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/class/xinstance\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/coro/(xcoro_monitor|xthread_obj)\\.c$")
-if(WIN32)
-    # COFF linkers resolve undefined symbols before per-function GC, so the
-    # otherwise-unused xstring_pool reference needs the lightweight accessors
-    # in the archive for both MSVC and MinGW. Mach-O and ELF discard that
-    # section before resolution.
-    list(APPEND XRAY_RT_CORO_SOURCES src/runtime/xisolate_api.c)
-endif()
 
 add_library(xray_rt_coro STATIC ${XRAY_RT_CORO_SOURCES})
 add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
