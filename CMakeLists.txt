@@ -1368,8 +1368,8 @@ set(XRAY_VM_RUNTIME_SOURCES
 )
 list(REMOVE_DUPLICATES XRAY_VM_RUNTIME_SOURCES)
 
-add_library(xray_vm_runtime STATIC ${XRAY_VM_RUNTIME_SOURCES})
-add_dependencies(xray_vm_runtime gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
+add_library(xray_vm STATIC ${XRAY_VM_RUNTIME_SOURCES})
+add_dependencies(xray_vm gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
 
 # The ownership audit heap is diagnostic instrumentation, not release runtime
 # behavior. Keep it out of core, coroutine, and VM archives; developers and
@@ -1442,11 +1442,11 @@ target_include_directories(xray_rt_coro PRIVATE
     ${XRAY_COMMON_INCLUDES}
 )
 
-target_include_directories(xray_vm_runtime PUBLIC
+target_include_directories(xray_vm PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_include_directories(xray_vm_runtime PRIVATE
+target_include_directories(xray_vm PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${XRAY_STDLIB_RUNTIME_BYTECODE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
@@ -1460,13 +1460,13 @@ if(WIN32)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_core PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_rt_coro PUBLIC ws2_32 synchronization)
-    target_link_libraries(xray_vm_runtime PUBLIC synchronization)
+    target_link_libraries(xray_vm PUBLIC synchronization)
 else()
     target_link_libraries(xray_core_objs PUBLIC m pthread)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC m pthread)
     target_link_libraries(xray_core PUBLIC m pthread)
     target_link_libraries(xray_rt_coro PUBLIC m pthread)
-    target_link_libraries(xray_vm_runtime PUBLIC pthread)
+    target_link_libraries(xray_vm PUBLIC pthread)
 endif()
 if(ZLIB_FOUND)
     target_link_libraries(xray_core_objs PUBLIC ZLIB::ZLIB)
@@ -1833,7 +1833,7 @@ else()
 endif()
 
 add_executable(xray ${XRAY_CLI_SOURCES})
-add_dependencies(xray xray_aot_core xray_rt_coro xray_vm_runtime)
+add_dependencies(xray xray_aot_core xray_rt_coro xray_vm)
 
 # The compiler's recursive IR/AOT passes can exceed the PE/COFF default 1 MiB
 # stack on larger programs. Match the usual Unix main-thread allowance so
@@ -4335,7 +4335,7 @@ install(TARGETS xray
 
 # Install public AOT runtime libraries. xray_core remains a build-tree-only
 # aggregate for the CLI and tests; it must not become a public install target.
-install(TARGETS xray_vm_runtime
+install(TARGETS xray_vm
     ARCHIVE DESTINATION lib/xray/vm/${XRAY_HOST_TARGET_ABI}
     COMPONENT XrayCore
 )

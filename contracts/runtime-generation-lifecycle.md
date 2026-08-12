@@ -56,7 +56,7 @@ product activation path.
    skipped/repeated states, mismatched pins, illegal rollback, and revision
    mutation.
 8. The standalone public header and lifecycle/scalar-execution symbols are
-   shipped by the Core component and link from `xray_vm_runtime` without
+   shipped by the Core component and link from `xray_vm` without
    compiler builders, encoders, analyzer objects, or Xi implementation symbols.
    Installed runtime code can derive authority from exact XSM and materialize a
    matching XTP, so its archive gate owns the XSM/XTP-to-sole-scalar success
@@ -74,5 +74,5 @@ anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 54ee3affe064aabfb89fe1cc75ef5642837fd14b6e7e575a0badb4fc670efd74
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py ba2b0af3f6c80fd37f789a0333b11fc8c7bd53be48f3b0d4300aa387f99a2635
-anchor-sha256: tests/install/run_install_public_surface_tests.py 661f46d787c66335e14736b5c3c00760c9afdca355cc424d946e1584e6eaed58
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py c38e7e7b4d9062bf88f1789633aa7ccccbf53aa681308a006d3b498f4fc0406b
+anchor-sha256: tests/install/run_install_public_surface_tests.py bdd70ec5023aed8644149660448feed4d6a51e45920611dd31c42fa9d6bdfb57

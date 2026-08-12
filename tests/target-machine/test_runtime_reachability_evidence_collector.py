@@ -113,7 +113,7 @@ def build_fixture(build: Path) -> None:
         f"xray{suffix}", f"tests/unit/test_xtp_format{suffix}",
         f"tests/unit/test_typed_frame_runtime_archive{suffix}",
         f"tests/unit/test_runtime_target_plan_load_archive{suffix}",
-        "xray_vm_runtime.lib" if os.name == "nt" else "libxray_vm_runtime.a",
+        "xray_vm.lib" if os.name == "nt" else "libxray_vm.a",
     )
     build.mkdir()
     (build / "CMakeCache.txt").write_text(

@@ -237,9 +237,9 @@ def self_test() -> list[str]:
 
     mutations = {
         "release-source-injection":
-            f"\ntarget_sources(xray_vm_runtime PRIVATE {AUDIT_SOURCE})\n",
+            f"\ntarget_sources(xray_vm PRIVATE {AUDIT_SOURCE})\n",
         "audit-target-link":
-            f"\ntarget_link_libraries(xray_vm_runtime PRIVATE {AUDIT_TARGET})\n",
+            f"\ntarget_link_libraries(xray_vm PRIVATE {AUDIT_TARGET})\n",
         "recursive-runtime-glob":
             '\nfile(GLOB_RECURSE RUNTIME_ALL "src/runtime/*.c")\n',
     }

@@ -112,7 +112,7 @@ def main() -> int:
         core_xray = core / "bin" / executable_name
         gate.record(is_executable(core_xray), "Core installed xray executable")
         gate.record(
-            (core / f"lib/xray/vm/{host_target}/{static_prefix}xray_vm_runtime{static_suffix}").is_file(),
+            (core / f"lib/xray/vm/{host_target}/{static_prefix}xray_vm{static_suffix}").is_file(),
             "Core installed VM runtime",
         )
         gate.record((core / "lib/xray/stdlib/path/path.xr").is_file(), "Core installed stdlib")
@@ -171,8 +171,9 @@ def main() -> int:
             (full / f"lib/xray/aot/{host_target}/{static_prefix}xray_aot_core{static_suffix}", "installed xray_aot_core archive"),
             (full / f"lib/xray/aot/{host_target}/{static_prefix}xray_rt_coro{static_suffix}", "installed xray_rt_coro archive"),
             (full / f"lib/xray/aot/{host_target}/manifest.json", "installed runtime manifest"),
-            (full / f"lib/xray/vm/{host_target}/{static_prefix}xray_vm_runtime{static_suffix}", "installed xray_vm_runtime archive"),
+            (full / f"lib/xray/vm/{host_target}/{static_prefix}xray_vm{static_suffix}", "installed xray_vm archive"),
             (full / "lib/xray/sdk/src/aot/xrt.h", "installed private AOT SDK"),
+            (full / "include/xray/runtime.h", "installed runtime API header"),
             (full / "include/xray/xray_target_plan_load.h", "installed TargetPlan load header"),
             (full / "include/xray/xray_runtime_generation.h", "installed generation authority header"),
             (full / "lib/xray/stdlib/path/path.xr", "installed stdlib source"),
@@ -181,6 +182,8 @@ def main() -> int:
         ]
         for path, name in expected:
             gate.record(path.is_file(), name, f"missing {path}")
+        gate.record(not (full / "include/xray/xray_runtime.h").exists(),
+                    "installed tree excludes old runtime header name")
 
         verify = run(
             [

@@ -29,7 +29,7 @@ KIND = "symbol"
 TARGET_FILES = {
     "xray-cli": ("xray.exe", "xray"),
     "libxray-exec-core": ("xray_rt_coro.lib", "libxray_rt_coro.a"),
-    "libxray-vm": ("xray_vm_runtime.lib", "libxray_vm_runtime.a"),
+    "libxray-vm": ("xray_vm.lib", "libxray_vm.a"),
     "libxray-compiler": ("xray_core.lib", "libxray_core.a"),
 }
 LEGACY_EXACT = {

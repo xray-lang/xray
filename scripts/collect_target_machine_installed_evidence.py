@@ -30,8 +30,8 @@ DELIVERABLE_PATTERNS = {
         "lib/xray/aot/*/libxray_rt_coro.a",
     ),
     "libxray-vm": (
-        "lib/xray/vm/*/xray_vm_runtime.lib",
-        "lib/xray/vm/*/libxray_vm_runtime.a",
+        "lib/xray/vm/*/xray_vm.lib",
+        "lib/xray/vm/*/libxray_vm.a",
     ),
     "libxray-compiler": (
         "lib/xray/aot/*/xray_core.lib",

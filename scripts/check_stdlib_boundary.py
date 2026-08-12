@@ -453,7 +453,7 @@ def check_fastpaths(root: Path) -> list[str]:
             if required_symbol not in hosted_text:
                 errors.append(f"hosted-fragment ABI is missing {required_symbol}")
     value_consumers = (
-        "include/xray_runtime.h",
+        "include/runtime.h",
         "src/runtime/value/xvalue.h",
         "src/aot/xrt_value.h",
         "src/aot/xrt_core_freestanding.h",

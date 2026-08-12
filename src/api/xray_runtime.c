@@ -8,12 +8,12 @@
  * xray_runtime.c - Self-contained embedding runtime for AOT-compiled code
  *
  * KEY CONCEPT:
- *   Implements xrt_* functions declared in xray_runtime.h.
+ *   Implements xrt_* functions declared in runtime.h.
  *   All functions are self-contained with no dependency on VM internals.
  *   Pure-compute AOT code doesn't link this file at all.
  */
 
-#include "../../include/xray_runtime.h"
+#include "../../include/runtime.h"
 #include "../base/xchecks.h"
 #include <stdio.h>
 #include <stdlib.h>

@@ -177,7 +177,7 @@ def main() -> int:
         os.environ["DUMPBIN"] = str(dumpbin)
     target = run([str(binary), "toolchain", "list", "--target", "native", "--json"])
     host = json.loads(target.stdout)["normalizedTarget"]
-    archive_name = "xray_vm_runtime.lib" if os.name == "nt" else "libxray_vm_runtime.a"
+    archive_name = "xray_vm.lib" if os.name == "nt" else "libxray_vm.a"
 
     with tempfile.TemporaryDirectory(prefix="xray-installed-runtime-symbols-") as temporary:
         work = Path(temporary)

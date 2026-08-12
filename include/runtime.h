@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xray_runtime.h - Minimal runtime API for AOT-compiled code
+ * runtime.h - Minimal runtime API for AOT-compiled code
  *
  * KEY CONCEPT:
  *   This header provides the thin API layer between AOT-generated C code

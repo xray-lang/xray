@@ -26,7 +26,7 @@ GRAPH_KINDS = tuple(sorted(completion.GRAPH_KINDS))
 TARGET_AUTHORITIES = {
     "xray-cli": "xray",
     "libxray-exec-core": "xray_rt_coro",
-    "libxray-vm": "xray_vm_runtime",
+    "libxray-vm": "xray_vm",
     "libxray-compiler": "xray_core",
 }
 

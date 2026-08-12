@@ -225,8 +225,8 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
                 f"exit_code={codes[name]}\n{outputs[name]}", encoding="utf-8",
             )
         identities = exact_identities(identity_path)
-        runtime_archive = build / ("xray_vm_runtime.lib" if os.name == "nt"
-                                   else "libxray_vm_runtime.a")
+        runtime_archive = build / ("xray_vm.lib" if os.name == "nt"
+                                   else "libxray_vm.a")
         compiler_symbols, symbol_text = runtime_compiler_symbols(runtime_archive)
         (logs / "runtime-symbols.log").write_text(symbol_text, encoding="utf-8")
         payload, product_passed = evaluate(

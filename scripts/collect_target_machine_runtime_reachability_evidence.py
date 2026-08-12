@@ -179,7 +179,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
     activation_canary = artifact(
         build, "tests/unit/test_runtime_target_plan_load_archive$EXE"
     )
-    archive_name = "xray_vm_runtime.lib" if os.name == "nt" else "libxray_vm_runtime.a"
+    archive_name = "xray_vm.lib" if os.name == "nt" else "libxray_vm.a"
     runtime_archive = artifact(build, archive_name)
     generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace(
         "+00:00", "Z"

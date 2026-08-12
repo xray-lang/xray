@@ -344,7 +344,7 @@ target_include_directories(test_runtime_target_plan_load_archive PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${XR_RUNTIME_SCALAR_ARTIFACT_DIR})
 target_link_libraries(test_runtime_target_plan_load_archive PRIVATE
-    xray_vm_runtime)
+    xray_vm)
 add_test(NAME test_runtime_target_plan_load_archive
     COMMAND $<TARGET_FILE:test_runtime_target_plan_load_archive>)
 add_xray_unit_test(test_runtime_generation
@@ -354,7 +354,7 @@ add_executable(test_runtime_generation_archive
 target_include_directories(test_runtime_generation_archive PRIVATE
     ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(test_runtime_generation_archive PRIVATE
-    xray_vm_runtime)
+    xray_vm)
 add_test(NAME test_runtime_generation_archive
     COMMAND $<TARGET_FILE:test_runtime_generation_archive>)
 add_xray_unit_test(test_typed_frame vm/test_typed_frame.c
@@ -366,7 +366,7 @@ add_executable(test_typed_frame_runtime_archive
 target_include_directories(test_typed_frame_runtime_archive PRIVATE
     ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_typed_frame_runtime_archive PRIVATE
-    xray_vm_runtime)
+    xray_vm)
 add_test(NAME test_typed_frame_runtime_archive
     COMMAND $<TARGET_FILE:test_typed_frame_runtime_archive>)
 add_executable(test_xtp_fuzz_entry ../fuzz/fuzz_xtp_decode.c
