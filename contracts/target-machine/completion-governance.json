@@ -53,6 +53,18 @@
       ]
     },
     {
+      "id": "runtime-reachability-evidence-producer",
+      "path": "scripts/collect_target_machine_runtime_reachability_evidence.py",
+      "required_regex": [
+        "PRODUCER\\s*=\\s*\"target-machine-runtime-reachability-evidence/1\"",
+        "EXPECTED_RESULTS",
+        "external_activation_canary",
+        "raw_log_identity",
+        "status\\s*=\\s*\"passed\"\\s+if\\s+all_ok\\s+else\\s+\"failed\"",
+        "os\\.rename\\(staging, output\\)"
+      ]
+    },
+    {
       "id": "semantic-schema-v18",
       "path": "src/plan/semantic/xr_semantic_ids.h",
       "required_regex": [
@@ -143,6 +155,7 @@
       "scripts/check_target_machine_completion.py",
       "scripts/collect_target_machine_dependency_graph_evidence.py",
       "scripts/collect_target_machine_installed_evidence.py",
+      "scripts/collect_target_machine_runtime_reachability_evidence.py",
       "scripts/collect_target_machine_symbol_evidence.py",
       "src/plan/format/xr_xtp_schema.h",
       "src/plan/semantic/xr_semantic_ids.h",
@@ -163,7 +176,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "09ab27fa7652bd05135ed23b5d060fee20f0cc2de2352a05159f820de18f8ac4"
+    "sha256": "67fad0b9c44ee1477f7cfe780e744cc4175e62810360d4d6625e23ca0569050f"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
