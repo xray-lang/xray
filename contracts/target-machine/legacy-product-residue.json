@@ -1,10 +1,10 @@
 {
   "counts": {
-    "api": 48,
+    "api": 46,
     "build": 65,
     "cli": 115,
     "install": 7,
-    "source": 3650
+    "source": 3646
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -61,7 +61,6 @@
     "src/app/dap/xdap_debug.h",
     "src/app/dap/xdap_eval.c",
     "src/app/dap/xdap_inspect.c",
-    "src/app/dap/xdap_protocol.c",
     "src/app/dap/xdap_variables.c",
     "src/app/lsp/xlsp_analysis.c",
     "src/app/lsp/xlsp_format.c",
@@ -545,7 +544,6 @@
     "xray_vm_debug_null_XXXXXX",
     "xray_vm_delete",
     "xray_vm_dofile",
-    "xray_vm_dofile_debug",
     "xray_vm_dostring",
     "xray_vm_enter",
     "xray_vm_eval_bundle",
@@ -557,7 +555,7 @@
     "xray_vm_new_full",
     "xray_vm_set_script_info"
   ],
-  "owner_count": 730,
+  "owner_count": 729,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -652,9 +650,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "2e559a137903dc4d55fbf621ebebf7e6b046b24a0a0f5f259acf8230a30c8264",
+      "evidence_sha256": "6b1983a1430cc4f30a8bd7be46935681a7470d554173e317ae401aeb7e58c4f0",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 22,
+      "hit_count": 21,
       "path": "include/xray_vm.h",
       "status": "transitional-owner",
       "surface": "api",
@@ -679,15 +677,14 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "ef71c5403080bad6cb28d39b1114d88d518fc2509ced5d0fb28569eb506bdedc",
+      "evidence_sha256": "c9684df83c6f48517d0cee2d1a6c4fe73b8a1671ba32710992e64e4501b9f57a",
       "family": "source-eval-runtime-api",
-      "hit_count": 3,
+      "hit_count": 2,
       "path": "include/xray_vm.h",
       "status": "transitional-owner",
       "surface": "api",
       "tokens": [
         "xray_vm_dofile",
-        "xray_vm_dofile_debug",
         "xray_vm_dostring"
       ]
     },
@@ -4213,7 +4210,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "15397797c919f36fdc201774828fd5e3b2ec5846dc5385d8abf0910ed20d4aaa",
+      "evidence_sha256": "00ee9775a635fb49900d168d07189dbe52d1c921f36015f412986493aa930ae4",
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 8,
       "path": "src/api/xisolate_scripting.c",
@@ -6898,9 +6895,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "4f5463189891a1c4aa72953a161caf28b3d99464f3087bc3be5770231477b1fc",
+      "evidence_sha256": "41957911720087f02603fdf9aee58c3553a9546f7569781024a6e4b9495ddf1d",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 56,
+      "hit_count": 57,
       "path": "src/runtime/xisolate_api.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -9678,28 +9675,15 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "897b8a7e6817d5dc4a97444d8448815c18e8e907af40f2f0a7c683d37c7b8079",
+      "evidence_sha256": "27f1d4df5157321e8439014d985707307f04f734c06184f573427fed3a774b8d",
       "family": "source-eval-runtime-api",
-      "hit_count": 9,
+      "hit_count": 6,
       "path": "src/api/xisolate_scripting.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "xray_vm_dofile",
-        "xray_vm_dofile_debug",
         "xray_vm_dostring"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "48646e33ea6a21159a48f8497f659a28e4cea7be1cf529bf5073537f63fb584e",
-      "family": "source-eval-runtime-api",
-      "hit_count": 1,
-      "path": "src/app/dap/xdap_protocol.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm_dofile_debug"
       ]
     },
     {
@@ -9789,14 +9773,13 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "5121b1b1044947b66f5e2a77f3e9b28482dd7e6c3b18d43cb8c5547e0b6eb4f5",
+      "evidence_sha256": "d6c97b56e9c669fb8d5edd0dfdb6f0bf488fc51b4a89bdadbc2324955d828bd8",
       "family": "source-eval-runtime-api",
-      "hit_count": 6,
+      "hit_count": 5,
       "path": "tests/unit/vm/test_vm_api.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "xray_vm_dofile_debug",
         "xray_vm_dostring"
       ]
     },
@@ -9905,6 +9888,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "bebf325d74624c7519faecd3dc58daa2579445d5d7c38af17deb2469c74203e7",
-  "total": 3885
+  "source_tree_fingerprint": "292b5163da3861a43fdccfbd85274d05b269916c01787665699bf339a224f6c3",
+  "total": 3879
 }

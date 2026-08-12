@@ -358,9 +358,9 @@ int xray_vm_dofile(XrVMRuntime *isolate, const char *filename) {
 
 // Debug version: compile and execute but don't free code (for debug resume)
 // Returns proto via out_proto, caller must free with xr_free_code when done
-int xray_vm_dofile_debug(XrVMRuntime *isolate, const char *filename, void **out_proto) {
-    xray_api_checkr(isolate != NULL, "xray_vm_dofile_debug: NULL isolate", -1);
-    xray_api_checkr(filename != NULL, "xray_vm_dofile_debug: NULL filename", -1);
+int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename, void **out_proto) {
+    xray_api_checkr(isolate != NULL, "xr_isolate_dofile_debug: NULL isolate", -1);
+    xray_api_checkr(filename != NULL, "xr_isolate_dofile_debug: NULL filename", -1);
 
     char *source = read_file_source(filename);
     if (source == NULL) {

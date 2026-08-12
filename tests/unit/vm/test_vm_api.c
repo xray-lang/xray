@@ -17,6 +17,7 @@
 
 #include "../test_framework.h"
 #include "xray_vm.h"
+#include "runtime/xisolate_api.h"
 #include "vm/xvm.h"
 #include "../test_helper.h"
 
@@ -286,7 +287,7 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
-    int rc = xray_vm_dofile_debug(iso, path, NULL);
+    int rc = xr_isolate_dofile_debug(iso, path, NULL);
     ASSERT_EQ_INT(rc, 0);
 
     xray_vm_delete(iso);
