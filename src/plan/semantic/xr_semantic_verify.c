@@ -1598,6 +1598,38 @@ static bool verify_string_builder_to_string(
                            "StringBuilder.toString authority is not exact");
 }
 
+static bool verify_string_builder_append_string(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    char *error, size_t error_size) {
+    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING)
+        return true;
+    const XrSemanticOperandRecord *receiver = operation->operand_count == 2 &&
+            operation->operand_begin + 1u < plan->operand_count
+        ? &plan->operands[operation->operand_begin] : NULL;
+    const XrSemanticOperandRecord *argument = receiver ? receiver + 1 : NULL;
+    const XrSemanticTypeRecord *receiver_type = receiver && receiver->type < plan->type_count
+                                                    ? &plan->types[receiver->type] : NULL;
+    const XrSemanticTypeRecord *argument_type = argument && argument->type < plan->type_count
+                                                    ? &plan->types[argument->type] : NULL;
+    const char *selector = operation->metadata_count == 1 &&
+                                   operation->metadata_begin < plan->metadata_count
+                               ? plan->metadata[operation->metadata_begin] : NULL;
+    bool exact = operation->opcode == XI_CALL_METHOD && selector &&
+                 strcmp(selector, "append") == 0 && receiver && argument &&
+                 semantic_type_is_exact_string_builder(receiver_type) && argument_type &&
+                 argument_type->kind == XR_KIND_STRING &&
+                 operation->result_type == receiver->type &&
+                 receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+                 receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
+                 argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 operation->result_alias_operand == 0 &&
+                 operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                 operation->return_complete == 1;
+    return exact || report(error, error_size, "XR_SEM_0019",
+                           "StringBuilder.append(string) authority is not exact");
+}
+
 static bool verify_string_builder_constructor(const XrSemanticPlan *plan,
                                               const XrSemanticOperationRecord *operation,
                                               char *error, size_t error_size) {
@@ -1712,6 +1744,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_string_builder_append_rune(plan, operation, error, error_size))
             return false;
         if (!verify_string_builder_to_string(plan, operation, error, error_size))
+            return false;
+        if (!verify_string_builder_append_string(plan, operation, error, error_size))
             return false;
         uint32_t existing_definition = definitions[operation->result_value];
         if (existing_definition != XR_SEMANTIC_INDEX_NONE) {

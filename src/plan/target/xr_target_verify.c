@@ -3159,6 +3159,28 @@ static bool operation_is_exact_stringbuilder_to_string(
     return exact;
 }
 
+static bool operation_is_exact_stringbuilder_append_string(
+    const XrSemanticPlan *semantic,const XrSemanticOperationRecord *operation,
+    uint32_t *argument_value) {
+    uint32_t count=0, metadata_count=0;
+    const XrSemanticOperandRecord *operands=xr_semantic_plan_operands(semantic,&count);
+    const char *const *metadata=xr_semantic_plan_metadata(semantic,&metadata_count);
+    if (!operation || operation->intrinsic_kind!=XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
+        operation->operand_count!=2 || operation->operand_begin+1u>=count ||
+        operation->metadata_count!=1 || operation->metadata_begin>=metadata_count ||
+        strcmp(metadata[operation->metadata_begin],"append")!=0 || operation->result_alias_operand!=0)
+        return false;
+    const XrSemanticOperandRecord *receiver=&operands[operation->operand_begin], *argument=receiver+1;
+    const XrSemanticTypeRecord *rt=xr_semantic_plan_type(semantic,receiver->type);
+    const XrSemanticTypeRecord *at=xr_semantic_plan_type(semantic,argument->type);
+    bool exact=semantic_stringbuilder_type_is_exact(rt)&&at&&at->kind==XR_KIND_STRING&&
+        operation->result_type==receiver->type&&receiver->role==XR_SEM_OPERAND_RECEIVER&&
+        receiver->flags==XR_SEM_OPERAND_CALL_CONTRACT&&argument->role==XR_SEM_OPERAND_ARGUMENT&&
+        argument->flags==XR_SEM_OPERAND_CALL_CONTRACT;
+    if(exact&&argument_value)*argument_value=argument->value;
+    return exact;
+}
+
 static bool operation_is_exact_stringbuilder_append_rune(
     const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
     uint32_t *receiver_value, uint32_t *argument_value) {
@@ -3301,6 +3323,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             if (expected_calls == UINT32_MAX) { valid = false; break; }
             expected_calls++;
         }
+        if (operation_is_exact_stringbuilder_append_string(semantic, operation, NULL)) {
+            if (expected_calls == UINT32_MAX) { valid=false; break; }
+            expected_calls++;
+        }
     }
     valid = valid && plan->calls_count == expected_calls;
     for (uint32_t target_index = 0;
@@ -3405,6 +3431,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         uint32_t to_string_receiver = XR_SEMANTIC_INDEX_NONE;
         bool stringbuilder_to_string = !semantic_target &&
             operation_is_exact_stringbuilder_to_string(semantic, operation, &to_string_receiver);
+        uint32_t append_string_argument=XR_SEMANTIC_INDEX_NONE;
+        bool stringbuilder_append_string=!semantic_target&&
+            operation_is_exact_stringbuilder_append_string(semantic,operation,&append_string_argument);
         uint16_t result_kind = XR_MACHINE_REP_COUNT;
         const XrSemanticTypeRecord *result_type = operation
                                                        ? xr_semantic_plan_type(
@@ -3417,7 +3446,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         int result_scalar = result_type
                                 ? semantic_type_expected_rep(result_type, &result_kind)
                                 : -1;
-        if (stringbuilder_constructor || stringbuilder_to_string) {
+        if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -3717,6 +3746,16 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
                     plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
             if (!valid) break;
+        } else if (stringbuilder_append_string) {
+            valid=result_type&&!suspends&&reconstruct_call_identity(
+                "xray-target-stringbuilder-append-string-v1",operation->id,result_type->id,
+                append_string_argument,&expected_identity)&&xr_stable_id_equal(call->identity,expected_identity)&&
+                call->semantic_call_target==XR_SEMANTIC_INDEX_NONE&&call->argument_count==0&&call->flags==0&&
+                call->calling_convention==XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING&&
+                call->target_kind==XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING&&
+                call->result_ownership==XR_TARGET_CALL_RETURN_OWNED&&result&&result->slot<plan->slots_count&&
+                plan->slots[result->slot].ownership==XR_TARGET_OWNERSHIP_OWNED;
+            if(!valid)break;
         } else {
             const XrSemanticTypeRecord *view_type =
                 xr_semantic_plan_type(semantic, operation->result_type);

@@ -30,6 +30,7 @@
 #define XR_C_STRING_BYTE_SLICE_VIEW_SYMBOL "xrt_span_from_string_bytes"
 #define XR_C_STRINGBUILDER_APPEND_RUNE_SYMBOL "xrt_strbuf_append"
 #define XR_C_STRINGBUILDER_TO_STRING_SYMBOL "xrt_strbuf_finish"
+#define XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL "xrt_strbuf_append"
 
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
@@ -559,6 +560,27 @@ static bool exact_stringbuilder_to_string_recipe(
     }
     if (!match) return false;
     if (receiver_value) *receiver_value = operands[operation->operand_begin].value;
+    return true;
+}
+
+static bool exact_stringbuilder_append_string_recipe(
+    const XrTargetPlan *target_plan,const XrTargetValueRepRecord *binding,
+    uint32_t *receiver_value,uint32_t *argument_value) {
+    const XrSemanticPlan *semantic=xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation=binding_operation(target_plan,binding);
+    uint32_t oc=0,cc=0; const XrSemanticOperandRecord *operands=xr_semantic_plan_operands(semantic,&oc);
+    const XrTargetCallRecord *calls=xr_target_plan_calls(target_plan,&cc);
+    if(!operation||operation->intrinsic_kind!=XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING||
+       operation->operand_count!=2||operation->operand_begin+1u>=oc||operation->result_value!=binding->semantic_value)
+        return false;
+    const XrTargetCallRecord *match=NULL;
+    for(uint32_t i=0;calls&&i<cc;i++){const XrTargetCallRecord *call=&calls[i];
+        if(call->result_value!=binding->semantic_value||call->calling_convention!=XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING)continue;
+        if(match||call->target_kind!=XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING||call->argument_count!=0||call->flags!=0)return false;
+        match=call;}
+    if(!match)return false;
+    if(receiver_value)*receiver_value=operands[operation->operand_begin].value;
+    if(argument_value)*argument_value=operands[operation->operand_begin+1u].value;
     return true;
 }
 
@@ -1094,6 +1116,10 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
                        value->recipe_argument_value == UINT32_MAX && value->recipe_symbol &&
                        strcmp(value->recipe_symbol, XR_C_STRINGBUILDER_TO_STRING_SYMBOL) == 0;
+    if(value->materialization==XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING)
+        recipe_valid=value->rep==XR_C_VALUE_REP_TAGGED&&value->recipe_operand_value!=UINT32_MAX&&
+            value->recipe_argument_value!=UINT32_MAX&&value->recipe_symbol&&
+            strcmp(value->recipe_symbol,XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL)==0;
     return expected_rep == (XrCValueRep) value->rep && value->c_type &&
            value->reserved == 0 && recipe_valid &&
            strcmp(value->c_type, expected_c_type) == 0 &&
@@ -1300,6 +1326,9 @@ bool xr_c_emission_plan_verify(
         uint32_t expected_finish_receiver = UINT32_MAX;
         bool expected_stringbuilder_finish = exact_stringbuilder_to_string_recipe(
             target_plan, binding, &expected_finish_receiver);
+        uint32_t expected_append_string_receiver=UINT32_MAX,expected_append_string_argument=UINT32_MAX;
+        bool expected_append_string=exact_stringbuilder_append_string_recipe(target_plan,binding,
+            &expected_append_string_receiver,&expected_append_string_argument);
         uint8_t expected_recipe = expected_literal
                                       ? XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW
                                       : expected_channel
@@ -1314,7 +1343,9 @@ bool xr_c_emission_plan_verify(
                                                                     ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_RUNE
                                                                     : expected_stringbuilder_finish
                                                                           ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_TO_STRING
-                                                                          : XR_C_VALUE_MATERIALIZATION_NONE;
+                                                                          : expected_append_string
+                                                                                ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING
+                                                                                : XR_C_VALUE_MATERIALIZATION_NONE;
         uint32_t expected_operand = expected_channel
                                         ? expected_capacity
                                         : expected_receive_symbol
@@ -1325,10 +1356,10 @@ bool xr_c_emission_plan_verify(
                                                           ? expected_append_receiver
                                                           : expected_stringbuilder_finish
                                                                 ? expected_finish_receiver
-                                                                : UINT32_MAX;
+                                                                : expected_append_string?expected_append_string_receiver:UINT32_MAX;
         uint32_t expected_argument = expected_stringbuilder_append
                                          ? expected_append_argument
-                                         : UINT32_MAX;
+                                         : expected_append_string?expected_append_string_argument:UINT32_MAX;
         const char *expected_symbol = expected_channel
                                           ? XR_C_CHANNEL_NEW_SYMBOL
                                           : expected_receive_symbol
@@ -1341,7 +1372,7 @@ bool xr_c_emission_plan_verify(
                                                                   ? XR_C_STRINGBUILDER_APPEND_RUNE_SYMBOL
                                                                   : expected_stringbuilder_finish
                                                                         ? XR_C_STRINGBUILDER_TO_STRING_SYMBOL
-                                                                        : NULL;
+                                                                        : expected_append_string?XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL:NULL;
         size_t expected_length = expected_literal ? strlen(expected_literal) : 0;
         if (row->materialization != expected_recipe || row->reserved != 0 ||
             row->literal_byte_length != expected_length ||
@@ -1390,7 +1421,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE |
         XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |
         XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |
-        XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE;
+        XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |
+        XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",
@@ -1596,6 +1628,19 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                                 value->materialization = XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_TO_STRING;
                                 value->recipe_operand_value = receiver;
                                 value->recipe_symbol = owned;
+                            }
+                        }
+                        if (value->materialization == XR_C_VALUE_MATERIALIZATION_NONE) {
+                            uint32_t receiver=UINT32_MAX,argument=UINT32_MAX;
+                            if(exact_stringbuilder_append_string_recipe(target_plan,binding,&receiver,&argument)){
+                                size_t n=sizeof(XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL);
+                                char *owned=(char *)xr_malloc(n);
+                                if(!owned){xr_c_emission_plan_free(plan);return emission_error(error,error_size,
+                                    "XR_EXEC_5003","StringBuilder string append recipe allocation failed");}
+                                memcpy(owned,XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL,n);
+                                value->materialization=XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING;
+                                value->recipe_operand_value=receiver;value->recipe_argument_value=argument;
+                                value->recipe_symbol=owned;
                             }
                         }
                     }

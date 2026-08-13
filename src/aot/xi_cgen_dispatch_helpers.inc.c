@@ -9059,6 +9059,20 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
             return true;
         }
     }
+    if (v->args[1] && v->args[1]->type && v->args[1]->type->kind == XR_KIND_STRING) {
+        XrCValueEmissionView authority={0};
+        uint32_t receiver=XR_SEMANTIC_INDEX_NONE,argument=XR_SEMANTIC_INDEX_NONE;
+        if(cg_value_emission_view(ctx,f,v,&authority)!=CG_VALUE_EMISSION_FOUND||
+           !cg_value_semantic_id(ctx,f,v->args[0],&receiver)||
+           !cg_value_semantic_id(ctx,f,v->args[1],&argument)||
+           authority.materialization!=XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING||
+           authority.recipe_operand_value!=receiver||authority.recipe_argument_value!=argument||
+           !authority.recipe_symbol||strcmp(authority.recipe_symbol,"xrt_strbuf_append")!=0){
+            ctx->error=true;
+            fprintf(stderr,"[xi_cgen] ERROR: StringBuilder.append(string) lacks immutable emission authority\n");
+            emit_codegen_abort_expr(out);return true;
+        }
+    }
 
     int64_t literal_length = 0;
     bool literal_plan = xicgen_stringbuilder_literal_append_plan(ctx, v, &literal_length);

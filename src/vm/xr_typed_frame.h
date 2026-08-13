@@ -39,7 +39,8 @@
                  XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |                        \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE |                \
                  XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |                    \
-                 XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE))
+                 XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |                     \
+                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE))
 
 typedef enum XrTypedFrameStatus {
     XR_TYPED_FRAME_OK = 0,
