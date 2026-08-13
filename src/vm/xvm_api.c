@@ -395,17 +395,6 @@ XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     return result;
 }
 
-/*
-** Execute source code
-*/
-XrVMResult xr_vm_interpret(const char *source) {
-    (void) source;
-    // This function is now just for API compatibility
-    // Currently requires xcompiler module
-    fprintf(stderr, "XrCompiler not yet implemented\n");
-    return XR_VM_COMPILE_ERROR;
-}
-
 /* ========== Exception Handling Implementation ========== */
 
 /*

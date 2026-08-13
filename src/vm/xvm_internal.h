@@ -254,7 +254,6 @@ XR_FUNC void xr_vm_install_value_hooks(void);
 
 // VM execution
 XR_FUNC XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto);
-XR_FUNC XrVMResult xr_vm_interpret(const char *source);
 XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *proto);
 XR_FUNC bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto);
 

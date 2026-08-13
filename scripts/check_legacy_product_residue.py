@@ -397,6 +397,13 @@ def self_test() -> int:
         )
         cfunction_free_drifted, _ = check(root, collect(root))
         retired_cfunction_free.unlink()
+        retired_interpret_stub = root / "include/xray_vm.h"
+        retired_interpret_stub.write_text(
+            "int xr_vm_interpret(const char *);\n",
+            encoding="utf-8",
+        )
+        interpret_stub_drifted, _ = check(root, collect(root))
+        retired_interpret_stub.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -422,6 +429,7 @@ def self_test() -> int:
             or dead_vm_lifecycle_drifted
             or machine_ctx_setter_drifted
             or cfunction_free_drifted
+            or interpret_stub_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")
