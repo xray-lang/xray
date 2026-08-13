@@ -264,6 +264,19 @@ static void make_record(XrRuntimeRecordAbi *out, uint16_t kind, uint16_t size,
             field_encoding                                                               \
     }
 
+/* The canonical namespace enumerates cross-executor carrier kinds only. A tag
+ * belongs here when a value bearing it can cross an executor boundary: be
+ * written into an artifact, read back by a different executor, or observed
+ * through the shared runtime ABI.
+ *
+ * XR_TAG_PLACE fails that test. It marks an interpreter call-binding slot and
+ * its payload is an absolute index into the interpreter register stack, which
+ * no other executor has. Every producer and every consumer of the tag lives in
+ * the interpreter, and bounds checks read it against the live stack capacity,
+ * so a place value is meaningless the moment it leaves that stack. Publishing
+ * it as canonical would oblige a native backend to describe a tag it can
+ * neither produce nor consume, so the tag stays interpreter-private and the
+ * canonical table covers exactly the encodings below it. */
 static bool make_dynamic_value(XrRuntimeDynamicValueAbi *out,
                                uint8_t target_endian) {
     static const XrCanonicalEncoding tags[] = {
@@ -275,8 +288,13 @@ static bool make_dynamic_value(XrRuntimeDynamicValueAbi *out,
         {"xray.runtime.dynamic-tag.v1/object-reference", XR_TAG_PTR},
         {"xray.runtime.dynamic-tag.v1/aggregate-reference", XR_TAG_AGG_REF},
         {"xray.runtime.dynamic-tag.v1/not-found", XR_TAG_NOTFOUND},
-        {"xray.runtime.dynamic-tag.v1/place", XR_TAG_PLACE},
     };
+    /* Adding an executor-visible tag must extend this table, and adding another
+     * interpreter-private tag must keep it above XR_TAG_PLACE, so that neither
+     * change can silently widen or narrow the canonical namespace. */
+    _Static_assert(sizeof(tags) / sizeof(tags[0]) == (size_t) XR_TAG_PLACE,
+                   "canonical dynamic tags must cover every encoding below the "
+                   "interpreter-private place marker");
     *out = (XrRuntimeDynamicValueAbi) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .size = (uint16_t) sizeof(XrValue),
