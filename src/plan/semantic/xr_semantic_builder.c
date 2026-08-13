@@ -21,6 +21,7 @@
 #include "../../ir/xi_module.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
+#include "../../ir/xi_value_query.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xenum_layout.h"
 #include "../../runtime/class/xclass_info.h"
@@ -1819,9 +1820,10 @@ static bool resolve_native_yieldable_callee(const XiFunc *caller, const XiValue 
     if (!callee || callee->op != XI_IMPORT_REF || !callee->aux)
         return false;
     const XiImportRef *ref = (const XiImportRef *) callee->aux;
-    if (!ref->resolution_attempted || ref->resolved_mod_index != -1 ||
-        ref->resolved_shared_slot != -1 || ref->resolved_export_slot != -1 || ref->resolved_func ||
-        ref->resolved_module)
+    /* Same grounding question the IR coroutine analysis asks, asked through the
+     * same predicate so the two layers cannot drift apart: a native identity is
+     * only authority once import resolution has actually run over it. */
+    if (!xi_import_ref_is_grounded_native(ref))
         return false;
     const XrStdlibDefEntry *binding =
         xr_stdlib_metadata_unique_func(ref->module_path, ref->member_name);

@@ -332,7 +332,13 @@ static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
     /* Source-level callsite composition does not carry the private/public ABI
      * distinction of embedded module members.  Consume the sealed native ABI
      * registry first, including internal stdlib primitives such as
-     * `os.__sleep`; a source module shadow stays on the Xi target path. */
+     * `os.__sleep`; a source module shadow stays on the Xi target path.
+     *
+     * The registry answer only becomes a yieldability proof once the import
+     * reference is grounded by the module-graph resolver.  Until then the
+     * semantic plan classifies the reference as unresolved and refuses the
+     * call any target authority, so the callsite is answered as identified but
+     * non-suspending rather than as a native suspension point. */
     if (current && call && call->nargs >= 1) {
         ref = xi_value_import_ref(current, call->args[0]);
         if (ref && ref->module_path && !ref->resolved_module && !ref->resolved_func) {
@@ -345,7 +351,10 @@ static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
             }
             if (member &&
                 xa_builtin_get_module_func_abi_signature(ref->module_path, member))
-                return xa_builtin_module_func_is_yieldable(ref->module_path, member) ? 1 : 0;
+                return xi_import_ref_is_grounded_native(ref) &&
+                               xa_builtin_module_func_is_yieldable(ref->module_path, member)
+                           ? 1
+                           : 0;
         }
     }
     if (row && xg_callsite_effects_compose_closed_world_calls(evidence, row, &effects))

@@ -13,6 +13,7 @@
 #include "xi_own.h"
 #include "xi_ops_gen.h"
 #include "xi_receiver_alias.h"
+#include "xi_value_query.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
@@ -49,22 +50,72 @@ static const XiValue *xi_coro_unwrap_receiver_identity(const XiValue *receiver) 
     return receiver;
 }
 
-static int xi_coro_native_import_suspendability(const XiFunc *f, const XiValue *call) {
+/* Name the callee of a call that targets a native-module ABI member, and hand
+ * back the import reference it came from.  NULL when the callee is not a
+ * declared native member at all. */
+static const char *xi_coro_native_import_member(const XiFunc *f, const XiValue *call,
+                                                const XiImportRef **out_ref) {
+    if (out_ref)
+        *out_ref = NULL;
     if (!f || !call || (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
                         call->op != XI_CALL_METHOD_DIRECT) ||
         call->nargs < 1)
-        return -1;
+        return NULL;
     const XiImportRef *ref = xi_value_import_ref(f, call->args[0]);
     if (!ref || !ref->module_path || ref->resolved_module || ref->resolved_func)
-        return -1;
+        return NULL;
     const char *member = NULL;
     if (call->op == XI_CALL)
         member = ref->member_name;
     else if (!ref->member_name && call->aux)
         member = (const char *) call->aux;
     if (!member || !xa_builtin_get_module_func_abi_signature(ref->module_path, member))
+        return NULL;
+    if (out_ref)
+        *out_ref = ref;
+    return member;
+}
+
+/* True when the callee is a declared native member whose import reference the
+ * module-graph resolver has not visited.  Its yieldability is then a registry
+ * spelling rather than a proof, and the semantic plan grants the call no
+ * target authority. */
+static bool xi_coro_call_is_ungrounded_native_import(const XiFunc *f, const XiValue *call) {
+    const XiImportRef *ref = NULL;
+    return xi_coro_native_import_member(f, call, &ref) != NULL &&
+           !xi_import_ref_is_grounded_native(ref);
+}
+
+/* Classify a call whose callee is a native-module import: 1 suspends, 0 does
+ * not, -1 unknown (the callee is not a native ABI member at all).
+ *
+ * Yieldability is only a proof once the import reference itself is grounded.
+ * A single-module compile never runs the module-graph resolver, so its
+ * references stay unvisited; the semantic plan then classifies them as
+ * unresolved and grants the call no call-target authority, which forbids a
+ * coroutine state at that site.  The ABI registry still identifies the callee
+ * there - the call is resolved, not open - so an ungrounded native import is
+ * answered 0 rather than -1, keeping call-resolution completeness intact while
+ * matching the state count the plan will accept. */
+static int xi_coro_native_import_suspendability(const XiFunc *f, const XiValue *call) {
+    const XiImportRef *ref = NULL;
+    const char *member = xi_coro_native_import_member(f, call, &ref);
+    if (!member)
         return -1;
+    if (!xi_import_ref_is_grounded_native(ref))
+        return 0;
     return xa_builtin_module_func_is_yieldable(ref->module_path, member) ? 1 : 0;
+}
+
+/* A value-level MAY_SUSPEND stamp is a conservative semantic contract that a
+ * target resolver may never erase.  The single exception is a call the stamp
+ * reached through the native ABI registry while its import reference is still
+ * ungrounded: the plan cannot confirm that spelling, refuses the call any
+ * target authority, and rejects a coroutine state at it, so honouring the
+ * stamp would only contradict the authority the state is checked against. */
+static bool xi_coro_value_carries_suspend_contract(const XiFunc *f, const XiValue *v) {
+    return v && (v->flags & XI_FLAG_MAY_SUSPEND) != 0 &&
+           !xi_coro_call_is_ungrounded_native_import(f, v);
 }
 
 /* ========== Op classifier ========== */
@@ -294,7 +345,7 @@ static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolve
             const XiValue *v = blk->values[vi];
             if (!v)
                 continue;
-            if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0)
+            if (xi_coro_value_carries_suspend_contract(f, v))
                 return true;
             if (v->op == XI_YIELD || v->op == XI_GEN_YIELD || v->op == XI_GO || v->op == XI_AWAIT ||
                 v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK ||
@@ -603,7 +654,7 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
      * intrinsic boundary before the direct-target override below. */
     if (xi_coro_is_net_io_call(f, v, resolver))
         return true;
-    if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0) {
+    if (xi_coro_value_carries_suspend_contract(f, v)) {
         /* MAY_SUSPEND is a conservative semantic contract.  A target resolver
          * may identify the child frame but may never erase the shared state. */
         return true;

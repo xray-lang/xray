@@ -116,6 +116,13 @@ XR_FUNC const XiImportRef *xi_value_import_ref(const XiFunc *func, const XiValue
     return NULL;
 }
 
+XR_FUNC bool xi_import_ref_is_grounded_native(const XiImportRef *ref) {
+    return ref && ref->module_path && ref->module_path[0] && ref->module_path[0] != '.' &&
+           ref->resolution_attempted && ref->resolved_mod_index == -1 &&
+           ref->resolved_shared_slot == -1 && ref->resolved_export_slot == -1 &&
+           !ref->resolved_func && !ref->resolved_module;
+}
+
 XR_FUNC bool xi_value_type_is_channel(const XiValue *v) {
     v = xi_value_unwrap_identity(v);
     return v && xi_type_is_channel(v->type);

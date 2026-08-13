@@ -48,6 +48,18 @@ XR_FUNC bool xi_value_type_is_unknown(const XiValue *v);
  * duplicate shared-slot scans. */
 XR_FUNC const XiImportRef *xi_value_import_ref(const XiFunc *func, const XiValue *value);
 
+/* True when the module-graph import resolver has already run over this
+ * reference and bound it to no source module, function, shared slot or export
+ * slot: the sealed native ABI registry is then its only possible target.
+ *
+ * A reference the resolver never visited is NOT grounded, even when its
+ * module/member spelling matches a native declaration - a source module may
+ * still shadow that spelling once resolution runs.  The semantic plan draws
+ * exactly this line (an unvisited reference classifies as unresolved and is
+ * granted no call-target authority), so IR analyses that turn a native
+ * identity into a proof must ask this question first. */
+XR_FUNC bool xi_import_ref_is_grounded_native(const XiImportRef *ref);
+
 /* Numeric facts at a use site.
  * Uses existing range annotations when available and, if needed, dominating
  * branch guards on the path to 'site'. */
