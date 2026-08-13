@@ -240,7 +240,7 @@ static bool xr_struct_write_array_bytes(uint8_t *fp, const XrAggregateFieldLayou
         for (int idx = 0; idx < count; idx++) {
             XrValue elem = xr_array_get(arr, idx);
             XrAggregateFieldLayout elem_field = {.native_type = field->elem_native_type};
-            if (!xr_vm_struct_write_field_value(NULL, fp + idx * es, &elem_field, elem))
+            if (!xr_struct_write_field_value(NULL, fp + idx * es, &elem_field, elem))
                 return false;
         }
         if (count < field->elem_count)
@@ -365,8 +365,8 @@ XR_FUNC bool xr_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
     }
 }
 
-XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
-                                            const XrAggregateFieldLayout *field, XrValue src) {
+XR_FUNC bool xr_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
+                                         const XrAggregateFieldLayout *field, XrValue src) {
     if (!fp || !field)
         return false;
     if (field->is_flexible)
@@ -485,7 +485,7 @@ static bool xr_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, X
     for (uint16_t i = 0; i < layout->field_count; i++) {
         XrAggregateFieldLayout *field = &layout->fields[i];
         uint8_t *fp = dst + field->offset;
-        if (!xr_vm_struct_write_field_value(isolate, fp, field, inst->fields[i]))
+        if (!xr_struct_write_field_value(isolate, fp, field, inst->fields[i]))
             return false;
     }
     return true;
@@ -527,7 +527,7 @@ XR_FUNC bool xr_vm_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *i
                                              int field_index, XrValue value) {
     XrAggregateFieldLayout *field = NULL;
     uint8_t *fp = xr_instance_struct_field_ptr(isolate, inst, field_index, &field);
-    return xr_vm_struct_write_field_value(isolate, fp, field, value);
+    return xr_struct_write_field_value(isolate, fp, field, value);
 }
 
 static XrValue xr_struct_materialize_instance_depth(XrVMRuntime *isolate, XrValue ref,

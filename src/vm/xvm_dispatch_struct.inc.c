@@ -144,7 +144,7 @@ vmcase(OP_AGG_NEW) {
                 continue;
             XrAggregateFieldLayout *fl = &layout->fields[fi];
             uint8_t *fp = payload + fl->offset;
-            (void) xr_vm_struct_write_field_value(isolate, fp, fl, dv);
+            (void) xr_struct_write_field_value(isolate, fp, fl, dv);
         }
     }
 
@@ -189,7 +189,7 @@ vmcase(OP_AGG_SET) {
     XrAggregateFieldLayout *field = &layout->fields[b];
     uint8_t *fp = payload + field->offset;
     XrValue src = R(c);
-    if (!xr_vm_struct_write_field_value(isolate, fp, field, src)) {
+    if (!xr_struct_write_field_value(isolate, fp, field, src)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
     }
     vmbreak;

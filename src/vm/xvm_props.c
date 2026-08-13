@@ -179,7 +179,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         if (payload && fidx >= 0 && fidx < slayout->field_count) {
             XrAggregateFieldLayout *sf = &slayout->fields[fidx];
             uint8_t *fp = payload + sf->offset;
-            if (!xr_vm_struct_write_field_value(isolate, fp, sf, value)) {
+            if (!xr_struct_write_field_value(isolate, fp, sf, value)) {
                 VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
             }
             return XR_DISP_NEXT;
