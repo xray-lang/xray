@@ -380,7 +380,6 @@ XR_FUNC void xr_coro_state_destroy(XrCoroState *state);
 
 // Multicore runtime
 XR_FUNC void xr_multicore_init(XrVMRuntime *X, int num_workers);
-XR_FUNC void xr_multicore_destroy(XrVMRuntime *X);
 
 // Wake mechanism
 XR_FUNC void xr_coro_ready(XrVMRuntime *X, XrCoroutine *gp, bool next);

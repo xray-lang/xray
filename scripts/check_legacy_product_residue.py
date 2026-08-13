@@ -30,6 +30,7 @@ CANDIDATE_RE = re.compile(
     r"(?P<public_runtime_map_constructor>\bxray_map_new\b)|"
     r"(?P<public_runtime_string_constructor>\bxray_string_new\b)|"
     r"(?P<internal_upvalue_lifecycle>\bxr_upvalue_(?:new|close)\b)|"
+    r"(?P<retired_internal_multicore_destroy>\bxr_multicore_destroy\b)|"
     r"(?P<public_vm_type>\bXr(?:VMRuntime|VMConfig|VMBackendType|BytecodeModule|BytecodeBundle)\b)|"
     r"(?P<internal_vm_alias>\bxr_vm_[A-Za-z0-9_]+\b)|"
     r"(?P<module_loader>\bxr_load_module_[A-Za-z0-9_]+\b)|"
@@ -106,6 +107,7 @@ def family_for(group: str, token: str) -> str:
         "public_runtime_map_constructor": "legacy-runtime-map-constructor-api",
         "public_runtime_string_constructor": "legacy-runtime-string-constructor-api",
         "internal_upvalue_lifecycle": "legacy-upvalue-object-lifecycle-api",
+        "retired_internal_multicore_destroy": "legacy-vm-internal-api-or-alias",
         "internal_vm_alias": "legacy-vm-internal-api-or-alias",
         "module_loader": "legacy-vm-module-loader",
         "bytecode_owner": "legacy-loader-writer-or-converter",
@@ -591,6 +593,13 @@ def self_test() -> int:
         )
         global_object_authority_drifted, _ = check(root, collect(root))
         retired_global_object_authority.unlink()
+        retired_internal_multicore_destroy = root / "include/xray_runtime.h"
+        retired_internal_multicore_destroy.write_text(
+            "void xr_multicore_destroy(XrVMRuntime *);\n",
+            encoding="utf-8",
+        )
+        internal_multicore_destroy_drifted, _ = check(root, collect(root))
+        retired_internal_multicore_destroy.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -639,6 +648,7 @@ def self_test() -> int:
             or regex_registration_wrapper_drifted
             or socket_wait_wrapper_drifted
             or global_object_authority_drifted
+            or internal_multicore_destroy_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")
