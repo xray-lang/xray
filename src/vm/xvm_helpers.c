@@ -523,8 +523,8 @@ XR_FUNC bool xr_instance_struct_get_field(XrVMRuntime *isolate, XrInstance *inst
     return xr_struct_read_field_value(isolate, fp, field, out);
 }
 
-XR_FUNC bool xr_vm_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *inst,
-                                             int field_index, XrValue value) {
+XR_FUNC bool xr_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *inst,
+                                          int field_index, XrValue value) {
     XrAggregateFieldLayout *field = NULL;
     uint8_t *fp = xr_instance_struct_field_ptr(isolate, inst, field_index, &field);
     return xr_struct_write_field_value(isolate, fp, field, value);

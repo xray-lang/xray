@@ -139,7 +139,7 @@ vmcase(OP_MAP_SETKS) {
     for (int j = 0; j < count; j++) {
         XrValue val = R(a + 1 + j);
         if (inst_obj->klass && inst_obj->klass->struct_layout) {
-            if (!xr_vm_instance_struct_set_field(isolate, inst_obj, j, val)) {
+            if (!xr_instance_struct_set_field(isolate, inst_obj, j, val)) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
             }
         } else if (XR_IS_ARRAY_REF(val)) {
@@ -191,7 +191,7 @@ vmcase(OP_SETFIELD) {
     if (xr_weak_instance_field_store(vm_weak_heap(vm_ctx), inst_obj, field_idx, val))
         vmbreak;
     if (inst_obj->klass && inst_obj->klass->struct_layout) {
-        if (!xr_vm_instance_struct_set_field(isolate, inst_obj, field_idx, val)) {
+        if (!xr_instance_struct_set_field(isolate, inst_obj, field_idx, val)) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
         }
     } else if (XR_IS_ARRAY_REF(val)) {
@@ -930,7 +930,7 @@ vmcase(OP_SETPROP) {
     // Fast path 1: Monomorphic IC hit (verify symbol match)
     if (cache && xr_ic_field_lookup_mono(cache, inst_class, prop_symbol, &field_index)) {
         if (inst_class->struct_layout) {
-            if (!xr_vm_instance_struct_set_field(isolate, inst_s, field_index, value)) {
+            if (!xr_instance_struct_set_field(isolate, inst_s, field_index, value)) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
             }
         } else if (XR_IS_ARRAY_REF(value)) {
@@ -947,7 +947,7 @@ vmcase(OP_SETPROP) {
     // Fast path 2: Polymorphic IC hit (verify symbol match)
     if (cache && xr_ic_field_lookup_poly(cache, inst_class, prop_symbol, &field_index)) {
         if (inst_class->struct_layout) {
-            if (!xr_vm_instance_struct_set_field(isolate, inst_s, field_index, value)) {
+            if (!xr_instance_struct_set_field(isolate, inst_s, field_index, value)) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
             }
         } else if (XR_IS_ARRAY_REF(value)) {
@@ -966,7 +966,7 @@ vmcase(OP_SETPROP) {
 
     if (field_index >= 0) {
         if (inst_class->struct_layout) {
-            if (!xr_vm_instance_struct_set_field(isolate, inst_s, field_index, value)) {
+            if (!xr_instance_struct_set_field(isolate, inst_s, field_index, value)) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
             }
         } else if (XR_IS_ARRAY_REF(value)) {
