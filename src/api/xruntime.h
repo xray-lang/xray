@@ -57,9 +57,6 @@ XRAY_API XrArray *xray_array_new_with_capacity(XrVMRuntime *X, size_t capacity);
 // Create empty map
 XRAY_API XrMap *xray_map_new(XrVMRuntime *X);
 
-// Create empty set
-XRAY_API XrSet *xray_set_new(XrVMRuntime *X);
-
 // Create interned string from C string
 XRAY_API XrString *xray_string_new(XrVMRuntime *X, const char *str, size_t len);
 

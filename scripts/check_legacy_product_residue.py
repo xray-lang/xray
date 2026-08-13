@@ -26,6 +26,7 @@ CANDIDATE_RE = re.compile(
     r"(?P<public_runtime_allocation>\bxray_(?:alloc|realloc)\b)|"
     r"(?P<public_runtime_lifecycle>\bxray_runtime_(?:init|cleanup|version)\b)|"
     r"(?P<internal_runtime_error_state>\bxr_runtime_(?:has_error|error_message|clear_error)\b)|"
+    r"(?P<public_runtime_set_constructor>\bxray_set_new\b)|"
     r"(?P<public_vm_type>\bXr(?:VMRuntime|VMConfig|VMBackendType|BytecodeModule|BytecodeBundle)\b)|"
     r"(?P<internal_vm_alias>\bxr_vm_[A-Za-z0-9_]+\b)|"
     r"(?P<module_loader>\bxr_load_module_[A-Za-z0-9_]+\b)|"
@@ -98,6 +99,7 @@ def family_for(group: str, token: str) -> str:
         "public_runtime_allocation": "legacy-runtime-allocation-api",
         "public_runtime_lifecycle": "legacy-runtime-lifecycle-api",
         "internal_runtime_error_state": "legacy-runtime-error-state-api",
+        "public_runtime_set_constructor": "legacy-runtime-set-constructor-api",
         "internal_vm_alias": "legacy-vm-internal-api-or-alias",
         "module_loader": "legacy-vm-module-loader",
         "bytecode_owner": "legacy-loader-writer-or-converter",
@@ -450,6 +452,13 @@ def self_test() -> int:
         )
         runtime_error_state_drifted, _ = check(root, collect(root))
         retired_runtime_error_state.unlink()
+        retired_runtime_set_constructor = root / "include/xray_runtime.h"
+        retired_runtime_set_constructor.write_text(
+            "void *xray_set_new(void *);\n",
+            encoding="utf-8",
+        )
+        runtime_set_constructor_drifted, _ = check(root, collect(root))
+        retired_runtime_set_constructor.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -481,6 +490,7 @@ def self_test() -> int:
             or runtime_allocation_drifted
             or runtime_lifecycle_drifted
             or runtime_error_state_drifted
+            or runtime_set_constructor_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")
