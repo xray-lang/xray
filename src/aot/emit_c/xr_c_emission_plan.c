@@ -576,7 +576,8 @@ static bool exact_stringbuilder_append_string_recipe(
     const XrTargetCallRecord *match=NULL;
     for(uint32_t i=0;calls&&i<cc;i++){const XrTargetCallRecord *call=&calls[i];
         if(call->result_value!=binding->semantic_value||call->calling_convention!=XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING)continue;
-        if(match||call->target_kind!=XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING||call->argument_count!=0||call->flags!=0)return false;
+        if(match||call->target_kind!=XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING||call->argument_count!=0||call->flags!=0||
+           call->result_ownership!=XR_TARGET_CALL_RETURN_OWNED)return false;
         match=call;}
     if(!match)return false;
     if(receiver_value)*receiver_value=operands[operation->operand_begin].value;
@@ -1422,7 +1423,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |
         XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |
         XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |
-        XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE;
+        XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |
+        XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",

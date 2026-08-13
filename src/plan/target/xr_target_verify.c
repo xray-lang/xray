@@ -914,6 +914,60 @@ static bool semantic_string_literal_is_exact(
            (type->flags & required) == required;
 }
 
+/* Rebuilt independently of the builder: an owned String is the one non-scalar
+ * result a direct-local call may name. The shape proof stays on the frozen
+ * type row and the ownership proof on the callee's return provenance. */
+static bool semantic_owned_string_type_is_exact(const XrSemanticTypeRecord *type) {
+    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT;
+    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
+    return type && type->kind == XR_KIND_STRING && type->child_count == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && (type->flags & forbidden) == 0 &&
+           (type->flags & required) == required;
+}
+
+static const XrSemanticFunctionRecord *semantic_direct_local_callee_for_operation(
+    const XrSemanticPlan *semantic, uint32_t operation_index) {
+    size_t target_count = xr_semantic_plan_call_target_count(semantic);
+    const XrSemanticFunctionRecord *callee = NULL;
+    for (size_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(semantic, i);
+        if (!target || target->operation != operation_index ||
+            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            continue;
+        if (callee)
+            return NULL;
+        callee = xr_semantic_plan_function(semantic, target->function);
+        if (!callee)
+            return NULL;
+    }
+    return callee;
+}
+
+static bool semantic_direct_local_string_result_is_exact(
+    const XrSemanticPlan *semantic, uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        operation_index == XR_SEMANTIC_INDEX_NONE
+            ? NULL
+            : xr_semantic_plan_operation(semantic, operation_index);
+    if (!semantic || !operation ||
+        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        !semantic_owned_string_type_is_exact(
+            xr_semantic_plan_type(semantic, operation->result_type)))
+        return false;
+    const XrSemanticFunctionRecord *callee =
+        semantic_direct_local_callee_for_operation(semantic, operation_index);
+    return callee && callee->return_type == operation->result_type &&
+           callee->return_parameter == -1 &&
+           callee->return_provenance == XR_SEM_RETURN_OWNED;
+}
+
 static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *type) {
     char expected_type_key[160];
     int written = snprintf(
@@ -932,6 +986,14 @@ static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *typ
 static bool operation_is_exact_stringbuilder_append_rune(
     const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
     uint32_t *receiver_value, uint32_t *argument_value);
+
+static bool operation_is_exact_stringbuilder_to_string(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    uint32_t *receiver_value);
+
+static bool operation_is_exact_stringbuilder_append_string(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    uint32_t *argument_value);
 
 static bool semantic_stringbuilder_constructor_is_exact(
     const XrSemanticPlan *semantic,
@@ -2296,8 +2358,18 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
         }
         if (semantic_heap_closure_is_exact(plan->semantic_plan, operation) ||
             semantic_string_literal_is_exact(plan->semantic_plan, operation) ||
+            semantic_direct_local_string_result_is_exact(plan->semantic_plan, i) ||
             semantic_stringbuilder_constructor_is_exact(plan->semantic_plan,
                                                          operation) ||
+            /* The method families own their result type in their own right;
+             * relying on the constructor to have marked StringBuilder would
+             * leave toString's String result unproven. */
+            operation_is_exact_stringbuilder_append_rune(plan->semantic_plan,
+                                                         operation, NULL, NULL) ||
+            operation_is_exact_stringbuilder_to_string(plan->semantic_plan,
+                                                        operation, NULL) ||
+            operation_is_exact_stringbuilder_append_string(plan->semantic_plan,
+                                                            operation, NULL) ||
             (exact_direct_callees &&
              exact_direct_callees[operation->result_value] != 0) ||
             (exact_go_callees &&
@@ -2315,6 +2387,7 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
 static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value,
                                  uint32_t semantic_type, uint32_t semantic_function,
                                  const XrSemanticOperationRecord *operation,
+                                 uint32_t operation_index,
                                  const uint8_t *exact_direct_callees,
                                  const uint8_t *exact_go_callees,
                                  const uint8_t *exact_channel_values,
@@ -2348,11 +2421,23 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         semantic_heap_closure_is_exact(plan->semantic_plan, operation);
     bool exact_string_literal =
         semantic_string_literal_is_exact(plan->semantic_plan, operation);
+    bool exact_direct_string_result =
+        semantic_direct_local_string_result_is_exact(plan->semantic_plan,
+                                                     operation_index) &&
+        operation && operation->result_value == semantic_value &&
+        operation->result_type == semantic_type;
     bool exact_stringbuilder =
         semantic_stringbuilder_constructor_is_exact(plan->semantic_plan,
                                                      operation);
+    /* All three StringBuilder method families bind a freshly owned dynamic
+     * result, exactly like the constructor. Leaving one out here makes the
+     * builder's value rep unexpected (reason 7) and the family unverifiable. */
     bool exact_stringbuilder_append = operation_is_exact_stringbuilder_append_rune(
         plan->semantic_plan, operation, NULL, NULL);
+    bool exact_stringbuilder_to_string = operation_is_exact_stringbuilder_to_string(
+        plan->semantic_plan, operation, NULL);
+    bool exact_stringbuilder_append_string = operation_is_exact_stringbuilder_append_string(
+        plan->semantic_plan, operation, NULL);
     bool exact_direct_callee =
         exact_direct_callees && exact_direct_callees[semantic_value] != 0;
     bool exact_go_callee =
@@ -2382,8 +2467,11 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     if (scalar_channel_receive && !exact_channel_receive)
         XR_VALUE_BINDING_FAIL(10);
     int eligibility = operation_result_void || exact_heap_closure ||
-                              exact_string_literal || exact_stringbuilder ||
+                              exact_string_literal || exact_direct_string_result ||
+                              exact_stringbuilder ||
                               exact_stringbuilder_append ||
+                              exact_stringbuilder_to_string ||
+                              exact_stringbuilder_append_string ||
                               exact_direct_callee || exact_go_callee ||
                               exact_channel || exact_source_namespace || exact_string_byte_view ||
                               exact_string_byte_parameter || exact_unit_enum
@@ -2404,8 +2492,11 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                                                          aggregate_stack, 0)
                         : 0;
     int expected_layout = -1;
-    if (exact_heap_closure || exact_string_literal || exact_stringbuilder ||
+    if (exact_heap_closure || exact_string_literal || exact_direct_string_result ||
+        exact_stringbuilder ||
         exact_stringbuilder_append ||
+        exact_stringbuilder_to_string ||
+        exact_stringbuilder_append_string ||
         exact_direct_callee ||
         exact_go_callee ||
         exact_channel || exact_source_namespace) {
@@ -2596,6 +2687,7 @@ static bool verify_value_reps(const XrTargetPlan *plan,
             defined[parameter->value] = 1;
             valid = verify_value_binding(plan, parameter->value, parameter->type,
                                          parameter->function, NULL,
+                                         XR_SEMANTIC_INDEX_NONE,
                                          exact_direct_callees,
                                          exact_go_callees,
                                          exact_channel_values,
@@ -2621,7 +2713,7 @@ static bool verify_value_reps(const XrTargetPlan *plan,
             else if (!defined[operation->result_value]) {
                 defined[operation->result_value] = 1;
                 valid = verify_value_binding(plan, operation->result_value, operation->result_type,
-                                             operation->function, operation,
+                                             operation->function, operation, index,
                                              exact_direct_callees,
                                              exact_go_callees,
                                              exact_channel_values,
@@ -3448,7 +3540,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         int result_scalar = result_type
                                 ? semantic_type_expected_rep(result_type, &result_kind)
                                 : -1;
-        if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string) {
+        bool direct_string_result =
+            direct && semantic_direct_local_string_result_is_exact(
+                          semantic, call->semantic_operation);
+        if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string ||
+            direct_string_result) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -3501,8 +3597,15 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 plan->machine_reps[call->error_memory_rep].kind == XR_MACHINE_REP_VOID &&
                 call->native_abi == machine->native_abi &&
                 call->result_mode == XR_TARGET_CALL_VALUE &&
+                /* Every family that hands back a freshly owned dynamic value
+                 * agrees on RETURN_OWNED here; the per-family branches below
+                 * re-assert it, so the two demands must stay in step. */
                 call->result_ownership ==
-                    (stringbuilder_constructor ? XR_TARGET_CALL_RETURN_OWNED
+                    (stringbuilder_constructor || direct_string_result ||
+                             stringbuilder_append_rune ||
+                             stringbuilder_to_string ||
+                             stringbuilder_append_string
+                         ? XR_TARGET_CALL_RETURN_OWNED
                      : string_byte_slice_view ? XR_TARGET_CALL_BORROW
                                               : XR_TARGET_CALL_NONE) &&
                 call->error_mode == XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL &&
@@ -3541,7 +3644,14 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
                     call->source_export == XR_SEMANTIC_INDEX_NONE &&
                     stable_id_is_zero(call->source_export_identity) &&
-                    stable_id_is_zero(call->source_callee_identity);
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    /* An owned String result is the one non-scalar direct-local
+                     * shape; its slot must carry the dynamic owned storage fact
+                     * and every other result stays a trivial scalar slot. */
+                    (!direct_string_result ||
+                     (result->slot < plan->slots_count &&
+                      plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                      plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED));
             if (!valid)
                 break;
             const XrSemanticOperandRecord *callee_operand =
@@ -3756,6 +3866,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 call->calling_convention==XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING&&
                 call->target_kind==XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING&&
                 call->result_ownership==XR_TARGET_CALL_RETURN_OWNED&&result&&result->slot<plan->slots_count&&
+                plan->slots[result->slot].root_kind==XR_TARGET_ROOT_DYNAMIC&&
                 plan->slots[result->slot].ownership==XR_TARGET_OWNERSHIP_OWNED;
             if(!valid)break;
         } else {
