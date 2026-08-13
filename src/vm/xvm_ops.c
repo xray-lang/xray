@@ -548,11 +548,12 @@ bool vm_values_equal(XrValue a, XrValue b) {
 
     if (XR_IS_INT(a) && XR_IS_INT(b))
         return XR_TO_INT(a) == XR_TO_INT(b);
-    // Numeric cross-type: int == float, float == int
-    if (XR_IS_INT(a) && XR_IS_FLOAT(b))
-        return (double) XR_TO_INT(a) == XR_TO_FLOAT(b);
-    if (XR_IS_FLOAT(a) && XR_IS_INT(b))
-        return XR_TO_FLOAT(a) == (double) XR_TO_INT(b);
+    /* An integer never equals a float.  The language requires an explicit
+     * conversion between them, so the analyzer rejects the static spelling;
+     * answering true here would make a tagged comparison - a container
+     * element, a map key - disagree with both the static rule and the AOT
+     * runtime, which compares tags first.  Integer widening stays legal
+     * because it has a lossless common type; int against float does not. */
     if (XR_IS_BOOL(a) && XR_IS_BOOL(b))
         return XR_TO_BOOL(a) == XR_TO_BOOL(b);
     if (XR_IS_NULL(a) && XR_IS_NULL(b))

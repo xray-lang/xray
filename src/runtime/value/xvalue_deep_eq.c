@@ -55,13 +55,11 @@ static bool deep_eq_ctx(DeepEqCtx *ctx, XrValue a, XrValue b) {
         return true;
     }
 
-    if (a.tag != b.tag) {
-        if (XR_IS_INT(a) && XR_IS_FLOAT(b))
-            return (double) a.i == b.f;
-        if (XR_IS_FLOAT(a) && XR_IS_INT(b))
-            return a.f == (double) b.i;
+    /* Different tags never compare equal: an integer against a float needs an
+     * explicit conversion, so no tagged path may answer true where the static
+     * rule rejects the program outright. */
+    if (a.tag != b.tag)
         return false;
-    }
 
     switch (a.tag) {
         case XR_TAG_NULL:
