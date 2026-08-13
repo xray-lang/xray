@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 105,
     "install": 2,
-    "source": 3436
+    "source": 3435
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -4055,9 +4055,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "ed1f4f71f529ee7943d5e5100ffe1f9d9d76a8eb814cd198e2baee9103ee743d",
+      "evidence_sha256": "de79d60e32c372294a8d9ed996f01eb0c4def5befa15c524eedd90a6812106e8",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 46,
+      "hit_count": 45,
       "path": "src/app/dap/xdap_debug.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -9328,6 +9328,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "d1d772949e6bae82fd5c694eeac1da600808a6309bb419f19ec250acdcc4009a",
-  "total": 3637
+  "source_tree_fingerprint": "dd4fd92247841ffda84853c74afd9d6179e8aabfca27320d95e8afaebb4b0ad4",
+  "total": 3636
 }

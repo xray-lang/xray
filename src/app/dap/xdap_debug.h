@@ -237,8 +237,6 @@ XR_FUNC char *xr_debug_evaluate_ex(XrVMRuntime *isolate, const char *expression,
 
 // Exception breakpoints
 XR_FUNC void xr_debug_set_exception_breakpoints(XrVMRuntime *isolate, bool uncaught, bool caught);
-XR_FUNC XrDebugAction xr_debug_on_exception(XrVMRuntime *isolate, const char *message,
-                                            bool is_uncaught);
 
 // Coroutine debugging
 XR_FUNC int xr_debug_get_coro_count(XrVMRuntime *isolate);
