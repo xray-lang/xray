@@ -174,7 +174,7 @@ XrClass *xr_vm_struct_layout_class(XrVMState *vm, uint16_t layout_id) {
     return match;
 }
 
-XrAggregateLayout *xr_vm_struct_layout_lookup_stable_key(XrVMState *vm, uint64_t stable_key) {
+XrAggregateLayout *xr_struct_layout_lookup_by_stable_key(XrVMState *vm, uint64_t stable_key) {
     if (!vm || stable_key == 0 || !vm->struct_layouts)
         return NULL;
     for (uint16_t i = 1; i < vm->struct_layout_count; i++) {

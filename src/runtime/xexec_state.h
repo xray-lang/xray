@@ -196,7 +196,7 @@ XR_FUNC struct XrAggregateLayout *xr_struct_layout_lookup_by_id(XrVMState *vm, u
 XR_FUNC bool xr_vm_struct_layout_bind_class(XrVMState *vm, struct XrAggregateLayout *layout,
                                             struct XrClass *cls);
 XR_FUNC struct XrClass *xr_vm_struct_layout_class(XrVMState *vm, uint16_t layout_id);
-XR_FUNC struct XrAggregateLayout *xr_vm_struct_layout_lookup_stable_key(XrVMState *vm,
+XR_FUNC struct XrAggregateLayout *xr_struct_layout_lookup_by_stable_key(XrVMState *vm,
                                                                         uint64_t stable_key);
 /* Intern a validated heap-materialized layout by stable semantic identity.
  * Ownership transfers on success; an equal duplicate is released. */

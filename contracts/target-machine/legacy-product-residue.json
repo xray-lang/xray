@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3352
+    "source": 3347
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -456,7 +456,6 @@
     "xr_vm_struct_layout_bind_class",
     "xr_vm_struct_layout_class",
     "xr_vm_struct_layout_field_index",
-    "xr_vm_struct_layout_lookup_stable_key",
     "xr_vm_struct_layout_register",
     "xr_vm_struct_materialize_instance",
     "xr_vm_struct_read_field_value",
@@ -8301,9 +8300,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "75956335ae34dfb8f6c09a33018f1afe10b3913cbcfc1a39c92a7c9f14d1775b",
+      "evidence_sha256": "0430be64ce5ebd2418980f56542a25023e94f66aa8666fa6263ae906871c5ae5",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 5,
+      "hit_count": 4,
       "path": "src/runtime/xexec_state.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -8311,7 +8310,6 @@
         "xr_vm_current_ctx",
         "xr_vm_struct_layout_bind_class",
         "xr_vm_struct_layout_class",
-        "xr_vm_struct_layout_lookup_stable_key",
         "xr_vm_struct_layout_register"
       ]
     },
@@ -8565,14 +8563,13 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "5c67aef50ce97c648c067d0e88e400e88278eb6af7a8296e827c5f65847c5536",
+      "evidence_sha256": "50db8baadf3fbc98293d0a2f8af31d0a708300e6606174033f73b7694e289970",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 4,
+      "hit_count": 1,
       "path": "src/vm/xvm_dispatch_collection.inc.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "xr_vm_struct_layout_lookup_stable_key",
         "xr_vm_struct_layout_register"
       ]
     },
@@ -8754,9 +8751,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "371b2f0096fdb4b4f139a211603d8d18d9a71a1f12700c4b9041f9318420e973",
+      "evidence_sha256": "2808b368afd346b3f6c8694bec7ecf434e5a1b8dec279d8e18734c6df7761303",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 33,
+      "hit_count": 32,
       "path": "src/vm/xvm_helpers.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -8769,7 +8766,6 @@
         "xr_vm_struct_layout_bind_class",
         "xr_vm_struct_layout_class",
         "xr_vm_struct_layout_field_index",
-        "xr_vm_struct_layout_lookup_stable_key",
         "xr_vm_struct_layout_register",
         "xr_vm_struct_materialize_instance",
         "xr_vm_struct_read_field_value",
@@ -9175,6 +9171,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "09a060e019eb961fe9560040cd1f8255ab1e04c731144f62395d450aafa04189",
-  "total": 3554
+  "source_tree_fingerprint": "759758f64fdd4fabb5bcdf159af42ad3188d5fb1f4b9cc45a3748e7d23f0f016",
+  "total": 3549
 }

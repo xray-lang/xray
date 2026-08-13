@@ -1342,7 +1342,7 @@ vmcase(OP_SLICE_REINTERPRET) {
     uint16_t target_alignment = (uint16_t) XR_TO_INT(R(c + 4));
     uint64_t target_layout_key = (uint64_t) XR_TO_INT(R(c + 5));
     XrAggregateLayout *target_layout =
-        xr_vm_struct_layout_lookup_stable_key(&isolate->vm, target_layout_key);
+        xr_struct_layout_lookup_by_stable_key(&isolate->vm, target_layout_key);
     bool target_is_aggregate = target_elem_type == XR_ELEM_ANY && target_layout != NULL;
     bool target_layout_valid =
         target_elem_type < XR_ELEM_COUNT && (target_elem_type != XR_ELEM_ANY || target_is_aggregate);
@@ -2579,7 +2579,7 @@ vmcase(OP_SLICE_FROM_PTR) {
     bool writable = (alignment_flags & 0x8000u) != 0;
     uint16_t alignment = (uint16_t) (alignment_flags & 0x7fffu);
     uint64_t layout_key = (uint64_t) XR_TO_INT(R(c + 6));
-    XrAggregateLayout *layout = xr_vm_struct_layout_lookup_stable_key(&isolate->vm, layout_key);
+    XrAggregateLayout *layout = xr_struct_layout_lookup_by_stable_key(&isolate->vm, layout_key);
     if (elem_size == 0 || alignment == 0 || elem_type >= XR_ELEM_COUNT)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "mem.slice<T>() has invalid static layout evidence");
     /* Source-level mem.slice is an unsafe, caller-proven raw view. Keep only
@@ -2620,7 +2620,7 @@ vmcase(OP_BUFFER_MATERIALIZE) {
     size_t align = (size_t) raw_align;
     uint8_t code = (uint8_t) raw_code;
     XrAggregateLayout *layout =
-        layout_key ? xr_vm_struct_layout_lookup_stable_key(&isolate->vm, layout_key) : NULL;
+        layout_key ? xr_struct_layout_lookup_by_stable_key(&isolate->vm, layout_key) : NULL;
     if (code == UINT8_MAX) {
         if (!layout || layout->total_size != size || !xr_aggregate_layout_is_headerless(layout)) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
