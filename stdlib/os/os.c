@@ -19,7 +19,7 @@
 #include "../../src/base/xchecks.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
-#include "../../src/vm/xvm.h"           // xr_vm_yieldable_cfunction_new
+#include "../../src/vm/xvm.h"           // xr_yieldable_cfunction_new
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

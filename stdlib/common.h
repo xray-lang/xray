@@ -137,7 +137,7 @@ static inline XrValue xrs_string_value_c(XrVMRuntime *X, const char *s) {
  * module export. Yieldable bindings use a different cfunction constructor
  * because their entry point carries an out-parameter signature.
  *
- * The callee declaration xr_vm_yieldable_cfunction_new() lives in
+ * The callee declaration xr_yieldable_cfunction_new() lives in
  * src/vm/xvm.h. Modules using XRS_EXPORT_YIELDABLE therefore need to have
  * that header on the include path; see stdlib/test_yield/test_yield.c for
  * a representative example.
@@ -149,7 +149,7 @@ static inline XrValue xrs_string_value_c(XrVMRuntime *X, const char *s) {
  */
 #define XRS_EXPORT_SLOW(mod, isolate, name_str, func_ptr)                                          \
     do {                                                                                           \
-        struct XrCFunction *_cf = xr_vm_cfunction_new((isolate), (func_ptr), (name_str));          \
+        struct XrCFunction *_cf = xr_cfunction_new((isolate), (func_ptr), (name_str));             \
         _cf->cfunc_class = XR_CFUNC_SLOW;                                                          \
         xr_module_add_export((isolate), (mod), (name_str), xr_value_from_cfunction(_cf));          \
     } while (0)
@@ -157,7 +157,7 @@ static inline XrValue xrs_string_value_c(XrVMRuntime *X, const char *s) {
 #define XRS_EXPORT_YIELDABLE(mod, isolate, name_str, func_ptr)                                     \
     do {                                                                                           \
         struct XrCFunction *_cf =                                                                  \
-            xr_vm_yieldable_cfunction_new((isolate), (func_ptr), (name_str));                      \
+            xr_yieldable_cfunction_new((isolate), (func_ptr), (name_str));                         \
         xr_module_add_export((isolate), (mod), (name_str), xr_value_from_cfunction(_cf));          \
     } while (0)
 

@@ -31,7 +31,7 @@
 #include "../../src/coro/xworker.h"
 #include "../../src/shared/xr_io_core.h"
 #include "../../src/shared/xr_os_core.h"
-#include "../../src/vm/xvm.h"  // xr_vm_yieldable_cfunction_new (XRS_EXPORT_YIELDABLE)
+#include "../../src/vm/xvm.h"  // xr_yieldable_cfunction_new (XRS_EXPORT_YIELDABLE)
 #include "../../src/runtime/xisolate_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
