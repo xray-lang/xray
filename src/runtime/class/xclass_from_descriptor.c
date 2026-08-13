@@ -300,7 +300,7 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
          * leaving heap-backed and nested value structs without a method/type
          * identity until an unrelated OP_AGG_NEW happened to bind them. */
         if (cls->struct_layout->nominal_name &&
-            !xr_vm_struct_layout_bind_class(vm, cls->struct_layout, cls)) {
+            !xr_struct_layout_bind_class(vm, cls->struct_layout, cls)) {
             xr_log_warning("class", "from_descriptor: aggregate identity collision for '%s'",
                            desc->class_name);
             return NULL;

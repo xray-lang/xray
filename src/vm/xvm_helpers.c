@@ -132,7 +132,7 @@ XrAggregateLayout *xr_struct_layout_lookup_by_id(XrVMState *vm, uint16_t layout_
     return vm->struct_layouts[layout_id];
 }
 
-bool xr_vm_struct_layout_bind_class(XrVMState *vm, XrAggregateLayout *layout, XrClass *cls) {
+bool xr_struct_layout_bind_class(XrVMState *vm, XrAggregateLayout *layout, XrClass *cls) {
     if (!vm || !layout || !cls || !layout->nominal_name)
         return false;
     uint16_t layout_id = xr_vm_struct_layout_register(vm, layout);
