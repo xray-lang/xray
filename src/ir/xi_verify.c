@@ -470,8 +470,15 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
             if (view->source_operand < 0 || view->source_operand >= (int16_t) v->nargs ||
                 !v->args[view->source_operand] ||
                 !verify_view_root_matches(v->args[view->source_operand], view->root_value_id)) {
-                verr(ctx, "func '%s': Slice v%u has stale/invalid ViewEvidence root operand",
-                     f->name, v->id);
+                verr(ctx,
+                     "func '%s': Slice v%u has stale/invalid ViewEvidence root operand "
+                     "(operand=%d value=v%u root=v%u)",
+                     f->name, v->id, (int) view->source_operand,
+                     view->source_operand >= 0 && view->source_operand < (int16_t) v->nargs &&
+                             v->args[view->source_operand]
+                         ? v->args[view->source_operand]->id
+                         : UINT32_MAX,
+                     view->root_value_id);
                 return;
             }
         }

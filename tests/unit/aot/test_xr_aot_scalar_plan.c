@@ -25,6 +25,7 @@
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_profile.h"
+#include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../plan/target_profile_test_fixture.h"
@@ -107,6 +108,19 @@ static XrType stringbuilder_type = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .frozen = true,
     .instance = {.class_name = "StringBuilder"},
+};
+static XrType byte_type = {
+    .kind = XR_KIND_INT,
+    .id = 8,
+    .scalar_rep = XR_NATIVE_U8,
+    .frozen = true,
+};
+static XrType byte_slice_type = {
+    .kind = XR_KIND_SLICE,
+    .id = 9,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .frozen = true,
+    .container = {.element_type = &byte_type},
 };
 
 static XrTargetProfile *build_profile(bool ilp32, bool freestanding_runtime) {
@@ -968,6 +982,92 @@ static void test_stringbuilder_new_c_emission_recipe_is_exact(void) {
     xi_func_free(root);
 }
 
+static void test_string_byte_slice_view_c_emission_recipe_is_exact(void) {
+    XiFunc *root = xi_func_new("string_byte_slice_view_recipe", &scalar_unit);
+    REQUIRE(root != NULL);
+    XiBlock *entry = xi_block_new(root);
+    REQUIRE(entry != NULL);
+    XiValue *source = xi_const_str(root, entry, "authority", &scalar_string);
+    XiValue *view = xi_value_new(root, entry, XI_CALL_BUILTIN,
+                                 &byte_slice_type, 1);
+    REQUIRE(source && view);
+    view->args[0] = source;
+    view->xa_intrinsic_id = XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
+    view->view_evidence = (XiViewEvidence) {
+        .root_value_id = source->id,
+        .element_type_id = byte_type.id,
+        .source_operand = 0,
+        .source_param = -1,
+        .origin = XI_VIEW_ORIGIN_RECEIVER,
+        .capability = 1,
+        .lifetime = 1,
+        .complete = 1,
+    };
+    xi_block_set_return(entry, NULL);
+    root->stage = XI_STAGE_OPTIMIZED;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    XrTargetProfile *profile = build_exact_profile();
+    XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+    uint32_t ignored_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t view_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(target, root, source,
+                                             &ignored_function, &source_value,
+                                             error, sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(target, root, view,
+                                             &ignored_function, &view_value,
+                                             error, sizeof(error)));
+    XrCValueEmissionView frozen = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, view_value, &frozen,
+                                           error, sizeof(error)));
+    REQUIRE(frozen.rep == XR_C_VALUE_REP_VIEW &&
+            frozen.target_register_kind == XR_MACHINE_REP_VIEW &&
+            frozen.target_memory_kind == XR_MACHINE_REP_VIEW &&
+            frozen.materialization ==
+                XR_C_VALUE_MATERIALIZATION_STRING_BYTE_SLICE_VIEW &&
+            frozen.recipe_operand_value == source_value && frozen.recipe_symbol &&
+            strcmp(frozen.recipe_symbol, "xrt_span_from_string_bytes") == 0 &&
+            frozen.literal_bytes == NULL && frozen.literal_byte_length == 0 &&
+            strcmp(frozen.c_type, "xr_span_t") == 0);
+
+    XrCValueEmissionView *row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == view_value)
+            row = &emission->values[i];
+    REQUIRE(row != NULL);
+    uint8_t saved_recipe = row->materialization;
+    row->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                        error, sizeof(error)));
+    row->materialization = saved_recipe;
+    uint32_t saved_operand = row->recipe_operand_value;
+    row->recipe_operand_value = view_value;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                        error, sizeof(error)));
+    row->recipe_operand_value = saved_operand;
+    const char *saved_symbol = row->recipe_symbol;
+    row->recipe_symbol = "xrt_span_from_string_Bytes";
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                        error, sizeof(error)));
+    row->recipe_symbol = saved_symbol;
+    uint8_t saved_rep = row->rep;
+    row->rep = XR_C_VALUE_REP_TAGGED;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                        error, sizeof(error)));
+    row->rep = saved_rep;
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                      error, sizeof(error)));
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(root);
+}
+
 static void test_channel_receive_c_emission_recipe_is_exact(void) {
     XiFunc *root = xi_func_new("channel_receive_recipe", &scalar_unit);
     REQUIRE(root != NULL);
@@ -1071,6 +1171,7 @@ int main(void) {
     test_dynamic_closure_c_emission_is_exact_and_mutation_safe();
     test_channel_new_c_emission_recipe_is_exact();
     test_stringbuilder_new_c_emission_recipe_is_exact();
+    test_string_byte_slice_view_c_emission_recipe_is_exact();
     test_channel_receive_c_emission_recipe_is_exact();
     printf("AOT scalar TargetPlan tests passed\n");
     return 0;

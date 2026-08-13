@@ -123,15 +123,17 @@ static bool verify_target_machine_value_rep(const XrTargetPlan *target_plan,
         case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
         case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
         case XR_MACHINE_REP_DYN_VALUE: rep = XAOT_REP_TAGGED; break;
+        case XR_MACHINE_REP_VIEW: rep = XAOT_REP_SLICE; break;
         default: return false;
     }
     info = xaot_rep_info(rep);
     if (!info)
         return false;
     memset(out, 0, sizeof(*out));
-    out->kind = rep == XAOT_REP_VOID   ? XAOT_VALUE_VOID
+    out->kind = rep == XAOT_REP_VOID    ? XAOT_VALUE_VOID
                 : rep == XAOT_REP_TAGGED ? XAOT_VALUE_TAGGED
-                                         : XAOT_VALUE_SCALAR;
+                : rep == XAOT_REP_SLICE  ? XAOT_VALUE_AGGREGATE
+                                          : XAOT_VALUE_SCALAR;
     out->rep = rep;
     out->type = value->type;
     out->c_type = info->c_type;
@@ -704,7 +706,7 @@ static bool verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan *plan,
 
 static bool verify_array_storage_plan(const XaotBundle *bundle, const XaotArrayStoragePlan *plan,
                                       char *errbuf, size_t errbuf_len) {
-    const XaotValuePlan *value_plan;
+    XaotValueRep value_rep;
     const XaotContainerTypePlan *container_plan;
 
     if (!bundle || !plan)
@@ -717,9 +719,11 @@ static bool verify_array_storage_plan(const XaotBundle *bundle, const XaotArrayS
         return set_error(errbuf, errbuf_len, "AOT array storage plan has no access flags");
     if (!verify_container_elem_plan(&plan->elem, errbuf, errbuf_len))
         return false;
-    value_plan = xaot_bundle_find_value_plan(bundle, plan->value);
-    if (!value_plan)
-        return set_error(errbuf, errbuf_len, "AOT array storage value has no value plan");
+    if (!verify_effective_value_rep(bundle, plan->func, plan->value, &value_rep,
+                                    errbuf, errbuf_len) ||
+        (value_rep.rep != XAOT_REP_SLICE && value_rep.rep != XAOT_REP_TAGGED))
+        return set_error(errbuf, errbuf_len,
+                         "AOT array storage value has no exact representation authority");
     container_plan = xaot_bundle_find_container_plan(bundle, plan->value->type);
     if ((!container_plan || container_plan->plan.kind != XAOT_CONTAINER_ARRAY ||
          (container_plan->plan.flags & XAOT_CONTAINER_RAW_DATA) == 0) &&

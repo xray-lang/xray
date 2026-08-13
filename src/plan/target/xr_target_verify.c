@@ -20,6 +20,7 @@
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
+#include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../../base/xmalloc.h"
@@ -449,17 +450,25 @@ static bool rep_kind_contract_is_exact(const XrTargetPlan *plan,
                    rep->signedness == XR_TARGET_SIGN_NONE;
         case XR_MACHINE_REP_AGGREGATE:
         case XR_MACHINE_REP_VIEW: {
-            if (rep->detail >= plan->layouts_count || rep->lane_count != 0 ||
+            int layout_index = rep->kind == XR_MACHINE_REP_VIEW
+                                   ? target_plan_layout_for_type(plan, rep->detail)
+                                   : (rep->detail < plan->layouts_count ? (int) rep->detail : -1);
+            if (layout_index < 0 || rep->lane_count != 0 ||
                 rep->signedness != XR_TARGET_SIGN_NONE ||
                 (rep->kind == XR_MACHINE_REP_AGGREGATE &&
                  (rep->root_kind != XR_TARGET_ROOT_NONE ||
                   rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
                   rep->null_encoding != XR_TARGET_NULL_NOT_NULLABLE)))
                 return false;
-            const XrTargetLayoutRecord *layout = &plan->layouts[rep->detail];
+            const XrTargetLayoutRecord *layout = &plan->layouts[layout_index];
             uint8_t expected_kind = rep->kind == XR_MACHINE_REP_VIEW ? XR_TARGET_LAYOUT_VIEW
                                                                      : XR_TARGET_LAYOUT_AGGREGATE;
-            return layout->kind == expected_kind && rep->memory_size == layout->fixed_prefix_size &&
+            return layout->kind == expected_kind &&
+                   (rep->kind != XR_MACHINE_REP_VIEW ||
+                    (rep->detail == layout->semantic_type && rep->root_kind == XR_TARGET_ROOT_VIEW_OWNER &&
+                     rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+                     rep->null_encoding == XR_TARGET_NULL_NOT_NULLABLE)) &&
+                   rep->memory_size == layout->fixed_prefix_size &&
                    rep->memory_align == layout->align &&
                    rep->register_bits == layout->fixed_prefix_size * 8u;
         }
@@ -936,6 +945,69 @@ static bool semantic_stringbuilder_constructor_is_exact(
                (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
            type->canonical_key &&
            strcmp(type->canonical_key, expected_type_key) == 0;
+}
+
+/* Independent reconstruction: consume only frozen SemanticPlan rows. */
+static bool semantic_string_byte_slice_view_is_exact(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    if (!semantic || !operation || operation->opcode != XI_CALL_BUILTIN ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW ||
+        operation->evidence[1] != XA_INTRINSIC_STRING_BYTE_SLICE_VIEW ||
+        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
+        operation->view_source_operand != 0 || operation->view_source_parameter != -1 ||
+        operation->view_origin != XI_VIEW_ORIGIN_RECEIVER || operation->view_capability != 1 ||
+        operation->view_lifetime != 1 || operation->view_complete != 1 ||
+        operation->view_element_type >= xr_semantic_plan_type_count(semantic))
+        return false;
+    const XrSemanticOperandRecord *source = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *source_type = xr_semantic_plan_type(semantic, source->type);
+    const XrSemanticTypeRecord *result_type = xr_semantic_plan_type(semantic, operation->result_type);
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(semantic, operation->view_element_type);
+    return source->value == operation->view_source_value && source->parameter == 0 &&
+           source->role == XR_SEM_OPERAND_ARGUMENT &&
+           (source->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 && source_type &&
+           source_type->kind == XR_KIND_STRING && source_type->scalar_rep == XR_SCALAR_REP_NONE &&
+           result_type && result_type->kind == XR_KIND_SLICE && result_type->child_count == 1 &&
+           result_type->child_begin < child_count &&
+           children[result_type->child_begin] == operation->view_element_type &&
+           result_type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW) &&
+           element && element->kind == XR_KIND_INT && element->scalar_rep == XR_NATIVE_U8;
+}
+
+static bool semantic_u8_slice_type_is_exact(const XrSemanticPlan *semantic,
+                                            uint32_t type_index) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, type_index);
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    const uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW;
+    const uint8_t allowed = required | XR_SEM_TYPE_CONST;
+    if (!type || type->kind != XR_KIND_SLICE || type->builtin_type != XR_TID_NULL ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->aggregate_extent != 0 ||
+        type->aggregate_align != 0 || type->child_count != 1 ||
+        type->child_begin >= child_count || (type->flags & required) != required ||
+        (type->flags & ~allowed) != 0)
+        return false;
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(semantic, children[type->child_begin]);
+    return element && element->kind == XR_KIND_INT &&
+           element->builtin_type == XR_TID_NULL && element->scalar_rep == XR_NATIVE_U8 &&
+           element->flags == 0 && element->child_count == 0 &&
+           element->aggregate_extent == 0 && element->aggregate_align == 0;
+}
+
+static bool semantic_u8_slice_parameter_is_exact(
+    const XrSemanticPlan *semantic, const XrSemanticParameterRecord *parameter) {
+    return parameter && parameter->function < xr_semantic_plan_function_count(semantic) &&
+           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == XR_PARAM_READ &&
+           parameter->ownership == XI_OWN_BORROWED &&
+           parameter->transfer_mode == XR_TRANSFER_SHARE &&
+           (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 &&
+           parameter->reserved == 0 && semantic_u8_slice_type_is_exact(semantic, parameter->type);
 }
 
 static bool verifier_channel_type_is_exact(const XrSemanticPlan *semantic,
@@ -2253,6 +2325,16 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                                  exact_channel_receives[semantic_value] != 0;
     bool exact_source_namespace = exact_source_namespaces &&
                                   exact_source_namespaces[semantic_value] != 0;
+    bool exact_string_byte_view = semantic_string_byte_slice_view_is_exact(
+        plan->semantic_plan, operation);
+    const XrSemanticParameterRecord *parameter = operation
+                                                     ? NULL
+                                                     : semantic_parameter_for_value(
+                                                           plan->semantic_plan,
+                                                           semantic_function,
+                                                           semantic_value);
+    bool exact_string_byte_parameter = semantic_u8_slice_parameter_is_exact(
+        plan->semantic_plan, parameter) && parameter->type == semantic_type;
     uint16_t receive_scalar_kind = XR_MACHINE_REP_COUNT;
     bool scalar_channel_receive =
         operation && operation->opcode == XI_CHAN_TRY_RECV && type &&
@@ -2263,7 +2345,8 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     int eligibility = operation_result_void || exact_heap_closure ||
                               exact_string_literal || exact_stringbuilder ||
                               exact_direct_callee || exact_go_callee ||
-                              exact_channel || exact_source_namespace
+                              exact_channel || exact_source_namespace || exact_string_byte_view ||
+                              exact_string_byte_parameter
                           ? 1
                           : (type ? semantic_type_expected_rep(type,
                                                                &expected_kind)
@@ -2290,6 +2373,13 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         eligibility = expected_layout >= 0 &&
                               plan->layouts[expected_layout].kind ==
                                   XR_TARGET_LAYOUT_DYNAMIC
+                          ? 1
+                          : -1;
+    } else if (exact_string_byte_view || exact_string_byte_parameter) {
+        expected_kind = XR_MACHINE_REP_VIEW;
+        expected_layout = target_plan_layout_for_type(plan, semantic_type);
+        eligibility = expected_layout >= 0 &&
+                              plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_VIEW
                           ? 1
                           : -1;
     } else if (eligibility == 0 && deferred_operation) {
@@ -2335,6 +2425,14 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                 XR_TARGET_ROOT_DYNAMIC)
             XR_VALUE_BINDING_FAIL(9);
     }
+    if (expected_kind == XR_MACHINE_REP_VIEW &&
+        (plan->machine_reps[record->register_rep].detail != semantic_type ||
+         plan->machine_reps[record->memory_rep].detail != semantic_type ||
+         plan->machine_reps[record->register_rep].root_kind != XR_TARGET_ROOT_VIEW_OWNER ||
+         plan->machine_reps[record->memory_rep].root_kind != XR_TARGET_ROOT_VIEW_OWNER ||
+         plan->machine_reps[record->register_rep].ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+         plan->machine_reps[record->memory_rep].ownership != XR_TARGET_OWNERSHIP_BORROWED))
+        XR_VALUE_BINDING_FAIL(11);
     if (expected_kind == XR_MACHINE_REP_VOID) {
         if (record->slot != XR_SEMANTIC_INDEX_NONE)
             XR_VALUE_BINDING_FAIL(8);
@@ -2598,7 +2696,8 @@ static bool verify_layouts(const XrTargetPlan *plan,
             (previous_type != XR_SEMANTIC_INDEX_NONE && layout->semantic_type <= previous_type) ||
             (layout->kind != XR_TARGET_LAYOUT_SCALAR &&
              layout->kind != XR_TARGET_LAYOUT_AGGREGATE &&
-             layout->kind != XR_TARGET_LAYOUT_DYNAMIC) ||
+             layout->kind != XR_TARGET_LAYOUT_DYNAMIC &&
+             layout->kind != XR_TARGET_LAYOUT_VIEW) ||
             layout->reserved != 0 ||
             !is_power_of_two(layout->align) || layout->fixed_prefix_size % layout->align != 0 ||
             layout->extent >= plan->extents_count ||
@@ -2643,6 +2742,23 @@ static bool verify_layouts(const XrTargetPlan *plan,
                 layout->root_field_count != 0 || representation_count == 0)
                 return report(error, error_size, "XR_TARGET_1002",
                               "dynamic value layout semantic contract is incomplete");
+        } else if (layout->kind == XR_TARGET_LAYOUT_VIEW) {
+            uint32_t representation_count = 0;
+            for (uint32_t r = 0; r < plan->machine_reps_count; r++) {
+                const XrTargetMachineRepRecord *rep = &plan->machine_reps[r];
+                representation_count += rep->kind == XR_MACHINE_REP_VIEW &&
+                                        rep->detail == layout->semantic_type &&
+                                        rep->memory_size == 16 && rep->memory_align == 8 &&
+                                        rep->register_bits == 128 &&
+                                        rep->root_kind == XR_TARGET_ROOT_VIEW_OWNER &&
+                                        rep->ownership == XR_TARGET_OWNERSHIP_BORROWED;
+            }
+            if (scalar != 0 || semantic_type->kind != XR_KIND_SLICE ||
+                semantic_type->child_count != 1 || layout->field_count != 0 ||
+                layout->root_field_count != 0 || layout->fixed_prefix_size != 16 ||
+                layout->align != 8 || representation_count != 1)
+                return report(error, error_size, "XR_TARGET_1002",
+                              "view layout semantic contract is incomplete");
         } else {
             uint32_t expected_fields = semantic_type->aggregate_extent;
             if (scalar != 0 || semantic_aggregate_kind(semantic_type) != 1 ||
@@ -3041,6 +3157,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             }
             expected_calls++;
         }
+        if (semantic_string_byte_slice_view_is_exact(semantic, operation)) {
+            if (expected_calls == UINT32_MAX) {
+                valid = false;
+                break;
+            }
+            expected_calls++;
+        }
     }
     valid = valid && plan->calls_count == expected_calls;
     for (uint32_t target_index = 0;
@@ -3135,6 +3258,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         bool stringbuilder_constructor =
             !semantic_target &&
             semantic_stringbuilder_constructor_is_exact(semantic, operation);
+        bool string_byte_slice_view = !semantic_target &&
+            semantic_string_byte_slice_view_is_exact(semantic, operation);
         uint16_t result_kind = XR_MACHINE_REP_COUNT;
         const XrSemanticTypeRecord *result_type = operation
                                                        ? xr_semantic_plan_type(
@@ -3150,6 +3275,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         if (stringbuilder_constructor) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
+        }
+        if (string_byte_slice_view) {
+            result_scalar = 1;
+            result_kind = XR_MACHINE_REP_VIEW;
         }
         bool suspends = operation && call->semantic_operation < semantic_operations &&
                         state_counts[call->semantic_operation] == 1;
@@ -3193,9 +3322,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 call->native_abi == machine->native_abi &&
                 call->result_mode == XR_TARGET_CALL_VALUE &&
                 call->result_ownership ==
-                    (stringbuilder_constructor
-                         ? XR_TARGET_CALL_RETURN_OWNED
-                         : XR_TARGET_CALL_NONE) &&
+                    (stringbuilder_constructor ? XR_TARGET_CALL_RETURN_OWNED
+                     : string_byte_slice_view ? XR_TARGET_CALL_BORROW
+                                              : XR_TARGET_CALL_NONE) &&
                 call->error_mode == XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL &&
                 call->reserved8 == 0;
         if (!valid)
@@ -3266,6 +3395,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                               xr_semantic_plan_type(semantic, operand->type),
                               &argument_kind)
                         : -1;
+                bool argument_u8_slice =
+                    semantic_u8_slice_parameter_is_exact(semantic, parameter) &&
+                    semantic_u8_slice_type_is_exact(semantic, operand->type);
                 uint8_t ownership =
                     operand->ownership_action == XR_SEM_OPERAND_CONSUME
                         ? XR_TARGET_CALL_CONSUME
@@ -3277,11 +3409,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         operand->parameter_mode == parameter->mode &&
                         operand->transfer_mode == parameter->transfer_mode &&
                         (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
-                        argument_scalar == 1 &&
+                        (argument_scalar == 1 || argument_u8_slice) &&
                         parameter->mode == XR_PARAM_READ &&
                         operand->access == XR_CALL_ARG_PLAIN &&
                         (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0 &&
-                        parameter->ownership == XI_OWN_NONE && caller_value &&
+                        (parameter->ownership == XI_OWN_NONE ||
+                         (argument_u8_slice && parameter->ownership == XI_OWN_BORROWED)) &&
+                        caller_value &&
                         callee_value &&
                         slot_binds_value_in_function(
                             plan, caller_value, operation->function) &&
@@ -3304,7 +3438,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         argument->register_rep == caller_value->register_rep &&
                         argument->memory_rep == caller_value->memory_rep &&
                         plan->machine_reps[argument->register_rep].kind ==
-                            argument_kind &&
+                            (argument_u8_slice ? XR_MACHINE_REP_VIEW : argument_kind) &&
                         argument->ordinal == ordinal &&
                         argument->mode == XR_TARGET_CALL_VALUE &&
                         argument->ownership == ownership &&
@@ -3356,7 +3490,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     call->target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
             if (!valid)
                 break;
-        } else {
+        } else if (stringbuilder_constructor) {
             valid = stringbuilder_constructor && !suspends &&
                     reconstruct_call_identity(
                         "xray-target-stringbuilder-constructor-v1",
@@ -3379,6 +3513,28 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         XR_TARGET_ROOT_DYNAMIC &&
                     plan->slots[result->slot].ownership ==
                         XR_TARGET_OWNERSHIP_OWNED;
+            if (!valid)
+                break;
+        } else {
+            const XrSemanticTypeRecord *view_type =
+                xr_semantic_plan_type(semantic, operation->result_type);
+            valid = string_byte_slice_view && view_type && !suspends &&
+                    reconstruct_call_identity("xray-target-string-byte-slice-view-v1",
+                                              operation->id, view_type->id, 0,
+                                              &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    call->argument_count == 0 && call->flags == 0 &&
+                    call->calling_convention == XR_TARGET_CALL_CONVENTION_STRING_BYTE_SLICE_VIEW &&
+                    call->target_kind == XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW && result &&
+                    result->slot < plan->slots_count &&
+                    plan->slots[result->slot].root_kind == XR_TARGET_ROOT_VIEW_OWNER &&
+                    plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_BORROWED;
             if (!valid)
                 break;
         }

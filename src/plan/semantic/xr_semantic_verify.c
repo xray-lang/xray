@@ -15,6 +15,7 @@
 #include "../ownership/xr_ownership_check.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
+#include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
@@ -1288,6 +1289,104 @@ static bool allocation_identity_is_exact(const XrSemanticOperationRecord *operat
            memcmp(operation->allocation_key + operation_length, suffix, sizeof(suffix)) == 0;
 }
 
+static bool semantic_type_is_exact_string(const XrSemanticTypeRecord *type) {
+    return type && type->kind == XR_KIND_STRING && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) ==
+               (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           (type->flags & ~(XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT |
+                            XR_SEM_TYPE_CONST | XR_SEM_TYPE_NULLABLE)) == 0;
+}
+
+static bool semantic_type_is_exact_u8(const XrSemanticTypeRecord *type) {
+    return type && type->kind == XR_KIND_INT && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_NATIVE_U8 && type->flags == 0;
+}
+
+static bool semantic_type_is_exact_u8_slice(const XrSemanticPlan *plan, uint32_t type_index,
+                                            uint32_t element_type) {
+    const XrSemanticTypeRecord *type =
+        type_index < plan->type_count ? &plan->types[type_index] : NULL;
+    return type && type->kind == XR_KIND_SLICE && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 1 && type->child_begin < plan->type_child_count &&
+           plan->type_children[type->child_begin] == element_type &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW);
+}
+
+static bool verify_string_byte_slice_view(const XrSemanticPlan *plan,
+                                          const XrSemanticOperationRecord *operation,
+                                          char *error, size_t error_size) {
+    bool candidate = operation->intrinsic_kind == XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW ||
+                     operation->evidence[1] == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
+    if (!candidate) {
+        bool empty = operation->intrinsic_kind == XR_SEM_INTRINSIC_NONE &&
+                     operation->view_source_value == XR_SEMANTIC_INDEX_NONE &&
+                     operation->view_element_type == XR_SEMANTIC_INDEX_NONE &&
+                     operation->view_source_operand == -1 && operation->view_source_parameter == -1 &&
+                     operation->view_origin == XI_VIEW_ORIGIN_NONE &&
+                     operation->view_capability == 0 && operation->view_lifetime == 0 &&
+                     operation->view_complete == 0 && operation->reserved_view[0] == 0 &&
+                     operation->reserved_view[1] == 0 && operation->reserved_view[2] == 0;
+        return empty || report(error, error_size, "XR_SEM_0019",
+                               "non-view operation carries string byte-slice authority");
+    }
+    const XrSemanticOperandRecord *source =
+        operation->operand_count == 1 && operation->operand_begin < plan->operand_count
+            ? &plan->operands[operation->operand_begin]
+            : NULL;
+    const XrSemanticTypeRecord *source_type =
+        source && source->type < plan->type_count ? &plan->types[source->type] : NULL;
+    const XrSemanticTypeRecord *element_type =
+        operation->view_element_type < plan->type_count
+            ? &plan->types[operation->view_element_type]
+            : NULL;
+    bool exact = operation->opcode == XI_CALL_BUILTIN && source &&
+                 source->value == operation->view_source_value && source->parameter == 0 &&
+                 source->role == XR_SEM_OPERAND_ARGUMENT &&
+                 (source->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
+                 semantic_type_is_exact_string(source_type) &&
+                 semantic_type_is_exact_u8(element_type) &&
+                 semantic_type_is_exact_u8_slice(plan, operation->result_type,
+                                                 operation->view_element_type) &&
+                 operation->intrinsic_kind == XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW &&
+                 operation->evidence[1] == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW &&
+                 operation->view_source_operand == 0 && operation->view_source_parameter == -1 &&
+                 operation->view_origin == XI_VIEW_ORIGIN_RECEIVER &&
+                 operation->view_capability == 1 && operation->view_lifetime == 1 &&
+                 operation->view_complete == 1 && operation->reserved_view[0] == 0 &&
+                 operation->reserved_view[1] == 0 && operation->reserved_view[2] == 0;
+    if (!exact && error && error_size) {
+        snprintf(error, error_size,
+                 "XR_SEM_0019: string byte-slice view authority is not exact "
+                 "(op=%u operands=%u source=%u view_source=%u parameter=%d role=%u flags=%u "
+                 "source_kind=%u source_scalar=%u source_flags=%u element_kind=%u "
+                 "element_scalar=%u element_flags=%u result=%u:%u:%u:%u intrinsic=%u evidence=%u)",
+                 operation->opcode, operation->operand_count,
+                 source ? source->value : UINT32_MAX, operation->view_source_value,
+                 source ? (int) source->parameter : INT32_MIN,
+                 source ? (unsigned) source->role : UINT32_MAX,
+                 source ? (unsigned) source->flags : UINT32_MAX,
+                 source_type ? source_type->kind : UINT32_MAX,
+                 source_type ? source_type->scalar_rep : UINT32_MAX,
+                 source_type ? source_type->flags : UINT32_MAX,
+                 element_type ? element_type->kind : UINT32_MAX,
+                 element_type ? element_type->scalar_rep : UINT32_MAX,
+                 element_type ? element_type->flags : UINT32_MAX, operation->result_type,
+                 operation->result_type < plan->type_count
+                     ? plan->types[operation->result_type].kind : UINT32_MAX,
+                 operation->result_type < plan->type_count
+                     ? plan->types[operation->result_type].scalar_rep : UINT32_MAX,
+                 operation->result_type < plan->type_count
+                     ? plan->types[operation->result_type].flags : UINT32_MAX,
+                 (unsigned) operation->intrinsic_kind, operation->evidence[1]);
+    }
+    return exact;
+}
+
 static bool verify_string_builder_constructor(const XrSemanticPlan *plan,
                                               const XrSemanticOperationRecord *operation,
                                               char *error, size_t error_size) {
@@ -1397,6 +1496,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         }
         if (!operation_debug_span_valid(plan, i))
             return report(error, error_size, "XR_SEM_0019", "operation debug span is invalid");
+        if (!verify_string_byte_slice_view(plan, operation, error, error_size))
+            return false;
         uint32_t existing_definition = definitions[operation->result_value];
         if (existing_definition != XR_SEMANTIC_INDEX_NONE) {
             bool matching_parameter = false;

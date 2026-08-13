@@ -14,6 +14,7 @@
 #include "../ownership/xr_ownership_obligation.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
+#include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_arc.h"
 #include "../../ir/xi_coro_analyze.h"
@@ -2652,6 +2653,10 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     XrSemanticOperationRecord *record = &ctx->plan->operations[index];
     memset(record, 0, sizeof(*record));
     record->evidence[7] = XR_SEMANTIC_INDEX_NONE;
+    record->view_source_value = XR_SEMANTIC_INDEX_NONE;
+    record->view_element_type = XR_SEMANTIC_INDEX_NONE;
+    record->view_source_operand = -1;
+    record->view_source_parameter = -1;
     XrTextBuilder key = {0};
     if (!text_append_format(&key, "%s/op:%u:%s",
                             ctx->plan->functions[function_index_value].canonical_key, value->id,
@@ -2717,6 +2722,28 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->return_parameter = value_ownership.param_index;
     record->return_provenance = value_ownership.kind;
     record->return_complete = value_ownership.complete ? 1u : 0u;
+    if (value->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
+        const XiViewEvidence *view = &value->view_evidence;
+        XrType *element = value->type && XR_TYPE_IS_SLICE(value->type)
+                              ? value->type->container.element_type
+                              : NULL;
+        if (!view->complete || view->origin != XI_VIEW_ORIGIN_RECEIVER ||
+            view->source_operand != 0 || view->source_param != -1 || value->nargs != 1 ||
+            !value->args[0] || view->root_value_id != value->args[0]->id ||
+            view->capability != 1 || view->lifetime != 1 || !element ||
+            !add_type(ctx, element, &record->view_element_type))
+            return fail(ctx, "XR_SEM_0019", "string byte-slice view authority is incomplete");
+        record->view_source_value = value_ref(ctx, function, value->args[0]);
+        if (record->view_source_value == XR_SEMANTIC_INDEX_NONE)
+            return fail(ctx, "XR_SEM_0019", "string byte-slice view source is invalid");
+        record->view_source_operand = view->source_operand;
+        record->view_source_parameter = view->source_param;
+        record->intrinsic_kind = XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW;
+        record->view_origin = view->origin;
+        record->view_capability = view->capability;
+        record->view_lifetime = view->lifetime;
+        record->view_complete = 1;
+    }
     for (uint16_t i = 0; i < value->nargs; i++) {
         if (!append_operand(ctx, function, value, i))
             return false;

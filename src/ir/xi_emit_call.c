@@ -1082,7 +1082,7 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_builtin_array_copy_new(ctx, v, dst);
         return;
     }
-    if (bname && strcmp(bname, "string_byte_slice") == 0) {
+    if (v->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
         emit_builtin_string_byte_slice(ctx, v, dst);
         return;
     }

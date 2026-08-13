@@ -314,10 +314,15 @@ static void replace_all_uses(XiFunc *f, XiValue *old_val, XiValue *new_val) {
         /* Scan instructions */
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
+            bool args_changed = false;
             for (uint16_t a = 0; a < v->nargs; a++) {
-                if (v->args[a] == old_val)
+                if (v->args[a] == old_val) {
                     v->args[a] = new_val;
+                    args_changed = true;
+                }
             }
+            if (args_changed)
+                xi_value_rebase_view_evidence(v);
         }
 
         /* Scan phi nodes */
@@ -879,13 +884,17 @@ XR_FUNC XiPassChange xi_opt_copy_prop(XiFunc *f) {
         /* Rewrite args of each value */
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
+            bool args_changed = false;
             for (uint16_t a = 0; a < v->nargs; a++) {
                 XiValue *resolved = resolve_copy(v->args[a]);
                 if (resolved && resolved != v->args[a]) {
                     v->args[a] = resolved;
+                    args_changed = true;
                     chg.values_changed = true;
                 }
             }
+            if (args_changed)
+                xi_value_rebase_view_evidence(v);
         }
 
         /* Rewrite phi operands — but preserve variable-boundary copies.
@@ -2698,6 +2707,8 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
              * semantic-intrinsic rewrite and defeat the direct C11 lowering. */
             return sr_type_native_boundary_rep(v->type);
         case XI_CALL_BUILTIN: {
+            if (v->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW)
+                return sr_type_native_boundary_rep(v->type);
             const char *name = (const char *) v->aux;
             if (name && strcmp(name, "array_reserve") == 0)
                 return sr_type_native_boundary_rep(v->type);
@@ -3465,14 +3476,19 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
             XiValue *v = blk->values[vi];
             if (!v)
                 continue;
+            bool args_changed = false;
             for (uint16_t ai = 0; ai < v->nargs; ai++) {
+                XiValue *before = v->args[ai];
                 XrRep use_r = sr_use_rep(v, ai, &local_policy);
                 bool erase_descriptor = false;
                 if ((v->op == XI_COPY || xi_op_is_identity_forward(v->op)) && ai == 0)
                     erase_descriptor = sr_conversion_erases_enum_metadata(v->args[ai], v->type);
                 sr_rewrite_arg(f, &v->args[ai], use_r, box_of, erased_box_of, unbox_of, max_id,
                                &local_policy, erase_descriptor);
+                args_changed = args_changed || before != v->args[ai];
             }
+            if (args_changed)
+                xi_value_rebase_view_evidence(v);
         }
 
         /* Phi args follow the selected backend policy.  VM-style consumers keep

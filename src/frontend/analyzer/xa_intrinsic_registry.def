@@ -349,3 +349,9 @@ XA_INTRINSIC(CODEGEN_OPAQUE, 5001, "codegen.opaque", CODEGEN, CODEGEN_OPAQUE, PU
              1, 1, NONE, NONE, 0, NONE, 0)
 XA_INTRINSIC(CODEGEN_COMPILER_FENCE, 5002, "codegen.compilerFence", CODEGEN,
              CODEGEN_COMPILER_FENCE, PURE, NO_ALLOC, SAFE, 0, 0, NONE, NONE, 0, NONE, 0)
+
+/* Builtin string.bytes is a compiler-owned borrowed view constructor.  The
+ * intrinsic identity, not the source member spelling, is the authority used
+ * after analyzer resolution. */
+XA_INTRINSIC(STRING_BYTE_SLICE_VIEW, 6001, "core.string.bytes", CORE,
+             STRING_BYTE_SLICE_VIEW, READ_MAY_THROW, NO_ALLOC, SAFE, 0, 0, NONE, NONE, 0, NONE, 0)

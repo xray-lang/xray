@@ -63,6 +63,12 @@ typedef enum XrSemanticOperandFlag {
     XR_SEM_OPERAND_ADDRESSABLE = 1u << 1,
 } XrSemanticOperandFlag;
 
+typedef enum XrSemanticIntrinsicKind {
+    XR_SEM_INTRINSIC_NONE = 0,
+    XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW = 1,
+    XR_SEM_INTRINSIC_COUNT,
+} XrSemanticIntrinsicKind;
+
 typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_DIRECT_LOCAL = 1,
     XR_SEM_CALL_TARGET_NATIVE_YIELDABLE,
@@ -354,6 +360,16 @@ typedef struct XrSemanticOperationRecord {
     int16_t return_parameter;
     uint8_t return_provenance;
     uint8_t return_complete;
+    uint32_t view_source_value;
+    uint32_t view_element_type;
+    int16_t view_source_operand;
+    int16_t view_source_parameter;
+    uint8_t intrinsic_kind;
+    uint8_t view_origin;
+    uint8_t view_capability;
+    uint8_t view_lifetime;
+    uint8_t view_complete;
+    uint8_t reserved_view[3];
 } XrSemanticOperationRecord;
 
 typedef struct XrSemanticEdgeRecord {

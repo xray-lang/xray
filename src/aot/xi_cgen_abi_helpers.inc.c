@@ -144,6 +144,15 @@ static bool cg_value_plan_is_struct_aggregate(XiCgenCtx *ctx, const XiValue *v) 
 
 static bool cg_value_plan_is_span_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     v = cg_unwrap_identity_value(v);
+    XrCValueEmissionView emission = {0};
+    CgValueEmissionStatus emission_status =
+        cg_value_emission_view(ctx, NULL, v, &emission);
+    if (emission_status == CG_VALUE_EMISSION_FOUND)
+        return emission.rep == XR_C_VALUE_REP_VIEW && emission.c_type &&
+               strcmp(emission.c_type, "xr_span_t") == 0;
+    if (emission_status == CG_VALUE_EMISSION_ERROR ||
+        emission_status == CG_VALUE_EMISSION_NOT_CONFIGURED)
+        return false;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && cg_value_rep_is_span_aggregate(plan->rep);
 }
@@ -1096,7 +1105,28 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
 
     slot = &target_plan->abi.params[arg_index];
     slot_rep = xaot_abi_slot_value_rep(slot);
-    arg_plan = cg_value_plan_require_legacy(ctx, arg);
+    XrCValueEmissionView arg_emission = {0};
+    CgValueEmissionStatus arg_emission_status =
+        cg_value_emission_view(ctx, f, arg, &arg_emission);
+    XaotValueRep frozen_arg_rep = {0};
+    bool frozen_arg = arg_emission_status == CG_VALUE_EMISSION_FOUND &&
+                      cg_value_emission_xaot_rep(ctx, &arg_emission,
+                                                 &frozen_arg_rep.rep);
+    if (frozen_arg) {
+        const XaotRepInfo *info = xaot_rep_info(frozen_arg_rep.rep);
+        frozen_arg_rep.kind = frozen_arg_rep.rep == XAOT_REP_SLICE
+                                  ? XAOT_VALUE_AGGREGATE
+                                  : frozen_arg_rep.rep == XAOT_REP_TAGGED
+                                        ? XAOT_VALUE_TAGGED
+                                        : frozen_arg_rep.rep == XAOT_REP_VOID
+                                              ? XAOT_VALUE_VOID
+                                              : XAOT_VALUE_SCALAR;
+        frozen_arg_rep.type = arg->type;
+        frozen_arg_rep.c_type = info ? info->c_type : NULL;
+        if (frozen_arg_rep.rep == XAOT_REP_SLICE)
+            frozen_arg_rep.flags = XAOT_VALUE_FLAG_SLICE;
+    }
+    arg_plan = frozen_arg ? NULL : cg_value_plan_require_legacy(ctx, arg);
     const XrType *param_type = cg_func_param_type(target, arg_index);
     if (param_type && XR_TYPE_IS_C_FUNCTION(param_type)) {
         if (arg_plan && xaot_value_storage_rep(arg_plan->rep) == XR_REP_RAWPTR && arg->type &&
@@ -1108,6 +1138,10 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         return;
     }
     if (slot_rep.kind == XAOT_VALUE_AGGREGATE) {
+        if (frozen_arg && xaot_value_reps_equal(frozen_arg_rep, slot_rep)) {
+            emit_vref(out, arg);
+            return;
+        }
         if (arg_plan && xaot_value_reps_equal(arg_plan->rep, slot_rep)) {
             emit_vref(out, arg);
             return;

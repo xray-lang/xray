@@ -6549,6 +6549,23 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     value->xa_intrinsic_id = (uint32_t) desc->id;
     value->flags = xi_op_default_effects(op);
     value->line = (uint32_t) node->line;
+    if (desc->id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
+        if (receiver->type->kind != XR_KIND_STRING || !xr_type_is_u8_slice(result_type) ||
+            args.count != 0) {
+            l->had_error = true;
+            return NULL;
+        }
+        value->view_evidence.root_value_id = receiver->id;
+        value->view_evidence.element_type_id = result_type->container.element_type
+                                                   ? result_type->container.element_type->semantic_type_id
+                                                   : 0;
+        value->view_evidence.source_operand = 0;
+        value->view_evidence.source_param = -1;
+        value->view_evidence.origin = XI_VIEW_ORIGIN_RECEIVER;
+        value->view_evidence.capability = 1;
+        value->view_evidence.lifetime = 1;
+        value->view_evidence.complete = 1;
+    }
     if (desc->family == XA_INTRINSIC_FAMILY_MEMORY) {
         if (desc->lowering == XA_INTRINSIC_LOWERING_SLICE_REINTERPRET) {
             if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {

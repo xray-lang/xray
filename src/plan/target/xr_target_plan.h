@@ -35,6 +35,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE = UINT64_C(1) << 8,
     XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE = UINT64_C(1) << 9,
     XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE = UINT64_C(1) << 10,
+    XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE = UINT64_C(1) << 11,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -64,7 +65,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |                            \
                  XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |                               \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE |                         \
-                 XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE))
+                 XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE |                         \
+                 XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -179,6 +181,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE,
     XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR,
+    XR_TARGET_CALL_CONVENTION_STRING_BYTE_SLICE_VIEW,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -191,6 +194,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_CHANNEL_CLOSE,
     XR_TARGET_CALL_TARGET_SOURCE_EXPORT,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR,
+    XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetCallErrorMode {

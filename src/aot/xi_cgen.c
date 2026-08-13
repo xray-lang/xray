@@ -2593,6 +2593,31 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     return CG_VALUE_EMISSION_FOUND;
 }
 
+/* Resolve an uncovered operand's frozen semantic identity without treating
+ * the absence of a C projection row as authority. Recipe consumers use this
+ * only to compare the operand with a verifier-checked recipe operand. */
+static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function,
+                                 const XiValue *value, uint32_t *out) {
+    if (out)
+        *out = XR_SEMANTIC_INDEX_NONE;
+    if (!ctx || !function || !value || !out || !function->semantic_plan)
+        return false;
+    const CgValueEmissionRegistryEntry *entry = NULL;
+    for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
+        if (ctx->value_emission_registry[i].semantic_plan == function->semantic_plan) {
+            if (entry)
+                return false;
+            entry = &ctx->value_emission_registry[i];
+        }
+    }
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    char error[256] = {0};
+    return entry && xr_aot_scalar_semantic_value_id(
+                        entry->target_plan, function, value, &semantic_function,
+                        out, error, sizeof(error)) &&
+           semantic_function == function->semantic_plan_function_index;
+}
+
 static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx,
                                         const XrCValueEmissionView *view,
                                         XaotRep *out) {
@@ -2643,6 +2668,9 @@ static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx,
             return true;
         case XR_C_VALUE_REP_TAGGED:
             *out = XAOT_REP_TAGGED;
+            return true;
+        case XR_C_VALUE_REP_VIEW:
+            *out = XAOT_REP_SLICE;
             return true;
         case XR_C_VALUE_REP_VOID:
             *out = XAOT_REP_VOID;
@@ -2704,6 +2732,12 @@ static bool cg_value_emission_storage_rep(XiCgenCtx *ctx,
             *out = XR_REP_I64;
             return true;
         case XR_C_VALUE_REP_TAGGED:
+            *out = XR_REP_TAGGED;
+            return true;
+        case XR_C_VALUE_REP_VIEW:
+            /* XrRep has no aggregate carrier. VIEW retains the historical
+             * aggregate lowering token while its declaration and recipe come
+             * solely from the immutable emission row. */
             *out = XR_REP_TAGGED;
             return true;
         case XR_C_VALUE_REP_COUNT: break;

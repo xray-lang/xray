@@ -42,6 +42,7 @@
 #include "xi_coro_analyze.h"
 #include "xi_value_query.h"
 #include "xi_receiver_alias.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -610,8 +611,9 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
         user->args[0] == member)
         return true;
     if (user->op == XI_CALL_BUILTIN && arc_type_is_span_view(user->type) && user->nargs >= 1 &&
-        user->args[0] == member && user->aux &&
-        strcmp((const char *) user->aux, "string_byte_slice") == 0)
+        user->args[0] == member &&
+        user->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW &&
+        user->view_evidence.complete && user->view_evidence.source_operand == 0)
         return true;
     if (!arc_value_is_span_view_carrier(member))
         return false;

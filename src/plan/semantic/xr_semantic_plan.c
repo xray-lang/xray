@@ -140,7 +140,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v21\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v22\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -328,6 +328,15 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, (uint16_t) op->return_parameter);
         hash_u64(&ctx, op->return_provenance);
         hash_u64(&ctx, op->return_complete);
+        hash_u64(&ctx, op->view_source_value);
+        hash_u64(&ctx, op->view_element_type);
+        hash_u64(&ctx, (uint16_t) op->view_source_operand);
+        hash_u64(&ctx, (uint16_t) op->view_source_parameter);
+        hash_u64(&ctx, op->intrinsic_kind);
+        hash_u64(&ctx, op->view_origin);
+        hash_u64(&ctx, op->view_capability);
+        hash_u64(&ctx, op->view_lifetime);
+        hash_u64(&ctx, op->view_complete);
     }
     for (uint32_t i = 0; i < plan->call_target_count; i++) {
         const XrSemanticCallTargetRecord *target = &plan->call_targets[i];

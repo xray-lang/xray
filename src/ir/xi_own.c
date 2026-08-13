@@ -31,6 +31,7 @@
 #include "xi_ops_gen.h"
 #include "xi_value_query.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
@@ -212,12 +213,16 @@ static bool low_level_byte_method_arg_is_borrowed(const XiValue *user, uint16_t 
 }
 
 static bool builtin_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
-    if (!user || user->op != XI_CALL_BUILTIN || !user->aux)
+    if (!user || user->op != XI_CALL_BUILTIN)
+        return false;
+
+    if (user->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW &&
+        user->view_evidence.complete && user->view_evidence.source_operand == 0)
+        return arg_idx == 0;
+
+    if (!user->aux)
         return false;
     const char *name = (const char *) user->aux;
-
-    if (strcmp(name, "string_byte_slice") == 0)
-        return arg_idx == 0;
 
     if (strcmp(name, "array_clear") == 0 || strcmp(name, "array_reserve") == 0 ||
         strcmp(name, "array_resize") == 0) {

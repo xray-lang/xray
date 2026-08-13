@@ -17,6 +17,7 @@
 #include "xr_target_plan_internal.h"
 #include "xr_target_profile_internal.h"
 #include "../../base/xmalloc.h"
+#include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
@@ -466,6 +467,25 @@ static bool make_borrowed_dynamic_value_rep(const XrTargetMachineFacts *profile,
     if (!make_dynamic_value_rep(profile, out))
         return false;
     out->ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    return true;
+}
+
+static bool make_string_byte_slice_view_rep(const XrTargetMachineFacts *profile,
+                                            XrTargetMachineRepRecord *out) {
+    if (!profile || !out || profile->data_layout.pointer.size != 8u ||
+        profile->data_layout.pointer.align != 8u || profile->data_layout.i64.size != 8u ||
+        profile->data_layout.i64.align != 8u)
+        return false;
+    *out = (XrTargetMachineRepRecord) {
+        .kind = XR_MACHINE_REP_VIEW,
+        .register_bits = 128,
+        .memory_size = 16,
+        .memory_align = 8,
+        .root_kind = XR_TARGET_ROOT_VIEW_OWNER,
+        .ownership = XR_TARGET_OWNERSHIP_BORROWED,
+        .null_encoding = XR_TARGET_NULL_NOT_NULLABLE,
+        .detail = XR_SEMANTIC_INDEX_NONE,
+    };
     return true;
 }
 
@@ -1736,6 +1756,166 @@ static bool note_closure_storage_value(
     return true;
 }
 
+static bool semantic_string_byte_slice_view_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    if (!plan || !operation || operation->opcode != XI_CALL_BUILTIN ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW ||
+        operation->evidence[1] != XA_INTRINSIC_STRING_BYTE_SLICE_VIEW ||
+        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
+        operation->view_source_operand != 0 || operation->view_source_parameter != -1 ||
+        operation->view_origin != XI_VIEW_ORIGIN_RECEIVER || operation->view_capability != 1 ||
+        operation->view_lifetime != 1 || operation->view_complete != 1 ||
+        operation->view_element_type >= xr_semantic_plan_type_count(plan))
+        return false;
+    const XrSemanticOperandRecord *source = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *source_type = xr_semantic_plan_type(plan, source->type);
+    const XrSemanticTypeRecord *result_type = xr_semantic_plan_type(plan, operation->result_type);
+    const XrSemanticTypeRecord *element_type =
+        xr_semantic_plan_type(plan, operation->view_element_type);
+    return source->value == operation->view_source_value && source->parameter == 0 &&
+           source->role == XR_SEM_OPERAND_ARGUMENT &&
+           (source->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 && source_type &&
+           source_type->kind == XR_KIND_STRING && source_type->scalar_rep == XR_SCALAR_REP_NONE &&
+           result_type && result_type->kind == XR_KIND_SLICE && result_type->child_count == 1 &&
+           result_type->child_begin < child_count &&
+           children[result_type->child_begin] == operation->view_element_type &&
+           result_type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW) &&
+           element_type && element_type->kind == XR_KIND_INT &&
+           element_type->scalar_rep == XR_NATIVE_U8;
+}
+
+static bool semantic_u8_slice_type_is_exact(const XrSemanticPlan *plan,
+                                            uint32_t type_index) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, type_index);
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    const uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW;
+    const uint8_t allowed = required | XR_SEM_TYPE_CONST;
+    if (!type || type->kind != XR_KIND_SLICE || type->builtin_type != XR_TID_NULL ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->aggregate_extent != 0 ||
+        type->aggregate_align != 0 || type->child_count != 1 ||
+        type->child_begin >= child_count || (type->flags & required) != required ||
+        (type->flags & ~allowed) != 0)
+        return false;
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(plan, children[type->child_begin]);
+    return element && element->kind == XR_KIND_INT &&
+           element->builtin_type == XR_TID_NULL && element->scalar_rep == XR_NATIVE_U8 &&
+           element->flags == 0 && element->child_count == 0 &&
+           element->aggregate_extent == 0 && element->aggregate_align == 0;
+}
+
+static bool semantic_u8_slice_parameter_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter) {
+    return parameter && parameter->function < xr_semantic_plan_function_count(plan) &&
+           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == XR_PARAM_READ &&
+           parameter->ownership == XI_OWN_BORROWED &&
+           parameter->transfer_mode == XR_TRANSFER_SHARE &&
+           (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 &&
+           parameter->reserved == 0 && semantic_u8_slice_type_is_exact(plan, parameter->type);
+}
+
+static bool note_u8_slice_view_parameter_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    const XrSemanticParameterRecord *parameter, char *error, size_t error_size) {
+    if (!semantic_u8_slice_parameter_is_exact(builder->semantic_plan, parameter) ||
+        parameter->value >= analysis->total_values || parameter->type >= analysis->type_count)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "byte-slice view parameter storage requires exact authority");
+    if (analysis->defined_values[parameter->value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "byte-slice view parameter storage is duplicated");
+    XrTargetMachineRepRecord rep;
+    if (!make_string_byte_slice_view_rep(xr_target_profile_machine_facts(builder->profile), &rep))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize byte-slice parameter ABI");
+    rep.detail = parameter->type;
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, parameter->function, XR_TARGET_SLOT_PARAMETER,
+                            parameter->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "byte-slice parameter slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = parameter->function,
+        .semantic_value = parameter->value,
+        .semantic_operation = XR_SEMANTIC_INDEX_NONE,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_PARAMETER,
+        .root_kind = rep.root_kind,
+        .ownership = rep.ownership,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = parameter->value,
+        .semantic_function = parameter->function,
+        .semantic_type = parameter->type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    analysis->defined_values[parameter->value] = 1;
+    analysis->value_types[parameter->value] = parameter->type;
+    analysis->value_functions[parameter->value] = parameter->function;
+    return append_rep_intent(builder, &rep, error, error_size) &&
+           append_slot_intent(builder, &slot, error, error_size) &&
+           append_layout_intent(builder, parameter->type, XR_TARGET_LAYOUT_VIEW, 0, &rep, error,
+                                error_size) &&
+           append_value_intent(builder, &value, error, error_size);
+}
+
+static bool note_string_byte_slice_view_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
+    if (!semantic_string_byte_slice_view_is_exact(builder->semantic_plan, operation) ||
+        operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "string byte-slice view storage requires exact authority");
+    if (analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "string byte-slice view storage is duplicated");
+    XrTargetMachineRepRecord rep;
+    if (!make_string_byte_slice_view_rep(xr_target_profile_machine_facts(builder->profile), &rep))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize string byte-slice view ABI");
+    rep.detail = operation->result_type;
+    if (!append_rep_intent(builder, &rep, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
+                            operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001", "view slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity, .function = operation->function,
+        .semantic_value = operation->result_value, .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE, .register_rep = rep, .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY, .root_kind = rep.root_kind,
+        .ownership = rep.ownership, .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value, .semantic_function = operation->function,
+        .semantic_type = operation->result_type, .register_rep = rep, .memory_rep = rep,
+        .slot_identity = slot_identity, .has_slot = true,
+    };
+    return append_slot_intent(builder, &slot, error, error_size) &&
+           append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_VIEW, 0, &rep,
+                                error, error_size) &&
+           append_value_intent(builder, &value, error, error_size);
+}
+
 static bool note_string_literal_storage_value(
     XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
     uint32_t semantic_operation, char *error, size_t error_size) {
@@ -2316,6 +2496,39 @@ static bool builder_add_string_literal_storage(
     }
     builder->completed_family_mask |=
         XR_TARGET_FAMILY_STRING_LITERAL_STORAGE;
+    return true;
+}
+
+static bool builder_add_string_byte_slice_view_storage(
+    XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    size_t parameter_count = xr_semantic_plan_parameter_count(builder->semantic_plan);
+    for (uint32_t i = 0; i < (uint32_t) parameter_count && valid; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(builder->semantic_plan, i);
+        if (!semantic_u8_slice_parameter_is_exact(builder->semantic_plan, parameter))
+            continue;
+        valid = note_u8_slice_view_parameter_storage_value(builder, &analysis, parameter, error,
+                                                           error_size);
+    }
+    size_t operation_count = xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; i < (uint32_t) operation_count && valid; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW)
+            continue;
+        valid = note_string_byte_slice_view_storage_value(builder, &analysis, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE;
     return true;
 }
 
@@ -3564,6 +3777,36 @@ static bool collect_stringbuilder_constructor_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_string_byte_slice_view_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
+    if (!semantic_string_byte_slice_view_is_exact(builder->semantic_plan, operation))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "string byte-slice view target authority is incomplete");
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_BORROW,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_STRING_BYTE_SLICE_VIEW,
+        .target_kind = XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW,
+    };
+    if (!stable_identity_from_pair("xray-target-string-byte-slice-view-v1", operation->id,
+                                   xr_semantic_plan_type(builder->semantic_plan,
+                                                         operation->result_type)->id,
+                                   0, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "string byte-slice view call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
                                              uint32_t target_index,
                                              const XrSemanticCallTargetRecord *target,
@@ -3637,15 +3880,19 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
             xr_semantic_plan_parameter(plan, parameter_index);
         uint32_t semantic_operand = operation->operand_begin + ordinal + 1u;
         const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        bool exact_scalar = call_type_is_exact_scalar(plan, operand->type);
+        bool exact_u8_slice = semantic_u8_slice_parameter_is_exact(plan, parameter) &&
+                              semantic_u8_slice_type_is_exact(plan, operand->type);
         if (!parameter || operand->role != XR_SEM_OPERAND_ARGUMENT ||
             operand->parameter != (int16_t) ordinal || operand->type != parameter->type ||
             operand->parameter_mode != parameter->mode ||
             operand->transfer_mode != parameter->transfer_mode ||
             (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
-            !call_type_is_exact_scalar(plan, operand->type) ||
+            (!exact_scalar && !exact_u8_slice) ||
             parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
             (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0 ||
-            parameter->ownership != XI_OWN_NONE)
+            (parameter->ownership != XI_OWN_NONE &&
+             !(exact_u8_slice && parameter->ownership == XI_OWN_BORROWED)))
             return fail(error, error_size, "XR_TARGET_1003",
                         "direct-local argument contract needs unsupported storage or ownership");
         XrTargetCallArgumentIntent argument = {
@@ -3877,6 +4124,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                         builder, &stringbuilder_values, i, error, error_size) &&
                     collect_stringbuilder_constructor_call_intent(
                         builder, i, operation, error, error_size);
+        } else if (semantic_string_byte_slice_view_is_exact(plan, operation)) {
+            valid = collect_string_byte_slice_view_call_intent(builder, i, operation,
+                                                               error, error_size);
         } else if (semantic_operation_is_call_shaped(plan, operation)) {
             valid = fail(error, error_size, "XR_TARGET_1003",
                          "call-shaped operation has no exact target authority");
@@ -4007,7 +4257,8 @@ static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
     XrTargetLayoutIntent *intent = &builder->layout_intents[index];
     XrTargetLayoutRecord *layout = &materialized->layouts[index];
     if (intent->kind == XR_TARGET_LAYOUT_SCALAR ||
-        intent->kind == XR_TARGET_LAYOUT_DYNAMIC) {
+        intent->kind == XR_TARGET_LAYOUT_DYNAMIC ||
+        intent->kind == XR_TARGET_LAYOUT_VIEW) {
         layout->align = intent->memory_rep.memory_align;
         layout->fixed_prefix_size = intent->memory_rep.memory_size;
         states[index] = 2;
@@ -5158,6 +5409,7 @@ bool xr_target_plan_build_module_set(
     if (!builder_add_scalars(builder, error, error_size) ||
         !builder_add_closure_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
+        !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||
         !builder_add_direct_local_callee_storage(builder, error, error_size) ||
         !builder_add_direct_local_go_callee_storage(builder, error, error_size) ||
         !builder_add_channel_allocation_storage(builder, error, error_size) ||

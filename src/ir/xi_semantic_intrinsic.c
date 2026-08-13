@@ -121,6 +121,8 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_CODEGEN_OPAQUE;
         case XA_INTRINSIC_LOWERING_CODEGEN_COMPILER_FENCE:
             return XI_CODEGEN_COMPILER_FENCE;
+        case XA_INTRINSIC_LOWERING_STRING_BYTE_SLICE_VIEW:
+            return XI_CALL_BUILTIN;
         case XA_INTRINSIC_LOWERING_NONE:
             return XI_OP_COUNT;
     }
@@ -297,6 +299,32 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
             return set_error(error, error_size,
                              "canonical codegen intrinsic id %u has unexpected metadata",
                              value->xa_intrinsic_id);
+    } else if (desc->family == XA_INTRINSIC_FAMILY_CORE) {
+        if (desc->id != XA_INTRINSIC_STRING_BYTE_SLICE_VIEW || value->op != XI_CALL_BUILTIN ||
+            value->nargs != 1 || !value->args || !value->args[0] ||
+            !value->args[0]->type || value->args[0]->type->kind != XR_KIND_STRING ||
+            !xr_type_is_u8_slice(value->type) || value->aux || value->aux_int != 0 ||
+            !value->view_evidence.complete ||
+            value->view_evidence.origin != XI_VIEW_ORIGIN_RECEIVER ||
+            value->view_evidence.source_operand != 0 ||
+            value->view_evidence.source_param != -1 ||
+            value->view_evidence.root_value_id != value->args[0]->id ||
+            value->view_evidence.capability != 1 || value->view_evidence.lifetime != 1)
+            return set_error(
+                error, error_size,
+                "canonical string byte-slice intrinsic id %u has invalid view proof "
+                "(recv=%u root=%u u8slice=%u elem_kind=%u elem_rep=%u element_id=%u)",
+                value->xa_intrinsic_id,
+                value->args && value->args[0] ? value->args[0]->id : UINT32_MAX,
+                value->view_evidence.root_value_id,
+                xr_type_is_u8_slice(value->type) ? 1u : 0u,
+                value->type && value->type->container.element_type
+                    ? (unsigned) value->type->container.element_type->kind
+                    : UINT32_MAX,
+                value->type && value->type->container.element_type
+                    ? (unsigned) value->type->container.element_type->scalar_rep
+                    : UINT32_MAX,
+                value->view_evidence.element_type_id);
     } else {
         return set_error(error, error_size, "canonical intrinsic id %u has unsupported family %u",
                          value->xa_intrinsic_id, (unsigned) desc->family);

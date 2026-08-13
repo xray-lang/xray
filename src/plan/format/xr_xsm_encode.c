@@ -235,6 +235,16 @@ static void encode_operations(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u16(writer, (uint16_t) record->return_parameter);
         xr_xsm_put_u8(writer, record->return_provenance);
         xr_xsm_put_u8(writer, record->return_complete);
+        xr_xsm_put_u32(writer, record->view_source_value);
+        xr_xsm_put_u32(writer, record->view_element_type);
+        xr_xsm_put_u16(writer, (uint16_t) record->view_source_operand);
+        xr_xsm_put_u16(writer, (uint16_t) record->view_source_parameter);
+        xr_xsm_put_u8(writer, record->intrinsic_kind);
+        xr_xsm_put_u8(writer, record->view_origin);
+        xr_xsm_put_u8(writer, record->view_capability);
+        xr_xsm_put_u8(writer, record->view_lifetime);
+        xr_xsm_put_u8(writer, record->view_complete);
+        xr_xsm_put_bytes(writer, record->reserved_view, sizeof(record->reserved_view));
     }
     for (uint32_t i = 0; i < plan->operand_count; i++) {
         const XrSemanticOperandRecord *record = &plan->operands[i];

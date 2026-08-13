@@ -91,8 +91,11 @@ const char *xa_intrinsic_source_member(const XaIntrinsicDesc *desc) {
 
 XaIntrinsicId xa_intrinsic_compiler_receiver_method(const XrType *receiver,
                                                     const char *member_name) {
-    if (!receiver || !member_name || receiver->kind != XR_KIND_INSTANCE ||
-        !xr_type_is_builtin_named_class(receiver, "Atomic"))
+    if (!receiver || !member_name)
+        return XA_INTRINSIC_NONE;
+    if (receiver->kind == XR_KIND_STRING && strcmp(member_name, "bytes") == 0)
+        return XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
+    if (receiver->kind != XR_KIND_INSTANCE || !xr_type_is_builtin_named_class(receiver, "Atomic"))
         return XA_INTRINSIC_NONE;
     for (size_t i = 0; i < xa_intrinsic_count(); i++) {
         const XaIntrinsicDesc *desc = &g_intrinsics[i];

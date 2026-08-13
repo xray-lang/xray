@@ -194,6 +194,7 @@ static bool adapter_target_rep_is_exact(const XrTargetPlan *target_plan,
         case XR_MACHINE_REP_ISIZE:
         case XR_MACHINE_REP_USIZE:
         case XR_MACHINE_REP_RUNE: return value->rep == XR_REP_I64;
+        case XR_MACHINE_REP_VIEW: return value->rep == XR_REP_PTR;
         default: return false;
     }
 }
@@ -230,6 +231,7 @@ static bool adapter_source_rep_is_exact(
         case XR_MACHINE_REP_ISIZE:
         case XR_MACHINE_REP_USIZE:
         case XR_MACHINE_REP_RUNE: return source->rep == XR_REP_I64;
+        case XR_MACHINE_REP_VIEW: return source->rep == XR_REP_PTR;
         default: return false;
     }
 }

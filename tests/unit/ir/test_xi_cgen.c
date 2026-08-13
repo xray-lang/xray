@@ -11343,6 +11343,10 @@ TEST(cgen_hosted_byte_slice_boundary_uses_layout_neutral_view) {
     char *code = generate_c_with_status_and_stats_for_artifact(ir, "test", &had_error, NULL,
                                                                XAOT_ARTIFACT_HOSTED_FRAGMENT);
     TEST_REQUIRE(code != NULL && !had_error, "hosted byte-slice C bridge generated");
+    TEST_REQUIRE(contains(code, "xrt_span_from_string_bytes("),
+                 "String.bytes mechanically consumes the frozen C emission recipe");
+    TEST_REQUIRE(!contains(code, "xrt_str_to_bytes("),
+                 "String.bytes has no legacy allocating conversion fallback");
     TEST_REQUIRE(contains(code, "XrHostedFragmentByteSpanView _hosted_byte_span_0"),
                  "byte slice is borrowed through the hosted byte-span ABI");
     TEST_REQUIRE(contains(code, "context->ops->byte_span_view"),

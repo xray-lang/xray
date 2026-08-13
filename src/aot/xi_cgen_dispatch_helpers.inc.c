@@ -7256,20 +7256,42 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         xicgen_array_new(ctx, out, f, v, prefix);
     } else if (emit_array_bytes_builtin_expr(ctx, out, f, v, bn)) {
         /* Expression emitted by the array/bytes helper. */
-    } else if (strcmp(bn, "string_byte_slice") == 0) {
-        XR_DCHECK(v->nargs >= 1, "builtin string_byte_slice: need string arg");
-        if (cg_value_plan_is_span_aggregate(ctx, v)) {
-            fprintf(out, "xrt_span_from_string_bytes(");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-            fprintf(out, ")");
-        } else {
-            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
-                                                             cg_value_plan_storage_rep(ctx, v));
-            fprintf(out, "xrt_str_to_bytes(");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-            fprintf(out, ")");
-            emit_conversion_suffix(out, conv_suffix);
+    } else if (v->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
+        XrCValueEmissionView emission = {0};
+        XrCValueEmissionView source = {0};
+        CgValueEmissionStatus source_status =
+            v->nargs == 1 && v->args[0]
+                ? cg_value_emission_view(ctx, f, v->args[0], &source)
+                : CG_VALUE_EMISSION_ERROR;
+        CgValueEmissionStatus result_status =
+            cg_value_emission_view(ctx, f, v, &emission);
+        uint32_t source_semantic_value = XR_SEMANTIC_INDEX_NONE;
+        bool source_identity = v->nargs == 1 && v->args[0] &&
+                               cg_value_semantic_id(ctx, f, v->args[0],
+                                                    &source_semantic_value);
+        if (v->nargs != 1 || !v->args[0] ||
+            result_status != CG_VALUE_EMISSION_FOUND ||
+            emission.rep != XR_C_VALUE_REP_VIEW ||
+            emission.materialization !=
+                XR_C_VALUE_MATERIALIZATION_STRING_BYTE_SLICE_VIEW ||
+            !emission.recipe_symbol || !source_identity ||
+            emission.recipe_operand_value != source_semantic_value ||
+            (source_status == CG_VALUE_EMISSION_FOUND &&
+             source.rep != XR_C_VALUE_REP_TAGGED) ||
+            (source_status == CG_VALUE_EMISSION_ERROR ||
+             source_status == CG_VALUE_EMISSION_NOT_CONFIGURED)) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: immutable string byte-slice view recipe is missing "
+                    "(result=%u source=%u result-rep=%u materialization=%u)\n",
+                    (unsigned) result_status, (unsigned) source_status,
+                    (unsigned) emission.rep, (unsigned) emission.materialization);
+            emit_codegen_abort_expr(out);
+            cg_ctx_set_error(ctx);
+            return;
         }
+        fprintf(out, "%s(", emission.recipe_symbol);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
     } else if (strcmp(bn, "StringBuilder") == 0) {
         XrCValueEmissionView emission = {0};
         if (cg_value_emission_view(ctx, f, v, &emission) !=

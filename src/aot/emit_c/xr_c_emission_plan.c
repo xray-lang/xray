@@ -15,17 +15,19 @@
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../ir/xi_own.h"
+#include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(10)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(11)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
 #define XR_C_CHANNEL_RECV_FLOAT_SYMBOL "XR_TO_FLOAT"
 #define XR_C_CHANNEL_RECV_BOOL_SYMBOL "XR_TO_BOOL"
 #define XR_C_CHANNEL_RECV_RUNE_SYMBOL "XR_TO_RUNE"
+#define XR_C_STRING_BYTE_SLICE_VIEW_SYMBOL "xrt_span_from_string_bytes"
 
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
@@ -112,6 +114,10 @@ static bool machine_kind_to_c_rep(uint16_t kind, XrCValueRep *out, const char **
             *out = XR_C_VALUE_REP_TAGGED;
             *c_type = "XrValue";
             return true;
+        case XR_MACHINE_REP_VIEW:
+            *out = XR_C_VALUE_REP_VIEW;
+            *c_type = "xr_span_t";
+            return true;
         default: return false;
     }
 }
@@ -122,6 +128,23 @@ static bool emission_stable_id_is_zero(XrStableId id) {
             return false;
     }
     return true;
+}
+
+static bool emission_identity_from_pair(const char *domain, XrStableId first,
+                                        XrStableId second, uint32_t ordinal,
+                                        XrStableId *out) {
+    char first_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char second_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[192];
+    XrFingerprint digest;
+    if (!domain || !out)
+        return false;
+    xr_stable_id_hex(first, first_hex);
+    xr_stable_id_hex(second, second_hex);
+    int written = snprintf(key, sizeof(key), "%s:first=%s:second=%s:ordinal=%u",
+                           domain, first_hex, second_hex, ordinal);
+    return written > 0 && (size_t) written < sizeof(key) &&
+           xr_stable_id_from_key(key, out, &digest);
 }
 
 static const XrSemanticOperationRecord *binding_operation(
@@ -138,6 +161,212 @@ static const XrSemanticOperationRecord *binding_operation(
     return operation < xr_semantic_plan_operation_count(semantic)
                ? xr_semantic_plan_operation(semantic, operation)
                : NULL;
+}
+
+/* Builder-side collector. The recipe is admitted only by the frozen
+ * intrinsic evidence and its exact Target call row; no Xi name survives at
+ * this boundary. */
+static bool build_exact_string_byte_slice_view_recipe(
+    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
+    uint32_t *source_value) {
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    if (!semantic || !operation || !binding || !operands || !slots ||
+        binding->slot >= slot_count || operation->opcode != XI_CALL_BUILTIN ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW ||
+        operation->evidence[1] != XA_INTRINSIC_STRING_BYTE_SLICE_VIEW ||
+        operation->result_value != binding->semantic_value ||
+        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
+        operation->view_source_operand != 0 || operation->view_source_parameter != -1 ||
+        operation->view_source_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->view_origin != XI_VIEW_ORIGIN_RECEIVER ||
+        operation->view_capability != 1 || operation->view_lifetime != 1 ||
+        operation->view_complete != 1 || operation->reserved_view[0] != 0 ||
+        operation->reserved_view[1] != 0 || operation->reserved_view[2] != 0 ||
+        operands[operation->operand_begin].value != operation->view_source_value ||
+        operands[operation->operand_begin].parameter != 0 ||
+        operands[operation->operand_begin].role != XR_SEM_OPERAND_ARGUMENT ||
+        (operands[operation->operand_begin].flags &
+         XR_SEM_OPERAND_CALL_CONTRACT) == 0)
+        return false;
+    const XrSemanticOperandRecord *source =
+        &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *source_type =
+        xr_semantic_plan_type(semantic, source->type);
+    const XrSemanticTypeRecord *element_type =
+        xr_semantic_plan_type(semantic, operation->view_element_type);
+    const XrSemanticTypeRecord *view_type =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_count);
+    const uint8_t string_required = XR_SEM_TYPE_REFERENCE_CAPABLE |
+                                    XR_SEM_TYPE_OWNERSHIP_ROOT;
+    const uint8_t string_allowed = string_required | XR_SEM_TYPE_CONST |
+                                   XR_SEM_TYPE_NULLABLE;
+    if (!source_type || source_type->kind != XR_KIND_STRING ||
+        source_type->builtin_type != XR_TID_NULL || source_type->child_count != 0 ||
+        source_type->aggregate_extent != 0 || source_type->aggregate_align != 0 ||
+        source_type->scalar_rep != XR_SCALAR_REP_NONE ||
+        (source_type->flags & string_required) != string_required ||
+        (source_type->flags & ~string_allowed) != 0 || !element_type ||
+        element_type->kind != XR_KIND_INT || element_type->builtin_type != XR_TID_NULL ||
+        element_type->child_count != 0 || element_type->aggregate_extent != 0 ||
+        element_type->aggregate_align != 0 || element_type->scalar_rep != XR_NATIVE_U8 ||
+        element_type->flags != 0 || !view_type || view_type->kind != XR_KIND_SLICE ||
+        view_type->builtin_type != XR_TID_NULL || view_type->child_count != 1 ||
+        view_type->child_begin >= child_count ||
+        children[view_type->child_begin] != operation->view_element_type ||
+        view_type->aggregate_extent != 0 || view_type->aggregate_align != 0 ||
+        view_type->scalar_rep != XR_SCALAR_REP_NONE ||
+        view_type->flags !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW))
+        return false;
+    uint32_t semantic_operation = slots[binding->slot].semantic_operation;
+    XrStableId expected_identity;
+    if (!emission_identity_from_pair("xray-target-string-byte-slice-view-v1",
+                                     operation->id, view_type->id, 0,
+                                     &expected_identity))
+        return false;
+    const XrTargetCallRecord *match = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        const XrTargetCallRecord *call = &calls[i];
+        if (call->semantic_operation != semantic_operation)
+            continue;
+        if (match || !xr_stable_id_equal(call->identity, expected_identity) ||
+            call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+            call->caller_function != operation->function ||
+            call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+            call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+            call->source_export != XR_SEMANTIC_INDEX_NONE ||
+            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_callee_identity) ||
+            call->result_value != binding->semantic_value ||
+            call->result_slot != binding->slot ||
+            call->result_register_rep != binding->register_rep ||
+            call->result_memory_rep != binding->memory_rep ||
+            call->argument_count != 0 || call->adapter_count != 0 ||
+            call->flags != 0 || call->result_mode != XR_TARGET_CALL_VALUE ||
+            call->result_ownership != XR_TARGET_CALL_BORROW ||
+            call->calling_convention !=
+                XR_TARGET_CALL_CONVENTION_STRING_BYTE_SLICE_VIEW ||
+            call->target_kind != XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW)
+            return false;
+        match = call;
+    }
+    if (!match)
+        return false;
+    if (source_value)
+        *source_value = operation->view_source_value;
+    return true;
+}
+
+/* Verifier-side proof is deliberately separate from the collector above. */
+static bool verify_exact_string_byte_slice_view_recipe(
+    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
+    uint32_t *source_value) {
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *op = binding_operation(target_plan, binding);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operand_rows =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_count);
+    if (!semantic || !binding || !op || !operand_rows ||
+        op->opcode != XI_CALL_BUILTIN ||
+        op->intrinsic_kind != XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW ||
+        op->evidence[1] != XA_INTRINSIC_STRING_BYTE_SLICE_VIEW ||
+        op->operand_count != 1 || op->operand_begin >= operand_count ||
+        op->result_value != binding->semantic_value ||
+        op->view_source_operand != 0 || op->view_source_parameter != -1 ||
+        op->view_origin != XI_VIEW_ORIGIN_RECEIVER || op->view_capability != 1 ||
+        op->view_lifetime != 1 || op->view_complete != 1 ||
+        op->reserved_view[0] != 0 || op->reserved_view[1] != 0 ||
+        op->reserved_view[2] != 0)
+        return false;
+    const XrSemanticOperandRecord *source = &operand_rows[op->operand_begin];
+    const XrSemanticTypeRecord *source_type =
+        xr_semantic_plan_type(semantic, source->type);
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(semantic, op->view_element_type);
+    const XrSemanticTypeRecord *view =
+        xr_semantic_plan_type(semantic, op->result_type);
+    const uint8_t source_required = XR_SEM_TYPE_REFERENCE_CAPABLE |
+                                    XR_SEM_TYPE_OWNERSHIP_ROOT;
+    const uint8_t source_allowed = source_required | XR_SEM_TYPE_CONST |
+                                   XR_SEM_TYPE_NULLABLE;
+    if (source->value != op->view_source_value || source->parameter != 0 ||
+        source->role != XR_SEM_OPERAND_ARGUMENT ||
+        (source->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 || !source_type ||
+        source_type->kind != XR_KIND_STRING || source_type->builtin_type != XR_TID_NULL ||
+        source_type->child_count != 0 || source_type->aggregate_extent != 0 ||
+        source_type->aggregate_align != 0 || source_type->scalar_rep != XR_SCALAR_REP_NONE ||
+        (source_type->flags & source_required) != source_required ||
+        (source_type->flags & ~source_allowed) != 0 || !element ||
+        element->kind != XR_KIND_INT || element->builtin_type != XR_TID_NULL ||
+        element->child_count != 0 || element->aggregate_extent != 0 ||
+        element->aggregate_align != 0 || element->scalar_rep != XR_NATIVE_U8 ||
+        element->flags != 0 || !view || view->kind != XR_KIND_SLICE ||
+        view->builtin_type != XR_TID_NULL || view->child_count != 1 ||
+        view->child_begin >= child_count ||
+        children[view->child_begin] != op->view_element_type ||
+        view->aggregate_extent != 0 || view->aggregate_align != 0 ||
+        view->scalar_rep != XR_SCALAR_REP_NONE ||
+        view->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW))
+        return false;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(target_plan, &slot_count);
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
+    if (!slots || binding->slot >= slot_count)
+        return false;
+    XrStableId expected;
+    if (!emission_identity_from_pair("xray-target-string-byte-slice-view-v1",
+                                     op->id, view->id, 0, &expected))
+        return false;
+    uint32_t semantic_operation = slots[binding->slot].semantic_operation;
+    uint32_t matches = 0;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        const XrTargetCallRecord *call = &calls[i];
+        if (call->semantic_operation != semantic_operation)
+            continue;
+        matches++;
+        if (!xr_stable_id_equal(call->identity, expected) ||
+            call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+            call->caller_function != op->function ||
+            call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+            call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+            call->source_export != XR_SEMANTIC_INDEX_NONE ||
+            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_callee_identity) ||
+            call->result_value != binding->semantic_value ||
+            call->result_slot != binding->slot ||
+            call->result_register_rep != binding->register_rep ||
+            call->result_memory_rep != binding->memory_rep ||
+            call->argument_count != 0 || call->adapter_count != 0 || call->flags != 0 ||
+            call->result_mode != XR_TARGET_CALL_VALUE ||
+            call->result_ownership != XR_TARGET_CALL_BORROW ||
+            call->calling_convention != XR_TARGET_CALL_CONVENTION_STRING_BYTE_SLICE_VIEW ||
+            call->target_kind != XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW)
+            return false;
+    }
+    if (matches != 1)
+        return false;
+    if (source_value)
+        *source_value = source->value;
+    return true;
 }
 
 static bool emission_allocation_identity_is_canonical(
@@ -601,7 +830,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v10\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v11\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -713,6 +942,10 @@ static bool verify_value(const XrCValueEmissionView *value) {
             expected_rep = XR_C_VALUE_REP_TAGGED;
             expected_c_type = "XrValue";
             break;
+        case XR_MACHINE_REP_VIEW:
+            expected_rep = XR_C_VALUE_REP_VIEW;
+            expected_c_type = "xr_span_t";
+            break;
         default: return false;
     }
     bool recipe_valid = value->materialization ==
@@ -758,6 +991,15 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_symbol &&
                        strcmp(value->recipe_symbol,
                               XR_C_STRINGBUILDER_NEW_SYMBOL) == 0;
+    if (value->materialization ==
+        XR_C_VALUE_MATERIALIZATION_STRING_BYTE_SLICE_VIEW)
+        recipe_valid = value->rep == XR_C_VALUE_REP_VIEW &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_symbol &&
+                       strcmp(value->recipe_symbol,
+                              XR_C_STRING_BYTE_SLICE_VIEW_SYMBOL) == 0;
     return expected_rep == (XrCValueRep) value->rep && value->c_type &&
            value->reserved == 0 && recipe_valid &&
            strcmp(value->c_type, expected_c_type) == 0 &&
@@ -851,6 +1093,10 @@ static bool verify_target_kind_projection(uint16_t kind,
         case XR_MACHINE_REP_DYN_VALUE:
             *out_rep = XR_C_VALUE_REP_TAGGED;
             *out_c_type = "XrValue";
+            return true;
+        case XR_MACHINE_REP_VIEW:
+            *out_rep = XR_C_VALUE_REP_VIEW;
+            *out_c_type = "xr_span_t";
             return true;
         default: return false;
     }
@@ -948,6 +1194,10 @@ bool xr_c_emission_plan_verify(
                                            &expected_receiver);
         bool expected_stringbuilder =
             exact_stringbuilder_new_recipe(target_plan, binding);
+        uint32_t expected_view_source = UINT32_MAX;
+        bool expected_string_byte_slice_view =
+            verify_exact_string_byte_slice_view_recipe(
+                target_plan, binding, &expected_view_source);
         uint8_t expected_recipe = expected_literal
                                       ? XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW
                                       : expected_channel
@@ -956,19 +1206,25 @@ bool xr_c_emission_plan_verify(
                                                   ? XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD
                                                   : expected_stringbuilder
                                                         ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW
-                                                        : XR_C_VALUE_MATERIALIZATION_NONE;
+                                                        : expected_string_byte_slice_view
+                                                              ? XR_C_VALUE_MATERIALIZATION_STRING_BYTE_SLICE_VIEW
+                                                              : XR_C_VALUE_MATERIALIZATION_NONE;
         uint32_t expected_operand = expected_channel
                                         ? expected_capacity
                                         : expected_receive_symbol
                                               ? expected_receiver
-                                              : UINT32_MAX;
+                                              : expected_string_byte_slice_view
+                                                    ? expected_view_source
+                                                    : UINT32_MAX;
         const char *expected_symbol = expected_channel
                                           ? XR_C_CHANNEL_NEW_SYMBOL
                                           : expected_receive_symbol
                                                 ? expected_receive_symbol
                                                 : expected_stringbuilder
                                                       ? XR_C_STRINGBUILDER_NEW_SYMBOL
-                                                      : NULL;
+                                                      : expected_string_byte_slice_view
+                                                            ? XR_C_STRING_BYTE_SLICE_VIEW_SYMBOL
+                                                            : NULL;
         size_t expected_length = expected_literal ? strlen(expected_literal) : 0;
         if (row->materialization != expected_recipe || row->reserved != 0 ||
             row->literal_byte_length != expected_length ||
@@ -1013,7 +1269,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE |
         XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |
         XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |
-        XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE;
+        XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE |
+        XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",
@@ -1169,6 +1426,26 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     value->materialization =
                         XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW;
                     value->recipe_symbol = owned;
+                } else {
+                    uint32_t source_value = UINT32_MAX;
+                    if (build_exact_string_byte_slice_view_recipe(
+                            target_plan, binding, &source_value)) {
+                        size_t symbol_length =
+                            sizeof(XR_C_STRING_BYTE_SLICE_VIEW_SYMBOL);
+                        char *owned = (char *) xr_malloc(symbol_length);
+                        if (!owned) {
+                            xr_c_emission_plan_free(plan);
+                            return emission_error(
+                                error, error_size, "XR_EXEC_5003",
+                                "string byte-slice view recipe symbol allocation failed");
+                        }
+                        memcpy(owned, XR_C_STRING_BYTE_SLICE_VIEW_SYMBOL,
+                               symbol_length);
+                        value->materialization =
+                            XR_C_VALUE_MATERIALIZATION_STRING_BYTE_SLICE_VIEW;
+                        value->recipe_operand_value = source_value;
+                        value->recipe_symbol = owned;
+                    }
                 }
             }
         }

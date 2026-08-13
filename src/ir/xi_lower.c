@@ -547,10 +547,15 @@ static void braun_replace_all_uses(XiLower *l, XiValue *old_val, XiValue *new_va
             XiValue *v = blk->values[i];
             if (!v)
                 continue;
+            bool args_changed = false;
             for (uint16_t a = 0; a < v->nargs; a++) {
-                if (v->args[a] == old_val)
+                if (v->args[a] == old_val) {
                     v->args[a] = new_val;
+                    args_changed = true;
+                }
             }
+            if (args_changed)
+                xi_value_rebase_view_evidence(v);
         }
         for (XiPhi *other = blk->phis; other; other = other->next) {
             if (&other->value == old_val)
