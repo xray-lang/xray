@@ -12,7 +12,7 @@
  *   from any scope. Each Isolate has its own global object.
  *
  * RELATED MODULES:
- *   - xray_vm.h: Owns the global object
+ *   - xisolate_internal.h: Owns the global object
  *   - xclass_system.h: Core classes registered here
  */
 

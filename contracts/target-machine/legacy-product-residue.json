@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 105,
     "install": 2,
-    "source": 3432
+    "source": 3431
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -499,7 +499,7 @@
     "xray_vm_new_full",
     "xray_vm_set_script_info"
   ],
-  "owner_count": 698,
+  "owner_count": 697,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -2174,18 +2174,6 @@
       "family": "legacy-installed-header",
       "hit_count": 1,
       "path": "src/aot/xaot_driver.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm.h"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "80db9515da780f2bf668fb4ac8723abbce8d1e7d7b071f17ea8c6fa4525b34ea",
-      "family": "legacy-installed-header",
-      "hit_count": 1,
-      "path": "src/api/xglobal_object.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -9328,6 +9316,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "ae7902a91c9f0e66e07d9ef4eb6321ad0cd22c4801149c5f12d5a738eac2187f",
-  "total": 3633
+  "source_tree_fingerprint": "236babfad8b453ba5ae7ac594d35de1a2abda6e9b489cfbc12185d5b69d60541",
+  "total": 3632
 }
