@@ -312,8 +312,8 @@ the compiler core does not download a provider.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c a268bec7948a3a9cecf081d63d51545e3fe41af0b6ab32a9a38b21b031127da0
-anchor-sha256: src/aot/xaot_prepare.c b7f90df6f9ec74b04770f889957abfbde360314209497a27aa5ba4240b253678
-anchor-sha256: src/aot/xaot_verify.c c33b2220cb9e30ebdde292a1f75752b1073b5eebe05b29da104edee9a7bf3805
+anchor-sha256: src/aot/xaot_prepare.c f025631467ed05ae8d5174765a5cbf43e13d5caa48f0d8e34e7cf8683027fbcd
+anchor-sha256: src/aot/xaot_verify.c aa7b3c738222b460a7c1d2922d5c6909fff3a405320c29c40406f458a03bd063
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 4e63b69f6828aefd149170dc7815da693d3ef88d7cefb182c807acacbbaa3dec
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 11e99944b4cf4a3cddad2830bb60f364731489d6ec6b8be4e8df584312e852da
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 87468cfafae3dc6fe3fee9c0a8bf2d64198c7a114dbfd0848266514a59945778

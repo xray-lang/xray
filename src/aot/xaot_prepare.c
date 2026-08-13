@@ -3224,37 +3224,6 @@ static bool prepare_func_alias_plans(XaotBundle *bundle, const XiFunc *func,
     return true;
 }
 
-static bool prepare_func_allocation_plans(XaotBundle *bundle, const XiFunc *func,
-                                          const XgBodySummary *body) {
-    if (!body)
-        return true;
-    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
-        const XiBlock *blk = func->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *value = blk->values[vi];
-            uint16_t original_op;
-            uint32_t evidence;
-            if (!value || value->op != XI_STACK_ALLOC || value->aux_int <= 0)
-                continue;
-            original_op = (uint16_t) value->aux_int;
-            if (!xi_op_is_heap_alloc(original_op))
-                continue;
-            evidence = XAOT_ALLOC_EV_STACK_ALLOC_OP | XAOT_ALLOC_EV_ORIGINAL_ALLOC_OP |
-                       XAOT_ALLOC_EV_BODY_SUMMARY;
-            if (value->escape == (uint8_t) XI_ESC_NONE)
-                evidence |= XAOT_ALLOC_EV_NO_ESCAPE;
-            if (!xaot_bundle_add_allocation_plan(bundle, func, value, body, XAOT_ALLOC_ACTION_STACK,
-                                                 original_op, value->escape, evidence)) {
-                bundle->error_msg = "failed to allocate AOT allocation plan";
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 static bool xaot_closure_target_can_be_direct_symbol(const XiFunc *target) {
     const XiCoroPlan *plan = target ? target->coro_plan : NULL;
     return target && target->ncaptures == 0 && plan && xi_coro_plan_is_current(target, plan) &&
@@ -5322,8 +5291,6 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     /* After bounds plans: the uniqueness proof requires every index access
      * to be raw (bounds-proven), which it reads from the bounds plans. */
     if (!prepare_func_alias_plans(bundle, func, body))
-        return false;
-    if (!prepare_func_allocation_plans(bundle, func, body))
         return false;
     if (!prepare_func_closure_plans(bundle, func))
         return false;

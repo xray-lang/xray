@@ -1037,60 +1037,10 @@ static bool verify_alias_plan(const XaotBundle *bundle, const XaotAliasPlan *pla
     return true;
 }
 
-static uint32_t verify_allocation_evidence_for(const XiValue *value, uint16_t original_op) {
-    uint32_t evidence = 0;
-    if (!value)
-        return 0;
-    if (value->op == XI_STACK_ALLOC)
-        evidence |= XAOT_ALLOC_EV_STACK_ALLOC_OP;
-    if (value->escape == (uint8_t) XI_ESC_NONE)
-        evidence |= XAOT_ALLOC_EV_NO_ESCAPE;
-    if (original_op != 0 && xi_op_is_heap_alloc(original_op))
-        evidence |= XAOT_ALLOC_EV_ORIGINAL_ALLOC_OP;
-    evidence |= XAOT_ALLOC_EV_BODY_SUMMARY;
-    return evidence;
-}
-
 static bool verify_allocation_plan_candidate(const XiValue *value) {
     if (!value || value->op != XI_STACK_ALLOC || value->aux_int <= 0)
         return false;
     return xi_op_is_heap_alloc((uint16_t) value->aux_int);
-}
-
-static bool verify_allocation_plan(const XaotBundle *bundle, const XaotAllocationPlan *plan,
-                                   char *errbuf, size_t errbuf_len) {
-    uint16_t original_op;
-    uint32_t expected_evidence;
-
-    if (!bundle || !plan)
-        return set_error(errbuf, errbuf_len, "AOT allocation plan is NULL");
-    if (!plan->func || !plan->value)
-        return set_error(errbuf, errbuf_len, "AOT allocation plan lacks func or value");
-    if (!xaot_bundle_find_func_plan(bundle, plan->func))
-        return set_error(errbuf, errbuf_len, "AOT allocation plan func has no func plan");
-    if (!verify_body_summary_anchor(bundle, plan->func, plan->body_func_id, plan->body_effect_bits,
-                                    plan->body_escape_bits, plan->body_evidence, "allocation",
-                                    errbuf, errbuf_len))
-        return false;
-    if (plan->value->op != XI_STACK_ALLOC)
-        return set_error(errbuf, errbuf_len, "AOT allocation plan value is not stack alloc");
-    if (plan->value->aux_int <= 0)
-        return set_error(errbuf, errbuf_len, "AOT allocation plan lacks original op");
-    original_op = (uint16_t) plan->value->aux_int;
-    if (!xi_op_is_heap_alloc(original_op))
-        return set_error(errbuf, errbuf_len, "AOT allocation plan original op is not heap alloc");
-    if (plan->original_op != original_op)
-        return set_error(errbuf, errbuf_len, "AOT allocation plan original op is stale");
-    if (plan->escape != plan->value->escape)
-        return set_error(errbuf, errbuf_len, "AOT allocation plan escape is stale");
-    if (plan->escape != (uint8_t) XI_ESC_NONE)
-        return set_error(errbuf, errbuf_len, "AOT allocation plan stack value is escaping");
-    if (plan->action != XAOT_ALLOC_ACTION_STACK)
-        return set_error(errbuf, errbuf_len, "AOT allocation plan action does not re-derive");
-    expected_evidence = verify_allocation_evidence_for(plan->value, original_op);
-    if (plan->evidence != expected_evidence)
-        return set_error(errbuf, errbuf_len, "AOT allocation plan evidence is stale");
-    return true;
 }
 
 static bool verify_closure_plan(const XaotBundle *bundle, const XaotClosurePlan *plan, char *errbuf,
@@ -7930,9 +7880,8 @@ static bool verify_func_closure_plans_recursive(const XaotBundle *bundle, const 
     return true;
 }
 
-static bool verify_func_allocation_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
-                                                   uint32_t *out_count, char *errbuf,
-                                                   size_t errbuf_len) {
+static bool verify_func_stack_allocations_recursive(const XiFunc *func, char *errbuf,
+                                                    size_t errbuf_len) {
     uint32_t bi;
     uint16_t ci;
 
@@ -7948,16 +7897,13 @@ static bool verify_func_allocation_plans_recursive(const XaotBundle *bundle, con
             const XiValue *value = blk->values[vi];
             if (!verify_allocation_plan_candidate(value))
                 continue;
-            if (out_count)
-                (*out_count)++;
-            if (!xaot_bundle_find_allocation_plan(bundle, value))
-                return set_error(errbuf, errbuf_len, "AOT stack allocation has no plan");
+            if (value->escape != (uint8_t) XI_ESC_NONE)
+                return set_error(errbuf, errbuf_len, "AOT stack allocation is escaping");
         }
     }
 
     for (ci = 0; ci < func->nchildren; ci++) {
-        if (!verify_func_allocation_plans_recursive(bundle, func->children[ci], out_count, errbuf,
-                                                    errbuf_len))
+        if (!verify_func_stack_allocations_recursive(func->children[ci], errbuf, errbuf_len))
             return false;
     }
     return true;
@@ -8141,7 +8087,6 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
                                 size_t errbuf_len) {
     uint32_t mi;
     uint32_t fi;
-    uint32_t allocation_count = 0;
     uint32_t closure_count = 0;
     uint32_t transfer_count = 0;
 
@@ -8175,8 +8120,7 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
             return false;
         if (!verify_func_boundaries_recursive(bundle, mod->init, errbuf, errbuf_len))
             return false;
-        if (!verify_func_allocation_plans_recursive(bundle, mod->init, &allocation_count, errbuf,
-                                                    errbuf_len))
+        if (!verify_func_stack_allocations_recursive(mod->init, errbuf, errbuf_len))
             return false;
         if (!verify_func_closure_plans_recursive(bundle, mod->init, &closure_count, errbuf,
                                                  errbuf_len))
@@ -8187,8 +8131,6 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
         if (!verify_func_extern_calls(bundle, mod->init, errbuf, errbuf_len))
             return false;
     }
-    if (allocation_count != bundle->nallocation_plans)
-        return set_error(errbuf, errbuf_len, "AOT allocation plan count does not match IR");
     if (closure_count != bundle->nclosure_plans)
         return set_error(errbuf, errbuf_len, "AOT closure plan count does not match IR");
     if (transfer_count != bundle->ntransfer_plans)
@@ -8238,10 +8180,6 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
     }
     for (fi = 0; fi < bundle->nalias_plans; fi++) {
         if (!verify_alias_plan(bundle, &bundle->alias_plans[fi], errbuf, errbuf_len))
-            return false;
-    }
-    for (fi = 0; fi < bundle->nallocation_plans; fi++) {
-        if (!verify_allocation_plan(bundle, &bundle->allocation_plans[fi], errbuf, errbuf_len))
             return false;
     }
     for (fi = 0; fi < bundle->nclosure_plans; fi++) {
