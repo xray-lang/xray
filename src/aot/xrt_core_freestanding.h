@@ -479,6 +479,7 @@ baseline:
 
 #define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
+#define XR_TO_BOOL(v) ((int) (v).i)
 #define XR_TO_RUNE(v) ((uint32_t) (v).i)
 
 #define XR_IS_NULL(v) ((v).tag == XR_TAG_NULL)
