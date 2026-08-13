@@ -77,6 +77,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted"]
 
 [[core]]
+id = "codegen-opaque"
+header = "src/shared/xr_codegen_opaque_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "data-pointer"
 header = "src/shared/xr_data_pointer_core.h"
 representation = "native"
@@ -315,6 +322,21 @@ fixtures = [
   "tests/unit/stdlib/test_numeric_core.c",
   "tests/unit/ir/test_xi_escape.c",
   "tests/unit/ir/test_xi_cgen.c",
+]
+
+[[operation]]
+id = "codegen-opaque"
+observable_contract = "src/shared/xr_codegen_opaque_core.h"
+semantic_kernel = "src/shared/xr_codegen_opaque_core.h"
+vm_adapter = "src/ir/xi_emit.c"
+aot_adapter = "src/aot/xi_cgen_dispatch_helpers.inc.c"
+typed_plan = "shared.codegen-opaque"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_numeric_core.c",
+  "tests/unit/ir/test_xi_opt.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/aot/filetests/link/freestanding_codegen_core.xr",
 ]
 
 [[operation]]

@@ -168,6 +168,7 @@ CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
 NULL_TEST_OPERATIONS = {"xi.isnull"}
 ASSERT_CONDITION_OPERATIONS = {"xi.assert", "xi.assert.eq", "xi.assert.ne"}
 OWNER_FORWARD_OPERATIONS = {"xi.owner.forward"}
+CODEGEN_OPAQUE_OPERATIONS = {"xi.codegen.opaque"}
 REGEX_COMPILE_OPERATIONS = {"xi.regex.compile"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
@@ -2194,6 +2195,64 @@ def verify_owner_forward_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_codegen_opaque_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.codegen-opaque"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != CODEGEN_OPAQUE_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.codegen-opaque family")
+    elif owner.get("cgen_adapter") != "xr_codegen_opaque_plan_core":
+        errors.append("semantic owner registry has no exact codegen-opaque CGen adapter")
+
+    core_text = (root / "src/shared/xr_codegen_opaque_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_CODEGEN_OPAQUE_OWNER_PLAN",
+                  "XR_CODEGEN_OPAQUE_VALUE", "xr_codegen_opaque_plan_core",
+                  "xr_codegen_opaque_plan_is_exact_core"):
+        if token not in core_text:
+            errors.append("src/shared/xr_codegen_opaque_core.h: opaque value lacks stable owner")
+            break
+
+    vm_text = (root / "src/ir/xi_emit.c").read_text(encoding="utf-8", errors="strict")
+    vm_body = extract_c_function(vm_text, "emit_codegen_opaque") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_CODEGEN_OPAQUE_OWNER_PLAN", "XR_CODEGEN_OPAQUE_VALUE",
+                  "xr_codegen_opaque_plan_is_exact_core", "OP_MOVE"):
+        if token not in vm_body:
+            errors.append("src/ir/xi_emit.c: codegen opaque bypasses shared owner")
+            break
+    if "emit_copy(" in vm_body:
+        errors.append("src/ir/xi_emit.c: codegen opaque revived an unowned copy path")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_codegen_opaque_adapter_name") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_CGEN",
+                  "xr_semantic_owner_cgen_adapter", '"xr_codegen_opaque_plan_core"'):
+        if token not in resolver:
+            errors.append("src/aot/xi_cgen.c: codegen opaque does not resolve stable adapter")
+            break
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    body = extract_c_function(dispatch_text, "xicgen_codegen_opaque") or ""
+    for token in ("cg_codegen_opaque_adapter_name", "XR_CODEGEN_OPAQUE_OWNER_PLAN",
+                  "xr_codegen_opaque_plan_is_exact_core", "xrt_codegen_opaque_i64",
+                  "xrt_codegen_opaque_u64", "xrt_codegen_opaque_ptr",
+                  "xrt_codegen_opaque_const_ptr"):
+        if token not in body:
+            errors.append(
+                "src/aot/xi_cgen_dispatch_helpers.inc.c: codegen opaque bypasses owner")
+            break
+
+    test_text = (root / "tests/unit/stdlib/test_numeric_core.c").read_text(
+        encoding="utf-8", errors="strict")
+    if "codegen_opaque_core_freezes_value_and_optimizer_barrier" not in test_text:
+        errors.append("tests/unit/stdlib/test_numeric_core.c: codegen-opaque KAT is missing")
+    return errors
+
+
 def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     owner_name = "shared.regex"
@@ -2943,8 +3002,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 38:
-        errors.append(f"shared-core inventory must contain exactly 38 headers, found {len(actual)}")
+    if len(actual) != 39:
+        errors.append(f"shared-core inventory must contain exactly 39 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -2987,6 +3046,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_null_test_ratchet(root, registry))
         errors.extend(verify_assert_condition_ratchet(root, registry))
         errors.extend(verify_owner_forward_ratchet(root, registry))
+        errors.extend(verify_codegen_opaque_ratchet(root, registry))
         errors.extend(verify_regex_compile_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_byte_array_copy_ratchet(root, registry))

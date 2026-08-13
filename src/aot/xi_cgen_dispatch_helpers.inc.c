@@ -726,13 +726,26 @@ static void xicgen_codegen_opaque(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         emit_codegen_abort_expr(out);
         return;
     }
-    /* Opaque is a typed identity and deliberately has no generic value-plan
-     * rewrite.  Its declaration storage is therefore the authoritative
-     * machine representation; asking only for an optional backend value plan
-     * incorrectly falls back to TAGGED for otherwise native u64/pointer values. */
+    const char *adapter = cg_codegen_opaque_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    /* Declaration storage selects the provider adapter; the shared owner
+     * freezes bit preservation and the native constant-propagation barrier. */
     XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
     if (rep == XR_REP_I64) {
         bool is_unsigned = v->type && xr_type_is_exact_unsigned_integer(v->type);
+        XrCodegenOpaqueKind kind =
+            is_unsigned ? XR_CODEGEN_OPAQUE_U64 : XR_CODEGEN_OPAQUE_I64;
+        XrCodegenOpaquePlan plan = XR_CODEGEN_OPAQUE_OWNER_PLAN(
+            XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI,
+            XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO, XR_SEM_CONSUMER_CGEN, kind);
+        if (!xr_codegen_opaque_plan_is_exact_core(plan)) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            return;
+        }
         fprintf(out, "%s(", is_unsigned ? "xrt_codegen_opaque_u64" : "xrt_codegen_opaque_i64");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
         fprintf(out, ")");
@@ -740,6 +753,16 @@ static void xicgen_codegen_opaque(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     }
     if (rep == XR_REP_PTR || rep == XR_REP_RAWPTR) {
         bool is_mut = v->type && v->type->kind == XR_KIND_POINTER && v->type->ptr_is_mut;
+        XrCodegenOpaqueKind kind =
+            is_mut ? XR_CODEGEN_OPAQUE_POINTER : XR_CODEGEN_OPAQUE_CONST_POINTER;
+        XrCodegenOpaquePlan plan = XR_CODEGEN_OPAQUE_OWNER_PLAN(
+            XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI,
+            XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO, XR_SEM_CONSUMER_CGEN, kind);
+        if (!xr_codegen_opaque_plan_is_exact_core(plan)) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            return;
+        }
         fprintf(out, "%s(", is_mut ? "xrt_codegen_opaque_ptr" : "xrt_codegen_opaque_const_ptr");
         emit_value_as_rep_ctx(ctx, out, v->args[0], rep);
         fprintf(out, ")");

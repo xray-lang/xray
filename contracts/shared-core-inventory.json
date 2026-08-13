@@ -375,6 +375,33 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_codegen_opaque_core.h",
+      "id": "codegen-opaque",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/ir/xi_emit.c",
+        "src/shared/xr_semantic_owner_ids_gen.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_codegen_opaque_plan_core",
+        "xr_codegen_opaque_plan_is_exact_core"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_compress_core.h",
       "id": "compression",
       "owner": "shared-kernel",

@@ -10,6 +10,7 @@
 
 #include "../test_framework.h"
 #include "shared/xr_bits_core.h"
+#include "shared/xr_codegen_opaque_core.h"
 #include "shared/xr_numeric_conversion_core.h"
 #include "shared/xr_numeric_core.h"
 #include "shared/xr_owner_forward_core.h"
@@ -550,6 +551,28 @@ TEST(owner_forward_core_freezes_value_and_ownership_transfer) {
                   "xr_owner_forward_plan_core");
 }
 
+TEST(codegen_opaque_core_freezes_value_and_optimizer_barrier) {
+    XrCodegenOpaquePlan vm_plan = XR_CODEGEN_OPAQUE_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI,
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO, XR_SEM_CONSUMER_VM,
+        XR_CODEGEN_OPAQUE_VALUE);
+    XrCodegenOpaquePlan cgen_plan = XR_CODEGEN_OPAQUE_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI,
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO, XR_SEM_CONSUMER_CGEN,
+        XR_CODEGEN_OPAQUE_CONST_POINTER);
+
+    ASSERT(xr_codegen_opaque_plan_is_exact_core(vm_plan));
+    ASSERT(xr_codegen_opaque_plan_is_exact_core(cgen_plan));
+    ASSERT_EQ_INT(vm_plan.kind, XR_CODEGEN_OPAQUE_VALUE);
+    ASSERT_EQ_INT(cgen_plan.kind, XR_CODEGEN_OPAQUE_CONST_POINTER);
+    ASSERT_FALSE(xr_codegen_opaque_plan_is_exact_core(
+        xr_codegen_opaque_plan_core(XR_CODEGEN_OPAQUE_KIND_COUNT)));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI,
+                      XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO),
+                  "xr_codegen_opaque_plan_core");
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -583,6 +606,7 @@ RUN_TEST(raw_scalar_core_dynamic_endian_is_only_a_value_transform);
 RUN_TEST(raw_scalar_core_float_and_pointer_access_preserve_bits);
 RUN_TEST(raw_scalar_access_owner_freezes_typed_load_store_matrix);
 RUN_TEST(owner_forward_core_freezes_value_and_ownership_transfer);
+RUN_TEST(codegen_opaque_core_freezes_value_and_optimizer_barrier);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()

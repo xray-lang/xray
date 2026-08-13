@@ -32,6 +32,7 @@
 #include "../toolchain/xcompiler_session.h"
 #include "../frontend/analyzer/xa_effect_db.h"
 #include "../shared/xr_native_type_core.h"
+#include "../shared/xr_codegen_opaque_core.h"
 
 #include <math.h>
 
@@ -612,7 +613,21 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
  * nodes for explain/verification, then realize their observable identity/no-op
  * semantics in bytecode. */
 static void emit_codegen_opaque(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_copy(ctx, v, dst);
+    if (!v || v->nargs != 1 || !v->args[0]) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XrCodegenOpaquePlan plan = XR_CODEGEN_OPAQUE_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI,
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO, XR_SEM_CONSUMER_VM,
+        XR_CODEGEN_OPAQUE_VALUE);
+    if (!xr_codegen_opaque_plan_is_exact_core(plan)) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    if (ctx->status == XI_EMIT_OK && dst != src)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
 }
 
 static void emit_codegen_compiler_fence(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {

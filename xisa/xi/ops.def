@@ -2646,7 +2646,6 @@
     xi.mul
     xi.div
     xi.mod
-    xi.codegen.opaque
     xi.codegen.compiler-fence
     xi.eq
     xi.ne
@@ -2763,6 +2762,7 @@
 
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
+    xi.codegen.opaque
     xi.owner.forward
     xi.target.sizeof
     xi.target.alignof
@@ -2889,6 +2889,21 @@
     (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
     (vm "src/ir/xi_emit_eh.c" "XR_OWNER_FORWARD_OWNER_APPLY")
     (cgen "src/aot/xi_cgen.c" "cg_owner_forward_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.codegen-opaque
+  :category shared-semantic-kernel
+  :operations (xi.codegen.opaque)
+  :consumers (
+    semantic-plan
+    vm
+    cgen
+  )
+  :cgen-adapter xr_codegen_opaque_plan_core
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/ir/xi_emit.c" "XR_CODEGEN_OPAQUE_OWNER_PLAN")
+    (cgen "src/aot/xi_cgen.c" "cg_codegen_opaque_adapter_name")
   ))
 
 (define-xi-observable-owner shared.truthiness
