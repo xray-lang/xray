@@ -622,7 +622,7 @@ vmcase(OP_GETPROP) {
     if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SLICE_REF(obj)) {
         XrAggregateLayout *slayout = NULL;
         uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
-        int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);
+        int fidx = xr_struct_layout_field_index(isolate, slayout, prop_symbol);
         if (fidx >= 0 && fidx < slayout->field_count) {
             XrAggregateFieldLayout *sf = &slayout->fields[fidx];
             if (sf->is_flexible) {

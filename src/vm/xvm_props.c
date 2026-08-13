@@ -175,7 +175,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
             slayout ? xr_vm_struct_layout_class(&isolate->vm, xr_aggregate_layout_id(obj)) : NULL;
 
         // Try stored field first
-        int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);
+        int fidx = xr_struct_layout_field_index(isolate, slayout, prop_symbol);
         if (payload && fidx >= 0 && fidx < slayout->field_count) {
             XrAggregateFieldLayout *sf = &slayout->fields[fidx];
             uint8_t *fp = payload + sf->offset;

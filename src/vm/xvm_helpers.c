@@ -214,8 +214,8 @@ uint8_t *xr_vm_struct_ref_payload(XrVMRuntime *isolate, XrValue ref,
     return (uint8_t *) ref.ptr + xr_aggregate_layout_header_size(layout);
 }
 
-int xr_vm_struct_layout_field_index(XrVMRuntime *isolate, const XrAggregateLayout *layout,
-                                    int prop_symbol) {
+int xr_struct_layout_field_index(XrVMRuntime *isolate, const XrAggregateLayout *layout,
+                                 int prop_symbol) {
     if (!isolate || !layout || !layout->field_names)
         return -1;
     XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
