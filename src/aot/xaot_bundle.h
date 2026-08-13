@@ -958,43 +958,6 @@ typedef struct XaotGenericStoragePlan {
     uint8_t unproven_reason;
 } XaotGenericStoragePlan;
 
-typedef enum XaotDeriveAction {
-    XAOT_DERIVE_FIELD_TABLE_SIDECAR = 1,
-    XAOT_DERIVE_INLINE_GENERATED_BODY,
-    XAOT_DERIVE_METADATA_ONLY,
-    XAOT_DERIVE_DCE,
-    XAOT_DERIVE_REJECT,
-} XaotDeriveAction;
-
-enum {
-    XAOT_DERIVE_EV_GLOBAL_ROW = 1u << 0,
-    XAOT_DERIVE_EV_OPT_IN = 1u << 1,
-    XAOT_DERIVE_EV_FIELD_TABLE = 1u << 2,
-    XAOT_DERIVE_EV_GENERATED_METHOD = 1u << 3,
-};
-
-enum {
-    XAOT_DERIVE_UNPROVEN_NONE = 0,
-    XAOT_DERIVE_UNPROVEN_NO_REACHABILITY = 1,
-    XAOT_DERIVE_UNPROVEN_INVALID_KIND = 2,
-};
-
-typedef struct XaotDerivePlan {
-    XgDeriveId derive_id;
-    XgDeclId owner_decl_id;
-    uint32_t type_key;
-    uint8_t derive_kind;
-    uint8_t action;
-    uint32_t field_start;
-    uint16_t field_count;
-    uint32_t method_start;
-    uint16_t method_count;
-    uint32_t sidecar_index;
-    XgFuncId generated_body_func_id;
-    uint32_t evidence;
-    uint8_t unproven_reason;
-} XaotDerivePlan;
-
 typedef enum XaotDerivedEqHashAction {
     XAOT_DERIVED_EQ_HASH_BUILTIN_FIELDS_INLINE = 1,
     XAOT_DERIVED_EQ_HASH_RECURSIVE_DERIVE_INLINE,
@@ -1755,9 +1718,6 @@ typedef struct XaotBundle {
     XaotGenericStoragePlan *generic_storage_plans;
     uint32_t ngeneric_storage_plans;
     uint32_t generic_storage_plan_cap;
-    XaotDerivePlan *derive_plans;
-    uint32_t nderive_plans;
-    uint32_t derive_plan_cap;
     XaotDerivedEqHashPlan *derived_eq_hash_plans;
     uint32_t nderived_eq_hash_plans;
     uint32_t derived_eq_hash_plan_cap;
@@ -1890,8 +1850,6 @@ XR_FUNC const XaotGenericBodyPlan *xaot_bundle_find_generic_body_plan(const Xaot
                                                                       XgGenericBodyUseId use_id);
 XR_FUNC const XaotGenericStoragePlan *
 xaot_bundle_find_generic_storage_plan(const XaotBundle *bundle, XgGenericStorageId storage_id);
-XR_FUNC const XaotDerivePlan *xaot_bundle_find_derive_plan(const XaotBundle *bundle,
-                                                           XgDeriveId derive_id);
 XR_FUNC const XaotDerivedEqHashPlan *xaot_bundle_find_derived_eq_hash_plan(const XaotBundle *bundle,
                                                                            uint32_t type_key);
 XR_FUNC const XaotDerivedClonePlan *xaot_bundle_find_derived_clone_plan(const XaotBundle *bundle,

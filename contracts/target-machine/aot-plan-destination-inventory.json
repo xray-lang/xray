@@ -33,7 +33,7 @@
     "unclassified_row": "error",
     "unresolved_destination": "error"
   },
-  "row_count": 47,
+  "row_count": 46,
   "rows": [
     {
       "c_coupling_fields": [],
@@ -405,25 +405,6 @@
         "src/aot/xaot_verify.c",
         "src/aot/xi_cgen_array_helpers.inc.c",
         "src/aot/xi_cgen_type_helpers.inc.c"
-      ],
-      "verifier": "src/aot/xaot_verify.c"
-    },
-    {
-      "c_coupling_fields": [],
-      "category": "semantic",
-      "consumers": [
-        "none-current-gap"
-      ],
-      "current_fallback": "none-declared",
-      "current_type": "XaotDerivePlan",
-      "deletion_task": 271,
-      "destination": "XrSemanticPlan",
-      "pointer_lifetime_fields": [],
-      "producer": "src/aot/xaot_bundle.c",
-      "reference_files": [
-        "src/aot/xaot_bundle.c",
-        "src/aot/xaot_bundle.h",
-        "src/aot/xaot_verify.c"
       ],
       "verifier": "src/aot/xaot_verify.c"
     },
@@ -1137,5 +1118,5 @@
     }
   ],
   "schema": 1,
-  "source_tree_fingerprint": "4c3398cd7db7a0c16eccb5429df8966f774d2b8f5a6ca11bb251f565f305eb2b"
+  "source_tree_fingerprint": "49ecd3d10683dd5a99fe5e8bda415025baac0451fd2085590861df012d88519e"
 }

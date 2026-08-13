@@ -266,11 +266,6 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->ngeneric_storage_plans = 0;
     bundle->generic_storage_plan_cap = 0;
 
-    xr_free(bundle->derive_plans);
-    bundle->derive_plans = NULL;
-    bundle->nderive_plans = 0;
-    bundle->derive_plan_cap = 0;
-
     xr_free(bundle->derived_eq_hash_plans);
     bundle->derived_eq_hash_plans = NULL;
     bundle->nderived_eq_hash_plans = 0;
@@ -1852,54 +1847,6 @@ static uint8_t generic_code_size_reason_for(const XgGlobalEvidence *evidence,
     return XAOT_GENERIC_DEEPEN_UNPROVEN_NONE;
 }
 
-static uint8_t derive_action_for(const XgDeriveSummary *derive) {
-    if (!derive)
-        return XAOT_DERIVE_REJECT;
-    switch ((XgDeriveKind) derive->derive_kind) {
-        case XG_DERIVE_JSON:
-        case XG_DERIVE_INSPECT:
-        case XG_DERIVE_EQ:
-        case XG_DERIVE_HASH:
-        case XG_DERIVE_CLONE:
-            break;
-        default:
-            return XAOT_DERIVE_REJECT;
-    }
-    if ((derive->flags & XG_DERIVE_METADATA_ONLY) != 0)
-        return XAOT_DERIVE_METADATA_ONLY;
-    if ((derive->flags & XG_DERIVE_GENERATED) != 0)
-        return XAOT_DERIVE_INLINE_GENERATED_BODY;
-    return XAOT_DERIVE_FIELD_TABLE_SIDECAR;
-}
-
-static uint8_t derive_reason_for(const XgDeriveSummary *derive) {
-    if (!derive)
-        return XAOT_DERIVE_UNPROVEN_INVALID_KIND;
-    switch ((XgDeriveKind) derive->derive_kind) {
-        case XG_DERIVE_JSON:
-        case XG_DERIVE_INSPECT:
-        case XG_DERIVE_EQ:
-        case XG_DERIVE_HASH:
-        case XG_DERIVE_CLONE:
-            return XAOT_DERIVE_UNPROVEN_NONE;
-        default:
-            return XAOT_DERIVE_UNPROVEN_INVALID_KIND;
-    }
-}
-
-static uint32_t derive_evidence_for(const XgDeriveSummary *derive) {
-    uint32_t evidence = XAOT_DERIVE_EV_GLOBAL_ROW;
-    if (!derive)
-        return evidence;
-    if ((derive->flags & XG_DERIVE_OPT_IN) != 0)
-        evidence |= XAOT_DERIVE_EV_OPT_IN;
-    if (derive->field_count != 0)
-        evidence |= XAOT_DERIVE_EV_FIELD_TABLE;
-    if (derive->method_count != 0)
-        evidence |= XAOT_DERIVE_EV_GENERATED_METHOD;
-    return evidence;
-}
-
 static XgFuncId derive_generated_body_func_id(const XgGlobalEvidence *evidence,
                                               const XgDeriveSummary *derive) {
     if (!evidence || !derive || derive->method_count == 0 || derive->method_start == 0)
@@ -1907,43 +1854,6 @@ static XgFuncId derive_generated_body_func_id(const XgGlobalEvidence *evidence,
     if (derive->method_start > evidence->nderived_methods)
         return XG_NO_ID;
     return evidence->derived_methods[derive->method_start - 1].generated_body_func_id;
-}
-
-static bool xaot_bundle_add_derive_plan(XaotBundle *bundle, const XgGlobalEvidence *evidence,
-                                        const XgDeriveSummary *derive) {
-    XaotDerivePlan *plan;
-    if (!bundle || !evidence || !derive)
-        return false;
-    if (!reserve_plan_array((void **) &bundle->derive_plans, &bundle->derive_plan_cap,
-                            bundle->nderive_plans + 1, sizeof(XaotDerivePlan), 8))
-        return false;
-    plan = &bundle->derive_plans[bundle->nderive_plans++];
-    memset(plan, 0, sizeof(*plan));
-    plan->derive_id = derive->derive_id;
-    plan->owner_decl_id = derive->owner_decl_id;
-    plan->type_key = derive->type_key;
-    plan->derive_kind = derive->derive_kind;
-    plan->action = derive_action_for(derive);
-    plan->field_start = derive->field_start;
-    plan->field_count = derive->field_count;
-    plan->method_start = derive->method_start;
-    plan->method_count = derive->method_count;
-    plan->sidecar_index =
-        plan->action == XAOT_DERIVE_FIELD_TABLE_SIDECAR ? bundle->nderive_plans : 0;
-    plan->generated_body_func_id = derive_generated_body_func_id(evidence, derive);
-    plan->evidence = derive_evidence_for(derive);
-    plan->unproven_reason = derive_reason_for(derive);
-    return true;
-}
-
-static bool xaot_bundle_add_derive_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
-    if (!bundle || !evidence)
-        return false;
-    for (uint32_t i = 0; i < evidence->nderives; i++) {
-        if (!xaot_bundle_add_derive_plan(bundle, evidence, &evidence->derives[i]))
-            return false;
-    }
-    return true;
 }
 
 static const XgDeriveSummary *find_derive_for_type_kind(const XgGlobalEvidence *evidence,
@@ -3976,10 +3886,6 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         bundle->error_msg = "failed to allocate AOT generic storage plan";
         return false;
     }
-    if (!xaot_bundle_add_derive_plans(bundle, evidence)) {
-        bundle->error_msg = "failed to allocate AOT derive plan";
-        return false;
-    }
     if (!xaot_bundle_add_derived_eq_hash_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT derived Eq/Hash plan";
         return false;
@@ -4452,17 +4358,6 @@ xaot_bundle_find_generic_storage_plan(const XaotBundle *bundle, XgGenericStorage
     for (uint32_t i = 0; i < bundle->ngeneric_storage_plans; i++) {
         if (bundle->generic_storage_plans[i].storage_id == storage_id)
             return &bundle->generic_storage_plans[i];
-    }
-    return NULL;
-}
-
-XR_FUNC const XaotDerivePlan *xaot_bundle_find_derive_plan(const XaotBundle *bundle,
-                                                           XgDeriveId derive_id) {
-    if (!bundle || derive_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < bundle->nderive_plans; i++) {
-        if (bundle->derive_plans[i].derive_id == derive_id)
-            return &bundle->derive_plans[i];
     }
     return NULL;
 }
@@ -6292,36 +6187,6 @@ static const char *metadata_unproven_reason_name(uint8_t reason) {
     }
 }
 
-static const char *derive_action_name(uint8_t action) {
-    switch ((XaotDeriveAction) action) {
-        case XAOT_DERIVE_FIELD_TABLE_SIDECAR:
-            return "field_table_sidecar";
-        case XAOT_DERIVE_INLINE_GENERATED_BODY:
-            return "inline_generated_body";
-        case XAOT_DERIVE_METADATA_ONLY:
-            return "metadata_only";
-        case XAOT_DERIVE_DCE:
-            return "dce";
-        case XAOT_DERIVE_REJECT:
-            return "reject";
-        default:
-            return "unknown";
-    }
-}
-
-static const char *derive_unproven_reason_name(uint8_t reason) {
-    switch (reason) {
-        case XAOT_DERIVE_UNPROVEN_NONE:
-            return "none";
-        case XAOT_DERIVE_UNPROVEN_NO_REACHABILITY:
-            return "no_reachability";
-        case XAOT_DERIVE_UNPROVEN_INVALID_KIND:
-            return "invalid_kind";
-        default:
-            return "unknown";
-    }
-}
-
 static const char *derived_eq_hash_action_name(uint8_t action) {
     switch ((XaotDerivedEqHashAction) action) {
         case XAOT_DERIVED_EQ_HASH_BUILTIN_FIELDS_INLINE:
@@ -8142,18 +8007,6 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 gp->container_plan_id);
         print_generic_storage_evidence_bits(out, gp->evidence);
         fprintf(out, " reason=%s\n", generic_deepen_unproven_reason_name(gp->unproven_reason));
-    }
-
-    for (uint32_t di = 0; di < bundle->nderive_plans; di++) {
-        const XaotDerivePlan *dp = &bundle->derive_plans[di];
-        fprintf(out,
-                "derive-plan %u id=%u decl=%u type=%u kind=%s action=%s fields=%u+%u "
-                "methods=%u+%u sidecar=%u body=%u evidence=0x%x reason=%s\n",
-                di, dp->derive_id, dp->owner_decl_id, dp->type_key,
-                xg_derive_kind_name(dp->derive_kind), derive_action_name(dp->action),
-                dp->field_start, (unsigned) dp->field_count, dp->method_start,
-                (unsigned) dp->method_count, dp->sidecar_index, dp->generated_body_func_id,
-                dp->evidence, derive_unproven_reason_name(dp->unproven_reason));
     }
 
     for (uint32_t di = 0; di < bundle->nderived_eq_hash_plans; di++) {

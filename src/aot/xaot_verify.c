@@ -4693,54 +4693,6 @@ static uint8_t verify_generic_code_size_reason_for(const XgGlobalEvidence *ev,
     return XAOT_GENERIC_DEEPEN_UNPROVEN_NONE;
 }
 
-static uint8_t verify_derive_action_for(const XgDeriveSummary *derive) {
-    if (!derive)
-        return XAOT_DERIVE_REJECT;
-    switch ((XgDeriveKind) derive->derive_kind) {
-        case XG_DERIVE_JSON:
-        case XG_DERIVE_INSPECT:
-        case XG_DERIVE_EQ:
-        case XG_DERIVE_HASH:
-        case XG_DERIVE_CLONE:
-            break;
-        default:
-            return XAOT_DERIVE_REJECT;
-    }
-    if ((derive->flags & XG_DERIVE_METADATA_ONLY) != 0)
-        return XAOT_DERIVE_METADATA_ONLY;
-    if ((derive->flags & XG_DERIVE_GENERATED) != 0)
-        return XAOT_DERIVE_INLINE_GENERATED_BODY;
-    return XAOT_DERIVE_FIELD_TABLE_SIDECAR;
-}
-
-static uint8_t verify_derive_reason_for(const XgDeriveSummary *derive) {
-    if (!derive)
-        return XAOT_DERIVE_UNPROVEN_INVALID_KIND;
-    switch ((XgDeriveKind) derive->derive_kind) {
-        case XG_DERIVE_JSON:
-        case XG_DERIVE_INSPECT:
-        case XG_DERIVE_EQ:
-        case XG_DERIVE_HASH:
-        case XG_DERIVE_CLONE:
-            return XAOT_DERIVE_UNPROVEN_NONE;
-        default:
-            return XAOT_DERIVE_UNPROVEN_INVALID_KIND;
-    }
-}
-
-static uint32_t verify_derive_evidence_for(const XgDeriveSummary *derive) {
-    uint32_t evidence = XAOT_DERIVE_EV_GLOBAL_ROW;
-    if (!derive)
-        return evidence;
-    if ((derive->flags & XG_DERIVE_OPT_IN) != 0)
-        evidence |= XAOT_DERIVE_EV_OPT_IN;
-    if (derive->field_count != 0)
-        evidence |= XAOT_DERIVE_EV_FIELD_TABLE;
-    if (derive->method_count != 0)
-        evidence |= XAOT_DERIVE_EV_GENERATED_METHOD;
-    return evidence;
-}
-
 static XgFuncId verify_derive_generated_body_func_id(const XgGlobalEvidence *ev,
                                                      const XgDeriveSummary *derive) {
     if (!ev || !derive || derive->method_count == 0 || derive->method_start == 0)
@@ -4748,32 +4700,6 @@ static XgFuncId verify_derive_generated_body_func_id(const XgGlobalEvidence *ev,
     if (derive->method_start > ev->nderived_methods)
         return XG_NO_ID;
     return ev->derived_methods[derive->method_start - 1].generated_body_func_id;
-}
-
-static bool verify_derive_plan_rederives(const XgGlobalEvidence *ev, const XaotDerivePlan *plan,
-                                         const XgDeriveSummary *derive, char *errbuf,
-                                         size_t errbuf_len) {
-    uint8_t expected_action;
-    if (!ev || !plan || !derive)
-        return set_error(errbuf, errbuf_len, "AOT derive verifier has incomplete input");
-    if (plan->derive_id != derive->derive_id || plan->owner_decl_id != derive->owner_decl_id ||
-        plan->type_key != derive->type_key || plan->derive_kind != derive->derive_kind ||
-        plan->field_start != derive->field_start || plan->field_count != derive->field_count ||
-        plan->method_start != derive->method_start || plan->method_count != derive->method_count)
-        return set_error(errbuf, errbuf_len, "AOT derive plan identity does not re-derive");
-    expected_action = verify_derive_action_for(derive);
-    if (plan->action != expected_action ||
-        plan->unproven_reason != verify_derive_reason_for(derive))
-        return set_error(errbuf, errbuf_len, "AOT derive plan action does not re-derive");
-    if (plan->evidence != verify_derive_evidence_for(derive))
-        return set_error(errbuf, errbuf_len, "AOT derive plan evidence does not re-derive");
-    if (plan->generated_body_func_id != verify_derive_generated_body_func_id(ev, derive))
-        return set_error(errbuf, errbuf_len, "AOT derive plan generated body is stale");
-    if (expected_action == XAOT_DERIVE_FIELD_TABLE_SIDECAR && plan->sidecar_index == 0)
-        return set_error(errbuf, errbuf_len, "AOT derive sidecar plan has no sidecar index");
-    if (expected_action != XAOT_DERIVE_FIELD_TABLE_SIDECAR && plan->sidecar_index != 0)
-        return set_error(errbuf, errbuf_len, "AOT derive non-sidecar plan has sidecar index");
-    return true;
 }
 
 static const XgDeriveSummary *verify_find_derive_for_type_kind(const XgGlobalEvidence *ev,
@@ -6567,7 +6493,6 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_generic_instantiation_plans = 0;
     uint32_t expected_generic_body_plans = 0;
     uint32_t expected_generic_storage_plans = 0;
-    uint32_t expected_derive_plans = 0;
     uint32_t expected_derived_eq_hash_plans = 0;
     uint32_t expected_derived_clone_plans = 0;
     uint32_t expected_json_codec_plans = 0;
@@ -6912,19 +6837,6 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->ngeneric_storage_plans != expected_generic_storage_plans)
         return set_error(errbuf, errbuf_len, "AOT generic storage plan count mismatches evidence");
-
-    for (uint32_t i = 0; i < ev->nderives; i++) {
-        const XgDeriveSummary *derive = &ev->derives[i];
-        const XaotDerivePlan *plan;
-        expected_derive_plans++;
-        plan = xaot_bundle_find_derive_plan(bundle, derive->derive_id);
-        if (!plan)
-            return set_error(errbuf, errbuf_len, "AOT derive evidence has no derive plan");
-        if (!verify_derive_plan_rederives(ev, plan, derive, errbuf, errbuf_len))
-            return false;
-    }
-    if (bundle->nderive_plans != expected_derive_plans)
-        return set_error(errbuf, errbuf_len, "AOT derive plan count mismatches evidence");
 
     for (uint32_t i = 0; i < ev->nderives; i++) {
         const XgDeriveSummary *derive = &ev->derives[i];

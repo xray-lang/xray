@@ -9658,20 +9658,9 @@ TEST(global_evidence_producer_records_derive_rows) {
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.nderive_plans, 2);
-    const XaotDerivePlan *json_plan =
-        xaot_bundle_find_derive_plan(&bundle, ev.derives[0].derive_id);
-    ASSERT_NOT_NULL(json_plan);
-    ASSERT_EQ_UINT(json_plan->derive_kind, XG_DERIVE_JSON);
-    ASSERT_EQ_UINT(json_plan->action, XAOT_DERIVE_FIELD_TABLE_SIDECAR);
-    ASSERT_EQ_UINT(json_plan->field_count, 2);
-    ASSERT_EQ_UINT(json_plan->evidence,
-                   XAOT_DERIVE_EV_GLOBAL_ROW | XAOT_DERIVE_EV_OPT_IN | XAOT_DERIVE_EV_FIELD_TABLE);
-    char *plan_dump = xaot_bundle_dump_plan(&bundle);
-    ASSERT_NOT_NULL(plan_dump);
-    ASSERT_NOT_NULL(strstr(plan_dump, "derive-plan 0 id=1"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "kind=json action=field_table_sidecar"));
-    xr_free(plan_dump);
+    ASSERT_EQ_UINT(bundle.nderived_eq_hash_plans, 0);
+    ASSERT_EQ_UINT(bundle.nderived_clone_plans, 0);
+    ASSERT_EQ_UINT(bundle.njson_codec_plans, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
