@@ -1,9 +1,9 @@
 {
   "counts": {
     "api": 42,
-    "build": 65,
+    "build": 55,
     "cli": 108,
-    "install": 7,
+    "install": 2,
     "source": 3612
   },
   "generated_from": [
@@ -19,7 +19,6 @@
     "scripts/check_stdlib_boundary.py",
     "scripts/check_target_machine_completion.py",
     "scripts/collect_target_machine_runtime_reachability_evidence.py",
-    "scripts/collect_target_machine_symbol_evidence.py",
     "scripts/derive_aot_sdk_closure.py",
     "scripts/generate_stdlib_embedded.py",
     "scripts/static_check.py",
@@ -343,7 +342,6 @@
     "tests/fuzz/fuzz_parser.c",
     "tests/fuzz/fuzz_stdlib_data.c",
     "tests/install/run_install_public_surface_tests.py",
-    "tests/install/run_installed_runtime_symbol_tests.py",
     "tests/lib/tests/test_binary.py",
     "tests/target-machine/test_aot_sdk_closure.py",
     "tests/target-machine/test_installed_evidence_collector.py",
@@ -421,8 +419,6 @@
     "xr_bundle_create_ex",
     "xr_bundle_free",
     "xr_bundle_to_c_source",
-    "xr_detect_output_format",
-    "xr_eval_bytecode",
     "xr_load_module_base64",
     "xr_load_module_cluster",
     "xr_load_module_codegen",
@@ -457,12 +453,10 @@
     "xr_load_module_ws",
     "xr_load_module_xml",
     "xr_load_module_yaml",
-    "xr_output_c_source",
     "xr_proto_add_symbol",
     "xr_proto_children",
     "xr_proto_name",
     "xr_proto_set_param_types",
-    "xr_run_bytecode_file",
     "xr_vm_add_stacktrace",
     "xr_vm_bind_proto_shared_slots",
     "xr_vm_bind_proto_shared_slots_recursive",
@@ -552,7 +546,7 @@
     "xray_vm_new_full",
     "xray_vm_set_script_info"
   ],
-  "owner_count": 714,
+  "owner_count": 711,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -731,38 +725,6 @@
       "surface": "build",
       "tokens": [
         "xray_vm.h"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "0dec05da96562e64e240c0f3a496b3801e6eac3d521ea4640e02483a4e4a5c8a",
-      "family": "legacy-loader-writer-or-converter",
-      "hit_count": 5,
-      "path": "scripts/collect_target_machine_runtime_reachability_evidence.py",
-      "status": "transitional-owner",
-      "surface": "build",
-      "tokens": [
-        "xr_bytecode_",
-        "xr_detect_output_format",
-        "xr_eval_bytecode",
-        "xr_output_c_source",
-        "xr_run_bytecode_file"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "8977051814b3787eba555a1dc3da689046badd402b90f5be213ae105b6dac675",
-      "family": "legacy-loader-writer-or-converter",
-      "hit_count": 5,
-      "path": "scripts/collect_target_machine_symbol_evidence.py",
-      "status": "transitional-owner",
-      "surface": "build",
-      "tokens": [
-        "xr_bytecode_",
-        "xr_detect_output_format",
-        "xr_eval_bytecode",
-        "xr_output_c_source",
-        "xr_run_bytecode_file"
       ]
     },
     {
@@ -1395,22 +1357,6 @@
       "surface": "install",
       "tokens": [
         "xray_vm.h"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "23975144d102e2348d4abdf771bea597033b85c336313c97cb4745dc0c533e4c",
-      "family": "legacy-loader-writer-or-converter",
-      "hit_count": 5,
-      "path": "tests/install/run_installed_runtime_symbol_tests.py",
-      "status": "transitional-owner",
-      "surface": "install",
-      "tokens": [
-        "xr_bytecode_",
-        "xr_detect_output_format",
-        "xr_eval_bytecode",
-        "xr_output_c_source",
-        "xr_run_bytecode_file"
       ]
     },
     {
@@ -9692,6 +9638,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "d80a1d542bb34eff66528024474a5876962464a5ddacf3a5232401cc017afd23",
-  "total": 3834
+  "source_tree_fingerprint": "691bd76dd56759eee388f741f86376b5ee65a20a78f1253f9cd4b29a4b26d080",
+  "total": 3819
 }

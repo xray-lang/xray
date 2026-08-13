@@ -18,6 +18,7 @@ from typing import Any
 
 import assemble_target_machine_completion_evidence as assembler
 import check_target_machine_completion as completion
+import target_machine_retired_runtime_symbols as retired_runtime
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,11 +38,7 @@ EXPECTED_RESULTS = {
     "xrc-negative": "rejected-before-activation",
     "xtp-positive": "activated-and-passed",
 }
-LEGACY_API_RE = re.compile(
-    r"^(?:xray_vm_|xr_vm_|xvm_|xr_bytecode_|xr_bundle_|xr_load_module_|"
-    r"xr_proto_|xr_eval_bytecode$|xr_run_bytecode_file$|"
-    r"xr_detect_output_format$|xr_output_c_source$)"
-)
+LEGACY_API_RE = retired_runtime.compiled_pattern()
 COMPILER_LINK_RE = re.compile(
     r"^(?:xr_parse|xr_compile|xr_semantic_plan_build$|xr_target_plan_build$|"
     r"xr_xtp_encode_plan$|xa_analyzer|xanalyzer_|xi_|xray_build|xtc_)"

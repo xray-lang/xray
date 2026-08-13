@@ -16,10 +16,14 @@ def bootstrap() -> None:
     lib = Path(__file__).resolve().parents[1] / "lib"
     if str(lib) not in sys.path:
         sys.path.insert(0, str(lib))
+    scripts = Path(__file__).resolve().parents[2] / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
 
 
 bootstrap()
 from xraytest import binary as binlib  # noqa: E402
+import target_machine_retired_runtime_symbols as retired_runtime  # noqa: E402
 
 
 REQUIRED = {
@@ -85,18 +89,7 @@ def install(build: Path, prefix: Path, component: str | None = None) -> subproce
 
 
 def legacy_symbols(symbols: set[str]) -> set[str]:
-    exact = {
-        "xr_eval_bytecode",
-        "xr_run_bytecode_file",
-        "xr_detect_output_format",
-        "xr_output_c_source",
-    }
-    return {
-        symbol for symbol in symbols
-        if symbol.startswith(("xray_vm_", "xr_vm_", "xvm_", "xr_bytecode_",
-                              "xr_bundle_", "xr_load_module_", "xr_proto_"))
-        or symbol in exact
-    }
+    return {symbol for symbol in symbols if retired_runtime.matches(symbol)}
 
 
 def inspect(archive: Path) -> list[str]:

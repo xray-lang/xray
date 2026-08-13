@@ -39,6 +39,16 @@
       ]
     },
     {
+      "id": "retired-runtime-symbol-boundary",
+      "path": "scripts/target_machine_retired_runtime_symbols.py",
+      "required_regex": [
+        "EXACT\\s*=\\s*frozenset",
+        "PREFIXES\\s*=",
+        "def matches",
+        "def compiled_pattern"
+      ]
+    },
+    {
       "id": "dependency-graph-evidence-producer",
       "path": "scripts/collect_target_machine_dependency_graph_evidence.py",
       "required_regex": [
@@ -200,6 +210,8 @@
       "scripts/collect_target_machine_runtime_reachability_evidence.py",
       "scripts/collect_target_machine_matrix_evidence.py",
       "scripts/collect_target_machine_symbol_evidence.py",
+      "scripts/target_machine_retired_runtime_symbols.py",
+      "tests/target-machine/test_symbol_evidence_collector.py",
       "tests/target-machine/phase0/run_baseline.py",
       "tests/target-machine/test_full_validation_evidence_collector.py",
       "src/plan/format/xr_xtp_schema.h",
@@ -221,7 +233,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "8ed9f34fb228258905aaca3d622a8ce1974bee93e8f9399dd0f63c44ce243de5"
+    "sha256": "84d318c1b2e80fb56202de0c54a1b856e1c208a82803e0afc59f84192c5ce18f"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",

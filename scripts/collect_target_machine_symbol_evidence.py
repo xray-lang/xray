@@ -15,6 +15,7 @@ from typing import Any
 
 import assemble_target_machine_completion_evidence as assembler
 import check_target_machine_completion as completion
+import target_machine_retired_runtime_symbols as retired_runtime
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,14 +41,8 @@ REQUIRED_AUTHORITY_SYMBOLS = {
         "xr_c_emission_plan_build",
     },
 }
-LEGACY_EXACT = {
-    "xr_eval_bytecode", "xr_run_bytecode_file", "xr_detect_output_format",
-    "xr_output_c_source",
-}
-LEGACY_PREFIXES = (
-    "xray_vm_", "xr_vm_", "xvm_", "xr_bytecode_", "xr_bundle_",
-    "xr_load_module_", "xr_proto_",
-)
+RETIRED_RUNTIME_EXACT = retired_runtime.EXACT
+RETIRED_RUNTIME_PREFIXES = retired_runtime.PREFIXES
 
 
 class CollectionError(ValueError):
@@ -94,7 +89,7 @@ def artifact_path(build: Path, name: str) -> Path | None:
 def forbidden_symbols(symbols: list[str]) -> list[str]:
     return sorted({
         symbol for symbol in symbols
-        if symbol in LEGACY_EXACT or symbol.startswith(LEGACY_PREFIXES)
+        if retired_runtime.matches(symbol)
     })
 
 
