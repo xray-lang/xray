@@ -145,7 +145,7 @@ bool xr_vm_struct_layout_bind_class(XrVMState *vm, XrAggregateLayout *layout, Xr
     return true;
 }
 
-XrClass *xr_vm_struct_layout_class(XrVMState *vm, uint16_t layout_id) {
+XrClass *xr_struct_layout_class_by_id(XrVMState *vm, uint16_t layout_id) {
     if (!vm || layout_id == 0 || layout_id >= vm->struct_layout_count || !vm->struct_layout_classes)
         return NULL;
     XrClass *direct = vm->struct_layout_classes[layout_id];
@@ -538,7 +538,7 @@ static XrValue xr_struct_materialize_instance_depth(XrVMRuntime *isolate, XrValu
 
     XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, ref);
     XrClass *cls =
-        layout ? xr_vm_struct_layout_class(&isolate->vm, xr_aggregate_layout_id(ref)) : NULL;
+        layout ? xr_struct_layout_class_by_id(&isolate->vm, xr_aggregate_layout_id(ref)) : NULL;
     if (!layout || !cls || !xr_aggregate_layout_semantically_equal(cls->struct_layout, layout) ||
         !cls->native_body)
         return xr_null();

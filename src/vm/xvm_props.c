@@ -172,7 +172,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         XrAggregateLayout *slayout = NULL;
         uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
         XrClass *scls =
-            slayout ? xr_vm_struct_layout_class(&isolate->vm, xr_aggregate_layout_id(obj)) : NULL;
+            slayout ? xr_struct_layout_class_by_id(&isolate->vm, xr_aggregate_layout_id(obj)) : NULL;
 
         // Try stored field first
         int fidx = xr_struct_layout_field_index(isolate, slayout, prop_symbol);
@@ -837,7 +837,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         /* A headerless aggregate carries no class pointer of its own; for the
          * rest the layout id resolves the class without reading the payload. */
         XrClass *scls = (slayout && !xr_aggregate_layout_is_headerless(slayout))
-                            ? xr_vm_struct_layout_class(&isolate->vm, xr_aggregate_layout_id(obj))
+                            ? xr_struct_layout_class_by_id(&isolate->vm, xr_aggregate_layout_id(obj))
                             : NULL;
         if (scls && (scls->flags & XR_CLASS_HAS_GETTERS)) {
             XrMethod *getter = xr_class_lookup_getter(scls, prop_symbol);

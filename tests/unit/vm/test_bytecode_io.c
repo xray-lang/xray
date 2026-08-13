@@ -1065,7 +1065,7 @@ TEST(vm_struct_layout_class_resolves_semantically_equal_descriptor_copy) {
     ASSERT_TRUE(copy_id != 0);
     ASSERT_TRUE(declared_id != copy_id);
     ASSERT_TRUE(xr_vm_struct_layout_bind_class(vm, &declared, &identity));
-    ASSERT_EQ_PTR(xr_vm_struct_layout_class(vm, copy_id), &identity);
+    ASSERT_EQ_PTR(xr_struct_layout_class_by_id(vm, copy_id), &identity);
 
     xray_vm_delete(iso);
 }
