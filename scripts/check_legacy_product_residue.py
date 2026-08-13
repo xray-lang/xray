@@ -494,6 +494,13 @@ def self_test() -> int:
         )
         instance_duplicate_drifted, _ = check(root, collect(root))
         retired_instance_duplicate.unlink()
+        retired_runtime_error_duplicate = root / "include/xray_runtime.h"
+        retired_runtime_error_duplicate.write_text(
+            "void xr_runtime_error(XrVMRuntime *, const char *, ...);\n",
+            encoding="utf-8",
+        )
+        runtime_error_duplicate_drifted, _ = check(root, collect(root))
+        retired_runtime_error_duplicate.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -530,6 +537,7 @@ def self_test() -> int:
             or runtime_string_constructor_drifted
             or upvalue_lifecycle_drifted
             or instance_duplicate_drifted
+            or runtime_error_duplicate_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")

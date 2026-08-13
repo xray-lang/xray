@@ -146,11 +146,6 @@ XR_FUNC void xr_value_print(XrVMRuntime *X, XrValue val);
 // Get type name of value
 XR_FUNC const char *xr_value_type_name(XrValue val);
 
-/* ========== Error Handling ========== */
-
-// Report runtime error with printf-style format
-XR_FUNC void xr_runtime_error(XrVMRuntime *X, const char *fmt, ...);
-
 #ifdef __cplusplus
 }
 #endif
