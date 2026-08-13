@@ -147,6 +147,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
+id = "int-arith"
+header = "src/shared/xr_int_arith_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "io"
 header = "src/shared/xr_io_core.h"
 representation = "native"
@@ -534,6 +541,24 @@ fixtures = [
   "tests/unit/ir/test_xi_cgen.c",
   "tests/regression/03_operators/0397_numeric_neg_owner_edges.xr",
   "tests/aot/basic/numeric_neg_owner.xr",
+]
+
+[[operation]]
+id = "int-div-mod"
+observable_contract = "src/shared/xr_int_arith_core.h"
+semantic_kernel = "src/shared/xr_int_arith_core.h"
+vm_adapter = "src/vm/xvm_dispatch_arith.inc.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "shared.int-div-mod"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_numeric_core.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/diff/cases/semantics/int_wrap/uint64_divmod_unsigned.xr",
+  "tests/aot/filetests/cgen/int_div_positive_guard_native.xr",
+  "tests/aot/filetests/cgen/int_mod_positive_guard_native.xr",
+  "tests/aot/filetests/cgen/int_div_unproven_runtime.xr",
+  "tests/aot/filetests/cgen/int_mod_unproven_runtime.xr",
 ]
 
 [[operation]]

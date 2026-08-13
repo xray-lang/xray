@@ -1,3 +1,3 @@
 contains=function 1 name=guardedMod module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
-c_contains= % 
+c_contains=xrt_int_div_mod_eval(XR_INT_DIV_MOD_MOD, XR_INT_DIV_MOD_PROOF_POSITIVE
 c_not_contains=xrt_int_mod(

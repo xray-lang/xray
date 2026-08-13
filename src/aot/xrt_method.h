@@ -22,7 +22,7 @@
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
 #include "xrt_arith.h"  // xrt_value_to_string for container/tuple toString
-#include "../shared/xr_int_arith.h"
+#include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_arith_core.h"  // int.addOverflows/... (task 153)
 #include "../shared/xr_range_core.h"
 #include "../shared/xr_string_core.h"

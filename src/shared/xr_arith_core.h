@@ -14,7 +14,7 @@
  *   and AOT produce identical results by construction. All operate on the
  *   64-bit signed `int` domain.
  *
- *   Wrapping arithmetic lives in xr_int_arith.h (xr_i64_*_wrap) — the
+ *   Wrapping arithmetic lives in xr_int_arith_core.h (xr_i64_*_wrap) — the
  *   wrapping helpers that used to live here were duplicates and were
  *   deleted when mem.addWrapping/... moved to int methods.
  *

@@ -19,7 +19,7 @@
                        // definition is provided by xrt_exception.h in the full
                        // xrt.h build and by the host TU in standalone unit tests
 #include "xrt_class.h"
-#include "../shared/xr_int_arith.h"
+#include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_type_identity_core.h"
 
@@ -547,35 +547,44 @@ static inline XrValue xrt_mul(XrValue a, XrValue b) {
     return XR_FROM_FLOAT(fa * fb);
 }
 
-/* Integer div/mod with zero-check + wrap.
- * Single source of truth for every AOT integer divide path (typed scalar
- * codegen in xi_cgen and the tagged xrt_div / xrt_mod below).
- *   b == 0          → throw (matches VM E0420 / E0421)
- *   INT64_MIN / -1  → INT64_MIN (unsigned negate; matches xi_opt fold)
- *   INT64_MIN % -1  → 0 */
+/* Hosted adapters for the shared xi.div/xi.mod owner. The owner decides the
+ * value — including INT64_MIN / -1 and the unsigned kinds — and reports a zero
+ * divisor; this profile publishes that report as the hosted E0420 / E0421
+ * throw. Generated C reaches the proven-divisor forms through the
+ * xrt_int_div_mod_eval adapter bound to this profile in xrt.h. */
+#define XRT_HOSTED_INT_DIV_MOD_CHECKED(kind, lhs, rhs)                                            \
+    XR_INT_DIV_MOD_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                             \
+                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,                             \
+                               XR_SEM_CONSUMER_AOT_HOSTED, (kind),                                \
+                               XR_INT_DIV_MOD_PROOF_NONE, (lhs), (rhs))
+
 static inline int64_t xrt_int_div(int64_t a, int64_t b) {
-    if (XR_UNLIKELY(b == 0))
+    XrIntDivModResult quotient = XRT_HOSTED_INT_DIV_MOD_CHECKED(XR_INT_DIV_MOD_DIV, a, b);
+    if (XR_UNLIKELY(quotient.divisor_is_zero))
         xrt_throw_exc(xr_box_str("E0420: division by zero"));
-    return xr_i64_div_wrap(a, b);
+    return quotient.value;
 }
 static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
-    if (XR_UNLIKELY(b == 0))
+    XrIntDivModResult remainder = XRT_HOSTED_INT_DIV_MOD_CHECKED(XR_INT_DIV_MOD_MOD, a, b);
+    if (XR_UNLIKELY(remainder.divisor_is_zero))
         xrt_throw_exc(xr_box_str("E0421: modulo by zero"));
-    return xr_i64_mod_wrap(a, b);
+    return remainder.value;
 }
 
 /* Unsigned division / modulo for statically-unsigned operands (mirrors VM
- * OP_DIV_U / OP_MOD_U and xr_i64_div_u_wrap). uint64_t covers every unsigned
- * width: narrower payloads are zero-extended in the i64 value model. */
+ * OP_DIV_U / OP_MOD_U). uint64_t covers every unsigned width: narrower
+ * payloads are zero-extended in the i64 value model. */
 static inline int64_t xrt_uint_div(int64_t a, int64_t b) {
-    if (XR_UNLIKELY(b == 0))
+    XrIntDivModResult quotient = XRT_HOSTED_INT_DIV_MOD_CHECKED(XR_INT_DIV_MOD_DIV_U, a, b);
+    if (XR_UNLIKELY(quotient.divisor_is_zero))
         xrt_throw_exc(xr_box_str("E0420: division by zero"));
-    return xr_i64_div_u_wrap(a, b);
+    return quotient.value;
 }
 static inline int64_t xrt_uint_mod(int64_t a, int64_t b) {
-    if (XR_UNLIKELY(b == 0))
+    XrIntDivModResult remainder = XRT_HOSTED_INT_DIV_MOD_CHECKED(XR_INT_DIV_MOD_MOD_U, a, b);
+    if (XR_UNLIKELY(remainder.divisor_is_zero))
         xrt_throw_exc(xr_box_str("E0421: modulo by zero"));
-    return xr_i64_mod_u_wrap(a, b);
+    return remainder.value;
 }
 
 /* Shifts: the language defines the count as taken mod 64 (spec: "shift count

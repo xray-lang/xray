@@ -39,7 +39,7 @@
 #include "../../../include/xray_value_abi.h"
 #include "../../base/xdefs.h"
 #include "../../base/xchecks.h"
-#include "../../shared/xr_int_arith.h"
+#include "../../shared/xr_int_arith_core.h"
 #include "../../shared/xr_bits_core.h"
 #include "../abi/xr_runtime_string_object.h"
 
@@ -421,27 +421,9 @@ static inline XrValue xr_float(xr_Number n) {
     return XR_FROM_FLOAT(n);
 }
 
-/* Integer wrap helpers shared by VM and AOT runtime.
- * INT64_MIN / -1 and INT64_MIN % -1 are signed-overflow UB in C; both
- * crash IDIV on x86-64. Define them as wrap on every backend so the VM,
- * AOT and xi_opt fold agree:
- *   INT64_MIN / -1 = INT64_MIN  (unsigned negate is well-defined)
- *   INT64_MIN % -1 = 0
- * Caller must have rejected divisor == 0 before calling these. */
-static inline xr_Integer xr_int_div_wrap(xr_Integer a, xr_Integer b) {
-    return xr_i64_div_wrap(a, b);
-}
-static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
-    return xr_i64_mod_wrap(a, b);
-}
-/* Unsigned division / modulo for statically-unsigned operands (OP_DIV_U /
- * OP_MOD_U). Caller must have rejected divisor == 0 before calling these. */
-static inline xr_Integer xr_int_div_u_wrap(xr_Integer a, xr_Integer b) {
-    return xr_i64_div_u_wrap(a, b);
-}
-static inline xr_Integer xr_int_mod_u_wrap(xr_Integer a, xr_Integer b) {
-    return xr_i64_mod_u_wrap(a, b);
-}
+/* Integer division and modulo have a single semantic owner: the VM dispatch
+ * applies XR_INT_DIV_MOD_OWNER_APPLY from xr_int_arith_core.h directly, so no
+ * value-layer restatement of the wrap or unsigned rules exists here. */
 
 /* ========== Type Query ========== */
 

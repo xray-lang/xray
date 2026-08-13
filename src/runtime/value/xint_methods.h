@@ -23,7 +23,7 @@
 #include "../object/xbigint.h"
 #include "../symbol/xsymbol_table.h"
 #include "../../coro/xcoroutine.h"
-#include "../../shared/xr_int_arith.h"
+#include "../../shared/xr_int_arith_core.h"
 #include "../../shared/xr_arith_core.h"
 
 #include <math.h>

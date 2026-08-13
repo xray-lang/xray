@@ -28,6 +28,15 @@
 ** Arithmetic Instructions (Hot Path Inlined)
 ** ======================================================== */
 
+/* Every VM integer division and modulo — signed, unsigned, register or
+ * constant operand — evaluates the shared xi.div/xi.mod owner. The VM proves
+ * nothing about the divisor, so it always passes the unproven kind and only
+ * publishes the divide-by-zero the owner reports. */
+#define XVM_INT_DIV_MOD_EVAL(kind, lhs, rhs)                                                       \
+    XR_INT_DIV_MOD_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                              \
+                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO, XR_SEM_CONSUMER_VM, (kind),  \
+                               XR_INT_DIV_MOD_PROOF_NONE, (lhs), (rhs))
+
 #define XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn)                             \
     do {                                                                                           \
         if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
@@ -155,12 +164,12 @@
             vmbreak;                                                                               \
         }                                                                                          \
         if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
-            xr_Integer nb = XR_TO_INT(vb);                                                         \
-            xr_Integer nc = XR_TO_INT(vc);                                                         \
-            if (nc == 0) {                                                                         \
+            XrIntDivModResult quotient =                                                           \
+                XVM_INT_DIV_MOD_EVAL(XR_INT_DIV_MOD_DIV, XR_TO_INT(vb), XR_TO_INT(vc));            \
+            if (XR_UNLIKELY(quotient.divisor_is_zero)) {                                           \
                 VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");                          \
             }                                                                                      \
-            R(a) = xr_int(xr_int_div_wrap(nb, nc));                                                \
+            R(a) = xr_int(quotient.value);                                                         \
             vmbreak;                                                                               \
         }                                                                                          \
         if ((XR_IS_INT(vb) || XR_IS_FLOAT(vb)) && (XR_IS_INT(vc) || XR_IS_FLOAT(vc))) {            \
@@ -181,11 +190,12 @@
         XrValue vb = R(b);                                                                         \
         XrValue vc = R(c);                                                                         \
         if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
-            xr_Integer divisor = XR_TO_INT(vc);                                                    \
-            if (divisor == 0) {                                                                    \
+            XrIntDivModResult remainder =                                                          \
+                XVM_INT_DIV_MOD_EVAL(XR_INT_DIV_MOD_MOD, XR_TO_INT(vb), XR_TO_INT(vc));            \
+            if (XR_UNLIKELY(remainder.divisor_is_zero)) {                                          \
                 VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");                            \
             }                                                                                      \
-            R(a) = xr_int(xr_int_mod_wrap(XR_TO_INT(vb), divisor));                                \
+            R(a) = xr_int(remainder.value);                                                        \
             vmbreak;                                                                               \
         }                                                                                          \
         if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {                                                \
@@ -422,12 +432,12 @@ vmcase(OP_DIVK) {
 
     // int / int → int (type determines result)
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        xr_Integer nb = XR_TO_INT(vb);
-        xr_Integer nc = XR_TO_INT(vc);
-        if (nc == 0) {
+        XrIntDivModResult quotient =
+            XVM_INT_DIV_MOD_EVAL(XR_INT_DIV_MOD_DIV, XR_TO_INT(vb), XR_TO_INT(vc));
+        if (XR_UNLIKELY(quotient.divisor_is_zero)) {
             VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
         }
-        R(a) = xr_int(xr_int_div_wrap(nb, nc));
+        R(a) = xr_int(quotient.value);
     } else if ((XR_IS_INT(vb) || XR_IS_FLOAT(vb)) && (XR_IS_INT(vc) || XR_IS_FLOAT(vc))) {
         // Mixed or float: promote to float
         double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);
@@ -449,11 +459,12 @@ vmcase(OP_MODK) {
     XrValue vc = k[c];
 
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        xr_Integer divisor = XR_TO_INT(vc);
-        if (divisor == 0) {
+        XrIntDivModResult remainder =
+            XVM_INT_DIV_MOD_EVAL(XR_INT_DIV_MOD_MOD, XR_TO_INT(vb), XR_TO_INT(vc));
+        if (XR_UNLIKELY(remainder.divisor_is_zero)) {
             VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");
         }
-        R(a) = xr_int(xr_int_mod_wrap(XR_TO_INT(vb), divisor));
+        R(a) = xr_int(remainder.value);
     } else {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "modulo requires integer types");
     }
@@ -474,11 +485,12 @@ vmcase(OP_DIV_U) {
     XrValue vc = R(c);
 
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        xr_Integer nc = XR_TO_INT(vc);
-        if (nc == 0) {
+        XrIntDivModResult quotient =
+            XVM_INT_DIV_MOD_EVAL(XR_INT_DIV_MOD_DIV_U, XR_TO_INT(vb), XR_TO_INT(vc));
+        if (XR_UNLIKELY(quotient.divisor_is_zero)) {
             VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
         }
-        R(a) = xr_int(xr_int_div_u_wrap(XR_TO_INT(vb), nc));
+        R(a) = xr_int(quotient.value);
         vmbreak;
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "division requires numeric types");
@@ -492,11 +504,12 @@ vmcase(OP_MOD_U) {
     XrValue vc = R(c);
 
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        xr_Integer divisor = XR_TO_INT(vc);
-        if (divisor == 0) {
+        XrIntDivModResult remainder =
+            XVM_INT_DIV_MOD_EVAL(XR_INT_DIV_MOD_MOD_U, XR_TO_INT(vb), XR_TO_INT(vc));
+        if (XR_UNLIKELY(remainder.divisor_is_zero)) {
             VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");
         }
-        R(a) = xr_int(xr_int_mod_u_wrap(XR_TO_INT(vb), divisor));
+        R(a) = xr_int(remainder.value);
         vmbreak;
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "modulo requires integer types");

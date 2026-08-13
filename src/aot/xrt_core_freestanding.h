@@ -56,7 +56,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_error_messages.h"
 #include "../shared/xr_enum_metadata_core.h"
-#include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
+#include "../shared/xr_int_arith_core.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
 #include "../shared/xr_range_core.h"
@@ -91,6 +91,16 @@ int memcmp(const void *a, const void *b, size_t n);
     XR_NUMERIC_NEG_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI,                             \
                                XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,                             \
                                XR_SEM_CONSUMER_AOT_FREESTANDING, kind, i64, f64)
+#define XRT_FREESTANDING_INT_DIV_MOD_CHECKED(kind, lhs, rhs)                                      \
+    XR_INT_DIV_MOD_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                             \
+                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,                             \
+                               XR_SEM_CONSUMER_AOT_FREESTANDING, (kind),                          \
+                               XR_INT_DIV_MOD_PROOF_NONE, (lhs), (rhs))
+#define xrt_int_div_mod_eval(kind, proof, lhs, rhs)                                               \
+    XR_INT_DIV_MOD_OWNER_APPLY_PROVEN(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                      \
+                                      XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,                      \
+                                      XR_SEM_CONSUMER_AOT_FREESTANDING, (kind), (proof), (lhs),   \
+                                      (rhs))
 #define xrt_null_test_tagged(tag)                                                                 \
     XR_NULL_TEST_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,                                \
                              XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,                                \
@@ -1665,35 +1675,39 @@ static inline int64_t xrt_i64_neg(int64_t a) {
     return (int64_t) (-(uint64_t) a);
 }
 
+/* Freestanding adapters for the shared xi.div/xi.mod owner. The value rule —
+ * including INT64_MIN / -1 and the unsigned kinds — is the same owner the VM
+ * and the hosted profile evaluate; only the divide-by-zero publication is
+ * profile-specific, and here it is the no-libc trap. */
 static inline int64_t xrt_int_div(int64_t a, int64_t b) {
-    if (XR_UNLIKELY(b == 0))
+    XrIntDivModResult quotient = XRT_FREESTANDING_INT_DIV_MOD_CHECKED(XR_INT_DIV_MOD_DIV, a, b);
+    if (XR_UNLIKELY(quotient.divisor_is_zero))
         xrt_freestanding_trap("division by zero");
-    if (b == -1)
-        return xrt_i64_neg(a);
-    return a / b;
+    return quotient.value;
 }
 
 static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
-    if (XR_UNLIKELY(b == 0))
+    XrIntDivModResult remainder = XRT_FREESTANDING_INT_DIV_MOD_CHECKED(XR_INT_DIV_MOD_MOD, a, b);
+    if (XR_UNLIKELY(remainder.divisor_is_zero))
         xrt_freestanding_trap("modulo by zero");
-    if (b == -1)
-        return 0;
-    return a % b;
+    return remainder.value;
 }
 
 /* Unsigned division / modulo for statically-unsigned operands (mirrors VM
  * OP_DIV_U / OP_MOD_U). uint64_t covers every unsigned width: narrower payloads
  * are zero-extended in the i64 value model. */
 static inline int64_t xrt_uint_div(int64_t a, int64_t b) {
-    if (XR_UNLIKELY(b == 0))
+    XrIntDivModResult quotient = XRT_FREESTANDING_INT_DIV_MOD_CHECKED(XR_INT_DIV_MOD_DIV_U, a, b);
+    if (XR_UNLIKELY(quotient.divisor_is_zero))
         xrt_freestanding_trap("division by zero");
-    return (int64_t) ((uint64_t) a / (uint64_t) b);
+    return quotient.value;
 }
 
 static inline int64_t xrt_uint_mod(int64_t a, int64_t b) {
-    if (XR_UNLIKELY(b == 0))
+    XrIntDivModResult remainder = XRT_FREESTANDING_INT_DIV_MOD_CHECKED(XR_INT_DIV_MOD_MOD_U, a, b);
+    if (XR_UNLIKELY(remainder.divisor_is_zero))
         xrt_freestanding_trap("modulo by zero");
-    return (int64_t) ((uint64_t) a % (uint64_t) b);
+    return remainder.value;
 }
 
 static inline double xrt_math_number(XrValue v) {

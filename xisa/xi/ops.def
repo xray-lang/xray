@@ -2644,8 +2644,6 @@
     xi.add
     xi.sub
     xi.mul
-    xi.div
-    xi.mod
     xi.codegen.compiler-fence
     xi.eq
     xi.ne
@@ -2779,6 +2777,8 @@
     xi.ptr.load
     xi.ptr.store
     xi.range
+    xi.div
+    xi.mod
     xi.neg
     xi.not
     xi.bnot
@@ -3070,6 +3070,25 @@
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_numeric_neg_eval")
     (cgen "src/aot/xi_cgen.c" "cg_numeric_neg_adapter_name")
     (runtime "src/runtime/object/xbigint.c" "XR_NUMERIC_NEG_BIGINT_OWNER_PLAN")
+  ))
+
+(define-xi-observable-owner shared.int-div-mod
+  :category shared-semantic-kernel
+  :operations (xi.div xi.mod)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_int_div_mod_eval
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_arith.inc.c" "XR_INT_DIV_MOD_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_int_div_mod_eval")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_int_div_mod_eval")
+    (cgen "src/aot/xi_cgen.c" "cg_int_div_mod_adapter_name")
   ))
 
 (define-xi-observable-owner shared.range
