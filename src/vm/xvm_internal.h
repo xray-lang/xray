@@ -212,10 +212,6 @@ XR_FUNC void xr_vm_cfunction_free(XrCFunction *cfunc);
 
 // Closure operations: see runtime/closure/xclosure.h
 
-// VM initialization and cleanup
-XR_FUNC void xr_vm_vm_init(XrVMRuntime *isolate);
-XR_FUNC void xr_vm_vm_free(XrVMRuntime *isolate);
-
 // Value operation helpers
 XR_FUNC bool xr_vm_is_truthy(XrValue value);
 
