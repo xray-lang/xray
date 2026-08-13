@@ -13576,9 +13576,6 @@ TEST(storage_and_capture_plans_close_owner_actions) {
 
     ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.nmodule_init_plans, 1);
-    ASSERT_EQ_UINT(bundle.module_init_plans[0].allocation_domain, XR_STORAGE_MODULE_STATIC);
-    ASSERT_FALSE(bundle.module_init_plans[0].may_suspend);
     const XaotStoragePlan *module_const = xaot_storage_plan_find(&bundle, &module, 0);
     const XaotStoragePlan *shared_state = xaot_storage_plan_find(&bundle, &module, 1);
     const XaotCapturePlan *module_capture = xaot_capture_plan_find(&bundle, &child, 0);

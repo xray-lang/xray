@@ -33,21 +33,6 @@ typedef struct XaotStoragePlan {
 } XaotStoragePlan;
 
 enum {
-    XAOT_MODULE_INIT_EV_ENTRY_FUNC = 1u << 0,
-    XAOT_MODULE_INIT_EV_STORAGE_DOMAIN = 1u << 1,
-    XAOT_MODULE_INIT_EV_NONSUSPEND = 1u << 2,
-};
-
-typedef struct XaotModuleInitPlan {
-    const struct XiFunc *func;
-    XgFuncId body_func_id;
-    uint32_t module_index;
-    uint32_t evidence;
-    uint8_t allocation_domain;
-    bool may_suspend;
-} XaotModuleInitPlan;
-
-enum {
     XAOT_CAPTURE_EV_CLOSED_CAPTURE = 1u << 0,
     XAOT_CAPTURE_EV_STORAGE_DOMAIN = 1u << 1,
     XAOT_CAPTURE_EV_TYPE_SHAPE = 1u << 2,

@@ -1738,9 +1738,6 @@ typedef struct XaotBundle {
     XaotCapturePlan *capture_plans;
     uint32_t ncapture_plans;
     uint32_t capture_plan_cap;
-    XaotModuleInitPlan *module_init_plans;
-    uint32_t nmodule_init_plans;
-    uint32_t module_init_plan_cap;
     XaotAddressPlan *address_plans;
     uint32_t naddress_plans;
     uint32_t address_plan_cap;

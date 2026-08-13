@@ -109,28 +109,19 @@ static XaotCapturePlan derive_capture(const XiFunc *func, uint16_t index) {
     return plan;
 }
 
-static XaotModuleInitPlan derive_module_init(const XaotBundle *bundle, const XiModule *module,
-                                             uint32_t module_index) {
-    XaotModuleInitPlan plan;
-    const XgGlobalEvidence *evidence = bundle->global_evidence_plan.evidence;
-    memset(&plan, 0, sizeof(plan));
-    plan.func = module ? module->init : NULL;
-    plan.body_func_id = module && module->init ? module->init->xg_body_func_id : XG_NO_ID;
-    plan.module_index = module_index;
-    plan.allocation_domain = XR_STORAGE_MODULE_STATIC;
-    plan.evidence = XAOT_MODULE_INIT_EV_ENTRY_FUNC | XAOT_MODULE_INIT_EV_STORAGE_DOMAIN |
-                    XAOT_MODULE_INIT_EV_NONSUSPEND;
+static bool module_initializer_may_suspend(const XaotBundle *bundle, const XiModule *module,
+                                           uint32_t module_index) {
+    const XgGlobalEvidence *evidence;
+    XgFuncId body_func_id;
+    if (!bundle || !module || !module->init || module_index == bundle->entry_module)
+        return false;
+    evidence = bundle->global_evidence_plan.evidence;
+    body_func_id = module->init->xg_body_func_id;
     for (uint32_t i = 0; evidence && i < evidence->nbodies; i++) {
-        if (evidence->bodies[i].func_id == plan.body_func_id) {
-            /* The executable entry Xi body currently contains both published
-             * module initialization and the logical root body.  Suspension
-             * belongs to EntryPlan, never to its ModuleInitPlan view. */
-            plan.may_suspend = module_index != bundle->entry_module &&
-                               (evidence->bodies[i].effect_bits & XG_BODY_MAY_SUSPEND) != 0;
-            break;
-        }
+        if (evidence->bodies[i].func_id == body_func_id)
+            return (evidence->bodies[i].effect_bits & XG_BODY_MAY_SUSPEND) != 0;
     }
-    return plan;
+    return false;
 }
 
 static bool value_is_buffer_pointer_borrow(const XiValue *value) {
@@ -384,12 +375,7 @@ bool xaot_storage_capture_plans_build(XaotBundle *bundle) {
         const XiModule *module = bundle->modules[mi];
         if (!module || !module->init)
             return false;
-        if (!reserve_rows((void **) &bundle->module_init_plans, &bundle->module_init_plan_cap,
-                          bundle->nmodule_init_plans + 1, sizeof(XaotModuleInitPlan)))
-            return false;
-        bundle->module_init_plans[bundle->nmodule_init_plans++] =
-            derive_module_init(bundle, module, mi);
-        if (bundle->module_init_plans[bundle->nmodule_init_plans - 1].may_suspend) {
+        if (module_initializer_may_suspend(bundle, module, mi)) {
             bundle->error_msg = "module initializer may not suspend";
             return false;
         }
@@ -473,23 +459,14 @@ bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, s
     uint32_t address_count = 0;
     if (!bundle)
         return false;
-    if (bundle->nmodule_init_plans == 0 && bundle->entry_plan.entry_func_id == XG_NO_ID)
+    if (bundle->nmodules == 0 && bundle->entry_plan.entry_func_id == XG_NO_ID)
         return true;
-    if (bundle->nmodule_init_plans != bundle->nmodules) {
-        if (errbuf && errbuf_len)
-            snprintf(errbuf, errbuf_len, "AOT module-init plan count is stale");
-        return false;
-    }
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
-        XaotModuleInitPlan expected = derive_module_init(bundle, bundle->modules[mi], mi);
-        const XaotModuleInitPlan *actual = &bundle->module_init_plans[mi];
-        if (expected.func != actual->func || expected.body_func_id != actual->body_func_id ||
-            expected.module_index != actual->module_index ||
-            expected.evidence != actual->evidence ||
-            expected.allocation_domain != actual->allocation_domain ||
-            expected.may_suspend != actual->may_suspend || actual->may_suspend) {
+        const XiModule *module = bundle->modules[mi];
+        if (!module || !module->init || module_initializer_may_suspend(bundle, module, mi)) {
             if (errbuf && errbuf_len)
-                snprintf(errbuf, errbuf_len, "AOT module-init plan is stale or suspendable");
+                snprintf(errbuf, errbuf_len,
+                         "AOT dependency module initializer is missing or suspendable");
             return false;
         }
     }

@@ -204,10 +204,6 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->capture_plans = NULL;
     bundle->ncapture_plans = 0;
     bundle->capture_plan_cap = 0;
-    xr_free(bundle->module_init_plans);
-    bundle->module_init_plans = NULL;
-    bundle->nmodule_init_plans = 0;
-    bundle->module_init_plan_cap = 0;
 
     xr_free(bundle->address_plans);
     bundle->address_plans = NULL;
@@ -8255,13 +8251,6 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 xr_storage_domain_name((XrSemanticStorageDomain) sp->domain), sp->mutability,
                 sp->address_identity, xaot_materialization_kind_name(sp->materialization_kind),
                 sp->flags);
-    }
-    for (uint32_t mi = 0; mi < bundle->nmodule_init_plans; mi++) {
-        const XaotModuleInitPlan *mp = &bundle->module_init_plans[mi];
-        fprintf(out, "module-init-plan %u func=%u owner=%s may_suspend=%u evidence=0x%x\n", mi,
-                mp->body_func_id,
-                xr_storage_domain_name((XrSemanticStorageDomain) mp->allocation_domain),
-                mp->may_suspend ? 1u : 0u, mp->evidence);
     }
     for (uint32_t ci = 0; ci < bundle->ncapture_plans; ci++) {
         const XaotCapturePlan *cp = &bundle->capture_plans[ci];

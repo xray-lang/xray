@@ -33,7 +33,7 @@
     "unclassified_row": "error",
     "unresolved_destination": "error"
   },
-  "row_count": 51,
+  "row_count": 50,
   "rows": [
     {
       "c_coupling_fields": [],
@@ -942,26 +942,6 @@
       "consumers": [
         "none-current-gap"
       ],
-      "current_fallback": "backend-reconstruction-risk",
-      "current_type": "XaotModuleInitPlan",
-      "deletion_task": 272,
-      "destination": "XrTargetPlan",
-      "pointer_lifetime_fields": [],
-      "producer": "src/aot/xaot_bundle.c",
-      "reference_files": [
-        "src/aot/xaot_bundle.c",
-        "src/aot/xaot_bundle.h",
-        "src/aot/xaot_storage_plan.c",
-        "src/aot/xaot_storage_plan.h"
-      ],
-      "verifier": "none-current-gap"
-    },
-    {
-      "c_coupling_fields": [],
-      "category": "target",
-      "consumers": [
-        "none-current-gap"
-      ],
       "current_fallback": "none-declared",
       "current_type": "XaotObjectAccessCasePlan",
       "deletion_task": 272,
@@ -1217,5 +1197,5 @@
     }
   ],
   "schema": 1,
-  "source_tree_fingerprint": "d4c55c1f6a962a759249a544f95544e7dbba08fe48ae2c818f7afb09e04ebeb2"
+  "source_tree_fingerprint": "d03c5d77e0e90e9a56c7acad912b78f5c82fcc86c9c61a24851b8f162b40e0b8"
 }
