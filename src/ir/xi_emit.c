@@ -581,7 +581,16 @@ static XrAggregateLayout *emit_value_struct_layout(const XrType *type) {
 }
 
 static void emit_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    if (v->nargs < 1) {
+    if (!v || v->nargs < 1 || !v->args[0]) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    bool has_enum_metadata = v->enum_metadata_owner != NULL || v->enum_metadata_field != 0 ||
+                             v->enum_metadata_kind != 0;
+    XrCopyPlan plan = XR_COPY_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO,
+        XR_SEM_CONSUMER_VM, v->aux_int, has_enum_metadata);
+    if (!xr_copy_plan_is_exact_core(plan)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
@@ -590,7 +599,7 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     /* Only lowering-marked value copies need independent storage. Optimizer
      * copies are identity aliases, including for value-struct typed values. */
-    if (!xi_copy_is_value_clone(v)) {
+    if (!plan.requires_independent_value) {
         if (dst != src)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
         return;

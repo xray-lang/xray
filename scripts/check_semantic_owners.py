@@ -169,6 +169,7 @@ NULL_TEST_OPERATIONS = {"xi.isnull"}
 ASSERT_CONDITION_OPERATIONS = {"xi.assert", "xi.assert.eq", "xi.assert.ne"}
 OWNER_FORWARD_OPERATIONS = {"xi.owner.forward"}
 CODEGEN_OPAQUE_OPERATIONS = {"xi.codegen.opaque"}
+COPY_OPERATIONS = {"xi.copy"}
 REGEX_COMPILE_OPERATIONS = {"xi.regex.compile"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
@@ -2253,6 +2254,75 @@ def verify_codegen_opaque_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_copy_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.copy"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != COPY_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.copy family")
+    elif owner.get("cgen_adapter") != "xr_copy_plan_core":
+        errors.append("semantic owner registry has no exact copy CGen adapter")
+
+    core_text = (root / "src/shared/xr_copy_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_COPY_OWNER_PLAN",
+                  "XI_COPY_KIND_VALUE_CLONE", "XI_COPY_KIND_CELL_READ",
+                  "XI_COPY_KIND_CLEANUP_RETURN", "XI_COPY_KIND_LIKELY",
+                  "XI_COPY_KIND_UNLIKELY", "XR_COPY_SEMANTIC_ENUM_METADATA_FORWARD",
+                  "xr_copy_plan_core", "xr_copy_plan_is_exact_core"):
+        if token not in core_text:
+            errors.append("src/shared/xr_copy_core.h: copy variants lack stable owner")
+            break
+
+    xi_text = (root / "src/ir/xi.h").read_text(encoding="utf-8", errors="strict")
+    for token in ('#include "../shared/xr_copy_core.h"', "xi_copy_is_value_clone",
+                  "xi_copy_is_identity_alias", "xi_copy_is_branch_hint"):
+        if token not in xi_text:
+            errors.append("src/ir/xi.h: Xi copy queries bypass shared constants")
+            break
+    if "#define XI_COPY_KIND_VALUE_CLONE" in xi_text:
+        errors.append("src/ir/xi.h: Xi copy semantic constants regained a private owner")
+
+    vm_text = (root / "src/ir/xi_emit.c").read_text(encoding="utf-8", errors="strict")
+    vm_body = extract_c_function(vm_text, "emit_copy") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_COPY_OWNER_PLAN", "xr_copy_plan_is_exact_core",
+                  "requires_independent_value", "OP_MOVE", "OP_COPY", "OP_AGG_COPY"):
+        if token not in vm_body:
+            errors.append("src/ir/xi_emit.c: copy emitter bypasses shared owner")
+            break
+    if "xi_copy_is_value_clone" in vm_body:
+        errors.append("src/ir/xi_emit.c: copy emitter revived a private clone decision")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_copy_adapter_name") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_CGEN",
+                  "xr_semantic_owner_cgen_adapter", '"xr_copy_plan_core"'):
+        if token not in resolver:
+            errors.append("src/aot/xi_cgen.c: copy does not resolve stable adapter")
+            break
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    body = extract_c_function(dispatch_text, "xicgen_copy") or ""
+    for token in ("cg_copy_adapter_name", "XR_COPY_OWNER_PLAN",
+                  "xr_copy_plan_is_exact_core", "requires_independent_value",
+                  "xicgen_identity", "xrt_value_clone_for_coro"):
+        if token not in body:
+            errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: copy bypasses owner")
+            break
+    if "xicgen_copy_needs_value_clone" in dispatch_text:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: private clone owner revived")
+
+    test_text = (root / "tests/unit/stdlib/test_numeric_core.c").read_text(
+        encoding="utf-8", errors="strict")
+    if "copy_core_freezes_identity_clone_and_control_variants" not in test_text:
+        errors.append("tests/unit/stdlib/test_numeric_core.c: copy owner KAT is missing")
+    return errors
+
+
 def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     owner_name = "shared.regex"
@@ -3002,8 +3072,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 39:
-        errors.append(f"shared-core inventory must contain exactly 39 headers, found {len(actual)}")
+    if len(actual) != 40:
+        errors.append(f"shared-core inventory must contain exactly 40 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -3047,6 +3117,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_assert_condition_ratchet(root, registry))
         errors.extend(verify_owner_forward_ratchet(root, registry))
         errors.extend(verify_codegen_opaque_ratchet(root, registry))
+        errors.extend(verify_copy_ratchet(root, registry))
         errors.extend(verify_regex_compile_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_byte_array_copy_ratchet(root, registry))

@@ -43,6 +43,7 @@
 #include "../base/xdefs.h"
 #include "../base/xconstants.h"
 #include "../shared/xr_conversion.h"
+#include "../shared/xr_copy_core.h"
 #include "../shared/xr_param_mode.h"
 #include "../runtime/value/xtransfer_mode.h"
 
@@ -1388,13 +1389,6 @@ static inline void xi_tuple_set_storage_mode(XiValue *v, uint8_t storage_mode) {
     if (v && v->op == XI_TUPLE_NEW)
         v->aux_int = xi_tuple_pack_aux(v->nargs, storage_mode);
 }
-
-#define XI_COPY_KIND_IDENTITY 0
-#define XI_COPY_KIND_VALUE_CLONE INT64_C(0x58434F5059434C4E)
-#define XI_COPY_KIND_CELL_READ INT64_C(0x5843454C4C524541)
-#define XI_COPY_KIND_CLEANUP_RETURN INT64_C(0x58434C4E52545552)
-#define XI_COPY_KIND_LIKELY INT64_C(0x584C494B454C5901)
-#define XI_COPY_KIND_UNLIKELY INT64_C(0x58554E4C494B5901)
 
 /* XI_ERR_CHECK starts operand-free at lowering.  After all AOT value-rewriting
  * passes, ARC finalization attaches the owners which remain live only on the

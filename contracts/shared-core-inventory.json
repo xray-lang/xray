@@ -446,6 +446,34 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_copy_core.h",
+      "id": "copy",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/ir/xi.h",
+        "src/ir/xi_emit.c",
+        "src/shared/xr_semantic_owner_ids_gen.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_copy_plan_core",
+        "xr_copy_plan_is_exact_core"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_crypto_core.h",
       "id": "crypto",
       "owner": "shared-kernel",

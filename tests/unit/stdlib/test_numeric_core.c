@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "shared/xr_bits_core.h"
 #include "shared/xr_codegen_opaque_core.h"
+#include "shared/xr_copy_core.h"
 #include "shared/xr_numeric_conversion_core.h"
 #include "shared/xr_numeric_core.h"
 #include "shared/xr_owner_forward_core.h"
@@ -573,6 +574,34 @@ TEST(codegen_opaque_core_freezes_value_and_optimizer_barrier) {
                   "xr_codegen_opaque_plan_core");
 }
 
+TEST(copy_core_freezes_identity_clone_and_control_variants) {
+    XrCopyPlan identity = XR_COPY_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO,
+        XR_SEM_CONSUMER_VM, XI_COPY_KIND_IDENTITY, false);
+    XrCopyPlan clone = XR_COPY_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO,
+        XR_SEM_CONSUMER_CGEN, XI_COPY_KIND_VALUE_CLONE, false);
+    XrCopyPlan hint = xr_copy_plan_core(XI_COPY_KIND_LIKELY, false);
+    XrCopyPlan metadata = xr_copy_plan_core(XI_COPY_KIND_IDENTITY, true);
+
+    ASSERT(xr_copy_plan_is_exact_core(identity));
+    ASSERT(xr_copy_plan_is_exact_core(clone));
+    ASSERT(xr_copy_plan_is_exact_core(hint));
+    ASSERT(xr_copy_plan_is_exact_core(metadata));
+    ASSERT_EQ_INT(identity.kind, XR_COPY_SEMANTIC_IDENTITY);
+    ASSERT(identity.borrows_source && !identity.requires_independent_value);
+    ASSERT_EQ_INT(clone.kind, XR_COPY_SEMANTIC_VALUE_CLONE);
+    ASSERT(!clone.borrows_source && clone.requires_independent_value);
+    ASSERT(hint.carries_branch_hint && hint.borrows_source);
+    ASSERT_EQ_INT(metadata.kind, XR_COPY_SEMANTIC_ENUM_METADATA_FORWARD);
+    ASSERT_FALSE(xr_copy_plan_is_exact_core(xr_copy_plan_core(INT64_C(7), false)));
+    ASSERT_FALSE(xr_copy_plan_is_exact_core(
+        xr_copy_plan_core(XI_COPY_KIND_VALUE_CLONE, true)));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO),
+                  "xr_copy_plan_core");
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -607,6 +636,7 @@ RUN_TEST(raw_scalar_core_float_and_pointer_access_preserve_bits);
 RUN_TEST(raw_scalar_access_owner_freezes_typed_load_store_matrix);
 RUN_TEST(owner_forward_core_freezes_value_and_ownership_transfer);
 RUN_TEST(codegen_opaque_core_freezes_value_and_optimizer_barrier);
+RUN_TEST(copy_core_freezes_identity_clone_and_control_variants);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()

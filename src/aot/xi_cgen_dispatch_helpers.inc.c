@@ -661,18 +661,25 @@ static void xicgen_identity(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     emit_conversion_suffix(out, conv_suffix);
 }
 
-static bool xicgen_copy_needs_value_clone(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    (void) ctx;
-    (void) f;
-    if (!v || v->op != XI_COPY || v->nargs < 1 || !v->args[0])
-        return false;
-    return xi_copy_is_value_clone(v);
-}
-
 static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
     (void) prefix;
-    XR_DCHECK(v->nargs >= 1, "xicgen_copy: need arg");
+    if (!v || v->nargs < 1 || !v->args[0] || !cg_copy_adapter_name(ctx)) {
+        if (ctx)
+            ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    bool has_enum_metadata = v->enum_metadata_owner != NULL || v->enum_metadata_field != 0 ||
+                             v->enum_metadata_kind != 0;
+    XrCopyPlan copy_plan = XR_COPY_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO,
+        XR_SEM_CONSUMER_CGEN, v->aux_int, has_enum_metadata);
+    if (!xr_copy_plan_is_exact_core(copy_plan)) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (cg_value_plan_is_vector(ctx, v) || cg_value_plan_is_vector(ctx, v->args[0])) {
         xicgen_identity(ctx, out, f, v, prefix);
         return;
@@ -704,7 +711,7 @@ static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                 ap ? (int) ap->rep.rep : -1, ap ? ap->rep.flags : 0,
                 (ap && ap->rep.c_type) ? ap->rep.c_type : "<null>");
     }
-    if (!xicgen_copy_needs_value_clone(ctx, f, v)) {
+    if (!copy_plan.requires_independent_value) {
         xicgen_identity(ctx, out, f, v, prefix);
         return;
     }

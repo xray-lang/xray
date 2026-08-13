@@ -41,6 +41,7 @@
 #include "../shared/xr_native_type_core.h"
 #include "../shared/xr_owner_forward_core.h"
 #include "../shared/xr_codegen_opaque_core.h"
+#include "../shared/xr_copy_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
@@ -4541,6 +4542,24 @@ static const char *cg_codegen_opaque_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO);
     if (!adapter || strcmp(adapter, "xr_codegen_opaque_plan_core") != 0) {
         fprintf(stderr, "[xi_cgen] ERROR: codegen-opaque owner has no exact CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_copy_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_COPY_HI,
+                                        XR_SEM_OWNER_ID_SHARED_COPY_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: copy owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO);
+    if (!adapter || strcmp(adapter, "xr_copy_plan_core") != 0) {
+        fprintf(stderr, "[xi_cgen] ERROR: copy owner has no exact CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }

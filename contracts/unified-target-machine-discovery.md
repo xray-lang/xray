@@ -38,7 +38,7 @@ LF bytes on every host.  Their policy and contract digests therefore identify
 the exact executed input instead of the caller's `core.autocrlf` preference.
 
 anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json c57ab963c916f51eb7b03e63c6f2cc1f8b0bbbac614ee1605e5cb9b49c16500a
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 467be0e61d824137d32276ffe1bf7e96213b1f200228f3e4b491803a4a2f8ccc
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json f13bbef3b5e5f739e760d242847e53b431252ed719ce669d2c058c8dc806df17
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json 415474d306be206ecab565c78b51be190fb9c0b80e846076c62c6fd81be4e9b0
 anchor-sha256: contracts/target-machine/legacy-product-residue.json addd4d156157a0cb38dacdab9a304f18ea8dd6257f09532b803e0ed473aeb513

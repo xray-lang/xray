@@ -2722,7 +2722,6 @@
     xi.multi.ret
     xi.phi
     xi.select
-    xi.copy
     xi.class.create
     xi.try
     xi.catch
@@ -2763,6 +2762,7 @@
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
     xi.codegen.opaque
+    xi.copy
     xi.owner.forward
     xi.target.sizeof
     xi.target.alignof
@@ -2904,6 +2904,21 @@
     (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
     (vm "src/ir/xi_emit.c" "XR_CODEGEN_OPAQUE_OWNER_PLAN")
     (cgen "src/aot/xi_cgen.c" "cg_codegen_opaque_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.copy
+  :category shared-semantic-kernel
+  :operations (xi.copy)
+  :consumers (
+    semantic-plan
+    vm
+    cgen
+  )
+  :cgen-adapter xr_copy_plan_core
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/ir/xi_emit.c" "XR_COPY_OWNER_PLAN")
+    (cgen "src/aot/xi_cgen.c" "cg_copy_adapter_name")
   ))
 
 (define-xi-observable-owner shared.truthiness
