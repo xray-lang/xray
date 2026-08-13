@@ -221,7 +221,7 @@ static inline XrDispatchAction vm_suspend_yield_replay_yielded(XrBcCallFrame *fr
 /* Reduction charge for a channel op that completed without blocking.
  * Shared by the out-of-line helpers (xvm_chan_ops.c) and the inline
  * buffered fast paths in the dispatch loop. */
-#define XR_VM_CHAN_READY_REDUCTION_COST 64
+#define XR_READY_CHANNEL_REDUCTION_COST 64
 
 static inline XrDispatchAction
 vm_ready_operation_next_or_yield(XrVMRuntime *isolate, XrCoroutine *current, XrBcCallFrame *frame,

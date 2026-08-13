@@ -113,7 +113,7 @@ vmcase(OP_CHAN_SEND) {
         _ch->buf_count++;
         xr_amutex_unlock(&_ch->lock);
         base[GETARG_A(i)] = xr_null();
-        if (XR_UNLIKELY(xr_coro_consume_reds(_cur, XR_VM_CHAN_READY_REDUCTION_COST) <= 0) && _rt) {
+        if (XR_UNLIKELY(xr_coro_consume_reds(_cur, XR_READY_CHANNEL_REDUCTION_COST) <= 0) && _rt) {
             xr_coro_set_reds(_cur, XR_CORO_REDUCTIONS);
             frame->pc = pc;
             return XR_VM_YIELD;
@@ -154,7 +154,7 @@ vmcase(OP_CHAN_RECV) {
         _v = xr_chan_take_recv(isolate, _v, _cur);
         base[GETARG_A(i)] = _v;
         base[GETARG_A(i) + 1] = xr_bool(true);
-        if (XR_UNLIKELY(xr_coro_consume_reds(_cur, XR_VM_CHAN_READY_REDUCTION_COST) <= 0) && _rt) {
+        if (XR_UNLIKELY(xr_coro_consume_reds(_cur, XR_READY_CHANNEL_REDUCTION_COST) <= 0) && _rt) {
             xr_coro_set_reds(_cur, XR_CORO_REDUCTIONS);
             frame->pc = pc;
             return XR_VM_YIELD;

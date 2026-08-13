@@ -48,7 +48,7 @@ static inline XrDispatchAction vm_chan_ready_next_or_yield(XrVMRuntime *isolate,
                                                            XrBcCallFrame *frame,
                                                            XrInstruction *pc) {
     return vm_ready_operation_next_or_yield(isolate, current, frame, pc,
-                                            XR_VM_CHAN_READY_REDUCTION_COST);
+                                            XR_READY_CHANNEL_REDUCTION_COST);
 }
 
 static XrDispatchAction vm_time_after_impl(XrVMRuntime *isolate, XrVMContext *vm_ctx,

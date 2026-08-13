@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3238
+    "source": 3234
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -8422,14 +8422,13 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "c5468c3b64102e6a01a06496cec84127b4fea7fae90af250ea1ad657f6504bb6",
+      "evidence_sha256": "9ce588f490e7516476d30c7fc3ec611dcf19c2f5c88540c8632a6d810a4400ea",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 14,
+      "hit_count": 13,
       "path": "src/vm/xvm_chan_ops.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "XR_VM_CHAN_READY_REDUCTION_COST",
         "xr_vm_send_result_value"
       ]
     },
@@ -8527,14 +8526,13 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "274990327903ea3e1c30b7d489a056e72ae846308c4df187728285d4ed94f69c",
+      "evidence_sha256": "f7c5c1a4ceb9c8545673713fa318ea132f20f99bd58fe39de4b62901e3f00d66",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 4,
+      "hit_count": 2,
       "path": "src/vm/xvm_dispatch_chan.inc.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "XR_VM_CHAN_READY_REDUCTION_COST",
         "XR_VM_YIELD"
       ]
     },
@@ -8581,15 +8579,14 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "5d51f5a96dd2772074f4aac8a13188da08f6e12fb8477fef50b6e47fbfaabe48",
+      "evidence_sha256": "b0c14cb04cb84068d39318f65cdcb6abe015d84d9a8e7fee8134437ef0915d44",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 3,
+      "hit_count": 2,
       "path": "src/vm/xvm_dispatch_helpers.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "XR_VM_BLOCKED",
-        "XR_VM_CHAN_READY_REDUCTION_COST",
         "xr_vm_unwind_with_trace"
       ]
     },
@@ -9068,6 +9065,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "a3afb3f74198fceddd6669786b5b4673eff85f7e488dcc8096b8a7df8600da1b",
-  "total": 3440
+  "source_tree_fingerprint": "9074791159c3c8f03566a8ff9f4ed8778ab083f58f97a0ff621c24d807e44bb1",
+  "total": 3436
 }
