@@ -376,7 +376,7 @@ static void *thread_entry_vm(void *arg) {
         return NULL;
 
     if (thread->isolate)
-        xray_vm_enter(thread->isolate);
+        xr_isolate_enter(thread->isolate);
     if (thread->name)
         xr_thread_set_name(xr_thread_self(), thread->name);
     thread_apply_affinity(thread->affinity_cpus, thread->affinity_count);
@@ -408,7 +408,7 @@ static void *thread_entry_vm(void *arg) {
     if (bound_vm_tls)
         thread_unbind_vm_tls(&worker, &machine);
     if (isolate)
-        xray_vm_exit();
+        xr_isolate_exit();
     xr_thread_obj_threadlocal_leave_current();
 
     thread_release_ref(thread);

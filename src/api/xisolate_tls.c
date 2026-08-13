@@ -20,7 +20,7 @@
 
 XR_THREAD_LOCAL XrVMRuntime *g_current_isolate = NULL;
 
-void xray_vm_enter(XrVMRuntime *isolate) {
+void xr_isolate_enter(XrVMRuntime *isolate) {
     if (isolate == NULL) {
         xr_log_warning("isolate", "isolate_enter: isolate is NULL");
         return;
@@ -28,10 +28,10 @@ void xray_vm_enter(XrVMRuntime *isolate) {
     g_current_isolate = isolate;
 }
 
-void xray_vm_exit(void) {
+void xr_isolate_exit(void) {
     g_current_isolate = NULL;
 }
 
-XrVMRuntime *xray_vm_current(void) {
+XrVMRuntime *xr_isolate_current(void) {
     return g_current_isolate;
 }

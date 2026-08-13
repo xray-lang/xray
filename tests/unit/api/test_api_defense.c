@@ -108,6 +108,13 @@ TEST(api_isolate_create_destroy) {
 
     XrVMRuntime *iso = xray_vm_new(&params);
     ASSERT_NOT_NULL(iso);
+    ASSERT_TRUE(xr_isolate_current() == iso);
+    xr_isolate_exit();
+    ASSERT_NULL(xr_isolate_current());
+    xr_isolate_enter(NULL);
+    ASSERT_NULL(xr_isolate_current());
+    xr_isolate_enter(iso);
+    ASSERT_TRUE(xr_isolate_current() == iso);
     ASSERT_NULL(xr_isolate_get_scheduler_runtime(iso));
 
     xr_isolate_multicore_init(NULL, 1);

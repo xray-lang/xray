@@ -174,10 +174,10 @@ XR_FUNC XrExtTraverseFn xr_isolate_get_ext_traverse(XrVMRuntime *isolate, uint8_
 
 /* ========== Thread Local API ========== */
 
-XR_FUNC XrVMRuntime *xray_vm_current(void);
+XR_FUNC XrVMRuntime *xr_isolate_current(void);
 
 // Enter/exit isolate context for current thread
-XR_FUNC void xray_vm_enter(XrVMRuntime *isolate);
-XR_FUNC void xray_vm_exit(void);
+XR_FUNC void xr_isolate_enter(XrVMRuntime *isolate);
+XR_FUNC void xr_isolate_exit(void);
 
 #endif  // XISOLATE_API_H

@@ -295,7 +295,7 @@ static void *worker_thread(void *arg) {
     }
 
     // Enter the isolate for this thread
-    xray_vm_enter(worker->isolate);
+    xr_isolate_enter(worker->isolate);
 
     while (atomic_load(&pool->running)) {
         // Wait for work
@@ -357,7 +357,7 @@ static void *worker_thread(void *arg) {
     }
 
     // Cleanup
-    xray_vm_exit();
+    xr_isolate_exit();
     xray_vm_delete(worker->isolate);
     worker->isolate = NULL;
 

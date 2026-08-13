@@ -110,7 +110,7 @@ XrVMRuntime *xray_vm_new(const XrVMConfig *params) {
         goto fail_after_vm;
 #endif
 
-    xray_vm_enter(isolate);
+    xr_isolate_enter(isolate);
     return isolate;
 
 #if XR_ENABLE_VM_PROFILER
@@ -188,7 +188,7 @@ void xray_vm_delete(XrVMRuntime *isolate) {
 
     stage_start_ns = xr_time_monotonic_ns();
     if (g_current_isolate == isolate) {
-        xray_vm_exit();
+        xr_isolate_exit();
     }
     tls_exit_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 

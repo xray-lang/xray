@@ -233,6 +233,6 @@ XR_FUNC XrProto *xr_compile_source_with_path(XrCompilerSession *session, const c
 // Each thread has its own Isolate instance
 extern XR_THREAD_LOCAL XrVMRuntime *g_current_isolate;
 
-// xray_vm_enter/xray_vm_exit declared in xisolate_api.h
+// xr_isolate_enter/xr_isolate_exit declared in xisolate_api.h
 
 #endif  // XISOLATE_INTERNAL_H
