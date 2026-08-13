@@ -46,17 +46,6 @@ typedef struct Upvalue Upvalue;
 // XrValue is defined in xvalue.h (16-byte tagged union struct)
 // Include xvalue.h to get the complete definition
 
-/* ========== Runtime Initialization and Cleanup ========== */
-
-// Create runtime state, returns NULL on failure
-XRAY_API XrVMRuntime *xray_runtime_init(void);
-
-// Destroy runtime and release all resources
-XRAY_API void xray_runtime_cleanup(XrVMRuntime *X);
-
-// Get runtime version string
-XRAY_API const char *xray_runtime_version(void);
-
 /* ========== Object Creation ========== */
 
 // Create empty array
