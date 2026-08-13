@@ -407,6 +407,7 @@ static bool scalar_rep_matches_profile(const XrTargetMachineRepRecord *rep,
         case XR_MACHINE_REP_RUNE:
             return rep_matches_layout(rep, &profile->data_layout.u32, XR_TARGET_SIGN_UNSIGNED);
         case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
             return rep_matches_layout(rep, &profile->data_layout.i64, XR_TARGET_SIGN_SIGNED);
         case XR_MACHINE_REP_U64:
             return rep_matches_layout(rep, &profile->data_layout.u64, XR_TARGET_SIGN_UNSIGNED);
@@ -433,6 +434,21 @@ static bool rep_kind_contract_is_exact(const XrTargetPlan *plan,
                rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
                rep->null_encoding == XR_TARGET_NULL_NOT_NULLABLE;
     switch (rep->kind) {
+        case XR_MACHINE_REP_ENUM_ORDINAL: {
+            const XrSemanticTypeRecord *type =
+                xr_semantic_plan_type(plan->semantic_plan, rep->detail);
+            return type && type->kind == XR_KIND_ENUM && type->source_enum_key &&
+                   type->enum_layout_id != 0 && type->enum_member_count != 0 &&
+                   type->enum_flags ==
+                       (XR_SEM_ENUM_DECLARATION_EXACT | XR_SEM_ENUM_UNIT) &&
+                   type->reserved_enum == 0 && type->builtin_type == XR_TID_NULL &&
+                   type->child_count == 0 && type->aggregate_extent == 0 &&
+                   type->aggregate_align == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
+                   (type->flags & XR_SEM_TYPE_NULLABLE) == 0 && rep->lane_count == 0 &&
+                   rep->root_kind == XR_TARGET_ROOT_NONE &&
+                   rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+                   rep->null_encoding == XR_TARGET_NULL_NOT_NULLABLE;
+        }
         case XR_MACHINE_REP_OBJECT_REF:
             return rep->root_kind == XR_TARGET_ROOT_OBJECT && rep->lane_count == 0 &&
                    rep->signedness == XR_TARGET_SIGN_NONE;
@@ -615,6 +631,19 @@ static int semantic_type_expected_rep(const XrSemanticTypeRecord *type, uint16_t
         default:
             return 0;
     }
+}
+
+static bool semantic_unit_enum_type_is_exact(const XrSemanticTypeRecord *type) {
+    XrStableId zero = {{0}};
+    return type && type->kind == XR_KIND_ENUM && type->source_enum_key &&
+           !xr_stable_id_equal(type->source_enum_identity, zero) &&
+           type->enum_layout_id != 0 && type->enum_member_count != 0 &&
+           type->enum_flags == (XR_SEM_ENUM_DECLARATION_EXACT | XR_SEM_ENUM_UNIT) &&
+           type->reserved_enum == 0 && type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
 }
 
 static int semantic_aggregate_kind(const XrSemanticTypeRecord *type) {
@@ -2335,6 +2364,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                                                            semantic_value);
     bool exact_string_byte_parameter = semantic_u8_slice_parameter_is_exact(
         plan->semantic_plan, parameter) && parameter->type == semantic_type;
+    bool exact_unit_enum = semantic_unit_enum_type_is_exact(type);
     uint16_t receive_scalar_kind = XR_MACHINE_REP_COUNT;
     bool scalar_channel_receive =
         operation && operation->opcode == XI_CHAN_TRY_RECV && type &&
@@ -2346,7 +2376,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                               exact_string_literal || exact_stringbuilder ||
                               exact_direct_callee || exact_go_callee ||
                               exact_channel || exact_source_namespace || exact_string_byte_view ||
-                              exact_string_byte_parameter
+                              exact_string_byte_parameter || exact_unit_enum
                           ? 1
                           : (type ? semantic_type_expected_rep(type,
                                                                &expected_kind)
@@ -2380,6 +2410,13 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         expected_layout = target_plan_layout_for_type(plan, semantic_type);
         eligibility = expected_layout >= 0 &&
                               plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_VIEW
+                          ? 1
+                          : -1;
+    } else if (exact_unit_enum) {
+        expected_kind = XR_MACHINE_REP_ENUM_ORDINAL;
+        expected_layout = target_plan_layout_for_type(plan, semantic_type);
+        eligibility = expected_layout >= 0 &&
+                              plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_SCALAR
                           ? 1
                           : -1;
     } else if (eligibility == 0 && deferred_operation) {
@@ -2433,6 +2470,14 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
          plan->machine_reps[record->register_rep].ownership != XR_TARGET_OWNERSHIP_BORROWED ||
          plan->machine_reps[record->memory_rep].ownership != XR_TARGET_OWNERSHIP_BORROWED))
         XR_VALUE_BINDING_FAIL(11);
+    if (expected_kind == XR_MACHINE_REP_ENUM_ORDINAL &&
+        (plan->machine_reps[record->register_rep].detail != semantic_type ||
+         plan->machine_reps[record->memory_rep].detail != semantic_type ||
+         plan->machine_reps[record->register_rep].root_kind != XR_TARGET_ROOT_NONE ||
+         plan->machine_reps[record->memory_rep].root_kind != XR_TARGET_ROOT_NONE ||
+         plan->machine_reps[record->register_rep].ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+         plan->machine_reps[record->memory_rep].ownership != XR_TARGET_OWNERSHIP_TRIVIAL))
+        XR_VALUE_BINDING_FAIL(12);
     if (expected_kind == XR_MACHINE_REP_VOID) {
         if (record->slot != XR_SEMANTIC_INDEX_NONE)
             XR_VALUE_BINDING_FAIL(8);
@@ -2708,6 +2753,10 @@ static bool verify_layouts(const XrTargetPlan *plan,
             xr_semantic_plan_type(plan->semantic_plan, layout->semantic_type);
         uint16_t expected_rep = XR_MACHINE_REP_COUNT;
         int scalar = semantic_type ? semantic_type_expected_rep(semantic_type, &expected_rep) : -1;
+        if (semantic_unit_enum_type_is_exact(semantic_type)) {
+            scalar = 1;
+            expected_rep = XR_MACHINE_REP_ENUM_ORDINAL;
+        }
         if (!semantic_type || !stable_id_is_zero(layout->destructor) ||
             !stable_id_is_zero(layout->clone) || !stable_id_is_zero(layout->equality_hash) ||
             plan->extents[layout->extent].kind != XR_TARGET_EXTENT_FIXED)
@@ -2721,6 +2770,8 @@ static bool verify_layouts(const XrTargetPlan *plan,
             bool physical_match = false;
             for (uint32_t r = 0; r < plan->machine_reps_count; r++)
                 if (plan->machine_reps[r].kind == expected_rep &&
+                    (expected_rep != XR_MACHINE_REP_ENUM_ORDINAL ||
+                     plan->machine_reps[r].detail == layout->semantic_type) &&
                     plan->machine_reps[r].memory_size == layout->fixed_prefix_size &&
                     plan->machine_reps[r].memory_align == layout->align)
                     physical_match = true;
@@ -3398,6 +3449,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 bool argument_u8_slice =
                     semantic_u8_slice_parameter_is_exact(semantic, parameter) &&
                     semantic_u8_slice_type_is_exact(semantic, operand->type);
+                bool argument_unit_enum = parameter && parameter->type == operand->type &&
+                                          semantic_unit_enum_type_is_exact(
+                                              xr_semantic_plan_type(semantic, operand->type));
                 uint8_t ownership =
                     operand->ownership_action == XR_SEM_OPERAND_CONSUME
                         ? XR_TARGET_CALL_CONSUME
@@ -3409,12 +3463,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         operand->parameter_mode == parameter->mode &&
                         operand->transfer_mode == parameter->transfer_mode &&
                         (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
-                        (argument_scalar == 1 || argument_u8_slice) &&
+                        (argument_scalar == 1 || argument_u8_slice || argument_unit_enum) &&
                         parameter->mode == XR_PARAM_READ &&
                         operand->access == XR_CALL_ARG_PLAIN &&
                         (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0 &&
                         (parameter->ownership == XI_OWN_NONE ||
-                         (argument_u8_slice && parameter->ownership == XI_OWN_BORROWED)) &&
+                         ((argument_u8_slice || argument_unit_enum) &&
+                          parameter->ownership == XI_OWN_BORROWED)) &&
                         caller_value &&
                         callee_value &&
                         slot_binds_value_in_function(
@@ -3438,7 +3493,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         argument->register_rep == caller_value->register_rep &&
                         argument->memory_rep == caller_value->memory_rep &&
                         plan->machine_reps[argument->register_rep].kind ==
-                            (argument_u8_slice ? XR_MACHINE_REP_VIEW : argument_kind) &&
+                            (argument_u8_slice
+                                 ? XR_MACHINE_REP_VIEW
+                                 : argument_unit_enum ? XR_MACHINE_REP_ENUM_ORDINAL
+                                                      : argument_kind) &&
                         argument->ordinal == ordinal &&
                         argument->mode == XR_TARGET_CALL_VALUE &&
                         argument->ownership == ownership &&

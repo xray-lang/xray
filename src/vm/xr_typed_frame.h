@@ -24,7 +24,7 @@
 #define XR_TYPED_FRAME_MAX_SLOT_COUNT UINT32_C(1048576)
 #define XR_TYPED_FRAME_MAX_ALIGNMENT ((size_t) 4096u)
 #define XR_TYPED_FRAME_MAX_TOTAL_BYTES ((size_t) 80u * 1024u * 1024u)
-#define XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION UINT32_C(17)
+#define XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION UINT32_C(18)
 #define XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK                                               \
     ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                   \
                  XR_TARGET_FAMILY_CALL_ADAPTER |                                          \
@@ -35,8 +35,9 @@
                  XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |                            \
                  XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |                               \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE |                         \
-                 XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE |                               \
-                 XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE))
+                 XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE |                              \
+                 XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |                        \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE))
 
 typedef enum XrTypedFrameStatus {
     XR_TYPED_FRAME_OK = 0,

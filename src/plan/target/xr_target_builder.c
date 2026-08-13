@@ -379,6 +379,7 @@ static bool rep_layout_for_kind(const XrTargetMachineFacts *profile, uint16_t ki
             *signedness = XR_TARGET_SIGN_UNSIGNED;
             break;
         case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
             *out = profile->data_layout.i64;
             *signedness = XR_TARGET_SIGN_SIGNED;
             break;
@@ -426,6 +427,32 @@ static bool make_machine_rep(const XrTargetMachineFacts *profile, uint16_t kind,
     out->memory_align = (uint16_t) layout.align;
     out->signedness = signedness;
     out->ownership = XR_TARGET_OWNERSHIP_TRIVIAL;
+    return true;
+}
+
+static bool semantic_unit_enum_type_is_exact(const XrSemanticTypeRecord *type) {
+    XrStableId zero = {{0}};
+    return type && type->kind == XR_KIND_ENUM && type->source_enum_key &&
+           !xr_stable_id_equal(type->source_enum_identity, zero) &&
+           type->enum_layout_id != 0 && type->enum_member_count != 0 &&
+           type->enum_flags == (XR_SEM_ENUM_DECLARATION_EXACT | XR_SEM_ENUM_UNIT) &&
+           type->reserved_enum == 0 && type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
+}
+
+static bool make_unit_enum_rep(const XrTargetPlanBuilder *builder,
+                               uint32_t semantic_type,
+                               XrTargetMachineRepRecord *out) {
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(builder ? builder->semantic_plan : NULL, semantic_type);
+    if (!semantic_unit_enum_type_is_exact(type) ||
+        !make_machine_rep(xr_target_profile_machine_facts(builder->profile),
+                          XR_MACHINE_REP_ENUM_ORDINAL, out))
+        return false;
+    out->detail = semantic_type;
     return true;
 }
 
@@ -2432,6 +2459,124 @@ static bool builder_add_scalars(XrTargetPlanBuilder *builder, char *error,
     return true;
 }
 
+static bool note_direct_local_unit_enum_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_value, uint32_t semantic_type, uint32_t semantic_function,
+    uint32_t semantic_operation, uint8_t role, XrStableId source_identity,
+    char *error, size_t error_size) {
+    if (semantic_value >= analysis->total_values || semantic_type >= analysis->type_count ||
+        semantic_function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
+        !semantic_unit_enum_type_is_exact(
+            xr_semantic_plan_type(builder->semantic_plan, semantic_type)))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "unit-enum value identity is not exact");
+    if (analysis->defined_values[semantic_value]) {
+        if (analysis->value_types[semantic_value] != semantic_type ||
+            analysis->value_functions[semantic_value] != semantic_function)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "unit-enum value identity is ambiguous");
+        return true;
+    }
+    bool parameter_slot = role == XR_TARGET_SLOT_PARAMETER;
+    if ((!parameter_slot &&
+         semantic_operation >= xr_semantic_plan_operation_count(builder->semantic_plan)))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "unit-enum defining operation is missing");
+    XrTargetMachineRepRecord rep;
+    XrStableId slot_identity;
+    if (!make_unit_enum_rep(builder, semantic_type, &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size) ||
+        !make_slot_identity(builder->semantic_plan, semantic_function, role,
+                            source_identity, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize unit-enum ordinal storage");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = semantic_function,
+        .semantic_value = semantic_value,
+        .semantic_operation = parameter_slot ? XR_SEMANTIC_INDEX_NONE : semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = role,
+        .root_kind = XR_TARGET_ROOT_NONE,
+        .ownership = XR_TARGET_OWNERSHIP_TRIVIAL,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = semantic_value,
+        .semantic_function = semantic_function,
+        .semantic_type = semantic_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[semantic_type] &&
+         !append_layout_intent(builder, semantic_type, XR_TARGET_LAYOUT_SCALAR, 0,
+                               &rep, error, error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[semantic_value] = 1;
+    analysis->used_types[semantic_type] = 1;
+    analysis->value_types[semantic_value] = semantic_type;
+    analysis->value_functions[semantic_value] = semantic_function;
+    analysis->type_rep_kinds[semantic_type] = XR_MACHINE_REP_ENUM_ORDINAL;
+    return true;
+}
+
+static bool builder_add_direct_local_unit_enum_argument_storage(
+    XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+    if (!builder_begin_family(
+            builder, XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE,
+            error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis,
+                                              error, error_size) &&
+                 index_value_operations(builder->semantic_plan, &analysis,
+                                        error, error_size);
+    uint32_t parameter_count =
+        (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(builder->semantic_plan, i);
+        if (!parameter ||
+            !semantic_unit_enum_type_is_exact(
+                xr_semantic_plan_type(builder->semantic_plan, parameter->type)))
+            continue;
+        valid = note_direct_local_unit_enum_value(
+            builder, &analysis, parameter->value, parameter->type,
+            parameter->function, XR_SEMANTIC_INDEX_NONE,
+            XR_TARGET_SLOT_PARAMETER, parameter->id, error, error_size);
+    }
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation || operation->opcode == XI_PARAM ||
+            !semantic_unit_enum_type_is_exact(
+                xr_semantic_plan_type(builder->semantic_plan, operation->result_type)))
+            continue;
+        valid = note_direct_local_unit_enum_value(
+            builder, &analysis, operation->result_value, operation->result_type,
+            operation->function, i,
+            operation->opcode == XI_PHI ? XR_TARGET_SLOT_PHI
+                                        : XR_TARGET_SLOT_TEMPORARY,
+            operation->id, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |=
+        XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE;
+    return true;
+}
+
 static bool builder_add_closure_storage(XrTargetPlanBuilder *builder,
                                         char *error, size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_CLOSURE_STORAGE,
@@ -3883,16 +4028,20 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
         bool exact_scalar = call_type_is_exact_scalar(plan, operand->type);
         bool exact_u8_slice = semantic_u8_slice_parameter_is_exact(plan, parameter) &&
                               semantic_u8_slice_type_is_exact(plan, operand->type);
+        bool exact_unit_enum = parameter && parameter->type == operand->type &&
+                               semantic_unit_enum_type_is_exact(
+                                   xr_semantic_plan_type(plan, operand->type));
         if (!parameter || operand->role != XR_SEM_OPERAND_ARGUMENT ||
             operand->parameter != (int16_t) ordinal || operand->type != parameter->type ||
             operand->parameter_mode != parameter->mode ||
             operand->transfer_mode != parameter->transfer_mode ||
             (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
-            (!exact_scalar && !exact_u8_slice) ||
+            (!exact_scalar && !exact_u8_slice && !exact_unit_enum) ||
             parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
             (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0 ||
             (parameter->ownership != XI_OWN_NONE &&
-             !(exact_u8_slice && parameter->ownership == XI_OWN_BORROWED)))
+             !((exact_u8_slice || exact_unit_enum) &&
+               parameter->ownership == XI_OWN_BORROWED)))
             return fail(error, error_size, "XR_TARGET_1003",
                         "direct-local argument contract needs unsupported storage or ownership");
         XrTargetCallArgumentIntent argument = {
@@ -5407,6 +5556,7 @@ bool xr_target_plan_build_module_set(
                      &builder, error, error_size))
         return false;
     if (!builder_add_scalars(builder, error, error_size) ||
+        !builder_add_direct_local_unit_enum_argument_storage(builder, error, error_size) ||
         !builder_add_closure_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
         !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||

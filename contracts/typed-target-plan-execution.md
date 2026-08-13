@@ -1,6 +1,6 @@
 # Typed TargetPlan scalar execution contract
 
-TargetPlan schema 17 may carry a canonical per-function instruction table.
+TargetPlan schema 18 may carry a canonical per-function instruction table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
 family. A function with zero instruction rows is execution unavailable, never
@@ -27,8 +27,13 @@ typed-frame slot identities. It independently recomputes the target-content
 fingerprint and does not inspect SemanticPlan or Xi. It has no legacy VM
 opcode, `XrValue`, AOT, or generated-C fallback.
 
-Schema 17 is a hard cutover from v16 and all earlier schemas. It preserves all
-v16 authorities while adding an exact borrowed `Slice<byte>` view of String storage.
+Schema 18 is a hard cutover from v17 and all earlier schemas. It preserves all
+v17 authorities while adding exact source unit-enum ordinal storage for
+direct-local arguments. The family binds a payload-free source enum's stable
+declaration and nominal layout to a trivial signed 64-bit target row and the
+exact callee parameter/argument relation. It grants no payload enum, boxing,
+allocation, root, cleanup, dispatch, or name-based enum authority.
+Schema 17 added an exact borrowed `Slice<byte>` view of String storage.
 The view binds the frozen Semantic intrinsic and source root to the exact
 `xray-target-string-byte-slice-view-v1` call identity; it grants no generic
 String method or slice construction authority. Schema 16 added a sealed
@@ -143,13 +148,13 @@ Evidence:
   execution, unsupported-plan rejection, bounded pins, drain, retirement, and
   unload without any legacy execution fallback.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 82be9921c5216992891b5b78058d6d5a4e2660dbf654de137571f034c8ae9b48
+anchor-sha256: src/plan/target/xr_target_plan.h 4034713c0e8f25cce06b55462feae7fec338d6e3145f2c034fc2d000d83394b1
 anchor-sha256: src/plan/target/xr_target_plan.c 5bab572276da4fafdd67cf7db09438b7cf5306572aad2e21de7bc97aaf35cff7
-anchor-sha256: src/plan/target/xr_target_builder.c 2c1c205ba9e219178163a4d6e2d48a30c0030bdbe55446faf02c75fb0701cc3f
+anchor-sha256: src/plan/target/xr_target_builder.c c4b951c001bb54a2a090eca1c129d7ff23f97369fafe675692cf008800116420
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 5eea43c77cf0e3802e30eacf12ca7e1a105b7b32de0497635cf7048de1b3438b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c af74c69df7296ff561d3a3abbf4d42a4016e6db54762a750c6da2ad8b4f2ee07
-anchor-sha256: src/plan/target/xr_target_verify.c dcc1f8936b9a7405e5c3a596c3a71f5f6de3f2dea015fc104b84386766f8cc89
-anchor-sha256: src/plan/format/xr_xtp_schema.h cd0655464f9f79e90d7185c9e99898cafdbfdf3f36958271bfb0e333f31c26ea
+anchor-sha256: src/plan/target/xr_target_verify.c 8f5116ad1c375030d1e1e0de4cdef18b1d2887ed88176247db49e2d69ef3a10a
+anchor-sha256: src/plan/format/xr_xtp_schema.h 19c65ab32a9d874cd8ec6c53f296ddec365963439f2c4c410083ac0dd40051f0
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 8cb0983494ace434ec1d1f7389f19d4780ad82f6f88460144e04a9e28c1502bc
 anchor-sha256: src/plan/target/xr_xtp_materialize.c c43b819e15e02784e50911b46ad3ec228b2069c114a7691216abbf59ab6bcdbf

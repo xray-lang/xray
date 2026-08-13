@@ -22,6 +22,7 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
+#include "../../runtime/value/xenum_layout.h"
 #include "../../runtime/class/xclass_info.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include <stdarg.h>
@@ -242,6 +243,43 @@ static uint32_t frozen_builtin_type(const XrType *type) {
     return XR_TID_NULL;
 }
 
+static bool source_enum_key(const XrType *type, XrTextBuilder *key,
+                            XrStableId *identity, uint8_t *flags) {
+    if (!type || type->kind != XR_KIND_ENUM || !type->enum_type.layout ||
+        !type->enum_type.layout->nominal_owner ||
+        !type->enum_type.layout->nominal_owner[0] || !type->enum_type.layout->name ||
+        !type->enum_type.layout->name[0] || !type->enum_type.layout->variants ||
+        type->enum_type.layout->variant_count == 0 ||
+        type->enum_type.layout->variant_count > UINT16_MAX)
+        return false;
+    const XrEnumLayout *layout = type->enum_type.layout;
+    if (type->enum_type.layout_id != layout->layout_id ||
+        layout->layout_id != xr_enum_layout_nominal_id(layout) ||
+        strcmp(type->enum_type.enum_name ? type->enum_type.enum_name : "", layout->name) != 0)
+        return false;
+    bool unit = layout->is_zero_payload;
+    if (!text_append_format(key, "source-enum-v1:schema=%u:owner=",
+                            XR_SEMANTIC_SCHEMA_VERSION) ||
+        !text_append_component(key, layout->nominal_owner) || !text_append(key, ":name=") ||
+        !text_append_component(key, layout->name) ||
+        !text_append_format(key, ":members=%u", layout->variant_count))
+        return false;
+    for (uint32_t i = 0; i < layout->variant_count; i++) {
+        const XrEnumVariantLayout *variant = &layout->variants[i];
+        if (!variant->name || !variant->name[0] || variant->tag != i ||
+            !text_append_format(key, ":m%u=", i) ||
+            !text_append_component(key, variant->name) ||
+            !text_append_format(key, ":payloads=%u", variant->payload_count))
+            return false;
+        unit = unit && variant->payload_count == 0;
+    }
+    XrFingerprint digest;
+    if (!xr_stable_id_from_key(key->data, identity, &digest))
+        return false;
+    *flags = XR_SEM_ENUM_DECLARATION_EXACT | (unit ? XR_SEM_ENUM_UNIT : 0u);
+    return true;
+}
+
 static bool type_key_list(XrType *const *types, int count, XrTextBuilder *key, const XrType **stack,
                           uint32_t depth, XrSemanticBuildContext *ctx) {
     if (count < 0 || (count > 0 && !types) || !text_append_format(key, "[%d", count))
@@ -348,12 +386,22 @@ static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stac
         case XR_KIND_TUPLE:
             return type_key_list(type->tuple.element_types, type->tuple.element_count, key, stack,
                                  depth + 1, ctx);
-        case XR_KIND_ENUM:
-            return text_append(key, ";enum:") &&
-                   text_append_component(key, type->enum_type.enum_name) &&
-                   text_append_format(key, ":%u:", type->enum_type.layout_id) &&
-                   type_key_list(type->enum_type.type_args, type->enum_type.type_arg_count, key,
-                                 stack, depth + 1, ctx);
+        case XR_KIND_ENUM: {
+            XrTextBuilder declaration = {0};
+            XrStableId identity = {{0}};
+            uint8_t flags = 0;
+            bool exact = source_enum_key(type, &declaration, &identity, &flags);
+            bool valid = text_append(key, ";enum:") &&
+                         text_append_component(key, type->enum_type.enum_name) &&
+                         text_append_format(key, ":%u:", type->enum_type.layout_id) &&
+                         type_key_list(type->enum_type.type_args,
+                                       type->enum_type.type_arg_count, key, stack,
+                                       depth + 1, ctx) &&
+                         (!exact || (text_append(key, ";source-enum:") &&
+                                     text_append_stable_id(key, identity)));
+            text_dispose(&declaration);
+            return valid;
+        }
         case XR_KIND_UNION:
             return type_key_list(type->union_type.members, type->union_type.member_count, key,
                                  stack, depth + 1, ctx);
@@ -549,6 +597,21 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
     record->builtin_type = frozen_builtin_type(type);
     record->source_class = source_class_for_type(ctx, type);
     (void) source_class_identity_for_type(ctx, type, &record->source_class_identity);
+    if (type->kind == XR_KIND_ENUM) {
+        XrTextBuilder enum_key = {0};
+        bool exact = source_enum_key(type, &enum_key, &record->source_enum_identity,
+                                     &record->enum_flags);
+        record->source_enum_key = exact
+                                      ? xr_semantic_plan_copy_string(ctx->plan, enum_key.data)
+                                      : NULL;
+        text_dispose(&enum_key);
+        if (exact && !record->source_enum_key)
+            return fail(ctx, "XR_EXEC_5003", "enum declaration identity allocation failed");
+        if (exact) {
+            record->enum_layout_id = type->enum_type.layout->layout_id;
+            record->enum_member_count = (uint16_t) type->enum_type.layout->variant_count;
+        }
+    }
     record->scalar_rep = type->scalar_rep;
     bool reference_capable = frozen_builtin_type(type) != XR_TID_NULL || xi_own_type_is_rc(type);
     bool borrow_view = type->kind == XR_KIND_SLICE;

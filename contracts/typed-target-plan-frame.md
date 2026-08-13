@@ -1,13 +1,14 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 17 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 18 with the complete
 scalar, aggregate, direct-local call, closure-storage, minimal coroutine
 state-call, String-literal-storage, direct-local-callee-storage, and
 Channel-allocation-storage, Channel-receive-storage, and
 direct-local-GO-callee-storage, SOURCE-namespace-storage, and
-String-byte-slice-view-storage family mask.
-Schema 17 is a breaking hard cutover: schema 16 and earlier and a plan missing
+String-byte-slice-view-storage and direct-local-unit-enum-argument-storage
+family mask.
+Schema 18 is a breaking hard cutover: schema 17 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
@@ -52,6 +53,11 @@ slot for an exact `XI_CHAN_TRY_RECV` whose Channel allocation identity and
 element type have been independently frozen. It adds no Channel object layout,
 receive scheduling, ownership transfer, aggregate payload, tuple payload,
 root, or cleanup authority.
+The direct-local-unit-enum-argument-storage family describes only a trivial
+signed 64-bit ordinal whose source enum declaration, unit shape, nominal layout,
+and exact direct-local parameter/argument relation are independently frozen.
+It grants no payload enum, boxing, allocation, root, cleanup, dispatch, or
+general enum inference authority.
 The SOURCE-namespace-storage family describes only borrowed dynamic outer
 `XrValue` tokens in an exact import/store/load chain whose load is consumed as
 the receiver of a SOURCE_EXPORT call. It grants no imported module object

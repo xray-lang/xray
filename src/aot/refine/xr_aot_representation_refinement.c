@@ -109,6 +109,7 @@ static bool storage_matches_machine(XrRep storage, uint16_t machine) {
         case XR_MACHINE_REP_I32:
         case XR_MACHINE_REP_U32:
         case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
         case XR_MACHINE_REP_U64:
         case XR_MACHINE_REP_ISIZE:
         case XR_MACHINE_REP_USIZE:
@@ -2754,6 +2755,7 @@ static bool oracle_machine_storage(const VerifyAuthority *ctx,
         case XR_MACHINE_REP_I32:
         case XR_MACHINE_REP_U32:
         case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
         case XR_MACHINE_REP_U64:
         case XR_MACHINE_REP_ISIZE:
         case XR_MACHINE_REP_USIZE:
@@ -3408,6 +3410,7 @@ static uint16_t oracle_representation_recipe(uint16_t adapter,
         case XR_MACHINE_REP_I32:
         case XR_MACHINE_REP_U32:
         case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
         case XR_MACHINE_REP_U64:
         case XR_MACHINE_REP_ISIZE:
         case XR_MACHINE_REP_USIZE:

@@ -83,6 +83,7 @@ static bool machine_kind_to_c_rep(uint16_t kind, XrCValueRep *out, const char **
             *c_type = "uint32_t";
             return true;
         case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
             *out = XR_C_VALUE_REP_I64;
             *c_type = "int64_t";
             return true;
@@ -911,6 +912,7 @@ static bool verify_value(const XrCValueEmissionView *value) {
             expected_c_type = "uint32_t";
             break;
         case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
             expected_rep = XR_C_VALUE_REP_I64;
             expected_c_type = "int64_t";
             break;
@@ -1063,6 +1065,7 @@ static bool verify_target_kind_projection(uint16_t kind,
             *out_c_type = "uint32_t";
             return true;
         case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
             *out_rep = XR_C_VALUE_REP_I64;
             *out_c_type = "int64_t";
             return true;

@@ -129,6 +129,7 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
         case XR_MACHINE_REP_I32: rep = XAOT_REP_I32; break;
         case XR_MACHINE_REP_U32: rep = XAOT_REP_U32; break;
         case XR_MACHINE_REP_I64: rep = XAOT_REP_I64; break;
+        case XR_MACHINE_REP_ENUM_ORDINAL: rep = XAOT_REP_I64; break;
         case XR_MACHINE_REP_U64: rep = XAOT_REP_U64; break;
         case XR_MACHINE_REP_ISIZE: rep = XAOT_REP_ISIZE; break;
         case XR_MACHINE_REP_USIZE: rep = XAOT_REP_USIZE; break;
@@ -150,6 +151,8 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
     out->rep = rep;
     out->type = value->type;
     out->c_type = info->c_type;
+    if (machine->kind == XR_MACHINE_REP_ENUM_ORDINAL)
+        out->flags = XAOT_VALUE_FLAG_ENUM;
     return true;
 }
 

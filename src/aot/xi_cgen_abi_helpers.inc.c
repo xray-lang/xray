@@ -1125,6 +1125,12 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         frozen_arg_rep.c_type = info ? info->c_type : NULL;
         if (frozen_arg_rep.rep == XAOT_REP_SLICE)
             frozen_arg_rep.flags = XAOT_VALUE_FLAG_SLICE;
+        else if (arg_emission.target_register_kind ==
+                     XR_MACHINE_REP_ENUM_ORDINAL &&
+                 arg_emission.target_memory_kind ==
+                     XR_MACHINE_REP_ENUM_ORDINAL &&
+                 frozen_arg_rep.rep == XAOT_REP_I64)
+            frozen_arg_rep.flags = XAOT_VALUE_FLAG_ENUM;
     }
     arg_plan = frozen_arg ? NULL : cg_value_plan_require_legacy(ctx, arg);
     const XrType *param_type = cg_func_param_type(target, arg_index);

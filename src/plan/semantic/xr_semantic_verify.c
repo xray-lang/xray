@@ -20,6 +20,7 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
+#include "../../shared/xr_hash_core.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include <stdarg.h>
 #include <stdio.h>
@@ -104,6 +105,143 @@ static bool verify_id(const char *key, XrStableId actual) {
     XrFingerprint digest;
     return key && xr_stable_id_from_key(key, &expected, &digest) &&
            xr_stable_id_equal(expected, actual);
+}
+
+#define XR_ENUM_NOMINAL_HASH_SEED UINT64_C(1469598103934665603)
+#define XR_ENUM_NOMINAL_HASH_PRIME UINT64_C(1099511628211)
+
+static uint64_t verifier_enum_hash_byte(uint64_t hash, uint8_t value) {
+    return (hash ^ value) * XR_ENUM_NOMINAL_HASH_PRIME;
+}
+
+static uint64_t verifier_enum_hash_u32(uint64_t hash, uint32_t value) {
+    hash = verifier_enum_hash_byte(hash, (uint8_t) (value >> 24));
+    hash = verifier_enum_hash_byte(hash, (uint8_t) (value >> 16));
+    hash = verifier_enum_hash_byte(hash, (uint8_t) (value >> 8));
+    return verifier_enum_hash_byte(hash, (uint8_t) value);
+}
+
+static uint64_t verifier_enum_hash_text(uint64_t hash, const char *text, size_t length) {
+    hash = verifier_enum_hash_u32(hash, (uint32_t) length);
+    for (size_t i = 0; i < length; i++)
+        hash = verifier_enum_hash_byte(hash, (uint8_t) text[i]);
+    return hash;
+}
+
+static bool verifier_take_u32(const char **cursor, uint32_t *out) {
+    const char *p = cursor ? *cursor : NULL;
+    uint64_t value = 0;
+    if (!p || !out || *p < '0' || *p > '9')
+        return false;
+    do {
+        value = value * 10u + (uint32_t) (*p - '0');
+        if (value > UINT32_MAX)
+            return false;
+        p++;
+    } while (*p >= '0' && *p <= '9');
+    *cursor = p;
+    *out = (uint32_t) value;
+    return true;
+}
+
+static bool verifier_take_component(const char **cursor, const char **text, size_t *length) {
+    uint32_t width = 0;
+    if (!verifier_take_u32(cursor, &width) || **cursor != ':')
+        return false;
+    (*cursor)++;
+    size_t remaining = strlen(*cursor);
+    if (width > remaining)
+        return false;
+    *text = *cursor;
+    *length = width;
+    *cursor += width;
+    return true;
+}
+
+static bool semantic_source_enum_identity_exact(const XrSemanticTypeRecord *type) {
+    XrStableId zero = {{0}};
+    if (!type)
+        return false;
+    if (type->kind != XR_KIND_ENUM)
+        return !type->source_enum_key &&
+               xr_stable_id_equal(type->source_enum_identity, zero) &&
+               type->enum_layout_id == 0 && type->enum_member_count == 0 &&
+               type->enum_flags == 0 && type->reserved_enum == 0;
+    if (!type->source_enum_key)
+        return xr_stable_id_equal(type->source_enum_identity, zero) &&
+               type->enum_layout_id == 0 && type->enum_member_count == 0 &&
+               type->enum_flags == 0 && type->reserved_enum == 0;
+    const char *cursor = type->source_enum_key;
+    static const char prefix[] = "source-enum-v1:schema=23:owner=";
+    if (!cursor || strncmp(cursor, prefix, sizeof(prefix) - 1u) != 0 ||
+        !verify_id(cursor, type->source_enum_identity) ||
+        type->enum_member_count == 0 || type->enum_layout_id == 0 ||
+        type->reserved_enum != 0 ||
+        (type->enum_flags & (uint8_t) ~(XR_SEM_ENUM_DECLARATION_EXACT |
+                                        XR_SEM_ENUM_UNIT)) != 0 ||
+        (type->enum_flags & XR_SEM_ENUM_DECLARATION_EXACT) == 0)
+        return false;
+    cursor += sizeof(prefix) - 1u;
+    const char *owner = NULL, *name = NULL;
+    size_t owner_length = 0, name_length = 0;
+    if (!verifier_take_component(&cursor, &owner, &owner_length) || owner_length == 0 ||
+        strncmp(cursor, ":name=", 6) != 0)
+        return false;
+    cursor += 6;
+    if (!verifier_take_component(&cursor, &name, &name_length) || name_length == 0 ||
+        strncmp(cursor, ":members=", 9) != 0)
+        return false;
+    cursor += 9;
+    uint32_t member_count = 0;
+    if (!verifier_take_u32(&cursor, &member_count) ||
+        member_count != type->enum_member_count)
+        return false;
+    uint64_t hash = XR_ENUM_NOMINAL_HASH_SEED;
+    hash = verifier_enum_hash_text(hash, "xray.enum.nominal.v1",
+                                   strlen("xray.enum.nominal.v1"));
+    hash = verifier_enum_hash_text(hash, owner, owner_length);
+    hash = verifier_enum_hash_text(hash, name, name_length);
+    hash = verifier_enum_hash_u32(hash, member_count);
+    bool unit = true;
+    for (uint32_t i = 0; i < member_count; i++) {
+        char marker[32];
+        int marker_length = snprintf(marker, sizeof(marker), ":m%u=", i);
+        const char *member = NULL;
+        size_t member_length = 0;
+        uint32_t payload_count = 0;
+        if (marker_length <= 0 || (size_t) marker_length >= sizeof(marker) ||
+            strncmp(cursor, marker, (size_t) marker_length) != 0)
+            return false;
+        cursor += marker_length;
+        if (!verifier_take_component(&cursor, &member, &member_length) ||
+            member_length == 0 || strncmp(cursor, ":payloads=", 10) != 0)
+            return false;
+        cursor += 10;
+        if (!verifier_take_u32(&cursor, &payload_count) || payload_count > UINT16_MAX)
+            return false;
+        hash = verifier_enum_hash_text(hash, member, member_length);
+        hash = verifier_enum_hash_u32(hash, payload_count);
+        unit = unit && payload_count == 0;
+    }
+    if (*cursor != '\0' ||
+        (((type->enum_flags & XR_SEM_ENUM_UNIT) != 0) != unit) ||
+        type->enum_layout_id != (((uint32_t) xr_hash_core_mix_u64(hash)) | UINT32_C(0x80000000)))
+        return false;
+    char enum_prefix[256];
+    int enum_prefix_length = snprintf(enum_prefix, sizeof(enum_prefix), ";enum:%zu:%.*s:%u:",
+                                      name_length, (int) name_length, name,
+                                      type->enum_layout_id);
+    char enum_suffix[64];
+    char enum_id[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(type->source_enum_identity, enum_id);
+    int enum_suffix_length = snprintf(enum_suffix, sizeof(enum_suffix), ";source-enum:%s", enum_id);
+    size_t type_key_length = type->canonical_key ? strlen(type->canonical_key) : 0;
+    return enum_prefix_length > 0 && (size_t) enum_prefix_length < sizeof(enum_prefix) &&
+           enum_suffix_length > 0 && (size_t) enum_suffix_length < sizeof(enum_suffix) &&
+           strstr(type->canonical_key, enum_prefix) != NULL &&
+           type_key_length >= (size_t) enum_suffix_length &&
+           strcmp(type->canonical_key + type_key_length - (size_t) enum_suffix_length,
+                  enum_suffix) == 0;
 }
 
 typedef struct XrEntityCoverage {
@@ -562,6 +700,9 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
         const XrSemanticTypeRecord *type = &plan->types[i];
         if (!verify_id(type->canonical_key, type->id))
             return report(error, error_size, "XR_SEM_0002", "type stable identity is invalid");
+        if (!semantic_source_enum_identity_exact(type))
+            return report(error, error_size, "XR_SEM_0002",
+                          "source enum declaration identity is not exact");
         XrStableId zero = {{0}};
         if (type->source_class != XR_SEMANTIC_INDEX_NONE) {
             if (type->source_class >= plan->source_class_count ||

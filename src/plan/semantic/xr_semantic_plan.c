@@ -140,7 +140,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v22\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v23\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -178,6 +178,9 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         const XrSemanticTypeRecord *type = &plan->types[i];
         hash_bytes(&ctx, type->id.bytes, sizeof(type->id.bytes));
         hash_string(&ctx, type->canonical_key);
+        hash_bytes(&ctx, type->source_enum_identity.bytes,
+                   sizeof(type->source_enum_identity.bytes));
+        hash_string(&ctx, type->source_enum_key);
         hash_u64(&ctx, type->kind);
         hash_u64(&ctx, type->builtin_type);
         hash_u64(&ctx, type->source_class);
@@ -186,9 +189,13 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, type->child_begin);
         hash_u64(&ctx, type->aggregate_extent);
         hash_u64(&ctx, type->aggregate_align);
+        hash_u64(&ctx, type->enum_layout_id);
         hash_u64(&ctx, type->child_count);
+        hash_u64(&ctx, type->enum_member_count);
         hash_u64(&ctx, type->scalar_rep);
         hash_u64(&ctx, type->flags);
+        hash_u64(&ctx, type->enum_flags);
+        hash_u64(&ctx, type->reserved_enum);
     }
     for (uint32_t i = 0; i < plan->source_method_count; i++) {
         const XrSemanticSourceMethodRecord *method = &plan->source_methods[i];
@@ -778,7 +785,12 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
                 record->flags, record->aggregate_extent, record->aggregate_align);
         for (uint16_t c = 0; c < record->child_count; c++)
             fprintf(out, "%s%u", c ? "," : "", plan->type_children[record->child_begin + c]);
-        fputs("]\n", out);
+        fputs("] enum-id=", out);
+        dump_id(out, record->source_enum_identity);
+        fputs(" enum-key=", out);
+        dump_text(out, record->source_enum_key);
+        fprintf(out, " enum-layout=%u enum-members=%u enum-flags=%u\n",
+                record->enum_layout_id, record->enum_member_count, record->enum_flags);
     }
     for (uint32_t i = 0; i < plan->source_method_count; i++) {
         const XrSemanticSourceMethodRecord *record = &plan->source_methods[i];

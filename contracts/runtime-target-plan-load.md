@@ -78,6 +78,12 @@ roots, or general module activation.
    that `Channel<T>`'s sole frozen child is the result type. The row does not
    authorize Channel object layout, receive scheduling, ownership transfer,
    aggregate payloads, tuple payloads, roots, or cleanup.
+   Direct-local unit-enum argument storage covers only source-backed, payload-
+   free enum ordinals whose declaration identity and nominal layout are frozen
+   in SemanticPlan. The target row is a trivial signed 64-bit ordinal bound to
+   that exact semantic type and direct-local parameter/argument relation. It
+   grants no payload enum, boxing, allocation, root, cleanup, or dispatch
+   authority.
    SOURCE-namespace storage covers only the borrowed dynamic outer `XrValue`
    tokens in the exact
    `IMPORT_REF -> identity COPY* -> SET_SHARED -> GET_SHARED -> identity COPY*`
@@ -92,12 +98,11 @@ roots, or general module activation.
    requirements have dense records bound to the same canonical provider kinds.
    Missing, duplicate, additional, or mismatched family,
    capability, or provider records fail before any activation boundary.
-5. Runtime loading accepts only an XTP v17 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v18 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
-   independent TargetPlan verification. V17 is a breaking hard cutover from
-   v16 and all earlier schemas. It preserves all v16 facts while adding the
-   sealed exact `StringBuilder()` constructor call and owned dynamic result
-   slot described above. V15 and all
+   independent TargetPlan verification. V18 is a breaking hard cutover from
+   v17 and all earlier schemas. It preserves all v17 facts while adding the
+   exact source unit-enum direct-local argument storage described above. V16 and all
    earlier schemas are rejected rather than reinterpreted.
    The `Channel.close()` receiver is a dispatch target rather than an argument
    or slot, and its descriptor grants no general method ABI or execution
@@ -176,8 +181,8 @@ anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc23
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/format/xr_xsm_decode.c 9a4bfad90c1656ed2ba79497caba8900f740ff3a0487c7df99eb637e27cd2eda
-anchor-sha256: src/plan/format/xr_xtp_schema.h cd0655464f9f79e90d7185c9e99898cafdbfdf3f36958271bfb0e333f31c26ea
+anchor-sha256: src/plan/format/xr_xsm_decode.c b379bc41fadbc3f992b2c8ba0d9b64da00ce8ef6c4db386f016b3c55c2a5de93
+anchor-sha256: src/plan/format/xr_xtp_schema.h 19c65ab32a9d874cd8ec6c53f296ddec365963439f2c4c410083ac0dd40051f0
 anchor-sha256: src/plan/format/xr_xtp_internal.h 2d1a76e7dd0a7d1f623ce3fc8118c4235d2694e03cceea8db756ec8f67e3a346
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1
 anchor-sha256: src/plan/format/xr_xtp_decode.c 385d185d9a86fcc01d1bea045ccc79692bac3e826e2c14145615721085e4bf8e
@@ -185,12 +190,12 @@ anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba3578
 anchor-sha256: src/runtime/abi/xr_target_machine_facts.h 8c8d1c341fb4639bb47c982ac6dfd851571d154823101e00011a63fcb14486d8
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h 5ea9aa4ff63d88b62dbf1f43bea9ab2875d9d63ef2722d73df5a71c59eedda1b
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c e5202e6650d78162c338bbd276150447ef853a662fa253cc977ea64141d5b247
-anchor-sha256: src/plan/target/xr_target_profile.h 2d0569b3cfb868ae378c5a8d723d33dfa5702a75c504d84ce73b497255f44649
+anchor-sha256: src/plan/target/xr_target_profile.h af4a1cefa7a6a7c00c46287e377c25b1a544d4b1cad463083def610798b08ffb
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h 82be9921c5216992891b5b78058d6d5a4e2660dbf654de137571f034c8ae9b48
+anchor-sha256: src/plan/target/xr_target_plan.h 4034713c0e8f25cce06b55462feae7fec338d6e3145f2c034fc2d000d83394b1
 anchor-sha256: src/plan/target/xr_target_plan.c 5bab572276da4fafdd67cf7db09438b7cf5306572aad2e21de7bc97aaf35cff7
-anchor-sha256: src/plan/target/xr_target_builder.c 2c1c205ba9e219178163a4d6e2d48a30c0030bdbe55446faf02c75fb0701cc3f
-anchor-sha256: src/plan/target/xr_target_verify.c dcc1f8936b9a7405e5c3a596c3a71f5f6de3f2dea015fc104b84386766f8cc89
+anchor-sha256: src/plan/target/xr_target_builder.c c4b951c001bb54a2a090eca1c129d7ff23f97369fafe675692cf008800116420
+anchor-sha256: src/plan/target/xr_target_verify.c 8f5116ad1c375030d1e1e0de4cdef18b1d2887ed88176247db49e2d69ef3a10a
 anchor-sha256: src/plan/target/xr_xtp_materialize.c c43b819e15e02784e50911b46ad3ec228b2069c114a7691216abbf59ab6bcdbf
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317

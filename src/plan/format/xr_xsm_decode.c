@@ -386,6 +386,9 @@ static void decode_types(XrXsmReader *reader, XrSemanticPlan *plan) {
         XrSemanticTypeRecord *record = &plan->types[i];
         xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
         record->canonical_key = take_plan_string(reader, plan, false);
+        xr_xsm_take_bytes(reader, record->source_enum_identity.bytes,
+                          sizeof(record->source_enum_identity.bytes));
+        record->source_enum_key = take_plan_string(reader, plan, true);
         record->kind = xr_xsm_take_u32(reader);
         record->builtin_type = xr_xsm_take_u32(reader);
         record->source_class = xr_xsm_take_u32(reader);
@@ -394,9 +397,13 @@ static void decode_types(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->child_begin = xr_xsm_take_u32(reader);
         record->aggregate_extent = xr_xsm_take_u32(reader);
         record->aggregate_align = xr_xsm_take_u32(reader);
+        record->enum_layout_id = xr_xsm_take_u32(reader);
         record->child_count = xr_xsm_take_u16(reader);
+        record->enum_member_count = xr_xsm_take_u16(reader);
         record->scalar_rep = xr_xsm_take_u8(reader);
         record->flags = xr_xsm_take_u8(reader);
+        record->enum_flags = xr_xsm_take_u8(reader);
+        record->reserved_enum = xr_xsm_take_u8(reader);
     }
     for (uint32_t i = 0; i < plan->type_child_count; i++)
         plan->type_children[i] = xr_xsm_take_u32(reader);

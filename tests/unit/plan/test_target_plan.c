@@ -7,6 +7,7 @@
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/ir/xi_module.h"
+#include "../../../src/ir/xi_own.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
@@ -19,6 +20,7 @@
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/runtime/value/xstruct_layout.h"
+#include "../../../src/runtime/value/xenum_layout.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "target_profile_test_fixture.h"
 #include <stdio.h>
@@ -1103,6 +1105,100 @@ static void expect_verify_failure_at(XrTargetPlan *plan, const char *code, uint3
 #define expect_verify_failure(plan, code) expect_verify_failure_at((plan), (code), __LINE__)
 #define expect_verify_failure_raw(plan, code) expect_verify_failure_raw_at((plan), (code), __LINE__)
 
+static XrSemanticPlan *build_unit_enum_semantic(XrEnumLayout **out_layout) {
+    static const char *members[] = {"Standard", "UrlSafe"};
+    XrEnumLayout *layout =
+        xr_enum_layout_new("stdlib/base64", "Base64Alphabet", members, 2);
+    REQUIRE(layout != NULL && layout->is_zero_payload && layout->layout_id != 0);
+    XrType enum_type = {
+        .kind = XR_KIND_ENUM,
+        .id = 18,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .enum_type = {
+            .enum_name = "Base64Alphabet",
+            .layout_id = layout->layout_id,
+            .layout = layout,
+        },
+    };
+    XiFunc *function = xi_func_new("target_source_enum_probe", &stub_int);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *ordinal = xi_param(function, entry, 0, &enum_type);
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(ordinal != NULL && result != NULL);
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = ordinal;
+    function->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(function,
+                                            (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->valid = true;
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "target source-enum semantic failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    *out_layout = layout;
+    return plan;
+}
+
+static void test_unit_enum_target_rep_mutations(void) {
+    XrEnumLayout *source_layout = NULL;
+    XrSemanticPlan *semantic = build_unit_enum_semantic(&source_layout);
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    const XrSemanticTypeRecord *enum_type = NULL;
+    for (uint32_t i = 0; i < semantic->type_count; i++)
+        if (semantic->types[i].kind == XR_KIND_ENUM)
+            enum_type = &semantic->types[i];
+    REQUIRE(enum_type != NULL);
+    const XrTargetValueRepRecord *binding = NULL;
+    uint32_t binding_count = 0;
+    XrTargetValueRepRecord *bindings =
+        (XrTargetValueRepRecord *) xr_target_plan_value_reps(plan, &binding_count);
+    for (uint32_t i = 0; i < binding_count; i++) {
+        const XrTargetMachineRepRecord *rep =
+            xr_target_plan_machine_rep(plan, bindings[i].register_rep);
+        if (rep && rep->kind == XR_MACHINE_REP_ENUM_ORDINAL)
+            binding = &bindings[i];
+    }
+    REQUIRE(binding != NULL);
+    XrTargetMachineRepRecord *rep = &plan->machine_reps[binding->register_rep];
+    REQUIRE(rep->kind == XR_MACHINE_REP_ENUM_ORDINAL &&
+            rep->detail < semantic->type_count &&
+            &semantic->types[rep->detail] == enum_type &&
+            rep->root_kind == XR_TARGET_ROOT_NONE &&
+            rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL);
+    uint16_t saved_kind = rep->kind;
+    uint32_t saved_detail = rep->detail;
+    uint8_t saved_root = rep->root_kind;
+    rep->kind = XR_MACHINE_REP_I64;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    rep->kind = saved_kind;
+    rep->detail = XR_SEMANTIC_INDEX_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    rep->detail = saved_detail;
+    rep->root_kind = XR_TARGET_ROOT_OBJECT;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    rep->root_kind = saved_root;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_enum_layout_free(source_layout);
+}
+
 static void test_profile_freeze_and_determinism(void) {
     XrTargetProfile *first = build_profile(0);
     XrTargetProfile *same = build_profile(0);
@@ -1176,7 +1272,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "00d7fa80761285333883cdce786fa65291cff4eb2f7c38efd086839448c67de0") == 0);
+                   "4ede915d0497881b2c3168d61d0f8fe42aa5cd76be569052a47dc2eb560be042") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2192,7 +2288,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "8bf321a08dbffe0a1e65ab7a1d7006e9741491fb38d968af262f5c33f7eaa60f") == 0);
+                   "a642202310f15944cebcb75915726a95609bc28141efa42d73d8342c40882400") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
         XrTargetCallArgumentRecord fabricated_argument = {0};
@@ -2376,7 +2472,7 @@ static XrSemanticPlan *build_lowered_tail_coroutine_chain(void) {
     leaf->parent_func = wrapper;
 
     /* Seed XiCoroLower so it materializes the caller state CFG.  The seed is
-     * rewritten below before SemanticPlan is frozen: schema 22 must then
+     * rewritten below before SemanticPlan is frozen: schema 23 must then
      * derive wrapper
      * suspendability solely through the DIRECT_LOCAL tail edge, while the wrapper itself has no
      * state row. */
@@ -2713,7 +2809,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "5fe72196d48c873370ace424b3a016ed6a3153d0a3312c7fce6e22aad615491e") == 0);
+                   "81fdd796e38919f3fed3b8b4926217ef393ac9745b52390707454dfdaaabdd3a") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -2943,7 +3039,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "baad8537bf6c5bdbc50274808edba4beb006a36064cf0e8529541b2828507e25") == 0);
+                   "0a09b51aadd94cba4f417b451cbfbd27054be0039d6e4060b19b00879b4cd900") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");
@@ -3444,6 +3540,7 @@ static void test_bool_and_nullable_scalar_boundary(void) {
 }
 
 int main(void) {
+    test_unit_enum_target_rep_mutations();
     test_stringbuilder_constructor_call_authority();
     test_string_byte_slice_view_target_authority();
     test_channel_receive_storage_authority();

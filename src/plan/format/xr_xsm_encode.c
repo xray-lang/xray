@@ -94,6 +94,9 @@ static void encode_types(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         const XrSemanticTypeRecord *record = &plan->types[i];
         xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
         xr_xsm_put_string(writer, record->canonical_key);
+        xr_xsm_put_bytes(writer, record->source_enum_identity.bytes,
+                         sizeof(record->source_enum_identity.bytes));
+        xr_xsm_put_string(writer, record->source_enum_key ? record->source_enum_key : "");
         xr_xsm_put_u32(writer, record->kind);
         xr_xsm_put_u32(writer, record->builtin_type);
         xr_xsm_put_u32(writer, record->source_class);
@@ -102,9 +105,13 @@ static void encode_types(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u32(writer, record->child_begin);
         xr_xsm_put_u32(writer, record->aggregate_extent);
         xr_xsm_put_u32(writer, record->aggregate_align);
+        xr_xsm_put_u32(writer, record->enum_layout_id);
         xr_xsm_put_u16(writer, record->child_count);
+        xr_xsm_put_u16(writer, record->enum_member_count);
         xr_xsm_put_u8(writer, record->scalar_rep);
         xr_xsm_put_u8(writer, record->flags);
+        xr_xsm_put_u8(writer, record->enum_flags);
+        xr_xsm_put_u8(writer, record->reserved_enum);
     }
     for (uint32_t i = 0; i < plan->type_child_count; i++)
         xr_xsm_put_u32(writer, plan->type_children[i]);

@@ -118,6 +118,11 @@ typedef enum XrSemanticTypeFlag {
     XR_SEM_TYPE_AGGREGATE_EXACT = 1u << 7,
 } XrSemanticTypeFlag;
 
+typedef enum XrSemanticEnumFlag {
+    XR_SEM_ENUM_DECLARATION_EXACT = 1u << 0,
+    XR_SEM_ENUM_UNIT = 1u << 1,
+} XrSemanticEnumFlag;
+
 typedef enum XrSemanticParameterFlag {
     XR_SEM_PARAMETER_REQUIRED = 1u << 0,
     XR_SEM_PARAMETER_VARIADIC = 1u << 1,
@@ -209,6 +214,8 @@ typedef struct XrSemanticEntityRecord {
 typedef struct XrSemanticTypeRecord {
     XrStableId id;
     const char *canonical_key;
+    XrStableId source_enum_identity;
+    const char *source_enum_key;
     uint32_t kind;
     uint32_t builtin_type;
     uint32_t source_class;
@@ -216,9 +223,13 @@ typedef struct XrSemanticTypeRecord {
     uint32_t child_begin;
     uint32_t aggregate_extent;
     uint32_t aggregate_align;
+    uint32_t enum_layout_id;
     uint16_t child_count;
+    uint16_t enum_member_count;
     uint8_t scalar_rep;
     uint8_t flags;
+    uint8_t enum_flags;
+    uint8_t reserved_enum;
 } XrSemanticTypeRecord;
 
 typedef struct XrSemanticSourceClassRecord {

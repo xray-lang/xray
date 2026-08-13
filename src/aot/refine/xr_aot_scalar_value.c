@@ -190,6 +190,7 @@ static bool adapter_target_rep_is_exact(const XrTargetPlan *target_plan,
         case XR_MACHINE_REP_I32:
         case XR_MACHINE_REP_U32:
         case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
         case XR_MACHINE_REP_U64:
         case XR_MACHINE_REP_ISIZE:
         case XR_MACHINE_REP_USIZE:
@@ -227,6 +228,7 @@ static bool adapter_source_rep_is_exact(
         case XR_MACHINE_REP_I32:
         case XR_MACHINE_REP_U32:
         case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
         case XR_MACHINE_REP_U64:
         case XR_MACHINE_REP_ISIZE:
         case XR_MACHINE_REP_USIZE:

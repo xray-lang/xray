@@ -312,9 +312,9 @@ the compiler core does not download a provider.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c a268bec7948a3a9cecf081d63d51545e3fe41af0b6ab32a9a38b21b031127da0
-anchor-sha256: src/aot/xaot_prepare.c af75cd0365f34f92e781091b397c2a9122eed66abbe33f6fc9787d51010ea95f
-anchor-sha256: src/aot/xaot_verify.c 713a2223cb777b709dc4f7133fd6a95d4db3d81da964f4b7e7bb745c17db498b
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c a5bea4c18c6414d00bd827947d1ce290879f1e762c3cbf819631b605b749519a
+anchor-sha256: src/aot/xaot_prepare.c b7f90df6f9ec74b04770f889957abfbde360314209497a27aa5ba4240b253678
+anchor-sha256: src/aot/xaot_verify.c c33b2220cb9e30ebdde292a1f75752b1073b5eebe05b29da104edee9a7bf3805
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 4e63b69f6828aefd149170dc7815da693d3ef88d7cefb182c807acacbbaa3dec
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 11e99944b4cf4a3cddad2830bb60f364731489d6ec6b8be4e8df584312e852da
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 66f2ecc04bd9e7560bb7cb25026f9e8b682eb968ec4966f2e09b86fc453003d4
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c b4201c02fc214411accff3be9a6f92b394c9116f86b79fc2b41a5e576a4a7d65
