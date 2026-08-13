@@ -64,9 +64,25 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
             return status == XR_TYPED_DISPATCH_OK
                        ? store_i64_bits(frame, row->result_slot, left)
                        : status;
+        case XR_TARGET_INSTRUCTION_NEG_WRAP_I64:
+            status = load_i64_bits(frame, row->operand_slots[0], &left);
+            if (status != XR_TYPED_DISPATCH_OK)
+                return status;
+            /* Negation wraps like the other arithmetic rows: the plan carries
+             * wrapping semantics, so INT64_MIN negates to itself rather than
+             * trapping. */
+            return store_i64_bits(frame, row->result_slot, (uint64_t) (0 - left));
+        case XR_TARGET_INSTRUCTION_BNOT_I64:
+            status = load_i64_bits(frame, row->operand_slots[0], &left);
+            if (status != XR_TYPED_DISPATCH_OK)
+                return status;
+            return store_i64_bits(frame, row->result_slot, ~left);
         case XR_TARGET_INSTRUCTION_ADD_WRAP_I64:
         case XR_TARGET_INSTRUCTION_SUB_WRAP_I64:
         case XR_TARGET_INSTRUCTION_MUL_WRAP_I64:
+        case XR_TARGET_INSTRUCTION_BAND_I64:
+        case XR_TARGET_INSTRUCTION_BOR_I64:
+        case XR_TARGET_INSTRUCTION_BXOR_I64:
             status = load_i64_bits(frame, row->operand_slots[0], &left);
             if (status != XR_TYPED_DISPATCH_OK)
                 return status;
@@ -77,8 +93,14 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                 left += right;
             else if (row->opcode == XR_TARGET_INSTRUCTION_SUB_WRAP_I64)
                 left -= right;
-            else
+            else if (row->opcode == XR_TARGET_INSTRUCTION_MUL_WRAP_I64)
                 left *= right;
+            else if (row->opcode == XR_TARGET_INSTRUCTION_BAND_I64)
+                left &= right;
+            else if (row->opcode == XR_TARGET_INSTRUCTION_BOR_I64)
+                left |= right;
+            else
+                left ^= right;
             return store_i64_bits(frame, row->result_slot, left);
         case XR_TARGET_INSTRUCTION_RETURN_I64:
             return load_i64_bits(frame, row->operand_slots[0], return_bits);

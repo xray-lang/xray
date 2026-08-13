@@ -108,6 +108,8 @@ static bool verify_function_group(const XrTargetPlan *plan,
                         !terminal;
                 break;
             case XR_TARGET_INSTRUCTION_COPY_I64:
+            case XR_TARGET_INSTRUCTION_NEG_WRAP_I64:
+            case XR_TARGET_INSTRUCTION_BNOT_I64:
                 valid = row->operand_count == 1 && row->immediate_bits == 0 &&
                         row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
                         operand_is_defined(plan, function, function_index,
@@ -117,6 +119,9 @@ static bool verify_function_group(const XrTargetPlan *plan,
             case XR_TARGET_INSTRUCTION_ADD_WRAP_I64:
             case XR_TARGET_INSTRUCTION_SUB_WRAP_I64:
             case XR_TARGET_INSTRUCTION_MUL_WRAP_I64:
+            case XR_TARGET_INSTRUCTION_BAND_I64:
+            case XR_TARGET_INSTRUCTION_BOR_I64:
+            case XR_TARGET_INSTRUCTION_BXOR_I64:
                 valid = row->operand_count == 2 && row->immediate_bits == 0 &&
                         operand_is_defined(plan, function, function_index,
                                            row->operand_slots[0], defined) &&

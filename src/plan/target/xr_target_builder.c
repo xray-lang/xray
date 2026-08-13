@@ -5237,6 +5237,11 @@ static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
         case XI_ADD: return XR_TARGET_INSTRUCTION_ADD_WRAP_I64;
         case XI_SUB: return XR_TARGET_INSTRUCTION_SUB_WRAP_I64;
         case XI_MUL: return XR_TARGET_INSTRUCTION_MUL_WRAP_I64;
+        case XI_BAND: return XR_TARGET_INSTRUCTION_BAND_I64;
+        case XI_BOR: return XR_TARGET_INSTRUCTION_BOR_I64;
+        case XI_BXOR: return XR_TARGET_INSTRUCTION_BXOR_I64;
+        case XI_NEG: return XR_TARGET_INSTRUCTION_NEG_WRAP_I64;
+        case XI_BNOT: return XR_TARGET_INSTRUCTION_BNOT_I64;
         default: return XR_TARGET_INSTRUCTION_INVALID;
     }
 }
@@ -5293,10 +5298,12 @@ static bool materialize_scalar_instruction_function(
         uint16_t expected_operands =
             opcode == XR_TARGET_INSTRUCTION_CONST_I64
                 ? 0
-                : opcode == XR_TARGET_INSTRUCTION_COPY_I64
+                : opcode == XR_TARGET_INSTRUCTION_COPY_I64 ||
+                          opcode == XR_TARGET_INSTRUCTION_NEG_WRAP_I64 ||
+                          opcode == XR_TARGET_INSTRUCTION_BNOT_I64
                       ? 1
                       : opcode >= XR_TARGET_INSTRUCTION_ADD_WRAP_I64 &&
-                                opcode <= XR_TARGET_INSTRUCTION_MUL_WRAP_I64
+                                opcode <= XR_TARGET_INSTRUCTION_BXOR_I64
                             ? 2
                             : UINT16_MAX;
         uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;

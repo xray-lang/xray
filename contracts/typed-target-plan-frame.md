@@ -1,14 +1,14 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 18 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 19 with the complete
 scalar, aggregate, direct-local call, closure-storage, minimal coroutine
 state-call, String-literal-storage, direct-local-callee-storage, and
 Channel-allocation-storage, Channel-receive-storage, and
 direct-local-GO-callee-storage, SOURCE-namespace-storage, and
 String-byte-slice-view-storage and direct-local-unit-enum-argument-storage
 family mask.
-Schema 18 is a breaking hard cutover: schema 17 and earlier and a plan missing
+Schema 19 is a breaking hard cutover: schema 18 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
@@ -108,7 +108,7 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 7bd02727594fba409bd6bf5ff6a95354aa1c06dd1096336255afb25abe41e946
+anchor-sha256: src/plan/target/xr_target_plan.h 44529fab61f1a8fd8e421e6c0a2099f2ab86e7e9e379182a7fcb716800d55dd6
 anchor-sha256: src/vm/xr_typed_frame.h 715f7ac98f468e004eed919fefb853a820375999cb1eba848122f9b418eb3401
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
