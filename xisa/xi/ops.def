@@ -2692,7 +2692,6 @@
     xi.call.method.direct
     xi.tail.call
     xi.call.builtin
-    xi.atomic.load
     xi.atomic.store
     xi.atomic.rmw
     xi.atomic.to.string
@@ -2761,6 +2760,7 @@
     xi.codegen.opaque
     xi.copy
     xi.static.addr
+    xi.atomic.load
     xi.retain
     xi.release
     xi.owner.forward
@@ -2932,6 +2932,23 @@
   :production-bindings (
     (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
     (cgen "src/aot/xi_cgen.c" "cg_static_address_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.atomic-load
+  :category shared-semantic-kernel
+  :operations (xi.atomic.load)
+  :consumers (
+    semantic-plan
+    vm
+    cgen
+    runtime
+  )
+  :cgen-adapter xr_atomic_load_plan_core
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/ir/xi_emit_call.c" "XR_ATOMIC_LOAD_OWNER_PLAN")
+    (cgen "src/aot/xi_cgen.c" "cg_atomic_load_adapter_name")
+    (runtime "src/runtime/object/xatomic.h" "xr_atomic_load_plan_c11_order_core")
   ))
 
 (define-xi-observable-owner shared.reference-count

@@ -18,6 +18,7 @@
 #include "shared/xr_raw_scalar_core.h"
 #include "shared/xr_static_address_core.h"
 #include "shared/xr_reference_count_core.h"
+#include "shared/xr_sync_core.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -648,6 +649,26 @@ TEST(reference_count_core_freezes_retain_and_release_contract) {
                   "xr_reference_count_plan_core");
 }
 
+TEST(atomic_load_core_freezes_ordering_without_aliases) {
+    XrAtomicLoadPlan relaxed = XR_ATOMIC_LOAD_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_LO,
+        XR_SEM_CONSUMER_VM, 0);
+    XrAtomicLoadPlan acquire = xr_atomic_load_plan_core(3);
+    XrAtomicLoadPlan invalid = xr_atomic_load_plan_core(99);
+
+    ASSERT(xr_atomic_load_plan_is_exact_core(relaxed));
+    ASSERT(xr_atomic_load_plan_is_exact_core(acquire));
+    ASSERT_EQ_INT(relaxed.order, XR_ATOMIC_LOAD_ORDER_RELAXED);
+    ASSERT_EQ_INT(acquire.order, XR_ATOMIC_LOAD_ORDER_ACQUIRE);
+    ASSERT_EQ_INT(xr_atomic_load_plan_core(4).order, XR_ATOMIC_LOAD_ORDER_SEQ_CST);
+    ASSERT_FALSE(xr_atomic_load_plan_is_exact_core(invalid));
+    ASSERT_EQ_INT(invalid.canonical_ordering, 4);
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_HI,
+                      XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_LO),
+                  "xr_atomic_load_plan_core");
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -685,6 +706,7 @@ RUN_TEST(codegen_opaque_core_freezes_value_and_optimizer_barrier);
 RUN_TEST(copy_core_freezes_identity_clone_and_control_variants);
 RUN_TEST(static_address_core_freezes_stability_and_borrow_contract);
 RUN_TEST(reference_count_core_freezes_retain_and_release_contract);
+RUN_TEST(atomic_load_core_freezes_ordering_without_aliases);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()

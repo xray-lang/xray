@@ -403,6 +403,20 @@ fixtures = [
 ]
 
 [[operation]]
+id = "atomic-load"
+observable_contract = "src/shared/xr_sync_core.h"
+semantic_kernel = "src/shared/xr_sync_core.h"
+vm_adapter = "src/ir/xi_emit_call.c"
+aot_adapter = "src/aot/xi_cgen_dispatch_helpers.inc.c"
+typed_plan = "shared.atomic-load"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_numeric_core.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/regression/09_advanced/0914_atomic_basic.xr",
+]
+
+[[operation]]
 id = "assert-condition"
 observable_contract = "src/shared/xr_assert_condition_core.h"
 semantic_kernel = "src/shared/xr_assert_condition_core.h"

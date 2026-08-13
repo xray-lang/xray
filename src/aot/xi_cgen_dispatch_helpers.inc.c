@@ -4567,19 +4567,23 @@ typedef enum {
 } CgAtomicOrderUse;
 
 static const char *xicgen_atomic_c11_order_name(CgAtomicOrderUse use, int64_t ordering) {
+    if (use == CG_ATOMIC_ORDER_LOAD) {
+        XrAtomicLoadPlan plan = XR_ATOMIC_LOAD_OWNER_PLAN(
+            XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_LO,
+            XR_SEM_CONSUMER_CGEN, ordering);
+        if (!xr_atomic_load_plan_is_exact_core(plan))
+            return NULL;
+        switch (plan.order) {
+            case XR_ATOMIC_LOAD_ORDER_RELAXED:
+                return "memory_order_relaxed";
+            case XR_ATOMIC_LOAD_ORDER_ACQUIRE:
+                return "memory_order_acquire";
+            case XR_ATOMIC_LOAD_ORDER_SEQ_CST:
+                return "memory_order_seq_cst";
+        }
+    }
     switch (use) {
         case CG_ATOMIC_ORDER_LOAD:
-            switch (ordering) {
-                case XR_AOT_ORDERING_RELAXED:
-                    return "memory_order_relaxed";
-                case XR_AOT_ORDERING_ACQUIRE:
-                case XR_AOT_ORDERING_ACQUIRE_RELEASE:
-                    return "memory_order_acquire";
-                case XR_AOT_ORDERING_SEQ_CST:
-                    return "memory_order_seq_cst";
-                case XR_AOT_ORDERING_RELEASE:
-                    return "memory_order_relaxed";
-            }
             break;
         case CG_ATOMIC_ORDER_STORE:
             switch (ordering) {
@@ -9799,6 +9803,10 @@ static void xicgen_atomic(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
     (void) f;
     (void) prefix;
     const XaIntrinsicDesc *desc = v ? xa_intrinsic_by_id((XaIntrinsicId) v->xa_intrinsic_id) : NULL;
+    if (v && v->op == XI_ATOMIC_LOAD && !cg_atomic_load_adapter_name(ctx)) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     uint16_t nargs = v && v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
     if (!desc || desc->family != XA_INTRINSIC_FAMILY_ATOMIC ||
         !xicgen_emit_atomic_method(ctx, out, v, desc->id, nargs)) {

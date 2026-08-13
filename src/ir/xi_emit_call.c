@@ -12,6 +12,7 @@
 #include "xi_emit_internal.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../runtime/mem/xobj_header.h"
+#include "../shared/xr_sync_core.h"
 
 static bool emit_shared_slot_is_function(EmitCtx *ctx, int64_t slot) {
     if (!ctx || !ctx->func || slot < 0)
@@ -331,6 +332,15 @@ XR_FUNC void xi_emit_semantic_intrinsic_call(EmitCtx *ctx, XiValue *v, XiEmitReg
     if (!desc || !source_member) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
+    }
+    if (v->op == XI_ATOMIC_LOAD) {
+        XrAtomicLoadPlan plan = XR_ATOMIC_LOAD_OWNER_PLAN(
+            XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_LO,
+            XR_SEM_CONSUMER_VM, 4);
+        if (!xr_atomic_load_plan_is_exact_core(plan)) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
     }
     uint16_t nargs = (uint16_t) (v->nargs - 1);
     for (uint16_t a = 0; a < v->nargs; a++) {

@@ -1393,8 +1393,13 @@
       "id": "synchronization",
       "owner": "shared-kernel",
       "production_callers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
         "src/aot/xrt_core_freestanding.h",
         "src/aot/xrt_mem.h",
+        "src/ir/xi_emit_call.c",
+        "src/runtime/object/xatomic.h",
+        "src/shared/xr_semantic_owner_ids_gen.h",
         "stdlib/mem/mem.c"
       ],
       "profiles": [
@@ -1405,11 +1410,16 @@
       ],
       "representation": "native",
       "signatures": [
+        "xr_atomic_load_plan_c11_order_core",
+        "xr_atomic_load_plan_core",
+        "xr_atomic_load_plan_is_exact_core",
         "xr_sync_core_fence",
         "xr_sync_core_memorder"
       ],
       "status": "production",
-      "test_callers": []
+      "test_callers": [
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
     },
     {
       "contains_tagged_value": false,

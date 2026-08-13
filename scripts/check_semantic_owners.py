@@ -172,6 +172,7 @@ CODEGEN_OPAQUE_OPERATIONS = {"xi.codegen.opaque"}
 COPY_OPERATIONS = {"xi.copy"}
 STATIC_ADDRESS_OPERATIONS = {"xi.static.addr"}
 REFERENCE_COUNT_OPERATIONS = {"xi.retain", "xi.release"}
+ATOMIC_LOAD_OPERATIONS = {"xi.atomic.load"}
 REGEX_COMPILE_OPERATIONS = {"xi.regex.compile"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
@@ -2442,6 +2443,73 @@ def verify_reference_count_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_atomic_load_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.atomic-load"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != ATOMIC_LOAD_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.atomic-load family")
+    elif owner.get("cgen_adapter") != "xr_atomic_load_plan_core":
+        errors.append("semantic owner registry has no exact atomic-load CGen adapter")
+
+    core_text = (root / "src/shared/xr_sync_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_ATOMIC_LOAD_OWNER_PLAN",
+                  "XR_ATOMIC_LOAD_ORDER_RELAXED", "XR_ATOMIC_LOAD_ORDER_ACQUIRE",
+                  "XR_ATOMIC_LOAD_ORDER_SEQ_CST", "xr_atomic_load_plan_core",
+                  "xr_atomic_load_plan_is_exact_core", "xr_atomic_load_plan_c11_order_core"):
+        if token not in core_text:
+            errors.append("src/shared/xr_sync_core.h: atomic load lacks stable owner")
+            break
+
+    vm_text = (root / "src/ir/xi_emit_call.c").read_text(encoding="utf-8", errors="strict")
+    vm_body = extract_c_function(vm_text, "xi_emit_semantic_intrinsic_call") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_ATOMIC_LOAD_OWNER_PLAN", "xr_atomic_load_plan_is_exact_core",
+                  "XI_ATOMIC_LOAD"):
+        if token not in vm_body:
+            errors.append("src/ir/xi_emit_call.c: atomic load bypasses shared owner")
+            break
+
+    runtime_text = (root / "src/runtime/object/xatomic.h").read_text(
+        encoding="utf-8", errors="strict")
+    runtime_body = extract_c_function(runtime_text, "xr_to_c11_load_order") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_RUNTIME",
+                  "XR_ATOMIC_LOAD_OWNER_PLAN", "xr_atomic_load_plan_c11_order_core"):
+        if token not in runtime_body:
+            errors.append("src/runtime/object/xatomic.h: atomic load revived private order mapping")
+            break
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_atomic_load_adapter_name") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_CGEN",
+                  "xr_semantic_owner_cgen_adapter", '"xr_atomic_load_plan_core"'):
+        if token not in resolver:
+            errors.append("src/aot/xi_cgen.c: atomic load does not resolve stable adapter")
+            break
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    order_body = extract_c_function(dispatch_text, "xicgen_atomic_c11_order_name") or ""
+    emit_body = extract_c_function(dispatch_text, "xicgen_atomic") or ""
+    for token in ("XR_ATOMIC_LOAD_OWNER_PLAN", "xr_atomic_load_plan_is_exact_core",
+                  "XR_ATOMIC_LOAD_ORDER_RELAXED", "XR_ATOMIC_LOAD_ORDER_ACQUIRE",
+                  "XR_ATOMIC_LOAD_ORDER_SEQ_CST"):
+        if token not in order_body:
+            errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: atomic load bypasses order owner")
+            break
+    if "cg_atomic_load_adapter_name" not in emit_body:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: atomic load bypasses adapter resolver")
+
+    test_text = (root / "tests/unit/stdlib/test_numeric_core.c").read_text(
+        encoding="utf-8", errors="strict")
+    if "atomic_load_core_freezes_ordering_without_aliases" not in test_text:
+        errors.append("tests/unit/stdlib/test_numeric_core.c: atomic-load KAT is missing")
+    return errors
+
+
 def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     owner_name = "shared.regex"
@@ -3239,6 +3307,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_copy_ratchet(root, registry))
         errors.extend(verify_static_address_ratchet(root, registry))
         errors.extend(verify_reference_count_ratchet(root, registry))
+        errors.extend(verify_atomic_load_ratchet(root, registry))
         errors.extend(verify_regex_compile_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_byte_array_copy_ratchet(root, registry))
