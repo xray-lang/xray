@@ -609,6 +609,13 @@ def self_test() -> int:
         )
         proto_registration_helpers_drifted, _ = check(root, collect(root))
         retired_proto_registration_helpers.unlink()
+        retired_bundle_constructor_wrapper = root / "include/xray_runtime.h"
+        retired_bundle_constructor_wrapper.write_text(
+            "void *xr_bundle_create(XrVMRuntime *, const char *);\n",
+            encoding="utf-8",
+        )
+        bundle_constructor_wrapper_drifted, _ = check(root, collect(root))
+        retired_bundle_constructor_wrapper.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -659,6 +666,7 @@ def self_test() -> int:
             or global_object_authority_drifted
             or internal_multicore_destroy_drifted
             or proto_registration_helpers_drifted
+            or bundle_constructor_wrapper_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")

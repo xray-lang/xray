@@ -2,9 +2,9 @@
   "counts": {
     "api": 38,
     "build": 56,
-    "cli": 105,
+    "cli": 106,
     "install": 2,
-    "source": 3427
+    "source": 3421
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -413,7 +413,6 @@
   ],
   "generator": "scripts/check_legacy_product_residue.py",
   "legacy_symbol_tokens": [
-    "xr_bundle_create",
     "xr_bundle_create_ex",
     "xr_bundle_free",
     "xr_bundle_to_c_source",
@@ -842,14 +841,15 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "41065d577bc5e9c151ab9e552906398c8696d672c90d72d3d736915d1890ad7b",
+      "evidence_sha256": "83b26f53aa3ba86fd268c5b6912da63256eb0975da04f5d578ede2ee73b3ae5c",
       "family": "legacy-bundle-converter",
-      "hit_count": 3,
+      "hit_count": 4,
       "path": "src/app/cli/xcmd_deps.c",
       "status": "transitional-owner",
       "surface": "cli",
       "tokens": [
-        "xr_bundle_create",
+        "XR_BUNDLE_DEFAULT",
+        "xr_bundle_create_ex",
         "xr_bundle_free"
       ]
     },
@@ -1332,16 +1332,14 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "12afbff8e2055ec3b89ab31ebf812ab33f05ca749d93190b58b5e3dd81c8cee9",
+      "evidence_sha256": "8b92ca663f651b3a5b1e32df524ec1a52fa6ca7a4af09271838bf495f0b78f20",
       "family": "legacy-bundle-converter",
-      "hit_count": 10,
+      "hit_count": 7,
       "path": "src/module/xbundle.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "XR_BUNDLE_DEFAULT",
         "XR_BUNDLE_STATIC_PACKAGES",
-        "xr_bundle_create",
         "xr_bundle_create_ex",
         "xr_bundle_free",
         "xr_bundle_to_c_source"
@@ -1349,9 +1347,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "db6e98a1e09ba26c5bfa54a9d4fb493361a83010ed843d7961f69cda0c595ffc",
+      "evidence_sha256": "b529ce704fd0778682c281cc68a86198efd6f97838031d483303b38fb60d63aa",
       "family": "legacy-bundle-converter",
-      "hit_count": 8,
+      "hit_count": 7,
       "path": "src/module/xbundle.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -1360,7 +1358,6 @@
         "XR_BUNDLE_MAGIC",
         "XR_BUNDLE_STATIC_PACKAGES",
         "XR_BUNDLE_VERSION",
-        "xr_bundle_create",
         "xr_bundle_create_ex",
         "xr_bundle_free",
         "xr_bundle_to_c_source"
@@ -5096,9 +5093,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "f6f331bfd9dc63180a8ebe64a5c0b39ab7f000f651b69f1e108b90e253a5dbfc",
+      "evidence_sha256": "596ca4c6ecb4e44b8e0fccb4d8115cc0b126696bf02b70b38dac20f15cc2a809",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 5,
+      "hit_count": 4,
       "path": "src/module/xbundle.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -5110,9 +5107,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "b0e7c616f44660a263235092d30823e23d6d834aa42d24c91297bb41b5314b72",
+      "evidence_sha256": "1ed7abf8dc58164e337dd738bd990aea704538db93f0a6cae13cdbba0dc0e90e",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 2,
+      "hit_count": 1,
       "path": "src/module/xbundle.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -9299,6 +9296,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "25300a8648f69ce74ebd28ea4faa1b6a31eec50b2bec3fb9280b2945db882f2a",
-  "total": 3628
+  "source_tree_fingerprint": "38860132815da7b6c1cbc864a75b8c94e2575e5336b334875e0ef2fdfd007c30",
+  "total": 3623
 }

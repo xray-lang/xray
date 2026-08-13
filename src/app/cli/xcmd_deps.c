@@ -84,7 +84,7 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
         return XR_CLI_EXIT_INTERNAL;
     }
 
-    XrBundle *bundle = xr_bundle_create(X, input_file);
+    XrBundle *bundle = xr_bundle_create_ex(X, input_file, XR_BUNDLE_DEFAULT);
     xray_vm_delete(X);
 
     if (!bundle) {

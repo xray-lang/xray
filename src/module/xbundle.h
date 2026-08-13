@@ -45,9 +45,6 @@ typedef enum {
     XR_BUNDLE_STATIC_PACKAGES = 1
 } XrBundleFlags;
 
-// Create bundle from entry file, returns NULL on failure
-XR_FUNC XrBundle *xr_bundle_create(XrVMRuntime *X, const char *entry_file);
-
 // Create bundle with options
 XR_FUNC XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFlags flags);
 
