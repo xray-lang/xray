@@ -371,7 +371,7 @@ static inline XrClass *invoke_resolve_class(XrVMRuntime *isolate, XrValue receiv
     if (XR_IS_BOOL(receiver))
         return isolate->core_rt->native_type_classes[XR_TBOOL];
     if (XR_IS_AGG_REF(receiver)) {
-        XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, receiver);
+        XrAggregateLayout *layout = xr_struct_ref_layout(isolate, receiver);
         if (layout && xr_aggregate_layout_is_headerless(layout))
             return xr_struct_layout_class_by_id(&isolate->vm, xr_aggregate_layout_id(receiver));
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(receiver);

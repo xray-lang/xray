@@ -51,7 +51,7 @@
 #include <stdint.h>
 #include "../base/xdefs.h"
 
-XR_FUNC XrAggregateLayout *xr_vm_struct_ref_layout(XrVMRuntime *isolate, XrValue ref);
+XR_FUNC XrAggregateLayout *xr_struct_ref_layout(XrVMRuntime *isolate, XrValue ref);
 XR_FUNC uint8_t *xr_vm_struct_ref_payload(XrVMRuntime *isolate, XrValue ref,
                                           XrAggregateLayout **layout_out);
 XR_FUNC int xr_struct_layout_field_index(XrVMRuntime *isolate, const XrAggregateLayout *layout,

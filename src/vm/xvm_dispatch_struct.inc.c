@@ -205,7 +205,7 @@ vmcase(OP_AGG_COPY) {
 
     XrValue src = R(b);
     uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(src);
-    XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, src);
+    XrAggregateLayout *layout = xr_struct_ref_layout(isolate, src);
     if (XR_UNLIKELY(!src_ptr || !layout)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct copy");
     }

@@ -833,7 +833,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
 
     // Struct ref: getter/method lookup when field not found in layout
     if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SLICE_REF(obj)) {
-        XrAggregateLayout *slayout = xr_vm_struct_ref_layout(isolate, obj);
+        XrAggregateLayout *slayout = xr_struct_ref_layout(isolate, obj);
         /* A headerless aggregate carries no class pointer of its own; for the
          * rest the layout id resolves the class without reading the payload. */
         XrClass *scls = (slayout && !xr_aggregate_layout_is_headerless(slayout))

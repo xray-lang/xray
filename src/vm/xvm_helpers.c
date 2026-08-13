@@ -185,7 +185,7 @@ XrAggregateLayout *xr_struct_layout_lookup_by_stable_key(XrVMState *vm, uint64_t
     return NULL;
 }
 
-XrAggregateLayout *xr_vm_struct_ref_layout(XrVMRuntime *isolate, XrValue ref) {
+XrAggregateLayout *xr_struct_ref_layout(XrVMRuntime *isolate, XrValue ref) {
     if (!XR_IS_AGG_REF(ref) || XR_IS_ARRAY_REF(ref) || XR_IS_SLICE_REF(ref) || !ref.ptr)
         return NULL;
 
@@ -206,7 +206,7 @@ XrAggregateLayout *xr_vm_struct_ref_layout(XrVMRuntime *isolate, XrValue ref) {
 
 uint8_t *xr_vm_struct_ref_payload(XrVMRuntime *isolate, XrValue ref,
                                   XrAggregateLayout **layout_out) {
-    XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, ref);
+    XrAggregateLayout *layout = xr_struct_ref_layout(isolate, ref);
     if (layout_out)
         *layout_out = layout;
     if (!layout || !ref.ptr)
@@ -536,7 +536,7 @@ static XrValue xr_struct_materialize_instance_depth(XrVMRuntime *isolate, XrValu
         !ref.ptr || depth > 16)
         return xr_null();
 
-    XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, ref);
+    XrAggregateLayout *layout = xr_struct_ref_layout(isolate, ref);
     XrClass *cls =
         layout ? xr_struct_layout_class_by_id(&isolate->vm, xr_aggregate_layout_id(ref)) : NULL;
     if (!layout || !cls || !xr_aggregate_layout_semantically_equal(cls->struct_layout, layout) ||
