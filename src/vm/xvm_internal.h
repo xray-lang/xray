@@ -38,6 +38,7 @@
 #include "../runtime/value/xenum_descriptor.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../shared/xr_assert_condition_core.h"
+#include "../shared/xr_compare_core.h"
 #include "../shared/xr_truthy_core.h"
 #include "../shared/xr_type_identity_core.h"
 #include "../base/xglobal_indices.h"
@@ -348,6 +349,38 @@ static inline bool vm_is_bigint_mixed(XrValue left, XrValue right) {
     return (left_bigint && (right_bigint || right_int)) ||
            (right_bigint && (left_bigint || left_int));
 }
+
+/* Every VM comparison evaluates the shared relation owner. The VM owns only
+ * the carrier work - reading a tag, reaching a string or big integer, walking
+ * an aggregate - and hands the owner either a lane value pair or the verdict a
+ * domain comparator produced. */
+#define VM_COMPARE_I64(kind, a, b)                                                                 \
+    XR_COMPARE_OWNER_APPLY_I64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_VM, (kind), (a), \
+                               (b))
+#define VM_COMPARE_U64(kind, a, b)                                                                 \
+    XR_COMPARE_OWNER_APPLY_U64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_VM, (kind), (a), \
+                               (b))
+#define VM_COMPARE_F64(kind, a, b)                                                                 \
+    XR_COMPARE_OWNER_APPLY_F64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_VM, (kind), (a), \
+                               (b))
+#define VM_COMPARE_PTR(kind, a, b)                                                                 \
+    XR_COMPARE_OWNER_APPLY_PTR(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_VM, (kind), (a), \
+                               (b))
+#define VM_COMPARE_ORDERING(kind, ordering)                                                        \
+    XR_COMPARE_OWNER_APPLY_ORDERING(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                             \
+                                    XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_VM,         \
+                                    (kind), (ordering))
+#define VM_COMPARE_EQUAL(kind, equal)                                                              \
+    XR_COMPARE_OWNER_APPLY_EQUAL(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                \
+                                 XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_VM, (kind),    \
+                                 (equal))
+#define VM_COMPARE_ROUTE(kind, left, right)                                                        \
+    XR_COMPARE_OWNER_ROUTE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI, XR_SEM_OWNER_ID_SHARED_COMPARE_LO,   \
+                           XR_SEM_CONSUMER_VM, (kind), (left), (right))
 
 // Comparison operations
 XR_FUNC bool vm_values_equal(XrValue a, XrValue b);

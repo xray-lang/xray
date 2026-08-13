@@ -12357,26 +12357,40 @@ static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                            const char *prefix) {
     (void) f;
     (void) prefix;
+    const char *adapter = cg_compare_adapter_name(ctx);
+    const char *relation = xi_to_c_template_compare_relation(v->op);
+    if (!adapter || !relation || !relation[0]) {
+        if (ctx)
+            ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
     const XiValue *present_bool_get = NULL;
     bool bool_const_value = false;
     if (cg_aot_compare_present_bool_map_get_const(ctx, v, &present_bool_get, &bool_const_value)) {
-        fprintf(out, "((");
+        /* A present-flag lookup answers in the i64 lane, so it is normalized to
+         * the boolean domain and then related to the constant - both through the
+         * owner, not through a locally spelled operator. */
+        fprintf(out, "%s(%s, %s(NE, ", adapter, relation, adapter);
         emit_value_as_rep_ctx(ctx, out, present_bool_get, XR_REP_I64);
-        fprintf(out, " != 0) %s %d)", v->op == XI_EQ ? "==" : "!=", bool_const_value ? 1 : 0);
+        fprintf(out, ", 0), %d)", bool_const_value ? 1 : 0);
         return;
     }
+    /* Proven scalar comparisons keep their machine lane - unsigned, raw address
+     * or the plan's own storage type - and take the relation from the owner
+     * adapter instead of spelling a C operator here. */
     if (xicgen_compare_uses_unsigned(v)) {
-        fprintf(out, "((uint64_t)");
+        fprintf(out, "%s(%s, (uint64_t)", adapter, relation);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-        fprintf(out, " %s (uint64_t)", xi_to_c_template_compare_native_op(v->op));
+        fprintf(out, ", (uint64_t)");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, ")");
         return;
     }
     if (xicgen_compare_uses_rawptr(v)) {
-        fprintf(out, "(");
+        fprintf(out, "%s(%s, ", adapter, relation);
         xicgen_emit_uintptr_compare_arg(ctx, out, v->args[0]);
-        fprintf(out, " %s ", xi_to_c_template_compare_native_op(v->op));
+        fprintf(out, ", ");
         xicgen_emit_uintptr_compare_arg(ctx, out, v->args[1]);
         fprintf(out, ")");
         return;
@@ -12397,7 +12411,11 @@ static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         }
         fprintf(out, ")");
     } else {
-        emit_binop(out, v, xi_to_c_template_compare_native_op(v->op));
+        fprintf(out, "%s(%s, ", adapter, relation);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_vref(out, v->args[1]);
+        fprintf(out, ")");
     }
 }
 

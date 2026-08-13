@@ -62,22 +62,25 @@ vmcase(OP_EQI) {
     vmbreak;
 }
 
-// Register-register comparison macro (LE, GT, GE share identical structure)
-#define VM_CMP_RR(op, int_op, float_op, str_cmp_op)                                                \
+/* Register-register branch comparison. The opcode names a relation and the
+ * shared owner answers it on whichever lane the operands route to; the VM keeps
+ * only the carrier work and the branch. */
+#define VM_CMP_RR(op, kind)                                                                        \
     vmcase(op) {                                                                                   \
         XrValue va = R(GETARG_A(i));                                                               \
         XrValue vb = R(GETARG_B(i));                                                               \
         int k_flag = GETARG_C(i);                                                                  \
         bool cond;                                                                                 \
         if (XR_IS_INT(va) && XR_IS_INT(vb)) {                                                      \
-            cond = XR_TO_INT(va) int_op XR_TO_INT(vb);                                             \
+            cond = VM_COMPARE_I64((kind), XR_TO_INT(va), XR_TO_INT(vb));                           \
         } else if ((XR_IS_INT(va) || XR_IS_FLOAT(va)) && (XR_IS_INT(vb) || XR_IS_FLOAT(vb))) {     \
-            double na = XR_IS_INT(va) ? (double) XR_TO_INT(va) : XR_TO_FLOAT(va);                  \
-            double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);                  \
-            cond = na float_op nb;                                                                 \
+            cond = VM_COMPARE_F64((kind),                                                          \
+                                  XR_IS_INT(va) ? (double) XR_TO_INT(va) : XR_TO_FLOAT(va),        \
+                                  XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb));       \
         } else if (XR_IS_STRING(va) && XR_IS_STRING(vb)) {                                         \
-            cond = xr_string_compare(xr_value_to_string(isolate, va),                              \
-                                     xr_value_to_string(isolate, vb)) str_cmp_op 0;                \
+            cond = VM_COMPARE_ORDERING((kind),                                                     \
+                                       xr_string_compare(xr_value_to_string(isolate, va),          \
+                                                         xr_value_to_string(isolate, vb)));        \
         } else {                                                                                   \
             if (k_flag == 0)                                                                       \
                 pc++;                                                                              \
@@ -88,97 +91,52 @@ vmcase(OP_EQI) {
         vmbreak;                                                                                   \
     }
 
-// Register-immediate comparison macro (LTI, LEI, GTI, GEI share identical structure)
-#define VM_CMP_RI(op, int_op, float_op)                                                            \
+/* Register-immediate branch comparison: the immediate is a signed operand of
+ * the same lane the register carries. */
+#define VM_CMP_RI(op, kind)                                                                        \
     vmcase(op) {                                                                                   \
         XrValue va = R(GETARG_A(i));                                                               \
         int sb = GETARG_sB(i);                                                                     \
         int k_flag = GETARG_C(i);                                                                  \
         bool cond;                                                                                 \
         if (XR_IS_INT(va)) {                                                                       \
-            cond = XR_TO_INT(va) int_op sb;                                                        \
+            cond = VM_COMPARE_I64((kind), XR_TO_INT(va), sb);                                      \
         } else {                                                                                   \
-            cond = XR_TO_FLOAT(va) float_op(double) sb;                                            \
+            cond = VM_COMPARE_F64((kind), XR_TO_FLOAT(va), (double) sb);                           \
         }                                                                                          \
         if (cond != k_flag)                                                                        \
             pc++;                                                                                  \
         vmbreak;                                                                                   \
     }
 
-vmcase(OP_LT) {
-    // LT A B k: if (R[A] < R[B]) != k then pc++
-    XrValue va = R(GETARG_A(i));
-    XrValue vb = R(GETARG_B(i));
-    int k_flag = GETARG_C(i);
+VM_CMP_RR(OP_LT, XR_COMPARE_LT)
+VM_CMP_RI(OP_LTI, XR_COMPARE_LT)
+VM_CMP_RR(OP_LE, XR_COMPARE_LE)
+VM_CMP_RI(OP_LEI, XR_COMPARE_LE)
 
-    // Fast path: int direct comparison
-    if (XR_IS_INT(va) && XR_IS_INT(vb)) {
-        if ((XR_TO_INT(va) < XR_TO_INT(vb)) != k_flag)
-            pc++;
-    } else if ((XR_IS_INT(va) || XR_IS_FLOAT(va)) && (XR_IS_INT(vb) || XR_IS_FLOAT(vb))) {
-        double na = XR_IS_INT(va) ? (double) XR_TO_INT(va) : XR_TO_FLOAT(va);
-        double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);
-        if ((na < nb) != k_flag)
-            pc++;
-    } else if (XR_IS_STRING(va) && XR_IS_STRING(vb)) {
-        const char *da = xr_value_str_data(&va);
-        uint32_t la = xr_value_str_len(&va);
-        const char *db = xr_value_str_data(&vb);
-        uint32_t lb = xr_value_str_len(&vb);
-        uint32_t ml = la < lb ? la : lb;
-        int cmp = memcmp(da, db, ml);
-        if (cmp == 0)
-            cmp = (la > lb) - (la < lb);
-        if ((cmp < 0) != k_flag)
-            pc++;
-    } else {
-        // Non-comparable types: treat as false
-        if (k_flag == 0)
-            pc++;
-    }
-    vmbreak;
-}
-
-vmcase(OP_LTI) {
-    // LTI A sB k: if (R[A] < sB) != k then pc++
-    XrValue va = R(GETARG_A(i));
-    int sb = GETARG_sB(i);
-    int k_flag = GETARG_C(i);
-    bool cond;
-
-    if (XR_IS_INT(va)) {
-        cond = XR_TO_INT(va) < sb;
-    } else {
-        cond = XR_TO_FLOAT(va) < (double) sb;
-    }
-    if (cond != k_flag)
-        pc++;
-    vmbreak;
-}
-
-VM_CMP_RR(OP_LE, <=, <=, <=)
-VM_CMP_RI(OP_LEI, <=, <=)
-
-#define VM_CMP_UNSIGNED_RR(op, cmp_op)                                                             \
+/* The unsigned branch opcodes read the same i64 slot on the unsigned lane. A
+ * non-integer pair has no unsigned reading, so it falls back to the signed
+ * relation the ordering helpers publish. */
+#define VM_CMP_UNSIGNED_RR(op, kind)                                                               \
     vmcase(op) {                                                                                   \
         XrValue va = R(GETARG_A(i));                                                               \
         XrValue vb = R(GETARG_B(i));                                                               \
         int k_flag = GETARG_C(i);                                                                  \
         bool cond;                                                                                 \
         if (XR_IS_INT(va) && XR_IS_INT(vb)) {                                                      \
-            cond = (uint64_t) XR_TO_INT(va) cmp_op(uint64_t) XR_TO_INT(vb);                        \
+            cond = VM_COMPARE_U64((kind), (uint64_t) XR_TO_INT(va), (uint64_t) XR_TO_INT(vb));     \
+        } else if ((kind) == XR_COMPARE_LT) {                                                      \
+            cond = vm_numeric_less(va, vb);                                                        \
         } else {                                                                                   \
             cond = vm_numeric_less_equal(va, vb);                                                  \
-            if (op == OP_LTU)                                                                      \
-                cond = vm_numeric_less(va, vb);                                                    \
         }                                                                                          \
         if (cond != k_flag)                                                                        \
             pc++;                                                                                  \
         vmbreak;                                                                                   \
     }
 
-VM_CMP_UNSIGNED_RR(OP_LTU, <)
-VM_CMP_UNSIGNED_RR(OP_LEU, <=)
+VM_CMP_UNSIGNED_RR(OP_LTU, XR_COMPARE_LT)
+VM_CMP_UNSIGNED_RR(OP_LEU, XR_COMPARE_LE)
 
 #undef VM_CMP_UNSIGNED_RR
 
@@ -189,6 +147,8 @@ VM_CMP_UNSIGNED_RR(OP_LEU, <=)
 #define XVM_COMPARE_IS_PRIMITIVE(v)                                                                \
     (XR_IS_INT(v) || XR_IS_FLOAT(v) || XR_IS_BOOL(v) || XR_IS_NULL(v))
 
+/* The generated `negate` flag names the relation, not a second rule: the owner
+ * turns the equality verdict into the opcode's answer. */
 #define XVM_TEMPLATE_COMPARE_DEEP_CASE(op, negate, op_flag, op_symbol, op_name, deep_fn)           \
     vmcase(op) {                                                                                   \
         int dest = GETARG_A(i);                                                                    \
@@ -196,14 +156,13 @@ VM_CMP_UNSIGNED_RR(OP_LEU, <=)
         int right = GETARG_C(i);                                                                   \
         XrValue vl = R(left);                                                                      \
         XrValue vr = R(right);                                                                     \
+        XrCompareKind kind = (negate) ? XR_COMPARE_NE : XR_COMPARE_EQ;                             \
         if (XVM_COMPARE_IS_PRIMITIVE(vl) && XVM_COMPARE_IS_PRIMITIVE(vr)) {                        \
-            bool equal = vm_values_equal(vl, vr);                                                  \
-            R(dest) = xr_bool((negate) ? !equal : equal);                                          \
+            R(dest) = xr_bool(VM_COMPARE_EQUAL(kind, vm_values_equal(vl, vr)));                    \
             vmbreak;                                                                               \
         }                                                                                          \
         VM_TRY_BINARY_OP_OVERLOAD(vl, vr, dest, op_flag, op_symbol, op_name);                      \
-        bool equal = deep_fn(isolate, vl, vr);                                                     \
-        R(dest) = xr_bool((negate) ? !equal : equal);                                              \
+        R(dest) = xr_bool(VM_COMPARE_EQUAL(kind, deep_fn(isolate, vl, vr)));                       \
         vmbreak;                                                                                   \
     }
 
@@ -226,7 +185,8 @@ vmcase(OP_CMP_LTU) {
     XrValue vl = R(GETARG_B(i));
     XrValue vr = R(GETARG_C(i));
     if (XR_IS_INT(vl) && XR_IS_INT(vr)) {
-        R(dest) = xr_bool((uint64_t) XR_TO_INT(vl) < (uint64_t) XR_TO_INT(vr));
+        R(dest) = xr_bool(
+            VM_COMPARE_U64(XR_COMPARE_LT, (uint64_t) XR_TO_INT(vl), (uint64_t) XR_TO_INT(vr)));
         vmbreak;
     }
     VM_TRY_BINARY_OP_OVERLOAD(vl, vr, dest, XR_OP_LT_FLAG, SYMBOL_OP_LT, "<");
@@ -239,7 +199,8 @@ vmcase(OP_CMP_LEU) {
     XrValue vl = R(GETARG_B(i));
     XrValue vr = R(GETARG_C(i));
     if (XR_IS_INT(vl) && XR_IS_INT(vr)) {
-        R(dest) = xr_bool((uint64_t) XR_TO_INT(vl) <= (uint64_t) XR_TO_INT(vr));
+        R(dest) = xr_bool(
+            VM_COMPARE_U64(XR_COMPARE_LE, (uint64_t) XR_TO_INT(vl), (uint64_t) XR_TO_INT(vr)));
         vmbreak;
     }
     VM_TRY_BINARY_OP_OVERLOAD(vl, vr, dest, XR_OP_LE_FLAG, SYMBOL_OP_LE, "<=");

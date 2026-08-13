@@ -15,7 +15,7 @@
 #define XR_SEM_CONSUMER_CGEN UINT32_C(0x00000010)
 #define XR_SEM_CONSUMER_RUNTIME UINT32_C(0x00000020)
 
-#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "9a0ca0b669cfb1966816b60ce5e2cb47aeaef3bcf72168cc8067e7ce185cde7e"
+#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "def5c0c89f652157f45c259ecd2ff1782f0247e9e0267e0227825619603559a2"
 
 #define XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI UINT64_C(0xac617302a6f0c5e7)
 #define XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO UINT64_C(0xec024eedf7938361)
@@ -53,6 +53,9 @@
 #define XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI UINT64_C(0x6fbb4b2fe8ab8b61)
 #define XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO UINT64_C(0x2dda997b7e6e8934)
 #define XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_CONSUMERS UINT32_C(0x0000001f)
+#define XR_SEM_OWNER_ID_SHARED_COMPARE_HI UINT64_C(0x2b67e75abd8a612a)
+#define XR_SEM_OWNER_ID_SHARED_COMPARE_LO UINT64_C(0x0bbedf300bf9fe29)
+#define XR_SEM_OWNER_ID_SHARED_COMPARE_CONSUMERS UINT32_C(0x0000001f)
 #define XR_SEM_OWNER_ID_SHARED_RANGE_HI UINT64_C(0x72235a3a274831e8)
 #define XR_SEM_OWNER_ID_SHARED_RANGE_LO UINT64_C(0x6027f98fa7d4ec32)
 #define XR_SEM_OWNER_ID_SHARED_RANGE_CONSUMERS UINT32_C(0x0000001f)
@@ -173,6 +176,9 @@ static inline uint32_t xr_semantic_owner_consumer_bits(uint64_t owner_id_hi,
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO)
         return XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_CONSUMERS;
+    if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_COMPARE_HI &&
+        owner_id_lo == XR_SEM_OWNER_ID_SHARED_COMPARE_LO)
+        return XR_SEM_OWNER_ID_SHARED_COMPARE_CONSUMERS;
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_RANGE_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_RANGE_LO)
         return XR_SEM_OWNER_ID_SHARED_RANGE_CONSUMERS;
@@ -302,6 +308,9 @@ static inline const char *xr_semantic_owner_cgen_adapter(uint64_t owner_id_hi,
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO)
         return "xrt_int_div_mod_eval";
+    if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_COMPARE_HI &&
+        owner_id_lo == XR_SEM_OWNER_ID_SHARED_COMPARE_LO)
+        return "xrt_compare_native";
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_RANGE_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_RANGE_LO)
         return "xrt_range_semantics";

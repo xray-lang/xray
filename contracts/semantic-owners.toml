@@ -147,6 +147,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
+id = "compare"
+header = "src/shared/xr_compare_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "int-arith"
 header = "src/shared/xr_int_arith_core.h"
 representation = "native"
@@ -541,6 +548,20 @@ fixtures = [
   "tests/unit/ir/test_xi_cgen.c",
   "tests/regression/03_operators/0397_numeric_neg_owner_edges.xr",
   "tests/aot/basic/numeric_neg_owner.xr",
+]
+
+[[operation]]
+id = "compare"
+observable_contract = "src/shared/xr_compare_core.h"
+semantic_kernel = "src/shared/xr_compare_core.h"
+vm_adapter = "src/vm/xvm_internal.h"
+aot_adapter = "src/aot/xrt_value.h"
+typed_plan = "shared.compare"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_compare_core.c",
+  "tests/unit/aot/test_xrt_compare_owner_freestanding.c",
+  "tests/diff/cases/semantics/compare/relation_owner.xr",
 ]
 
 [[operation]]

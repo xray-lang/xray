@@ -116,6 +116,33 @@ NUMERIC_NEG_AOT_BINDINGS = (
     "src/aot/xrt.h",
     "src/aot/xrt_core_freestanding.h",
 )
+COMPARE_OPERATIONS = {"xi.eq", "xi.ne", "xi.lt", "xi.le", "xi.gt", "xi.ge"}
+COMPARE_RETIRED_SOURCES = (
+    "src/vm/xvm_ops.c",
+    "src/vm/xvm_internal.h",
+    "src/vm/xvm_dispatch_compare.inc.c",
+    "src/aot/xrt_value.h",
+    "src/aot/xrt_arith.h",
+    "src/aot/xrt_core_freestanding.h",
+    "src/aot/xi_cgen.c",
+    "src/aot/xi_cgen_dispatch_helpers.inc.c",
+    "src/aot/xi_cgen_loop_helpers.inc.c",
+    "src/aot/xi_to_c_dispatch_gen.h",
+    "src/ir/xi_opt.c",
+    "src/ir/xi_opt_sccp.c",
+    "tools/xisagen/xisagen.py",
+)
+# A relational operator applied straight to a register payload - the shape every
+# converged dispatch template stopped using.
+COMPARE_RAW_PAYLOAD_RELATION = re.compile(
+    r"XR_TO_(?:INT|FLOAT|BOOL)\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*\)\s*(?:<=|>=|==|!=|<|>)")
+# Negating an equality verdict by hand is the other way the relation comes back.
+COMPARE_TERNARY_NEGATION = re.compile(r"\?\s*!")
+COMPARE_RETIRED_TOKENS = (
+    "xi_to_c_template_compare_native_op",
+    "vm_compare_native_op",
+    "xrt_compare_operator",
+)
 INT_DIV_MOD_OPERATIONS = {"xi.div", "xi.mod"}
 INT_DIV_MOD_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -561,6 +588,26 @@ def extract_c_function(text: str, symbol: str) -> str | None:
     if match is None:
         return None
     start = text.find("{", match.start())
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:index + 1]
+    return None
+
+
+def extract_c_definition(text: str, symbol: str) -> str | None:
+    """Body of a file-scope definition, ignoring call sites that happen to be
+    followed by a brace (an `if (fn(...)) {` reads the same to a plain scan)."""
+    pattern = re.compile(rf"^[A-Za-z_][^;{{}}\n]*\b{re.escape(symbol)}\s*\([^;{{}}]*\)\s*\{{",
+                         re.MULTILINE)
+    match = pattern.search(text)
+    if match is None:
+        return None
+    start = text.find("{", match.end() - 1)
     depth = 0
     for index in range(start, len(text)):
         if text[index] == "{":
@@ -1220,6 +1267,163 @@ def verify_int_div_mod_ratchet(root: Path, registry: dict) -> list[str]:
         for token in INT_DIV_MOD_RETIRED_TOKENS:
             if token in text:
                 errors.append(f"{relative}: retired div/mod semantic source remains: {token}")
+    return errors
+
+
+def verify_compare_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.compare")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.compare"), None)
+    if owner is None or set(owner.get("operations", [])) != COMPARE_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.compare operation family")
+
+    core_relative = "src/shared/xr_compare_core.h"
+    core_text = (root / core_relative).read_text(encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_COMPARE_OWNER_GUARD",
+                  "XR_COMPARE_CONSUMER_GUARD", "XR_COMPARE_KIND_GUARD",
+                  "XR_COMPARE_OWNER_APPLY_I64", "XR_COMPARE_OWNER_APPLY_U64",
+                  "XR_COMPARE_OWNER_APPLY_F64", "XR_COMPARE_OWNER_APPLY_PTR",
+                  "XR_COMPARE_OWNER_APPLY_ORDERING", "XR_COMPARE_OWNER_APPLY_EQUAL",
+                  "XR_COMPARE_OWNER_APPLY_NATIVE", "XR_COMPARE_OWNER_ROUTE",
+                  "xr_compare_i64_core", "xr_compare_u64_core", "xr_compare_f64_core",
+                  "xr_compare_ptr_core", "xr_compare_ordering_core", "xr_compare_equal_core",
+                  "xr_compare_route_core"):
+        if token not in core_text:
+            errors.append(f"{core_relative}: shared compare owner lacks {token}")
+
+    vm_header = "src/vm/xvm_internal.h"
+    vm_header_text = (root / vm_header).read_text(encoding="utf-8", errors="strict")
+    if f"{marker}_HI" not in vm_header_text or f"{marker}_LO" not in vm_header_text:
+        errors.append(f"{vm_header}: VM compare adapters do not bind the stable owner ID")
+    for token in ("VM_COMPARE_ROUTE", "VM_COMPARE_I64", "VM_COMPARE_U64", "VM_COMPARE_F64",
+                  "VM_COMPARE_PTR", "VM_COMPARE_ORDERING", "VM_COMPARE_EQUAL"):
+        if token not in vm_header_text:
+            errors.append(f"{vm_header}: VM compare adapter {token} is missing")
+
+    vm_ops = "src/vm/xvm_ops.c"
+    vm_ops_text = (root / vm_ops).read_text(encoding="utf-8", errors="strict")
+    relation_body = extract_c_definition(vm_ops_text, "vm_compare_relation")
+    if relation_body is None or "VM_COMPARE_ROUTE" not in relation_body:
+        errors.append(f"{vm_ops}: VM comparison does not route through the shared owner")
+    elif any(token in relation_body for token in (") < 0", ") <= 0", ") == 0", ") > 0", ") >= 0",
+                                                  "nl < nr", "nl <= nr")):
+        errors.append(f"{vm_ops}: private compare semantics revived in vm_compare_relation")
+    for symbol, kind in (("vm_values_equal", "XR_COMPARE_EQ"),
+                         ("vm_values_equal_deep", "XR_COMPARE_EQ"),
+                         ("vm_numeric_less", "XR_COMPARE_LT"),
+                         ("vm_numeric_less_equal", "XR_COMPARE_LE"),
+                         ("vm_numeric_greater", "XR_COMPARE_GT"),
+                         ("vm_numeric_greater_equal", "XR_COMPARE_GE")):
+        body = extract_c_definition(vm_ops_text, symbol)
+        if body is None or "vm_compare_relation" not in body or kind not in body:
+            errors.append(f"{vm_ops}: {symbol} bypasses the shared compare owner")
+        elif "xr_bigint_cmp" in body or "xr_string_compare" in body:
+            errors.append(f"{vm_ops}: private compare semantics revived in {symbol}")
+
+    dispatch_relative = "src/vm/xvm_dispatch_compare.inc.c"
+    dispatch_text = (root / dispatch_relative).read_text(encoding="utf-8", errors="strict")
+    for token in ("int_op", "float_op", "str_cmp_op", "cmp_op", "? !equal : equal"):
+        if token in dispatch_text:
+            errors.append(f"{dispatch_relative}: raw compare operator revived: {token}")
+    # Each dispatch template is checked on its own body: a file-wide token count
+    # would stay green while one opcode quietly went back to a C operator.
+    for start, end, required in (
+        ("#define VM_CMP_RR(", "#define VM_CMP_RI(",
+         ("VM_COMPARE_I64", "VM_COMPARE_F64", "VM_COMPARE_ORDERING")),
+        ("#define VM_CMP_RI(", "VM_CMP_RR(OP_LT", ("VM_COMPARE_I64", "VM_COMPARE_F64")),
+        ("#define VM_CMP_UNSIGNED_RR(", "VM_CMP_UNSIGNED_RR(OP_LTU", ("VM_COMPARE_U64",)),
+        ("#define XVM_TEMPLATE_COMPARE_DEEP_CASE", "#define XVM_TEMPLATE_COMPARE_ORDER_CASE",
+         ("VM_COMPARE_EQUAL",)),
+        ("vmcase(OP_CMP_LTU)", "vmcase(OP_CMP_LEU)", ("VM_COMPARE_U64",)),
+        ("vmcase(OP_CMP_LEU)", "#undef XVM_TEMPLATE_COMPARE_ORDER_CASE", ("VM_COMPARE_U64",)),
+    ):
+        begin = dispatch_text.find(start)
+        stop = dispatch_text.find(end, begin + 1)
+        body = dispatch_text[begin:stop] if begin >= 0 and stop > begin else ""
+        if not body:
+            errors.append(f"{dispatch_relative}: compare dispatch template {start} is missing")
+            continue
+        for token in required:
+            if token not in body:
+                errors.append(f"{dispatch_relative}: {start} bypasses the shared compare owner")
+        if COMPARE_RAW_PAYLOAD_RELATION.search(body) or COMPARE_TERNARY_NEGATION.search(body):
+            errors.append(f"{dispatch_relative}: raw compare operator revived in {start}")
+
+    for relative, symbol, adapters in (
+        ("src/aot/xrt_value.h", "xrt_compare_tagged_equal",
+         ("xrt_compare_equal", "xrt_compare_i64", "xrt_compare_f64", "xrt_compare_ptr")),
+        ("src/aot/xrt_arith.h", "xrt_compare_tagged_order",
+         ("xrt_compare_i64", "xrt_compare_ordering", "xrt_compare_f64")),
+        ("src/aot/xrt_core_freestanding.h", "xrt_compare_tagged_equal",
+         ("xrt_compare_equal", "xrt_compare_i64", "xrt_compare_f64", "xrt_compare_ptr")),
+        ("src/aot/xrt_core_freestanding.h", "xrt_compare_tagged_order",
+         ("xrt_compare_i64", "xrt_compare_f64")),
+    ):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        body = extract_c_definition(text, symbol)
+        if body is None:
+            errors.append(f"{relative}: {symbol} is missing")
+            continue
+        for adapter in adapters:
+            if adapter not in body:
+                errors.append(f"{relative}: {symbol} does not evaluate the owner through {adapter}")
+        for token in ("a.i == b.i", "a.f == b.f", "a.i < b.i", "a.i <= b.i", "fa < fb", "fa <= fb",
+                      "cmp_value(a, b) < 0", "cmp_value(a, b) <= 0", "return a.ptr == b.ptr;"):
+            if token in body:
+                errors.append(f"{relative}: private compare semantics revived in {symbol}")
+
+    for relative in ("src/aot/xrt_value.h", "src/aot/xrt_core_freestanding.h"):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "xrt_compare_route" not in text or "xrt_compare_native" not in text):
+            errors.append(f"{relative}: AOT compare adapters bypass the stable owner")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_definition(cgen_text, "cg_compare_adapter_name")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append("src/aot/xi_cgen.c: CGen compare does not resolve by stable owner ID")
+
+    dispatch_helpers = "src/aot/xi_cgen_dispatch_helpers.inc.c"
+    helpers_text = (root / dispatch_helpers).read_text(encoding="utf-8", errors="strict")
+    compare_body = extract_c_definition(helpers_text, "xicgen_compare")
+    if compare_body is None or "cg_compare_adapter_name" not in compare_body:
+        errors.append(f"{dispatch_helpers}: compare emitter resolves no owner adapter")
+    elif "emit_binop(" in compare_body or any(token in compare_body
+                                              for token in ('"=="', '"!="', '"<"', '"<="',
+                                                            '">"', '">="')):
+        errors.append(f"{dispatch_helpers}: raw compare operator revived in xicgen_compare")
+
+    loop_helpers = "src/aot/xi_cgen_loop_helpers.inc.c"
+    loop_text = (root / loop_helpers).read_text(encoding="utf-8", errors="strict")
+    for symbol in ("emit_structured_loop_condition_expr", "emit_structured_loop_condition_expr_ctx",
+                   "emit_structured_array_fill_loop_stmt"):
+        body = extract_c_definition(loop_text, symbol)
+        if body is None or "cg_compare_adapter_name" not in body:
+            errors.append(f"{loop_helpers}: {symbol} emits a private comparison")
+        elif any(token in body for token in ('" < "', '" <= "', '" == "', '" != "', '" > "',
+                                             '" >= "')):
+            errors.append(f"{loop_helpers}: raw compare operator revived in {symbol}")
+
+    optimizer_text = (root / "src/ir/xi_opt.c").read_text(encoding="utf-8", errors="strict")
+    for symbol, adapter in (("fold_int_compare", "XI_OPT_COMPARE_I64"),
+                            ("fold_float_compare", "XI_OPT_COMPARE_F64")):
+        body = extract_c_definition(optimizer_text, symbol)
+        if body is None or adapter not in body:
+            errors.append(f"src/ir/xi_opt.c: {symbol} folds outside the shared kernel")
+    sccp_text = (root / "src/ir/xi_opt_sccp.c").read_text(encoding="utf-8", errors="strict")
+    sccp_body = extract_c_definition(sccp_text, "eval_compare")
+    if sccp_body is None or "SCCP_COMPARE_I64" not in sccp_body or \
+            "SCCP_COMPARE_F64" not in sccp_body:
+        errors.append("src/ir/xi_opt_sccp.c: SCCP compare folding bypasses the shared kernel")
+
+    for relative in COMPARE_RETIRED_SOURCES:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for token in COMPARE_RETIRED_TOKENS:
+            if token in text:
+                errors.append(f"{relative}: retired compare semantic source remains: {token}")
     return errors
 
 
@@ -3472,8 +3676,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 43:
-        errors.append(f"shared-core inventory must contain exactly 43 headers, found {len(actual)}")
+    if len(actual) != 44:
+        errors.append(f"shared-core inventory must contain exactly 44 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -3504,6 +3708,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_shift_ratchet(root, registry))
         errors.extend(verify_numeric_neg_ratchet(root, registry))
         errors.extend(verify_int_div_mod_ratchet(root, registry))
+        errors.extend(verify_compare_ratchet(root, registry))
         errors.extend(verify_numeric_width_ratchet(root, registry))
         errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
         errors.extend(verify_byte_slice_fill_ratchet(root, registry))

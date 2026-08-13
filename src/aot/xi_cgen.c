@@ -4380,6 +4380,26 @@ static const char *cg_int_div_mod_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
+/* The relation spelling AOT CGen writes into generated C, resolved from the
+ * stable owner ID rather than named locally. */
+static const char *cg_compare_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,
+                                        XR_SEM_OWNER_ID_SHARED_COMPARE_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: compare owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_COMPARE_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: compare owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
 static const char *cg_regex_compile_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_REGEX_HI,
                                         XR_SEM_OWNER_ID_SHARED_REGEX_LO,
@@ -7708,7 +7728,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
     if (user->op == XI_BNOT)
         return arg_index == 0;
 
-    template_op = xi_to_c_template_compare_native_op(user->op);
+    template_op = xi_to_c_template_compare_relation(user->op);
     if (template_op && *template_op) {
         if (arg_index >= 2 || user->nargs < 2)
             return false;

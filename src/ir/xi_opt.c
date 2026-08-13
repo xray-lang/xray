@@ -45,6 +45,7 @@
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_null_test_core.h"
+#include "../shared/xr_compare_core.h"
 #include "xi_analysis.h"
 #include "xi_analysis_manager.h"
 #include "xi_edit.h"
@@ -408,32 +409,60 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, bool shr_unsigned
     }
 }
 
-/* Try to fold a comparison on two integer constants. */
-static bool fold_int_compare(uint16_t op, int64_t a, int64_t b, bool use_unsigned, bool *result) {
-    uint64_t ua = (uint64_t) a;
-    uint64_t ub = (uint64_t) b;
+/* Constant folding answers the same relation the executors do, through the same
+ * owner: a fold that disagreed with the runtime would move the answer into the
+ * compiler. */
+#define XI_OPT_COMPARE_I64(kind, a, b)                                                             \
+    XR_COMPARE_OWNER_APPLY_I64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_SEMANTIC_PLAN,   \
+                               (kind), (a), (b))
+#define XI_OPT_COMPARE_U64(kind, a, b)                                                             \
+    XR_COMPARE_OWNER_APPLY_U64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_SEMANTIC_PLAN,   \
+                               (kind), (a), (b))
+#define XI_OPT_COMPARE_F64(kind, a, b)                                                             \
+    XR_COMPARE_OWNER_APPLY_F64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_SEMANTIC_PLAN,   \
+                               (kind), (a), (b))
+
+/* The Xi opcode that carries each relation. */
+static bool xi_compare_kind(uint16_t op, XrCompareKind *kind) {
     switch (op) {
         case XI_EQ:
-            *result = (a == b);
+            *kind = XR_COMPARE_EQ;
             return true;
         case XI_NE:
-            *result = (a != b);
+            *kind = XR_COMPARE_NE;
             return true;
         case XI_LT:
-            *result = use_unsigned ? (ua < ub) : (a < b);
+            *kind = XR_COMPARE_LT;
             return true;
         case XI_LE:
-            *result = use_unsigned ? (ua <= ub) : (a <= b);
+            *kind = XR_COMPARE_LE;
             return true;
         case XI_GT:
-            *result = use_unsigned ? (ua > ub) : (a > b);
+            *kind = XR_COMPARE_GT;
             return true;
         case XI_GE:
-            *result = use_unsigned ? (ua >= ub) : (a >= b);
+            *kind = XR_COMPARE_GE;
             return true;
         default:
             return false;
     }
+}
+
+/* Try to fold a comparison on two integer constants. */
+static bool fold_int_compare(uint16_t op, int64_t a, int64_t b, bool use_unsigned, bool *result) {
+    XrCompareKind kind;
+    if (!xi_compare_kind(op, &kind))
+        return false;
+    /* Equality reads the same bits either way, so only the order relations need
+     * the unsigned lane. */
+    if (use_unsigned && !xr_compare_kind_is_equality_core(kind))
+        *result = XI_OPT_COMPARE_U64(kind, (uint64_t) a, (uint64_t) b);
+    else
+        *result = XI_OPT_COMPARE_I64(kind, a, b);
+    return true;
 }
 
 /* Try to fold a binary op on two float constants.
@@ -484,28 +513,11 @@ static bool fold_float_binary(uint16_t op, double a, double b, bool is_f32, doub
 
 /* Try to fold a comparison on two float constants. */
 static bool fold_float_compare(uint16_t op, double a, double b, bool *result) {
-    switch (op) {
-        case XI_EQ:
-            *result = (a == b);
-            return true;
-        case XI_NE:
-            *result = (a != b);
-            return true;
-        case XI_LT:
-            *result = (a < b);
-            return true;
-        case XI_LE:
-            *result = (a <= b);
-            return true;
-        case XI_GT:
-            *result = (a > b);
-            return true;
-        case XI_GE:
-            *result = (a >= b);
-            return true;
-        default:
-            return false;
-    }
+    XrCompareKind kind;
+    if (!xi_compare_kind(op, &kind))
+        return false;
+    *result = XI_OPT_COMPARE_F64(kind, a, b);
+    return true;
 }
 
 static void rewrite_to_const_int(XiValue *v, int64_t value) {

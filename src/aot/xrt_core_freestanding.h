@@ -63,6 +63,41 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_null_test_core.h"
 #include "../shared/xr_assert_condition_core.h"
+#include "../shared/xr_compare_core.h"
+#define xrt_compare_route(kind, left_class, right_class)                                          \
+    XR_COMPARE_OWNER_ROUTE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                     \
+                           XR_SEM_OWNER_ID_SHARED_COMPARE_LO,                                     \
+                           XR_SEM_CONSUMER_AOT_FREESTANDING, (kind), (left_class), (right_class))
+#define xrt_compare_i64(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_I64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO,                                 \
+                               XR_SEM_CONSUMER_AOT_FREESTANDING, (kind), (a), (b))
+#define xrt_compare_u64(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_U64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO,                                 \
+                               XR_SEM_CONSUMER_AOT_FREESTANDING, (kind), (a), (b))
+#define xrt_compare_f64(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_F64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO,                                 \
+                               XR_SEM_CONSUMER_AOT_FREESTANDING, (kind), (a), (b))
+#define xrt_compare_ptr(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_PTR(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO,                                 \
+                               XR_SEM_CONSUMER_AOT_FREESTANDING, (kind), (a), (b))
+#define xrt_compare_ordering(kind, ordering)                                                      \
+    XR_COMPARE_OWNER_APPLY_ORDERING(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                            \
+                                    XR_SEM_OWNER_ID_SHARED_COMPARE_LO,                            \
+                                    XR_SEM_CONSUMER_AOT_FREESTANDING, (kind), (ordering))
+#define xrt_compare_equal(kind, equal)                                                            \
+    XR_COMPARE_OWNER_APPLY_EQUAL(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                               \
+                                 XR_SEM_OWNER_ID_SHARED_COMPARE_LO,                               \
+                                 XR_SEM_CONSUMER_AOT_FREESTANDING, (kind), (equal))
+/* Spelled into generated C for a proven scalar comparison: the relation comes
+ * from the owner while the operand type stays the one the plan chose. */
+#define xrt_compare_native(relation, a, b)                                                        \
+    XR_COMPARE_OWNER_APPLY_NATIVE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                              \
+                                  XR_SEM_OWNER_ID_SHARED_COMPARE_LO,                              \
+                                  XR_SEM_CONSUMER_AOT_FREESTANDING, relation, (a), (b))
 #define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
                               XR_SEM_OWNER_ID_SHARED_BITS_LO,                                     \
@@ -479,6 +514,7 @@ baseline:
 
 #define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
+#define XR_TO_BOOL(v) ((int) (v).i)
 #define XR_TO_RUNE(v) ((uint32_t) (v).i)
 #define XR_TO_BOOL(v) ((int) (v).i)
 
@@ -1831,44 +1867,52 @@ static inline int64_t xrt_typeof_id(XrValue v) {
         xrt_freestanding_type_identity_kind(v));
 }
 
-static inline int64_t xrt_eq(XrValue a, XrValue b) {
+/* The freestanding carrier rule mirrors the hosted one: a tagged pair compares
+ * only within one tag class, STR_ARC normalized to STR. The relation over each
+ * class comes from the shared owner. */
+static inline int64_t xrt_compare_tagged_equal(XrCompareKind kind, XrValue a, XrValue b) {
     uint32_t ta = (a.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : a.tag;
     uint32_t tb = (b.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : b.tag;
     if (ta != tb)
-        return 0;
+        return xrt_compare_equal(kind, false);
     if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL || ta == XR_TAG_RUNE)
-        return a.i == b.i;
+        return xrt_compare_i64(kind, a.i, b.i);
     if (ta == XR_TAG_F64)
-        return a.f == b.f;
+        return xrt_compare_f64(kind, a.f, b.f);
     if (ta == XR_TAG_NULL)
-        return 1;
+        return xrt_compare_equal(kind, true);
     if (ta == XR_TAG_ENUM) {
         const XrAotEnumBox *ea = (const XrAotEnumBox *) a.ptr;
         const XrAotEnumBox *eb = (const XrAotEnumBox *) b.ptr;
         if (!ea || !eb)
-            return ea == eb;
-        if (ea->layout_id != eb->layout_id || ea->member_index != eb->member_index ||
-            ea->payload_count != eb->payload_count)
-            return 0;
-        for (uint32_t i = 0; i < ea->payload_count; i++) {
-            if (!xrt_eq(ea->payloads[i], eb->payloads[i]))
-                return 0;
-        }
-        return 1;
+            return xrt_compare_ptr(kind, ea, eb);
+        bool same = ea->layout_id == eb->layout_id && ea->member_index == eb->member_index &&
+                    ea->payload_count == eb->payload_count;
+        for (uint32_t i = 0; same && i < ea->payload_count; i++)
+            same = xrt_compare_tagged_equal(XR_COMPARE_EQ, ea->payloads[i], eb->payloads[i]) != 0;
+        return xrt_compare_equal(kind, same);
     }
-    return a.ptr == b.ptr && a.ext == b.ext;
+    return xrt_compare_equal(kind, a.ptr == b.ptr && a.ext == b.ext);
+}
+
+static inline int64_t xrt_eq(XrValue a, XrValue b) {
+    return xrt_compare_tagged_equal(XR_COMPARE_EQ, a, b);
+}
+
+/* Freestanding ordering: the integer lane when both operands are integers, the
+ * double lane otherwise, with the numeric projection the profile already owns. */
+static inline int64_t xrt_compare_tagged_order(XrCompareKind kind, XrValue a, XrValue b) {
+    if (XR_IS_INT(a) && XR_IS_INT(b))
+        return xrt_compare_i64(kind, a.i, b.i);
+    return xrt_compare_f64(kind, xrt_math_number(a), xrt_math_number(b));
 }
 
 static inline int64_t xrt_lt(XrValue a, XrValue b) {
-    if (XR_IS_INT(a) && XR_IS_INT(b))
-        return a.i < b.i;
-    return xrt_math_number(a) < xrt_math_number(b);
+    return xrt_compare_tagged_order(XR_COMPARE_LT, a, b);
 }
 
 static inline int64_t xrt_le(XrValue a, XrValue b) {
-    if (XR_IS_INT(a) && XR_IS_INT(b))
-        return a.i <= b.i;
-    return xrt_math_number(a) <= xrt_math_number(b);
+    return xrt_compare_tagged_order(XR_COMPARE_LE, a, b);
 }
 
 static inline XrValue xrt_add(XrValue a, XrValue b) {
