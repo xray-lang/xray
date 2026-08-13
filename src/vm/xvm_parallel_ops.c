@@ -39,10 +39,10 @@
 #include "../runtime/xshared.h"
 
 enum {
-    XR_VM_PAR_MAX_LANES = XR_PARALLEL_EXECUTOR_MAX_LANES,
-    XR_VM_PAR_FLAG_INCLUSIVE_END = 1 << 0,
-    XR_VM_PAR_FLAG_RANGE_BODY = 1 << 1,
-    XR_VM_PAR_FLAG_PLAN_STATE = 1 << 2,
+    XR_PAR_OP_MAX_LANES = XR_PARALLEL_EXECUTOR_MAX_LANES,
+    XR_PAR_OP_FLAG_INCLUSIVE_END = 1 << 0,
+    XR_PAR_OP_FLAG_RANGE_BODY = 1 << 1,
+    XR_PAR_OP_FLAG_PLAN_STATE = 1 << 2,
 };
 
 typedef struct XrVmParBatch XrVmParBatch;
@@ -647,7 +647,7 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
     XrValue *end_slot = &base[arg_base + 1];
     XrValue *workers_slot = &base[arg_base + 2];
     XrValue *closure_slot = &base[arg_base + 3];
-    bool plan_state = (flags & XR_VM_PAR_FLAG_PLAN_STATE) != 0;
+    bool plan_state = (flags & XR_PAR_OP_FLAG_PLAN_STATE) != 0;
     XrValue *states_slot = plan_state ? &base[arg_base + 4] : NULL;
     XrValue *batch_slot = &base[arg_base + (plan_state ? 5 : 4)];
 
@@ -671,7 +671,7 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
 
     int64_t start = XR_TO_INT(*start_slot);
     int64_t end_excl = XR_TO_INT(*end_slot);
-    if ((flags & XR_VM_PAR_FLAG_INCLUSIVE_END) != 0) {
+    if ((flags & XR_PAR_OP_FLAG_INCLUSIVE_END) != 0) {
         if (end_excl == INT64_MAX)
             return XR_DISP_NEXT;
         end_excl++;
@@ -684,7 +684,7 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
 
     XrRuntime *runtime = vm_par_ensure_scheduler(isolate);
     int lane_count =
-        xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
+        xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_PAR_OP_MAX_LANES);
     if (lane_count <= 1) {
         vm_par_force_single_lane_fallback(workers_slot);
         return XR_DISP_NEXT;
@@ -708,7 +708,7 @@ XR_FUNC XrDispatchAction vm_par_for_dispatch(XrVMRuntime *isolate, XrVMContext *
 
     XrVmParBatch *batch =
         vm_par_batch_new(isolate, runtime, closure, NULL, NULL, states, start, end_excl, lane_count,
-                         (flags & XR_VM_PAR_FLAG_RANGE_BODY) != 0, plan_state, false, false);
+                         (flags & XR_PAR_OP_FLAG_RANGE_BODY) != 0, plan_state, false, false);
     if (!batch) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "parallel.forEach batch allocation failed");
     }
@@ -735,7 +735,7 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
     XrValue *workers_slot = &base[arg_base + 2];
     XrValue *closure_slot = &base[arg_base + 3];
     XrValue *output_slot = &base[arg_base + 4];
-    bool plan_state = (flags & XR_VM_PAR_FLAG_PLAN_STATE) != 0;
+    bool plan_state = (flags & XR_PAR_OP_FLAG_PLAN_STATE) != 0;
     XrValue *states_slot = plan_state ? &base[arg_base + 5] : NULL;
     XrValue *batch_slot = &base[arg_base + (plan_state ? 6 : 5)];
 
@@ -763,7 +763,7 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
 
     int64_t start = XR_TO_INT(*start_slot);
     int64_t end_excl = XR_TO_INT(*end_slot);
-    if ((flags & XR_VM_PAR_FLAG_INCLUSIVE_END) != 0) {
+    if ((flags & XR_PAR_OP_FLAG_INCLUSIVE_END) != 0) {
         if (end_excl == INT64_MAX)
             return XR_DISP_NEXT;
         end_excl++;
@@ -782,7 +782,7 @@ XR_FUNC XrDispatchAction vm_par_map_dispatch(XrVMRuntime *isolate, XrVMContext *
 
     XrRuntime *runtime = vm_par_ensure_scheduler(isolate);
     int lane_count =
-        xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
+        xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_PAR_OP_MAX_LANES);
     if (lane_count <= 1) {
         vm_par_force_single_lane_fallback(workers_slot);
         return XR_DISP_NEXT;
@@ -833,7 +833,7 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
     XrValue *initial_slot = &base[arg_base + 3];
     XrValue *body_slot = &base[arg_base + 4];
     XrValue *combine_slot = &base[arg_base + 5];
-    bool plan_state = (flags & XR_VM_PAR_FLAG_PLAN_STATE) != 0;
+    bool plan_state = (flags & XR_PAR_OP_FLAG_PLAN_STATE) != 0;
     XrValue *states_slot = plan_state ? &base[arg_base + 6] : NULL;
     XrValue *batch_slot = &base[arg_base + (plan_state ? 7 : 6)];
     XrValue *partials_slot = &base[arg_base + (plan_state ? 8 : 7)];
@@ -861,7 +861,7 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
 
     int64_t start = XR_TO_INT(*start_slot);
     int64_t end_excl = XR_TO_INT(*end_slot);
-    if ((flags & XR_VM_PAR_FLAG_INCLUSIVE_END) != 0) {
+    if ((flags & XR_PAR_OP_FLAG_INCLUSIVE_END) != 0) {
         if (end_excl == INT64_MAX)
             return XR_DISP_NEXT;
         end_excl++;
@@ -874,7 +874,7 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
 
     XrRuntime *runtime = vm_par_ensure_scheduler(isolate);
     int lane_count =
-        xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_VM_PAR_MAX_LANES);
+        xr_parallel_resolve_lane_count(runtime, item_count, workers, XR_PAR_OP_MAX_LANES);
     if (lane_count <= 1) {
         vm_par_force_single_lane_fallback(workers_slot);
         return XR_DISP_NEXT;
@@ -915,7 +915,7 @@ XR_FUNC XrDispatchAction vm_par_reduce_dispatch(XrVMRuntime *isolate, XrVMContex
 
     XrVmParBatch *batch = vm_par_batch_new(
         isolate, runtime, body, combine, partials, states, start, end_excl, lane_count,
-        (flags & XR_VM_PAR_FLAG_RANGE_BODY) != 0, plan_state, false, true);
+        (flags & XR_PAR_OP_FLAG_RANGE_BODY) != 0, plan_state, false, true);
     if (!batch) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "parallel.reduce batch allocation failed");
     }
