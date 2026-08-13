@@ -104,7 +104,7 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
     if (!runtime) {
         int workers =
             entry_plan->scheduler_mode == XR_SCHED_MULTI ? isolate->params.scheduler_workers : 1;
-        xray_vm_multicore_init(isolate, workers);
+        xr_isolate_multicore_init(isolate, workers);
         runtime = (XrRuntime *) isolate->vm.scheduler;
         if (!runtime) {
             xr_log_warning("vm", "entry plan requires an unavailable scheduler");
@@ -149,7 +149,7 @@ XrValue xr_vm_run_closure_blocking(XrVMRuntime *isolate, XrClosure *closure, XrV
     // single-worker runtime defensively for any other caller.
     XrRuntime *runtime = (XrRuntime *) isolate->vm.scheduler;
     if (!runtime) {
-        xray_vm_multicore_init(isolate, 1);
+        xr_isolate_multicore_init(isolate, 1);
         runtime = (XrRuntime *) isolate->vm.scheduler;
         if (!runtime) {
             xr_log_warning("vm", "run_closure_blocking: scheduler unavailable");

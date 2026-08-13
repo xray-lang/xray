@@ -82,7 +82,7 @@ static void *vm_parallel_isolate_runner(void *raw) {
         return NULL;
     }
 
-    xray_vm_multicore_init(isolate, VM_PAR_ISOLATE_WORKERS);
+    xr_isolate_multicore_init(isolate, VM_PAR_ISOLATE_WORKERS);
     atomic_fetch_add_explicit(run->ready_count, 1, memory_order_acq_rel);
     while (!atomic_load_explicit(run->start, memory_order_acquire))
         xr_thread_yield();

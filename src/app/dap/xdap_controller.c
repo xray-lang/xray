@@ -122,7 +122,7 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program, char **ar
     }
 
     // Initialize multicore runtime
-    xray_vm_multicore_init(ctrl->isolate, 0);
+    xr_isolate_multicore_init(ctrl->isolate, 0);
 
     // Set script info
     xray_vm_set_script_info(ctrl->isolate, program, arg_count, args);

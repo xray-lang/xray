@@ -37,6 +37,7 @@ XR_FUNC XrRuntimeCore *xr_isolate_get_runtime_core(XrVMRuntime *X);
 
 // Scheduler runtime
 XR_FUNC XrRuntime *xr_isolate_get_scheduler_runtime(XrVMRuntime *X);
+XR_FUNC void xr_isolate_multicore_init(XrVMRuntime *X, int num_workers);
 
 // Memory subsystem
 XR_FUNC XrFixedHeap *xr_isolate_get_fixed_heap(XrVMRuntime *X);

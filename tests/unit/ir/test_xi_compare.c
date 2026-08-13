@@ -229,7 +229,7 @@ static XrProto *compile_xi(const char *source) {
  *     via xr_vm_interpret_proto_isolate and never touches a coroutine.
  *     Snippets this small are exactly the elided case, so pushing them
  *     through the scheduler path ran nothing at all.
- *   - xray_vm_multicore_init: xr_main_thread_run needs isolate->vm.scheduler,
+ *   - xr_isolate_multicore_init: xr_main_thread_run needs isolate->vm.scheduler,
  *     which xray_vm_new_full leaves NULL.
  *   - the main coroutine: xray_vm_new_full also leaves isolate->main_coro
  *     NULL (it is created on demand), so xr_isolate_get_main_coro returns

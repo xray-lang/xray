@@ -544,7 +544,7 @@ static bool handle_command(ReplState *state, const char *input) {
             fprintf(stderr, "Error: failed to create isolate\n");
             return true;
         }
-        xray_vm_multicore_init(state->isolate, 0);
+        xr_isolate_multicore_init(state->isolate, 0);
         print_colored(state, XR_CLR_GREEN, "Environment reset\n");
         return true;
     }
@@ -709,7 +709,7 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
         xr_free(state.protos);
         return XR_CLI_EXIT_INTERNAL;
     }
-    xray_vm_multicore_init(state.isolate, 0);
+    xr_isolate_multicore_init(state.isolate, 0);
 
     // Print welcome
     print_welcome(&state);

@@ -142,7 +142,7 @@ static XrRuntime *vm_par_ensure_scheduler(XrVMRuntime *isolate) {
         /* Parallel intrinsics are a lazy scheduler boundary. Direct roots stay
          * taskless until an actual batch is requested, then acquire only the
          * worker runtime needed by that operation. */
-        xray_vm_multicore_init(isolate, 0);
+        xr_isolate_multicore_init(isolate, 0);
         runtime = xr_isolate_get_scheduler_runtime(isolate);
     }
     return runtime;

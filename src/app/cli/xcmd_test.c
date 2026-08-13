@@ -370,7 +370,7 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         return;
     }
     xr_isolate_set_suppress_exception_print(X, true);
-    xray_vm_multicore_init(X, 0);
+    xr_isolate_multicore_init(X, 0);
     xray_vm_set_script_info(X, filepath, 0, NULL);
     xr_module_system_init_with_script(X, filepath);
 

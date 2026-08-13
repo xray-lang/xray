@@ -65,7 +65,6 @@ XRAY_API int xray_vm_eval_bundle(XrVMRuntime *vm, const XrBytecodeBundle *bundle
 XRAY_API void xray_vm_set_script_info(XrVMRuntime *vm, const char *script_file, int argc,
                                       char **argv);
 
-XRAY_API void xray_vm_multicore_init(XrVMRuntime *vm, int num_workers);
 XRAY_API void xray_vm_multicore_destroy(XrVMRuntime *vm);
 #ifdef __cplusplus
 }
