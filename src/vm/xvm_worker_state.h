@@ -21,6 +21,6 @@
 
 struct XrMachine;
 
-XR_FUNC XrVMContext *xr_vm_machine_ctx(struct XrMachine *machine, XrVMRuntime *isolate);
+XR_FUNC XrVMContext *xr_machine_vm_context(struct XrMachine *machine, XrVMRuntime *isolate);
 
 #endif  // XVM_WORKER_STATE_H

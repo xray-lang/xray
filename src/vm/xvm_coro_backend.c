@@ -1185,7 +1185,7 @@ static XrVMResult run_cfunc_resume(XrVMRuntime *isolate, XrCoroutine *coro, XrVM
 // First-exec and resume are factored into helpers above so the
 // orchestration here stays small and obvious.
 static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrVMRuntime *isolate) {
-    XrVMContext *ctx = xr_vm_machine_ctx(worker->m, isolate);
+    XrVMContext *ctx = xr_machine_vm_context(worker->m, isolate);
     if (!ctx)
         return XR_VM_RUNTIME_ERROR;
     XrVMContext *coro_ctx = xr_coro_vm_ctx(coro);
@@ -1565,7 +1565,7 @@ XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrVMRuntime *isolate, XrVMContext *
     atomic_store_explicit(&m->heartbeat,
                           atomic_load_explicit(&m->heartbeat, memory_order_relaxed) + 1,
                           memory_order_relaxed);
-    XrVMContext *mctx = xr_vm_machine_ctx(m, isolate);
+    XrVMContext *mctx = xr_machine_vm_context(m, isolate);
     if (mctx)
         mctx->current_coro = next;
     next_ctx->current_coro = next;
@@ -1898,7 +1898,7 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
         return XR_VM_CANCELLED;
     }
 
-    XrVMContext *ctx = xr_vm_machine_ctx(worker->m, isolate);
+    XrVMContext *ctx = xr_machine_vm_context(worker->m, isolate);
     if (!ctx)
         return XR_VM_RUNTIME_ERROR;
     XrVmCoroState *vm_state = vm_state_for_coro(coro);

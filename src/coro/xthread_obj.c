@@ -344,7 +344,7 @@ static bool thread_bind_vm_tls(XrThread *thread, XrWorker *worker, XrMachine *ma
     worker->p.runtime = runtime;
     worker->m = machine;
 
-    XrVMContext *machine_ctx = xr_vm_machine_ctx(machine, thread->isolate);
+    XrVMContext *machine_ctx = xr_machine_vm_context(machine, thread->isolate);
     if (!machine_ctx)
         return false;
     machine_ctx->current_coro = thread->coro;
@@ -358,7 +358,7 @@ static void thread_unbind_vm_tls(XrWorker *worker, XrMachine *machine) {
     if (machine) {
         XrVMContext *machine_ctx = NULL;
         if (machine->backend_storage)
-            machine_ctx = xr_vm_machine_ctx(machine, NULL);
+            machine_ctx = xr_machine_vm_context(machine, NULL);
         if (machine_ctx)
             machine_ctx->current_coro = NULL;
         atomic_store_explicit(&machine->current_coro, (XrCoroutine *) NULL, memory_order_relaxed);

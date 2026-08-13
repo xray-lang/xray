@@ -82,7 +82,7 @@ static void vm_machine_storage_destroy(void *ptr) {
     xr_free(storage);
 }
 
-XrVMContext *xr_vm_machine_ctx(struct XrMachine *machine, XrVMRuntime *isolate) {
+XrVMContext *xr_machine_vm_context(struct XrMachine *machine, XrVMRuntime *isolate) {
     if (!machine)
         return NULL;
 

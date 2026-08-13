@@ -40,7 +40,7 @@ XrVMContext *xr_vm_current_ctx(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "vm_current_ctx: NULL isolate");
     XrWorker *worker = xr_current_worker();
     if (worker && worker->m) {
-        XrVMContext *machine_ctx = xr_vm_machine_ctx(worker->m, isolate);
+        XrVMContext *machine_ctx = xr_machine_vm_context(worker->m, isolate);
         if (machine_ctx) {
             XrCoroutine *coro = (XrCoroutine *) machine_ctx->current_coro;
             if (coro)
