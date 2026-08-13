@@ -48,8 +48,8 @@ enum {
 typedef struct XrVmParBatch XrVmParBatch;
 
 typedef enum XrVmParLanePhase {
-    XR_VM_PAR_LANE_BODY = 0,
-    XR_VM_PAR_LANE_COMBINE = 1,
+    XR_PAR_LANE_PHASE_BODY = 0,
+    XR_PAR_LANE_PHASE_COMBINE = 1,
 } XrVmParLanePhase;
 
 typedef struct XrVmParLane {
@@ -354,13 +354,13 @@ static XrCFuncResult vm_par_lane_continue(XrVMRuntime *isolate, int status, XrVa
         return XR_CFUNC_DONE;
     }
     if (batch->reduce_body) {
-        if (lane->phase == XR_VM_PAR_LANE_COMBINE) {
+        if (lane->phase == XR_PAR_LANE_PHASE_COMBINE) {
             vm_par_release_terminal_value(batch->core, lane->partial);
             vm_par_release_terminal_value(batch->core, lane->pending_value);
             lane->partial = resume_value;
             lane->partial_init = true;
             lane->pending_value = xr_null();
-            lane->phase = XR_VM_PAR_LANE_BODY;
+            lane->phase = XR_PAR_LANE_PHASE_BODY;
             lane->iter++;
             return vm_par_lane_call_next(isolate, lane, result);
         }
@@ -384,7 +384,7 @@ static XrCFuncResult vm_par_lane_continue(XrVMRuntime *isolate, int status, XrVa
             return XR_CFUNC_DONE;
         }
         lane->pending_value = resume_value;
-        lane->phase = XR_VM_PAR_LANE_COMBINE;
+        lane->phase = XR_PAR_LANE_PHASE_COMBINE;
         lane->call_args[0] = lane->partial;
         lane->call_args[1] = lane->pending_value;
         return xr_call_closure(isolate, batch->combine, lane->call_args, 2, vm_par_lane_continue,
@@ -523,7 +523,7 @@ static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, 
         slot->partial = xr_null();
         slot->pending_value = xr_null();
         slot->partial_init = false;
-        slot->phase = XR_VM_PAR_LANE_BODY;
+        slot->phase = XR_PAR_LANE_PHASE_BODY;
 
         XrValue args[2] = {vm_par_batch_to_value(batch), xr_int(lane)};
         batch->coros[lane] = xr_coro_create_vm_cfunc(

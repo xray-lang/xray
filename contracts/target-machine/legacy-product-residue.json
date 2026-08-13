@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3332
+    "source": 3326
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -8868,15 +8868,13 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "7e743147f63ad96bb261c4c27680fc9bf5c1102a5f8c14ff7dec2d6a85997696",
+      "evidence_sha256": "85359cc7dd15d0a7ded5064ec697f061145e37f58d90fcaaa734de1d15ce405a",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 8,
+      "hit_count": 2,
       "path": "src/vm/xvm_parallel_ops.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "XR_VM_PAR_LANE_BODY",
-        "XR_VM_PAR_LANE_COMBINE",
         "xr_vm_current_ctx",
         "xr_vm_unwind_with_trace"
       ]
@@ -9167,6 +9165,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "3a9adf1a481639e0d51d1a2b37f6008dda6ea2afcdd567ec144a8581c9cae8ca",
-  "total": 3534
+  "source_tree_fingerprint": "de855f16d89f45defc76954b40d034ad6c0020c4c926c7ea2f30a644f25ce33d",
+  "total": 3528
 }
