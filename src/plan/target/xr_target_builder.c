@@ -1004,6 +1004,58 @@ static bool semantic_stringbuilder_append_string_is_exact(
     return true;
 }
 
+static bool semantic_json_namespace_type_is_exact(const XrSemanticTypeRecord *type) {
+    char expected_type_key[160];
+    int written = snprintf(expected_type_key, sizeof(expected_type_key),
+                           "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:4:JSON[0]",
+                           (unsigned) XR_KIND_CLASS, (unsigned) XR_TID_NULL,
+                           (unsigned) XR_SCALAR_REP_NONE);
+    XrStableId zero = {{0}};
+    return type && written > 0 && (size_t) written < sizeof(expected_type_key) &&
+           type->kind == XR_KIND_CLASS && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
+           strcmp(type->canonical_key, expected_type_key) == 0;
+}
+
+/* The JSON class namespace is compiler owned: its receiver is a reserved
+ * builtin global, so the frozen selector alone names one implementation.  The
+ * receiver is a namespace handle rather than a value, which is why the call
+ * carries no argument intent and folds the argument value into its identity. */
+static bool semantic_json_namespace_value_is_exact(const XrSemanticPlan *plan,
+                                                   const XrSemanticOperationRecord *operation,
+                                                   uint32_t *argument_value) {
+    uint32_t operands_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operands_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE ||
+        operation->opcode != XI_CALL_METHOD || operation->semantic_immediate <= 0 ||
+        (operation->semantic_immediate & 1) != 0 || operation->operand_count != 2 ||
+        operation->operand_begin + 1u >= operands_count || operation->metadata_count != 1 ||
+        operation->metadata_begin >= metadata_count ||
+        strcmp(metadata[operation->metadata_begin], "value") != 0 ||
+        operation->result_alias_operand != -1 ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *argument = receiver + 1;
+    const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(plan, receiver->type);
+    const XrSemanticTypeRecord *result_type = xr_semantic_plan_type(plan, operation->result_type);
+    if (!semantic_json_namespace_type_is_exact(receiver_type) || !result_type ||
+        result_type->kind != XR_KIND_JSON || result_type->builtin_type != XR_TID_NULL ||
+        result_type->child_count != 0 || result_type->scalar_rep != XR_SCALAR_REP_NONE ||
+        receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != 0 ||
+        argument->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+        return false;
+    if (argument_value)
+        *argument_value = argument->value;
+    return true;
+}
+
 static bool stable_id_is_zero(XrStableId id) {
     for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++)
         if (id.bytes[i] != 0)
@@ -2271,6 +2323,53 @@ static bool note_stringbuilder_to_string_storage_value(
     return true;
 }
 
+static bool note_json_namespace_value_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
+    if (!semantic_json_namespace_value_is_exact(builder->semantic_plan, operation, NULL) ||
+        operation->result_value >= analysis->total_values ||
+        analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "JSON.value result authority is incomplete");
+    XrTargetMachineRepRecord rep;
+    if (!make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "target profile cannot materialize JSON.value result");
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function,
+                            XR_TARGET_SLOT_TEMPORARY, operation->id, XR_SEMANTIC_INDEX_NONE,
+                            &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "JSON.value result slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity, .function = operation->function,
+        .semantic_value = operation->result_value, .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE, .register_rep = rep, .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY, .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_OWNED, .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value, .semantic_function = operation->function,
+        .semantic_type = operation->result_type, .register_rep = rep, .memory_rep = rep,
+        .slot_identity = slot_identity, .has_slot = true,
+    };
+    /* The dynamic layout is appended unconditionally: append_layout_intent
+     * already deduplicates a compatible intent and rejects a conflicting one,
+     * so the result type is guaranteed to carry the dynamic layout the value
+     * binding demands even when another value already referenced the type. */
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep,
+                              error, error_size) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->used_types[operation->result_type] = 1;
+    return true;
+}
+
 static bool note_direct_local_callee_storage_value(
     XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
     const XrDirectLocalCalleeStorageAnalysis *callee_analysis,
@@ -2935,6 +3034,37 @@ static bool builder_add_stringbuilder_to_string_storage(
     value_storage_analysis_dispose(&analysis);
     if (!valid) { builder->poisoned = true; return false; }
     builder->completed_family_mask |= XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE;
+    return true;
+}
+
+static bool builder_add_json_namespace_value_storage(XrTargetPlanBuilder *builder, char *error,
+                                                     size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values) {
+            analysis.defined_values[value->semantic_value] = 1;
+            analysis.used_types[value->semantic_type] = 1;
+        }
+    }
+    uint32_t count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (operation && operation->intrinsic_kind == XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE)
+            valid = note_json_namespace_value_storage_value(builder, &analysis, i, error,
+                                                             error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE;
     return true;
 }
 
@@ -4341,6 +4471,38 @@ static bool collect_stringbuilder_append_string_call_intent(
     return append_call_intent(builder,&call,error,error_size);
 }
 
+static bool collect_json_namespace_value_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
+    uint32_t argument = XR_SEMANTIC_INDEX_NONE;
+    if (!semantic_json_namespace_value_is_exact(builder->semantic_plan, operation, &argument))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "JSON.value dispatch authority is incomplete");
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_RETURN_OWNED,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_JSON_NAMESPACE_VALUE,
+        .target_kind = XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE,
+    };
+    if (!result_type || !stable_identity_from_pair("xray-target-json-namespace-value-v1",
+                                                   operation->id, result_type->id, argument,
+                                                   &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "JSON.value call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
                                              uint32_t target_index,
                                              const XrSemanticCallTargetRecord *target,
@@ -4674,6 +4836,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_stringbuilder_append_string_is_exact(plan, operation, NULL, NULL)) {
             valid = collect_stringbuilder_append_string_call_intent(builder, i, operation,
                                                                      error, error_size);
+        } else if (semantic_json_namespace_value_is_exact(plan, operation, NULL)) {
+            valid = collect_json_namespace_value_call_intent(builder, i, operation, error,
+                                                             error_size);
         } else if (semantic_operation_is_call_shaped(plan, operation)) {
             uint32_t metadata_count = 0;
             uint32_t operand_count = 0;
@@ -6072,6 +6237,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_stringbuilder_append_rune_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_to_string_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_append_string_storage(builder, error, error_size) ||
+        !builder_add_json_namespace_value_storage(builder, error, error_size) ||
         !builder_add_direct_local_callee_storage(builder, error, error_size) ||
         !builder_add_direct_local_go_callee_storage(builder, error, error_size) ||
         !builder_add_channel_allocation_storage(builder, error, error_size) ||

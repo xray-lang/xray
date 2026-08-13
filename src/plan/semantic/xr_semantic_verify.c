@@ -1598,6 +1598,61 @@ static bool verify_string_builder_to_string(
                            "StringBuilder.toString authority is not exact");
 }
 
+/* Recomputed from the frozen rows alone.  A class type record whose source
+ * class index and identity are both absent can only be a compiler-owned
+ * namespace: every source declaration records its own class authority.  The
+ * frozen selector then names one implementation, which is what makes the
+ * callsite an exact target instead of an open-domain method dispatch. */
+static bool semantic_type_is_exact_json_namespace(const XrSemanticTypeRecord *type) {
+    char expected[160];
+    int length = snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:4:JSON[0]",
+                          (unsigned) XR_KIND_CLASS, (unsigned) XR_TID_NULL,
+                          (unsigned) XR_SCALAR_REP_NONE);
+    XrStableId zero = {{0}};
+    return type && length > 0 && (size_t) length < sizeof(expected) &&
+           type->kind == XR_KIND_CLASS && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
+           strcmp(type->canonical_key, expected) == 0;
+}
+
+static bool verify_json_namespace_value(const XrSemanticPlan *plan,
+                                        const XrSemanticOperationRecord *operation, char *error,
+                                        size_t error_size) {
+    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE)
+        return true;
+    const XrSemanticOperandRecord *receiver =
+        operation->operand_count == 2 && operation->operand_begin + 1u < plan->operand_count
+            ? &plan->operands[operation->operand_begin]
+            : NULL;
+    const XrSemanticOperandRecord *argument = receiver ? receiver + 1 : NULL;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver && receiver->type < plan->type_count ? &plan->types[receiver->type] : NULL;
+    const XrSemanticTypeRecord *result_type =
+        operation->result_type < plan->type_count ? &plan->types[operation->result_type] : NULL;
+    const char *selector =
+        operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
+            ? plan->metadata[operation->metadata_begin]
+            : NULL;
+    bool exact = operation->opcode == XI_CALL_METHOD && operation->semantic_immediate > 0 &&
+                 (operation->semantic_immediate & 1) == 0 && selector &&
+                 strcmp(selector, "value") == 0 && receiver && argument &&
+                 semantic_type_is_exact_json_namespace(receiver_type) && result_type &&
+                 result_type->kind == XR_KIND_JSON && result_type->builtin_type == XR_TID_NULL &&
+                 result_type->child_count == 0 && result_type->scalar_rep == XR_SCALAR_REP_NONE &&
+                 receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+                 receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
+                 argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 operation->result_alias_operand == -1 &&
+                 operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                 operation->return_complete == 1;
+    return exact || report(error, error_size, "XR_SEM_0019",
+                           "JSON.value namespace authority is not exact");
+}
+
 static bool verify_string_builder_append_string(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     char *error, size_t error_size) {
@@ -1746,6 +1801,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_string_builder_to_string(plan, operation, error, error_size))
             return false;
         if (!verify_string_builder_append_string(plan, operation, error, error_size))
+            return false;
+        if (!verify_json_namespace_value(plan, operation, error, error_size))
             return false;
         uint32_t existing_definition = definitions[operation->result_value];
         if (existing_definition != XR_SEMANTIC_INDEX_NONE) {

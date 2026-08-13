@@ -1,0 +1,15 @@
+// anchor: json-namespace-value-scalar-target
+// JSON is a compiler-owned class namespace, so JSON.value(x) is a method call
+// whose receiver is a reserved builtin global rather than a value. Without an
+// exact dispatch authority for that shape the native backend rejects the call
+// as having no target, while the VM keeps running it: this case is the only
+// coverage that pins the scalar encoder to one proven target on both paths.
+fn main() {
+    print(JSON.value(1))
+    print(JSON.value(2.5))
+    print(JSON.value(true))
+    var encoded = JSON.value(-7)
+    print(encoded)
+}
+
+main()

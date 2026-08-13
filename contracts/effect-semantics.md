@@ -32,6 +32,14 @@ Schema 22 also freezes `core.string.bytes` as an exact non-allocating borrowed
 source operand and semantic root, byte element type, read capability, and
 caller lifetime. Independent verification reconstructs these facts; selector
 text, aliases, analyzer-local IDs, and backend type guesses are not authority.
+A method call on a compiler-owned class namespace carries its own numeric
+intrinsic identity. `JSON.value` is frozen when the receiver type record is the
+`JSON` class with no source-class index and no source-class identity, the
+selector is the sole frozen metadata entry, exactly one argument carries the
+call contract, and the result is an owned non-aliasing JSON value. A source
+declaration can never produce that receiver record because every declared class
+records its own class authority, so the namespace plus the selector names one
+implementation. Every other namespace member stays without dispatch authority.
 When the independently proven target reaches a function with a canonical
 static suspend operation (or `XI_GO`), the same row also authorizes exactly one
 coroutine-state entity for an ordinary call. A direct tail-call edge propagates
@@ -316,11 +324,11 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
 anchor-sha256: src/plan/format/xr_xsm_encode.c e56ac921cb9c4be957086f9b6b960c5d194a04b066986ddefafc9efc838e8876
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 2a6000d3bc453c541a1c7c57486094c57531c4610be9e37944f62aff4e5802e0
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c d6cff3d360ad33b7eccfcb46a456a931e73ded4e24c2c64be46b88a14c7ab8cb
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 6f5048cf95e341617e68eba47ffbf51ae396b72f9771328ff2ba8f8f500bf459
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c ea4675808fc8b4cc1bd3539b4b437756b9b0b92afd5a2afd1dd17ad9b1e9e7b0
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 937fc7f69fb0614c966ad8cc4bd8775f9a236a2632882d80aa44c11d19e8579b
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 83486fbaa7cdcfd43285326bf43bcc4e37236b4813d858c9bf35d20b8e3a71a9
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c f1405c2630e27aafa38f4c6822cd1d79372a628f40937d625f8cde3a7d050602
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 6e06bea77035872d2bd79ecddb36d6e3a519da4b2df9c53bd84dbda866c7817e
 anchor-sha256: src/stdlib/xstdlib_metadata.h 4f0d9628ff18ec6522c48bf602a9ba738813cb1a11f2d059dc7d9c7daf179c14
 anchor-sha256: tests/unit/plan/test_semantic_plan.c c78d240af78d32c8c39e129219cfe0427e778fb9428d46dbd337525c529b35e7

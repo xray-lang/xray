@@ -40,7 +40,8 @@
                  XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE |                \
                  XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |                    \
                  XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |                     \
-                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE))
+                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                   \
+                 XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE))
 
 typedef enum XrTypedFrameStatus {
     XR_TYPED_FRAME_OK = 0,
