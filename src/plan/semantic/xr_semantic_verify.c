@@ -1794,6 +1794,19 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
                   "operation side tables are not exactly partitioned");
 }
 
+/* A callable survives the forwarding ops unchanged: an identity copy, the
+ * ownership forwards, and a successful CHECKTYPE all hand on the same closure
+ * with at most a refined static type. */
+static bool frozen_operation_forwards_callable(const XrSemanticOperationRecord *producer) {
+    if (producer->operand_count != 1)
+        return false;
+    if (producer->opcode == XI_COPY)
+        return producer->semantic_immediate == XI_COPY_KIND_IDENTITY &&
+               producer->result_alias_operand == 0;
+    return producer->opcode == XI_SOURCE_MOVE || producer->opcode == XI_OWNER_FORWARD ||
+           producer->opcode == XI_CHECKTYPE;
+}
+
 static uint32_t resolve_frozen_closure_value(const XrSemanticPlan *plan,
                                              const uint32_t *definitions, uint32_t value_count,
                                              uint32_t function, uint32_t value) {
@@ -1811,8 +1824,7 @@ static uint32_t resolve_frozen_closure_value(const XrSemanticPlan *plan,
             (producer->opcode == XI_STACK_ALLOC && producer->semantic_immediate == XI_CLOSURE_NEW);
         if (closure_binding)
             return producer->callable_function;
-        if (producer->opcode != XI_COPY || producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
-            producer->operand_count != 1 || producer->result_alias_operand != 0)
+        if (!frozen_operation_forwards_callable(producer))
             return XR_SEMANTIC_INDEX_NONE;
         value = plan->operands[producer->operand_begin].value;
     }
@@ -1913,9 +1925,42 @@ static bool root_store_precedes_activation(const XrSemanticPlan *plan, uint32_t 
 }
 
 static uint32_t
-resolve_frozen_shared_target(const XrSemanticPlan *plan, const uint32_t *definitions,
-                             const XrSemanticGraph *graph, const XrFrozenSharedStoreIndex *stores,
-                             uint32_t value_count, uint32_t caller, uint32_t load, int64_t slot) {
+resolve_frozen_shared_target_depth(const XrSemanticPlan *plan, const uint32_t *definitions,
+                                   const XrSemanticGraph *graph,
+                                   const XrFrozenSharedStoreIndex *stores, uint32_t value_count,
+                                   uint32_t caller, uint32_t load, int64_t slot, unsigned depth);
+
+static uint32_t frozen_chained_shared_target(const XrSemanticPlan *plan,
+                                             const uint32_t *definitions,
+                                             const XrSemanticGraph *graph,
+                                             const XrFrozenSharedStoreIndex *stores,
+                                             uint32_t value_count, uint32_t owner, uint32_t value,
+                                             unsigned depth) {
+    if (depth >= XR_SEMANTIC_MAX_SHARED_CALLEE_HOPS)
+        return XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t step = 0; step < plan->operation_count; step++) {
+        if (value >= value_count || definitions[value] >= plan->operation_count)
+            return XR_SEMANTIC_INDEX_NONE;
+        uint32_t producer_index = definitions[value];
+        const XrSemanticOperationRecord *producer = &plan->operations[producer_index];
+        if (producer->function != owner)
+            return XR_SEMANTIC_INDEX_NONE;
+        if (producer->opcode == XI_GET_SHARED && producer->semantic_immediate >= 0)
+            return resolve_frozen_shared_target_depth(plan, definitions, graph, stores, value_count,
+                                                      owner, producer_index,
+                                                      producer->semantic_immediate, depth + 1u);
+        if (!frozen_operation_forwards_callable(producer))
+            return XR_SEMANTIC_INDEX_NONE;
+        value = plan->operands[producer->operand_begin].value;
+    }
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
+static uint32_t
+resolve_frozen_shared_target_depth(const XrSemanticPlan *plan, const uint32_t *definitions,
+                                   const XrSemanticGraph *graph,
+                                   const XrFrozenSharedStoreIndex *stores, uint32_t value_count,
+                                   uint32_t caller, uint32_t load, int64_t slot, unsigned depth) {
     for (uint32_t owner = caller; owner != XR_SEMANTIC_INDEX_NONE;
          owner = plan->functions[owner].parent) {
         uint32_t store;
@@ -1934,10 +1979,22 @@ resolve_frozen_shared_target(const XrSemanticPlan *plan, const uint32_t *definit
                       root_store_precedes_activation(plan, store);
         if (record->operand_count != 1 || !initialized)
             return XR_SEMANTIC_INDEX_NONE;
-        return resolve_frozen_closure_value(plan, definitions, value_count, owner,
-                                            plan->operands[record->operand_begin].value);
+        uint32_t bound = resolve_frozen_closure_value(plan, definitions, value_count, owner,
+                                                      plan->operands[record->operand_begin].value);
+        if (bound != XR_SEMANTIC_INDEX_NONE)
+            return bound;
+        return frozen_chained_shared_target(plan, definitions, graph, stores, value_count, owner,
+                                            plan->operands[record->operand_begin].value, depth);
     }
     return XR_SEMANTIC_INDEX_NONE;
+}
+
+static uint32_t
+resolve_frozen_shared_target(const XrSemanticPlan *plan, const uint32_t *definitions,
+                             const XrSemanticGraph *graph, const XrFrozenSharedStoreIndex *stores,
+                             uint32_t value_count, uint32_t caller, uint32_t load, int64_t slot) {
+    return resolve_frozen_shared_target_depth(plan, definitions, graph, stores, value_count, caller,
+                                              load, slot, 0u);
 }
 
 static uint32_t resolve_frozen_direct_call_target(const XrSemanticPlan *plan,
@@ -1967,8 +2024,7 @@ static uint32_t resolve_frozen_direct_call_target(const XrSemanticPlan *plan,
             return resolve_frozen_shared_target(plan, definitions, graph, stores, value_count,
                                                 call->function, producer_index,
                                                 producer->semantic_immediate);
-        if (producer->opcode != XI_COPY || producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
-            producer->operand_count != 1 || producer->result_alias_operand != 0)
+        if (!frozen_operation_forwards_callable(producer))
             return XR_SEMANTIC_INDEX_NONE;
         value = plan->operands[producer->operand_begin].value;
     }

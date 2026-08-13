@@ -14,6 +14,12 @@
 #include "xr_semantic_plan.h"
 #include <stdatomic.h>
 
+/* A shared binding that merely forwards another shared slot names the same
+ * function, so naming a call target may follow that chain.  Builder and
+ * verifier must stop at the same hop, or one of them would ground a target
+ * the other cannot reproduce. */
+#define XR_SEMANTIC_MAX_SHARED_CALLEE_HOPS 4u
+
 typedef struct XrSemanticStringPool {
     char **items;
     uint32_t count;

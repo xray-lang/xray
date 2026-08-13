@@ -1778,9 +1778,23 @@ static bool shared_store_initializes_load(const XrSemanticBuildContext *ctx, con
     return block_dominates(store->block, load->block);
 }
 
+/* A callable survives the forwarding ops unchanged: an identity copy, the
+ * ownership forwards, and a successful CHECKTYPE all hand on the same closure
+ * with at most a refined static type.  Naming a call target through them is
+ * the same question the IR coroutine resolver already answers this way. */
+static const XiValue *strip_callable_forwards(const XiFunc *owner, const XiValue *value) {
+    uint32_t depth = 0;
+    while (value && value->nargs >= 1 && value->block && value->block->func == owner &&
+           depth++ < XR_SEMANTIC_MAX_OPERATIONS &&
+           (xi_copy_is_identity_alias(value) || xi_op_is_identity_forward(value->op) ||
+            value->op == XI_CHECKTYPE))
+        value = value->args[0];
+    return depth < XR_SEMANTIC_MAX_OPERATIONS ? value : NULL;
+}
+
 static int resolve_closure_binding(const XrSemanticBuildContext *ctx, const XiFunc *owner,
                                    const XiValue *value) {
-    value = strip_identity_copies(owner, value);
+    value = strip_callable_forwards(owner, value);
     if (!value || !value->block || value->block->func != owner || !value->aux ||
         (value->op != XI_CLOSURE_NEW &&
          !(value->op == XI_STACK_ALLOC && value->aux_int == XI_CLOSURE_NEW)))
@@ -1788,9 +1802,13 @@ static int resolve_closure_binding(const XrSemanticBuildContext *ctx, const XiFu
     return function_index(ctx, (const XiFunc *) value->aux);
 }
 
-static int resolve_direct_local_callee(const XrSemanticBuildContext *ctx, const XiFunc *caller,
-                                       const XiValue *callee) {
-    callee = strip_identity_copies(caller, callee);
+/* A binding that merely forwards another shared slot names the same function.
+ * Following that chain is bounded by XR_SEMANTIC_MAX_SHARED_CALLEE_HOPS, and
+ * an ambiguous or unresolved hop still fails closed. */
+static int resolve_direct_local_callee_depth(const XrSemanticBuildContext *ctx,
+                                             const XiFunc *caller, const XiValue *callee,
+                                             unsigned depth) {
+    callee = strip_callable_forwards(caller, callee);
     int direct = resolve_closure_binding(ctx, caller, callee);
     if (direct >= 0)
         return direct;
@@ -1806,9 +1824,17 @@ static int resolve_direct_local_callee(const XrSemanticBuildContext *ctx, const 
             continue;
         if (store->nargs != 1 || !shared_store_initializes_load(ctx, caller, owner, store, callee))
             return -1;
-        return resolve_closure_binding(ctx, owner, store->args[0]);
+        direct = resolve_closure_binding(ctx, owner, store->args[0]);
+        if (direct >= 0 || depth >= XR_SEMANTIC_MAX_SHARED_CALLEE_HOPS)
+            return direct;
+        return resolve_direct_local_callee_depth(ctx, owner, store->args[0], depth + 1u);
     }
     return -1;
+}
+
+static int resolve_direct_local_callee(const XrSemanticBuildContext *ctx, const XiFunc *caller,
+                                       const XiValue *callee) {
+    return resolve_direct_local_callee_depth(ctx, caller, callee, 0u);
 }
 
 static bool resolve_native_yieldable_callee(const XiFunc *caller, const XiValue *call,
