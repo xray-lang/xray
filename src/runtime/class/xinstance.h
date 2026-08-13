@@ -86,9 +86,6 @@ XR_FUNC bool xr_instance_set_decoded_field(XrInstance *inst, int index, XrValue 
 XR_FUNC XrValue xr_instance_call_method(XrVMRuntime *X, XrInstance *inst, const char *name,
                                         XrValue *args, int argc);
 
-// Allocate + init fields + call constructor
-XR_FUNC XrValue xr_instance_construct(XrVMRuntime *X, XrClass *cls, XrValue *args, int argc);
-
 // Shallow clone: allocate new instance, copy all field values
 XR_FUNC XrInstance *xr_instance_clone(XrVMRuntime *X, XrInstance *src);
 

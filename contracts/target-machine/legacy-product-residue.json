@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 105,
     "install": 2,
-    "source": 3435
+    "source": 3434
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -5503,9 +5503,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "ddf68e984a3dd429b11311c723651881bf8c5da423c5fafd95fc31c729608b30",
+      "evidence_sha256": "2b026dc3425cc3fc56d72888ff64ccdcc43ad9854744917286b33667488f5014",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 10,
+      "hit_count": 9,
       "path": "src/runtime/class/xinstance.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -9328,6 +9328,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "dd4fd92247841ffda84853c74afd9d6179e8aabfca27320d95e8afaebb4b0ad4",
-  "total": 3636
+  "source_tree_fingerprint": "8c62c1e403b1ad563f8218634dc4fab61b457a76662dc23282f84812a6f252e2",
+  "total": 3635
 }

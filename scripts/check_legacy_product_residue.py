@@ -563,6 +563,13 @@ def self_test() -> int:
         )
         dap_exception_wrapper_drifted, _ = check(root, collect(root))
         retired_dap_exception_wrapper.unlink()
+        retired_instance_construct_wrapper = root / "include/xray_runtime.h"
+        retired_instance_construct_wrapper.write_text(
+            "void *xr_instance_construct(XrVMRuntime *, void *, void *, int);\n",
+            encoding="utf-8",
+        )
+        instance_construct_wrapper_drifted, _ = check(root, collect(root))
+        retired_instance_construct_wrapper.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -607,6 +614,7 @@ def self_test() -> int:
             or public_array_constructors_drifted
             or runtime_compatibility_header_drifted
             or dap_exception_wrapper_drifted
+            or instance_construct_wrapper_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")
