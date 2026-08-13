@@ -1,7 +1,8 @@
 contains=function 1 name=fill_words module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
 contains=function 2 name=zero_words module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
 regex=span-access [0-9]+ func=fill_words value=v[0-9]+ kind=span_fill evidence=recv_agg\+pod drop=type\+pod\+helper
-c_contains=for (int64_t _i = 0; _i < _s.length; _i++)
-c_contains=((uint32_t*)_s.data)[_i] = _fill
+c_contains=xrt_span_fill_checked_raw(
+c_contains=XR_POD_SLICE_FILL_U32
+c_not_contains=for (int64_t _i = 0; _i < _s.length; _i++)
 c_not_contains=Slice.fill(value) element type mismatch
 c_not_contains=xrt_array_fill_value(

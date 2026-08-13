@@ -14626,40 +14626,32 @@ static void xicgen_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         emit_codegen_abort_expr(out);
         return;
     }
-    bool zero_bits = cg_array_fill_value_is_zero_bits_literal(v->args[1]);
-    bool byte_pattern = cg_array_elem_info_is_memset_byte_pattern(&info);
-    bool use_memset = bulk ? bulk->action == XAOT_BULK_INLINE_MEMSET : zero_bits;
-    if (use_memset && !zero_bits && !byte_pattern) {
+    if (!info.elem_name || strncmp(info.elem_name, "XR_ELEM_", 8) != 0) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "({ xr_span_t _s = ");
-    emit_span_ref_expr(out, v->args[0]);
-    fprintf(out, "; ");
-    fprintf(out,
-            "if (XR_UNLIKELY(_s.length < 0 || _s.length > INT64_MAX / "
-            "(int64_t)sizeof(%s))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-            "\"Slice.fill(value) byte length overflow\"); ",
-            info.ctype);
-    fprintf(out, "if (XR_UNLIKELY(_s.length > 0 && !_s.data)) "
-                 "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                 "\"Slice.fill(value) range out of bounds\"); ");
-    if (use_memset) {
-        fprintf(out, "if (_s.length > 0) memset(_s.data, ");
-        if (zero_bits)
-            fprintf(out, "0");
-        else
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ", (size_t)_s.length * sizeof(%s)); _s; })", info.ctype);
+    const char *adapter = cg_pod_slice_fill_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "%s _fill = ", info.ctype);
-    emit_typed_array_store_value(ctx, out, &info, v->args[1]);
-    fprintf(out,
-            "; for (int64_t _i = 0; _i < _s.length; _i++) "
-            "((%s*)_s.data)[_i] = _fill; _s; })",
-            info.ctype);
+    fprintf(out, "%s(", adapter);
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", (uint16_t)sizeof(%s), XR_POD_SLICE_FILL_%s, "
+                 "(XrPodSliceFillValue){ .",
+            info.ctype, info.elem_name + 8);
+    if (info.rep == XR_REP_F64) {
+        fprintf(out, "f64 = (double)");
+        emit_typed_array_store_value(ctx, out, &info, v->args[1]);
+    } else if (info.rep == XR_REP_RAWPTR) {
+        fprintf(out, "ptr = (void *)");
+        emit_typed_array_store_value(ctx, out, &info, v->args[1]);
+    } else {
+        fprintf(out, "bits = (uint64_t)");
+        emit_typed_array_store_value(ctx, out, &info, v->args[1]);
+    }
+    fprintf(out, " })");
 }
 
 static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

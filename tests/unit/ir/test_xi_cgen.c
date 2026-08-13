@@ -8097,6 +8097,16 @@ TEST(cgen_pod_slice_copy_compare_use_stable_owner_adapters) {
 
 }
 
+TEST(cgen_pod_slice_fill_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI,
+               XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO, XR_SEM_CONSUMER_CGEN));
+    assert(strcmp(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI,
+                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO),
+                  "xrt_span_fill_checked_raw") == 0);
+}
+
 TEST(cgen_pod_slice_view_uses_stable_owner_adapter) {
     assert(xr_semantic_owner_has_consumer(
                XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI,
@@ -13551,6 +13561,7 @@ int main(void) {
     run_cgen_byte_slice_mutation_uses_stable_owner_adapters();
     run_cgen_byte_slice_common_prefix_uses_stable_owner_adapter();
     run_cgen_pod_slice_copy_compare_use_stable_owner_adapters();
+    run_cgen_pod_slice_fill_uses_stable_owner_adapter();
     run_cgen_pod_slice_view_uses_stable_owner_adapter();
     run_cgen_raw_memory_copy_owner_registry_is_stable();
     run_cgen_enum_metadata_access_uses_stable_owner_adapter();

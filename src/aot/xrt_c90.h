@@ -172,6 +172,15 @@ static xr_span_t xrt_span_copy_checked_raw(xr_span_t dst, xr_span_t src, uint16_
     return dst;
 }
 
+static xr_span_t xrt_span_fill_checked_raw(xr_span_t span, uint16_t elem_size,
+                                           XrPodSliceFillKind kind,
+                                           XrPodSliceFillValue value) {
+    XrPodSliceStatus status = xr_pod_slice_fill_core(span.data, span.length, elem_size, kind, value);
+    if (status != XR_POD_SLICE_OK)
+        abort();
+    return span;
+}
+
 static int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t right,
                                             uint16_t elem_size) {
     XrPodSliceCompareResult result;

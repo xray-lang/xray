@@ -29,6 +29,28 @@ typedef enum XrPodSliceStatus {
     XR_POD_SLICE_NO_DATA = 4
 } XrPodSliceStatus;
 
+typedef enum XrPodSliceFillKind {
+    XR_POD_SLICE_FILL_I8 = 0,
+    XR_POD_SLICE_FILL_U8 = 1,
+    XR_POD_SLICE_FILL_I16 = 2,
+    XR_POD_SLICE_FILL_U16 = 3,
+    XR_POD_SLICE_FILL_I32 = 4,
+    XR_POD_SLICE_FILL_U32 = 5,
+    XR_POD_SLICE_FILL_I64 = 6,
+    XR_POD_SLICE_FILL_U64 = 7,
+    XR_POD_SLICE_FILL_F32 = 8,
+    XR_POD_SLICE_FILL_F64 = 9,
+    XR_POD_SLICE_FILL_BOOL = 10,
+    XR_POD_SLICE_FILL_RUNE = 11,
+    XR_POD_SLICE_FILL_RAWPTR = 12
+} XrPodSliceFillKind;
+
+typedef union XrPodSliceFillValue {
+    uint64_t bits;
+    double f64;
+    void *ptr;
+} XrPodSliceFillValue;
+
 typedef struct XrPodSliceCompareResult {
     int64_t ordering;
     XrPodSliceStatus status;
@@ -79,6 +101,29 @@ typedef struct XrPodSliceViewResult {
 #define XR_POD_SLICE_COPY_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)              \
     (XR_POD_SLICE_COPY_OWNER_GUARD((owner_hi), (owner_lo)),                                      \
      XR_POD_SLICE_COPY_CONSUMER_GUARD((consumer_bit)), (expression))
+
+#define XR_POD_SLICE_FILL_OWNER_GUARD(owner_hi, owner_lo)                                       \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_pod_slice_fill                                     \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI &&            \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO)               \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_POD_SLICE_FILL_CONSUMER_GUARD(consumer_bit)                                          \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_pod_slice_fill                        \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_CONSUMERS &                               \
+                 (uint32_t) (consumer_bit)) != 0)                                                 \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_POD_SLICE_FILL_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)              \
+    (XR_POD_SLICE_FILL_OWNER_GUARD((owner_hi), (owner_lo)),                                      \
+     XR_POD_SLICE_FILL_CONSUMER_GUARD((consumer_bit)), (expression))
 
 #define XR_POD_SLICE_COMPARE_OWNER_GUARD(owner_hi, owner_lo)                                    \
     ((void) sizeof(struct {                                                                        \
@@ -196,6 +241,95 @@ XR_POD_SLICE_INLINE XrPodSliceStatus xr_pod_slice_copy_core(
         return XR_POD_SLICE_RANGE_ERROR;
     if (src_bytes > 0)
         memmove(dst_data, src_data, (size_t) src_bytes);
+    return XR_POD_SLICE_OK;
+}
+
+XR_POD_SLICE_INLINE XrPodSliceStatus xr_pod_slice_fill_core(
+    void *data, int64_t length, uint16_t elem_size, XrPodSliceFillKind kind,
+    XrPodSliceFillValue value) {
+    uint16_t expected_size;
+    int64_t i;
+    switch (kind) {
+        case XR_POD_SLICE_FILL_I8:
+        case XR_POD_SLICE_FILL_U8:
+        case XR_POD_SLICE_FILL_BOOL:
+            expected_size = 1;
+            break;
+        case XR_POD_SLICE_FILL_I16:
+        case XR_POD_SLICE_FILL_U16:
+            expected_size = 2;
+            break;
+        case XR_POD_SLICE_FILL_I32:
+        case XR_POD_SLICE_FILL_U32:
+        case XR_POD_SLICE_FILL_F32:
+        case XR_POD_SLICE_FILL_RUNE:
+            expected_size = 4;
+            break;
+        case XR_POD_SLICE_FILL_I64:
+        case XR_POD_SLICE_FILL_U64:
+        case XR_POD_SLICE_FILL_F64:
+        case XR_POD_SLICE_FILL_RAWPTR:
+            expected_size = 8;
+            break;
+        default:
+            return XR_POD_SLICE_INVALID_LAYOUT;
+    }
+    if (elem_size != expected_size)
+        return XR_POD_SLICE_INVALID_LAYOUT;
+    if (length < 0 || length > INT64_MAX / (int64_t) elem_size)
+        return XR_POD_SLICE_BYTE_LENGTH_OVERFLOW;
+    if (length > 0 && !data)
+        return XR_POD_SLICE_NO_DATA;
+    switch (kind) {
+        case XR_POD_SLICE_FILL_I8:
+            memset(data, (int8_t) value.bits, (size_t) length);
+            break;
+        case XR_POD_SLICE_FILL_U8:
+            memset(data, (uint8_t) value.bits, (size_t) length);
+            break;
+        case XR_POD_SLICE_FILL_BOOL:
+            memset(data, value.bits ? 1 : 0, (size_t) length);
+            break;
+        case XR_POD_SLICE_FILL_I16:
+            for (i = 0; i < length; ++i)
+                ((int16_t *) data)[i] = (int16_t) value.bits;
+            break;
+        case XR_POD_SLICE_FILL_U16:
+            for (i = 0; i < length; ++i)
+                ((uint16_t *) data)[i] = (uint16_t) value.bits;
+            break;
+        case XR_POD_SLICE_FILL_I32:
+            for (i = 0; i < length; ++i)
+                ((int32_t *) data)[i] = (int32_t) value.bits;
+            break;
+        case XR_POD_SLICE_FILL_U32:
+        case XR_POD_SLICE_FILL_RUNE:
+            for (i = 0; i < length; ++i)
+                ((uint32_t *) data)[i] = (uint32_t) value.bits;
+            break;
+        case XR_POD_SLICE_FILL_I64:
+            for (i = 0; i < length; ++i)
+                ((int64_t *) data)[i] = (int64_t) value.bits;
+            break;
+        case XR_POD_SLICE_FILL_U64:
+            for (i = 0; i < length; ++i)
+                ((uint64_t *) data)[i] = value.bits;
+            break;
+        case XR_POD_SLICE_FILL_F32:
+            for (i = 0; i < length; ++i)
+                ((float *) data)[i] = (float) value.f64;
+            break;
+        case XR_POD_SLICE_FILL_F64:
+            for (i = 0; i < length; ++i)
+                ((double *) data)[i] = value.f64;
+            break;
+        case XR_POD_SLICE_FILL_RAWPTR:
+            for (i = 0; i < length; ++i)
+                ((void **) data)[i] = value.ptr;
+            break;
+        default:
+            return XR_POD_SLICE_INVALID_LAYOUT;
+    }
     return XR_POD_SLICE_OK;
 }
 

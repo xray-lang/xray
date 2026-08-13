@@ -196,6 +196,11 @@ int memcmp(const void *a, const void *b, size_t n);
         XR_SEM_CONSUMER_AOT_FREESTANDING,                                                        \
         xr_pod_slice_copy_core((dst_data), (dst_length), (dst_elem_size), (src_data),            \
                                (src_length), (src_elem_size)))
+#define xrt_pod_slice_fill_semantics(data, length, elem_size, kind, value)                        \
+    XR_POD_SLICE_FILL_OWNER_APPLY(                                                               \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO,     \
+        XR_SEM_CONSUMER_AOT_FREESTANDING,                                                       \
+        xr_pod_slice_fill_core((data), (length), (elem_size), (kind), (value)))
 #define xrt_pod_slice_compare_semantics(left_data, left_length, left_elem_size, right_data,       \
                                         right_length, right_elem_size)                            \
     XR_POD_SLICE_COMPARE_OWNER_APPLY(                                                            \
@@ -1253,6 +1258,20 @@ static inline xr_span_t xrt_span_copy_checked_raw(xr_span_t dst, xr_span_t src,
     if (status != XR_POD_SLICE_OK)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
     return dst;
+}
+
+static inline xr_span_t xrt_span_fill_checked_raw(xr_span_t span, uint16_t elem_size,
+                                                  XrPodSliceFillKind kind,
+                                                  XrPodSliceFillValue value) {
+    XrPodSliceStatus status =
+        xrt_pod_slice_fill_semantics(span.data, span.length, elem_size, kind, value);
+    if (status == XR_POD_SLICE_INVALID_LAYOUT)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.fill(value) element layout mismatch");
+    if (status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.fill(value) byte length overflow");
+    if (status != XR_POD_SLICE_OK)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.fill(value) range out of bounds");
+    return span;
 }
 
 static inline int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t right,

@@ -2669,7 +2669,6 @@
     xi.slice.window
     xi.slice.from.ptr
     xi.buffer.materialize
-    xi.slice.fill
     xi.static.addr
     xi.local.addr
     xi.place.load
@@ -2829,6 +2828,7 @@
     xi.byte.array.append.from
     xi.byte.array.repeat.from
     xi.slice.copy
+    xi.slice.fill
     xi.slice.compare
     xi.slice.as.bytes
     xi.slice.reinterpret
@@ -3309,6 +3309,25 @@
     (aot-hosted "src/aot/xrt_coll.h" "xrt_pod_slice_copy_semantics")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_pod_slice_copy_semantics")
     (cgen "src/aot/xi_cgen.c" "cg_pod_slice_copy_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.pod-slice-fill
+  :category shared-semantic-kernel
+  :operations (xi.slice.fill)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_span_fill_checked_raw
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_collection.inc.c" "XR_POD_SLICE_FILL_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt_coll.h" "xrt_pod_slice_fill_semantics")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_pod_slice_fill_semantics")
+    (cgen "src/aot/xi_cgen.c" "cg_pod_slice_fill_adapter_name")
   ))
 
 (define-xi-observable-owner shared.pod-slice-compare

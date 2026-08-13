@@ -1232,14 +1232,37 @@ vmcase(OP_SLICE_FILL) {
     if (span_reserved & XR_SLICE_VIEW_READONLY) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Slice");
     }
-    if (span_length < 0 || span_length > INT64_MAX / (int64_t) span_elem_size) {
+    XrPodSliceFillValue owner_value = {0};
+    XrPodSliceFillKind owner_kind = (XrPodSliceFillKind) (span_elem_type - XR_ELEM_I8);
+    if (span_elem_type >= XR_ELEM_I8 && span_elem_type <= XR_ELEM_U64) {
+        owner_value.bits = (uint64_t) xr_value_to_int64_coerce(fill_value);
+    } else if (span_elem_type == XR_ELEM_F32 || span_elem_type == XR_ELEM_F64) {
+        owner_value.f64 = xr_value_to_f64_coerce(fill_value);
+    } else if (span_elem_type == XR_ELEM_BOOL) {
+        bool falsy = XR_IS_FALSE(fill_value) || XR_IS_NULL(fill_value) ||
+                     (XR_IS_INT(fill_value) && XR_TO_INT(fill_value) == 0) ||
+                     (XR_IS_FLOAT(fill_value) && XR_TO_FLOAT(fill_value) == 0.0);
+        owner_value.bits = falsy ? 0 : 1;
+    } else if (span_elem_type == XR_ELEM_RUNE) {
+        if (!XR_IS_RUNE(fill_value)) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.fill(value) value type mismatch");
+        }
+        owner_value.bits = XR_TO_RUNE(fill_value);
+    } else if (span_elem_type == XR_ELEM_RAWPTR) {
+        owner_value.ptr = (void *) (intptr_t) xr_value_to_int64_coerce(fill_value);
+    }
+    XrPodSliceStatus fill_status = XR_POD_SLICE_FILL_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO,
+        XR_SEM_CONSUMER_VM,
+        xr_pod_slice_fill_core(span_data, span_length, span_elem_size, owner_kind, owner_value));
+    if (fill_status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.fill(value) byte length overflow");
     }
-    if (span_length > 0 && !span_data) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.fill(value) range out of bounds");
+    if (fill_status == XR_POD_SLICE_INVALID_LAYOUT) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.fill(value) element layout mismatch");
     }
-    if (!xr_typed_fill(span_data, span_length, fill_value, span_elem_type)) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.fill(value) value type mismatch");
+    if (fill_status != XR_POD_SLICE_OK) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.fill(value) range out of bounds");
     }
     vmbreak;
 }

@@ -158,6 +158,7 @@ BYTE_SLICE_FILL_OPERATIONS = {"xi.byte.slice.fill"}
 BYTE_SLICE_COPY_OPERATIONS = {"xi.byte.slice.copy"}
 BYTE_SLICE_REPEAT_OPERATIONS = {"xi.byte.slice.repeat"}
 POD_SLICE_COPY_OPERATIONS = {"xi.slice.copy"}
+POD_SLICE_FILL_OPERATIONS = {"xi.slice.fill"}
 POD_SLICE_COMPARE_OPERATIONS = {"xi.slice.compare"}
 POD_SLICE_VIEW_OPERATIONS = {"xi.slice.as.bytes", "xi.slice.reinterpret"}
 RAW_MEMORY_COPY_OPERATIONS = {"xi.ptr.copy.nonoverlap"}
@@ -2681,6 +2682,10 @@ def verify_target_layout_query_ratchet(root: Path, registry: dict) -> list[str]:
 def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     families = (
+        ("shared.pod-slice-fill", POD_SLICE_FILL_OPERATIONS, "FILL", "OP_SLICE_FILL",
+         "xr_pod_slice_fill_core", "xrt_pod_slice_fill_semantics",
+         "xrt_span_fill_checked_raw", "cg_pod_slice_fill_adapter_name", "xicgen_span_fill",
+         ("memset(", "for (int64_t", "xr_typed_fill(")),
         ("shared.pod-slice-copy", POD_SLICE_COPY_OPERATIONS, "COPY", "OP_SLICE_COPY",
          "xr_pod_slice_copy_core", "xrt_pod_slice_copy_semantics",
          "xrt_span_copy_checked_raw", "cg_pod_slice_copy_adapter_name", "xicgen_span_copy",

@@ -938,6 +938,39 @@ TEST(pod_slice_owner_copy_and_compare_cover_layout_overlap_and_overflow_edges) {
     ASSERT_EQ_INT(compared.status, XR_POD_SLICE_BYTE_LENGTH_OVERFLOW);
 }
 
+TEST(pod_slice_fill_owner_covers_scalar_layout_and_bounds_edges) {
+    int32_t ints[3] = {0, 0, 0};
+    double floats[2] = {0.0, 0.0};
+    XrPodSliceFillValue value = {0};
+
+    value.bits = UINT64_C(0xfffffffffffffffd);
+    ASSERT_EQ_INT(XR_POD_SLICE_FILL_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI,
+                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO, XR_SEM_CONSUMER_VM,
+                      xr_pod_slice_fill_core(ints, 3, sizeof(int32_t),
+                                             XR_POD_SLICE_FILL_I32, value)),
+                  XR_POD_SLICE_OK);
+    ASSERT_EQ_INT(ints[0], -3);
+    ASSERT_EQ_INT(ints[2], -3);
+    value.f64 = 1.25;
+    ASSERT_EQ_INT(xr_pod_slice_fill_core(floats, 2, sizeof(double), XR_POD_SLICE_FILL_F64,
+                                         value),
+                  XR_POD_SLICE_OK);
+    ASSERT_EQ_INT(floats[1] == 1.25, 1);
+    ASSERT_EQ_INT(xr_pod_slice_fill_core(NULL, 0, sizeof(int32_t), XR_POD_SLICE_FILL_I32,
+                                         value),
+                  XR_POD_SLICE_OK);
+    ASSERT_EQ_INT(xr_pod_slice_fill_core(NULL, 1, sizeof(int32_t), XR_POD_SLICE_FILL_I32,
+                                         value),
+                  XR_POD_SLICE_NO_DATA);
+    ASSERT_EQ_INT(xr_pod_slice_fill_core(ints, 3, sizeof(int16_t), XR_POD_SLICE_FILL_I32,
+                                         value),
+                  XR_POD_SLICE_INVALID_LAYOUT);
+    ASSERT_EQ_INT(xr_pod_slice_fill_core(ints, INT64_MAX, sizeof(int32_t),
+                                         XR_POD_SLICE_FILL_I32, value),
+                  XR_POD_SLICE_BYTE_LENGTH_OVERFLOW);
+}
+
 TEST(array_core_sort_typed_buffers_in_place) {
     int64_t ints[] = {3, -1, 7, 3, 0};
     ASSERT_TRUE(xr_sort_core_typed(ints, 5, XR_ELEM_I64));
@@ -1024,6 +1057,7 @@ RUN_TEST(array_core_bytes_common_prefix_uses_min_length_and_word_chunks);
 RUN_TEST(array_core_byte_slice_compare_owns_lexicographic_edges);
 RUN_TEST(array_core_pod_slice_view_owner_covers_layout_edges);
 RUN_TEST(pod_slice_owner_copy_and_compare_cover_layout_overlap_and_overflow_edges);
+RUN_TEST(pod_slice_fill_owner_covers_scalar_layout_and_bounds_edges);
 RUN_TEST(array_core_sort_typed_buffers_in_place);
 RUN_TEST(array_core_sort_compare_result_uses_sign);
 RUN_TEST(array_core_sort_default_compare_numbers_and_string_slices);
