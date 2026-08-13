@@ -1394,7 +1394,7 @@ static XrVMResult run_finalize(XrVMRuntime *isolate, XrWorker *worker, XrCorouti
             bool dropped_fire_and_forget =
                 !is_main && coro->task == NULL && !xr_coro_parent_scope(coro);
             if (is_main || dropped_fire_and_forget)
-                xr_vm_report_uncaught_error(isolate, coro->error, !is_main);
+                xr_report_uncaught_error(isolate, coro->error, !is_main);
         }
         coro_ctx->current_exception = xr_null();
         coro_ctx->pending_error = xr_null();

@@ -91,7 +91,7 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
              * so run_finalize() — where the scheduler-backed roots report —
              * is never reached. Report here, and clear the channel so a
              * re-entrant host (REPL, embedder) starts clean. */
-            xr_vm_report_uncaught_error(isolate, ctx->pending_error, false);
+            xr_report_uncaught_error(isolate, ctx->pending_error, false);
             ctx->pending_error = xr_null();
             return -1;
         }

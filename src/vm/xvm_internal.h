@@ -263,7 +263,7 @@ XR_FUNC void xr_cleanup_scope_check_error(XrVMRuntime *isolate, XrVMContext *ctx
  * top-level finalization path so the wording stays in one place; honours
  * suppress_exception_print and ignores a null error. Defined in xvm_api.c.
  */
-XR_FUNC void xr_vm_report_uncaught_error(XrVMRuntime *isolate, XrValue error, bool in_go_coroutine);
+XR_FUNC void xr_report_uncaught_error(XrVMRuntime *isolate, XrValue error, bool in_go_coroutine);
 
 /*
  * Single-call throw helper: records the full call chain into

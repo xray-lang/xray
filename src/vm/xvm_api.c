@@ -533,7 +533,7 @@ void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception) {
  * them: the coroutine backend's run_finalize (scheduler-backed roots and
  * dropped fire-and-forget `go`) and xr_execute's elided-root fast path, which
  * never materializes a main coroutine at all. */
-void xr_vm_report_uncaught_error(XrVMRuntime *isolate, XrValue error, bool in_go_coroutine) {
+void xr_report_uncaught_error(XrVMRuntime *isolate, XrValue error, bool in_go_coroutine) {
     if (!isolate || isolate->suppress_exception_print || XR_IS_NULL(error))
         return;
     XrString *msg = xr_value_to_string(isolate, error);
