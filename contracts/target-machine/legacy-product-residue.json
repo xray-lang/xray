@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 105,
     "install": 2,
-    "source": 3434
+    "source": 3433
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -6668,9 +6668,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "9b2d35ed50dcf0c24fab4bfe35588d0516ec46a78227f451f15d70baea282cca",
+      "evidence_sha256": "0f320f1a2a9e862c239980df81ece2f1d9cd2d40c2dcaa76ab1b20234a2b6893",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 3,
+      "hit_count": 2,
       "path": "src/runtime/xstdlib_bridge.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -9328,6 +9328,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "8c62c1e403b1ad563f8218634dc4fab61b457a76662dc23282f84812a6f252e2",
-  "total": 3635
+  "source_tree_fingerprint": "c7c63f53d751bcf16d8bc4270d435eaf1516e9b973144d8f3434e533061eb67a",
+  "total": 3634
 }
