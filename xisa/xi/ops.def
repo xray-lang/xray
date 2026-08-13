@@ -2729,7 +2729,6 @@
     xi.try
     xi.catch
     xi.end.try
-    xi.assert
     xi.assert.eq
     xi.assert.ne
     xi.assert.throws
@@ -2774,6 +2773,7 @@
     xi.static.bytes.ptr
     xi.cell.get
     xi.cell.set
+    xi.assert
     xi.isnull
     xi.enum.variant.at
     xi.enum.payload.at
@@ -2895,6 +2895,25 @@
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xr_truthy")
     (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")
     (runtime "src/runtime/value/xvalue_truthy.c" "xr_value_is_truthy")
+  ))
+
+(define-xi-observable-owner shared.assert-condition
+  :category shared-semantic-kernel
+  :operations (xi.assert)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_assert_condition_failed
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_assert.inc.c" "XR_ASSERT_CONDITION_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_assert_condition_failed")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_assert_condition_failed")
+    (cgen "src/aot/xi_cgen.c" "cg_assert_condition_adapter_name")
   ))
 
 (define-xi-observable-owner shared.target-layout-query

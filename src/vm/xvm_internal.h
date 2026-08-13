@@ -37,6 +37,7 @@
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xenum_descriptor.h"
 #include "../runtime/symbol/xsymbol_table.h"
+#include "../shared/xr_assert_condition_core.h"
 #include "../shared/xr_truthy_core.h"
 #include "../shared/xr_type_identity_core.h"
 #include "../base/xglobal_indices.h"

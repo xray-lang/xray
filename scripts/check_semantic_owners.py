@@ -24,7 +24,7 @@ from xisagen import parse_xi_ops_def, parse_xi_semantic_owners  # noqa: E402
 SOURCE_SUFFIXES = (".c", ".h")
 SIGNATURE_RE = re.compile(
     r"\b(?:(?:static\s+)?inline|XR_BYTE_SLICE_SCALAR_INLINE|XR_BYTE_ARRAY_COPY_INLINE|"
-    r"XR_NULL_TEST_INLINE)\s+[^;{}]*?"
+    r"XR_NULL_TEST_INLINE|XR_ASSERT_CONDITION_INLINE)\s+[^;{}]*?"
     r"\b(xr_[A-Za-z0-9_]+)\s*\(")
 SORT_OLD_SYMBOLS = (
     "xr_array_hybrid_sort",
@@ -165,6 +165,7 @@ RAW_SCALAR_ACCESS_OPERATIONS = {"xi.ptr.load", "xi.ptr.store"}
 ENUM_METADATA_ACCESS_OPERATIONS = {"xi.enum.variant.at", "xi.enum.payload.at"}
 CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
 NULL_TEST_OPERATIONS = {"xi.isnull"}
+ASSERT_CONDITION_OPERATIONS = {"xi.assert"}
 REGEX_COMPILE_OPERATIONS = {"xi.regex.compile"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
@@ -2048,6 +2049,72 @@ def verify_null_test_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_assert_condition_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.assert-condition"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != ASSERT_CONDITION_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.assert-condition family")
+    elif owner.get("cgen_adapter") != "xrt_assert_condition_failed":
+        errors.append("semantic owner registry has no exact assertion CGen adapter")
+
+    core_text = (root / "src/shared/xr_assert_condition_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_ASSERT_CONDITION_OWNER_APPLY",
+                  "xr_assert_condition_failed_core"):
+        if token not in core_text:
+            errors.append("src/shared/xr_assert_condition_core.h: assertion lacks stable owner")
+            break
+
+    vm_text = (root / "src/vm/xvm_dispatch_assert.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    start = vm_text.find("vmcase(OP_ASSERT)")
+    end = vm_text.find("vmbreak;", start)
+    vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_ASSERT_CONDITION_OWNER_APPLY", "xr_vm_is_truthy"):
+        if token not in vm_body:
+            errors.append("src/vm/xvm_dispatch_assert.inc.c: OP_ASSERT bypasses owner")
+            break
+    if "negate ? truthy : !truthy" in vm_body:
+        errors.append("src/vm/xvm_dispatch_assert.inc.c: OP_ASSERT revived a private decision")
+
+    for relative, consumer in (("src/aot/xrt.h", "XR_SEM_CONSUMER_AOT_HOSTED"),
+                               ("src/aot/xrt_core_freestanding.h",
+                                "XR_SEM_CONSUMER_AOT_FREESTANDING")):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for token in ("xrt_assert_condition_failed", "XR_ASSERT_CONDITION_OWNER_APPLY",
+                      f"{marker}_HI", f"{marker}_LO", consumer):
+            if token not in text:
+                errors.append(f"{relative}: assertion adapter bypasses owner")
+                break
+
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    for token in ("XR_ASSERT_CONDITION_C90", "#undef XR_ASSERT_CONDITION_C90",
+                  "xrt_assert_condition_failed", "xr_assert_condition_failed_core"):
+        if token not in c90_text:
+            errors.append("src/aot/xrt_c90.h: assertion mechanical adapter is incomplete")
+            break
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_assert_condition_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: assertion does not resolve stable adapter")
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    body = extract_c_function(dispatch_text, "xicgen_assert") or ""
+    for token in ("cg_assert_condition_adapter_name", "xicgen_emit_assert_condition"):
+        if token not in body:
+            errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: xicgen_assert bypasses owner")
+            break
+    if 'fprintf(out, "(%s("' in body:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: xicgen_assert revived private decision")
+    return errors
+
+
 def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     owner_name = "shared.regex"
@@ -2793,8 +2860,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 36:
-        errors.append(f"shared-core inventory must contain exactly 36 headers, found {len(actual)}")
+    if len(actual) != 37:
+        errors.append(f"shared-core inventory must contain exactly 37 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -2835,6 +2902,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_enum_metadata_access_ratchet(root, registry))
         errors.extend(verify_cell_access_ratchet(root, registry))
         errors.extend(verify_null_test_ratchet(root, registry))
+        errors.extend(verify_assert_condition_ratchet(root, registry))
         errors.extend(verify_regex_compile_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_byte_array_copy_ratchet(root, registry))

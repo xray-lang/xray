@@ -28,6 +28,12 @@ in `xr_truthy_core_eval`. Removing a declared production binding, changing its
 stable ID marker, or reviving a private truthiness decision fails the owner
 ratchet.
 
+`shared.assert-condition` owns canonical `xi.assert` after truthiness has been
+classified. VM, hosted AOT, freestanding AOT, and CGen consume the same
+expected-true/expected-false failure decision. Error construction, diagnostic
+printing, abort, and trap transport remain backend adapters; `assert_eq`,
+`assert_ne`, and `assert_throws` remain outside this owner.
+
 `primitive.type-identity` owns canonical `xi.typeid`. VM, runtime, hosted AOT,
 freestanding AOT, and CGen consume the generated owner ID and declared consumer
 bit; representation adapters only classify local value tags into the shared
@@ -86,9 +92,9 @@ Generated C may not ask the host compiler to rediscover target layout through
 
 ## Digest anchors
 
-anchor-sha256: contracts/semantic-owners.toml 28043b470d1edc37096585035bf0df62f92c8c6fce99201795011b3535569e9f
-anchor-sha256: contracts/semantic-owner-registry.json 25a0a305b471688916c59934595928537eead3b139e8d7c8b65f2715988eaeb2
+anchor-sha256: contracts/semantic-owners.toml 28281b08e73eef2687f6263b65183bf05c1bee786cd93985cb82f0fbd5fdc7ad
+anchor-sha256: contracts/semantic-owner-registry.json 75103d175c199f1396df0f04df4a670ffb863eb587038774e5d47c57e3dded11
 anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
-anchor-sha256: contracts/shared-core-inventory.json 034bccfecd677cef9fb8b0390f010d78c7684aea8b1c83263d2283baaa5dcff4
-anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h c1e9e386889e80c8c7d035909d4aaca2c931e19b8f8296f559f47bf67fb637ff
-anchor-sha256: scripts/check_semantic_owners.py b01cfa99ce83025964ad64e5f88cfb4869bdb89df513037e89a94c1c1e506e4a
+anchor-sha256: contracts/shared-core-inventory.json a13c64696ffb72ea2ed206acb21d3fc32dd5e394226c795f1deb14e1a0213b0a
+anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h 0e8345a8ee0c666bc5285dadf95bdc4f690eb41fedabdb6d88faa7eee450bd71
+anchor-sha256: scripts/check_semantic_owners.py fd20f15a883dde24331961435fef450f074c93f7ae2e4d6d9180811d95249836

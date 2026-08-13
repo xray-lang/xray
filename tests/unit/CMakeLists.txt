@@ -606,6 +606,30 @@ add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
 # ============================================================================
 
 add_xray_unit_test(test_array_core stdlib/test_array_core.c)
+add_executable(test_assert_condition_core stdlib/test_assert_condition_core.c)
+target_include_directories(test_assert_condition_core PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+add_test(NAME test_assert_condition_core COMMAND $<TARGET_FILE:test_assert_condition_core>)
+add_xray_unit_test(test_xrt_assert_condition_owner_freestanding
+    aot/test_xrt_assert_condition_owner_freestanding.c)
+if(NOT WIN32)
+    add_executable(test_xrt_assert_condition_owner_c90
+        aot/test_xrt_assert_condition_owner_c90.c)
+    target_include_directories(test_xrt_assert_condition_owner_c90 PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_target_properties(test_xrt_assert_condition_owner_c90 PROPERTIES
+        C_STANDARD 90
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    add_test(NAME test_xrt_assert_condition_owner_c90
+        COMMAND $<TARGET_FILE:test_xrt_assert_condition_owner_c90>)
+endif()
 add_xray_unit_test(test_byte_array_copy_core stdlib/test_byte_array_copy_core.c)
 add_xray_unit_test(test_byte_array_repeat_core stdlib/test_byte_array_repeat_core.c)
 add_executable(test_byte_array_append_core stdlib/test_byte_array_append_core.c)

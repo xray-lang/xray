@@ -4104,9 +4104,14 @@ static void xicgen_assert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
     XR_DCHECK(v->nargs >= 1, "xicgen_assert: need cond");
     const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
     bool invert = (v->aux_int == 1);
-    fprintf(out, "(%s(", invert ? "!" : "");
+    const char *adapter = cg_assert_condition_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "(!%s(", adapter);
     xicgen_emit_assert_condition(ctx, out, v->args[0]);
-    fprintf(out, ") ? XR_NULL_VAL : (");
+    fprintf(out, ", %s) ? XR_NULL_VAL : (", invert ? "false" : "true");
     if (ctx && ctx->freestanding_profile) {
         fprintf(out, "xrt_freestanding_trap(\"Assertion failed%s: %s\"), XR_NULL_VAL))",
                 invert ? " (expected false)" : "", loc);

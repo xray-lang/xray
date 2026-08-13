@@ -36,8 +36,10 @@ vmcase(OP_ASSERT) {
     XrValue cond = R(cond_reg);
     bool truthy = xr_vm_is_truthy(cond);
 
-    // C=1: assert_false — fail if truthy
-    bool failed = negate ? truthy : !truthy;
+    // C=1: assert_false — expect a false condition.
+    bool failed = XR_ASSERT_CONDITION_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI,
+        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO, XR_SEM_CONSUMER_VM, truthy, !negate);
 
     if (failed) {
         XrValue loc_val = K(loc_idx);

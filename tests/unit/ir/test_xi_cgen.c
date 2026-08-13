@@ -4187,6 +4187,8 @@ TEST(cgen_native_bool_assert_does_not_materialize_box) {
                  "native bool assert conditions must not materialize tagged boxes");
     TEST_REQUIRE(count_between(check, check_end, "Assertion failed") == 2,
                  "both assertions must remain as native abort checks");
+    TEST_REQUIRE(count_between(check, check_end, "xrt_assert_condition_failed(") == 2,
+                 "both assertions must consume the stable assertion owner adapter");
     TEST_REQUIRE(!contains_between(check, check_end, "({"),
                  "assert lowering must remain portable C11");
 

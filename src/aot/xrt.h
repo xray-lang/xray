@@ -44,6 +44,7 @@
 #include "../shared/xr_enum_metadata_core.h" // L0: checked enum metadata views
 #include "../shared/xr_numeric_core.h"     // L0: canonical numeric negation
 #include "../shared/xr_null_test_core.h"   // L0: canonical tagged/pointer null observation
+#include "../shared/xr_assert_condition_core.h" // L0: canonical assertion decision
 #include "../shared/xr_numeric_conversion_core.h"  // L0: deterministic scalar narrowing
 #define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
@@ -83,6 +84,11 @@
                              XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,                                \
                              XR_SEM_CONSUMER_AOT_HOSTED,                                        \
                              xr_null_test_pointer_is_null_core((const void *) (pointer)))
+#define xrt_assert_condition_failed(truthy, expected_truthy)                                      \
+    XR_ASSERT_CONDITION_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI,                                              \
+        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO, XR_SEM_CONSUMER_AOT_HOSTED,                  \
+        (truthy), (expected_truthy))
 #define xrt_data_pointer_project(address, lifetime)                                               \
     XR_DATA_POINTER_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI,                           \
                                 XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO,                           \
