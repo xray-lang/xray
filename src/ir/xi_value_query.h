@@ -60,6 +60,25 @@ XR_FUNC const XiImportRef *xi_value_import_ref(const XiFunc *func, const XiValue
  * identity into a proof must ask this question first. */
 XR_FUNC bool xi_import_ref_is_grounded_native(const XiImportRef *ref);
 
+/* True when the resolver bound this reference to a source module it can read. */
+XR_FUNC bool xi_import_ref_is_source_module(const XiImportRef *ref);
+
+/* True when this reference is grounded and names a module the sealed stdlib
+ * definition registry declares: the registry is then its complete member set. */
+XR_FUNC bool xi_import_ref_is_native_stdlib(const XiImportRef *ref);
+
+/* True when a reference that does name a module resolves to neither a readable
+ * source module nor a declared native one - because the module-graph resolver
+ * never visited it, or visited it and bound nothing.
+ *
+ * The semantic plan classifies exactly this state as unresolved and grants a
+ * call through such a reference no call-target authority at all, which in turn
+ * forbids a coroutine state at that call.  An IR analysis must therefore not
+ * read the reference as an open target set to be rejected: the plan has already
+ * settled the call as identified and non-suspending, and answering otherwise
+ * either fails a compile the plan accepts or creates a state it will reject. */
+XR_FUNC bool xi_import_ref_is_unresolved(const XiImportRef *ref);
+
 /* Numeric facts at a use site.
  * Uses existing range annotations when available and, if needed, dominating
  * branch guards on the path to 'site'. */

@@ -308,6 +308,14 @@ XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness
                                                const XiValue *target,
                                                const XiCoroResolver *resolver);
 
+/* Same question restricted to proven suspension points: a call whose target set
+ * is merely open obliges the plan to reserve a coroutine state, but is not
+ * proof that control leaves the frame, and no resolver-less caller can refine
+ * it.  Ask this instead of the above when the answer decides a rejection rather
+ * than how much frame state to reserve. */
+XR_FUNC bool xi_coro_value_live_across_proven_suspend(const XiFunc *f, const XiLiveness *live,
+                                                      const XiValue *target);
+
 /* True when 'target' is an evaluated operand of a suspension operation whose
  * resume contract retries that same operation.  Such an operand is a logical
  * post-suspend use even when ordinary SSA liveness sees only the original

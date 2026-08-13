@@ -1836,16 +1836,15 @@ static bool resolve_native_yieldable_callee(const XiFunc *caller, const XiValue 
     return true;
 }
 
+/* The three import-resolution questions are asked through the same shared
+ * predicates the IR coroutine analysis asks, so the layers cannot drift on
+ * which references carry call-target authority. */
 static uint8_t classify_import_resolution(const XiImportRef *ref) {
     if (!ref || !ref->module_path || !ref->module_path[0])
         return XR_SEM_IMPORT_RESOLUTION_NONE;
-    if (ref->resolved_mod_index >= 0 && ref->resolved_module)
+    if (xi_import_ref_is_source_module(ref))
         return XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE;
-    if (!ref->resolution_attempted)
-        return XR_SEM_IMPORT_RESOLUTION_UNRESOLVED;
-    if (ref->resolved_mod_index == -1 && ref->resolved_shared_slot == -1 &&
-        ref->resolved_export_slot == -1 && !ref->resolved_func && !ref->resolved_module &&
-        xr_stdlib_metadata_module_known(ref->module_path))
+    if (xi_import_ref_is_native_stdlib(ref))
         return XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB;
     return XR_SEM_IMPORT_RESOLUTION_UNRESOLVED;
 }

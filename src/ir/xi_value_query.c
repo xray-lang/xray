@@ -13,6 +13,7 @@
 #include "xi_module.h"
 #include "xi_range.h"
 #include "../runtime/value/xtype.h"
+#include "../stdlib/xstdlib_metadata.h"
 #include <string.h>
 
 XR_FUNC bool xi_type_is_channel(const XrType *type) {
@@ -121,6 +122,21 @@ XR_FUNC bool xi_import_ref_is_grounded_native(const XiImportRef *ref) {
            ref->resolution_attempted && ref->resolved_mod_index == -1 &&
            ref->resolved_shared_slot == -1 && ref->resolved_export_slot == -1 &&
            !ref->resolved_func && !ref->resolved_module;
+}
+
+XR_FUNC bool xi_import_ref_is_source_module(const XiImportRef *ref) {
+    return ref && ref->module_path && ref->module_path[0] && ref->resolved_mod_index >= 0 &&
+           ref->resolved_module != NULL;
+}
+
+XR_FUNC bool xi_import_ref_is_native_stdlib(const XiImportRef *ref) {
+    return xi_import_ref_is_grounded_native(ref) &&
+           xr_stdlib_metadata_module_known(ref->module_path);
+}
+
+XR_FUNC bool xi_import_ref_is_unresolved(const XiImportRef *ref) {
+    return ref && ref->module_path && ref->module_path[0] &&
+           !xi_import_ref_is_source_module(ref) && !xi_import_ref_is_native_stdlib(ref);
 }
 
 XR_FUNC bool xi_value_type_is_channel(const XiValue *v) {

@@ -76,46 +76,59 @@ static const char *xi_coro_native_import_member(const XiFunc *f, const XiValue *
     return member;
 }
 
-/* True when the callee is a declared native member whose import reference the
- * module-graph resolver has not visited.  Its yieldability is then a registry
- * spelling rather than a proof, and the semantic plan grants the call no
- * target authority. */
-static bool xi_coro_call_is_ungrounded_native_import(const XiFunc *f, const XiValue *call) {
-    const XiImportRef *ref = NULL;
-    return xi_coro_native_import_member(f, call, &ref) != NULL &&
-           !xi_import_ref_is_grounded_native(ref);
+/* True when the call reaches its callee through a module import reference that
+ * resolves to neither a readable source module nor a grounded native one.
+ *
+ * The semantic plan classifies exactly this reference as unresolved and grants
+ * every call through it no call-target authority, which in turn forbids a
+ * coroutine state at the call.  The plan has therefore already settled the
+ * call: it is identified and non-suspending, not an open target set.  A single
+ * module compiled on its own never runs the module-graph resolver, so this is
+ * the state of every cross-module callee it sees. */
+static bool xi_coro_call_through_unresolved_import(const XiFunc *f, const XiValue *call) {
+    if (!f || !call ||
+        (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
+         call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs < 1)
+        return false;
+    const XiImportRef *ref = xi_value_import_ref(f, call->args[0]);
+    /* A reference that did bind a function, module or slot still carries a
+     * target for the resolvers to find, whichever bucket the plan files it
+     * under.  Only one that bound nothing at all is settled here. */
+    return xi_import_ref_is_unresolved(ref) && !ref->resolved_func && !ref->resolved_module &&
+           ref->resolved_shared_slot == -1 && ref->resolved_export_slot == -1;
 }
 
-/* Classify a call whose callee is a native-module import: 1 suspends, 0 does
- * not, -1 unknown (the callee is not a native ABI member at all).
+/* Classify a call whose callee is reached through a module import: 1 suspends,
+ * 0 does not, -1 unknown (the callee does not come from an import at all).
  *
- * Yieldability is only a proof once the import reference itself is grounded.
- * A single-module compile never runs the module-graph resolver, so its
- * references stay unvisited; the semantic plan then classifies them as
- * unresolved and grants the call no call-target authority, which forbids a
- * coroutine state at that site.  The ABI registry still identifies the callee
- * there - the call is resolved, not open - so an ungrounded native import is
- * answered 0 rather than -1, keeping call-resolution completeness intact while
- * matching the state count the plan will accept. */
-static int xi_coro_native_import_suspendability(const XiFunc *f, const XiValue *call) {
+ * Native yieldability is only a proof once the import reference is grounded,
+ * and a member absent from the sealed ABI registry is not a native callee at
+ * all - in a single-module compile it is usually another module's source
+ * export, which no registry can describe.  Both cases share one answer: the
+ * reference is unresolved, the plan refuses the call any target authority and
+ * forbids a coroutine state at it.  Answering 0 rather than -1 records that
+ * the plan has settled the call, so call-resolution completeness holds and the
+ * state count matches what the plan will accept. */
+static int xi_coro_import_call_suspendability(const XiFunc *f, const XiValue *call) {
     const XiImportRef *ref = NULL;
     const char *member = xi_coro_native_import_member(f, call, &ref);
     if (!member)
-        return -1;
+        return xi_coro_call_through_unresolved_import(f, call) ? 0 : -1;
     if (!xi_import_ref_is_grounded_native(ref))
         return 0;
     return xa_builtin_module_func_is_yieldable(ref->module_path, member) ? 1 : 0;
 }
 
 /* A value-level MAY_SUSPEND stamp is a conservative semantic contract that a
- * target resolver may never erase.  The single exception is a call the stamp
- * reached through the native ABI registry while its import reference is still
- * ungrounded: the plan cannot confirm that spelling, refuses the call any
- * target authority, and rejects a coroutine state at it, so honouring the
- * stamp would only contradict the authority the state is checked against. */
+ * target resolver may never erase.  The single exception is a call whose
+ * import reference is still unresolved: the plan cannot confirm that spelling,
+ * refuses the call any target authority, and rejects a coroutine state at it,
+ * so honouring the stamp would only contradict the authority the state is
+ * checked against. */
 static bool xi_coro_value_carries_suspend_contract(const XiFunc *f, const XiValue *v) {
     return v && (v->flags & XI_FLAG_MAY_SUSPEND) != 0 &&
-           !xi_coro_call_is_ungrounded_native_import(f, v);
+           !xi_coro_call_through_unresolved_import(f, v);
 }
 
 /* ========== Op classifier ========== */
@@ -522,8 +535,13 @@ static bool xi_coro_call_is_open_callable(const XiValue *v) {
            !(callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW);
 }
 
+/* An open target set obliges the plan to allocate a coroutine state, but it is
+ * not a proof that control ever leaves this frame - only a resolved target or
+ * an explicit suspension op is.  Analyses that must reserve state answer with
+ * the obligation; analyses that must prove control transfer ask for the proof
+ * alone.  See xi_coro_value_live_across_proven_suspend. */
 static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResolver *resolver,
-                                              int depth) {
+                                              int depth, bool open_target_suspends) {
     if (f && f->coro_plan && f->coro_plan->analysis_complete) {
         const XiCoroPlan *published = f->coro_plan;
         bool current = published->cfg_rewritten
@@ -564,10 +582,11 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
                 target = xi_coro_resolve_local_callee(f, v->args[0]);
             if (!target && (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT))
                 target = xi_coro_resolve_method_callee(f, v);
-            int native_suspendability = xi_coro_native_import_suspendability(f, v);
-            if (!target && native_suspendability > 0)
+            int import_suspendability = xi_coro_import_call_suspendability(f, v);
+            if (!target && import_suspendability > 0)
                 return true;
-            if (!target && native_suspendability < 0 && xi_coro_call_is_open_callable(v))
+            if (!target && import_suspendability < 0 && open_target_suspends &&
+                xi_coro_call_is_open_callable(v))
                 return true;
             if (!target && resolver && resolver->call_suspendability &&
                 (v->op == XI_CALL || v->op == XI_CALL_METHOD ||
@@ -578,7 +597,8 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
             }
             if (!target || target == f || target->entry_type == 2)
                 continue;
-            if (xi_coro_func_is_suspendable_depth(target, resolver, depth + 1))
+            if (xi_coro_func_is_suspendable_depth(target, resolver, depth + 1,
+                                                  open_target_suspends))
                 return true;
         }
     }
@@ -586,14 +606,14 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
 }
 
 XR_FUNC bool xi_coro_func_is_suspendable(const XiFunc *f, const XiCoroResolver *resolver) {
-    return xi_coro_func_is_suspendable_depth(f, resolver, 0);
+    return xi_coro_func_is_suspendable_depth(f, resolver, 0, true);
 }
 
 
 /* A direct call whose resolved target is (transitively) suspendable is itself
  * a suspension site in the caller. */
 static bool xi_coro_call_suspends(const XiFunc *f, const XiValue *v,
-                                  const XiCoroResolver *resolver) {
+                                  const XiCoroResolver *resolver, bool open_target_suspends) {
     if (!v || v->op != XI_CALL || v->nargs < 1)
         return false;
     const XiFunc *target = resolver && resolver->resolve_callee
@@ -604,12 +624,15 @@ static bool xi_coro_call_suspends(const XiFunc *f, const XiValue *v,
     if (target && target->entry_type == 2)
         return false;
     if (target)
-        return xi_coro_func_is_suspendable(target, resolver);
-    int native_suspendability = xi_coro_native_import_suspendability(f, v);
-    if (native_suspendability >= 0)
-        return native_suspendability > 0;
+        return xi_coro_func_is_suspendable_depth(target, resolver, 0, open_target_suspends);
+    int import_suspendability = xi_coro_import_call_suspendability(f, v);
+    if (import_suspendability >= 0)
+        return import_suspendability > 0;
+    /* An open target set is a state obligation, never a proof of transfer, so
+     * a caller asking only for proofs settles the call here rather than
+     * letting a resolver answer with the same conservative obligation. */
     if (xi_coro_call_is_open_callable(v))
-        return true;
+        return open_target_suspends;
     if (resolver && resolver->call_suspendability) {
         int prepared = resolver->call_suspendability(resolver->ud, f, v);
         /* Unknown targets are rejected independently before a plan is
@@ -623,7 +646,8 @@ static bool xi_coro_call_suspends(const XiFunc *f, const XiValue *v,
 /* A statically resolved method call whose target is (transitively)
  * suspendable is also a suspension site in the caller. */
 static bool xi_coro_method_call_suspends(const XiFunc *f, const XiValue *v,
-                                         const XiCoroResolver *resolver) {
+                                         const XiCoroResolver *resolver,
+                                         bool open_target_suspends) {
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1)
         return false;
     const XiFunc *target = resolver && resolver->resolve_method
@@ -634,10 +658,10 @@ static bool xi_coro_method_call_suspends(const XiFunc *f, const XiValue *v,
     if (target && target->entry_type == 2)
         return false;
     if (target)
-        return xi_coro_func_is_suspendable(target, resolver);
-    int native_suspendability = xi_coro_native_import_suspendability(f, v);
-    if (native_suspendability >= 0)
-        return native_suspendability > 0;
+        return xi_coro_func_is_suspendable_depth(target, resolver, 0, open_target_suspends);
+    int import_suspendability = xi_coro_import_call_suspendability(f, v);
+    if (import_suspendability >= 0)
+        return import_suspendability > 0;
     if (resolver && resolver->call_suspendability)
         return resolver->call_suspendability(resolver->ud, f, v) > 0;
     return false;
@@ -645,8 +669,9 @@ static bool xi_coro_method_call_suspends(const XiFunc *f, const XiValue *v,
 
 /* ========== Suspension-point predicate ========== */
 
-XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
-                                      const XiCoroResolver *resolver) {
+static bool xi_coro_is_suspend_point_impl(const XiFunc *f, const XiValue *v,
+                                          const XiCoroResolver *resolver,
+                                          bool open_target_suspends) {
     if (!v)
         return false;
     /* A resolved pure-Xray wrapper is not itself suspendable, but these calls
@@ -674,7 +699,13 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
         return true;
     if (xi_coro_is_test_yield_call(f, v, resolver))
         return true;
-    return xi_coro_call_suspends(f, v, resolver) || xi_coro_method_call_suspends(f, v, resolver);
+    return xi_coro_call_suspends(f, v, resolver, open_target_suspends) ||
+           xi_coro_method_call_suspends(f, v, resolver, open_target_suspends);
+}
+
+XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
+                                      const XiCoroResolver *resolver) {
+    return xi_coro_is_suspend_point_impl(f, v, resolver, true);
 }
 
 static const XiEnumData *xi_coro_static_enum_namespace(const XiFunc *f,
@@ -814,7 +845,7 @@ static bool xi_coro_call_resolution_complete(const XiFunc *f, const XiValue *v,
             return true;
         if (xi_coro_is_default_class_constructor_call(f, v))
             return true;
-        if (xi_coro_native_import_suspendability(f, v) >= 0)
+        if (xi_coro_import_call_suspendability(f, v) >= 0)
             return true;
         if (v->nargs > 0) {
             if (resolver && resolver->resolve_callee)
@@ -831,7 +862,7 @@ static bool xi_coro_call_resolution_complete(const XiFunc *f, const XiValue *v,
     }
 
     if (xi_coro_is_static_enum_member_call(f, v) || xi_coro_is_closed_builtin_method_call(v) ||
-        xi_coro_native_import_suspendability(f, v) >= 0 ||
+        xi_coro_import_call_suspendability(f, v) >= 0 ||
         xi_value_is_blocking_channel_method_call(v) ||
         xi_value_is_blocking_task_method_call(v) ||
         xi_value_is_blocking_work_queue_method_call(v) ||
@@ -1423,9 +1454,10 @@ static bool xi_coro_value_live_at_split_point(const XiFunc *f, const XiLiveness 
     return false;
 }
 
-XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness *live,
-                                               const XiValue *target,
-                                               const XiCoroResolver *resolver) {
+static bool xi_coro_value_live_across_suspend_impl(const XiFunc *f, const XiLiveness *live,
+                                                   const XiValue *target,
+                                                   const XiCoroResolver *resolver,
+                                                   bool open_target_suspends) {
     if (!f || !live || !target)
         return false;
     if (xi_coro_value_is_await_into_result(f, target))
@@ -1443,7 +1475,7 @@ XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness
             const XiValue *v = blk->values[vi];
             if (v == target) {
                 available = true;
-                if (xi_coro_is_suspend_point(f, v, resolver) &&
+                if (xi_coro_is_suspend_point_impl(f, v, resolver, open_target_suspends) &&
                     (xi_is_live_out(live, blk, target) ||
                      xi_coro_block_uses_target_after(blk, vi + 1, target) ||
                      xi_coro_block_successor_phi_uses_target(blk, target) ||
@@ -1451,7 +1483,8 @@ XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness
                     return true;
                 continue;
             }
-            if (!available || !xi_coro_is_suspend_point(f, v, resolver))
+            if (!available ||
+                !xi_coro_is_suspend_point_impl(f, v, resolver, open_target_suspends))
                 continue;
             if (xi_coro_suspend_boundary_uses_target(v, target) ||
                 xi_is_live_out(live, blk, target) ||
@@ -1461,6 +1494,27 @@ XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness
         }
     }
     return false;
+}
+
+XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness *live,
+                                               const XiValue *target,
+                                               const XiCoroResolver *resolver) {
+    return xi_coro_value_live_across_suspend_impl(f, live, target, resolver, true);
+}
+
+/* Liveness across only those suspension points that are proven, ignoring the
+ * ones an open target set merely obliges the plan to reserve state for.
+ *
+ * Raw Xi verification runs before any dependency-complete call resolver and
+ * before the coroutine plan exists, so an open target set is the one thing it
+ * can neither confirm nor refine.  Rejecting a borrow there would forbid what
+ * the later stage is required to do: coroutine lowering spills every parameter
+ * and call-plan place that reaches a materialized point, and the CoroLowered
+ * verification demands exactly those spills.  Ask this question when a missing
+ * proof must not become a rejection. */
+XR_FUNC bool xi_coro_value_live_across_proven_suspend(const XiFunc *f, const XiLiveness *live,
+                                                      const XiValue *target) {
+    return xi_coro_value_live_across_suspend_impl(f, live, target, NULL, false);
 }
 
 /* A call-bound place is itself a raw pointer, so ordinary SSA liveness keeps

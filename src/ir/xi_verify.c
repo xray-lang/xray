@@ -1529,7 +1529,13 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
      * analyzer has frozen both suspension dimensions as synchronous, do not
      * reclassify an ordinary call by recursively scanning an erased generic
      * body with the NULL resolver.  Coroutine lowering later consumes the
-     * same fingerprinted sidecar and verifies every materialized point. */
+     * same fingerprinted sidecar and verifies every materialized point.
+     *
+     * For the same reason the interval checks below ask only about proven
+     * suspension points: a call through an open function value obliges the
+     * plan to reserve a coroutine state, but whether it transfers control is
+     * exactly what this stage cannot know, and coroutine lowering is required
+     * to carry these places across every point it does materialize. */
     if (f->analyzer_effect_fingerprint != 0 &&
         ((f->semantic_effects | f->unknown_semantic_effects) &
          XA_SEM_EFFECT_ANY_SUSPEND) == 0)
@@ -1568,7 +1574,7 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
                 continue;
 
             if (v->op == XI_PARAM && verify_is_call_bound_place(v) &&
-                xi_coro_value_live_across_suspend(f, live, v, NULL)) {
+                xi_coro_value_live_across_proven_suspend(f, live, v)) {
                 verr(ctx,
                      "func '%s': call-bound parameter place v%u is live across a suspension "
                      "point",
@@ -1578,7 +1584,7 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
 
             if (v->op == XI_PLACE_LOAD && v->nargs == 1 && v->args[0] &&
                 xi_own_type_may_be_ref(v->type) &&
-                xi_coro_value_live_across_suspend(f, live, v, NULL) &&
+                xi_coro_value_live_across_proven_suspend(f, live, v) &&
                 !xi_coro_value_is_retry_suspend_operand(f, v)) {
                 verr(ctx, "func '%s': borrowed place load v%u is live across a suspension point",
                      f->name, v->id);

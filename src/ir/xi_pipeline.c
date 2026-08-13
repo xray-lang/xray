@@ -338,7 +338,10 @@ static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
      * reference is grounded by the module-graph resolver.  Until then the
      * semantic plan classifies the reference as unresolved and refuses the
      * call any target authority, so the callsite is answered as identified but
-     * non-suspending rather than as a native suspension point. */
+     * non-suspending rather than as a native suspension point.  A member the
+     * registry does not declare at all gets the same answer for the same
+     * reason: an unresolved reference has no target authority to grant, no
+     * matter how the member is spelled. */
     if (current && call && call->nargs >= 1) {
         ref = xi_value_import_ref(current, call->args[0]);
         if (ref && ref->module_path && !ref->resolved_module && !ref->resolved_func) {
@@ -355,6 +358,8 @@ static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
                                xa_builtin_module_func_is_yieldable(ref->module_path, member)
                            ? 1
                            : 0;
+            if (xi_import_ref_is_unresolved(ref))
+                return 0;
         }
     }
     if (row && xg_callsite_effects_compose_closed_world_calls(evidence, row, &effects))
@@ -391,11 +396,22 @@ static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
     return -1;
 }
 
+/* The coroutine intrinsics keyed on a module identity - time.sleep, the
+ * test_yield probes, the netpoll TCP operations - are rewrites of one specific
+ * module's members, so the reference must actually be that module rather than
+ * merely spell its path.  An unresolved reference names a module the compile
+ * cannot read; the semantic plan grants calls through it no target authority
+ * and forbids a coroutine state at them, so the intrinsic must not claim one
+ * either. */
+static bool xi_pipeline_coro_import_names_module(const XiImportRef *ref, const char *module) {
+    return ref && ref->module_path && module && strcmp(ref->module_path, module) == 0 &&
+           !xi_import_ref_is_unresolved(ref);
+}
+
 static bool xi_pipeline_coro_value_is_module_import(void *ud, const XiFunc *func,
                                                     const XiValue *value, const char *module) {
     (void) ud;
-    const XiImportRef *ref = xi_value_import_ref(func, value);
-    return ref && ref->module_path && module && strcmp(ref->module_path, module) == 0;
+    return xi_pipeline_coro_import_names_module(xi_value_import_ref(func, value), module);
 }
 
 static bool xi_pipeline_coro_call_is_module_member(void *ud, const XiFunc *func,
@@ -406,14 +422,12 @@ static bool xi_pipeline_coro_call_is_module_member(void *ud, const XiFunc *func,
         return false;
     if ((call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) && call->aux) {
         const XiImportRef *ref = xi_value_import_ref(func, call->args[0]);
-        return ref && ref->module_path && !ref->member_name &&
-               strcmp(ref->module_path, module) == 0 &&
+        return xi_pipeline_coro_import_names_module(ref, module) && !ref->member_name &&
                strcmp((const char *) call->aux, member) == 0;
     }
     if (call->op == XI_CALL) {
         const XiImportRef *ref = xi_value_import_ref(func, call->args[0]);
-        return ref && ref->module_path && ref->member_name &&
-               strcmp(ref->module_path, module) == 0 &&
+        return xi_pipeline_coro_import_names_module(ref, module) && ref->member_name &&
                strcmp(ref->member_name, member) == 0;
     }
     return false;
