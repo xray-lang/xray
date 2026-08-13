@@ -906,7 +906,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         }
         (void) line;
 
-        const char *var_name = xr_vm_get_local_name(proto, b, current_pc);
+        const char *var_name = xr_debug_local_name(proto, b, current_pc);
         if (var_name) {
             VM_THROW(frame, pc, error_code,
                      "variable '%s' has type '%s', does not support property access '.%s'",

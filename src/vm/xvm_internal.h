@@ -205,7 +205,7 @@ static inline bool vm_is_falsey(XrValue value) {
 XR_FUNC void xr_runtime_error(XrVMRuntime *isolate, const char *format, ...);
 
 // Debug info: find local variable name by register and PC
-XR_FUNC const char *xr_vm_get_local_name(XrProto *proto, int reg, int pc);
+XR_FUNC const char *xr_debug_local_name(XrProto *proto, int reg, int pc);
 
 // Closure operations: see runtime/closure/xclosure.h
 

@@ -688,7 +688,7 @@ void xr_runtime_error(XrVMRuntime *isolate, const char *format, ...) {
  * @param pc Current instruction index
  * @return Variable name, NULL if not found
  */
-const char *xr_vm_get_local_name(XrProto *proto, int reg, int pc) {
+const char *xr_debug_local_name(XrProto *proto, int reg, int pc) {
     if (!proto)
         return NULL;
 
