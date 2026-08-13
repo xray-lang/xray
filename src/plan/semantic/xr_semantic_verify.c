@@ -1653,6 +1653,85 @@ static bool verify_json_namespace_value(const XrSemanticPlan *plan,
                            "JSON.value namespace authority is not exact");
 }
 
+/* Recomputed from the frozen rows alone.  The array kind is produced only by
+ * the builtin container type and carries neither a source class index nor a
+ * source class identity, so no declaration can present this receiver record;
+ * the frozen selector then names one implementation.  The argument contract is
+ * checked against the receiver's own element entry rather than a spelled type,
+ * and a reference capable element is refused because `push` consumes its
+ * argument and that consumption must stay free of any reference-count
+ * obligation for this authority to be complete. */
+static bool semantic_type_is_exact_push_array(const XrSemanticTypeRecord *type) {
+    char expected[96];
+    int length = snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:",
+                          (unsigned) XR_KIND_ARRAY, (unsigned) XR_TID_NULL,
+                          (unsigned) XR_SCALAR_REP_NONE);
+    XrStableId zero = {{0}};
+    return type && length > 0 && (size_t) length < sizeof(expected) &&
+           type->kind == XR_KIND_ARRAY && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 1 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
+           strncmp(type->canonical_key, expected, (size_t) length) == 0;
+}
+
+static bool semantic_type_is_exact_push_unit(const XrSemanticTypeRecord *type) {
+    char expected[96];
+    int length = snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:",
+                          (unsigned) XR_KIND_UNIT, (unsigned) XR_TID_NULL,
+                          (unsigned) XR_SCALAR_REP_NONE);
+    return type && length > 0 && (size_t) length < sizeof(expected) &&
+           type->kind == XR_KIND_UNIT && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0 && type->canonical_key &&
+           strcmp(type->canonical_key, expected) == 0;
+}
+
+static bool verify_array_push_scalar(const XrSemanticPlan *plan,
+                                     const XrSemanticOperationRecord *operation, char *error,
+                                     size_t error_size) {
+    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_PUSH_SCALAR)
+        return true;
+    const XrSemanticOperandRecord *receiver =
+        operation->operand_count == 2 && operation->operand_begin + 1u < plan->operand_count
+            ? &plan->operands[operation->operand_begin]
+            : NULL;
+    const XrSemanticOperandRecord *argument = receiver ? receiver + 1 : NULL;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver && receiver->type < plan->type_count ? &plan->types[receiver->type] : NULL;
+    const XrSemanticTypeRecord *argument_type =
+        argument && argument->type < plan->type_count ? &plan->types[argument->type] : NULL;
+    const XrSemanticTypeRecord *result_type =
+        operation->result_type < plan->type_count ? &plan->types[operation->result_type] : NULL;
+    const char *selector =
+        operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
+            ? plan->metadata[operation->metadata_begin]
+            : NULL;
+    bool exact = operation->opcode == XI_CALL_METHOD && operation->semantic_immediate > 0 &&
+                 (operation->semantic_immediate & 1) == 0 && selector &&
+                 strcmp(selector, "push") == 0 && receiver && argument && argument_type &&
+                 semantic_type_is_exact_push_array(receiver_type) &&
+                 receiver_type->child_begin < plan->type_child_count &&
+                 plan->type_children[receiver_type->child_begin] == argument->type &&
+                 (argument_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 &&
+                 semantic_type_is_exact_push_unit(result_type) &&
+                 operation->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
+                 receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+                 receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
+                 argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
+                 argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 argument->ownership_action == XR_SEM_OPERAND_CONSUME &&
+                 operation->result_alias_operand == -1 &&
+                 operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+                 operation->return_provenance == XR_SEM_RETURN_NONE &&
+                 operation->return_parameter == -1 && operation->return_complete == 0;
+    return exact || report(error, error_size, "XR_SEM_0019",
+                           "Array.push scalar authority is not exact");
+}
+
 static bool verify_string_builder_append_string(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     char *error, size_t error_size) {
@@ -1803,6 +1882,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_string_builder_append_string(plan, operation, error, error_size))
             return false;
         if (!verify_json_namespace_value(plan, operation, error, error_size))
+            return false;
+        if (!verify_array_push_scalar(plan, operation, error, error_size))
             return false;
         uint32_t existing_definition = definitions[operation->result_value];
         if (existing_definition != XR_SEMANTIC_INDEX_NONE) {

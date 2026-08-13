@@ -224,6 +224,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_TO_STRING,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING,
     XR_TARGET_CALL_CONVENTION_JSON_NAMESPACE_VALUE,
+    XR_TARGET_CALL_CONVENTION_ARRAY_PUSH_SCALAR,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -231,7 +232,10 @@ typedef enum XrTargetCallConvention {
  * private implementation or reuses a dependency function index as a local
  * index. CHANNEL_CLOSE names a sealed runtime receiver operation.
  * JSON_NAMESPACE_VALUE names the sealed compiler-owned JSON class namespace
- * member, whose receiver is a reserved builtin global rather than a value. */
+ * member, whose receiver is a reserved builtin global rather than a value.
+ * ARRAY_PUSH_SCALAR names the sealed builtin container member on an array
+ * receiver whose element carries no reference, so the consumed argument leaves
+ * no reference-count obligation behind the call. */
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
@@ -243,6 +247,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING,
     XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE,
+    XR_TARGET_CALL_TARGET_ARRAY_PUSH_SCALAR,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetCallErrorMode {
