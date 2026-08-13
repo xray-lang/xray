@@ -268,7 +268,7 @@ int xr_instruction_unit_add_upvalue(XrProto *proto, uint16_t index, uint8_t stor
     return DYNARRAY_ADD(&proto->upvalues, new_uv, UpvalInfo);
 }
 
-static void xr_vm_entry_plan_scan_proto(const XrProto *proto, bool is_root, XrEntryPlan *plan) {
+static void xr_entry_plan_scan_proto(const XrProto *proto, bool is_root, XrEntryPlan *plan) {
     if (!proto || !plan)
         return;
     plan->reachable_body_count++;
@@ -398,7 +398,7 @@ static void xr_vm_entry_plan_scan_proto(const XrProto *proto, bool is_root, XrEn
     }
     int child_count = DYNARRAY_COUNT(&proto->protos);
     for (int i = 0; i < child_count; i++)
-        xr_vm_entry_plan_scan_proto(DYNARRAY_GET(&proto->protos, i, XrProto *), false, plan);
+        xr_entry_plan_scan_proto(DYNARRAY_GET(&proto->protos, i, XrProto *), false, plan);
 }
 
 bool xr_vm_entry_plan_derive(XrProto *root) {
@@ -413,7 +413,7 @@ bool xr_vm_entry_plan_derive(XrProto *root) {
     plan.provider_hook_bits = UINT32_MAX;
     plan.evidence = XR_ENTRY_EV_CLOSED_WORLD_REACHABILITY | XR_ENTRY_EV_ROOT_EFFECT |
                     XR_ENTRY_EV_VERIFIED_BYTECODE;
-    xr_vm_entry_plan_scan_proto(root, true, &plan);
+    xr_entry_plan_scan_proto(root, true, &plan);
     plan.runtime_component_bits = plan.required_capability_bits;
     if ((plan.reachable_effect_bits & XR_EFFECT_MAY_SUSPEND) != 0)
         plan.root_representation = XR_ROOT_RESUMABLE_FRAME;

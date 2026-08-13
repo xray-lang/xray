@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3395
+    "source": 3392
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -436,7 +436,6 @@
     "xr_vm_ctx_get_ic_methods",
     "xr_vm_current_ctx",
     "xr_vm_entry_plan_derive",
-    "xr_vm_entry_plan_scan_proto",
     "xr_vm_entry_plan_validate",
     "xr_vm_execute_module",
     "xr_vm_ic_",
@@ -8275,15 +8274,14 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "5fd49fd8793bcf0b8ad6882f4dc120de6e44edfc7ec79e061a10e1683ad95684",
+      "evidence_sha256": "e6292ac128e20898d7f374c2d2eaeb7ac8c7e32601115a1b1d2a54865913b4cc",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 6,
+      "hit_count": 3,
       "path": "src/runtime/value/xchunk.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "xr_vm_entry_plan_derive",
-        "xr_vm_entry_plan_scan_proto",
         "xr_vm_entry_plan_validate"
       ]
     },
@@ -9203,6 +9201,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "281526def5da535e743d0b00959fd11929e34c429cbe47d65b84cb7c9246136c",
-  "total": 3597
+  "source_tree_fingerprint": "6af5d87711816c1624b02f2eccf2a625ae74e04c895ac442c5fe5d070d6bfea7",
+  "total": 3594
 }
