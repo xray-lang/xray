@@ -26,8 +26,6 @@
 #include "../vm/xvm_internal.h"
 #include <string.h>
 
-XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *proto);
-
 static bool xr_vm_bind_proto_shared_slots_recursive(XrVMRuntime *isolate, XrProto *proto,
                                                     int offset) {
     if (!proto)
@@ -85,7 +83,7 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
     if (entry_plan->root_representation == XR_ROOT_ELIDED) {
         XrExecutionContext *previous =
             xr_exec_context_enter(xr_runtime_core_root_exec(isolate->core_rt));
-        XrVMResult result = xr_vm_interpret_proto_isolate(isolate, proto);
+        XrVMResult result = xr_vm_interpret_proto(isolate, proto);
         XrVMContext *ctx = xr_vm_current_ctx(isolate);
         xr_exec_context_restore(previous);
         if (result == XR_VM_OK && ctx && !XR_IS_NULL(ctx->pending_error)) {

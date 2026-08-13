@@ -411,6 +411,13 @@ def self_test() -> int:
         )
         stacktrace_split_drifted, _ = check(root, collect(root))
         retired_stacktrace_split.unlink()
+        retired_proto_isolate_wrapper = root / "include/xray_vm.h"
+        retired_proto_isolate_wrapper.write_text(
+            "int xr_vm_interpret_proto_isolate(void *, void *);\n",
+            encoding="utf-8",
+        )
+        proto_isolate_wrapper_drifted, _ = check(root, collect(root))
+        retired_proto_isolate_wrapper.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -438,6 +445,7 @@ def self_test() -> int:
             or cfunction_free_drifted
             or interpret_stub_drifted
             or stacktrace_split_drifted
+            or proto_isolate_wrapper_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")

@@ -443,7 +443,7 @@ vmcase(OP_LOOP_BACK) {
             xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);
             /* See xvm_dispatch_jump.inc.c (OP_JMP backward): without a
              * scheduler we must not yield, otherwise the no-runtime
-             * fallback in xr_vm_interpret_proto_isolate would abandon
+             * direct root execution would abandon
              * execution on the first reductions exhaustion. */
             if (XR_LIKELY(isolate->vm.scheduler != NULL)) {
                 frame->pc = pc;

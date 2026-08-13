@@ -77,9 +77,6 @@
 XR_FUNC XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto);
 XR_FUNC XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto);
 
-struct XrVMRuntime;
-XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(struct XrVMRuntime *isolate, XrProto *proto);
-
 /* ========== C Function API ========== */
 
 XR_FUNC XrCFunction *xr_vm_cfunction_new(XrVMRuntime *isolate, XrCFunctionPtr func,

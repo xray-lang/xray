@@ -226,7 +226,7 @@ static XrProto *compile_xi(const char *source) {
  *   - xr_vm_bind_proto_shared_slots: module-level `var`s live in shared
  *     slots, so SETSHARED/GETSHARED read garbage without it.
  *   - the entry plan: a root with XR_ROOT_ELIDED runs on the native stack
- *     via xr_vm_interpret_proto_isolate and never touches a coroutine.
+ *     directly via xr_vm_interpret_proto and never touches a coroutine.
  *     Snippets this small are exactly the elided case, so pushing them
  *     through the scheduler path ran nothing at all.
  *   - xr_isolate_multicore_init: xr_main_thread_run needs isolate->vm.scheduler,

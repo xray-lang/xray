@@ -558,19 +558,3 @@ void xr_vm_set_pending_error(XrVMRuntime *isolate, XrValue error) {
     if (ctx)
         ctx->pending_error = error;
 }
-
-/* ==========  Isolate API ========== */
-
-/*
-** Execute bytecode on Isolate
-** Thin wrapper: delegates to xr_vm_interpret_proto which operates on isolate directly.
-*/
-XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *proto) {
-    if (isolate == NULL || proto == NULL) {
-        return XR_VM_RUNTIME_ERROR;
-    }
-
-    // Simplified: directly call xr_vm_interpret_proto, it operates on isolate->vm directly
-    // Previous copy operation was unnecessary since xr_vm_interpret_proto uses isolate directly
-    return xr_vm_interpret_proto(isolate, proto);
-}
