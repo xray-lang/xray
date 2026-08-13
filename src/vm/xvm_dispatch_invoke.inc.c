@@ -344,7 +344,7 @@ invoke_dispatch:;
                 VM_BUILTIN_INVOKE_CHECK_EXC();
                 XrDispatchAction ready_action =
                     vm_ready_operation_next_or_yield(isolate, (XrCoroutine *) VM_CURRENT_CORO, ci,
-                                                     pc, XR_VM_YIELDABLE_READY_REDUCTION_COST);
+                                                     pc, XR_READY_CALL_REDUCTION_COST);
                 if (ready_action == XR_DISP_YIELD)
                     return XR_VM_YIELD;
                 vmbreak;
@@ -576,7 +576,7 @@ vmcase(OP_INVOKE_DIRECT) {
             VM_BUILTIN_INVOKE_CHECK_EXC();
             XrDispatchAction ready_action =
                 vm_ready_operation_next_or_yield(isolate, (XrCoroutine *) VM_CURRENT_CORO, ci, pc,
-                                                 XR_VM_YIELDABLE_READY_REDUCTION_COST);
+                                                 XR_READY_CALL_REDUCTION_COST);
             if (ready_action == XR_DISP_YIELD)
                 return XR_VM_YIELD;
             vmbreak;

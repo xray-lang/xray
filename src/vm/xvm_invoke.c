@@ -254,7 +254,7 @@ vm_call_yieldable_primitive_method(XrVMRuntime *isolate, XrVMContext *vm_ctx, Xr
             vm_suspend_finish_preset(frame, pc);
             base[a] = result;
             return vm_ready_operation_next_or_yield(isolate, vm_get_coro(vm_ctx), frame, pc,
-                                                    XR_VM_YIELDABLE_READY_REDUCTION_COST);
+                                                    XR_READY_CALL_REDUCTION_COST);
         case XR_CFUNC_BLOCKED:
             return XR_DISP_BLOCKED;
         case XR_CFUNC_YIELD:

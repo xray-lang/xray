@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3242
+    "source": 3238
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -8581,24 +8581,23 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "65b9caa48ee1c5f4de0da636af9f0005d4ab72a320920aba26711f660340026d",
+      "evidence_sha256": "5d51f5a96dd2772074f4aac8a13188da08f6e12fb8477fef50b6e47fbfaabe48",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 4,
+      "hit_count": 3,
       "path": "src/vm/xvm_dispatch_helpers.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "XR_VM_BLOCKED",
         "XR_VM_CHAN_READY_REDUCTION_COST",
-        "XR_VM_YIELDABLE_READY_REDUCTION_COST",
         "xr_vm_unwind_with_trace"
       ]
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "9555813920cbaa0e924a88afd1e96dd148dfe2aa9b4ae45bd7ed9177d8815e47",
+      "evidence_sha256": "383e9fd20fe34d0e114ee9a29b50cc919e85389c78c32dbd20ab193d484b7643",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 39,
+      "hit_count": 37,
       "path": "src/vm/xvm_dispatch_invoke.inc.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -8608,7 +8607,6 @@
         "XR_VM_IC_METHOD_BIND",
         "XR_VM_RUNTIME_ERROR",
         "XR_VM_YIELD",
-        "XR_VM_YIELDABLE_READY_REDUCTION_COST",
         "xr_vm_ctx_ensure_ic_methods",
         "xr_vm_is_catch_reachable"
       ]
@@ -8765,16 +8763,15 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "9a023ef1bc3ead621e0907172c2cfd444004c0f85752ed552840a6459429303e",
+      "evidence_sha256": "8d299216f0322264081af63541b4b4fb2f26da790a7b9b475eeea29b5a0a0ca1",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 15,
+      "hit_count": 14,
       "path": "src/vm/xvm_invoke.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "XR_VM_IC_ASSERT_INDEX",
         "XR_VM_IC_METHOD_BIND",
-        "XR_VM_YIELDABLE_READY_REDUCTION_COST",
         "xr_vm_ctx_get_ic_methods",
         "xr_vm_send_result_value",
         "xr_vm_unwind_with_trace"
@@ -9071,6 +9068,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "bbb4654348e00c3a67714410693c4bdf077a44575258344cd7c2b5a30da6a78a",
-  "total": 3444
+  "source_tree_fingerprint": "a3afb3f74198fceddd6669786b5b4673eff85f7e488dcc8096b8a7df8600da1b",
+  "total": 3440
 }

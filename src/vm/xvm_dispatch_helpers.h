@@ -36,7 +36,7 @@
 #include "../coro/xtimer_wheel.h"
 #include "../os/os_thread.h"
 
-#define XR_VM_YIELDABLE_READY_REDUCTION_COST 64
+#define XR_READY_CALL_REDUCTION_COST 64
 
 /* ========== Dispatch Action Enum ========== */
 
