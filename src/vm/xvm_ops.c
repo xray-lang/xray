@@ -514,8 +514,8 @@ bool vm_values_equal_deep(XrVMRuntime *isolate, XrValue a, XrValue b) {
     if (XR_IS_AGG_REF(a) && XR_IS_AGG_REF(b)) {
         XrAggregateLayout *la = NULL;
         XrAggregateLayout *lb = NULL;
-        uint8_t *pa = xr_vm_struct_ref_payload(isolate, a, &la);
-        uint8_t *pb = xr_vm_struct_ref_payload(isolate, b, &lb);
+        uint8_t *pa = xr_struct_ref_payload(isolate, a, &la);
+        uint8_t *pb = xr_struct_ref_payload(isolate, b, &lb);
         if (!pa || !pb || la != lb)
             return false;
         return memcmp(pa, pb, la->total_size) == 0;

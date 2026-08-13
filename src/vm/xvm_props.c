@@ -170,7 +170,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
     // Struct ref: stored field write or setter method
     if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SLICE_REF(obj)) {
         XrAggregateLayout *slayout = NULL;
-        uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
+        uint8_t *payload = xr_struct_ref_payload(isolate, obj, &slayout);
         XrClass *scls =
             slayout ? xr_struct_layout_class_by_id(&isolate->vm, xr_aggregate_layout_id(obj)) : NULL;
 

@@ -204,8 +204,8 @@ XrAggregateLayout *xr_struct_ref_layout(XrVMRuntime *isolate, XrValue ref) {
     return cls->struct_layout;
 }
 
-uint8_t *xr_vm_struct_ref_payload(XrVMRuntime *isolate, XrValue ref,
-                                  XrAggregateLayout **layout_out) {
+uint8_t *xr_struct_ref_payload(XrVMRuntime *isolate, XrValue ref,
+                               XrAggregateLayout **layout_out) {
     XrAggregateLayout *layout = xr_struct_ref_layout(isolate, ref);
     if (layout_out)
         *layout_out = layout;
@@ -546,7 +546,7 @@ static XrValue xr_struct_materialize_instance_depth(XrVMRuntime *isolate, XrValu
     XrInstance *inst = xr_instance_new(isolate, cls);
     if (!inst)
         return xr_null();
-    uint8_t *src = xr_vm_struct_ref_payload(isolate, ref, NULL);
+    uint8_t *src = xr_struct_ref_payload(isolate, ref, NULL);
     uint8_t *dst = (uint8_t *) xr_instance_native_body(inst);
     if (!src || !dst)
         return xr_null();

@@ -161,7 +161,7 @@ vmcase(OP_AGG_GET) {
     int c = GETARG_C(i);
 
     XrAggregateLayout *layout = NULL;
-    uint8_t *payload = xr_vm_struct_ref_payload(isolate, R(b), &layout);
+    uint8_t *payload = xr_struct_ref_payload(isolate, R(b), &layout);
     if (XR_UNLIKELY(!payload || !layout || c < 0 || c >= layout->field_count)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
     }
@@ -182,7 +182,7 @@ vmcase(OP_AGG_SET) {
     int c = GETARG_C(i);
 
     XrAggregateLayout *layout = NULL;
-    uint8_t *payload = xr_vm_struct_ref_payload(isolate, R(a), &layout);
+    uint8_t *payload = xr_struct_ref_payload(isolate, R(a), &layout);
     if (XR_UNLIKELY(!payload || !layout || b < 0 || b >= layout->field_count)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field write");
     }
