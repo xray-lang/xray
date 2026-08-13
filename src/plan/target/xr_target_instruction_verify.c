@@ -86,6 +86,21 @@ static uint32_t function_parameter_slot_count(const XrTargetPlan *plan,
     return parameters;
 }
 
+/* Shared shape of every two-operand computation row: canonical arity, an
+ * unused immediate, and both operands already defined in this function. */
+static bool binary_row_shape_is_exact(const XrTargetPlan *plan,
+                                      const XrTargetFunctionRecord *function,
+                                      uint32_t function_index,
+                                      const XrTargetInstructionRecord *row,
+                                      const uint8_t *defined, bool terminal) {
+    return row->operand_count == 2 && row->immediate_bits == 0 &&
+           operand_is_defined(plan, function, function_index,
+                              row->operand_slots[0], defined) &&
+           operand_is_defined(plan, function, function_index,
+                              row->operand_slots[1], defined) &&
+           !terminal;
+}
+
 static bool slot_role_is(const XrTargetPlan *plan,
                          const XrTargetFunctionRecord *function,
                          uint32_t function_index, uint32_t slot_index,
@@ -162,12 +177,19 @@ static bool verify_function_group(const XrTargetPlan *plan,
             case XR_TARGET_INSTRUCTION_BAND_I64:
             case XR_TARGET_INSTRUCTION_BOR_I64:
             case XR_TARGET_INSTRUCTION_BXOR_I64:
-                valid = row->operand_count == 2 && row->immediate_bits == 0 &&
-                        operand_is_defined(plan, function, function_index,
-                                           row->operand_slots[0], defined) &&
-                        operand_is_defined(plan, function, function_index,
-                                           row->operand_slots[1], defined) &&
-                        !terminal;
+                valid = binary_row_shape_is_exact(plan, function, function_index,
+                                                  row, defined, terminal);
+                break;
+            case XR_TARGET_INSTRUCTION_SHL_MASKED_I64:
+            case XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64:
+                /* The count is the second operand and nothing else: rejecting a
+                 * non-zero immediate means there is no immediate shift form, so
+                 * every count is a defined i64 slot the executor masks modulo
+                 * 64 on the way in. A defined i64 slot therefore needs no
+                 * further static range proof, because the language leaves no
+                 * i64 count undefined. */
+                valid = binary_row_shape_is_exact(plan, function, function_index,
+                                                  row, defined, terminal);
                 break;
             case XR_TARGET_INSTRUCTION_RETURN_I64:
                 valid = row->operand_count == 1 && row->immediate_bits == 0 &&

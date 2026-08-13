@@ -5242,9 +5242,42 @@ static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
         case XI_BXOR: return XR_TARGET_INSTRUCTION_BXOR_I64;
         case XI_NEG: return XR_TARGET_INSTRUCTION_NEG_WRAP_I64;
         case XI_BNOT: return XR_TARGET_INSTRUCTION_BNOT_I64;
+        /* XI_SHR is the arithmetic shift only because every operand and result
+         * of an admitted row is exact signed i64; an unsigned shift never
+         * reaches here, so no row can silently zero fill. */
+        case XI_SHL: return XR_TARGET_INSTRUCTION_SHL_MASKED_I64;
+        case XI_SHR: return XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64;
         case XI_PARAM: return XR_TARGET_INSTRUCTION_PARAM_I64;
         default: return XR_TARGET_INSTRUCTION_INVALID;
     }
+}
+
+/* Spelled out per opcode rather than derived from enum ranges, so extending
+ * the instruction set can never silently reassign an existing arity. */
+static uint16_t scalar_instruction_operand_count(uint8_t opcode) {
+    switch ((XrTargetInstructionOpcode) opcode) {
+        case XR_TARGET_INSTRUCTION_CONST_I64:
+        case XR_TARGET_INSTRUCTION_PARAM_I64:
+            return 0;
+        case XR_TARGET_INSTRUCTION_COPY_I64:
+        case XR_TARGET_INSTRUCTION_NEG_WRAP_I64:
+        case XR_TARGET_INSTRUCTION_BNOT_I64:
+            return 1;
+        case XR_TARGET_INSTRUCTION_ADD_WRAP_I64:
+        case XR_TARGET_INSTRUCTION_SUB_WRAP_I64:
+        case XR_TARGET_INSTRUCTION_MUL_WRAP_I64:
+        case XR_TARGET_INSTRUCTION_BAND_I64:
+        case XR_TARGET_INSTRUCTION_BOR_I64:
+        case XR_TARGET_INSTRUCTION_BXOR_I64:
+        case XR_TARGET_INSTRUCTION_SHL_MASKED_I64:
+        case XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64:
+            return 2;
+        case XR_TARGET_INSTRUCTION_INVALID:
+        case XR_TARGET_INSTRUCTION_RETURN_I64:
+        case XR_TARGET_INSTRUCTION_COUNT:
+            break;
+    }
+    return UINT16_MAX;
 }
 
 /*
@@ -5344,18 +5377,7 @@ static bool materialize_scalar_instruction_function(
         uint8_t opcode = operation
                              ? scalar_instruction_opcode(operation->opcode)
                              : XR_TARGET_INSTRUCTION_INVALID;
-        uint16_t expected_operands =
-            opcode == XR_TARGET_INSTRUCTION_CONST_I64 ||
-                    opcode == XR_TARGET_INSTRUCTION_PARAM_I64
-                ? 0
-                : opcode == XR_TARGET_INSTRUCTION_COPY_I64 ||
-                          opcode == XR_TARGET_INSTRUCTION_NEG_WRAP_I64 ||
-                          opcode == XR_TARGET_INSTRUCTION_BNOT_I64
-                      ? 1
-                      : opcode >= XR_TARGET_INSTRUCTION_ADD_WRAP_I64 &&
-                                opcode <= XR_TARGET_INSTRUCTION_BXOR_I64
-                            ? 2
-                            : UINT16_MAX;
+        uint16_t expected_operands = scalar_instruction_operand_count(opcode);
         uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
         if (!operation || opcode == XR_TARGET_INSTRUCTION_INVALID ||
             operation->function != function_index ||

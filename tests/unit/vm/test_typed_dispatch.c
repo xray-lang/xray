@@ -114,6 +114,41 @@ static XrSemanticPlan *build_parameter_semantic(void) {
     return semantic;
 }
 
+/* fn(value, count) -> (value << count) - (value >> count): the two shifts read
+ * the same pair in the same order, so the difference can only come out right
+ * if each shift ran with its own kind, and swapping the arguments changes it. */
+static XrSemanticPlan *build_shift_semantic(void) {
+    XiFunc *function = xi_func_new("typed_dispatch_shifts", &stub_int);
+    REQUIRE(function != NULL);
+    function->nparams = 2;
+    function->min_params = 2;
+    function->params = (XiValue **) xr_calloc(2, sizeof(XiValue *));
+    REQUIRE(function->params != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    entry->sealed = true;
+    function->params[0] = xi_param(function, entry, 0, &stub_int);
+    function->params[1] = xi_param(function, entry, 1, &stub_int);
+    XiValue *left = xi_value_new(function, entry, XI_SHL, &stub_int, 2);
+    XiValue *right = xi_value_new(function, entry, XI_SHR, &stub_int, 2);
+    XiValue *difference = xi_value_new(function, entry, XI_SUB, &stub_int, 2);
+    REQUIRE(function->params[0] && function->params[1] && left && right &&
+            difference);
+    left->args[0] = function->params[0];
+    left->args[1] = function->params[1];
+    right->args[0] = function->params[0];
+    right->args[1] = function->params[1];
+    difference->args[0] = left;
+    difference->args[1] = right;
+    xi_block_set_return(entry, difference);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
+
 static bool freeze_with_rows(const TypedDispatchFixture *fixture,
                              const XrTargetInstructionRecord *rows,
                              uint32_t row_count, XrTargetPlan **out,
@@ -436,12 +471,112 @@ static void test_instruction_mutations_fail_closed(void) {
     dispose_fixture(&fixture);
 }
 
+/* Expected values are written out rather than recomputed from the shift helper
+ * the executor uses, so the assertions are an independent oracle for the
+ * language rule instead of a restatement of the implementation. */
+static void test_shift_rows_execute_with_masked_counts(void) {
+    XrSemanticPlan *semantic = build_shift_semantic();
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_instructions(plan, &instruction_count);
+    REQUIRE(rows != NULL && instruction_count ==
+                                xr_semantic_plan_operation_count(semantic) + 1u);
+    uint32_t shl = UINT32_MAX;
+    uint32_t shr = UINT32_MAX;
+    for (uint32_t i = 0; i < instruction_count; i++) {
+        if (rows[i].opcode == XR_TARGET_INSTRUCTION_SHL_MASKED_I64)
+            shl = i;
+        else if (rows[i].opcode == XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64)
+            shr = i;
+    }
+    REQUIRE(shl != UINT32_MAX && shr != UINT32_MAX);
+    REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) ==
+            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
+
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    const struct {
+        int64_t value;
+        int64_t count;
+        int64_t expected;
+    } cases[] = {
+        {1, 4, 16},
+        /* A negative left operand proves the right shift is arithmetic: a
+         * logical shift would make the subtrahend a huge positive number. */
+        {-256, 3, -2016},
+        /* 67 and 3 select the same shift, which is the modulo-64 count rule. */
+        {-256, 67, -2016},
+        /* A count of 64 is a zero shift, not a wipe and not undefined. */
+        {1, 64, 0},
+        /* Shifting into the sign bit wraps instead of trapping. */
+        {-1, 63, INT64_MIN + 1},
+        /* Swapping the pair changes the answer, so the value is executed
+         * rather than folded into the plan. */
+        {4, 1, 6},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        const int64_t arguments[2] = {cases[i].value, cases[i].count};
+        int64_t result = 0;
+        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments,
+                                              2, &result) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(result == cases[i].expected);
+    }
+
+    TypedDispatchFixture mutable_source = {.semantic = semantic,
+                                           .profile = profile,
+                                           .program_plan = plan,
+                                           .row_count = instruction_count};
+    XrTargetInstructionRecord mutated[16];
+    REQUIRE(instruction_count <= sizeof(mutated) / sizeof(mutated[0]));
+    size_t row_bytes = (size_t) instruction_count * sizeof(*rows);
+    /* Positive control: the unmutated rows still freeze, so every rejection
+     * below is attributable to its own mutation. */
+    memcpy(mutated, rows, row_bytes);
+    XrTargetPlan *refrozen = NULL;
+    REQUIRE(freeze_with_rows(&mutable_source, mutated, instruction_count,
+                             &refrozen, error, sizeof(error)));
+    xr_target_plan_free(refrozen);
+
+    /* There is no immediate shift form: a count folded into the row would
+     * bypass the slot the executor masks. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[shl].immediate_bits = 3;
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* A shift is binary; dropping the count operand may not leave a row the
+     * executor would read an unwritten second slot for. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[shr].operand_count = 1;
+    expect_rows_rejected(&mutable_source, mutated);
+
+    memcpy(mutated, rows, row_bytes);
+    mutated[shr].operand_slots[1] = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* The count must be defined before the shift reads it. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[shl].operand_slots[1] = mutated[instruction_count - 2u].result_slot;
+    expect_rows_rejected(&mutable_source, mutated);
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 int main(void) {
     test_closed_program_and_unavailable_boundary();
     test_production_builder_keeps_unsupported_function_unavailable();
     test_parameters_reach_the_executed_program();
     test_xtp_exact_roundtrip_executes_same_program();
     test_instruction_mutations_fail_closed();
+    test_shift_rows_execute_with_masked_counts();
     puts("typed dispatch tests passed");
     return 0;
 }

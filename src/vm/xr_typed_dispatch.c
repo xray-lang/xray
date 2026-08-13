@@ -16,6 +16,7 @@
 #include "xr_typed_dispatch.h"
 #include "xr_typed_frame.h"
 #include "../plan/target/xr_target_instruction_verify.h"
+#include "../shared/xr_bits_core.h"
 #include <string.h>
 
 static XrTypedDispatchStatus describe_i64(XrTypedFrame *frame, uint32_t slot,
@@ -112,6 +113,33 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
             else
                 left ^= right;
             return store_i64_bits(frame, row->result_slot, left);
+        case XR_TARGET_INSTRUCTION_SHL_MASKED_I64:
+        case XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64: {
+            status = load_i64_bits(frame, row->operand_slots[0], &left);
+            if (status != XR_TYPED_DISPATCH_OK)
+                return status;
+            status = load_i64_bits(frame, row->operand_slots[1], &right);
+            if (status != XR_TYPED_DISPATCH_OK)
+                return status;
+            int64_t value = 0;
+            int64_t count = 0;
+            memcpy(&value, &left, sizeof(value));
+            memcpy(&count, &right, sizeof(count));
+            /* The shared shift owner is the single definition of the count
+             * rule: it takes the count modulo 64, so this row is defined for
+             * every i64 count and agrees exactly with the bytecode VM, the AOT
+             * runtime, and constant folding. Going through it is also what
+             * keeps the executor out of C's undefined shift. */
+            int64_t shifted = XR_SHIFT_OWNER_APPLY(
+                XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
+                XR_SEM_CONSUMER_VM,
+                row->opcode == XR_TARGET_INSTRUCTION_SHL_MASKED_I64
+                    ? XR_SHIFT_LEFT
+                    : XR_SHIFT_RIGHT_SIGNED,
+                value, count);
+            memcpy(&left, &shifted, sizeof(left));
+            return store_i64_bits(frame, row->result_slot, left);
+        }
         case XR_TARGET_INSTRUCTION_RETURN_I64:
             return load_i64_bits(frame, row->operand_slots[0], return_bits);
         default:

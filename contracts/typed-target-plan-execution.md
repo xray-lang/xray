@@ -13,13 +13,25 @@ partial group or fallback is allowed.
 The only supported execution family is a closed straight-line signed `i64`
 program consisting of constants, parameter bindings, copies, wrapping
 addition, wrapping subtraction, wrapping multiplication, bitwise and, or,
-exclusive or, wrapping negation, bitwise complement, and one return. A
+exclusive or, wrapping negation, bitwise complement, masked left shift, masked
+arithmetic right shift, and one return. A
 non-empty function group must form an exact table partition in canonical
 function and dense row order. Its independent verifier requires every
 referenced slot to belong to that function and have identical trivial
 signed-`i64` register and memory representations. It also proves single
 assignment, use after definition, canonical arity and unused fields, and a
 unique final return. Unknown or unsupported instructions fail closed.
+
+A shift row takes its count modulo 64, which is the language rule and the
+same shared shift owner the bytecode VM, the AOT runtime, and constant folding
+already consume, so the executor cannot diverge from them and can never reach
+C's undefined shift. There is no immediate shift form: the verifier rejects a
+non-zero immediate on a shift row, so a count always arrives through a defined
+exact-`i64` slot of that function and is masked on the way in. No further
+static range proof exists or is needed, because the language leaves no `i64`
+count undefined. The right shift is arithmetic; only exact signed `i64` rows
+are admitted at all, so an unsigned shift is unavailable rather than silently
+zero filling.
 
 A parameter row is a definition, not a computation: its immediate is the
 incoming argument ordinal and its result slot is the function's parameter
@@ -162,7 +174,12 @@ Evidence:
   opcode, def-use, row identity, function identity, and return structure. It
   also proves that a two-parameter function emits dense argument ordinals,
   that both arguments reach the executed program in the right positions, and
-  that a short, long, or absent argument vector is refused.
+  that a short, long, or absent argument vector is refused. It proves the
+  shift rows against written-out expectations rather than against the shift
+  helper itself: sign-replicating right shift, counts of 64 and 67 selecting
+  the same shift as 0 and 3, a left shift into the sign bit, and a swapped
+  argument pair changing the answer. It rejects an immediate on a shift row,
+  a shift missing its count operand, and a count read before its definition.
 - `test_xtp_format` proves the instruction row width is part of the complete
   exact codec registry and exercises the public XSM/XTP generation route.
 - `test_typed_frame_runtime_archive` proves the dispatcher and verifier link
@@ -172,20 +189,20 @@ Evidence:
   execution, unsupported-plan rejection, bounded pins, drain, retirement, and
   unload without any legacy execution fallback.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 2cc17ba0ea588020cf35447e84cd8ad11b52db9642bd575214a5dd2b03b3b512
+anchor-sha256: src/plan/target/xr_target_plan.h 67daa7cd4dcbda848e7fa6a65acb708431b6d4544e82c2dae9bb8a10b01d60bf
 anchor-sha256: src/plan/target/xr_target_plan.c 0755f79a32970d79e208eb005e2e647d25c6a46e4cea16ca3565f67bd7e38b42
-anchor-sha256: src/plan/target/xr_target_builder.c 6597c1a0b8db43feac4fa602f627e2fc9baa8d45bb710837908db56206d45aaa
+anchor-sha256: src/plan/target/xr_target_builder.c 48c45f151440a711ec0b22b6f2603f7d001118e698666be77a74f4668be6c3ed
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 5eea43c77cf0e3802e30eacf12ca7e1a105b7b32de0497635cf7048de1b3438b
-anchor-sha256: src/plan/target/xr_target_instruction_verify.c b3b43bb664c129939fccdb8676c989dc11f8b6af6a842e4f5888cc19e832f705
+anchor-sha256: src/plan/target/xr_target_instruction_verify.c 2ff61a90195560e76b45d128c9a42a201cecd89b12818643127319397f6abb63
 anchor-sha256: src/plan/target/xr_target_verify.c 2cf7f6534a8db0831687873d3e0ac4f1cb5b890546e0e006cb218025d105f753
 anchor-sha256: src/plan/format/xr_xtp_schema.h 04840cf64073530619483953264b801358984d6559d7928b0b733b265ef2c668
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 8cb0983494ace434ec1d1f7389f19d4780ad82f6f88460144e04a9e28c1502bc
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/vm/xr_typed_dispatch.h 396124e124d2c1c5806a09ec27357f9598928f5a22870b18655d9782d2b3e379
-anchor-sha256: src/vm/xr_typed_dispatch.c c5fa11530b6864daf364fb5e0c8fe904a9f0ea179871787c637be4768d891eae
+anchor-sha256: src/vm/xr_typed_dispatch.c 223454983d24a56d1d8567e20e02c64b2fce4fc41588dfb426549232c6864184
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c 57a0ca8f5d9959e1b0f99d0d00a21bfecd5e1ec9bb6a6b14933884dd1d4488a0
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 7162cc6b5dd2fd1625d22e0c95657e8f42976fd7b27b1cd6a97fa5dc753905a8
 anchor-sha256: tests/unit/plan/test_xtp_format.c ab7a3766a721d1aa2e6fc2ca67031e77ad1f7b44f974d5e8b532067f58705801
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 1a8fcbe84ce64c733d0cb2614f745a1852fbd6991ef9ae8da5683b5f0eab6de5
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0

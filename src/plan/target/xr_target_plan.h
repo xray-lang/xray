@@ -58,6 +58,12 @@ typedef enum XrTargetInstructionOpcode {
     XR_TARGET_INSTRUCTION_BXOR_I64,
     XR_TARGET_INSTRUCTION_NEG_WRAP_I64,
     XR_TARGET_INSTRUCTION_BNOT_I64,
+    /* Shift counts are taken modulo 64, so every i64 count denotes a defined
+     * shift and C's undefined shift is unreachable. The right shift is
+     * arithmetic: this family admits only exact signed i64, so it replicates
+     * the sign bit rather than zero filling. */
+    XR_TARGET_INSTRUCTION_SHL_MASKED_I64,
+    XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64,
     XR_TARGET_INSTRUCTION_RETURN_I64,
     /* Binds one incoming argument ordinal, carried in the immediate, to the
      * function's parameter slot. It is a definition row, not a computation, so
