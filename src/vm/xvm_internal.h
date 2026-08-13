@@ -56,8 +56,8 @@ XR_FUNC uint8_t *xr_vm_struct_ref_payload(XrVMRuntime *isolate, XrValue ref,
                                           XrAggregateLayout **layout_out);
 XR_FUNC int xr_struct_layout_field_index(XrVMRuntime *isolate, const XrAggregateLayout *layout,
                                          int prop_symbol);
-XR_FUNC bool xr_vm_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
-                                           XrAggregateFieldLayout *field, XrValue *out);
+XR_FUNC bool xr_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
+                                        XrAggregateFieldLayout *field, XrValue *out);
 XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
                                             const XrAggregateFieldLayout *field, XrValue src);
 /* Cross the frame-local aggregate boundary by creating a stable nominal value

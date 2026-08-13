@@ -167,7 +167,7 @@ vmcase(OP_AGG_GET) {
     }
     XrAggregateFieldLayout *field = &layout->fields[c];
     uint8_t *fp = payload + field->offset;
-    if (!xr_vm_struct_read_field_value(isolate, fp, field, &R(a))) {
+    if (!xr_struct_read_field_value(isolate, fp, field, &R(a))) {
         R(a) = xr_null();
     }
     vmbreak;

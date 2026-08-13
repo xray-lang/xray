@@ -630,7 +630,7 @@ vmcase(OP_GETPROP) {
                 vmbreak;
             }
             uint8_t *fp = payload ? payload + sf->offset : NULL;
-            if (!xr_vm_struct_read_field_value(isolate, fp, sf, &R(a)))
+            if (!xr_struct_read_field_value(isolate, fp, sf, &R(a)))
                 R(a) = xr_null();
             vmbreak;
         }

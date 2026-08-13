@@ -254,8 +254,8 @@ static bool xr_struct_write_array_bytes(uint8_t *fp, const XrAggregateFieldLayou
     return false;
 }
 
-XR_FUNC bool xr_vm_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
-                                           XrAggregateFieldLayout *field, XrValue *out) {
+XR_FUNC bool xr_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
+                                        XrAggregateFieldLayout *field, XrValue *out) {
     if (!fp || !field || !out)
         return false;
     if (field->is_flexible)
@@ -520,7 +520,7 @@ XR_FUNC bool xr_vm_instance_struct_get_field(XrVMRuntime *isolate, XrInstance *i
                                              int field_index, XrValue *out) {
     XrAggregateFieldLayout *field = NULL;
     uint8_t *fp = xr_instance_struct_field_ptr(isolate, inst, field_index, &field);
-    return xr_vm_struct_read_field_value(isolate, fp, field, out);
+    return xr_struct_read_field_value(isolate, fp, field, out);
 }
 
 XR_FUNC bool xr_vm_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *inst,
@@ -558,7 +558,7 @@ static XrValue xr_struct_materialize_instance_depth(XrVMRuntime *isolate, XrValu
     for (uint16_t i = 0; i < layout->field_count; i++) {
         XrAggregateFieldLayout *field = &layout->fields[i];
         XrValue value = xr_null();
-        if (!xr_vm_struct_read_field_value(isolate, dst + field->offset, field, &value))
+        if (!xr_struct_read_field_value(isolate, dst + field->offset, field, &value))
             return xr_null();
         if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
             value = xr_struct_materialize_instance_depth(isolate, value, depth + 1);
