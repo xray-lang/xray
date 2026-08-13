@@ -13,6 +13,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* A hosting libc can publish the fixed-width integer surface even when the
+ * dialect is restricted to C90, and it may spell int64_t as long long. The
+ * Darwin SDK does exactly that through the <stdlib.h> this header already
+ * includes. Restating the types there is a conflicting definition that stops
+ * the translation unit, so spell the surface out only when the platform
+ * published none of it, and adopt whatever it did publish otherwise. */
+#if defined(INT64_MAX) || defined(_INT64_T) || defined(__int64_t_defined)
+#define XRT_C90_LIBC_FIXED_WIDTH 1
+#endif
+
+#ifndef XRT_C90_LIBC_FIXED_WIDTH
 typedef signed char int8_t;
 typedef unsigned char uint8_t;
 typedef signed short int16_t;
@@ -33,15 +44,26 @@ typedef signed long int64_t;
 typedef unsigned long uint64_t;
 typedef signed long intptr_t;
 typedef unsigned long uintptr_t;
-#define INT64_C(value) value##L
-#define UINT64_C(value) value##UL
 #else
 #error "restricted C90 output currently requires an LP64 target without long long"
 #endif
+#endif /* XRT_C90_LIBC_FIXED_WIDTH */
 
+#ifndef INT64_C
+#define INT64_C(value) value##L
+#endif
+#ifndef UINT64_C
+#define UINT64_C(value) value##UL
+#endif
+#ifndef INT32_C
 #define INT32_C(value) value
+#endif
+#ifndef UINT32_C
 #define UINT32_C(value) value##U
+#endif
+#ifndef INT64_MAX
 #define INT64_MAX LONG_MAX
+#endif
 
 typedef int bool;
 #define false 0
