@@ -36,6 +36,18 @@ typedef struct XrAtomicLoadPlan {
     int valid;
 } XrAtomicLoadPlan;
 
+typedef enum XrAtomicStoreOrder {
+    XR_ATOMIC_STORE_ORDER_RELAXED = 0,
+    XR_ATOMIC_STORE_ORDER_RELEASE,
+    XR_ATOMIC_STORE_ORDER_SEQ_CST
+} XrAtomicStoreOrder;
+
+typedef struct XrAtomicStorePlan {
+    XrAtomicStoreOrder order;
+    int64_t canonical_ordering;
+    int valid;
+} XrAtomicStorePlan;
+
 static inline XrAtomicLoadPlan xr_atomic_load_plan_core(int64_t ordering) {
     XrAtomicLoadPlan plan = {XR_ATOMIC_LOAD_ORDER_SEQ_CST, ordering, 1};
     switch (ordering) {
@@ -76,6 +88,46 @@ static inline memory_order xr_atomic_load_plan_c11_order_core(XrAtomicLoadPlan p
     }
 }
 
+static inline XrAtomicStorePlan xr_atomic_store_plan_core(int64_t ordering) {
+    XrAtomicStorePlan plan = {XR_ATOMIC_STORE_ORDER_SEQ_CST, ordering, 1};
+    switch (ordering) {
+        case 0:
+        case 1:
+            plan.order = XR_ATOMIC_STORE_ORDER_RELAXED;
+            return plan;
+        case 2:
+        case 3:
+            plan.order = XR_ATOMIC_STORE_ORDER_RELEASE;
+            return plan;
+        case 4:
+            return plan;
+        default:
+            plan.canonical_ordering = 4;
+            plan.valid = 0;
+            return plan;
+    }
+}
+
+static inline int xr_atomic_store_plan_is_exact_core(XrAtomicStorePlan plan) {
+    if (!plan.valid || plan.canonical_ordering < 0 || plan.canonical_ordering > 4)
+        return 0;
+    return plan.order == XR_ATOMIC_STORE_ORDER_RELAXED ||
+           plan.order == XR_ATOMIC_STORE_ORDER_RELEASE ||
+           plan.order == XR_ATOMIC_STORE_ORDER_SEQ_CST;
+}
+
+static inline memory_order xr_atomic_store_plan_c11_order_core(XrAtomicStorePlan plan) {
+    switch (plan.order) {
+        case XR_ATOMIC_STORE_ORDER_RELAXED:
+            return memory_order_relaxed;
+        case XR_ATOMIC_STORE_ORDER_RELEASE:
+            return memory_order_release;
+        case XR_ATOMIC_STORE_ORDER_SEQ_CST:
+        default:
+            return memory_order_seq_cst;
+    }
+}
+
 #define XR_ATOMIC_LOAD_OWNER_GUARD(owner_hi, owner_lo)                                          \
     ((void) sizeof(struct {                                                                      \
         unsigned int owner_id_must_be_shared_atomic_load                                        \
@@ -99,6 +151,30 @@ static inline memory_order xr_atomic_load_plan_c11_order_core(XrAtomicLoadPlan p
     (XR_ATOMIC_LOAD_OWNER_GUARD((owner_hi), (owner_lo)),                                        \
      XR_ATOMIC_LOAD_CONSUMER_GUARD((consumer_bit)),                                             \
      xr_atomic_load_plan_core((ordering)))
+
+#define XR_ATOMIC_STORE_OWNER_GUARD(owner_hi, owner_lo)                                         \
+    ((void) sizeof(struct {                                                                      \
+        unsigned int owner_id_must_be_shared_atomic_store                                       \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI &&              \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO)                \
+                   ? 1                                                                          \
+                   : -1);                                                                       \
+    }))
+
+#define XR_ATOMIC_STORE_CONSUMER_GUARD(consumer_bit)                                            \
+    ((void) sizeof(struct {                                                                      \
+        unsigned int consumer_must_be_declared_for_shared_atomic_store                          \
+            : (((uint32_t) (consumer_bit) != 0 &&                                               \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&         \
+                (XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_CONSUMERS & (uint32_t) (consumer_bit)) != 0)\
+                   ? 1                                                                          \
+                   : -1);                                                                       \
+    }))
+
+#define XR_ATOMIC_STORE_OWNER_PLAN(owner_hi, owner_lo, consumer_bit, ordering)                  \
+    (XR_ATOMIC_STORE_OWNER_GUARD((owner_hi), (owner_lo)),                                       \
+     XR_ATOMIC_STORE_CONSUMER_GUARD((consumer_bit)),                                            \
+     xr_atomic_store_plan_core((ordering)))
 
 static inline memory_order xr_sync_core_memorder(int64_t ordering) {
     switch (ordering) {

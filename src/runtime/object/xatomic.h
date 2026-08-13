@@ -130,18 +130,10 @@ static inline memory_order xr_to_c11_load_order(XrAtomicOrdering ord) {
 }
 
 static inline memory_order xr_to_c11_store_order(XrAtomicOrdering ord) {
-    switch (ord) {
-        case XR_ORDERING_RELAXED:
-            return memory_order_relaxed;
-        case XR_ORDERING_RELEASE:
-        case XR_ORDERING_ACQUIRE_RELEASE:
-            return memory_order_release;
-        case XR_ORDERING_SEQ_CST:
-            return memory_order_seq_cst;
-        case XR_ORDERING_ACQUIRE:
-            return memory_order_relaxed;
-    }
-    return memory_order_seq_cst;
+    XrAtomicStorePlan plan = XR_ATOMIC_STORE_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO,
+        XR_SEM_CONSUMER_RUNTIME, (int64_t) ord);
+    return xr_atomic_store_plan_c11_order_core(plan);
 }
 
 static inline memory_order xr_to_c11_rmw_order(XrAtomicOrdering ord) {

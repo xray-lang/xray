@@ -342,6 +342,15 @@ XR_FUNC void xi_emit_semantic_intrinsic_call(EmitCtx *ctx, XiValue *v, XiEmitReg
             return;
         }
     }
+    if (v->op == XI_ATOMIC_STORE) {
+        XrAtomicStorePlan plan = XR_ATOMIC_STORE_OWNER_PLAN(
+            XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO,
+            XR_SEM_CONSUMER_VM, 4);
+        if (!xr_atomic_store_plan_is_exact_core(plan)) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+    }
     uint16_t nargs = (uint16_t) (v->nargs - 1);
     for (uint16_t a = 0; a < v->nargs; a++) {
         (void) reg_of(ctx, v->args[a]);

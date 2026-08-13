@@ -1413,6 +1413,9 @@
         "xr_atomic_load_plan_c11_order_core",
         "xr_atomic_load_plan_core",
         "xr_atomic_load_plan_is_exact_core",
+        "xr_atomic_store_plan_c11_order_core",
+        "xr_atomic_store_plan_core",
+        "xr_atomic_store_plan_is_exact_core",
         "xr_sync_core_fence",
         "xr_sync_core_memorder"
       ],

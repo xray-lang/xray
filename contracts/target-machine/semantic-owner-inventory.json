@@ -1547,19 +1547,19 @@
       "capabilities": [
         "atomic-order"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_sync_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "memory-write"
       ],
       "error_panic_suspend_cancel_publication": [],
       "family": "memory-and-place",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.atomic-store",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_sync_core.h",
       "observable_edges": [
         "atomic-store"
       ],
@@ -6912,5 +6912,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "0e4f26c9bd7bc7807ab79fb338097ac1144dbfa99ac2a201736b9465c61e0a64"
+  "source_tree_fingerprint": "e83de8ece11d37aefa540e68fcc5cb95b52c944282db14450970ba3d46eeb44c"
 }

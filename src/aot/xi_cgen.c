@@ -4626,6 +4626,24 @@ static const char *cg_atomic_load_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
+static const char *cg_atomic_store_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI,
+                                        XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: atomic-store owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO);
+    if (!adapter || strcmp(adapter, "xr_atomic_store_plan_core") != 0) {
+        fprintf(stderr, "[xi_cgen] ERROR: atomic-store owner has no exact CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
 static const char *cg_range_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_RANGE_HI,
                                         XR_SEM_OWNER_ID_SHARED_RANGE_LO,
