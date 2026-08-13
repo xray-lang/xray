@@ -25,6 +25,7 @@ typedef struct XiOptimizedProgram XiOptimizedProgram;
 typedef struct XiSemanticPlannedProgram XiSemanticPlannedProgram;
 typedef struct XiReppedProgram XiReppedProgram;
 typedef struct XiBackendProgram XiBackendProgram;
+struct XiCoroResolver;
 
 XR_FUNC XiRawProgram *xi_stage_adopt_raw(XiFunc *graph, char *error, size_t error_size);
 XR_FUNC XiOptimizedProgram *xi_stage_adopt_optimized(XiFunc *graph, char *error, size_t error_size);

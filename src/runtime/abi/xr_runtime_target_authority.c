@@ -10,6 +10,7 @@
 
 #include "xr_runtime_target_authority.h"
 #include "../value/xvalue.h"
+#include "../../plan/semantic/xr_semantic_ids.h"
 
 #include <float.h>
 #include <stddef.h>

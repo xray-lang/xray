@@ -563,7 +563,7 @@ static XrValue sys_once_call(XrVMRuntime *isolate, XrValue self, XrValue *args, 
     if (!body)
         return sys_once_invalid_receiver(isolate);
 
-    XrClosure *closure = xr_vm_closure_from_arg(isolate, args[0], "sys.OsOnce.call");
+    XrClosure *closure = xr_closure_from_callback_arg(isolate, args[0], "sys.OsOnce.call");
     if (!closure)
         return xr_null();
 
@@ -1271,7 +1271,7 @@ static XrValue sys_on_signal(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (!generation_slot)
         return xr_bool(false);
 
-    XrClosure *handler = xr_vm_closure_from_arg(isolate, args[1], "sys.onSignal");
+    XrClosure *handler = xr_closure_from_callback_arg(isolate, args[1], "sys.onSignal");
     if (!handler || !sys_signal_install_native(sig))
         return xr_bool(false);
 

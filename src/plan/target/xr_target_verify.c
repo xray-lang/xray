@@ -28,6 +28,8 @@
 #include <stdio.h>
 #include <string.h>
 
+static int target_plan_layout_for_type(const XrTargetPlan *plan, uint32_t semantic_type);
+
 static bool report(char *error, size_t size, const char *code, const char *detail) {
     if (error && size)
         snprintf(error, size, "%s: %s", code, detail);

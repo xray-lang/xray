@@ -16,6 +16,7 @@
 #include "xr_target_plan_internal.h"
 #include "xr_target_verify.h"
 #include "../format/xr_xtp_internal.h"
+#include "../semantic/xr_semantic_verify.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
 
