@@ -1404,14 +1404,6 @@ typedef enum XaotBulkAction {
     XAOT_BULK_REJECT,
 } XaotBulkAction;
 
-typedef enum XaotEncodingAction {
-    XAOT_ENCODING_VALIDATE_ELIDED = 1,
-    XAOT_ENCODING_VALIDATE_ONCE,
-    XAOT_ENCODING_RUNTIME_VALIDATE,
-    XAOT_ENCODING_TRANSCODE,
-    XAOT_ENCODING_REJECT,
-} XaotEncodingAction;
-
 enum {
     XAOT_SEQUENCE_EV_GLOBAL_ROW = 1u << 0,
     XAOT_SEQUENCE_EV_RECEIVER_TYPE = 1u << 1,
@@ -1466,22 +1458,6 @@ enum {
     XAOT_BULK_UNPROVEN_LENGTH_UNKNOWN = 4,
 };
 
-enum {
-    XAOT_ENCODING_EV_GLOBAL_ROW = 1u << 0,
-    XAOT_ENCODING_EV_KNOWN_UTF8 = 1u << 1,
-    XAOT_ENCODING_EV_VALIDATED_ONCE = 1u << 2,
-    XAOT_ENCODING_EV_SCALAR_BOUNDARY = 1u << 3,
-    XAOT_ENCODING_EV_STATIC_LITERAL = 1u << 4,
-    XAOT_ENCODING_EV_INPUT_TYPE = 1u << 5,
-    XAOT_ENCODING_EV_OUTPUT_TYPE = 1u << 6,
-};
-
-enum {
-    XAOT_ENCODING_UNPROVEN_NONE = 0,
-    XAOT_ENCODING_UNPROVEN_INVALID_KIND = 1,
-    XAOT_ENCODING_UNPROVEN_RAW_BYTES_UNKNOWN = 2,
-};
-
 typedef struct XaotSequenceAccessPlan {
     XgSequenceAccessId access_id;
     XgFuncId owner_func_id;
@@ -1528,19 +1504,6 @@ typedef struct XaotBulkPlan {
     uint32_t evidence;
     uint8_t unproven_reason;
 } XaotBulkPlan;
-
-typedef struct XaotEncodingPlan {
-    XgEncodingOpId op_id;
-    XgFuncId owner_func_id;
-    uint32_t source_span_id;
-    uint32_t body_ordinal;
-    uint8_t op_kind;
-    uint32_t input_type_key;
-    uint32_t output_type_key;
-    uint8_t action;
-    uint32_t evidence;
-    uint8_t unproven_reason;
-} XaotEncodingPlan;
 
 enum {
     XAOT_METADATA_EV_GLOBAL_BODY = 1u << 0,
@@ -1837,9 +1800,6 @@ typedef struct XaotBundle {
     XaotBulkPlan *bulk_plans;
     uint32_t nbulk_plans;
     uint32_t bulk_plan_cap;
-    XaotEncodingPlan *encoding_plans;
-    uint32_t nencoding_plans;
-    uint32_t encoding_plan_cap;
     XaotMetadataReachabilityPlan *metadata_plans;
     uint32_t nmetadata_plans;
     uint32_t metadata_plan_cap;
@@ -1957,8 +1917,6 @@ xaot_bundle_find_sequence_access_plan(const XaotBundle *bundle, XgSequenceAccess
 XR_FUNC const XaotCapacityPlan *xaot_bundle_find_capacity_plan(const XaotBundle *bundle,
                                                                XgCapacityOpId op_id);
 XR_FUNC const XaotBulkPlan *xaot_bundle_find_bulk_plan(const XaotBundle *bundle, XgBulkOpId op_id);
-XR_FUNC const XaotEncodingPlan *xaot_bundle_find_encoding_plan(const XaotBundle *bundle,
-                                                               XgEncodingOpId op_id);
 XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const XaotBundle *bundle,
                                                                            uint32_t metadata);
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,

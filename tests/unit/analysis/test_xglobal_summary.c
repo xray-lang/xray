@@ -10826,19 +10826,16 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_EQ_UINT(bundle.nsequence_access_plans, 1);
     ASSERT_EQ_UINT(bundle.ncapacity_plans, 1);
     ASSERT_EQ_UINT(bundle.nbulk_plans, 3);
-    ASSERT_EQ_UINT(bundle.nencoding_plans, 1);
     const XaotSequenceAccessPlan *seq_plan = xaot_bundle_find_sequence_access_plan(&bundle, 1);
     const XaotCapacityPlan *cap_plan = xaot_bundle_find_capacity_plan(&bundle, 1);
     const XaotBulkPlan *bulk_plan = xaot_bundle_find_bulk_plan(&bundle, 1);
     const XaotBulkPlan *managed_bulk_plan = xaot_bundle_find_bulk_plan(&bundle, 2);
     const XaotBulkPlan *zero_fill_bulk_plan = xaot_bundle_find_bulk_plan(&bundle, 3);
-    const XaotEncodingPlan *enc_plan = xaot_bundle_find_encoding_plan(&bundle, 1);
     ASSERT_NOT_NULL(seq_plan);
     ASSERT_NOT_NULL(cap_plan);
     ASSERT_NOT_NULL(bulk_plan);
     ASSERT_NOT_NULL(managed_bulk_plan);
     ASSERT_NOT_NULL(zero_fill_bulk_plan);
-    ASSERT_NOT_NULL(enc_plan);
     ASSERT_EQ_UINT(seq_plan->action, XAOT_SEQUENCE_ACCESS_CHECKED_INDEX);
     ASSERT_EQ_UINT(seq_plan->evidence,
                    XAOT_SEQUENCE_EV_GLOBAL_ROW | XAOT_SEQUENCE_EV_RECEIVER_TYPE |
@@ -10860,11 +10857,6 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
                                                       XAOT_BULK_EV_LENGTH_EXPR |
                                                       XAOT_BULK_EV_ZERO_FILL);
     ASSERT_EQ_UINT(zero_fill_bulk_plan->unproven_reason, XAOT_BULK_UNPROVEN_NONE);
-    ASSERT_EQ_UINT(enc_plan->action, XAOT_ENCODING_VALIDATE_ELIDED);
-    ASSERT_EQ_UINT(enc_plan->evidence, XAOT_ENCODING_EV_GLOBAL_ROW | XAOT_ENCODING_EV_KNOWN_UTF8 |
-                                           XAOT_ENCODING_EV_VALIDATED_ONCE |
-                                           XAOT_ENCODING_EV_INPUT_TYPE |
-                                           XAOT_ENCODING_EV_OUTPUT_TYPE);
 
     char *plan_dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(plan_dump);
@@ -10878,8 +10870,6 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_NOT_NULL(strstr(plan_dump, "reason=write_barrier"));
     ASSERT_NOT_NULL(strstr(plan_dump, "action=inline_memset"));
     ASSERT_NOT_NULL(strstr(plan_dump, "zero_fill"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "encoding-plan 0 id=1"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=validate_elided"));
     xr_free(plan_dump);
 
     XiFunc init_func;
@@ -10907,6 +10897,14 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT bulk plan action does not re-derive"));
+    bundle.bulk_plans[1].action = XAOT_BULK_TYPED_LOOP;
+    XgGlobalEvidence *mutable_evidence =
+        (XgGlobalEvidence *) bundle.global_evidence_plan.evidence;
+    mutable_evidence->encoding_ops[0].flags |= 1u << 31;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(mutable_evidence);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT encoding evidence flags are invalid"));
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);

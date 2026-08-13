@@ -6173,76 +6173,6 @@ static bool verify_encoding_op_kind_valid(uint8_t kind) {
     }
 }
 
-static uint8_t verify_encoding_action_for(const XgEncodingOpSummary *enc) {
-    if (!enc || !verify_encoding_op_kind_valid(enc->op_kind))
-        return XAOT_ENCODING_REJECT;
-    switch ((XgEncodingOpKind) enc->op_kind) {
-        case XG_ENCODING_STRING_TO_BYTES:
-            return (enc->flags & XG_ENCODING_KNOWN_UTF8) != 0 ? XAOT_ENCODING_VALIDATE_ELIDED
-                                                              : XAOT_ENCODING_RUNTIME_VALIDATE;
-        case XG_ENCODING_BYTES_TO_STRING:
-        case XG_ENCODING_UTF8_COUNT:
-            if ((enc->flags & XG_ENCODING_KNOWN_UTF8) != 0)
-                return XAOT_ENCODING_VALIDATE_ELIDED;
-            if ((enc->flags & XG_ENCODING_VALIDATED_ONCE) != 0)
-                return XAOT_ENCODING_VALIDATE_ONCE;
-            return XAOT_ENCODING_RUNTIME_VALIDATE;
-        case XG_ENCODING_UTF8_VALIDATE:
-            return XAOT_ENCODING_RUNTIME_VALIDATE;
-        case XG_ENCODING_UTF16_ENCODE:
-        case XG_ENCODING_UTF16_DECODE:
-            return XAOT_ENCODING_TRANSCODE;
-        default:
-            return XAOT_ENCODING_REJECT;
-    }
-}
-
-static uint8_t verify_encoding_reason_for(const XgEncodingOpSummary *enc) {
-    if (!enc || !verify_encoding_op_kind_valid(enc->op_kind))
-        return XAOT_ENCODING_UNPROVEN_INVALID_KIND;
-    if (verify_encoding_action_for(enc) == XAOT_ENCODING_RUNTIME_VALIDATE &&
-        (enc->op_kind == XG_ENCODING_BYTES_TO_STRING || enc->op_kind == XG_ENCODING_UTF8_COUNT))
-        return XAOT_ENCODING_UNPROVEN_RAW_BYTES_UNKNOWN;
-    return XAOT_ENCODING_UNPROVEN_NONE;
-}
-
-static uint32_t verify_encoding_evidence_for(const XgEncodingOpSummary *enc) {
-    uint32_t bits = XAOT_ENCODING_EV_GLOBAL_ROW;
-    if (!enc)
-        return bits;
-    if ((enc->flags & XG_ENCODING_KNOWN_UTF8) != 0)
-        bits |= XAOT_ENCODING_EV_KNOWN_UTF8;
-    if ((enc->flags & XG_ENCODING_VALIDATED_ONCE) != 0)
-        bits |= XAOT_ENCODING_EV_VALIDATED_ONCE;
-    if ((enc->flags & XG_ENCODING_SCALAR_BOUNDARY) != 0)
-        bits |= XAOT_ENCODING_EV_SCALAR_BOUNDARY;
-    if ((enc->flags & XG_ENCODING_STATIC_LITERAL) != 0)
-        bits |= XAOT_ENCODING_EV_STATIC_LITERAL;
-    if (enc->input_type_key != 0)
-        bits |= XAOT_ENCODING_EV_INPUT_TYPE;
-    if (enc->output_type_key != 0)
-        bits |= XAOT_ENCODING_EV_OUTPUT_TYPE;
-    return bits;
-}
-
-static bool verify_encoding_plan_rederives(const XaotEncodingPlan *plan,
-                                           const XgEncodingOpSummary *enc, char *errbuf,
-                                           size_t errbuf_len) {
-    if (!plan || !enc)
-        return set_error(errbuf, errbuf_len, "AOT encoding verifier has incomplete input");
-    if (plan->op_id != enc->op_id || plan->owner_func_id != enc->owner_func_id ||
-        plan->source_span_id != enc->source_span_id || plan->body_ordinal != enc->body_ordinal ||
-        plan->op_kind != enc->op_kind || plan->input_type_key != enc->input_type_key ||
-        plan->output_type_key != enc->output_type_key)
-        return set_error(errbuf, errbuf_len, "AOT encoding plan identity does not re-derive");
-    if (plan->action != verify_encoding_action_for(enc) ||
-        plan->unproven_reason != verify_encoding_reason_for(enc))
-        return set_error(errbuf, errbuf_len, "AOT encoding plan action does not re-derive");
-    if (plan->evidence != verify_encoding_evidence_for(enc))
-        return set_error(errbuf, errbuf_len, "AOT encoding plan evidence does not re-derive");
-    return true;
-}
-
 static bool verify_class_field_range(const XgGlobalEvidence *ev, const XgClassSummary *cls,
                                      uint32_t *out_start) {
     uint32_t start;
@@ -6651,7 +6581,6 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_sequence_access_plans = 0;
     uint32_t expected_capacity_plans = 0;
     uint32_t expected_bulk_plans = 0;
-    uint32_t expected_encoding_plans = 0;
     uint32_t expected_metadata_plans = 0;
     uint32_t expected_capability_plans = 0;
     uint32_t expected_static_data_plans = 0;
@@ -7218,22 +7147,23 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
 
     for (uint32_t i = 0; i < ev->nencoding_ops; i++) {
         const XgEncodingOpSummary *enc = &ev->encoding_ops[i];
-        const XaotEncodingPlan *plan;
         if (enc->op_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT encoding evidence has no id");
+        if (!verify_encoding_op_kind_valid(enc->op_kind))
+            return set_error(errbuf, errbuf_len, "AOT encoding evidence kind is invalid");
+        if (enc->owner_func_id == XG_NO_ID ||
+            !verify_find_evidence_body_by_func(ev, enc->owner_func_id))
+            return set_error(errbuf, errbuf_len, "AOT encoding evidence owner is missing");
+        if (enc->source_span_id == 0 || enc->input_type_key == 0 || enc->output_type_key == 0)
+            return set_error(errbuf, errbuf_len, "AOT encoding evidence identity is incomplete");
+        if ((enc->flags & ~(XG_ENCODING_KNOWN_UTF8 | XG_ENCODING_VALIDATED_ONCE |
+                            XG_ENCODING_SCALAR_BOUNDARY | XG_ENCODING_STATIC_LITERAL)) != 0)
+            return set_error(errbuf, errbuf_len, "AOT encoding evidence flags are invalid");
         for (uint32_t j = i + 1; j < ev->nencoding_ops; j++) {
             if (ev->encoding_ops[j].op_id == enc->op_id)
                 return set_error(errbuf, errbuf_len, "AOT encoding evidence id is duplicated");
         }
-        expected_encoding_plans++;
-        plan = xaot_bundle_find_encoding_plan(bundle, enc->op_id);
-        if (!plan)
-            return set_error(errbuf, errbuf_len, "AOT encoding evidence has no plan");
-        if (!verify_encoding_plan_rederives(plan, enc, errbuf, errbuf_len))
-            return false;
     }
-    if (bundle->nencoding_plans != expected_encoding_plans)
-        return set_error(errbuf, errbuf_len, "AOT encoding plan count mismatches evidence");
 
     for (uint32_t mi = 0; mi < metadata_count; mi++) {
         uint32_t bit = metadata[mi];

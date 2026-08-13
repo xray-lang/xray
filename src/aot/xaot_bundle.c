@@ -340,11 +340,6 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->nbulk_plans = 0;
     bundle->bulk_plan_cap = 0;
 
-    xr_free(bundle->encoding_plans);
-    bundle->encoding_plans = NULL;
-    bundle->nencoding_plans = 0;
-    bundle->encoding_plan_cap = 0;
-
     xr_free(bundle->metadata_plans);
     bundle->metadata_plans = NULL;
     bundle->nmetadata_plans = 0;
@@ -3599,104 +3594,6 @@ static bool xaot_bundle_add_bulk_plans(XaotBundle *bundle, const XgGlobalEvidenc
     return true;
 }
 
-static bool encoding_op_kind_valid(uint8_t kind) {
-    switch ((XgEncodingOpKind) kind) {
-        case XG_ENCODING_STRING_TO_BYTES:
-        case XG_ENCODING_BYTES_TO_STRING:
-        case XG_ENCODING_UTF8_VALIDATE:
-        case XG_ENCODING_UTF8_COUNT:
-        case XG_ENCODING_UTF16_ENCODE:
-        case XG_ENCODING_UTF16_DECODE:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static uint8_t encoding_action_for(const XgEncodingOpSummary *enc) {
-    if (!enc || !encoding_op_kind_valid(enc->op_kind))
-        return XAOT_ENCODING_REJECT;
-    switch ((XgEncodingOpKind) enc->op_kind) {
-        case XG_ENCODING_STRING_TO_BYTES:
-            return (enc->flags & XG_ENCODING_KNOWN_UTF8) != 0 ? XAOT_ENCODING_VALIDATE_ELIDED
-                                                              : XAOT_ENCODING_RUNTIME_VALIDATE;
-        case XG_ENCODING_BYTES_TO_STRING:
-        case XG_ENCODING_UTF8_COUNT:
-            if ((enc->flags & XG_ENCODING_KNOWN_UTF8) != 0)
-                return XAOT_ENCODING_VALIDATE_ELIDED;
-            if ((enc->flags & XG_ENCODING_VALIDATED_ONCE) != 0)
-                return XAOT_ENCODING_VALIDATE_ONCE;
-            return XAOT_ENCODING_RUNTIME_VALIDATE;
-        case XG_ENCODING_UTF8_VALIDATE:
-            return XAOT_ENCODING_RUNTIME_VALIDATE;
-        case XG_ENCODING_UTF16_ENCODE:
-        case XG_ENCODING_UTF16_DECODE:
-            return XAOT_ENCODING_TRANSCODE;
-        default:
-            return XAOT_ENCODING_REJECT;
-    }
-}
-
-static uint8_t encoding_reason_for(const XgEncodingOpSummary *enc) {
-    if (!enc || !encoding_op_kind_valid(enc->op_kind))
-        return XAOT_ENCODING_UNPROVEN_INVALID_KIND;
-    if (encoding_action_for(enc) == XAOT_ENCODING_RUNTIME_VALIDATE &&
-        (enc->op_kind == XG_ENCODING_BYTES_TO_STRING || enc->op_kind == XG_ENCODING_UTF8_COUNT))
-        return XAOT_ENCODING_UNPROVEN_RAW_BYTES_UNKNOWN;
-    return XAOT_ENCODING_UNPROVEN_NONE;
-}
-
-static uint32_t encoding_evidence_for(const XgEncodingOpSummary *enc) {
-    uint32_t bits = XAOT_ENCODING_EV_GLOBAL_ROW;
-    if (!enc)
-        return bits;
-    if ((enc->flags & XG_ENCODING_KNOWN_UTF8) != 0)
-        bits |= XAOT_ENCODING_EV_KNOWN_UTF8;
-    if ((enc->flags & XG_ENCODING_VALIDATED_ONCE) != 0)
-        bits |= XAOT_ENCODING_EV_VALIDATED_ONCE;
-    if ((enc->flags & XG_ENCODING_SCALAR_BOUNDARY) != 0)
-        bits |= XAOT_ENCODING_EV_SCALAR_BOUNDARY;
-    if ((enc->flags & XG_ENCODING_STATIC_LITERAL) != 0)
-        bits |= XAOT_ENCODING_EV_STATIC_LITERAL;
-    if (enc->input_type_key != 0)
-        bits |= XAOT_ENCODING_EV_INPUT_TYPE;
-    if (enc->output_type_key != 0)
-        bits |= XAOT_ENCODING_EV_OUTPUT_TYPE;
-    return bits;
-}
-
-static bool xaot_bundle_add_encoding_plan(XaotBundle *bundle, const XgEncodingOpSummary *enc) {
-    XaotEncodingPlan *plan;
-    if (!bundle || !enc)
-        return false;
-    if (!reserve_plan_array((void **) &bundle->encoding_plans, &bundle->encoding_plan_cap,
-                            bundle->nencoding_plans + 1, sizeof(XaotEncodingPlan), 8))
-        return false;
-    plan = &bundle->encoding_plans[bundle->nencoding_plans++];
-    memset(plan, 0, sizeof(*plan));
-    plan->op_id = enc->op_id;
-    plan->owner_func_id = enc->owner_func_id;
-    plan->source_span_id = enc->source_span_id;
-    plan->body_ordinal = enc->body_ordinal;
-    plan->op_kind = enc->op_kind;
-    plan->input_type_key = enc->input_type_key;
-    plan->output_type_key = enc->output_type_key;
-    plan->action = encoding_action_for(enc);
-    plan->evidence = encoding_evidence_for(enc);
-    plan->unproven_reason = encoding_reason_for(enc);
-    return true;
-}
-
-static bool xaot_bundle_add_encoding_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
-    if (!bundle || !evidence)
-        return false;
-    for (uint32_t i = 0; i < evidence->nencoding_ops; i++) {
-        if (!xaot_bundle_add_encoding_plan(bundle, &evidence->encoding_ops[i]))
-            return false;
-    }
-    return true;
-}
-
 static uint32_t xaot_metadata_profile_action(uint32_t profile, uint32_t metadata) {
     if (profile == XG_BUILD_FREESTANDING) {
         switch (metadata) {
@@ -4133,10 +4030,6 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     }
     if (!xaot_bundle_add_bulk_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT bulk plan";
-        return false;
-    }
-    if (!xaot_bundle_add_encoding_plans(bundle, evidence)) {
-        bundle->error_msg = "failed to allocate AOT encoding plan";
         return false;
     }
     if (!xaot_bundle_add_metadata_plans(bundle, evidence)) {
@@ -4712,17 +4605,6 @@ XR_FUNC const XaotBulkPlan *xaot_bundle_find_bulk_plan(const XaotBundle *bundle,
     for (uint32_t i = 0; i < bundle->nbulk_plans; i++) {
         if (bundle->bulk_plans[i].op_id == op_id)
             return &bundle->bulk_plans[i];
-    }
-    return NULL;
-}
-
-XR_FUNC const XaotEncodingPlan *xaot_bundle_find_encoding_plan(const XaotBundle *bundle,
-                                                               XgEncodingOpId op_id) {
-    if (!bundle || op_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < bundle->nencoding_plans; i++) {
-        if (bundle->encoding_plans[i].op_id == op_id)
-            return &bundle->encoding_plans[i];
     }
     return NULL;
 }
@@ -6902,57 +6784,6 @@ static void print_bulk_evidence_bits(FILE *out, uint32_t bits) {
 #undef PRINT_BIT
 }
 
-static const char *encoding_action_name(uint8_t action) {
-    switch ((XaotEncodingAction) action) {
-        case XAOT_ENCODING_VALIDATE_ELIDED:
-            return "validate_elided";
-        case XAOT_ENCODING_VALIDATE_ONCE:
-            return "validate_once";
-        case XAOT_ENCODING_RUNTIME_VALIDATE:
-            return "runtime_validate";
-        case XAOT_ENCODING_TRANSCODE:
-            return "transcode";
-        case XAOT_ENCODING_REJECT:
-            return "reject";
-        default:
-            return "unknown";
-    }
-}
-
-static const char *encoding_unproven_reason_name(uint8_t reason) {
-    switch (reason) {
-        case XAOT_ENCODING_UNPROVEN_NONE:
-            return "none";
-        case XAOT_ENCODING_UNPROVEN_INVALID_KIND:
-            return "invalid_kind";
-        case XAOT_ENCODING_UNPROVEN_RAW_BYTES_UNKNOWN:
-            return "raw_bytes_unknown";
-        default:
-            return "unknown";
-    }
-}
-
-static void print_encoding_evidence_bits(FILE *out, uint32_t bits) {
-    bool first = true;
-#define PRINT_BIT(mask, name)                                                                      \
-    do {                                                                                           \
-        if ((bits & (mask)) != 0) {                                                                \
-            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
-            first = false;                                                                         \
-        }                                                                                          \
-    } while (0)
-    PRINT_BIT(XAOT_ENCODING_EV_GLOBAL_ROW, "row");
-    PRINT_BIT(XAOT_ENCODING_EV_KNOWN_UTF8, "known_utf8");
-    PRINT_BIT(XAOT_ENCODING_EV_VALIDATED_ONCE, "validated_once");
-    PRINT_BIT(XAOT_ENCODING_EV_SCALAR_BOUNDARY, "scalar_boundary");
-    PRINT_BIT(XAOT_ENCODING_EV_STATIC_LITERAL, "static_literal");
-    PRINT_BIT(XAOT_ENCODING_EV_INPUT_TYPE, "input_type");
-    PRINT_BIT(XAOT_ENCODING_EV_OUTPUT_TYPE, "output_type");
-    if (first)
-        fprintf(out, "none");
-#undef PRINT_BIT
-}
-
 static const char *static_data_action_name(uint32_t action) {
     switch ((XaotStaticDataAction) action) {
         case XAOT_STATIC_DATA_ACTION_PROVE:
@@ -8491,18 +8322,6 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 bp->src_type_key, bp->dst_type_key, bp->length_expr_id);
         print_bulk_evidence_bits(out, bp->evidence);
         fprintf(out, " reason=%s\n", bulk_unproven_reason_name(bp->unproven_reason));
-    }
-
-    for (uint32_t ei = 0; ei < bundle->nencoding_plans; ei++) {
-        const XaotEncodingPlan *ep = &bundle->encoding_plans[ei];
-        fprintf(out,
-                "encoding-plan %u id=%u func=%u span=%u ordinal=%u op=%s action=%s "
-                "input_type=%u output_type=%u evidence=",
-                ei, ep->op_id, ep->owner_func_id, ep->source_span_id, ep->body_ordinal,
-                xg_encoding_op_kind_name(ep->op_kind), encoding_action_name(ep->action),
-                ep->input_type_key, ep->output_type_key);
-        print_encoding_evidence_bits(out, ep->evidence);
-        fprintf(out, " reason=%s\n", encoding_unproven_reason_name(ep->unproven_reason));
     }
 
     for (uint32_t mi = 0; mi < bundle->nmetadata_plans; mi++) {
