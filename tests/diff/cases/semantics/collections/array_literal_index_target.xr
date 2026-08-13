@@ -1,0 +1,44 @@
+// anchor: array-literal-index-target
+// An integer array literal built and then read back by index. Passing under the
+// VM is not evidence the native backend accepts it: the VM allocates and indexes
+// a container at run time, while the native backend demands a frozen storage
+// fact for every value it emits, and before this case no family stated one for
+// an array allocation. Each line below pins a separate fact the two backends
+// have to agree on:
+//   - the allocation's storage is the owned tagged outer value, stated by its
+//     own frozen family; without that family the AOT build refuses the whole
+//     module rather than emitting the allocation;
+//   - the Xi representation choice for the container operand of an index access
+//     has to name that same tagged storage, or the backend materializes a
+//     native pointer view the frozen plan has no adapter row for and the module
+//     is refused again;
+//   - the index and the element keep their own native scalar storage, so the
+//     element read still crosses a representation boundary that the plan states
+//     as an ordinary integer box.
+// The authority stops at a signed 64-bit element on purpose: a reference
+// capable element would leave a reference-count obligation on every element
+// store that no frozen row here describes.
+fn main() {
+    var a = [1, 2, 3]
+    print(a[0])
+    print(a[2])
+
+    a[1] = 99
+    print(a[1])
+
+    var negatives = [-7, 11]
+    print(negatives[0] + negatives[1])
+
+    var picked = a[1]
+    print(picked)
+
+    var i = 0
+    var total = 0
+    while (i < 3) {
+        total = total + a[i]
+        i = i + 1
+    }
+    print(total)
+}
+
+main()

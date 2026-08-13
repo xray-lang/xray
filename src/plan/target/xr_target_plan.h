@@ -42,6 +42,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE = UINT64_C(1) << 15,
     XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE = UINT64_C(1) << 16,
     XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE = UINT64_C(1) << 17,
+    XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE = UINT64_C(1) << 18,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -142,7 +143,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |                     \
                  XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                  \
                  XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE |                  \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE))
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE |            \
+                 XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,

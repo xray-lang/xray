@@ -1144,6 +1144,57 @@ static bool semantic_array_push_scalar_is_exact(const XrSemanticPlan *plan,
     return true;
 }
 
+/* A freshly allocated `Array<T>` carries exactly one storage fact this plan can
+ * state: the owned tagged outer value, the same fact a heap closure allocation
+ * already states.  The element entry must be an exact signed 64-bit integer: a
+ * reference capable element would leave a reference-count obligation on every
+ * element store that no frozen row here describes, and a narrower or floating
+ * element would carry a second element representation this authority does not
+ * state.  The capacity operand is the sole operand and is consumed by value, so
+ * the allocation owns no borrow of anything else. */
+static bool semantic_array_allocation_is_exact(const XrSemanticPlan *plan,
+                                               const XrSemanticOperationRecord *operation) {
+    uint32_t operand_count = 0, child_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    if (!plan || !operation || !operands || !children ||
+        operation->opcode != XI_ARRAY_NEW || operation->operand_count != 1 ||
+        operation->operand_begin >= operand_count ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->effects != xi_generated_op_effects(XI_ARRAY_NEW) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_complete != 1 || operation->return_parameter != -1 ||
+        operation->result_alias_operand != -1 ||
+        !semantic_allocation_identity_is_canonical(operation))
+        return false;
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, operation->result_type);
+    if (!semantic_array_push_receiver_type_is_exact(type) ||
+        type->child_begin >= child_count)
+        return false;
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(plan, children[type->child_begin]);
+    const XrSemanticOperandRecord *capacity = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *capacity_type = xr_semantic_plan_type(plan, capacity->type);
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(plan, operation->function);
+    uint16_t element_kind = XR_MACHINE_REP_COUNT, capacity_kind = XR_MACHINE_REP_COUNT;
+    return element && capacity_type && function &&
+           (element->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 &&
+           classify_scalar_type(element, &element_kind) == XR_TARGET_SCALAR_VALUE &&
+           element_kind == XR_MACHINE_REP_I64 &&
+           classify_scalar_type(capacity_type, &capacity_kind) == XR_TARGET_SCALAR_VALUE &&
+           capacity_kind == XR_MACHINE_REP_I64 &&
+           capacity->role == XR_SEM_OPERAND_VALUE && capacity->parameter == -1 &&
+           capacity->flags == 0 &&
+           capacity->ownership_action == XR_SEM_OPERAND_CONSUME &&
+           operation->result_value >= function->value_begin &&
+           operation->result_value < function->value_begin + function->value_count;
+}
+
 static bool semantic_json_namespace_type_is_exact(const XrSemanticTypeRecord *type) {
     char expected_type_key[160];
     int written = snprintf(expected_type_key, sizeof(expected_type_key),
@@ -3043,6 +3094,111 @@ static bool builder_add_closure_storage(XrTargetPlanBuilder *builder,
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_CLOSURE_STORAGE;
+    return true;
+}
+
+/* Binds the allocation to its own owned dynamic slot. Ownership stays a storage
+ * fact here exactly as it is for a heap closure: Semantic ownership and the
+ * existing AOT array lifetime path still own the allocation, the roots, and the
+ * cleanup, so this family adds no root or cleanup row. */
+static bool note_array_allocation_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticPlan *plan = builder->semantic_plan;
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(plan, semantic_operation);
+    if (!operation || operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >= xr_semantic_plan_function_count(plan) ||
+        analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "array allocation storage authority is incomplete");
+    if (analysis->type_rep_kinds[operation->result_type] != XR_MACHINE_REP_COUNT &&
+        analysis->type_rep_kinds[operation->result_type] != XR_MACHINE_REP_DYN_VALUE)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "semantic array type has conflicting storage representations");
+    XrTargetMachineRepRecord rep;
+    if (!make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize exact array allocation storage");
+    XrStableId slot_identity;
+    if (!make_slot_identity(plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
+                            operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "array allocation slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_OWNED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[operation->result_type] &&
+         !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC,
+                               0, &rep, error, error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->used_types[operation->result_type] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    analysis->type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+static bool builder_add_array_allocation_storage(
+    XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    /* A value another family already bound is not this family's to claim. The
+     * layout intent stays unseeded: a void result carrying the array type marks
+     * no layout of its own, and the layout appender is idempotent and refuses a
+     * conflicting geometry on its own. */
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values)
+            analysis.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "semantic operation is missing");
+            break;
+        }
+        if (!semantic_array_allocation_is_exact(builder->semantic_plan, operation))
+            continue;
+        valid = note_array_allocation_storage_value(builder, &analysis, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE;
     return true;
 }
 
@@ -6710,6 +6866,7 @@ bool xr_target_plan_build_module_set(
     if (!builder_add_scalars(builder, error, error_size) ||
         !builder_add_direct_local_unit_enum_argument_storage(builder, error, error_size) ||
         !builder_add_closure_storage(builder, error, error_size) ||
+        !builder_add_array_allocation_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
         !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_append_rune_storage(builder, error, error_size) ||
