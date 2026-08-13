@@ -75,23 +75,6 @@ XR_FUNC void xr_array_set(XrVMRuntime *X, XrArray *arr, int index, XrValue val);
 // Get array length
 XR_FUNC size_t xr_array_length(XrArray *arr);
 
-/* ========== Map Operations ========== */
-
-// Set map key-value pair
-XR_FUNC void xr_map_set(XrVMRuntime *X, XrMap *map, XrValue key, XrValue val);
-
-// Get map value, returns null if key not found
-XR_FUNC XrValue xr_map_get(XrVMRuntime *X, XrMap *map, XrValue key);
-
-// Delete map entry, returns true if key existed
-XR_FUNC bool xr_map_delete(XrVMRuntime *X, XrMap *map, XrValue key);
-
-// Check if key exists in map
-XR_FUNC bool xr_map_contains(XrVMRuntime *X, XrMap *map, XrValue key);
-
-// Get number of entries in map
-XR_FUNC size_t xr_map_size(XrMap *map);
-
 /* ========== String Operations ========== */
 
 // Concatenate two strings

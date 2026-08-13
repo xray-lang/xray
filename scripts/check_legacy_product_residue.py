@@ -501,6 +501,17 @@ def self_test() -> int:
         )
         runtime_error_duplicate_drifted, _ = check(root, collect(root))
         retired_runtime_error_duplicate.unlink()
+        retired_map_operation_split = root / "include/xray_runtime.h"
+        retired_map_operation_split.write_text(
+            "void xr_map_set(XrVMRuntime *, void *, void *, void *);\n"
+            "void *xr_map_get(XrVMRuntime *, void *, void *);\n"
+            "bool xr_map_delete(XrVMRuntime *, void *, void *);\n"
+            "bool xr_map_contains(XrVMRuntime *, void *, void *);\n"
+            "size_t xr_map_size(void *);\n",
+            encoding="utf-8",
+        )
+        map_operation_split_drifted, _ = check(root, collect(root))
+        retired_map_operation_split.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -538,6 +549,7 @@ def self_test() -> int:
             or upvalue_lifecycle_drifted
             or instance_duplicate_drifted
             or runtime_error_duplicate_drifted
+            or map_operation_split_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")
