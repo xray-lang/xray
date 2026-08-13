@@ -1,0 +1,19 @@
+import { Kind, takeBranch } from "./_array_fill_ref_lib"
+
+fn run() {
+    var stack: Array<i64> = [1, 2, 3, 4, 5]
+    var kinds: Array<Kind> = [Kind.I64, Kind.I64, Kind.I64, Kind.I64, Kind.I64]
+    takeBranch(ref stack, ref kinds, 2, 1)
+    print(len(stack))
+    print(stack[0])
+    print(stack[1])
+    print(stack[2])
+    print(len(kinds))
+
+    var empty: Array<i64> = []
+    var marks: Array<Kind> = []
+    takeBranch(ref empty, ref marks, 0, 0)
+    print(len(empty))
+}
+
+run()

@@ -73,11 +73,11 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
                                                    : "xrt_array_set_storage(");
         if (storage_rep == XR_REP_PTR) {
             fprintf(out, "((xrt_array_t*)xrt_array_with_capacity_value(");
-            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ", %s).ptr)", elem_name);
         } else {
             fprintf(out, "xrt_array_with_capacity_value(");
-            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ", %s)", elem_name);
         }
         if (storage_mode != XR_OBJ_STORAGE_NORMAL)
@@ -94,9 +94,9 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
             fprintf(out, storage_rep == XR_REP_PTR ? "xrt_array_set_storage_ptr("
                                                    : "xrt_array_set_storage(");
         fprintf(out, "xrt_array_new_filled_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", %s)", elem_name);
         if (storage_rep == XR_REP_PTR)
             fprintf(out, ".ptr");
@@ -116,7 +116,7 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         if (storage_rep == XR_REP_PTR)
             fprintf(out, "((xrt_array_t*)");
         fprintf(out, "xrt_array_new_copy_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %s)", elem_name);
         if (storage_rep == XR_REP_PTR)
             fprintf(out, ".ptr)");
@@ -126,7 +126,7 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
     }
     if (strcmp(name, "array_clear") == 0) {
         fprintf(out, "xrt_array_clear_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
         return true;
     }
@@ -138,7 +138,7 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
             fprintf(out, "xrt_array_reserve_trusted_raw(");
             emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             fprintf(out, ")");
             emit_conversion_suffix(out, suffix);
             return true;
@@ -151,7 +151,7 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
             fprintf(out, "xrt_array_reserve_trusted_raw(");
             emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             fprintf(out, ")");
             if (boxed)
                 fprintf(out, ", XR_TAG_ARRAY)");
@@ -159,9 +159,9 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         }
         const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
         fprintf(out, "xrt_array_reserve_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, suffix);
         return true;
@@ -182,17 +182,17 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
             }
             const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
             fprintf(out, "({ XrValue _arr = ");
-            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, "; ((xrt_array_t*)_arr.ptr)->length = 0; _arr; })");
             emit_conversion_suffix(out, suffix);
             return true;
         }
         fprintf(out, "xrt_array_resize_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ")");
         return true;
     }

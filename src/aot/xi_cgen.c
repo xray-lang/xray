@@ -9256,7 +9256,12 @@ static bool cg_value_traces_to_explicit_vector(const XiValue *value) {
  * Native C SSA locals can therefore share the source local when:
  *   - both AOT plans have the exact same value representation and C type;
  *   - the source is not a mutable phi/cell;
- *   - no ref call takes the alias's address.
+ *   - no ref call takes the address of either the alias or the source.
+ *
+ * The source side matters just as much as the alias side: once a ref call holds
+ * `&source`, a later callee store rewrites that C local in place, so an alias
+ * sharing the same storage would observe the post-call value instead of the one
+ * captured at the copy.
  *
  * Debug source variables still synchronize at the alias statement.  Only the
  * redundant C declaration/assignment disappears.
@@ -9286,7 +9291,8 @@ static bool cg_rep_identical_alias_can_share_c_local(XiCgenCtx *ctx, const XiFun
     const char *source_ctype = local_ctype_str_ctx(ctx, f, source);
     if (!alias_ctype || !source_ctype || strcmp(alias_ctype, source_ctype) != 0)
         return false;
-    return !cg_c_value_alias_is_address_taken(f, alias);
+    return !cg_c_value_alias_is_address_taken(f, alias) &&
+           !cg_c_value_alias_is_address_taken(f, source);
 }
 
 /* Build the per-function C-value coalescing map. Phis that share the exact
