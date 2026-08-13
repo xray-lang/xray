@@ -134,7 +134,7 @@
       "id": "exact-xtp-artifact",
       "path": "src/plan/format/xr_xtp_schema.h",
       "required_regex": [
-        "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(18\\)",
+        "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(19\\)",
         "XR_XTP_MAX_ARTIFACT_SIZE",
         "xr_xtp_decode_candidate"
       ]
@@ -233,7 +233,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "4ea3c4e5043afda11e134922492320356482f1adffa7471fd27e8ac6ee259b77"
+    "sha256": "aed6d5188edbe929612e5c37d2f3a038781d2736e76c51edbbcac561ca7d6347"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
