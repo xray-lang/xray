@@ -1059,8 +1059,8 @@ TEST(vm_struct_layout_class_resolves_semantically_equal_descriptor_copy) {
 
     XrClass identity;
     memset(&identity, 0, sizeof(identity));
-    uint16_t declared_id = xr_vm_struct_layout_register(vm, &declared);
-    uint16_t copy_id = xr_vm_struct_layout_register(vm, &embedded_copy);
+    uint16_t declared_id = xr_struct_layout_register(vm, &declared);
+    uint16_t copy_id = xr_struct_layout_register(vm, &embedded_copy);
     ASSERT_TRUE(declared_id != 0);
     ASSERT_TRUE(copy_id != 0);
     ASSERT_TRUE(declared_id != copy_id);

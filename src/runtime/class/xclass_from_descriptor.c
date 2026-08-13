@@ -290,7 +290,7 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
     if (desc->struct_layout) {
         cls->struct_layout = desc->struct_layout;
         XrVMState *vm = xr_isolate_get_vm_state(isolate);
-        if (xr_vm_struct_layout_register(vm, cls->struct_layout) == 0) {
+        if (xr_struct_layout_register(vm, cls->struct_layout) == 0) {
             xr_log_warning("class", "from_descriptor: failed to register aggregate layout for '%s'",
                            desc->class_name);
             return NULL;

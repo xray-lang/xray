@@ -117,7 +117,7 @@ vmcase(OP_AGG_NEW) {
     XrClass *cls = xr_value_to_class(class_val);
     XrAggregateLayout *layout = cls->struct_layout;
     XR_DCHECK(layout != NULL, "OP_AGG_NEW requires struct_layout");
-    uint16_t layout_id = xr_vm_struct_layout_register(&isolate->vm, layout);
+    uint16_t layout_id = xr_struct_layout_register(&isolate->vm, layout);
     if (layout->nominal_name &&
         XR_UNLIKELY(!xr_struct_layout_bind_class(&isolate->vm, layout, cls))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "value-struct layout/class identity collision");
@@ -211,7 +211,7 @@ vmcase(OP_AGG_COPY) {
     }
     uint16_t layout_id = xr_aggregate_layout_id(src);
     if (layout_id == 0)
-        layout_id = xr_vm_struct_layout_register(&isolate->vm, layout);
+        layout_id = xr_struct_layout_register(&isolate->vm, layout);
 
     uint8_t *dst_ptr = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + c * 16;
 

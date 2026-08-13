@@ -30,7 +30,7 @@ static bool xr_struct_layout_register_children(XrVMState *vm, XrAggregateLayout 
     for (uint16_t i = 0; i < layout->field_count; i++) {
         XrAggregateFieldLayout *field = &layout->fields[i];
         if (field->native_type == XR_NATIVE_NESTED_AGGREGATE && field->sub_layout) {
-            field->sub_layout_id = xr_vm_struct_layout_register(vm, field->sub_layout);
+            field->sub_layout_id = xr_struct_layout_register(vm, field->sub_layout);
             if (field->sub_layout_id == 0)
                 return false;
         }
@@ -66,7 +66,7 @@ static bool xr_struct_layout_reserve(XrVMState *vm, uint16_t capacity) {
     return true;
 }
 
-uint16_t xr_vm_struct_layout_register(XrVMState *vm, XrAggregateLayout *layout) {
+uint16_t xr_struct_layout_register(XrVMState *vm, XrAggregateLayout *layout) {
     if (!vm || !layout)
         return 0;
 
@@ -119,7 +119,7 @@ XrAggregateLayout *xr_struct_layout_intern_owned(XrVMState *vm, XrAggregateLayou
             return existing;
         }
     }
-    uint16_t id = xr_vm_struct_layout_register(vm, layout);
+    uint16_t id = xr_struct_layout_register(vm, layout);
     if (id == 0)
         return NULL;
     vm->struct_layout_owned[id] = true;
@@ -135,7 +135,7 @@ XrAggregateLayout *xr_struct_layout_lookup_by_id(XrVMState *vm, uint16_t layout_
 bool xr_struct_layout_bind_class(XrVMState *vm, XrAggregateLayout *layout, XrClass *cls) {
     if (!vm || !layout || !cls || !layout->nominal_name)
         return false;
-    uint16_t layout_id = xr_vm_struct_layout_register(vm, layout);
+    uint16_t layout_id = xr_struct_layout_register(vm, layout);
     if (layout_id == 0 || !vm->struct_layout_classes)
         return false;
     XrClass *existing = vm->struct_layout_classes[layout_id];
@@ -200,7 +200,7 @@ XrAggregateLayout *xr_struct_ref_layout(XrVMRuntime *isolate, XrValue ref) {
     if (!cls || !cls->struct_layout)
         return NULL;
     if (isolate)
-        xr_vm_struct_layout_register(&isolate->vm, cls->struct_layout);
+        xr_struct_layout_register(&isolate->vm, cls->struct_layout);
     return cls->struct_layout;
 }
 
@@ -348,7 +348,7 @@ XR_FUNC bool xr_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
         case XR_NATIVE_NESTED_AGGREGATE:
             if (field->sub_layout && field->sub_layout_id == 0 && isolate)
                 field->sub_layout_id =
-                    xr_vm_struct_layout_register(&isolate->vm, field->sub_layout);
+                    xr_struct_layout_register(&isolate->vm, field->sub_layout);
             *out = xr_aggregate_ref(fp, field->sub_layout_id);
             return true;
         case XR_NATIVE_ARRAY:
@@ -470,7 +470,7 @@ static bool xr_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, X
 
     XrAggregateLayout *layout = inst->klass->struct_layout;
     if (isolate)
-        xr_vm_struct_layout_register(&isolate->vm, layout);
+        xr_struct_layout_register(&isolate->vm, layout);
 
     void *body = xr_instance_native_body(inst);
     if (body) {
@@ -504,7 +504,7 @@ static uint8_t *xr_instance_struct_field_ptr(XrVMRuntime *isolate, XrInstance *i
         return NULL;
 
     if (isolate)
-        xr_vm_struct_layout_register(&isolate->vm, layout);
+        xr_struct_layout_register(&isolate->vm, layout);
 
     uint8_t *payload = (uint8_t *) xr_instance_native_body(inst);
     if (!payload)

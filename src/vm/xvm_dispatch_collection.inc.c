@@ -2626,7 +2626,7 @@ vmcase(OP_BUFFER_MATERIALIZE) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                              "mem.assumeInitialized<T>() aggregate layout is unavailable");
         }
-        uint16_t layout_id = xr_vm_struct_layout_register(&isolate->vm, layout);
+        uint16_t layout_id = xr_struct_layout_register(&isolate->vm, layout);
         uint8_t *dst = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + (uint16_t) raw_slot * 16u;
         if (!xr_mem_buffer_materialize(R(b), dst, size, align, layout)) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
