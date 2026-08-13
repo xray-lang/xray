@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3367
+    "source": 3361
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -8476,9 +8476,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "66dfa94ab9a70cfa0c584ce6826caab58deb24ed26e1666852ca38d558360c15",
+      "evidence_sha256": "5b6b702061a69afeb6493d447e07bea610eec8a556b73462353a730c104baeb3",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 90,
+      "hit_count": 84,
       "path": "src/vm/xvm_coro_backend.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -8486,8 +8486,6 @@
         "XR_VM_BLOCKED",
         "XR_VM_CANCELLED",
         "XR_VM_COMPILE_ERROR",
-        "XR_VM_CORO_INIT_FRAME_SLOTS",
-        "XR_VM_CORO_INIT_STACK_SLOTS",
         "XR_VM_DEBUG_BREAK",
         "XR_VM_DIRECT_SWITCH",
         "XR_VM_GO_CHILD",
@@ -9183,6 +9181,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "4ad84a7d9945beb80bfd2699e95f735f9571aba289cd030576798ff1acd2e273",
-  "total": 3569
+  "source_tree_fingerprint": "144b8002d70fa6b7116ecd271571cd15e122fdd0d3995b0757b68bdb2e83f714",
+  "total": 3563
 }

@@ -38,8 +38,8 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 
-#define XR_VM_CORO_INIT_STACK_SLOTS 64
-#define XR_VM_CORO_INIT_FRAME_SLOTS 4
+#define XR_CORO_INIT_STACK_CAPACITY 64
+#define XR_CORO_INIT_FRAME_CAPACITY 4
 
 // ========== Forward Declarations ==========
 
@@ -679,16 +679,16 @@ static bool vm_backend_alloc_stack_frames(XrCoroutine *coro, XrVMContext *ctx, X
     if (ctx->stack)
         return true;
 
-    size_t stack_bytes = sizeof(XrValue) * XR_VM_CORO_INIT_STACK_SLOTS;
-    size_t frames_bytes = sizeof(XrBcCallFrame) * XR_VM_CORO_INIT_FRAME_SLOTS;
+    size_t stack_bytes = sizeof(XrValue) * XR_CORO_INIT_STACK_CAPACITY;
+    size_t frames_bytes = sizeof(XrBcCallFrame) * XR_CORO_INIT_FRAME_CAPACITY;
     char *block = (char *) xr_malloc(stack_bytes + frames_bytes);
     if (!block)
         return false;
 
     ctx->stack = (XrValue *) block;
-    ctx->stack_capacity = XR_VM_CORO_INIT_STACK_SLOTS;
+    ctx->stack_capacity = XR_CORO_INIT_STACK_CAPACITY;
     ctx->frames = (XrBcCallFrame *) (block + stack_bytes);
-    ctx->frame_capacity = XR_VM_CORO_INIT_FRAME_SLOTS;
+    ctx->frame_capacity = XR_CORO_INIT_FRAME_CAPACITY;
     memset(block, 0, stack_bytes + frames_bytes);
     return true;
 }
