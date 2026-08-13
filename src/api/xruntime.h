@@ -56,9 +56,6 @@ XRAY_API XrArray *xray_array_new_with_capacity(XrVMRuntime *X, size_t capacity);
 // Create class - declared in xclass.h
 // Use: XrClass* xr_class_new(XrVMRuntime *X, const char *name, XrClass *super);
 
-// Create instance of a class
-XR_FUNC XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *klass);
-
 // Closure creation is declared in runtime/closure/xclosure.h.
 
 /* ========== Array Operations ========== */
