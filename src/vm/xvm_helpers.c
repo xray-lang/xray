@@ -491,9 +491,9 @@ static bool xr_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, X
     return true;
 }
 
-XR_FUNC uint8_t *xr_vm_instance_struct_field_ptr(XrVMRuntime *isolate, XrInstance *inst,
-                                                 int field_index,
-                                                 XrAggregateFieldLayout **field_out) {
+static uint8_t *xr_instance_struct_field_ptr(XrVMRuntime *isolate, XrInstance *inst,
+                                             int field_index,
+                                             XrAggregateFieldLayout **field_out) {
     if (field_out)
         *field_out = NULL;
     if (!inst || !inst->klass || !inst->klass->struct_layout)
@@ -519,14 +519,14 @@ XR_FUNC uint8_t *xr_vm_instance_struct_field_ptr(XrVMRuntime *isolate, XrInstanc
 XR_FUNC bool xr_vm_instance_struct_get_field(XrVMRuntime *isolate, XrInstance *inst,
                                              int field_index, XrValue *out) {
     XrAggregateFieldLayout *field = NULL;
-    uint8_t *fp = xr_vm_instance_struct_field_ptr(isolate, inst, field_index, &field);
+    uint8_t *fp = xr_instance_struct_field_ptr(isolate, inst, field_index, &field);
     return xr_vm_struct_read_field_value(isolate, fp, field, out);
 }
 
 XR_FUNC bool xr_vm_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *inst,
                                              int field_index, XrValue value) {
     XrAggregateFieldLayout *field = NULL;
-    uint8_t *fp = xr_vm_instance_struct_field_ptr(isolate, inst, field_index, &field);
+    uint8_t *fp = xr_instance_struct_field_ptr(isolate, inst, field_index, &field);
     return xr_vm_struct_write_field_value(isolate, fp, field, value);
 }
 
