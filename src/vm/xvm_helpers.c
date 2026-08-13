@@ -756,15 +756,6 @@ XrCFunction *xr_vm_yieldable_cfunction_new(XrVMRuntime *isolate, XrYieldableCFun
     return cfunc;
 }
 
-/*
- * Free C function object
- */
-void xr_vm_cfunction_free(XrCFunction *cfunc) {
-    if (cfunc != NULL) {
-        xr_free(cfunc);
-    }
-}
-
 // Closure creation now lives in runtime/closure/xclosure.c.
 
 // ========== Value Operation Helpers ==========

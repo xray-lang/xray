@@ -87,7 +87,6 @@ XR_FUNC XrCFunction *xr_vm_cfunction_new(XrVMRuntime *isolate, XrCFunctionPtr fu
                                          const char *name);
 XR_FUNC XrCFunction *xr_vm_yieldable_cfunction_new(XrVMRuntime *isolate,
                                                    XrYieldableCFunctionPtr func, const char *name);
-XR_FUNC void xr_vm_cfunction_free(XrCFunction *cfunc);
 
 /* ========== Closure API ========== */
 /* Closure creation is declared in runtime/closure/xclosure.h. */

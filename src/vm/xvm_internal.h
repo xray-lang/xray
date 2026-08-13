@@ -207,9 +207,6 @@ XR_FUNC void xr_runtime_error(XrVMRuntime *isolate, const char *format, ...);
 // Debug info: find local variable name by register and PC
 XR_FUNC const char *xr_vm_get_local_name(XrProto *proto, int reg, int pc);
 
-// C function operations
-XR_FUNC void xr_vm_cfunction_free(XrCFunction *cfunc);
-
 // Closure operations: see runtime/closure/xclosure.h
 
 // Value operation helpers
