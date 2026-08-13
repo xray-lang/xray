@@ -3751,13 +3751,6 @@
       ]
     },
     {
-      "path": "src/api/xruntime.h",
-      "pointer_names": [
-        "last",
-        "slot"
-      ]
-    },
-    {
       "path": "src/api/xvm_exec.c",
       "pointer_names": [
         "args",

@@ -41,7 +41,6 @@ typedef struct XrClass XrClass;
 typedef struct XrInstance XrInstance;
 typedef struct XrClosure XrClosure;
 typedef struct XrProto XrProto;
-typedef struct Upvalue Upvalue;
 
 // XrValue is defined in xvalue.h (16-byte tagged union struct)
 // Include xvalue.h to get the complete definition
@@ -109,14 +108,6 @@ XR_FUNC size_t xr_string_length(XrString *str);
 
 // Get C string pointer (null-terminated)
 XR_FUNC const char *xr_string_cstr(XrString *str);
-
-/* ========== Closure and Upvalue ========== */
-
-// Create upvalue pointing to stack slot
-XR_FUNC Upvalue *xr_upvalue_new(XrVMRuntime *X, XrValue *slot);
-
-// Close upvalues: copy stack values to heap
-XR_FUNC void xr_upvalue_close(XrVMRuntime *X, XrValue *last);
 
 /* ========== Type Checking ========== */
 XR_FUNC bool xr_is_null(XrValue val);
