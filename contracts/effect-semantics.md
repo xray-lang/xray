@@ -86,7 +86,7 @@ selective imports, private-wrapper substitution, builtin calls, tail calls,
 ordinary methods, and non-yieldable definitions remain unavailable. This
 family freezes coroutine obligation only; TargetPlan dispatch and execution
 continue to fail closed until a separate target family consumes it.
-Schema 18 additionally requires an exact allocation identity for the zero-
+Schema 19 additionally requires an exact allocation identity for the zero-
 argument builtin `StringBuilder()` constructor. Publication requires the
 canonical builtin instance type (never a user class with the same spelling),
 the exact `CALL_BUILTIN` metadata, flags, arity, ownership, return provenance,
@@ -316,7 +316,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
 anchor-sha256: src/plan/format/xr_xsm_encode.c e56ac921cb9c4be957086f9b6b960c5d194a04b066986ddefafc9efc838e8876
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c ac78349470148b415c97727b234641d5c02fc1f2e9da4517d9c43db6fd310bf4
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c a2ec93ddf4977dca3c880be80cd93aa290380aa6bc8141e74503a576cbf2f539
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 6f5048cf95e341617e68eba47ffbf51ae396b72f9771328ff2ba8f8f500bf459
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c ea4675808fc8b4cc1bd3539b4b437756b9b0b92afd5a2afd1dd17ad9b1e9e7b0
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h 937fc7f69fb0614c966ad8cc4bd8775f9a236a2632882d80aa44c11d19e8579b

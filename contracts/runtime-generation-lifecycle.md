@@ -35,7 +35,7 @@ product activation path.
    call-argument, root-map, root-slot, cleanup, adapter, or coroutine execution
    authority. Any other verified plan remains VERIFIED and fails PREPARE with
    `XR_EXEC_5004`; it is not partially activated.
-   TargetPlan schema 18 preserves SOURCE-namespace storage in the exact required
+   TargetPlan schema 19 preserves SOURCE-namespace storage in the exact required
    family mask. Those borrowed dynamic rows remain storage/call authority and
    therefore continue to make this sole-scalar PREPARE route fail closed.
    Its sealed StringBuilder constructor call likewise remains non-executable
@@ -68,7 +68,7 @@ anchor-sha256: src/runtime/xr_module_generation_internal.h 427d2d23bfa8991dd8d20
 anchor-sha256: src/runtime/xr_module_generation.c d02e74f29b281d354ea03b339205e457e62266c06bd4b1afb6692d90a2c0e1d7
 anchor-sha256: src/runtime/xr_module_generation_verify.c 4028ff528eeba7bb8db3c902901a36f45c085f5e2ecf54245bcc6a96de58e12d
 anchor-sha256: src/vm/xr_typed_dispatch.h f72964091ac427130a3ff00c6d051cf85a3edd6ae174846984e0c1d506adeecd
-anchor-sha256: src/vm/xr_typed_dispatch.c 3fd358dc6b4aaa5ce0ff2f039a1b62e0420bede465473c8cfc2da51980e94945
+anchor-sha256: src/vm/xr_typed_dispatch.c 7cfe0b4ec52f28b83f601fccf46f313c7c9b8961740e47a876dbf25f7d38d595
 anchor-sha256: src/vm/xr_typed_frame.h 715f7ac98f468e004eed919fefb853a820375999cb1eba848122f9b418eb3401
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 54ee3affe064aabfb89fe1cc75ef5642837fd14b6e7e575a0badb4fc670efd74
