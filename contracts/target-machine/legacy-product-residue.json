@@ -1,10 +1,10 @@
-﻿{
+{
     "counts":  {
                    "api":  38,
                    "build":  56,
                    "cli":  106,
                    "install":  2,
-                   "source":  3174
+                   "source":  3166
                },
     "generated_from":  [
                            "CMakeLists.txt",
@@ -417,7 +417,6 @@
                                  "xr_vm_call_closure",
                                  "xr_vm_call_closure_ex",
                                  "xr_vm_call_method",
-                                 "xr_vm_cleanup",
                                  "xr_vm_coro_resume_with_unroll",
                                  "xr_vm_coro_run_to_completion",
                                  "xr_vm_ctx_ensure_ic_",
@@ -432,7 +431,6 @@
                                  "xr_vm_ic_",
                                  "xr_vm_ic_fields_snapshot",
                                  "xr_vm_ic_methods_snapshot",
-                                 "xr_vm_init",
                                  "xr_vm_interpret_proto",
                                  "xr_vm_is_catch_reachable",
                                  "xr_vm_is_truthy",
@@ -453,7 +451,7 @@
                                  "xray_vm_new_full",
                                  "xray_vm_set_script_info"
                              ],
-    "owner_count":  679,
+    "owner_count":  676,
     "owners":  [
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
@@ -3920,7 +3918,7 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "e19b4963aee32e2ba17119678e98d5d40bd9a255f3f01744ed79cf71a88b1424",
+                       "evidence_sha256":  "6a8b48e4fa62711f7330fab9bcd2f9c757c64f02ca04b98fba0edbe32aa4b37f",
                        "family":  "legacy-vm-handle-or-bytecode-type",
                        "hit_count":  10,
                        "path":  "src/api/xvm_exec.c",
@@ -6545,7 +6543,7 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "a718925c426791ae8b76d7edf244e9494c76d2126bd9a3253f2e5ed5cc226daa",
+                       "evidence_sha256":  "a58ce95c8340febc8de49c35ed6757e42bbb7d1872d876f6e6a260cd690ee793",
                        "family":  "legacy-vm-handle-or-bytecode-type",
                        "hit_count":  10,
                        "path":  "src/runtime/xisolate_internal.h",
@@ -7858,31 +7856,6 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "13c11f3be5f688a731b1f76bb757f93fc004d8edb8868dd448bf9781e4d5a47c",
-                       "family":  "legacy-vm-internal-api-or-alias",
-                       "hit_count":  3,
-                       "path":  "src/api/xisolate.c",
-                       "status":  "transitional-owner",
-                       "surface":  "source",
-                       "tokens":  [
-                                      "xr_vm_cleanup",
-                                      "xr_vm_init"
-                                  ]
-                   },
-                   {
-                       "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "4d9ec7316373131c8cb6cbcee7b117c3f12c2e15520da002d85f597314bdf2b0",
-                       "family":  "legacy-vm-internal-api-or-alias",
-                       "hit_count":  1,
-                       "path":  "src/api/xisolate_full.c",
-                       "status":  "transitional-owner",
-                       "surface":  "source",
-                       "tokens":  [
-                                      "xr_vm_init"
-                                  ]
-                   },
-                   {
-                       "disposition":  "remove-with-atomic-target-plan-product-cutover",
                        "evidence_sha256":  "6790b45856c552971fe360650ac614b63e5b9dc231f878e3500d73069fae66eb",
                        "family":  "legacy-vm-internal-api-or-alias",
                        "hit_count":  2,
@@ -7896,19 +7869,17 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "c786f1f628644ceac1c0b63f6c7ffead20a38fdcb5acf98ebbfeab47ca64f580",
+                       "evidence_sha256":  "e526ac721899d77a668b287edcb881bd23401517602bd23404739bf55fbe9eeb",
                        "family":  "legacy-vm-internal-api-or-alias",
-                       "hit_count":  12,
+                       "hit_count":  10,
                        "path":  "src/api/xvm_exec.c",
                        "status":  "transitional-owner",
                        "surface":  "source",
                        "tokens":  [
                                       "XR_VM_OK",
                                       "xr_vm_bind_proto_shared_slots",
-                                      "xr_vm_cleanup",
                                       "xr_vm_ctx_free_ic_tables",
                                       "xr_vm_current_ctx",
-                                      "xr_vm_init",
                                       "xr_vm_interpret_proto",
                                       "xr_vm_run_closure_blocking"
                                   ]
@@ -8206,19 +8177,6 @@
                        "tokens":  [
                                       "xr_vm_current_ctx",
                                       "xr_vm_struct_layout_register"
-                                  ]
-                   },
-                   {
-                       "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "8b39f3f753f15f3ff0c4b4990cbac89609519c68fdc21a0ce3322c5953d38e9d",
-                       "family":  "legacy-vm-internal-api-or-alias",
-                       "hit_count":  2,
-                       "path":  "src/runtime/xisolate_internal.h",
-                       "status":  "transitional-owner",
-                       "surface":  "source",
-                       "tokens":  [
-                                      "xr_vm_cleanup",
-                                      "xr_vm_init"
                                   ]
                    },
                    {
@@ -8927,6 +8885,6 @@
                    "unclassified_residue":  "error"
                },
     "schema":  2,
-    "source_tree_fingerprint":  "bb1edca5582c149ac1f3e2f6f4977f714cedbc4ec3b5e819e921a894c29f1104",
-    "total":  3376
+    "source_tree_fingerprint":  "0d9ffd83516e23305c68c911bc6095e39baf1d68394fafcc1e159bc15ae623a4",
+    "total":  3368
 }
