@@ -854,6 +854,79 @@ static bool semantic_string_literal_is_exact(
            (type->flags & required) == required;
 }
 
+/* The one integer spelling this container authority admits. Every narrower or
+ * unsigned spelling carries a second element representation the array storage
+ * fact does not state, so it stays outside the shape. */
+static bool semantic_exact_i64_type(const XrSemanticTypeRecord *type) {
+    return type && type->kind == XR_KIND_INT && type->scalar_rep == XR_NATIVE_I64 &&
+           type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->flags == 0 &&
+           type->builtin_type == XR_TID_NULL;
+}
+
+/* Rebuilt independently of both the TargetPlan collector and its verifier: a
+ * freshly allocated `Array<T>` is an owned heap object whose only storage fact
+ * is the outer tagged XrValue, the same fact a heap closure allocation carries.
+ * The element entry must be an exact signed 64-bit integer, so no element store
+ * leaves a reference-count obligation behind and the element carries exactly one
+ * native representation. Every other container shape stays fail closed. */
+static bool aot_array_allocation_is_exact(const XrSemanticPlan *semantic,
+                                          const XrSemanticOperationRecord *operation) {
+    char expected_type_key[96];
+    int written = snprintf(expected_type_key, sizeof(expected_type_key),
+                           "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:",
+                           (unsigned) XR_KIND_ARRAY, (unsigned) XR_TID_NULL,
+                           (unsigned) XR_SCALAR_REP_NONE);
+    uint32_t operand_count = 0, child_count = 0;
+    const XrSemanticOperandRecord *operands =
+        semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
+    const uint32_t *children =
+        semantic ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
+    XrStableId zero = {{0}};
+    if (!semantic || !operation || !operands || !children || written <= 0 ||
+        (size_t) written >= sizeof(expected_type_key) ||
+        operation->opcode != XI_ARRAY_NEW || operation->operand_count != 1 ||
+        operation->operand_begin >= operand_count ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->effects != xi_generated_op_effects(XI_ARRAY_NEW) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_complete != 1 || operation->return_parameter != -1 ||
+        operation->result_alias_operand != -1 ||
+        !semantic_allocation_identity_is_canonical(operation))
+        return false;
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    if (!type || type->kind != XR_KIND_ARRAY || type->builtin_type != XR_TID_NULL ||
+        type->child_count != 1 || type->aggregate_extent != 0 ||
+        type->aggregate_align != 0 || type->scalar_rep != XR_SCALAR_REP_NONE ||
+        type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(type->source_class_identity, zero) ||
+        !type->canonical_key ||
+        strncmp(type->canonical_key, expected_type_key, (size_t) written) != 0 ||
+        type->child_begin >= child_count)
+        return false;
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(semantic, children[type->child_begin]);
+    const XrSemanticOperandRecord *capacity = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *capacity_type =
+        xr_semantic_plan_type(semantic, capacity->type);
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(semantic, operation->function);
+    return element && capacity_type && function &&
+           (element->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 &&
+           semantic_exact_i64_type(element) && semantic_exact_i64_type(capacity_type) &&
+           capacity->role == XR_SEM_OPERAND_VALUE && capacity->parameter == -1 &&
+           capacity->flags == 0 &&
+           capacity->ownership_action == XR_SEM_OPERAND_CONSUME &&
+           operation->result_value >= function->value_begin &&
+           operation->result_value < function->value_begin + function->value_count;
+}
+
 /* Rebuilt independently of both the TargetPlan collector and its verifier: a
  * direct-local call may carry an owned String result, whose storage is the
  * outer tagged XrValue. Every other non-scalar result stays fail closed. */
@@ -3039,6 +3112,142 @@ static bool oracle_dynamic_string_literal_storage(
     return true;
 }
 
+/* The array allocation materializes an owned dynamic value in its own temporary
+ * slot. Its storage is tagged because the runtime allocator returns a boxed
+ * object; the frozen slot, layout, and ownership rows are rebuilt here rather
+ * than read back from the collector. */
+static bool oracle_dynamic_array_allocation_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !aot_array_allocation_is_exact(ctx->semantic, operation))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        binding->semantic_value != semantic_value ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+/* An element read or write is admitted only against a container this authority
+ * already proved to be an exact array allocation. The index is an exact signed
+ * 64-bit integer, the stored element matches the container's own element entry,
+ * and the container is borrowed for the duration of the access, so the access
+ * moves no ownership. */
+static bool oracle_array_element_access_is_exact(const VerifyAuthority *ctx,
+                                                 uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0, child_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    const uint32_t *children =
+        ctx ? xr_semantic_plan_type_children(ctx->semantic, &child_count) : NULL;
+    if (!ctx || !operation || !operands || !children ||
+        (operation->opcode != XI_INDEX_GET && operation->opcode != XI_INDEX_SET))
+        return false;
+    uint16_t expected_operands = operation->opcode == XI_INDEX_GET ? 2u : 3u;
+    if (operation->operand_count != expected_operands ||
+        operand_count < expected_operands ||
+        operation->operand_begin > operand_count - expected_operands ||
+        operation->auxiliary_kind != 0 || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->allocation_key != NULL ||
+        operation->effects != xi_generated_op_effects(operation->opcode) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(operation->opcode) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1)
+        return false;
+    const XrSemanticOperandRecord *container = &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *index = container + 1;
+    XrRep container_storage = XR_REP_TAGGED;
+    uint16_t container_kind = XR_MACHINE_REP_COUNT;
+    if (container->role != XR_SEM_OPERAND_VALUE || container->parameter != -1 ||
+        container->flags != 0 ||
+        container->ownership_action != XR_SEM_OPERAND_BORROW ||
+        index->role != XR_SEM_OPERAND_VALUE || index->parameter != -1 ||
+        index->flags != 0 ||
+        !semantic_exact_i64_type(xr_semantic_plan_type(ctx->semantic, index->type)) ||
+        container->value >= ctx->value_count ||
+        !oracle_dynamic_array_allocation_storage(ctx, container->value,
+                                                 &container_storage,
+                                                 &container_kind))
+        return false;
+    const XrSemanticTypeRecord *container_type =
+        xr_semantic_plan_type(ctx->semantic, container->type);
+    const XrSemanticOperationRecord *allocation = xr_semantic_plan_operation(
+        ctx->semantic, ctx->operation_by_value[container->value]);
+    if (!container_type || !allocation ||
+        container->type != allocation->result_type ||
+        container_type->child_begin >= child_count)
+        return false;
+    uint32_t element_type = children[container_type->child_begin];
+    if (operation->opcode == XI_INDEX_GET)
+        return operation->result_type == element_type;
+    const XrSemanticOperandRecord *element = index + 1;
+    return element->role == XR_SEM_OPERAND_VALUE && element->parameter == -1 &&
+           element->flags == 0 && element->type == element_type &&
+           element->ownership_action == XR_SEM_OPERAND_CONSUME;
+}
+
 static bool oracle_dynamic_direct_local_string_result_storage(
     const VerifyAuthority *ctx, uint32_t semantic_value,
     XrRep *out_storage, uint16_t *out_machine_kind) {
@@ -3777,6 +3986,16 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             *out_storage = XR_REP_TAGGED;
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
             return true;
+        case XI_ARRAY_NEW:
+            return oracle_dynamic_array_allocation_storage(
+                ctx, semantic_value, out_storage, out_machine_kind);
+        case XI_INDEX_GET:
+            /* Only an element read off an exact array allocation is admitted;
+             * its storage is the element's own scalar machine storage. */
+            if (!oracle_array_element_access_is_exact(ctx, operation_index))
+                return false;
+            return oracle_machine_storage(ctx, semantic_value, out_storage,
+                                          out_machine_kind);
         case XI_CHAN_RECV:
         case XI_ENUM_DESCRIPTOR_BOX:
             *out_storage = XR_REP_TAGGED;
@@ -3910,6 +4129,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             if (!oracle_dynamic_string_literal_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_direct_local_string_result_storage(
+                    ctx, source_value, &literal_storage, &ignored_kind) &&
+                !oracle_dynamic_array_allocation_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
@@ -4075,6 +4296,30 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             return oracle_definition_storage(ctx, operation->result_value,
                                              out_storage, &result_kind);
         }
+        case XI_ARRAY_NEW: {
+            /* The capacity is the sole operand and stays in its own native
+             * scalar storage; the allocation it feeds must be exact. */
+            XrRep ignored_storage = XR_REP_TAGGED;
+            if (operand_index != 0 ||
+                !oracle_dynamic_array_allocation_storage(
+                    ctx, operation->result_value, &ignored_storage,
+                    &ignored_kind))
+                return false;
+            return oracle_machine_storage(ctx, source_value, out_storage,
+                                          &ignored_kind);
+        }
+        case XI_INDEX_SET:
+        case XI_INDEX_GET:
+            /* The container is the owned tagged allocation, and the index and
+             * the element keep their own native scalar storage. Every other
+             * container shape stays without authority. */
+            if (!oracle_array_element_access_is_exact(ctx, operation_index))
+                return false;
+            if (operand_index == 0)
+                return oracle_dynamic_array_allocation_storage(
+                    ctx, source_value, out_storage, &ignored_kind);
+            return oracle_machine_storage(ctx, source_value, out_storage,
+                                          &ignored_kind);
         case XI_BOX:
         case XI_ENUM_DESCRIPTOR_BOX:
             return oracle_machine_storage(ctx, source_value, out_storage,

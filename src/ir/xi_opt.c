@@ -2121,6 +2121,19 @@ static bool sr_value_has_static_unboxed_array_elem_type(const XiValue *value) {
     return sr_value_typed_array_elem_rep(value) != XR_REP_TAGGED;
 }
 
+/* The container operand of an index access. A freshly allocated heap array has
+ * a single storage fact, the owned tagged outer value, so a native pointer view
+ * of it would need a representation adapter no frozen storage row can state.
+ * Its container operand stays tagged; the index and the element keep their
+ * native representations. Every other container keeps the native boundary it
+ * already carries at its own definition, so no adapter appears there either. */
+static XrRep sr_container_operand_rep(const XiValue *container) {
+    const XiValue *v = sr_unwrap_identity_value(container);
+    if (v && v->op == XI_ARRAY_NEW)
+        return XR_REP_TAGGED;
+    return sr_type_native_boundary_rep(container ? container->type : NULL);
+}
+
 static bool sr_is_typed_array_length_field(const XiValue *v) {
     if (!v || v->op != XI_LEN || v->nargs != 1 || !v->args[0])
         return false;
@@ -2848,7 +2861,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             if (user->nargs >= 2 && user->args[0] &&
                 sr_value_has_static_index_storage(user->args[0])) {
                 if (arg_idx == 0) {
-                    *out = sr_type_native_boundary_rep(user->args[0]->type);
+                    *out = sr_container_operand_rep(user->args[0]);
                     return true;
                 }
                 if (arg_idx == 1) {
@@ -2863,7 +2876,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
                 (sr_value_has_static_index_storage(user->args[0]) ||
                  sr_value_has_static_unboxed_array_elem_type(user->args[0]))) {
                 if (arg_idx == 0) {
-                    *out = sr_type_native_boundary_rep(user->args[0]->type);
+                    *out = sr_container_operand_rep(user->args[0]);
                     return true;
                 }
                 if (arg_idx == 1) {
