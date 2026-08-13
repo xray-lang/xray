@@ -38,7 +38,7 @@ LF bytes on every host.  Their policy and contract digests therefore identify
 the exact executed input instead of the caller's `core.autocrlf` preference.
 
 anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 467be0e61d824137d32276ffe1bf7e96213b1f200228f3e4b491803a4a2f8ccc
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json d106f8c7a84b5d36f98836f9d7a114b4f62fc9a3dca47a67bacc45c9cda6089f
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json f13bbef3b5e5f739e760d242847e53b431252ed719ce669d2c058c8dc806df17
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json d9b7b9d3b40c27644adbf59c443aff6ed09d0726b03afee37cdb8bf7a9230add
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 0a08c23bb9ef3d6984f94536fa9e11175cfde204c415bd55b21c162c45725d94
@@ -48,7 +48,7 @@ anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc6
 anchor-sha256: contracts/target-machine/baseline-manifest.json 9264ec82b4e58d421c7b285e3bc2ff598ef09587622110de6cf72d79cbf7ddef
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 54ee3affe064aabfb89fe1cc75ef5642837fd14b6e7e575a0badb4fc670efd74
 anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
-anchor-sha256: scripts/target_machine_phase0.py 6834e7d3b066437795b367bd0fa4ae7a01f12f8da8576c1ec7395ff226c528ab
+anchor-sha256: scripts/target_machine_phase0.py 91de1b843c880cee07f59bf19864d5a0fea45f473936f9c2387eeac98b645e96
 anchor-sha256: scripts/check_legacy_product_residue.py d160f8b9ab1d16da893bcc30a7ed90d583dda9e478dd11f67c9ce299629f8d2f
 anchor-sha256: scripts/check_runtime_header_dependencies.py 917a82b6ecff974005edfad476b18ed5653be50ccc75952451de5ec2ae9afdd2
 anchor-sha256: tests/target-machine/phase0/run_baseline.py d8ac40519305d9394b1857311eac49599a4532ab44226bc2f4323184047ce195
