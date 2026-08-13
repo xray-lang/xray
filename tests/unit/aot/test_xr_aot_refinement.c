@@ -25,9 +25,12 @@
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/aot/xaot_bundle.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/aot/refine/xr_aot_scalar_value.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
+#include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
@@ -1049,7 +1052,7 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(xr_aot_backend_run(&view, fixture.target_plan,
                                xr_aot_test_backend_interface(), &test_backend,
                                &stats, &diag));
-    REQUIRE(strstr(emission, "families=00000000000007ff") != NULL);
+    REQUIRE(strstr(emission, "families=000000000001ffff") != NULL);
     REQUIRE(strstr(emission, "transform=direct-call decision=refused") != NULL);
     REQUIRE(strstr(emission,
                    "issue=XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE") != NULL);
