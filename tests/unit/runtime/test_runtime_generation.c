@@ -545,11 +545,11 @@ int main(void) {
     uint32_t function_count = 0;
     REQUIRE(xr_target_plan_function_execution_family_mask(unsupported, 0) == 0);
     REQUIRE(xr_target_plan_function_execution_family_mask(zero, 0) ==
-            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
     REQUIRE(xr_target_plan_functions(multi, &function_count) != NULL &&
             function_count == 2);
     REQUIRE(xr_target_plan_function_execution_family_mask(multi, 0) ==
-            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
     test_scalar_generation_lifecycle(plan);
     test_unsupported_generation_remains_verified(unsupported);
     test_unsupported_generation_remains_verified(multi);

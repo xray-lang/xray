@@ -29,7 +29,19 @@ typedef enum XrTypedDispatchStatus {
      * language names for each operator. */
     XR_TYPED_DISPATCH_DIVIDE_BY_ZERO,
     XR_TYPED_DISPATCH_MODULO_BY_ZERO,
+    /* A verified program may loop forever: no static proof forbids it, and one
+     * that did would refuse ordinary loops. The executor bounds the work
+     * instead and stops with this status, so a plan can never hang the caller
+     * that ran it. */
+    XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED,
 } XrTypedDispatchStatus;
+
+/*
+ * Executed rows per call. It is a fixed budget rather than a wall clock so the
+ * limit is a property of the program and the same call refused once is refused
+ * every time.
+ */
+#define XR_TYPED_DISPATCH_MAX_STEPS UINT32_C(16777216)
 
 /*
  * Arguments are positional signed i64 values. The count must equal the

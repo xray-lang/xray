@@ -190,6 +190,88 @@ static XrSemanticPlan *build_opposed_pair_semantic(const char *name, XiOp op) {
     return semantic;
 }
 
+/* fn(selector, first, second) -> selector != 0 ? first - second : second - first.
+ * The arms compute opposite differences, so taking the wrong edge negates the
+ * answer and no constant could track either. Both arms read values the entry
+ * block defined, which is the cross-block use the verifier has to prove. */
+static XrSemanticPlan *build_branch_semantic(void) {
+    XiFunc *function = xi_func_new("typed_dispatch_branch", &stub_int);
+    REQUIRE(function != NULL);
+    function->nparams = 3;
+    function->min_params = 3;
+    function->params = (XiValue **) xr_calloc(3, sizeof(XiValue *));
+    REQUIRE(function->params != NULL);
+    XiBlock *entry = xi_block_new(function);
+    XiBlock *taken = xi_block_new(function);
+    XiBlock *untaken = xi_block_new(function);
+    REQUIRE(entry && taken && untaken);
+    entry->sealed = true;
+    for (uint16_t ordinal = 0; ordinal < 3; ordinal++) {
+        function->params[ordinal] = xi_param(function, entry, ordinal, &stub_int);
+        REQUIRE(function->params[ordinal] != NULL);
+    }
+    XiValue *forward = xi_value_new(function, taken, XI_SUB, &stub_int, 2);
+    XiValue *reverse = xi_value_new(function, untaken, XI_SUB, &stub_int, 2);
+    REQUIRE(forward && reverse);
+    forward->args[0] = function->params[1];
+    forward->args[1] = function->params[2];
+    reverse->args[0] = function->params[2];
+    reverse->args[1] = function->params[1];
+    xi_block_set_if(entry, function->params[0], taken, untaken);
+    xi_block_set_return(taken, forward);
+    xi_block_set_return(untaken, reverse);
+    taken->sealed = true;
+    untaken->sealed = true;
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
+
+/* fn(first, second) -> ((first - second) * first) - second, split across three
+ * blocks chained by unconditional jumps. Each block reads a value the previous
+ * one defined, so the answer is only reachable if control really moved and the
+ * values survived the move. */
+static XrSemanticPlan *build_jump_semantic(void) {
+    XiFunc *function = xi_func_new("typed_dispatch_jump", &stub_int);
+    REQUIRE(function != NULL);
+    function->nparams = 2;
+    function->min_params = 2;
+    function->params = (XiValue **) xr_calloc(2, sizeof(XiValue *));
+    REQUIRE(function->params != NULL);
+    XiBlock *entry = xi_block_new(function);
+    XiBlock *middle = xi_block_new(function);
+    XiBlock *exit = xi_block_new(function);
+    REQUIRE(entry && middle && exit);
+    entry->sealed = true;
+    function->params[0] = xi_param(function, entry, 0, &stub_int);
+    function->params[1] = xi_param(function, entry, 1, &stub_int);
+    XiValue *difference = xi_value_new(function, entry, XI_SUB, &stub_int, 2);
+    XiValue *product = xi_value_new(function, middle, XI_MUL, &stub_int, 2);
+    XiValue *answer = xi_value_new(function, exit, XI_SUB, &stub_int, 2);
+    REQUIRE(function->params[0] && function->params[1] && difference && product &&
+            answer);
+    difference->args[0] = function->params[0];
+    difference->args[1] = function->params[1];
+    product->args[0] = difference;
+    product->args[1] = function->params[0];
+    answer->args[0] = product;
+    answer->args[1] = function->params[1];
+    xi_block_set_jump(entry, middle);
+    xi_block_set_jump(middle, exit);
+    xi_block_set_return(exit, answer);
+    middle->sealed = true;
+    exit->sealed = true;
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
+
 static bool freeze_with_rows(const TypedDispatchFixture *fixture,
                              const XrTargetInstructionRecord *rows,
                              uint32_t row_count, XrTargetPlan **out,
@@ -277,7 +359,7 @@ static void test_closed_program_and_unavailable_boundary(void) {
     XrFingerprint fingerprint =
         xr_target_plan_fingerprint(fixture.program_plan);
     REQUIRE(xr_target_plan_function_execution_family_mask(fixture.program_plan, 0) ==
-            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
     REQUIRE(xr_typed_dispatch_execute_i64(fixture.program_plan, &fingerprint,
                                           0, NULL, 0,
                                           &result) == XR_TYPED_DISPATCH_OK);
@@ -352,7 +434,7 @@ static void test_parameters_reach_the_executed_program(void) {
     }
     REQUIRE(parameter_rows == 2 && ordinals == 3);
     REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) ==
-            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
 
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
     const int64_t arguments[2] = {7, 5};
@@ -539,7 +621,7 @@ static void test_shift_rows_execute_with_masked_counts(void) {
     }
     REQUIRE(shl != UINT32_MAX && shr != UINT32_MAX);
     REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) ==
-            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
 
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
     const struct {
@@ -679,7 +761,7 @@ static void test_division_rows_take_the_zero_divisor_edge(void) {
         }
         REQUIRE(first != UINT32_MAX && second != UINT32_MAX);
         REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) ==
-                XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
+                XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
 
         XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
         for (size_t i = 0; i < 4; i++) {
@@ -748,6 +830,278 @@ static void test_division_rows_take_the_zero_divisor_edge(void) {
     }
 }
 
+/* The row group is the only description of the control flow, so the tests find
+ * the block boundaries the same way the verifier does: a block begins at the
+ * first row and after every terminator. */
+static uint32_t row_of_opcode(const XrTargetInstructionRecord *rows,
+                              uint32_t row_count, uint8_t opcode,
+                              uint32_t occurrence) {
+    for (uint32_t i = 0; i < row_count; i++) {
+        if (rows[i].opcode != opcode)
+            continue;
+        if (occurrence == 0)
+            return i;
+        occurrence--;
+    }
+    return UINT32_MAX;
+}
+
+static void test_conditional_branch_selects_its_edge(void) {
+    XrSemanticPlan *semantic = build_branch_semantic();
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_instructions(plan, &instruction_count);
+    /* Three blocks, so three terminator rows on top of every operation. */
+    REQUIRE(rows != NULL &&
+            instruction_count ==
+                xr_semantic_plan_operation_count(semantic) + 3u);
+    uint32_t branch = row_of_opcode(rows, instruction_count,
+                                    XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64, 0);
+    uint32_t forward = row_of_opcode(rows, instruction_count,
+                                     XR_TARGET_INSTRUCTION_SUB_WRAP_I64, 0);
+    uint32_t reverse = row_of_opcode(rows, instruction_count,
+                                     XR_TARGET_INSTRUCTION_SUB_WRAP_I64, 1);
+    uint32_t last_return = row_of_opcode(rows, instruction_count,
+                                         XR_TARGET_INSTRUCTION_RETURN_I64, 1);
+    REQUIRE(branch != UINT32_MAX && forward != UINT32_MAX &&
+            reverse != UINT32_MAX && last_return == instruction_count - 1u);
+    /* Both edges are carried by the branch row itself, and each names the first
+     * row of an arm rather than the row that happens to follow. */
+    uint32_t nonzero_target =
+        XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(rows[branch].immediate_bits);
+    uint32_t zero_target =
+        XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(rows[branch].immediate_bits);
+    REQUIRE(nonzero_target == forward && zero_target == reverse);
+    REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) ==
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
+
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    const struct {
+        int64_t selector;
+        int64_t first;
+        int64_t second;
+        int64_t expected;
+    } cases[] = {
+        {1, 9, 4, 5},
+        /* Zero is the only value that takes the other edge, and it negates the
+         * answer, so a branch that ignored the condition could not produce
+         * both results from the same pair. */
+        {0, 9, 4, -5},
+        /* A negative condition is still nonzero: the test is against zero, not
+         * against a sign or a low bit. */
+        {-1, 9, 4, 5},
+        /* A value whose low 32 bits are zero must not read as zero. */
+        {INT64_C(1) << 32, 9, 4, 5},
+        {0, 4, 9, 5},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        const int64_t arguments[3] = {cases[i].selector, cases[i].first,
+                                      cases[i].second};
+        int64_t result = 0;
+        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments,
+                                              3, &result) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(result == cases[i].expected);
+    }
+
+    TypedDispatchFixture mutable_source = {.semantic = semantic,
+                                           .profile = profile,
+                                           .program_plan = plan,
+                                           .row_count = instruction_count};
+    XrTargetInstructionRecord mutated[16];
+    REQUIRE(instruction_count <= sizeof(mutated) / sizeof(mutated[0]));
+    size_t row_bytes = (size_t) instruction_count * sizeof(*rows);
+    /* Positive control: the unmutated rows still freeze, so every rejection
+     * below is attributable to its own mutation. */
+    memcpy(mutated, rows, row_bytes);
+    XrTargetPlan *refrozen = NULL;
+    REQUIRE(freeze_with_rows(&mutable_source, mutated, instruction_count,
+                             &refrozen, error, sizeof(error)));
+    xr_target_plan_free(refrozen);
+
+    /* An edge past the end of the group. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[branch].immediate_bits =
+        XR_TARGET_INSTRUCTION_TARGET_PACK(instruction_count, zero_target);
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* An edge back into the middle of the entry block. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[branch].immediate_bits =
+        XR_TARGET_INSTRUCTION_TARGET_PACK(1, zero_target);
+    expect_rows_rejected(&mutable_source, mutated);
+
+    memcpy(mutated, rows, row_bytes);
+    mutated[branch].immediate_bits =
+        XR_TARGET_INSTRUCTION_TARGET_PACK(nonzero_target, branch);
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* Both edges to one arm leaves the other arm unreachable, and rows no path
+     * can reach are refused rather than carried. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[branch].immediate_bits =
+        XR_TARGET_INSTRUCTION_TARGET_PACK(nonzero_target, nonzero_target);
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* A jump may not smuggle a second edge in the half of the immediate it
+     * does not use. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[branch].opcode = XR_TARGET_INSTRUCTION_JUMP;
+    mutated[branch].operand_count = 0;
+    mutated[branch].operand_slots[0] = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* The condition is read like any other operand, so it must be defined. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[branch].operand_slots[0] = rows[forward].result_slot;
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* The cross-block proof itself: one arm reading the value the other arm
+     * defines is undefined on the path that reaches it, even though the row
+     * that defines it exists in the group. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[forward].operand_slots[1] = rows[reverse].result_slot;
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* A group whose last row is not a terminator could run off the end of the
+     * table. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[last_return].opcode = XR_TARGET_INSTRUCTION_COPY_I64;
+    mutated[last_return].result_slot = rows[reverse].result_slot;
+    expect_rows_rejected(&mutable_source, mutated);
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_unconditional_jumps_chain_blocks(void) {
+    XrSemanticPlan *semantic = build_jump_semantic();
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_instructions(plan, &instruction_count);
+    REQUIRE(rows != NULL &&
+            instruction_count ==
+                xr_semantic_plan_operation_count(semantic) + 3u);
+    uint32_t first_jump =
+        row_of_opcode(rows, instruction_count, XR_TARGET_INSTRUCTION_JUMP, 0);
+    uint32_t second_jump =
+        row_of_opcode(rows, instruction_count, XR_TARGET_INSTRUCTION_JUMP, 1);
+    REQUIRE(first_jump != UINT32_MAX && second_jump != UINT32_MAX);
+    REQUIRE(XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(rows[first_jump].immediate_bits) == 0);
+    REQUIRE(XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(rows[first_jump].immediate_bits) ==
+            first_jump + 1u);
+    REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) ==
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
+
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    const int64_t arguments[2] = {7, 5};
+    int64_t result = 0;
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments, 2,
+                                          &result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(result == ((arguments[0] - arguments[1]) * arguments[0]) - arguments[1]);
+    const int64_t swapped[2] = {arguments[1], arguments[0]};
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, swapped, 2,
+                                          &result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(result == ((swapped[0] - swapped[1]) * swapped[0]) - swapped[1]);
+
+    TypedDispatchFixture mutable_source = {.semantic = semantic,
+                                           .profile = profile,
+                                           .program_plan = plan,
+                                           .row_count = instruction_count};
+    XrTargetInstructionRecord mutated[16];
+    REQUIRE(instruction_count <= sizeof(mutated) / sizeof(mutated[0]));
+    size_t row_bytes = (size_t) instruction_count * sizeof(*rows);
+    memcpy(mutated, rows, row_bytes);
+    XrTargetPlan *refrozen = NULL;
+    REQUIRE(freeze_with_rows(&mutable_source, mutated, instruction_count,
+                             &refrozen, error, sizeof(error)));
+    xr_target_plan_free(refrozen);
+
+    /* A jump carries one edge, so the unused half of its immediate must stay
+     * zero. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[first_jump].immediate_bits = XR_TARGET_INSTRUCTION_TARGET_PACK(
+        XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(rows[first_jump].immediate_bits),
+        second_jump + 1u);
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* Jumping over the middle block leaves the value it defines undefined on
+     * the only path that reaches the block reading it. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[first_jump].immediate_bits =
+        XR_TARGET_INSTRUCTION_TARGET_PACK(second_jump + 1u, 0);
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* An edge to the last row of the final block: every block stays reachable
+     * and every value is still assigned before the row that reads it, so the
+     * only thing wrong is that the target is not where a block begins. That
+     * makes this the case the block-entry rule alone has to refuse. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[second_jump].immediate_bits =
+        XR_TARGET_INSTRUCTION_TARGET_PACK(instruction_count - 1u, 0);
+    expect_rows_rejected(&mutable_source, mutated);
+
+    /* A jump takes no operand: an operand slot would be a value the executor
+     * never reads and the def-use proof would never see. */
+    memcpy(mutated, rows, row_bytes);
+    mutated[second_jump].operand_count = 1;
+    mutated[second_jump].operand_slots[0] = rows[first_jump - 1u].result_slot;
+    expect_rows_rejected(&mutable_source, mutated);
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+/* A verified program may loop forever, and no static proof could forbid that
+ * without also forbidding ordinary loops. The executor's step budget is what
+ * keeps such a program from hanging its caller. */
+static void test_backward_jump_stops_at_the_step_budget(void) {
+    TypedDispatchFixture fixture = make_fixture();
+    XrTargetInstructionRecord rows[16];
+    memcpy(rows, fixture.rows, sizeof(rows));
+    uint32_t last = fixture.row_count - 1u;
+    REQUIRE(rows[last].opcode == XR_TARGET_INSTRUCTION_RETURN_I64);
+    rows[last] = (XrTargetInstructionRecord) {
+        .id = fixture.rows[last].id,
+        .function = fixture.rows[last].function,
+        .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+        .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                          XR_TARGET_INSTRUCTION_SLOT_NONE},
+        .immediate_bits = XR_TARGET_INSTRUCTION_TARGET_PACK(0, 0),
+        .opcode = XR_TARGET_INSTRUCTION_JUMP,
+        .operand_count = 0,
+    };
+    /* The verifier admits it: the single block is entered at its own first
+     * row, every operand is defined before it is read, and a program with no
+     * return is still a closed program. */
+    XrTargetPlan *looping = NULL;
+    char error[512] = {0};
+    REQUIRE(freeze_with_rows(&fixture, rows, fixture.row_count, &looping, error,
+                             sizeof(error)));
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(looping);
+    int64_t result = 11;
+    REQUIRE(xr_typed_dispatch_execute_i64(looping, &fingerprint, 0, NULL, 0,
+                                          &result) ==
+            XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED);
+    REQUIRE(result == 0);
+    xr_target_plan_free(looping);
+    dispose_fixture(&fixture);
+}
+
 int main(void) {
     test_closed_program_and_unavailable_boundary();
     test_production_builder_keeps_unsupported_function_unavailable();
@@ -756,6 +1110,9 @@ int main(void) {
     test_instruction_mutations_fail_closed();
     test_shift_rows_execute_with_masked_counts();
     test_division_rows_take_the_zero_divisor_edge();
+    test_conditional_branch_selects_its_edge();
+    test_unconditional_jumps_chain_blocks();
+    test_backward_jump_stops_at_the_step_budget();
     puts("typed dispatch tests passed");
     return 0;
 }

@@ -30,7 +30,7 @@ product activation path.
 5. `xr_runtime_generation_activation_available()` means only that the bounded
    sole-function scalar executor is installed. PREPARE independently requires
    exactly one canonical function 0, a nonempty complete
-   `SCALAR_I64_STRAIGHT_LINE` instruction group, the exact typed-frame schema
+   `SCALAR_I64_CLOSED` instruction group, the exact typed-frame schema
    and family mask, and no storage, allocation, extent-operand, call,
    call-argument, root-map, root-slot, cleanup, adapter, or coroutine execution
    authority. Any other verified plan remains VERIFIED and fails PREPARE with
@@ -48,7 +48,10 @@ product activation path.
    already-started call to release its pin, and retirement still requires all
    pins to reach zero. This route passes no arguments, so a sole function whose
    verified rows declare parameters fails closed with `XR_EXEC_5004` rather
-   than executing against implicit zeros. A verified, eligible program that
+   than executing against implicit zeros. A sole function whose verified rows
+   loop without reaching a return is stopped by the executor's step budget and
+   reported as a program fault, so it can neither hang the runtime nor be read
+   as a verification failure. A verified, eligible program that
    divides by zero is a program fault, not an authority failure: it reports
    `XR_EXEC_5009`, yields no result, releases its pin, and leaves the
    generation ACTIVE, so it can never be read as a verification or identity
@@ -72,14 +75,14 @@ product activation path.
 
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation_internal.h 427d2d23bfa8991dd8d20463169fb9bb23d7486a38d5274cb5d84b089a14a96a
-anchor-sha256: src/runtime/xr_module_generation.c 6bf5ac5976ed0d6784d2c28531608299d500a521dd433877403fa23d80f75ec4
-anchor-sha256: src/runtime/xr_module_generation_verify.c 4028ff528eeba7bb8db3c902901a36f45c085f5e2ecf54245bcc6a96de58e12d
-anchor-sha256: src/vm/xr_typed_dispatch.h 429949f7960b431fcbb0b14cd10ca5e720ef4deeb1f0d54d725bb435091c1c42
-anchor-sha256: src/vm/xr_typed_dispatch.c 7e3bc7db834ba7a5eb9fd764c2e06c61749b680473d1f790f7f91a1b61c8b871
-anchor-sha256: src/vm/xr_typed_frame.h 19d1f77e23efdec170fb60c617a496be341c9579deaa4953a17e669c6f59fb4a
+anchor-sha256: src/runtime/xr_module_generation.c f3fe95413105fbb79fb40b5a0a6f718179b997ad4b823a90baae94a045ba103a
+anchor-sha256: src/runtime/xr_module_generation_verify.c 0f146f9f8526f83d84157febadde7cb92327f24186fb6d8d45138968ecaaf4bd
+anchor-sha256: src/vm/xr_typed_dispatch.h 30b893c4f791e6b99a87cf46194c982b63972072675d2bfbc329ab55fcba1b25
+anchor-sha256: src/vm/xr_typed_dispatch.c b89abe0916835904f3ea7bc7394e7a8eab23d2f2c37bf3a711d44941858e0591
+anchor-sha256: src/vm/xr_typed_frame.h b51b7f45110ccd0f05a1b6595a4a960eec1606d2bae6dbd21e95633fed2b0151
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 6a877b4078e8b4bc9d1fcd3e432df7b5df4af6053ba8b6b11700686b37f4b2d5
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 42b13fdd86da1191714c9f5d2c4981bd8f40a338c9e0a5aa7d0276843f2fc867

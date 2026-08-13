@@ -793,7 +793,7 @@ uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
                                                        uint32_t function) {
     uint32_t count = 0;
     return xr_target_plan_function_instructions(plan, function, &count) && count
-               ? (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE
+               ? (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_CLOSED
                : 0;
 }
 

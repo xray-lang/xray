@@ -53,10 +53,18 @@ static XrTypedDispatchStatus store_i64_bits(XrTypedFrame *frame, uint32_t slot,
                : XR_TYPED_DISPATCH_FRAME_ERROR;
 }
 
+/*
+ * Executes one row. `next` arrives holding the row that follows in the table
+ * and is rewritten only by a jump or a branch, so control flow is explicit
+ * here rather than implied by the caller's loop. `returned` is set only by the
+ * row that ends the program.
+ */
 static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                                          const XrTargetInstructionRecord *row,
                                          const int64_t *arguments,
                                          uint32_t argument_count,
+                                         uint32_t row_count, uint32_t *next,
+                                         bool *returned,
                                          uint64_t *return_bits) {
     uint64_t left = 0;
     uint64_t right = 0;
@@ -184,7 +192,32 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
             return store_i64_bits(frame, row->result_slot, left);
         }
         case XR_TARGET_INSTRUCTION_RETURN_I64:
+            *returned = true;
             return load_i64_bits(frame, row->operand_slots[0], return_bits);
+        case XR_TARGET_INSTRUCTION_JUMP:
+        case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64: {
+            uint32_t target = XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(
+                row->immediate_bits);
+            if (row->opcode == XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64) {
+                status = load_i64_bits(frame, row->operand_slots[0], &left);
+                if (status != XR_TYPED_DISPATCH_OK)
+                    return status;
+                /* The condition is compared against zero as a bit pattern, so
+                 * every i64 value selects an edge and no value is outside the
+                 * test. */
+                if (left == 0)
+                    target = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(
+                        row->immediate_bits);
+            }
+            /* The verifier proved the target is the first row of a block of
+             * this same group; the bound is repeated here so a table that
+             * changed underneath cannot move the instruction pointer out of
+             * the group. */
+            if (target >= row_count)
+                return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+            *next = target;
+            return XR_TYPED_DISPATCH_OK;
+        }
         default:
             return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     }
@@ -210,7 +243,7 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
                                                sizeof(error)))
         return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
     if (xr_target_plan_function_execution_family_mask(verified_plan, function) !=
-        XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE)
+        XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
         return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
 
     uint32_t instruction_count = 0;
@@ -236,14 +269,30 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
                               &limits, &frame) != XR_TYPED_FRAME_OK)
         return XR_TYPED_DISPATCH_FRAME_ERROR;
 
+    /* The instruction pointer starts at the group's first row, which the
+     * verifier proved is the entry block, and moves only where a row says. A
+     * fixed step budget bounds a program the verifier had no reason to refuse
+     * but that loops forever, so the executor returns instead of hanging. */
     uint64_t return_bits = 0;
+    uint32_t row = 0;
+    bool returned = false;
     XrTypedDispatchStatus status = XR_TYPED_DISPATCH_OK;
-    for (uint32_t i = 0; i < instruction_count; i++) {
-        status = execute_row(frame, &instructions[i], arguments, argument_count,
+    for (uint32_t step = 0; step < XR_TYPED_DISPATCH_MAX_STEPS && !returned;
+         step++) {
+        if (row >= instruction_count) {
+            status = XR_TYPED_DISPATCH_PROGRAM_INVALID;
+            break;
+        }
+        uint32_t next = row + 1u;
+        status = execute_row(frame, &instructions[row], arguments,
+                             argument_count, instruction_count, &next, &returned,
                              &return_bits);
         if (status != XR_TYPED_DISPATCH_OK)
             break;
+        row = next;
     }
+    if (status == XR_TYPED_DISPATCH_OK && !returned)
+        status = XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED;
     xr_typed_frame_free(frame);
     if (status != XR_TYPED_DISPATCH_OK)
         return status;

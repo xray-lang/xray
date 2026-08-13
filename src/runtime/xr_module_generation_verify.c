@@ -264,7 +264,7 @@ static bool verifier_sole_scalar_generation_eligible(
         !sole_instructions || instruction_count == 0 ||
         instruction_count != sole_instruction_count ||
         xr_target_plan_function_execution_family_mask(plan, 0) !=
-            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE)
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
         return false;
     return verifier_has_no_non_scalar_execution_authority(plan);
 }

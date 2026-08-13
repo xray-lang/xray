@@ -14,6 +14,7 @@
  */
 
 #include "xr_target_builder.h"
+#include "xr_target_instruction_verify.h"
 #include "xr_target_plan_internal.h"
 #include "xr_target_profile_internal.h"
 #include "../../base/xmalloc.h"
@@ -5725,8 +5726,12 @@ static uint16_t scalar_instruction_operand_count(uint8_t opcode) {
         case XR_TARGET_INSTRUCTION_SHL_MASKED_I64:
         case XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64:
             return 2;
+        /* Terminators are not lowered from a semantic operation: they come from
+         * the block kind, so they have no arity here at all. */
         case XR_TARGET_INSTRUCTION_INVALID:
         case XR_TARGET_INSTRUCTION_RETURN_I64:
+        case XR_TARGET_INSTRUCTION_JUMP:
+        case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64:
         case XR_TARGET_INSTRUCTION_COUNT:
             break;
     }
@@ -5765,6 +5770,125 @@ static bool scalar_parameter_row_is_exact(
     return true;
 }
 
+/* A branch may only leave for a block of the same function, so a successor is
+ * admitted as a local ordinal or not at all. */
+static bool scalar_block_successor_local(const XrSemanticFunctionRecord *function,
+                                         uint32_t successor,
+                                         uint32_t *out_local) {
+    if (successor == XR_SEMANTIC_INDEX_NONE ||
+        successor < function->block_begin ||
+        successor - function->block_begin >= function->block_count)
+        return false;
+    if (out_local)
+        *out_local = successor - function->block_begin;
+    return true;
+}
+
+/*
+ * Each admitted block kind has exactly one terminator row, so a block's row
+ * count is its operation count plus one and is known before any row is
+ * written. XI_BLOCK_UNREACHABLE has no terminator this family can express and
+ * leaves the function unavailable rather than falling out of its last block.
+ */
+static bool scalar_block_is_admissible(const XrSemanticPlan *semantic,
+                                       const XrSemanticFunctionRecord *function,
+                                       uint32_t function_index,
+                                       uint32_t block_index,
+                                       const XrSemanticBlockRecord **out_block) {
+    const XrSemanticBlockRecord *block =
+        xr_semantic_plan_block(semantic, block_index);
+    uint32_t operation_total =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    if (!block || block->function != function_index ||
+        block->operation_begin > operation_total ||
+        block->operation_count > operation_total - block->operation_begin ||
+        block->operation_count >= 40000000u)
+        return false;
+    switch (block->kind) {
+        case XI_BLOCK_RETURN:
+            if (block->control_value == XR_SEMANTIC_INDEX_NONE ||
+                block->successors[0] != XR_SEMANTIC_INDEX_NONE ||
+                block->successors[1] != XR_SEMANTIC_INDEX_NONE)
+                return false;
+            break;
+        case XI_BLOCK_PLAIN:
+            if (block->control_value != XR_SEMANTIC_INDEX_NONE ||
+                !scalar_block_successor_local(function, block->successors[0],
+                                              NULL) ||
+                block->successors[1] != XR_SEMANTIC_INDEX_NONE)
+                return false;
+            break;
+        case XI_BLOCK_IF:
+            /* The condition becomes a nonzero test on an ordinary i64 slot, so
+             * a block whose condition is not exact signed i64 is refused when
+             * that slot is resolved rather than coerced into one. */
+            if (block->control_value == XR_SEMANTIC_INDEX_NONE ||
+                !scalar_block_successor_local(function, block->successors[0],
+                                              NULL) ||
+                !scalar_block_successor_local(function, block->successors[1],
+                                              NULL))
+                return false;
+            break;
+        default:
+            return false;
+    }
+    if (out_block)
+        *out_block = block;
+    return true;
+}
+
+/* Writes the one row that ends a block. Targets are row indexes relative to
+ * the group's first row, taken from the frozen block layout. */
+static bool scalar_block_terminator_row(
+    const XrTargetMaterializedPlan *materialized, uint32_t function_index,
+    const XrSemanticFunctionRecord *function,
+    const XrSemanticBlockRecord *block, const uint32_t *block_row,
+    XrTargetInstructionRecord *row) {
+    uint32_t control_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    uint32_t taken = 0;
+    uint32_t untaken = 0;
+    *row = (XrTargetInstructionRecord) {
+        .function = function_index,
+        .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+        .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                          XR_TARGET_INSTRUCTION_SLOT_NONE},
+    };
+    switch (block->kind) {
+        case XI_BLOCK_RETURN:
+            if (!materialized_i64_slot(materialized, function_index,
+                                       block->control_value, &control_slot))
+                return false;
+            row->opcode = XR_TARGET_INSTRUCTION_RETURN_I64;
+            row->operand_count = 1;
+            row->operand_slots[0] = control_slot;
+            return true;
+        case XI_BLOCK_PLAIN:
+            if (!scalar_block_successor_local(function, block->successors[0],
+                                              &taken))
+                return false;
+            row->opcode = XR_TARGET_INSTRUCTION_JUMP;
+            row->immediate_bits =
+                XR_TARGET_INSTRUCTION_TARGET_PACK(block_row[taken], 0);
+            return true;
+        case XI_BLOCK_IF:
+            if (!materialized_i64_slot(materialized, function_index,
+                                       block->control_value, &control_slot) ||
+                !scalar_block_successor_local(function, block->successors[0],
+                                              &taken) ||
+                !scalar_block_successor_local(function, block->successors[1],
+                                              &untaken))
+                return false;
+            row->opcode = XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64;
+            row->operand_count = 1;
+            row->operand_slots[0] = control_slot;
+            row->immediate_bits = XR_TARGET_INSTRUCTION_TARGET_PACK(
+                block_row[taken], block_row[untaken]);
+            return true;
+        default:
+            return false;
+    }
+}
+
 /*
  * A function is committed only as one complete instruction group. Structural
  * or semantic facts outside this deliberately small closed family make the
@@ -5784,7 +5908,8 @@ static bool materialize_scalar_instruction_function(
         materialized->functions[function_index].id != function_index ||
         materialized->functions[function_index].semantic_function != function_index ||
         function->parameter_count > XR_TARGET_INSTRUCTION_MAX_PARAMETERS ||
-        function->capture_count != 0 || function->block_count != 1 ||
+        function->capture_count != 0 || function->block_count == 0 ||
+        function->block_count > XR_TARGET_INSTRUCTION_MAX_BLOCKS ||
         function->semantic_effects != 0 ||
         !semantic_type_is_exact_i64(semantic, function->return_type))
         return false;
@@ -5803,91 +5928,126 @@ static bool materialize_scalar_instruction_function(
             return false;
     }
 
-    const XrSemanticBlockRecord *block =
-        xr_semantic_plan_block(semantic, function->block_begin);
-    uint32_t operation_total =
-        (uint32_t) xr_semantic_plan_operation_count(semantic);
     uint32_t operand_total = 0;
     const XrSemanticOperandRecord *operands =
         xr_semantic_plan_operands(semantic, &operand_total);
-    if (!block || block->function != function_index ||
-        block->kind != XI_BLOCK_RETURN || block->predecessor_count != 0 ||
-        block->successors[0] != XR_SEMANTIC_INDEX_NONE ||
-        block->successors[1] != XR_SEMANTIC_INDEX_NONE ||
-        block->control_value == XR_SEMANTIC_INDEX_NONE ||
-        block->operation_count == 0 ||
-        block->operation_begin > operation_total ||
-        block->operation_count > operation_total - block->operation_begin ||
-        block->operation_count >= 40000000u)
+    /* The block layout is frozen before any row is written, because a jump can
+     * name a block that has not been emitted yet. */
+    uint32_t *block_row =
+        (uint32_t *) xr_calloc(function->block_count, sizeof(uint32_t));
+    if (!block_row)
         return false;
+    uint32_t group_rows = 0;
+    bool admissible = true;
+    for (uint32_t ordinal = 0; ordinal < function->block_count && admissible;
+         ordinal++) {
+        const XrSemanticBlockRecord *block = NULL;
+        block_row[ordinal] = group_rows;
+        if (!scalar_block_is_admissible(semantic, function, function_index,
+                                        function->block_begin + ordinal,
+                                        &block) ||
+            block->operation_count > 40000000u - 1u - group_rows)
+            admissible = false;
+        else
+            group_rows += block->operation_count + 1u;
+    }
+    XrTargetInstructionRecord *group =
+        admissible ? (XrTargetInstructionRecord *) xr_calloc(
+                         group_rows, sizeof(*group))
+                   : NULL;
+    if (!group) {
+        xr_free(block_row);
+        return false;
+    }
 
-    bool return_defined = false;
     uint64_t bound_parameters = 0;
-    for (uint32_t ordinal = 0; ordinal < block->operation_count; ordinal++) {
-        uint32_t operation_index = block->operation_begin + ordinal;
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(semantic, operation_index);
-        uint8_t opcode = operation
-                             ? scalar_instruction_opcode(operation->opcode)
-                             : XR_TARGET_INSTRUCTION_INVALID;
-        uint16_t expected_operands = scalar_instruction_operand_count(opcode);
-        uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
-        if (!operation || opcode == XR_TARGET_INSTRUCTION_INVALID ||
-            operation->function != function_index ||
-            operation->block != function->block_begin ||
-            operation->effects != 0 ||
-            operation->operand_count != expected_operands ||
-            operation->operand_begin > operand_total ||
-            operation->operand_count > operand_total - operation->operand_begin ||
-            !semantic_type_is_exact_i64(semantic, operation->result_type) ||
-            !materialized_i64_slot(materialized, function_index,
-                                   operation->result_value, &result_slot))
-            return false;
-        if ((operation->opcode == XI_COPY &&
-             operation->semantic_immediate != XI_COPY_KIND_IDENTITY) ||
-            (operation->opcode != XI_CONST && operation->opcode != XI_COPY &&
-             operation->opcode != XI_PARAM &&
-             operation->semantic_immediate != 0))
-            return false;
-
-        uint64_t immediate_bits = 0;
-        if (operation->opcode == XI_CONST) {
-            const XrSemanticConstantRecord *constant =
-                xr_semantic_plan_constant(semantic, operation->constant);
-            if (!constant || constant->kind != XR_SEM_CONST_INT ||
-                constant->type != operation->result_type)
-                return false;
-            immediate_bits = (uint64_t) constant->integer;
-        } else if (operation->constant != XR_SEMANTIC_INDEX_NONE) {
-            return false;
+    uint32_t next_row = 0;
+    for (uint32_t block_ordinal = 0;
+         block_ordinal < function->block_count && admissible; block_ordinal++) {
+        uint32_t block_index = function->block_begin + block_ordinal;
+        const XrSemanticBlockRecord *block = NULL;
+        if (!scalar_block_is_admissible(semantic, function, function_index,
+                                        block_index, &block) ||
+            next_row != block_row[block_ordinal]) {
+            admissible = false;
+            break;
         }
-        if (operation->opcode == XI_PARAM) {
-            uint32_t parameter_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
-            if (!scalar_parameter_row_is_exact(semantic, materialized,
-                                               function_index, function,
-                                               operation, &immediate_bits,
-                                               &parameter_slot) ||
-                parameter_slot != result_slot ||
-                (bound_parameters & (UINT64_C(1) << immediate_bits)) != 0)
-                return false;
-            bound_parameters |= UINT64_C(1) << immediate_bits;
-        }
-
-        uint32_t operand_slots[2] = {XR_TARGET_INSTRUCTION_SLOT_NONE,
-                                     XR_TARGET_INSTRUCTION_SLOT_NONE};
-        for (uint16_t operand = 0; operand < operation->operand_count;
-             operand++) {
-            const XrSemanticOperandRecord *semantic_operand =
-                &operands[operation->operand_begin + operand];
-            if (!semantic_type_is_exact_i64(semantic, semantic_operand->type) ||
+        for (uint32_t ordinal = 0; ordinal < block->operation_count; ordinal++) {
+            uint32_t operation_index = block->operation_begin + ordinal;
+            const XrSemanticOperationRecord *operation =
+                xr_semantic_plan_operation(semantic, operation_index);
+            uint8_t opcode = operation
+                                 ? scalar_instruction_opcode(operation->opcode)
+                                 : XR_TARGET_INSTRUCTION_INVALID;
+            uint16_t expected_operands = scalar_instruction_operand_count(opcode);
+            uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+            if (!operation || opcode == XR_TARGET_INSTRUCTION_INVALID ||
+                operation->function != function_index ||
+                operation->block != block_index || operation->effects != 0 ||
+                operation->operand_count != expected_operands ||
+                operation->operand_begin > operand_total ||
+                operation->operand_count > operand_total - operation->operand_begin ||
+                !semantic_type_is_exact_i64(semantic, operation->result_type) ||
                 !materialized_i64_slot(materialized, function_index,
-                                       semantic_operand->value,
-                                       &operand_slots[operand]))
-                return false;
-        }
-        if (rows) {
-            rows[row_begin + ordinal] = (XrTargetInstructionRecord) {
-                .id = row_begin + ordinal,
+                                       operation->result_value, &result_slot)) {
+                admissible = false;
+                break;
+            }
+            if ((operation->opcode == XI_COPY &&
+                 operation->semantic_immediate != XI_COPY_KIND_IDENTITY) ||
+                (operation->opcode != XI_CONST && operation->opcode != XI_COPY &&
+                 operation->opcode != XI_PARAM &&
+                 operation->semantic_immediate != 0)) {
+                admissible = false;
+                break;
+            }
+
+            uint64_t immediate_bits = 0;
+            if (operation->opcode == XI_CONST) {
+                const XrSemanticConstantRecord *constant =
+                    xr_semantic_plan_constant(semantic, operation->constant);
+                if (!constant || constant->kind != XR_SEM_CONST_INT ||
+                    constant->type != operation->result_type) {
+                    admissible = false;
+                    break;
+                }
+                immediate_bits = (uint64_t) constant->integer;
+            } else if (operation->constant != XR_SEMANTIC_INDEX_NONE) {
+                admissible = false;
+                break;
+            }
+            if (operation->opcode == XI_PARAM) {
+                uint32_t parameter_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+                if (!scalar_parameter_row_is_exact(semantic, materialized,
+                                                   function_index, function,
+                                                   operation, &immediate_bits,
+                                                   &parameter_slot) ||
+                    parameter_slot != result_slot ||
+                    (bound_parameters & (UINT64_C(1) << immediate_bits)) != 0) {
+                    admissible = false;
+                    break;
+                }
+                bound_parameters |= UINT64_C(1) << immediate_bits;
+            }
+
+            uint32_t operand_slots[2] = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                                         XR_TARGET_INSTRUCTION_SLOT_NONE};
+            for (uint16_t operand = 0; operand < operation->operand_count;
+                 operand++) {
+                const XrSemanticOperandRecord *semantic_operand =
+                    &operands[operation->operand_begin + operand];
+                if (!semantic_type_is_exact_i64(semantic,
+                                                semantic_operand->type) ||
+                    !materialized_i64_slot(materialized, function_index,
+                                           semantic_operand->value,
+                                           &operand_slots[operand])) {
+                    admissible = false;
+                    break;
+                }
+            }
+            if (!admissible)
+                break;
+            group[next_row++] = (XrTargetInstructionRecord) {
                 .function = function_index,
                 .result_slot = result_slot,
                 .operand_slots = {operand_slots[0], operand_slots[1]},
@@ -5896,8 +6056,12 @@ static bool materialize_scalar_instruction_function(
                 .operand_count = (uint8_t) operation->operand_count,
             };
         }
-        return_defined = return_defined ||
-                         operation->result_value == block->control_value;
+        if (!admissible ||
+            !scalar_block_terminator_row(materialized, function_index, function,
+                                         block, block_row, &group[next_row]))
+            admissible = false;
+        else
+            next_row++;
     }
 
     /* Dense coverage of the declared ordinals: a signature whose parameter is
@@ -5906,24 +6070,28 @@ static bool materialize_scalar_instruction_function(
         function->parameter_count == XR_TARGET_INSTRUCTION_MAX_PARAMETERS
             ? UINT64_MAX
             : (UINT64_C(1) << function->parameter_count) - 1u;
-    uint32_t return_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
-    if (bound_parameters != declared_parameters || !return_defined ||
-        !materialized_i64_slot(materialized, function_index,
-                               block->control_value, &return_slot))
+    /* Admission is decided by the very judgement the independent verifier will
+     * apply, so a group can never be emitted that verification would then
+     * refuse. Where a value is defined and where it is read are now separated
+     * by control flow, and this is what proves the two agree on every path. */
+    if (!admissible || next_row != group_rows ||
+        bound_parameters != declared_parameters ||
+        !xr_target_instruction_rows_control_flow_is_exact(
+            group, group_rows, materialized->functions[function_index].slot_begin,
+            materialized->functions[function_index].slot_count)) {
+        xr_free(group);
+        xr_free(block_row);
         return false;
-    if (rows) {
-        uint32_t return_row = row_begin + block->operation_count;
-        rows[return_row] = (XrTargetInstructionRecord) {
-            .id = return_row,
-            .function = function_index,
-            .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
-            .operand_slots = {return_slot, XR_TARGET_INSTRUCTION_SLOT_NONE},
-            .opcode = XR_TARGET_INSTRUCTION_RETURN_I64,
-            .operand_count = 1,
-        };
     }
+    if (rows)
+        for (uint32_t i = 0; i < group_rows; i++) {
+            group[i].id = row_begin + i;
+            rows[row_begin + i] = group[i];
+        }
     if (out_row_count)
-        *out_row_count = block->operation_count + 1u;
+        *out_row_count = group_rows;
+    xr_free(group);
+    xr_free(block_row);
     return true;
 }
 

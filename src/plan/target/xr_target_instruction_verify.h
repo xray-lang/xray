@@ -17,4 +17,19 @@ XR_FUNC bool xr_target_instruction_program_verify(const XrTargetPlan *plan,
                                                    char *error,
                                                    size_t error_size);
 
+/*
+ * The one control-flow judgement for a function's row group, owned here and
+ * reused by the production builder so that admission and verification cannot
+ * drift apart. It reads nothing but the rows: it derives the basic-block
+ * partition from the terminators, proves every jump target is a block entry of
+ * this same group, proves every block is reachable from the entry, and proves
+ * by a definite-assignment fixed point that no operand is read on any path that
+ * does not already define it. Slot indexes are interpreted relative to the
+ * function's own slot range, and jump targets relative to the group's first
+ * row. Anything it cannot prove is refused.
+ */
+XR_FUNC bool xr_target_instruction_rows_control_flow_is_exact(
+    const XrTargetInstructionRecord *rows, uint32_t row_count,
+    uint32_t slot_begin, uint32_t slot_count);
+
 #endif  // XR_TARGET_INSTRUCTION_VERIFY_H
