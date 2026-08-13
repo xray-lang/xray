@@ -74,7 +74,7 @@ uint16_t xr_vm_struct_layout_register(XrVMState *vm, XrAggregateLayout *layout) 
         return 0;
 
     if (layout->layout_id != 0) {
-        XrAggregateLayout *registered = xr_vm_struct_layout_lookup(vm, layout->layout_id);
+        XrAggregateLayout *registered = xr_struct_layout_lookup_by_id(vm, layout->layout_id);
         if (registered == layout)
             return layout->layout_id;
     }
@@ -126,7 +126,7 @@ XrAggregateLayout *xr_struct_layout_intern_owned(XrVMState *vm, XrAggregateLayou
     return layout;
 }
 
-XrAggregateLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id) {
+XrAggregateLayout *xr_struct_layout_lookup_by_id(XrVMState *vm, uint16_t layout_id) {
     if (!vm || layout_id == 0 || layout_id >= vm->struct_layout_count || !vm->struct_layouts)
         return NULL;
     return vm->struct_layouts[layout_id];
@@ -191,7 +191,7 @@ XrAggregateLayout *xr_vm_struct_ref_layout(XrVMRuntime *isolate, XrValue ref) {
 
     uint16_t layout_id = xr_aggregate_layout_id(ref);
     if (layout_id != 0 && isolate) {
-        XrAggregateLayout *layout = xr_vm_struct_layout_lookup(&isolate->vm, layout_id);
+        XrAggregateLayout *layout = xr_struct_layout_lookup_by_id(&isolate->vm, layout_id);
         if (layout)
             return layout;
     }

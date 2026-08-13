@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3361
+    "source": 3357
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -457,7 +457,6 @@
     "xr_vm_struct_layout_bind_class",
     "xr_vm_struct_layout_class",
     "xr_vm_struct_layout_field_index",
-    "xr_vm_struct_layout_lookup",
     "xr_vm_struct_layout_lookup_stable_key",
     "xr_vm_struct_layout_register",
     "xr_vm_struct_materialize_instance",
@@ -8303,9 +8302,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "27b11a39ff877bc015dfa3dcb39d679b3b97ae5b9e81e0337424b0d96ffb9717",
+      "evidence_sha256": "75956335ae34dfb8f6c09a33018f1afe10b3913cbcfc1a39c92a7c9f14d1775b",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 6,
+      "hit_count": 5,
       "path": "src/runtime/xexec_state.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -8313,7 +8312,6 @@
         "xr_vm_current_ctx",
         "xr_vm_struct_layout_bind_class",
         "xr_vm_struct_layout_class",
-        "xr_vm_struct_layout_lookup",
         "xr_vm_struct_layout_lookup_stable_key",
         "xr_vm_struct_layout_register"
       ]
@@ -8757,9 +8755,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "807af839da04400d9503b3e17d687ba18ec9f70c11a9aded0e5c502bd4f6131e",
+      "evidence_sha256": "6978a673695f47909174296ba5c7dcbadf681f4f6a33d7e7f1ffbc08fd1fb593",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 39,
+      "hit_count": 36,
       "path": "src/vm/xvm_helpers.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -8773,7 +8771,6 @@
         "xr_vm_struct_layout_bind_class",
         "xr_vm_struct_layout_class",
         "xr_vm_struct_layout_field_index",
-        "xr_vm_struct_layout_lookup",
         "xr_vm_struct_layout_lookup_stable_key",
         "xr_vm_struct_layout_register",
         "xr_vm_struct_materialize_instance",
@@ -9181,6 +9178,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "144b8002d70fa6b7116ecd271571cd15e122fdd0d3995b0757b68bdb2e83f714",
-  "total": 3563
+  "source_tree_fingerprint": "d6af6b4529306f092cb107133b9425107babc53990c6fa3c0f88496f140e2b13",
+  "total": 3559
 }
