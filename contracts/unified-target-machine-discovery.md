@@ -39,7 +39,7 @@ the exact executed input instead of the caller's `core.autocrlf` preference.
 
 anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
 anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 0c23fc2e001312deef5e6984cebf418ef273aedfaca334c0bdef0338247bcb12
-anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 12f9ab423264086969ab976a98416c51e7631b53afd91f802986d876bd026fc5
+anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 0afc0f392ad050ce769571ada498e0a75429d37d1f8937b30ec53a8ec879c3cb
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json 415474d306be206ecab565c78b51be190fb9c0b80e846076c62c6fd81be4e9b0
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 721f64657b4c30e177e4d8feec93d418deb1e4a1e5f467637448288e0969054b
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7

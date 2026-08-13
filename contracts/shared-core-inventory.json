@@ -594,6 +594,7 @@
         "src/aot/xrt_value.h",
         "src/frontend/analyzer/xa_effect_db.c",
         "src/frontend/analyzer/xa_memory_effect_db.c",
+        "src/plan/semantic/xr_semantic_verify.c",
         "src/runtime/object/xmap.c",
         "src/runtime/value/xenum_layout.c",
         "src/runtime/value/xvalue_hash.c"
