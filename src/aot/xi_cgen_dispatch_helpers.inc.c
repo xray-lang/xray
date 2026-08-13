@@ -9026,6 +9026,27 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
     if (strcmp(method, "append") != 0 || nargs != 1)
         return false;
 
+    if (v->args[1] && v->args[1]->type && v->args[1]->type->kind == XR_KIND_RUNE) {
+        XrCValueEmissionView append_emission = {0};
+        uint32_t receiver_semantic = XR_SEMANTIC_INDEX_NONE;
+        uint32_t argument_semantic = XR_SEMANTIC_INDEX_NONE;
+        if (cg_value_emission_view(ctx, f, v, &append_emission) != CG_VALUE_EMISSION_FOUND ||
+            !cg_value_semantic_id(ctx, f, v->args[0], &receiver_semantic) ||
+            !cg_value_semantic_id(ctx, f, v->args[1], &argument_semantic) ||
+            append_emission.materialization !=
+                XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_RUNE ||
+            append_emission.recipe_operand_value != receiver_semantic ||
+            append_emission.recipe_argument_value != argument_semantic ||
+            !append_emission.recipe_symbol ||
+            strcmp(append_emission.recipe_symbol, "xrt_strbuf_append") != 0) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: StringBuilder.append(rune) lacks immutable emission authority\n");
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+    }
+
     int64_t literal_length = 0;
     bool literal_plan = xicgen_stringbuilder_literal_append_plan(ctx, v, &literal_length);
     bool literal_is_string = false;

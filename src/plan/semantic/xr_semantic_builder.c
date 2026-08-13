@@ -2660,6 +2660,44 @@ static bool semantic_string_builder_type_exact(const XrSemanticTypeRecord *type)
            type->canonical_key && strcmp(type->canonical_key, expected) == 0;
 }
 
+static bool xi_string_builder_append_rune_exact(const XiValue *value) {
+    return value && value->op == XI_CALL_METHOD && value->nargs == 2 && value->args[0] &&
+           value->args[1] && value->aux && strcmp((const char *) value->aux, "append") == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
+           (value->aux_int & 1) == 0 &&
+           xr_type_is_builtin_named_class(value->args[0]->type, "StringBuilder") &&
+           value->args[1]->type && value->args[1]->type->kind == XR_KIND_RUNE &&
+           xr_type_is_builtin_named_class(value->type, "StringBuilder");
+}
+
+static bool semantic_string_builder_append_rune_exact(
+    const XrSemanticBuildContext *ctx, const XrSemanticOperationRecord *record) {
+    if (!ctx || !record || record->operand_count != 2 ||
+        record->operand_begin > ctx->plan->operand_count ||
+        record->operand_count > ctx->plan->operand_count - record->operand_begin ||
+        record->metadata_count != 1 || record->metadata_begin >= ctx->plan->metadata_count)
+        return false;
+    const XrSemanticOperandRecord *receiver =
+        &ctx->plan->operands[record->operand_begin];
+    const XrSemanticOperandRecord *argument = receiver + 1;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
+    const XrSemanticTypeRecord *argument_type =
+        argument->type < ctx->plan->type_count ? &ctx->plan->types[argument->type] : NULL;
+    return semantic_string_builder_type_exact(receiver_type) &&
+           record->result_type == receiver->type && argument_type &&
+           argument_type->kind == XR_KIND_RUNE && argument_type->builtin_type == XR_TID_NULL &&
+           argument_type->child_count == 0 && argument_type->scalar_rep == XR_SCALAR_REP_NONE &&
+           argument_type->flags == 0 &&
+           strcmp(ctx->plan->metadata[record->metadata_begin], "append") == 0 &&
+           receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
+           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           record->result_alias_operand == 0 &&
+           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED;
+}
+
 static bool semantic_string_builder_constructor_exact(const XrSemanticBuildContext *ctx,
                                                       const XrSemanticOperationRecord *record) {
     const XrSemanticTypeRecord *type =
@@ -2827,6 +2865,9 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     }
     if (!add_operation_metadata(ctx, value, record) || !append_constant(ctx, value, record))
         return false;
+    if (xi_string_builder_append_rune_exact(value) &&
+        semantic_string_builder_append_rune_exact(ctx, record))
+        record->intrinsic_kind = XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE;
     bool string_builder_candidate = xi_string_builder_constructor_candidate(value);
     bool string_builder_exact = xi_string_builder_constructor_exact(value);
     if (string_builder_candidate &&

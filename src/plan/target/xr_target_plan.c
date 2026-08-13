@@ -597,14 +597,19 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         bool string_byte_slice_view =
             plan->calls[i].target_kind ==
             XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW;
+        bool stringbuilder_append_rune =
+            plan->calls[i].target_kind ==
+            XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE;
         if ((!direct_local && !channel_close && !source_export &&
-             !stringbuilder_constructor && !string_byte_slice_view) ||
+             !stringbuilder_constructor && !string_byte_slice_view &&
+             !stringbuilder_append_rune) ||
             plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
             ((direct_local || source_export) &&
              plan->calls[i].semantic_call_target >=
                  xr_semantic_plan_call_target_count(plan->semantic_plan)) ||
-            ((channel_close || stringbuilder_constructor || string_byte_slice_view) &&
+            ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
+              stringbuilder_append_rune) &&
              plan->calls[i].semantic_call_target != XR_SEMANTIC_INDEX_NONE) ||
             plan->calls[i].result_register_rep >= plan->machine_reps_count ||
             plan->calls[i].result_memory_rep >= plan->machine_reps_count ||

@@ -47,6 +47,7 @@ typedef enum XrCValueMaterializationRecipe {
     XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD = 3,
     XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW = 4,
     XR_C_VALUE_MATERIALIZATION_STRING_BYTE_SLICE_VIEW = 5,
+    XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_RUNE = 6,
     XR_C_VALUE_MATERIALIZATION_COUNT,
 } XrCValueMaterializationRecipe;
 
@@ -64,6 +65,7 @@ typedef struct XrCValueEmissionView {
     uint16_t reserved;
     uint32_t literal_byte_length;
     uint32_t recipe_operand_value;
+    uint32_t recipe_argument_value;
     const char *c_type;
     const char *literal_bytes;
     const char *recipe_symbol;

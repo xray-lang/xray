@@ -2697,6 +2697,7 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
            left->materialization == right->materialization &&
            left->literal_byte_length == right->literal_byte_length &&
            left->recipe_operand_value == right->recipe_operand_value &&
+           left->recipe_argument_value == right->recipe_argument_value &&
            left->reserved == right->reserved && left->c_type && right->c_type &&
            strcmp(left->c_type, right->c_type) == 0 &&
            ((!left->recipe_symbol && !right->recipe_symbol) ||

@@ -1464,7 +1464,7 @@ static bool verify_string_byte_slice_view(const XrSemanticPlan *plan,
     bool candidate = operation->intrinsic_kind == XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW ||
                      operation->evidence[1] == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
     if (!candidate) {
-        bool empty = operation->intrinsic_kind == XR_SEM_INTRINSIC_NONE &&
+        bool empty = operation->intrinsic_kind != XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW &&
                      operation->view_source_value == XR_SEMANTIC_INDEX_NONE &&
                      operation->view_element_type == XR_SEMANTIC_INDEX_NONE &&
                      operation->view_source_operand == -1 && operation->view_source_parameter == -1 &&
@@ -1526,6 +1526,45 @@ static bool verify_string_byte_slice_view(const XrSemanticPlan *plan,
                  (unsigned) operation->intrinsic_kind, operation->evidence[1]);
     }
     return exact;
+}
+
+static bool verify_string_builder_append_rune(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    char *error, size_t error_size) {
+    bool candidate = operation->intrinsic_kind ==
+                     XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE;
+    if (!candidate)
+        return true;
+    const XrSemanticOperandRecord *receiver =
+        operation->operand_count == 2 && operation->operand_begin < plan->operand_count
+            ? &plan->operands[operation->operand_begin]
+            : NULL;
+    const XrSemanticOperandRecord *argument = receiver ? receiver + 1 : NULL;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver && receiver->type < plan->type_count ? &plan->types[receiver->type] : NULL;
+    const XrSemanticTypeRecord *argument_type =
+        argument && argument->type < plan->type_count ? &plan->types[argument->type] : NULL;
+    const char *selector =
+        operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
+            ? plan->metadata[operation->metadata_begin]
+            : NULL;
+    bool exact = operation->opcode == XI_CALL_METHOD && operation->semantic_immediate > 0 &&
+                 (operation->semantic_immediate & 1) == 0 && selector &&
+                 strcmp(selector, "append") == 0 && receiver && argument &&
+                 semantic_type_is_exact_string_builder(receiver_type) &&
+                 operation->result_type == receiver->type && argument_type &&
+                 argument_type->kind == XR_KIND_RUNE &&
+                 argument_type->builtin_type == XR_TID_NULL && argument_type->child_count == 0 &&
+                 argument_type->scalar_rep == XR_SCALAR_REP_NONE && argument_type->flags == 0 &&
+                 receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+                 receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
+                 argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 operation->result_alias_operand == 0 &&
+                 operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                 operation->return_complete == 1;
+    return exact || report(error, error_size, "XR_SEM_0019",
+                           "StringBuilder.append(rune) authority is not exact");
 }
 
 static bool verify_string_builder_constructor(const XrSemanticPlan *plan,
@@ -1638,6 +1677,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!operation_debug_span_valid(plan, i))
             return report(error, error_size, "XR_SEM_0019", "operation debug span is invalid");
         if (!verify_string_byte_slice_view(plan, operation, error, error_size))
+            return false;
+        if (!verify_string_builder_append_rune(plan, operation, error, error_size))
             return false;
         uint32_t existing_definition = definitions[operation->result_value];
         if (existing_definition != XR_SEMANTIC_INDEX_NONE) {

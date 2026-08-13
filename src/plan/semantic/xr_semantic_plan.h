@@ -66,6 +66,7 @@ typedef enum XrSemanticOperandFlag {
 typedef enum XrSemanticIntrinsicKind {
     XR_SEM_INTRINSIC_NONE = 0,
     XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW = 1,
+    XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE = 2,
     XR_SEM_INTRINSIC_COUNT,
 } XrSemanticIntrinsicKind;
 
