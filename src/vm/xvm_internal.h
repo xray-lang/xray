@@ -247,7 +247,7 @@ XR_FUNC XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrV
 
 // Install the Map/Set instance hash/eq hooks (xvm_value_hooks.c) so a user
 // Hashable class keys by value. Idempotent; called from isolate init.
-XR_FUNC void xr_vm_install_value_hooks(void);
+XR_FUNC void xr_value_install_instance_hooks(void);
 
 // VM execution
 XR_FUNC XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto);

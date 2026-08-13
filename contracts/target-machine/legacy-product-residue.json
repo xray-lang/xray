@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3322
+    "source": 3318
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -441,7 +441,6 @@
     "xr_vm_ic_fields_snapshot",
     "xr_vm_ic_methods_snapshot",
     "xr_vm_init",
-    "xr_vm_install_value_hooks",
     "xr_vm_instance_struct_get_field",
     "xr_vm_instance_struct_set_field",
     "xr_vm_interpret_proto",
@@ -7893,15 +7892,14 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "ce810bf5095c81ad043df54403aa894efd3c62135bf5d77cc4823d9097e26b1d",
+      "evidence_sha256": "4d9ec7316373131c8cb6cbcee7b117c3f12c2e15520da002d85f597314bdf2b0",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 2,
+      "hit_count": 1,
       "path": "src/api/xisolate_full.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "xr_vm_init",
-        "xr_vm_install_value_hooks"
+        "xr_vm_init"
       ]
     },
     {
@@ -8792,9 +8790,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "8437cdf0fbb3e5bee97788a3cb4ec9c810898e58d3ffe32f3d14e710582d4ca7",
+      "evidence_sha256": "879a9c07c3d6d9692524e263a73fd9255845c4192cec8f0cfe5ecc131c2b0edb",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 36,
+      "hit_count": 35,
       "path": "src/vm/xvm_internal.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -8814,7 +8812,6 @@
         "xr_vm_execute_module",
         "xr_vm_ic_fields_snapshot",
         "xr_vm_ic_methods_snapshot",
-        "xr_vm_install_value_hooks",
         "xr_vm_instance_struct_get_field",
         "xr_vm_instance_struct_set_field",
         "xr_vm_interpret_proto",
@@ -8922,15 +8919,14 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "8693008ca55aece8a2dedf698fd072522aa715832be5ee9bb42613b13bf3a355",
+      "evidence_sha256": "5ce5b06ed0f0ba844a7d8eaa0dc744029da895fe58d1c2691d62cdbca8b03fb2",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 4,
+      "hit_count": 2,
       "path": "src/vm/xvm_value_hooks.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "xr_vm_call_closure",
-        "xr_vm_install_value_hooks"
+        "xr_vm_call_closure"
       ]
     },
     {
@@ -9160,6 +9156,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "a6d9b94ef42f560d4f9d2fba345347211c4af23123e86fb35a8b4181a4032752",
-  "total": 3524
+  "source_tree_fingerprint": "3056163eacaa704e6600dd4cddee0e2882d4bf5d1e491dabd009eb1c52af752a",
+  "total": 3520
 }

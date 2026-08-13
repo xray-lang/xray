@@ -77,7 +77,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     xr_runtime_core_enable_full_destroy_ops(isolate->core_rt);
 
     // Route Map/Set instance key hash/equality through user hash()/operator ==.
-    xr_vm_install_value_hooks();
+    xr_value_install_instance_hooks();
 
     // Core class system (creates Object, String, Array, etc.)
     xr_core_init(isolate);

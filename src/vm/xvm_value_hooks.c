@@ -10,7 +10,7 @@
  * A class that implements Hashable by hand — declaring `hash() -> int` and
  * `operator ==` — must key a Map or Set by value. xr_hash_value / xr_value_eq
  * cannot run user methods on their own, so they defer to these hooks. The VM
- * installs them once at isolate init (xr_vm_install_value_hooks); each reaches
+ * installs them once at isolate init (xr_value_install_instance_hooks); each reaches
  * the running isolate through the thread-local execution context and invokes
  * the method reentrantly. The coro heap never moves objects, so the borrowed
  * key / entry pointers held by the caller stay valid across the call.
@@ -76,6 +76,6 @@ static int vm_instance_eq_hook(XrValue a, XrValue b) {
     return XR_IS_BOOL(result) ? (XR_TO_BOOL(result) ? 1 : 0) : 0;
 }
 
-void xr_vm_install_value_hooks(void) {
+void xr_value_install_instance_hooks(void) {
     xr_value_set_instance_hooks(vm_instance_hash_hook, vm_instance_eq_hook);
 }
