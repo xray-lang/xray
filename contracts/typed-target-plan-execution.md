@@ -148,13 +148,13 @@ Evidence:
   execution, unsupported-plan rejection, bounded pins, drain, retirement, and
   unload without any legacy execution fallback.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 4034713c0e8f25cce06b55462feae7fec338d6e3145f2c034fc2d000d83394b1
-anchor-sha256: src/plan/target/xr_target_plan.c 5bab572276da4fafdd67cf7db09438b7cf5306572aad2e21de7bc97aaf35cff7
-anchor-sha256: src/plan/target/xr_target_builder.c c4b951c001bb54a2a090eca1c129d7ff23f97369fafe675692cf008800116420
+anchor-sha256: src/plan/target/xr_target_plan.h 0276151a64df48d5ce06191f359fae8f1cbf379bab75266c163ce72793088392
+anchor-sha256: src/plan/target/xr_target_plan.c 0087960d4fb49a747d610b9dccb5be1ed29e475bf459f16818b0cc58b8a9fb9a
+anchor-sha256: src/plan/target/xr_target_builder.c 478123bdda93783a5d30862a22c93afea296fa54dfde40d894eb7dceaae7b14e
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 5eea43c77cf0e3802e30eacf12ca7e1a105b7b32de0497635cf7048de1b3438b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c af74c69df7296ff561d3a3abbf4d42a4016e6db54762a750c6da2ad8b4f2ee07
-anchor-sha256: src/plan/target/xr_target_verify.c 8f5116ad1c375030d1e1e0de4cdef18b1d2887ed88176247db49e2d69ef3a10a
-anchor-sha256: src/plan/format/xr_xtp_schema.h 19c65ab32a9d874cd8ec6c53f296ddec365963439f2c4c410083ac0dd40051f0
+anchor-sha256: src/plan/target/xr_target_verify.c 4a9354dc023d2818928c357de2b38b0fa8e614bef1f6f68a49a996d50e81a84a
+anchor-sha256: src/plan/format/xr_xtp_schema.h 04840cf64073530619483953264b801358984d6559d7928b0b733b265ef2c668
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 8cb0983494ace434ec1d1f7389f19d4780ad82f6f88460144e04a9e28c1502bc
 anchor-sha256: src/plan/target/xr_xtp_materialize.c c43b819e15e02784e50911b46ad3ec228b2069c114a7691216abbf59ab6bcdbf
