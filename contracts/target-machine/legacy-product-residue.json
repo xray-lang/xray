@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 105,
     "install": 2,
-    "source": 3466
+    "source": 3451
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -37,7 +37,6 @@
     "src/api/xisolate_tls.c",
     "src/api/xrepl.c",
     "src/api/xrepl.h",
-    "src/api/xruntime.c",
     "src/api/xruntime.h",
     "src/api/xvm_compile.c",
     "src/api/xvm_exec.c",
@@ -501,7 +500,7 @@
     "xray_vm_new_full",
     "xray_vm_set_script_info"
   ],
-  "owner_count": 701,
+  "owner_count": 700,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -4008,21 +4007,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "8e4123f00ba28ab83090181ab1966c4bb7ef85b0f6325f89ba08b4153e7cdd77",
+      "evidence_sha256": "66daa4dfb0612e60f1291cf7b0e0511f96624549ada8445ceff6bfac8ed961f2",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 2,
-      "path": "src/api/xruntime.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "XrVMRuntime"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "c6b592325af45a25d5e85d7526a2cdc9de2d18f9ad3087c8ba4ab0d718d6507b",
-      "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 27,
+      "hit_count": 14,
       "path": "src/api/xruntime.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -9366,6 +9353,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "c90e11224466137742c17d0c4d4dc2c8690f1eef33b528305b5528260a2e580b",
-  "total": 3667
+  "source_tree_fingerprint": "983174d11ef5ee5054b872d573b4975dfa73d7bce05b0b887b564db63870fe2f",
+  "total": 3652
 }
