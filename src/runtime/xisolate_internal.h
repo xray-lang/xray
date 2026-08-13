@@ -19,7 +19,6 @@
  *
  * RELATED MODULES:
  *   - xray_vm.h: Public API for VM lifecycle
- *   - xr_vm_state.h: VM execution state (stack, frames, globals)
  *   - xcoro_memory.h: Per-coroutine memory management
  */
 
@@ -147,8 +146,7 @@ struct XrVMRuntime {
 
     /* ========== VM Engine State ========== */
 
-    // VM state uses independent type XrVMState (defined in xr_vm_state.h)
-    // Embedded directly in Isolate for zero-overhead access
+    // Embedded directly in Isolate for zero-overhead execution-state access.
     XrVMState vm;
 
     /* ========== Unified VM Context (multi-core support) ========== */

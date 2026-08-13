@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3421
+    "source": 3419
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -463,7 +463,6 @@
     "xr_vm_run_closure_blocking",
     "xr_vm_send_result_value",
     "xr_vm_set_pending_error",
-    "xr_vm_state",
     "xr_vm_struct_layout_bind_class",
     "xr_vm_struct_layout_class",
     "xr_vm_struct_layout_field_index",
@@ -8354,16 +8353,15 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "406cad5a48dba4292265024363255333ae52e6edd1f90c8a893fd37b2d8d89e9",
+      "evidence_sha256": "8b39f3f753f15f3ff0c4b4990cbac89609519c68fdc21a0ce3322c5953d38e9d",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 4,
+      "hit_count": 2,
       "path": "src/runtime/xisolate_internal.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "xr_vm_cleanup",
-        "xr_vm_init",
-        "xr_vm_state"
+        "xr_vm_init"
       ]
     },
     {
@@ -9296,6 +9294,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "38860132815da7b6c1cbc864a75b8c94e2575e5336b334875e0ef2fdfd007c30",
-  "total": 3623
+  "source_tree_fingerprint": "206cbc6ebd4b2f4d994c288e76f1f882226977b54756381881cd51f0c0ddd075",
+  "total": 3621
 }
