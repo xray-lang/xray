@@ -18,20 +18,8 @@
   ],
   "generator": "target-machine-phase0/1",
   "legacy_artifact_symbols": [],
-  "opcode_count": 296,
+  "opcode_count": 295,
   "opcodes": [
-    {
-      "deletion_task": 276,
-      "error_suspend_edges": "handler-specific",
-      "family": "typed-operation",
-      "observable_behavior": "description-in-xinstruction-table",
-      "opcode": "OP_NAME",
-      "operand_format": "FMT_TAG",
-      "operand_roles": "KOP_TAG",
-      "ownership": "implicit-opcode-handler-contract",
-      "tag_assumption": "XrValue-register-frame",
-      "target_plan_mapping": "map-to-target-plan-op"
-    },
     {
       "deletion_task": 276,
       "error_suspend_edges": "handler-specific",

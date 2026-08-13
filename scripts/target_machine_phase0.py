@@ -328,6 +328,13 @@ def legacy_vm_inventory(root: Path) -> dict[str, Any]:
         "include/xray_vm.h", "src/vm/xvm.c", "src/vm/xvm_coro_backend.c",
     ]
     op_text = read(root / inputs[0])
+    # The table's own doc comment spells the macro's parameter list as
+    # `_(NAME, FMT_TAG, KOP_TAG, "...")`, which matches the row shape exactly.
+    # Reading it as an opcode inflates every downstream count by one, so rows
+    # are taken from the table body only.
+    table_start = op_text.find("#define XR_OPCODE_TABLE")
+    if table_start >= 0:
+        op_text = op_text[table_start:]
     pattern = re.compile(r"_\(\s*([A-Z][A-Z0-9_]*)\s*,\s*(FMT_[A-Za-z0-9_]+)\s*,\s*(KOP_[A-Za-z0-9_]+)\s*,")
     opcodes = []
     for name, fmt, operands in pattern.findall(op_text):
