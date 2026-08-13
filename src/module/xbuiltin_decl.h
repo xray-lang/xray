@@ -44,13 +44,13 @@
 struct XrCFunction;
 struct XrVMRuntime;
 typedef XrValue (*XrCFunctionPtr)(struct XrVMRuntime *, XrValue *, int);
-extern struct XrCFunction *xr_vm_cfunction_new(struct XrVMRuntime *isolate, XrCFunctionPtr func,
-                                               const char *name);
+extern struct XrCFunction *xr_cfunction_new(struct XrVMRuntime *isolate, XrCFunctionPtr func,
+                                            const char *name);
 extern XrValue xr_value_from_cfunction(struct XrCFunction *cfunc);
 
 #define XR_MODULE_EXPORT(mod, isolate, name_str, func_ptr)                                         \
     do {                                                                                           \
-        struct XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str);              \
+        struct XrCFunction *cfunc = xr_cfunction_new(isolate, func_ptr, name_str);                 \
         XrValue fn_val = xr_value_from_cfunction(cfunc);                                           \
         xr_module_add_export(isolate, mod, name_str, fn_val);                                      \
     } while (0)

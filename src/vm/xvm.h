@@ -79,10 +79,9 @@ XR_FUNC XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto);
 
 /* ========== C Function API ========== */
 
-XR_FUNC XrCFunction *xr_vm_cfunction_new(XrVMRuntime *isolate, XrCFunctionPtr func,
-                                         const char *name);
-XR_FUNC XrCFunction *xr_vm_yieldable_cfunction_new(XrVMRuntime *isolate,
-                                                   XrYieldableCFunctionPtr func, const char *name);
+XR_FUNC XrCFunction *xr_cfunction_new(XrVMRuntime *isolate, XrCFunctionPtr func, const char *name);
+XR_FUNC XrCFunction *xr_yieldable_cfunction_new(XrVMRuntime *isolate,
+                                                XrYieldableCFunctionPtr func, const char *name);
 
 /* ========== Closure API ========== */
 /* Closure creation is declared in runtime/closure/xclosure.h. */

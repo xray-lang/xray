@@ -710,7 +710,7 @@ const char *xr_debug_local_name(XrProto *proto, int reg, int pc) {
 /*
  * Create regular C function object
  */
-XrCFunction *xr_vm_cfunction_new(XrVMRuntime *isolate, XrCFunctionPtr func, const char *name) {
+XrCFunction *xr_cfunction_new(XrVMRuntime *isolate, XrCFunctionPtr func, const char *name) {
     XR_DCHECK(func != NULL, "cfunction_new: NULL func");
     XrCFunction *cfunc = (XrCFunction *) xr_malloc(sizeof(XrCFunction));
     if (cfunc == NULL) {
@@ -734,15 +734,15 @@ XrCFunction *xr_vm_cfunction_new(XrVMRuntime *isolate, XrCFunctionPtr func, cons
 /*
  * Create yieldable C function object
  */
-XrCFunction *xr_vm_yieldable_cfunction_new(XrVMRuntime *isolate, XrYieldableCFunctionPtr func,
-                                           const char *name) {
+XrCFunction *xr_yieldable_cfunction_new(XrVMRuntime *isolate, XrYieldableCFunctionPtr func,
+                                        const char *name) {
     XR_DCHECK(func != NULL, "yieldable_cfunction_new: NULL func");
     XrCFunction *cfunc = (XrCFunction *) xr_malloc(sizeof(XrCFunction));
     if (cfunc == NULL) {
         return NULL;
     }
 
-    // Fully initialize object header — see xr_vm_cfunction_new for rationale.
+    // Fully initialize object header — see xr_cfunction_new for rationale.
     memset(&cfunc->hdr, 0, sizeof(XrObjHeader));
     cfunc->hdr.type = XR_TCFUNCTION;
     cfunc->hdr.objsize = (uint32_t) sizeof(XrCFunction);

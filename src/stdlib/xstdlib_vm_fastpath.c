@@ -667,8 +667,8 @@ bool xr_stdlib_vm_fastpath_install(XrVMRuntime *isolate, XrModule *module,
             continue;
         XrCFunction *function =
             entry->yieldable_entry
-                ? xr_vm_yieldable_cfunction_new(isolate, entry->yieldable_entry, entry->member)
-                : xr_vm_cfunction_new(isolate, entry->entry, entry->member);
+                ? xr_yieldable_cfunction_new(isolate, entry->yieldable_entry, entry->member)
+                : xr_cfunction_new(isolate, entry->entry, entry->member);
         if (!function)
             return false;
         if (!xr_module_set_initializing_export(isolate, module, entry->member,
