@@ -144,6 +144,10 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
         for item in manifest.get("operation", [])
         if item.get("typed_plan") and item.get("semantic_kernel")
     })
+    blocks = re.findall(r"\(define-xi-op\s+([^\s()]+)(.*?)(?=\n\(define-xi-op|\Z)", text, re.S)
+    targets_by_operation = {
+        name: set(sexpr_list(body, "targets")) for name, body in blocks
+    }
     explicit_by_operation: dict[str, dict[str, Any]] = {}
     for owner in registry.get("owners", []):
         canonical_source = kernels_by_owner.get(owner.get("owner"))
@@ -152,14 +156,16 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
         # Runtime owners additionally name their hosted/freestanding adapters,
         # but requiring those profiles would hide source-backed target queries
         # that are fully reduced before generated C crosses that boundary.
-        if not canonical_source or "vm" not in consumers or "cgen" not in consumers:
+        if not canonical_source or "cgen" not in consumers:
             continue
         for operation in owner.get("operations", []):
+            targets = targets_by_operation.get(operation, set())
+            if "vm-bytecode" in targets and "vm" not in consumers:
+                continue
             explicit_by_operation[operation] = {
                 "owner": owner["owner"],
                 "source": canonical_source,
             }
-    blocks = re.findall(r"\(define-xi-op\s+([^\s()]+)(.*?)(?=\n\(define-xi-op|\Z)", text, re.S)
     rows: list[dict[str, Any]] = []
     for name, body in blocks:
         op_class = sexpr_atom(body, "class", "unclassified")

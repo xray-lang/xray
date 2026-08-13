@@ -1252,6 +1252,31 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_static_address_core.h",
+      "id": "static-address",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/shared/xr_semantic_owner_ids_gen.h"
+      ],
+      "profiles": [
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_static_address_plan_core",
+        "xr_static_address_plan_is_exact_core"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_strbuf_core.h",
       "id": "string-buffer",
       "owner": "shared-kernel",

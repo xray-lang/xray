@@ -16,6 +16,7 @@
 #include "shared/xr_numeric_core.h"
 #include "shared/xr_owner_forward_core.h"
 #include "shared/xr_raw_scalar_core.h"
+#include "shared/xr_static_address_core.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -602,6 +603,27 @@ TEST(copy_core_freezes_identity_clone_and_control_variants) {
                   "xr_copy_plan_core");
 }
 
+TEST(static_address_core_freezes_stability_and_borrow_contract) {
+    XrStaticAddressPlan readonly = XR_STATIC_ADDRESS_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_HI,
+        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_LO, XR_SEM_CONSUMER_CGEN,
+        XR_STATIC_ADDRESS_IDENTITY_MODULE, false);
+    XrStaticAddressPlan mutable = xr_static_address_plan_core(
+        XR_STATIC_ADDRESS_IDENTITY_SYSTEM, true);
+
+    ASSERT(xr_static_address_plan_is_exact_core(readonly));
+    ASSERT(xr_static_address_plan_is_exact_core(mutable));
+    ASSERT(readonly.stable_escape && readonly.borrowed);
+    ASSERT(readonly.requires_module_static_domain && !readonly.requires_mutable_storage);
+    ASSERT(mutable.requires_mutable_storage && !mutable.requires_module_static_domain);
+    ASSERT_FALSE(xr_static_address_plan_is_exact_core(
+        xr_static_address_plan_core(XR_STATIC_ADDRESS_IDENTITY_INVALID, false)));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_HI,
+                      XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_LO),
+                  "xr_static_address_plan_core");
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -637,6 +659,7 @@ RUN_TEST(raw_scalar_access_owner_freezes_typed_load_store_matrix);
 RUN_TEST(owner_forward_core_freezes_value_and_ownership_transfer);
 RUN_TEST(codegen_opaque_core_freezes_value_and_optimizer_barrier);
 RUN_TEST(copy_core_freezes_identity_clone_and_control_variants);
+RUN_TEST(static_address_core_freezes_stability_and_borrow_contract);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()

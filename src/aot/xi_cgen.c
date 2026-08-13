@@ -42,6 +42,7 @@
 #include "../shared/xr_owner_forward_core.h"
 #include "../shared/xr_codegen_opaque_core.h"
 #include "../shared/xr_copy_core.h"
+#include "../shared/xr_static_address_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
@@ -4560,6 +4561,25 @@ static const char *cg_copy_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO);
     if (!adapter || strcmp(adapter, "xr_copy_plan_core") != 0) {
         fprintf(stderr, "[xi_cgen] ERROR: copy owner has no exact CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_static_address_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_HI,
+                                        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: static-address owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_HI,
+        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_LO);
+    if (!adapter || strcmp(adapter, "xr_static_address_plan_core") != 0) {
+        fprintf(stderr, "[xi_cgen] ERROR: static-address owner has no exact CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }

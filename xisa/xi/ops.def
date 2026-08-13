@@ -2668,7 +2668,6 @@
     xi.slice.window
     xi.slice.from.ptr
     xi.buffer.materialize
-    xi.static.addr
     xi.local.addr
     xi.place.load
     xi.place.store
@@ -2763,6 +2762,7 @@
   :operations (
     xi.codegen.opaque
     xi.copy
+    xi.static.addr
     xi.owner.forward
     xi.target.sizeof
     xi.target.alignof
@@ -2919,6 +2919,19 @@
     (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
     (vm "src/ir/xi_emit.c" "XR_COPY_OWNER_PLAN")
     (cgen "src/aot/xi_cgen.c" "cg_copy_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.static-address
+  :category shared-semantic-kernel
+  :operations (xi.static.addr)
+  :consumers (
+    semantic-plan
+    cgen
+  )
+  :cgen-adapter xr_static_address_plan_core
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (cgen "src/aot/xi_cgen.c" "cg_static_address_adapter_name")
   ))
 
 (define-xi-observable-owner shared.truthiness

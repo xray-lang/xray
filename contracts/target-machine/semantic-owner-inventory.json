@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 266,
+  "operation_count": 267,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -883,6 +883,32 @@
         "vm",
         "aot",
         "hosted"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/static-address",
+      "capabilities": [
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_static_address_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/static-address",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_static_address_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.static-address",
+      "ownership": "native",
+      "targets": [
+        "aot",
+        "hosted",
+        "freestanding"
       ]
     },
     {
@@ -5551,16 +5577,16 @@
         "static-data",
         "addressable"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_static_address_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-pure",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.static-address",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_static_address_core.h",
       "observable_edges": [],
       "operation_id": "xi.static.addr",
       "ownership": "borrow",
@@ -6858,5 +6884,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "42c877f0e2e7157e2652825cf87b78743b14a087cec50b7a83325dee44b37368"
+  "source_tree_fingerprint": "fba85b3e445b744ba59288de5f72578afb2ac041777a004c9d5f81de71fc1c48"
 }

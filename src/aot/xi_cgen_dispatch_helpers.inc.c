@@ -15052,18 +15052,34 @@ static bool xicgen_emit_static_addr_symbol_name(XiCgenCtx *ctx, FILE *out, const
 static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
     (void) prefix;
+    if (!v || !cg_static_address_adapter_name(ctx)) {
+        if (ctx)
+            ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
     const XiModule *module = NULL;
     int64_t slot = -1;
     bool want_mutable = v && v->type && XR_TYPE_IS_POINTER(v->type) && v->type->ptr_is_mut;
     const XiConstLiteral *lit = xicgen_static_addr_resolve_literal(ctx, f, v ? v->aux_int : -1,
                                                                    want_mutable, &module, &slot);
     const XaotAddressPlan *address = xaot_address_plan_find(cg_ctx_aot_bundle(ctx), v);
-    if (!address ||
-        (address->provenance.address_identity != XR_ADDRESS_MODULE_STABLE &&
-         address->provenance.address_identity != XR_ADDRESS_SYSTEM_STABLE) ||
-        address->provenance.escape != XR_POINTER_ESCAPE_STABLE ||
-        (want_mutable && address->provenance.mutability == XR_STORAGE_READONLY) ||
-        (!want_mutable && address->provenance.domain != XR_STORAGE_MODULE_STATIC)) {
+    XrStaticAddressIdentity identity = XR_STATIC_ADDRESS_IDENTITY_INVALID;
+    if (address && address->provenance.address_identity == XR_ADDRESS_MODULE_STABLE)
+        identity = XR_STATIC_ADDRESS_IDENTITY_MODULE;
+    else if (address && address->provenance.address_identity == XR_ADDRESS_SYSTEM_STABLE)
+        identity = XR_STATIC_ADDRESS_IDENTITY_SYSTEM;
+    XrStaticAddressPlan owner_plan = XR_STATIC_ADDRESS_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_HI,
+        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_LO, XR_SEM_CONSUMER_CGEN,
+        identity, want_mutable);
+    bool adapter_matches = address && xr_static_address_plan_is_exact_core(owner_plan) &&
+                           address->provenance.escape == XR_POINTER_ESCAPE_STABLE &&
+                           (!owner_plan.requires_mutable_storage ||
+                            address->provenance.mutability != XR_STORAGE_READONLY) &&
+                           (!owner_plan.requires_module_static_domain ||
+                            address->provenance.domain == XR_STORAGE_MODULE_STATIC);
+    if (!adapter_matches) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: %s requires verified stable %s storage provenance for '%s.%s'\n",
                 "static address", want_mutable ? "mutable" : "readonly",

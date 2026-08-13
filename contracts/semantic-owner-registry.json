@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "37c6d39b36527f93cd5a73f768dba346539c77124cd4ac7c078d6c683be975ff",
+  "canonical_fingerprint": "508dfec5b99a42c4aadd3593ce33ea62f09eae3332f92603546b0dcd1728f167",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -1507,6 +1507,34 @@
           "consumer": "runtime",
           "path": "src/runtime/object/xbigint.c",
           "symbol": "XR_SHIFT_BIGINT_OWNER_APPLY"
+        }
+      ]
+    },
+    {
+      "owner": "shared.static-address",
+      "owner_id": "7550405f9f595552201a1fcda85a4d9b",
+      "owner_id_hi": "0x7550405f9f595552",
+      "owner_id_lo": "0x201a1fcda85a4d9b",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.static.addr"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "cgen"
+      ],
+      "consumer_bits": "0x00000011",
+      "cgen_adapter": "xr_static_address_plan_core",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_static_address_adapter_name"
         }
       ]
     },
@@ -3959,28 +3987,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.stack.alloc"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.static.addr",
-      "owner_id": "d7061f520b01261ca5517dcf9ce8fb59",
-      "owner_id_hi": "0xd7061f520b01261c",
-      "owner_id_lo": "0xa5517dcf9ce8fb59",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.static.addr"
       ],
       "consumers": [
         "semantic-plan"
@@ -8510,21 +8516,27 @@
       "operation_id": "d7061f520b01261ca5517dcf9ce8fb59",
       "operation_id_hi": "0xd7061f520b01261c",
       "operation_id_lo": "0xa5517dcf9ce8fb59",
-      "owner": "xi.static.addr",
-      "owner_id": "d7061f520b01261ca5517dcf9ce8fb59",
-      "owner_id_hi": "0xd7061f520b01261c",
-      "owner_id_lo": "0xa5517dcf9ce8fb59",
-      "category": "declarative-primitive",
+      "owner": "shared.static-address",
+      "owner_id": "7550405f9f595552201a1fcda85a4d9b",
+      "owner_id_hi": "0x7550405f9f595552",
+      "owner_id_lo": "0x201a1fcda85a4d9b",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x00000011",
+      "cgen_adapter": "xr_static_address_plan_core",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_static_address_adapter_name"
         }
       ]
     },
