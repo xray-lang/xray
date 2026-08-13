@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 268,
+  "operation_count": 269,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -521,6 +521,34 @@
       "observable_contract": "src/shared/xr_hash_core.h",
       "observable_edges": [],
       "operation_id": "shared.hash",
+      "ownership": "native",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/int-arith",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_int_arith_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/int-arith",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_int_arith_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.int-arith",
       "ownership": "native",
       "targets": [
         "vm",
@@ -3316,16 +3344,16 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_int_arith_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.int-div-mod",
       "independent_oracle": "independent-kat-property-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_int_arith_core.h",
       "observable_edges": [],
       "operation_id": "xi.div",
       "ownership": "borrow",
@@ -4256,16 +4284,16 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_int_arith_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.int-div-mod",
       "independent_oracle": "independent-kat-property-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_int_arith_core.h",
       "observable_edges": [],
       "operation_id": "xi.mod",
       "ownership": "borrow",
@@ -6912,5 +6940,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "26b6df30cca2a7ca359c2160aa6953501334bcbc3b5b56f72741ab5091f1a50f"
+  "source_tree_fingerprint": "5b2490cd2991dda2f46bdd3f659ca597884df12de7582d12d25ce6f0bbd552e9"
 }

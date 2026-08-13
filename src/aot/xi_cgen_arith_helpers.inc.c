@@ -52,41 +52,47 @@ static bool cg_const_int_value_in_func(XiCgenCtx *ctx, const XiFunc *f, const Xi
     return true;
 }
 
+/* Kind token for the shared xi.div/xi.mod owner, spelled into generated C. */
+static const char *cg_int_div_mod_kind_token(uint16_t op, bool unsigned_kind) {
+    if (unsigned_kind)
+        return op == XI_DIV ? "XR_INT_DIV_MOD_DIV_U" : "XR_INT_DIV_MOD_MOD_U";
+    return op == XI_DIV ? "XR_INT_DIV_MOD_DIV" : "XR_INT_DIV_MOD_MOD";
+}
+
+/* Open an owner-adapter call for a divisor the plan already discharged. The
+ * proof token is what keeps the emitted expression equal to the bare machine
+ * divide it replaces: a positive divisor makes the signed wrap rule
+ * unreachable, and a nonzero divisor drops the zero probe. Proving something
+ * about the divisor is therefore a narrower rule from the same owner, never a
+ * private lowering. */
+static bool emit_int_div_mod_proven_head(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                         bool unsigned_kind, const char *proof) {
+    const char *adapter = cg_int_div_mod_adapter_name(ctx);
+    if (!adapter || !proof || (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90))
+        return false;
+    fprintf(out, "%s(%s, %s, ", adapter, cg_int_div_mod_kind_token(v->op, unsigned_kind), proof);
+    return true;
+}
+
 static bool emit_native_const_div_mod_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *v) {
     if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64)
+        return false;
+    if (v->op != XI_DIV && v->op != XI_MOD)
         return false;
 
     int64_t divisor = 0;
     if (!cg_const_int_value_in_func(ctx, f, v->args[1], &divisor) || divisor == 0)
         return false;
+    if (!emit_int_div_mod_proven_head(ctx, out, v, false, "XR_INT_DIV_MOD_PROOF_NONZERO"))
+        return false;
 
-    if (v->op == XI_DIV) {
-        if (divisor == -1) {
-            fprintf(out, "(int64_t)(-(uint64_t)");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ")");
-        } else {
-            fprintf(out, "(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, " / INT64_C(%" PRId64 "))", divisor);
-        }
-        return true;
-    }
-    if (v->op == XI_MOD) {
-        if (divisor == -1) {
-            fprintf(out, "INT64_C(0)");
-        } else {
-            fprintf(out, "(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, " %% INT64_C(%" PRId64 "))", divisor);
-        }
-        return true;
-    }
-    return false;
+    emit_vref(out, v->args[0]);
+    fprintf(out, ", INT64_C(%" PRId64 "))", divisor);
+    return true;
 }
 
-static bool emit_native_positive_divisor_div_mod_expr(FILE *out, const XiFunc *f,
+static bool emit_native_positive_divisor_div_mod_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                       const XiValue *v) {
     if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
         cg_rep(v->args[1]) != XR_REP_I64)
@@ -95,10 +101,11 @@ static bool emit_native_positive_divisor_div_mod_expr(FILE *out, const XiFunc *f
         return false;
     if (!xi_value_known_positive_at(f, v->args[1], v->block))
         return false;
+    if (!emit_int_div_mod_proven_head(ctx, out, v, false, "XR_INT_DIV_MOD_PROOF_POSITIVE"))
+        return false;
 
-    fprintf(out, "(");
     emit_vref(out, v->args[0]);
-    fprintf(out, v->op == XI_DIV ? " / " : " %% ");
+    fprintf(out, ", ");
     emit_vref(out, v->args[1]);
     fprintf(out, ")");
     return true;
@@ -122,8 +129,8 @@ static bool cg_divmod_uses_unsigned(const XiValue *v) {
 
 /* Emit unsigned div/mod via xrt_uint_div / xrt_uint_mod (same divide-by-zero
  * throw as the signed path; clang folds the check and constant divisors after
- * inlining). Must be tried before the signed const / positive-divisor fast
- * paths, which emit signed C '/' and '%'. */
+ * inlining). Must be tried before the signed const / positive-divisor paths,
+ * which select the signed owner kinds. */
 static bool emit_native_unsigned_div_mod_expr(FILE *out, const XiValue *v) {
     if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
         cg_rep(v->args[1]) != XR_REP_I64)

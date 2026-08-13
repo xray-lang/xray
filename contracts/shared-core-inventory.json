@@ -675,6 +675,56 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_int_arith_core.h",
+      "id": "int-arith",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xrt_arith.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/aot/xrt_method.h",
+        "src/ir/xi_opt.c",
+        "src/ir/xi_opt_sccp.c",
+        "src/runtime/value/xint_methods.h",
+        "src/runtime/value/xvalue.h",
+        "src/shared/xr_arith_core.h",
+        "src/shared/xr_numeric_core.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_i64_abs_magnitude",
+        "xr_i64_abs_wrap",
+        "xr_i64_add_wrap",
+        "xr_i64_checked_add",
+        "xr_i64_checked_mul",
+        "xr_i64_checked_sub",
+        "xr_i64_mul_wrap",
+        "xr_i64_neg_wrap",
+        "xr_i64_saturating_add",
+        "xr_i64_saturating_mul",
+        "xr_i64_saturating_sub",
+        "xr_i64_sub_wrap",
+        "xr_int_div_mod_apply",
+        "xr_int_div_mod_eval",
+        "xr_u64_mul_high",
+        "xr_u64_mul_wide",
+        "xr_uint_mul_high_bits"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/ir/test_xi_cgen.c",
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_io_core.h",
       "id": "io",
       "owner": "shared-kernel",
@@ -937,9 +987,7 @@
         "xr_numeric_core_i64_abs_magnitude",
         "xr_numeric_core_i64_abs_wrap",
         "xr_numeric_core_i64_add_wrap",
-        "xr_numeric_core_i64_div_wrap",
         "xr_numeric_core_i64_math_abs",
-        "xr_numeric_core_i64_mod_wrap",
         "xr_numeric_core_i64_mul_wrap",
         "xr_numeric_core_i64_neg_wrap",
         "xr_numeric_core_i64_sub_wrap",

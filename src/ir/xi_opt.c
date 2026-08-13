@@ -41,7 +41,7 @@
 #include "xi_value_query.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../os/os_thread.h"
-#include "../shared/xr_int_arith.h"
+#include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_null_test_core.h"
@@ -375,12 +375,16 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, bool shr_unsigned
         case XI_DIV:
             if (b == 0)
                 return false;
-            *result = divmod_unsigned ? xr_i64_div_u_wrap(a, b) : xr_i64_div_wrap(a, b);
+            *result = xr_int_div_mod_apply(divmod_unsigned ? XR_INT_DIV_MOD_DIV_U
+                                                           : XR_INT_DIV_MOD_DIV,
+                                           XR_INT_DIV_MOD_PROOF_NONZERO, a, b);
             return true;
         case XI_MOD:
             if (b == 0)
                 return false;
-            *result = divmod_unsigned ? xr_i64_mod_u_wrap(a, b) : xr_i64_mod_wrap(a, b);
+            *result = xr_int_div_mod_apply(divmod_unsigned ? XR_INT_DIV_MOD_MOD_U
+                                                           : XR_INT_DIV_MOD_MOD,
+                                           XR_INT_DIV_MOD_PROOF_NONZERO, a, b);
             return true;
         case XI_BAND:
             *result = xr_bitwise_binary_i64(XR_BITWISE_BINARY_AND, a, b);

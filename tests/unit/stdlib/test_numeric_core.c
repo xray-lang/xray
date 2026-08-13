@@ -12,6 +12,7 @@
 #include "shared/xr_bits_core.h"
 #include "shared/xr_codegen_opaque_core.h"
 #include "shared/xr_copy_core.h"
+#include "shared/xr_int_arith_core.h"
 #include "shared/xr_numeric_conversion_core.h"
 #include "shared/xr_numeric_core.h"
 #include "shared/xr_owner_forward_core.h"
@@ -126,11 +127,50 @@ TEST(numeric_neg_owner_freezes_scalar_bits_and_bigint_sign) {
     ASSERT_FALSE(xr_numeric_neg_bigint_plan(denormalized, 2, 1).valid);
 }
 
-TEST(numeric_core_integer_div_mod_edges_match_language) {
-    ASSERT_EQ_INT(xr_numeric_core_i64_div_wrap(INT64_MIN, -1), INT64_MIN);
-    ASSERT_EQ_INT(xr_numeric_core_i64_mod_wrap(INT64_MIN, -1), 0);
-    ASSERT_EQ_INT(xr_numeric_core_i64_div_wrap(7, -3), -2);
-    ASSERT_EQ_INT(xr_numeric_core_i64_mod_wrap(7, -3), 1);
+TEST(int_div_mod_owner_freezes_signed_unsigned_and_zero_edges) {
+    /* Signed edges: division stays total once the divisor is nonzero. */
+    ASSERT_EQ_INT(xr_int_div_mod_apply(XR_INT_DIV_MOD_DIV, XR_INT_DIV_MOD_PROOF_NONZERO,
+                                       INT64_MIN, -1),
+                  INT64_MIN);
+    ASSERT_EQ_INT(xr_int_div_mod_apply(XR_INT_DIV_MOD_MOD, XR_INT_DIV_MOD_PROOF_NONZERO,
+                                       INT64_MIN, -1),
+                  0);
+    ASSERT_EQ_INT(xr_int_div_mod_apply(XR_INT_DIV_MOD_DIV, XR_INT_DIV_MOD_PROOF_NONZERO, 7, -3),
+                  -2);
+    ASSERT_EQ_INT(xr_int_div_mod_apply(XR_INT_DIV_MOD_MOD, XR_INT_DIV_MOD_PROOF_NONZERO, 7, -3), 1);
+
+    /* A positive-divisor proof selects the same value as the general rule. */
+    ASSERT_EQ_INT(xr_int_div_mod_apply(XR_INT_DIV_MOD_DIV, XR_INT_DIV_MOD_PROOF_POSITIVE, -7, 3),
+                  xr_int_div_mod_apply(XR_INT_DIV_MOD_DIV, XR_INT_DIV_MOD_PROOF_NONZERO, -7, 3));
+    ASSERT_EQ_INT(xr_int_div_mod_apply(XR_INT_DIV_MOD_MOD, XR_INT_DIV_MOD_PROOF_POSITIVE, -7, 3),
+                  xr_int_div_mod_apply(XR_INT_DIV_MOD_MOD, XR_INT_DIV_MOD_PROOF_NONZERO, -7, 3));
+
+    /* Unsigned kinds read the same i64 slot as u64. */
+    ASSERT_EQ_INT(xr_int_div_mod_apply(XR_INT_DIV_MOD_DIV_U, XR_INT_DIV_MOD_PROOF_NONZERO, -1, 2),
+                  (int64_t) (UINT64_MAX / 2u));
+    ASSERT_EQ_INT(xr_int_div_mod_apply(XR_INT_DIV_MOD_MOD_U, XR_INT_DIV_MOD_PROOF_NONZERO, -1, 10),
+                  (int64_t) (UINT64_MAX % 10u));
+    ASSERT_EQ_INT(xr_int_div_mod_apply(XR_INT_DIV_MOD_DIV_U, XR_INT_DIV_MOD_PROOF_NONZERO,
+                                       INT64_MIN, -1),
+                  0);
+
+    /* The zero divisor is reported, never raised, and only when unproven. */
+    XrIntDivModResult zero = XR_INT_DIV_MOD_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI, XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,
+        XR_SEM_CONSUMER_VM, XR_INT_DIV_MOD_DIV, XR_INT_DIV_MOD_PROOF_NONE, 5, 0);
+    ASSERT_TRUE(zero.divisor_is_zero);
+    ASSERT_EQ_INT(zero.value, 0);
+
+    XrIntDivModResult ok = XR_INT_DIV_MOD_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI, XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,
+        XR_SEM_CONSUMER_VM, XR_INT_DIV_MOD_MOD, XR_INT_DIV_MOD_PROOF_NONE, -7, 3);
+    ASSERT_FALSE(ok.divisor_is_zero);
+    ASSERT_EQ_INT(ok.value, -1);
+    ASSERT_EQ_INT(XR_INT_DIV_MOD_OWNER_APPLY_PROVEN(
+                      XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,
+                      XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO, XR_SEM_CONSUMER_VM,
+                      XR_INT_DIV_MOD_DIV, XR_INT_DIV_MOD_PROOF_POSITIVE, -7, 3),
+                  -2);
 }
 
 TEST(numeric_core_shift_counts_are_mod64) {
@@ -705,7 +745,7 @@ RUN_TEST(numeric_core_abs_wraps_int64_min);
 RUN_TEST(numeric_core_math_abs_preserves_int_or_promotes_min);
 RUN_TEST(numeric_core_integer_arithmetic_wraps);
 RUN_TEST(numeric_neg_owner_freezes_scalar_bits_and_bigint_sign);
-RUN_TEST(numeric_core_integer_div_mod_edges_match_language);
+RUN_TEST(int_div_mod_owner_freezes_signed_unsigned_and_zero_edges);
 RUN_TEST(numeric_core_shift_counts_are_mod64);
 RUN_TEST(bitwise_binary_owner_freezes_scalar_and_bigint_edges);
 RUN_TEST(numeric_conversion_integer_matrix_is_bit_defined);

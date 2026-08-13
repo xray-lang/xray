@@ -116,6 +116,36 @@ NUMERIC_NEG_AOT_BINDINGS = (
     "src/aot/xrt.h",
     "src/aot/xrt_core_freestanding.h",
 )
+INT_DIV_MOD_OPERATIONS = {"xi.div", "xi.mod"}
+INT_DIV_MOD_AOT_BINDINGS = (
+    "src/aot/xrt.h",
+    "src/aot/xrt_core_freestanding.h",
+)
+INT_DIV_MOD_RETIRED_SOURCES = (
+    "src/shared/xr_int_arith_core.h",
+    "src/shared/xr_numeric_core.h",
+    "src/runtime/value/xvalue.h",
+    "src/vm/xvm_dispatch_arith.inc.c",
+    "src/ir/xi_opt.c",
+    "src/ir/xi_opt_sccp.c",
+    "src/aot/xrt.h",
+    "src/aot/xrt_arith.h",
+    "src/aot/xrt_core_freestanding.h",
+    "src/aot/xi_cgen_arith_helpers.inc.c",
+    "src/aot/xi_cgen_dispatch_helpers.inc.c",
+)
+INT_DIV_MOD_RETIRED_TOKENS = (
+    "xr_i64_div_wrap",
+    "xr_i64_mod_wrap",
+    "xr_i64_div_u_wrap",
+    "xr_i64_mod_u_wrap",
+    "xr_int_div_wrap",
+    "xr_int_mod_wrap",
+    "xr_int_div_u_wrap",
+    "xr_int_mod_u_wrap",
+    "xr_numeric_core_i64_div_wrap",
+    "xr_numeric_core_i64_mod_wrap",
+)
 NUMERIC_WIDTH_OPERATIONS = {
     "xi.narrow.i8",
     "xi.narrow.u8",
@@ -967,7 +997,7 @@ def verify_shift_ratchet(root: Path, registry: dict) -> list[str]:
         errors.append("src/ir/xi_opt_sccp.c: SCCP shift folding bypasses shared kernel")
 
     retired_sources = (
-        "src/shared/xr_int_arith.h",
+        "src/shared/xr_int_arith_core.h",
         "src/shared/xr_numeric_core.h",
         "src/runtime/value/xvalue.h",
         "src/runtime/object/xbigint.h",
@@ -1090,6 +1120,106 @@ def verify_numeric_neg_ratchet(root: Path, registry: dict) -> list[str]:
     sccp_body = extract_c_function(sccp_text, "eval_unary")
     if sccp_body is None or sccp_body.count("xr_numeric_neg_eval") < 2:
         errors.append("src/ir/xi_opt_sccp.c: SCCP numeric-neg bypasses shared core")
+    return errors
+
+
+def verify_int_div_mod_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.int-div-mod")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.int-div-mod"), None)
+    if owner is None or set(owner.get("operations", [])) != INT_DIV_MOD_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.int-div-mod operation family")
+
+    core_text = (root / "src/shared/xr_int_arith_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_INT_DIV_MOD_OWNER_APPLY",
+                  "XR_INT_DIV_MOD_OWNER_APPLY_PROVEN", "XR_INT_DIV_MOD_KIND_GUARD",
+                  "XR_INT_DIV_MOD_PROOF_GUARD", "XR_INT_DIV_MOD_PROVEN_GUARD",
+                  "xr_int_div_mod_eval", "xr_int_div_mod_apply"):
+        if token not in core_text:
+            errors.append(f"src/shared/xr_int_arith_core.h: shared int-div-mod owner lacks {token}")
+
+    vm_relative = "src/vm/xvm_dispatch_arith.inc.c"
+    vm_text = (root / vm_relative).read_text(encoding="utf-8", errors="strict")
+    if f"{marker}_HI" not in vm_text or f"{marker}_LO" not in vm_text or \
+            "XR_INT_DIV_MOD_OWNER_APPLY" not in vm_text:
+        errors.append(f"{vm_relative}: VM div/mod does not bind the stable owner ID")
+    for start, end, kind in (
+        ("#define XVM_TEMPLATE_ARITH_DIV_CASE", "#define XVM_TEMPLATE_ARITH_MOD_CASE",
+         "XR_INT_DIV_MOD_DIV"),
+        ("#define XVM_TEMPLATE_ARITH_MOD_CASE", "#undef XVM_TEMPLATE_ARITH_MOD_CASE",
+         "XR_INT_DIV_MOD_MOD"),
+    ):
+        begin = vm_text.find(start)
+        stop = vm_text.find(end, begin + 1)
+        body = vm_text[begin:stop] if begin >= 0 and stop > begin else ""
+        if f"XVM_INT_DIV_MOD_EVAL({kind}," not in body:
+            errors.append(f"{vm_relative}: {start} bypasses the shared div/mod owner")
+    for kind in ("XR_INT_DIV_MOD_DIV", "XR_INT_DIV_MOD_MOD", "XR_INT_DIV_MOD_DIV_U",
+                 "XR_INT_DIV_MOD_MOD_U"):
+        if f"XVM_INT_DIV_MOD_EVAL({kind}," not in vm_text:
+            errors.append(f"{vm_relative}: no VM opcode evaluates the owner for {kind}")
+
+    for relative in INT_DIV_MOD_AOT_BINDINGS:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "xrt_int_div_mod_eval" not in text or
+                "XR_INT_DIV_MOD_OWNER_APPLY_PROVEN" not in text):
+            errors.append(f"{relative}: AOT div/mod adapter bypasses the stable owner")
+
+    for relative in ("src/aot/xrt_arith.h", "src/aot/xrt_core_freestanding.h"):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for symbol in ("xrt_int_div", "xrt_int_mod", "xrt_uint_div", "xrt_uint_mod"):
+            body = extract_c_function(text, symbol)
+            if body is None or "INT_DIV_MOD_CHECKED(" not in body:
+                errors.append(f"{relative}: {symbol} bypasses the shared div/mod owner")
+            elif any(retired in body for retired in ("a / b", "a % b", "(uint64_t) a /",
+                                                     "(uint64_t) a %", "xrt_i64_neg")):
+                errors.append(f"{relative}: private div/mod semantics revived in {symbol}")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_int_div_mod_adapter_name")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append("src/aot/xi_cgen.c: CGen div/mod does not resolve by stable owner ID")
+
+    arith_text = (root / "src/aot/xi_cgen_arith_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    head_body = extract_c_function(arith_text, "emit_int_div_mod_proven_head")
+    if head_body is None or "cg_int_div_mod_adapter_name" not in head_body:
+        errors.append("src/aot/xi_cgen_arith_helpers.inc.c: proven div/mod head resolves no owner")
+    for symbol in ("emit_native_const_div_mod_expr", "emit_native_positive_divisor_div_mod_expr"):
+        body = extract_c_function(arith_text, symbol)
+        if body is None or "emit_int_div_mod_proven_head" not in body:
+            errors.append(f"src/aot/xi_cgen_arith_helpers.inc.c: {symbol} emits a private division")
+        elif any(token in body for token in ('" / "', '" %% "', "-(uint64_t)", '" / INT64_C',
+                                             '" %% INT64_C')):
+            errors.append(f"src/aot/xi_cgen_arith_helpers.inc.c: raw division revived in {symbol}")
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    dispatch_body = extract_c_function(dispatch_text, "xicgen_div_mod")
+    if dispatch_body is None or "emit_int_div_mod_proven_head" not in dispatch_body:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: div/mod emitter bypasses the owner")
+    elif "(uint64_t)(" in dispatch_body:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: raw unsigned division revived")
+
+    optimizer_text = (root / "src/ir/xi_opt.c").read_text(encoding="utf-8", errors="strict")
+    optimizer_body = extract_c_function(optimizer_text, "fold_int_binary")
+    if optimizer_body is None or optimizer_body.count("xr_int_div_mod_apply") < 2:
+        errors.append("src/ir/xi_opt.c: div/mod constant folding bypasses the shared kernel")
+    sccp_text = (root / "src/ir/xi_opt_sccp.c").read_text(encoding="utf-8", errors="strict")
+    sccp_body = extract_c_function(sccp_text, "eval_arith")
+    if sccp_body is None or sccp_body.count("xr_int_div_mod_apply") < 2:
+        errors.append("src/ir/xi_opt_sccp.c: SCCP div/mod folding bypasses the shared kernel")
+
+    for relative in INT_DIV_MOD_RETIRED_SOURCES:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for token in INT_DIV_MOD_RETIRED_TOKENS:
+            if token in text:
+                errors.append(f"{relative}: retired div/mod semantic source remains: {token}")
     return errors
 
 
@@ -3342,8 +3472,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 42:
-        errors.append(f"shared-core inventory must contain exactly 42 headers, found {len(actual)}")
+    if len(actual) != 43:
+        errors.append(f"shared-core inventory must contain exactly 43 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -3373,6 +3503,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_bitwise_binary_ratchet(root, registry))
         errors.extend(verify_shift_ratchet(root, registry))
         errors.extend(verify_numeric_neg_ratchet(root, registry))
+        errors.extend(verify_int_div_mod_ratchet(root, registry))
         errors.extend(verify_numeric_width_ratchet(root, registry))
         errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
         errors.extend(verify_byte_slice_fill_ratchet(root, registry))

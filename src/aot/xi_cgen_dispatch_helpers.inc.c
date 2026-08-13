@@ -941,19 +941,20 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
      * OP_DIV_U/OP_MOD_U and both constant folders). The signed xrt_int_div /
      * xrt_int_mod fallback below would treat u64/usize top-bit-set payloads as
      * negative. uint64_t covers every unsigned width — narrower payloads are
-     * zero-extended in the i64 value model. When the divisor is provably
-     * nonzero, inline the native division; otherwise use the throwing helper.
-     * emit_value_as_rep_ctx normalizes raw-i64 and boxed operands alike. */
+     * zero-extended in the i64 value model. A divisor the plan proved nonzero
+     * carries that proof to the shared owner and needs no zero probe; anything
+     * else takes the throwing helper. emit_value_as_rep_ctx normalizes raw-i64
+     * and boxed operands alike. */
     if (result_rep == XR_REP_I64 && cg_type_is_unsigned_int(v->type)) {
         bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
         if (boxed)
             fprintf(out, "XR_FROM_INT(");
-        if (cg_div_mod_is_trusted_nothrow(ctx, f, v)) {
-            fprintf(out, "(int64_t)((uint64_t)(");
+        if (cg_div_mod_is_trusted_nothrow(ctx, f, v) &&
+            emit_int_div_mod_proven_head(ctx, out, v, true, "XR_INT_DIV_MOD_PROOF_NONZERO")) {
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-            fprintf(out, ") %s (uint64_t)(", v->op == XI_DIV ? "/" : "%");
+            fprintf(out, ", ");
             emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, "))");
+            fprintf(out, ")");
         } else {
             fprintf(out, "%s(", v->op == XI_DIV ? "xrt_uint_div" : "xrt_uint_mod");
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
@@ -969,8 +970,8 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     /* Imported/local module constants can remain represented as tagged shared
      * slots even though the bundle carries their exact integer literal.  Fold
      * a nonzero divisor here before the generic tagged arithmetic path so a
-     * source-level `const` divisor lowers to native C division and cannot
-     * publish a pending divide-by-zero error. */
+     * source-level `const` divisor keeps its literal and cannot publish a
+     * pending divide-by-zero error. */
     if (emit_native_const_div_mod_expr(ctx, out, f, v))
         return;
 
@@ -1022,7 +1023,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         }
     } else if (result_rep == XR_REP_I64) {
         if (!emit_native_unsigned_div_mod_expr(out, v) &&
-            !emit_native_positive_divisor_div_mod_expr(out, f, v)) {
+            !emit_native_positive_divisor_div_mod_expr(ctx, out, f, v)) {
             const char *fn = xi_to_c_template_div_mod_int_fn(v->op);
             fprintf(out, "%s(", fn);
             emit_vref(out, v->args[0]);

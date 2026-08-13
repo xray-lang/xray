@@ -74,6 +74,10 @@
     XR_NUMERIC_NEG_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI,                             \
                                XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,                             \
                                XR_SEM_CONSUMER_AOT_HOSTED, kind, i64, f64)
+#define xrt_int_div_mod_eval(kind, proof, lhs, rhs)                                               \
+    XR_INT_DIV_MOD_OWNER_APPLY_PROVEN(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                      \
+                                      XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,                      \
+                                      XR_SEM_CONSUMER_AOT_HOSTED, (kind), (proof), (lhs), (rhs))
 #define xrt_null_test_tagged(tag)                                                                 \
     XR_NULL_TEST_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,                                \
                              XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,                                \

@@ -28,7 +28,7 @@
 #include "xi_range.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../shared/xr_int_arith.h"
+#include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_null_test_core.h"
@@ -410,16 +410,18 @@ static SccpCell eval_arith(uint16_t op, SccpCell a, SccpCell b, bool divmod_unsi
             return sccp_bot();
         case XI_DIV:
             if (both_int(a, b) && b.ival != 0) {
-                return sccp_int(divmod_unsigned ? xr_i64_div_u_wrap(a.ival, b.ival)
-                                                : xr_i64_div_wrap(a.ival, b.ival));
+                return sccp_int(xr_int_div_mod_apply(
+                    divmod_unsigned ? XR_INT_DIV_MOD_DIV_U : XR_INT_DIV_MOD_DIV,
+                    XR_INT_DIV_MOD_PROOF_NONZERO, a.ival, b.ival));
             }
             if (both_float(a, b) && b.fval != 0.0)
                 return sccp_float(a.fval / b.fval);
             return sccp_bot();
         case XI_MOD:
             if (both_int(a, b) && b.ival != 0) {
-                return sccp_int(divmod_unsigned ? xr_i64_mod_u_wrap(a.ival, b.ival)
-                                                : xr_i64_mod_wrap(a.ival, b.ival));
+                return sccp_int(xr_int_div_mod_apply(
+                    divmod_unsigned ? XR_INT_DIV_MOD_MOD_U : XR_INT_DIV_MOD_MOD,
+                    XR_INT_DIV_MOD_PROOF_NONZERO, a.ival, b.ival));
             }
             return sccp_bot();
         default:

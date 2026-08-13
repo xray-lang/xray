@@ -4362,6 +4362,24 @@ static const char *cg_numeric_neg_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
+static const char *cg_int_div_mod_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,
+                                        XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: int-div-mod owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: int-div-mod owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
 static const char *cg_regex_compile_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_REGEX_HI,
                                         XR_SEM_OWNER_ID_SHARED_REGEX_LO,
@@ -10477,6 +10495,8 @@ static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
         /* Stable shared shift owner adapter is header-inline. */
         "xrt_bitwise_binary_eval",
         "xrt_shift_eval",
+        /* Proven-divisor division resolves to a native divide after inlining. */
+        "xrt_int_div_mod_eval",
         "xrt_rotl",
         "xrt_rotr",
         "xrt_min",

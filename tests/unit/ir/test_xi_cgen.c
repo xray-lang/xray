@@ -43,7 +43,7 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xmemstream.h"
 #include "../../../src/base/xglobal_indices.h"
-#include "../../../src/shared/xr_int_arith.h"
+#include "../../../src/shared/xr_int_arith_core.h"
 #include "../../../src/shared/xr_semantic_owner_ids_gen.h"
 #include "../../../src/plan/semantic/xr_semantic_ops_gen.h"
 #include "../../../include/xray.h"
@@ -9262,14 +9262,16 @@ TEST(cgen_int_const_div_mod_uses_native_ops) {
            contains(code, "static int64_t test_checked_") &&
            "both test functions should be generated");
     assert(count_between(code, code_end, "xrt_int_div(") == 0 &&
-           "constant non-zero integer division must use native /");
+           "constant non-zero integer division must not reach the throwing helper");
     assert(count_between(code, code_end, "xrt_int_mod(") == 1 &&
-           "constant non-zero integer modulo must use native %");
-    assert(count_between(code, code_end, " / ") >= 1 &&
-           "constant non-zero integer division should emit C /");
-    assert(count_between(code, code_end, " % ") >= 1 &&
-           "constant non-zero integer modulo should emit C %");
-    assert(contains(code, " / INT64_C(5)") && contains(code, " % INT64_C(7)") &&
+           "an unproven integer modulo must still reach the throwing helper");
+    assert(contains(code, "xrt_int_div_mod_eval(XR_INT_DIV_MOD_DIV, "
+                          "XR_INT_DIV_MOD_PROOF_NONZERO") &&
+           "a constant divisor must carry its nonzero proof to the shared owner");
+    assert(contains(code, "xrt_int_div_mod_eval(XR_INT_DIV_MOD_MOD, "
+                          "XR_INT_DIV_MOD_PROOF_NONZERO") &&
+           "a constant modulus must carry its nonzero proof to the shared owner");
+    assert(contains(code, ", INT64_C(5))") && contains(code, ", INT64_C(7))") &&
            "constant div/mod RHS must stay literal so C compilers can strength-reduce it");
 
     printf("  Generated integer div/mod fast path %zu bytes of C code\n", strlen(code));

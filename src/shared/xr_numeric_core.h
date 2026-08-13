@@ -157,17 +157,9 @@ static inline int64_t xr_numeric_core_i64_neg_wrap(int64_t value) {
     return xr_numeric_neg_eval(XR_NUMERIC_NEG_I64, value, 0.0).i64;
 }
 
-static inline int64_t xr_numeric_core_i64_div_wrap(int64_t a, int64_t b) {
-    if (b == -1)
-        return xr_numeric_core_i64_neg_wrap(a);
-    return a / b;
-}
-
-static inline int64_t xr_numeric_core_i64_mod_wrap(int64_t a, int64_t b) {
-    if (b == -1)
-        return 0;
-    return a % b;
-}
+/* Integer division and modulo belong to the shared.int-div-mod owner in
+ * xr_int_arith_core.h; restating the wrap rule here would be a second
+ * semantic source. */
 
 static inline int xr_numeric_core_format_i64(char *buf, size_t bufsz, int64_t value) {
     if (!buf || bufsz == 0)
