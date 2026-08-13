@@ -86,19 +86,19 @@ materialization. AOT prepare runs only after every required BOX or UNBOX is
 present at its recorded source and use, and rejects a missing, extra, reordered,
 or stale adapter before ABI planning. This adds no public value representation,
 layout, or calling-convention change.
-The C emission projection schema 10 preserves the exact materialization recipe
+The C emission projection schema 11 preserves the exact materialization recipe
 and immutable byte payload for every verified String literal row. CGen
 mechanically consumes that row and cannot recover literal bytes, a dynamic
 tag, field spelling, or ownership from mutable Xi values. Missing, extra,
 reordered, stale, or incorrectly spelled rows fail before emission; this does
 not authorize general owned Strings, tuples, or object bodies.
-Schema 10 additionally projects the sealed `StringBuilder()` Target call as an
+Schema 11 additionally projects the sealed `StringBuilder()` Target call as an
 owned `TAGGED`/`XrValue` result with the fixed zero-argument `xrt_strbuf_new`
 recipe. Ordinary and coroutine CGen mechanically consume that recipe; neither
 may rediscover the builtin by Xi auxiliary text or fall back to generic
 allocation. The recipe grants no generic builtin, object layout, root-map,
 cleanup, alias, or allocation-table authority.
-Schema 10 also preserves the exact borrowed `TAGGED`/`XrValue` row for a frozen
+Schema 11 also preserves the exact borrowed `TAGGED`/`XrValue` row for a frozen
 direct-local shared callee token. CGen consumes that immutable row mechanically;
 it cannot infer callable representation from Xi type or representation state.
 The live materialization verifier walks the caller parent chain to the frozen
@@ -106,12 +106,15 @@ callee's first lexical shared-slot owner and requires that owner's unique child
 and slot pointer to match, so root-owned sibling helpers are accepted without
 name or type guessing. The row grants no closure body, allocation, root, or
 cleanup authority.
-For an exact scalar `XI_CHAN_TRY_RECV`, schema 10 preserves the receiver semantic
+For an exact scalar `XI_CHAN_TRY_RECV`, schema 11 preserves the receiver semantic
 value and exact scalar unbox helper spelling. Sync and coroutine CGen consume
 that recipe mechanically; they cannot infer it from Xi type/representation or
 fall back to a legacy adapter. This grants no Channel object layout, receive
 scheduling, ownership transfer, aggregate/tuple payload, root, or cleanup
-authority.
+authority. For the exact String byte-slice intrinsic, schema 11 preserves the
+borrowed `xr_span_t` view, its source semantic value, and the fixed
+`xrt_span_from_string_bytes` recipe. CGen has no selector-, alias-, or
+type-derived fallback; this grants no generic String method or Slice ABI.
 An AOT cross-execution transfer row binds its site and payload to exactly one
 representation authority. A TargetPlan value binding and a legacy value row
 are mutually exclusive; the only accepted legacy rows are the independently
@@ -309,14 +312,14 @@ the compiler core does not download a provider.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c a268bec7948a3a9cecf081d63d51545e3fe41af0b6ab32a9a38b21b031127da0
-anchor-sha256: src/aot/xaot_prepare.c 14065b3961b50a4fee75ddfb5ca9ede64d2fb4c351184834921f60f80cc23589
-anchor-sha256: src/aot/xaot_verify.c dd20098c80d32cd67944e347a39de93b4f38126a6b989890fce6ce355a4211b6
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 591cd0f4e85d5b95aa667ba815a4fc7f166e96d5df1fc35d60fa4c1f56bacae5
+anchor-sha256: src/aot/xaot_prepare.c af75cd0365f34f92e781091b397c2a9122eed66abbe33f6fc9787d51010ea95f
+anchor-sha256: src/aot/xaot_verify.c 713a2223cb777b709dc4f7133fd6a95d4db3d81da964f4b7e7bb745c17db498b
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c a5bea4c18c6414d00bd827947d1ce290879f1e762c3cbf819631b605b749519a
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 11e99944b4cf4a3cddad2830bb60f364731489d6ec6b8be4e8df584312e852da
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 809c66017a53bcb10f4d04e76b9f872a7217bbea2f456c0ffc8ac21eeda80518
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 48e82044772e6d2e16a839de4e9fcdb03ac55701597bcd6b7ed15238f2808284
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c b4201c02fc214411accff3be9a6f92b394c9116f86b79fc2b41a5e576a4a7d65
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 9011332cab0c4cff0952d954c9dd04a6bd45160df9d9549b08828dc13d7af422
-anchor-sha256: src/aot/xi_cgen.c 439448c91088d810009bf73cfcbbb5d8b08a1c1ac82cb0a8993f6da1d7e604a7
+anchor-sha256: src/aot/xi_cgen.c e5453e03b8976a80949049c07a8018221b0b1d63e7fda3eb4636dd212a5d23bb
 anchor-sha256: src/aot/xrt_coll.h 1ba34be990068c77bbfefb2b5b0606294a92488268b82af872d14d3541c54d0c
 anchor-sha256: src/aot/xrt_core_freestanding.h 33753314de27a8e3ac4d9efbe61212d96c39300edf42ec1c5e9341067bf69386
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7

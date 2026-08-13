@@ -103,8 +103,8 @@ Evidence:
   the exact XSM/XTP sole-function generation route.
 
 anchor-sha256: src/plan/target/xr_target_plan.h 82be9921c5216992891b5b78058d6d5a4e2660dbf654de137571f034c8ae9b48
-anchor-sha256: src/vm/xr_typed_frame.h c9103cc550224ff770d8788c3ef98395b48b976f42cdea9d693846b1d92808ea
+anchor-sha256: src/vm/xr_typed_frame.h 4f609fc384804fba9a286af96af09e62580320d888860c54e73adaf15c7d86ca
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c fd1d0a25a4a0f634fde4ceb37f64bffc43a65da91ed5d725b7bb09e1d327df25
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c b07e9b374f2961d08eb0ee985785eeb28de3984b974f791cb38b4094c1e8790b
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7
