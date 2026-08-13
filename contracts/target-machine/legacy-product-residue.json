@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3379
+    "source": 3376
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -416,7 +416,6 @@
     "xr_bundle_to_c_source",
     "xr_proto_add_symbol",
     "xr_vm_bind_proto_shared_slots",
-    "xr_vm_bind_proto_shared_slots_recursive",
     "xr_vm_call_closure",
     "xr_vm_call_closure_ex",
     "xr_vm_call_method",
@@ -3948,7 +3947,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "b8782250ffc4a44cf171f08c9a2e4a015464c171da4ed5173449686889517ed3",
+      "evidence_sha256": "e19b4963aee32e2ba17119678e98d5d40bd9a255f3f01744ed79cf71a88b1424",
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 10,
       "path": "src/api/xvm_exec.c",
@@ -7949,16 +7948,15 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "d51bfae84e97a7177db48fce3d3e34123e755a6f3db5cb1340fd5772b4ca352c",
+      "evidence_sha256": "8ee14244e1535b0b9f817f716c5666f37bd6aad8d4bfa96e392920fabffd7bf7",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 17,
+      "hit_count": 14,
       "path": "src/api/xvm_exec.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "XR_VM_OK",
         "xr_vm_bind_proto_shared_slots",
-        "xr_vm_bind_proto_shared_slots_recursive",
         "xr_vm_cleanup",
         "xr_vm_ctx_free_ic_tables",
         "xr_vm_current_ctx",
@@ -9191,6 +9189,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "c6f624c838b186bded538f4027d56211b842624f735512447f011ffa192bee29",
-  "total": 3581
+  "source_tree_fingerprint": "e67ac46f1e4ab0c7be6e64cb9d3998c99e2f031a8a6459c114d66ef7fb3dd54b",
+  "total": 3578
 }

@@ -26,8 +26,8 @@
 #include "../vm/xvm_internal.h"
 #include <string.h>
 
-static bool xr_vm_bind_proto_shared_slots_recursive(XrVMRuntime *isolate, XrProto *proto,
-                                                    int offset) {
+static bool xr_bind_proto_shared_slots_recursive(XrVMRuntime *isolate, XrProto *proto,
+                                                 int offset) {
     if (!proto)
         return true;
     proto->shared_offset = offset;
@@ -36,7 +36,7 @@ static bool xr_vm_bind_proto_shared_slots_recursive(XrVMRuntime *isolate, XrProt
     int child_count = DYNARRAY_COUNT(&proto->protos);
     for (int i = 0; i < child_count; i++) {
         XrProto *child = DYNARRAY_GET(&proto->protos, i, XrProto *);
-        if (!xr_vm_bind_proto_shared_slots_recursive(isolate, child, offset))
+        if (!xr_bind_proto_shared_slots_recursive(isolate, child, offset))
             return false;
     }
     return true;
@@ -58,7 +58,7 @@ bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto) {
             isolate->vm.shared.data[offset + i] = XR_NULL_VAL;
         isolate->vm.shared.count = offset + proto->shared_count;
     }
-    return xr_vm_bind_proto_shared_slots_recursive(isolate, proto, offset);
+    return xr_bind_proto_shared_slots_recursive(isolate, proto, offset);
 }
 
 /* ========== Execution API ========== */
