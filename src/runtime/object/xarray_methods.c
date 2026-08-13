@@ -54,13 +54,13 @@ static bool array_accepts_value(XrVMRuntime *iso, XrArray *arr, XrValue value) {
     return true;
 }
 
-// Build the diagnostic tag "Array.<method>" for xr_vm_closure_from_arg.
+// Build the diagnostic tag "Array.<method>" for callback validation.
 // The composed name lives on the stack; xr_runtime_error copies it into
 // the isolate's error buffer before returning, so a stack address is safe.
 static struct XrClosure *array_callback(XrVMRuntime *iso, XrValue v, const char *method) {
     char tag[32];
     snprintf(tag, sizeof(tag), "Array.%s", method);
-    return xr_vm_closure_from_arg(iso, v, tag);
+    return xr_closure_from_callback_arg(iso, v, tag);
 }
 
 /* === Mutation === */

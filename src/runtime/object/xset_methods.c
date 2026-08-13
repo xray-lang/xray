@@ -142,7 +142,7 @@ static XrValue xr_set_method_to_array(XrVMRuntime *iso, XrValue self, XrValue *a
 static XrValue xr_set_method_foreach(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    struct XrClosure *cb = xr_vm_closure_from_arg(iso, args[0], "Set.forEach");
+    struct XrClosure *cb = xr_closure_from_callback_arg(iso, args[0], "Set.forEach");
     if (!cb)
         return xr_null();
     XrSet *s = set_self(self);

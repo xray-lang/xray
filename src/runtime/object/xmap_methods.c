@@ -136,7 +136,7 @@ static XrValue xr_map_method_to_string(XrVMRuntime *iso, XrValue self, XrValue *
 static XrValue xr_map_method_foreach(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    struct XrClosure *cb = xr_vm_closure_from_arg(iso, args[0], "Map.forEach");
+    struct XrClosure *cb = xr_closure_from_callback_arg(iso, args[0], "Map.forEach");
     if (!cb)
         return xr_null();
     XrMap *m = map_self(self);
