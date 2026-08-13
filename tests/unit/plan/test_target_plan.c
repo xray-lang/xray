@@ -128,6 +128,12 @@ static XrType stub_string_builder = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .instance = {.class_name = "StringBuilder"},
 };
+static XrType stub_rune = {
+    .kind = XR_KIND_RUNE,
+    .id = 119,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 static XrType stub_target_u8 = {
     .kind = XR_KIND_INT,
     .id = 117,
@@ -386,6 +392,92 @@ static XrSemanticPlan *build_stringbuilder_constructor_semantic(void) {
     REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
+}
+
+/* The three StringBuilder method families are all stated against the same
+ * exact constructor receiver, so every fixture starts from one. */
+static XiValue *emit_exact_string_builder(XiFunc *function, XiBlock *entry) {
+    XiValue *builder = xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_string_builder, 0);
+    REQUIRE(builder != NULL);
+    builder->aux = (void *) "StringBuilder";
+    return builder;
+}
+
+static XrSemanticPlan *finish_stringbuilder_semantic(XiFunc *function, XiBlock *entry,
+                                                     const char *label) {
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "%s Target semantic failed: %s\n", label, error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_stringbuilder_append_rune_semantic(void) {
+    XiFunc *function = xi_func_new("target_stringbuilder_append_rune", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *builder = emit_exact_string_builder(function, entry);
+    XiValue *rune = xi_const_rune(function, entry, 'x', &stub_rune);
+    REQUIRE(rune != NULL);
+    XiValue *append = xi_value_new(function, entry, XI_CALL_METHOD, &stub_string_builder, 2);
+    REQUIRE(append != NULL);
+    append->args[0] = builder;
+    append->args[1] = rune;
+    append->aux = (void *) "append";
+    append->aux_int = 2;
+    append->result_alias_operand = 0;
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = append;
+    return finish_stringbuilder_semantic(function, entry, "StringBuilder.append(rune)");
+}
+
+static XrSemanticPlan *build_stringbuilder_to_string_semantic(void) {
+    XiFunc *function = xi_func_new("target_stringbuilder_to_string", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *builder = emit_exact_string_builder(function, entry);
+    XiValue *to_string = xi_value_new(function, entry, XI_CALL_METHOD, &stub_exact_string, 1);
+    REQUIRE(to_string != NULL);
+    to_string->args[0] = builder;
+    to_string->aux = (void *) "toString";
+    to_string->aux_int = 2;
+    XiValue *release_string = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    XiValue *release_builder = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release_string != NULL && release_builder != NULL);
+    release_string->args[0] = to_string;
+    release_builder->args[0] = builder;
+    return finish_stringbuilder_semantic(function, entry, "StringBuilder.toString");
+}
+
+static XrSemanticPlan *build_stringbuilder_append_string_semantic(void) {
+    XiFunc *function = xi_func_new("target_stringbuilder_append_string", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *builder = emit_exact_string_builder(function, entry);
+    XiValue *text = xi_const_str(function, entry, "target-append", &stub_exact_string);
+    REQUIRE(text != NULL);
+    XiValue *append = xi_value_new(function, entry, XI_CALL_METHOD, &stub_string_builder, 2);
+    REQUIRE(append != NULL);
+    append->args[0] = builder;
+    append->args[1] = text;
+    append->aux = (void *) "append";
+    append->aux_int = 2;
+    append->result_alias_operand = 0;
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = append;
+    return finish_stringbuilder_semantic(function, entry, "StringBuilder.append(string)");
 }
 
 static XrSemanticPlan *build_string_byte_slice_view_semantic(void) {
@@ -3121,6 +3213,116 @@ static void test_stringbuilder_constructor_call_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static XrTargetCallRecord *find_call_by_convention(XrTargetPlan *plan, uint8_t convention) {
+    XrTargetCallRecord *match = NULL;
+    for (uint32_t i = 0; i < plan->calls_count; i++) {
+        if (plan->calls[i].calling_convention != convention)
+            continue;
+        REQUIRE(match == NULL);
+        match = &plan->calls[i];
+    }
+    REQUIRE(match != NULL);
+    return match;
+}
+
+/* The shared call block and the per-family branch state the same ownership
+ * fact about a StringBuilder method result. When they disagree the shared
+ * block breaks out first, the per-family branch becomes dead code, and no
+ * plan carrying the row can ever verify — so each family asserts that the
+ * builder's row verifies as written and that RETURN_OWNED is load-bearing. */
+static XrTargetCallRecord *expect_owned_dynamic_stringbuilder_call(
+    XrTargetPlan *plan, uint8_t convention, uint8_t target_kind) {
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    XrTargetCallRecord *call = find_call_by_convention(plan, convention);
+    const XrTargetValueRepRecord *result = xr_target_plan_value_rep(plan, call->result_value);
+    REQUIRE(result && result->slot == call->result_slot &&
+            call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+            call->callee_function == XR_SEMANTIC_INDEX_NONE && call->argument_count == 0 &&
+            call->flags == 0 && call->result_mode == XR_TARGET_CALL_VALUE &&
+            call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+            call->target_kind == target_kind &&
+            plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[result->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+
+    uint8_t saved_ownership = call->result_ownership;
+    call->result_ownership = XR_TARGET_CALL_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_ownership = XR_TARGET_CALL_BORROW;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_ownership = saved_ownership;
+    /* Identity, target kind and convention live only in the per-family branch
+     * behind the shared `break`; rejecting them proves that branch still runs
+     * rather than having been stranded by a disagreeing shared block. */
+    XrStableId saved_identity = call->identity;
+    call->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->identity = saved_identity;
+    uint8_t saved_kind = call->target_kind;
+    call->target_kind = XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->target_kind = saved_kind;
+    uint8_t saved_convention = call->calling_convention;
+    call->calling_convention = XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->calling_convention = saved_convention;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    return call;
+}
+
+static void test_stringbuilder_append_rune_call_authority(void) {
+    XrSemanticPlan *semantic = build_stringbuilder_append_rune_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "StringBuilder.append(rune) TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan);
+    expect_owned_dynamic_stringbuilder_call(
+        plan, XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_RUNE,
+        XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE);
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
+static void test_stringbuilder_to_string_call_authority(void) {
+    XrSemanticPlan *semantic = build_stringbuilder_to_string_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "StringBuilder.toString TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan);
+    expect_owned_dynamic_stringbuilder_call(
+        plan, XR_TARGET_CALL_CONVENTION_STRINGBUILDER_TO_STRING,
+        XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING);
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
+static void test_stringbuilder_append_string_call_authority(void) {
+    XrSemanticPlan *semantic = build_stringbuilder_append_string_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "StringBuilder.append(string) TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan);
+    expect_owned_dynamic_stringbuilder_call(
+        plan, XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING,
+        XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING);
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_string_byte_slice_view_target_authority(void) {
     XrSemanticPlan *semantic = build_string_byte_slice_view_semantic();
     XrTargetProfile *profile = build_profile(0);
@@ -3542,6 +3744,9 @@ static void test_bool_and_nullable_scalar_boundary(void) {
 int main(void) {
     test_unit_enum_target_rep_mutations();
     test_stringbuilder_constructor_call_authority();
+    test_stringbuilder_append_rune_call_authority();
+    test_stringbuilder_to_string_call_authority();
+    test_stringbuilder_append_string_call_authority();
     test_string_byte_slice_view_target_authority();
     test_channel_receive_storage_authority();
     test_channel_close_call_authority();
