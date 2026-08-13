@@ -8961,6 +8961,19 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
     const XaotCapacityPlan *plan = xicgen_stringbuilder_capacity_plan(ctx, v);
 
     if (strcmp(method, "toString") == 0 && nargs == 0) {
+        XrCValueEmissionView authority = {0};
+        uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
+        if (!cg_value_semantic_id(ctx, f, v->args[0], &receiver_value) ||
+            cg_value_emission_view(ctx, f, v, &authority) != CG_VALUE_EMISSION_FOUND ||
+            authority.materialization != XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_TO_STRING ||
+            authority.recipe_operand_value != receiver_value ||
+            authority.recipe_argument_value != UINT32_MAX || !authority.recipe_symbol ||
+            strcmp(authority.recipe_symbol, "xrt_strbuf_finish") != 0) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: StringBuilder.toString lacks immutable emission authority\n");
+            emit_codegen_abort_expr(out);
+            return true;
+        }
         if (!plan && v->xg_capacity_op_id == XG_NO_ID)
             return false;
         const uint32_t required = XAOT_CAPACITY_EV_GLOBAL_ROW | XAOT_CAPACITY_EV_RECEIVER_TYPE |
