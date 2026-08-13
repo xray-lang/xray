@@ -5214,8 +5214,12 @@ TEST(cgen_byte_slice_safe_methods_use_stable_owners) {
            "fast path");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_copy_checked_raw(") > 0 &&
            "Slice<byte>.copyFrom must lower through the stable owner adapter");
-    assert(count_between(fn_body, fn_end, "xrt_byte_array_append_from_span_raw(") == 0 &&
-           "Array<byte>.appendFrom hot path must not call the large raw helper");
+    assert(count_between(fn_body, fn_end, "xrt_byte_array_append_from_span_raw(") > 0 &&
+           "Array<byte>.appendFrom must lower through the stable owner adapter");
+    assert(count_between(fn_body, fn_end, "xrt_byte_array_append_from_span_slow_raw(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") == 0 &&
+           count_between(fn_body, fn_end, "xr_raw_memory_copy_nonoverlap(") == 0 &&
+           "Array<byte>.appendFrom CGen must not recreate grow, alias, or copy semantics");
     assert(count_between(fn_body, fn_end, "xrt_byte_array_repeat_from_tail_raw(") > 0 &&
            "Array<byte>.repeatFrom must lower through the stable owner adapter");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_copy(") == 0 &&
@@ -5836,8 +5840,8 @@ TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
 
     assert(count_between(fn, fn_end, "xrt_span_from_span_slice(") > 0 &&
            "appendRange must keep the Slice<byte> slice in native span storage");
-    assert(count_between(fn, fn_end, "xrt_byte_array_append_from_span_slow_raw(") > 0 &&
-           "appendRange must lower appendFrom(Slice<byte>) to the byte append fast path");
+    assert(count_between(fn, fn_end, "xrt_byte_array_append_from_span_raw(") > 0 &&
+           "appendRange must lower appendFrom(Slice<byte>) through the stable owner adapter");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "appendFrom(Slice<byte> slice) must not keep dead ERR_CHECKs after proven native paths");
 

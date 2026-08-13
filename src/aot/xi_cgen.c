@@ -3135,6 +3135,7 @@ static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *cla
 
 #include "xi_cgen_class_native_helpers.inc.c"
 
+static const char *cg_byte_array_append_adapter_name(XiCgenCtx *ctx);
 static const char *cg_byte_array_repeat_adapter_name(XiCgenCtx *ctx);
 
 #include "xi_cgen_array_helpers.inc.c"
@@ -4653,6 +4654,25 @@ static const char *cg_byte_array_copy_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: byte-array copy owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_byte_array_append_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI,
+                                        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: byte-array append owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: byte-array append owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }

@@ -172,6 +172,31 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_byte_array_append_core.h",
+      "id": "byte-array-append",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_coll.h",
+        "src/runtime/object/xarray.c",
+        "src/runtime/object/xarray.h",
+        "src/vm/xvm.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_byte_array_append_core"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_byte_array_append_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_byte_array_copy_core.h",
       "id": "byte-array-copy",
       "owner": "shared-kernel",
@@ -961,7 +986,6 @@
       "id": "raw-memory",
       "owner": "shared-kernel",
       "production_callers": [
-        "src/aot/xi_cgen_array_helpers.inc.c",
         "src/aot/xrt.h",
         "src/aot/xrt_c90.h",
         "src/aot/xrt_core_freestanding.h",

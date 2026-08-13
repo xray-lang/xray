@@ -256,7 +256,12 @@ static XrValue m_append_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
-    if (!xr_byte_array_append_from_span(dst, src_data, src_length, src_guard)) {
+    XrByteArrayAppendResult result = XR_BYTE_ARRAY_APPEND_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO, XR_SEM_CONSUMER_RUNTIME,
+        xr_byte_array_append_from_span_adapter(dst, src_data, src_length, XR_ELEM_U8,
+                                               src_guard));
+    if (result.status != XR_BYTE_ARRAY_APPEND_OK) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
                                          XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
         xr_vm_unwind_with_trace(iso, exc);

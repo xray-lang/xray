@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 261,
+  "operation_count": 262,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -117,6 +117,32 @@
         "aot",
         "hosted",
         "freestanding"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/byte-array-append",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_byte_array_append_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/byte-array-append",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_byte_array_append_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.byte-array-append",
+      "ownership": "native",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted"
       ]
     },
     {
@@ -1772,9 +1798,9 @@
         "append-grow",
         "alias-safe"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_byte_array_append_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "may-throw",
@@ -1785,10 +1811,10 @@
         "may-throw"
       ],
       "family": "memory-and-place",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.byte-array-append",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_byte_array_append_core.h",
       "observable_edges": [
         "sequence-append"
       ],
@@ -6720,5 +6746,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "a24e88b2c37acda75ce298d70930d651bb224986833e3828721f5297fbfb2a87"
+  "source_tree_fingerprint": "4ee298985affaf8e61adb3ef984bcfef097d744f1db7b285d3a44f91e626788d"
 }

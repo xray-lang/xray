@@ -1088,47 +1088,38 @@ uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok) {
     return xr_array_core_bytes_load_u64_le(arr->data, arr->length, arr->elem_type, offset, ok);
 }
 
-bool xr_byte_array_append_from_span(XrArray *dst, const void *src_data, int64_t src_length,
-                                    const void *src_guard) {
-    if (!dst || dst->elem_type != XR_ELEM_U8 || xr_array_is_slice(dst))
+static bool xr_byte_array_append_reserve(void *ctx, XrByteArrayAppendView *view,
+                                         int64_t capacity) {
+    XrArray *dst = (XrArray *) ctx;
+    if (!dst || !view || capacity < 0 || capacity > INT32_MAX)
         return false;
-    if (src_length < 0 || src_length > INT32_MAX || dst->length > INT32_MAX - src_length)
-        return false;
-    if (src_length > 0 && !src_data)
-        return false;
+    xr_array_ensure_capacity(dst, (int) capacity);
+    view->data = dst->data;
+    view->capacity = dst->capacity;
+    return dst->capacity >= capacity && (capacity == 0 || dst->data != NULL);
+}
 
-    bool aliases_dst = false;
-    int64_t src_offset = 0;
-    if (src_length > 0 && dst->data) {
-        const uint8_t *base = (const uint8_t *) dst->data;
-        const uint8_t *src = (const uint8_t *) src_data;
-        if (src >= base && src <= base + dst->length) {
-            if (src_length > dst->length)
-                return false;
-            src_offset = (int64_t) (src - base);
-            if (src_offset > dst->length - src_length)
-                return false;
-            aliases_dst = true;
-        } else if (src_guard == dst) {
-            return false;
-        }
+XrByteArrayAppendResult xr_byte_array_append_from_span_adapter(
+    XrArray *dst, const void *src_data, int64_t src_length, uint8_t src_elem_type,
+    const void *src_guard) {
+    XrByteArrayAppendView view = {0};
+    if (dst) {
+        view.data = dst->data;
+        view.length = dst->length;
+        view.capacity = dst->capacity;
+        view.elem_type = dst->elem_type;
+        view.resizable = !xr_array_is_slice(dst);
+        view.identity = dst;
     }
-
-    int64_t old_length = dst->length;
-    int64_t new_length = old_length + src_length;
-    if (new_length > dst->capacity) {
-        xr_array_ensure_capacity(dst, (int) new_length);
-        if (dst->capacity < new_length || (new_length > 0 && !dst->data))
-            return false;
+    XrByteArrayAppendResult result = xr_byte_array_append_core(
+        dst ? &view : NULL, src_data, src_length, src_elem_type, src_guard,
+        xr_byte_array_append_reserve, dst);
+    if (dst && result.status == XR_BYTE_ARRAY_APPEND_OK) {
+        dst->length = (int32_t) view.length;
+        if (result.changed)
+            XR_ARRAY_MARK_MUTATED(dst);
     }
-    if (src_length > 0) {
-        const uint8_t *src =
-            aliases_dst ? (const uint8_t *) dst->data + src_offset : (const uint8_t *) src_data;
-        uint8_t *dst_data = (uint8_t *) dst->data + old_length;
-        xr_array_core_copy_or_move_bytes(dst_data, src, src_length);
-    }
-    dst->length = (int32_t) new_length;
-    return true;
+    return result;
 }
 
 static bool xr_byte_array_repeat_reserve(void *ctx, XrByteArrayRepeatView *view,

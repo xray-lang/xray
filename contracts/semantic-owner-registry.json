@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "d638e81b40aff260378f0e7cd1e550d7204d307dc9147916a0919efff71ccb76",
+  "canonical_fingerprint": "aae2b5881aa8db2d0ea6b9f0c7c56d69d0c2aaab6da706610fa83a20ad85b3dd",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -212,6 +212,52 @@
           "consumer": "runtime",
           "path": "src/runtime/object/xbigint.c",
           "symbol": "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY"
+        }
+      ]
+    },
+    {
+      "owner": "shared.byte-array-append",
+      "owner_id": "6a0586278621de39864e17375221abc8",
+      "owner_id_hi": "0x6a0586278621de39",
+      "owner_id_lo": "0x864e17375221abc8",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.byte.array.append.from"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "runtime",
+        "vm",
+        "aot-hosted",
+        "cgen"
+      ],
+      "consumer_bits": "0x00000037",
+      "cgen_adapter": "xrt_byte_array_append_from_span_raw",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/object/xarray_methods.c",
+          "symbol": "XR_BYTE_ARRAY_APPEND_OWNER_APPLY"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_BYTE_ARRAY_APPEND_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_coll.h",
+          "symbol": "xrt_byte_array_append_semantics"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_byte_array_append_adapter_name"
         }
       ]
     },
@@ -1781,28 +1827,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.buffer.materialize"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.byte.array.append.from",
-      "owner_id": "4b4e358a97252933a72590292d2476fe",
-      "owner_id_hi": "0x4b4e358a97252933",
-      "owner_id_lo": "0xa72590292d2476fe",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.byte.array.append.from"
       ],
       "consumers": [
         "semantic-plan"
@@ -8220,21 +8244,45 @@
       "operation_id": "4b4e358a97252933a72590292d2476fe",
       "operation_id_hi": "0x4b4e358a97252933",
       "operation_id_lo": "0xa72590292d2476fe",
-      "owner": "xi.byte.array.append.from",
-      "owner_id": "4b4e358a97252933a72590292d2476fe",
-      "owner_id_hi": "0x4b4e358a97252933",
-      "owner_id_lo": "0xa72590292d2476fe",
-      "category": "declarative-primitive",
+      "owner": "shared.byte-array-append",
+      "owner_id": "6a0586278621de39864e17375221abc8",
+      "owner_id_hi": "0x6a0586278621de39",
+      "owner_id_lo": "0x864e17375221abc8",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "runtime",
+        "vm",
+        "aot-hosted",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x00000037",
+      "cgen_adapter": "xrt_byte_array_append_from_span_raw",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/object/xarray_methods.c",
+          "symbol": "XR_BYTE_ARRAY_APPEND_OWNER_APPLY"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_BYTE_ARRAY_APPEND_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_coll.h",
+          "symbol": "xrt_byte_array_append_semantics"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_byte_array_append_adapter_name"
         }
       ]
     },

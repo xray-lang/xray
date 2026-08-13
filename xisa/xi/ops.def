@@ -2670,7 +2670,6 @@
     xi.slice.from.ptr
     xi.buffer.materialize
     xi.slice.fill
-    xi.byte.array.append.from
     xi.static.addr
     xi.local.addr
     xi.place.load
@@ -2827,6 +2826,7 @@
     xi.byte.slice.repeat
     xi.byte.array.copy.within
     xi.byte.array.copy.from
+    xi.byte.array.append.from
     xi.byte.array.repeat.from
     xi.slice.copy
     xi.slice.compare
@@ -3210,6 +3210,25 @@
     (vm "src/vm/xvm_dispatch_collection.inc.c" "XR_BYTE_ARRAY_REPEAT_OWNER_APPLY")
     (aot-hosted "src/aot/xrt_coll.h" "xrt_byte_array_repeat_semantics")
     (cgen "src/aot/xi_cgen.c" "cg_byte_array_repeat_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.byte-array-append
+  :category shared-semantic-kernel
+  :operations (xi.byte.array.append.from)
+  :consumers (
+    semantic-plan
+    runtime
+    vm
+    aot-hosted
+    cgen
+  )
+  :cgen-adapter xrt_byte_array_append_from_span_raw
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (runtime "src/runtime/object/xarray_methods.c" "XR_BYTE_ARRAY_APPEND_OWNER_APPLY")
+    (vm "src/vm/xvm_dispatch_collection.inc.c" "XR_BYTE_ARRAY_APPEND_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt_coll.h" "xrt_byte_array_append_semantics")
+    (cgen "src/aot/xi_cgen.c" "cg_byte_array_append_adapter_name")
   ))
 
 (define-xi-observable-owner shared.byte-slice-compare

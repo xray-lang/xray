@@ -26,6 +26,7 @@
 #include "../shared/xr_array_abi.h"
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_builtin_schema.h"
+#include "../shared/xr_byte_array_append_core.h"
 #include "../shared/xr_byte_array_copy_core.h"
 #include "../shared/xr_byte_array_repeat_core.h"
 #include "../shared/xr_cell_access_core.h"
@@ -57,6 +58,14 @@
         XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_LO, XR_SEM_CONSUMER_AOT_HOSTED,                \
         xr_byte_array_repeat_tail_core((view), (distance), (count), (reserve_fn),                \
                                        (reserve_ctx)))
+
+#define xrt_byte_array_append_semantics(view, src_data, src_length, src_elem_type, src_guard,     \
+                                        reserve_fn, reserve_ctx)                                  \
+    XR_BYTE_ARRAY_APPEND_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI,                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO, XR_SEM_CONSUMER_AOT_HOSTED,                \
+        xr_byte_array_append_core((view), (src_data), (src_length), (src_elem_type),             \
+                                  (src_guard), (reserve_fn), (reserve_ctx)))
 
 #define xrt_pod_slice_copy_semantics(dst_data, dst_length, dst_elem_size, src_data, src_length,   \
                                      src_elem_size)                                               \

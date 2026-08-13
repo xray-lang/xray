@@ -5254,41 +5254,20 @@ static bool emit_byte_array_append_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
         return true;
     }
 
+    (void) bulk;
+    const char *adapter = cg_byte_array_append_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
     bool boxed = cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
-    if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        fprintf(out, "xrt_byte_array_append_from_span_slow_raw(");
-        emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
-        fprintf(out, ", ");
-        emit_span_ref_expr(out, call->args[1]);
-        fprintf(out, ")");
-        emit_byte_array_result_suffix(out, boxed);
-        return true;
-    }
-    fprintf(out, "({ xrt_array_t *_dst = ");
+    fprintf(out, "%s(", adapter);
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
-    fprintf(out, "; xr_span_t _src = ");
+    fprintf(out, ", ");
     emit_span_ref_expr(out, call->args[1]);
-    fprintf(out,
-            "; xrt_array_t *_res = _dst; if (XR_LIKELY(_dst && _src.length >= 0 && _src.length "
-            "<= INT64_MAX - _dst->length)) { int64_t _old_length = _dst->length; int64_t "
-            "_new_length = _old_length + _src.length; if (XR_LIKELY(_new_length <= "
-            "_dst->capacity");
-    fprintf(out, " && (_new_length == 0 || _dst->data) && (_src.length == 0 || _src.data))) { "
-                 "if (_src.length > 0) { uint8_t *_dp = (uint8_t*)_dst->data + _old_length; ");
-    if (bulk && bulk->action == XAOT_BULK_INLINE_MEMMOVE)
-        fprintf(out, "memmove(_dp, _src.data, (size_t)_src.length);");
-    else if (bulk && bulk->action == XAOT_BULK_INLINE_MEMCPY)
-        fprintf(out, "memcpy(_dp, _src.data, (size_t)_src.length);");
-    else if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP)
-        fprintf(out, "for (int64_t _i = 0; _i < _src.length; _i++) "
-                     "_dp[_i] = ((const uint8_t*)_src.data)[_i];");
-    else
-        fprintf(out, "xr_raw_memory_copy_nonoverlap(_dp, _src.data, _src.length);");
-    fprintf(out, " } _dst->length = _new_length; } else { _res = "
-                 "xrt_byte_array_append_from_span_slow_raw(_dst, _src); } } else { _res = "
-                 "xrt_byte_array_append_from_span_slow_raw(_dst, _src); } _res; })");
+    fprintf(out, ")");
     emit_byte_array_result_suffix(out, boxed);
     return true;
 }

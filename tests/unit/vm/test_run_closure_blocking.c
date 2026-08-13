@@ -101,8 +101,7 @@ TEST(run_closure_blocking_accepts_byte_array_argument) {
     static const unsigned char payload[] = {1, 2, 3, 4, 5};
     XrArray *body = xr_array_with_capacity_in(&core->root_alloc, (int) sizeof(payload), XR_ELEM_U8);
     ASSERT_NOT_NULL(body);
-    xr_byte_array_append_from_span(body, payload, (int64_t) sizeof(payload),
-                                   payload + sizeof(payload));
+    xr_array_append_data(body, payload, (int32_t) sizeof(payload));
     xr_exec_context_restore(prev);
 
     XrValue args[4] = {url, ctype, xr_value_from_array(body), auth};

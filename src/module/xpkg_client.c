@@ -470,10 +470,8 @@ static void pkg_http_post_exchange(XrVMRuntime *iso, const char *url, const char
     XrValue type_v = pkg_http_string_value(iso, content_type);
     XrValue auth_v = pkg_http_string_value(iso, authorization);
     XrArray *body_arr = xr_array_with_capacity_in(&core->root_alloc, (int) body_len, XR_ELEM_U8);
-    if (body_arr && body && body_len > 0) {
-        xr_byte_array_append_from_span(body_arr, body, (int64_t) body_len,
-                                       (const char *) body + body_len);
-    }
+    if (body_arr && body && body_len > 0)
+        xr_array_append_data(body_arr, body, (int32_t) body_len);
     xr_exec_context_restore(prev);
     if (XR_IS_NULL(url_v) || XR_IS_NULL(type_v) || XR_IS_NULL(auth_v) || !body_arr) {
         out->error = xr_strdup("failed to build request");

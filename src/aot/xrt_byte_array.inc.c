@@ -612,61 +612,38 @@ static inline xrt_array_t *xrt_byte_array_copy_checked_raw(
     return dst;
 }
 
-static inline xrt_array_t *xrt_byte_array_append_from_span_slow_raw(xrt_array_t *dst,
-                                                                    xr_span_t src) {
-    if (!dst || dst->elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OPERANDS_MSG);
-    if (dst->data_storage == XR_ARRAY_DATA_BORROWED || src.length < 0 ||
-        (src.length > 0 && !src.data) || src.length > INT64_MAX - dst->length)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
-
-    bool aliases_dst = false;
-    int64_t src_offset = 0;
-    if (src.length > 0 && dst->data) {
-        const uint8_t *base = (const uint8_t *) dst->data;
-        const uint8_t *sp = (const uint8_t *) src.data;
-        if (sp >= base && sp <= base + dst->length) {
-            src_offset = (int64_t) (sp - base);
-            if (src.length > dst->length || src_offset > dst->length - src.length)
-                xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                                XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
-            aliases_dst = true;
-        }
-    }
-
-    int64_t old_length = dst->length;
-    int64_t new_length = old_length + src.length;
-    if (new_length > dst->capacity)
-        xrt_array_reserve_trusted_raw(dst, new_length);
-    if (new_length > dst->capacity || (new_length > 0 && !dst->data))
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
-    if (src.length > 0) {
-        const uint8_t *sp =
-            aliases_dst ? (const uint8_t *) dst->data + src_offset : (const uint8_t *) src.data;
-        uint8_t *dp = (uint8_t *) dst->data + old_length;
-        xr_array_core_copy_or_move_bytes(dp, sp, src.length);
-    }
-    dst->length = new_length;
-    return dst;
+static bool xrt_byte_array_append_reserve(void *ctx, XrByteArrayAppendView *view,
+                                          int64_t capacity) {
+    xrt_array_t *dst = (xrt_array_t *) ctx;
+    if (!dst || !view)
+        return false;
+    xrt_array_reserve_trusted_raw(dst, capacity);
+    view->data = dst->data;
+    view->capacity = dst->capacity;
+    return dst->capacity >= capacity && (capacity == 0 || dst->data != NULL);
 }
 
 static inline xrt_array_t *xrt_byte_array_append_from_span_raw(xrt_array_t *dst, xr_span_t src) {
-    if (XR_LIKELY(dst && dst->elem_type == XR_ELEM_U8 &&
-                  dst->data_storage != XR_ARRAY_DATA_BORROWED && src.length >= 0 &&
-                  src.length <= INT64_MAX - dst->length)) {
-        int64_t old_length = dst->length;
-        int64_t new_length = old_length + src.length;
-        if (XR_LIKELY(new_length <= dst->capacity && (new_length == 0 || dst->data) &&
-                      (src.length == 0 || src.data))) {
-            if (src.length > 0) {
-                uint8_t *dp = (uint8_t *) dst->data + old_length;
-                xr_array_core_copy_or_move_bytes(dp, src.data, src.length);
-            }
-            dst->length = new_length;
-            return dst;
-        }
+    XrByteArrayAppendView view = {0};
+    if (dst) {
+        view.data = dst->data;
+        view.length = dst->length;
+        view.capacity = dst->capacity;
+        view.elem_type = dst->elem_type;
+        view.resizable = dst->data_storage != XR_ARRAY_DATA_BORROWED;
+        view.identity = dst;
     }
-    return xrt_byte_array_append_from_span_slow_raw(dst, src);
+    XrByteArrayAppendResult result = xrt_byte_array_append_semantics(
+        dst ? &view : NULL, src.data, src.length, XR_ELEM_U8, NULL,
+        xrt_byte_array_append_reserve, dst);
+    if (result.status == XR_BYTE_ARRAY_APPEND_WRONG_ELEMENT_TYPE || !dst)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OPERANDS_MSG);
+    if (result.status != XR_BYTE_ARRAY_APPEND_OK)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
+    dst->length = view.length;
+    if (result.changed)
+        XR_ARRAY_MARK_MUTATED(dst);
+    return dst;
 }
 
 static bool xrt_byte_array_repeat_reserve(void *ctx, XrByteArrayRepeatView *view,

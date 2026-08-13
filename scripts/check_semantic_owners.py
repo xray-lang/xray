@@ -168,6 +168,7 @@ NULL_TEST_OPERATIONS = {"xi.isnull"}
 REGEX_COMPILE_OPERATIONS = {"xi.regex.compile"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
+BYTE_ARRAY_APPEND_OPERATIONS = {"xi.byte.array.append.from"}
 BYTE_ARRAY_REPEAT_OPERATIONS = {"xi.byte.array.repeat.from"}
 TARGET_LAYOUT_QUERY_OPERATIONS = {"xi.target.sizeof", "xi.target.alignof"}
 RANGE_OPERATIONS = {"xi.range"}
@@ -2432,6 +2433,108 @@ def verify_byte_array_repeat_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_byte_array_append_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.byte-array-append"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != BYTE_ARRAY_APPEND_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.byte-array-append family")
+
+    core_text = (root / "src/shared/xr_byte_array_append_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    core_body = extract_c_function(core_text, "xr_byte_array_append_core") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_BYTE_ARRAY_APPEND_OWNER_APPLY",
+                  "xr_byte_array_append_core", "memmove(",
+                  "dst->length > INT32_MAX - src_length", "dst->length = result.new_length"):
+        if token not in core_text:
+            errors.append("src/shared/xr_byte_array_append_core.h: append contract is incomplete")
+            break
+    if any(token in core_body for token in ("malloc(", "realloc(", "xrt_array_", "XrArray")):
+        errors.append("src/shared/xr_byte_array_append_core.h: append core owns an adapter")
+
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    start = vm_text.find("vmcase(OP_BYTE_ARRAY_APPEND_FROM)")
+    end = vm_text.find("vmbreak;", start)
+    vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_BYTE_ARRAY_APPEND_OWNER_APPLY", "xr_byte_array_append_from_span_adapter"):
+        if token not in vm_body:
+            errors.append("src/vm/xvm_dispatch_collection.inc.c: append opcode bypasses owner")
+            break
+    if any(token in vm_body for token in ("INT32_MAX -", "aliases_dst",
+                                          "xr_array_core_copy_or_move_bytes")):
+        errors.append("src/vm/xvm_dispatch_collection.inc.c: append opcode owns semantics")
+
+    runtime_text = (root / "src/runtime/object/xarray_methods.c").read_text(
+        encoding="utf-8", errors="strict")
+    runtime_body = extract_c_function(runtime_text, "m_append_from") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_RUNTIME",
+                  "XR_BYTE_ARRAY_APPEND_OWNER_APPLY", "xr_byte_array_append_from_span_adapter"):
+        if token not in runtime_body:
+            errors.append("src/runtime/object/xarray_methods.c: dynamic append bypasses owner")
+            break
+
+    adapter_text = (root / "src/runtime/object/xarray.c").read_text(
+        encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(adapter_text, "xr_byte_array_append_from_span_adapter") or ""
+    if ("xr_byte_array_append_core" not in adapter_body or
+            any(token in adapter_body for token in ("INT32_MAX -", "aliases_dst",
+                                                    "xr_array_core_copy_or_move_bytes"))):
+        errors.append("src/runtime/object/xarray.c: runtime append adapter owns semantics")
+
+    hosted_text = (root / "src/aot/xrt_coll.h").read_text(encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_AOT_HOSTED",
+                  "XR_BYTE_ARRAY_APPEND_OWNER_APPLY", "xrt_byte_array_append_semantics",
+                  "xr_byte_array_append_core"):
+        if token not in hosted_text:
+            errors.append("src/aot/xrt_coll.h: hosted append adapter bypasses owner")
+            break
+    if "#ifndef xrt_byte_array_append_semantics" in hosted_text:
+        errors.append("src/aot/xrt_coll.h: byte-array append fallback or alias revived")
+
+    raw_text = (root / "src/aot/xrt_byte_array.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    raw_body = extract_c_function(raw_text, "xrt_byte_array_append_from_span_raw") or ""
+    if ("xrt_byte_array_append_semantics" not in raw_body or
+            any(token in raw_body for token in ("INT64_MAX -", "aliases_dst",
+                                               "xr_array_core_copy_or_move_bytes"))):
+        errors.append("src/aot/xrt_byte_array.inc.c: hosted append adapter owns semantics")
+    retired_text = "\n".join((root / relative).read_text(encoding="utf-8", errors="strict")
+                              for relative in ("src/runtime/object/xarray.c",
+                                               "src/runtime/object/xarray.h",
+                                               "src/aot/xrt_byte_array.inc.c"))
+    for symbol in ("xr_byte_array_append_from_span", "xrt_byte_array_append_from_span_slow_raw"):
+        if re.search(rf"\b{re.escape(symbol)}\s*\(", retired_text):
+            errors.append(f"retired byte-array append surface revived: {symbol}")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_byte_array_append_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: byte-array append does not resolve stable adapter")
+    emitter_text = (root / "src/aot/xi_cgen_array_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    emitter = extract_c_function(emitter_text, "emit_byte_array_append_from_expr") or ""
+    if "cg_byte_array_append_adapter_name" not in emitter:
+        errors.append("src/aot/xi_cgen_array_helpers.inc.c: append emitter bypasses adapter")
+    if any(token in emitter for token in ("({", "memcpy(", "memmove(",
+                                          "xr_raw_memory_copy_nonoverlap",
+                                          "xrt_array_reserve_trusted_raw", "INT64_MAX -")):
+        errors.append("src/aot/xi_cgen_array_helpers.inc.c: append emitter owns semantics")
+
+    cmake_text = (root / "tests/unit/CMakeLists.txt").read_text(
+        encoding="utf-8", errors="strict")
+    if "test_byte_array_append_core" not in cmake_text:
+        errors.append("tests/unit/CMakeLists.txt: append owner KAT is not registered")
+    no_alloc = root / "tests/aot/filetests/link/no_alloc_byte_array_append_from_reject.expect"
+    if not no_alloc.is_file() or "status=fail" not in no_alloc.read_text(encoding="utf-8"):
+        errors.append("freestanding/no-alloc byte-array grow rejection boundary is not pinned")
+    return errors
+
+
 def verify_target_layout_query_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     owner_name = "shared.target-layout-query"
@@ -2690,8 +2793,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 35:
-        errors.append(f"shared-core inventory must contain exactly 35 headers, found {len(actual)}")
+    if len(actual) != 36:
+        errors.append(f"shared-core inventory must contain exactly 36 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -2735,6 +2838,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_regex_compile_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_byte_array_copy_ratchet(root, registry))
+        errors.extend(verify_byte_array_append_ratchet(root, registry))
         errors.extend(verify_byte_array_repeat_ratchet(root, registry))
         errors.extend(verify_target_layout_query_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))

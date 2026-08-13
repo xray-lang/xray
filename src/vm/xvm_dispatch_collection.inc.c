@@ -1402,7 +1402,12 @@ vmcase(OP_BYTE_ARRAY_APPEND_FROM) {
     if (dst->elem_type != XR_ELEM_U8 || src_elem_type != XR_ELEM_U8) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OPERANDS_MSG);
     }
-    if (!xr_byte_array_append_from_span(dst, src_data, src_length, src_guard)) {
+    XrByteArrayAppendResult append_result = XR_BYTE_ARRAY_APPEND_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO, XR_SEM_CONSUMER_VM,
+        xr_byte_array_append_from_span_adapter(dst, src_data, src_length, src_elem_type,
+                                               src_guard));
+    if (append_result.status != XR_BYTE_ARRAY_APPEND_OK) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
     }
     vmbreak;

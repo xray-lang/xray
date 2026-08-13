@@ -32,6 +32,7 @@
 #include "../../shared/xr_elem_type.h"
 #include "../../shared/xr_typed_ops.h"
 #include "../../shared/xr_array_abi.h"
+#include "../../shared/xr_byte_array_append_core.h"
 #include "../../shared/xr_byte_array_repeat_core.h"
 
 /* ====== Convenience Macros ====== */
@@ -202,8 +203,9 @@ XR_FUNC void xr_array_append_data(XrArray *arr, const uint8_t *data, int32_t len
 XR_FUNC uint16_t xr_array_load_u16_le(XrArray *arr, int64_t offset, bool *ok);
 XR_FUNC uint32_t xr_array_load_u32_le(XrArray *arr, int64_t offset, bool *ok);
 XR_FUNC uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok);
-XR_FUNC bool xr_byte_array_append_from_span(XrArray *dst, const void *src_data, int64_t src_length,
-                                            const void *src_guard);
+XR_FUNC XrByteArrayAppendResult xr_byte_array_append_from_span_adapter(
+    XrArray *dst, const void *src_data, int64_t src_length, uint8_t src_elem_type,
+    const void *src_guard);
 XR_FUNC XrByteArrayRepeatResult xr_byte_array_repeat_from_tail_adapter(XrArray *arr,
                                                                        int64_t distance,
                                                                        int64_t count);
