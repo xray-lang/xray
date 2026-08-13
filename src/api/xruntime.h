@@ -172,15 +172,6 @@ XR_FUNC const char *xr_value_type_name(XrValue val);
 // Report runtime error with printf-style format
 XR_FUNC void xr_runtime_error(XrVMRuntime *X, const char *fmt, ...);
 
-// Check if there is a pending error
-XR_FUNC bool xr_runtime_has_error(XrVMRuntime *X);
-
-// Get error message string
-XR_FUNC const char *xr_runtime_error_message(XrVMRuntime *X);
-
-// Clear error state
-XR_FUNC void xr_runtime_clear_error(XrVMRuntime *X);
-
 #ifdef __cplusplus
 }
 #endif
