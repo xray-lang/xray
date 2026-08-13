@@ -398,50 +398,6 @@ XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
 /* ========== Exception Handling Implementation ========== */
 
 /*
-** Add current stack frame to exception's stack trace
-**
-** Under coroutine architecture: uses Worker's vm_ctx to access frames
-*/
-void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception) {
-    XR_DCHECK(isolate != NULL, "vm_add_stacktrace: NULL isolate");
-    if (!xr_value_is_panic_info(isolate, exception)) {
-        return;
-    }
-
-    XrVMContext *ctx = xr_vm_current_ctx(isolate);
-
-    int frame_count = ctx->frame_count;
-    XrBcCallFrame *frames = ctx->frames;
-
-    if (frame_count == 0) {
-        return;
-    }
-
-    // Get current frame
-    XrBcCallFrame *frame = &frames[frame_count - 1];
-
-    // Get function name
-    const char *func_name = "?";
-    int line = 0;
-
-    if (frame->closure && frame->closure->proto) {
-        if (frame->closure->proto->name) {
-            func_name = frame->closure->proto->name->data;
-        }
-
-        // Calculate current line number (from lineinfo)
-        int pc_offset = (int) (frame->pc - PROTO_CODE_BASE(frame->closure->proto));
-        size_t line_count = PROTO_LINE_COUNT(frame->closure->proto);
-        if (pc_offset >= 0 && (size_t) pc_offset < line_count) {
-            line = PROTO_LINE(frame->closure->proto, pc_offset);
-        }
-    }
-
-    // Add stack frame
-    xr_panic_info_add_frame(isolate, exception, func_name, line);
-}
-
-/*
 ** User-visible message of an error value, with exactly the semantics of the
 ** AOT's xrt_exception_message_cstr: a raw string yields itself, an exception
 ** object yields its `message` field, anything else (a thrown enum error value,

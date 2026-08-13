@@ -258,7 +258,6 @@ XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *
 XR_FUNC bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto);
 
 // Exception handling
-XR_FUNC void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception);
 XR_FUNC void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception);
 XR_FUNC void xr_vm_cleanup_enter(XrVMRuntime *isolate, XrVMContext *ctx);
 XR_FUNC void xr_vm_cleanup_leave(XrVMRuntime *isolate, XrVMContext *ctx);

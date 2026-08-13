@@ -19,10 +19,10 @@
  *        resumes at the matching catch / finally handler (or
  *        terminates cleanly when nothing catches).
  *
- *   Historically these were two separate APIs (xr_vm_add_stacktrace
- *   + xr_vm_throw_exception), and every throw site had to remember
- *   to call them in the right order. Worse, xr_vm_add_stacktrace
- *   only ever recorded the topmost frame, so the trace lost every
+ *   Historically stack-trace recording and xr_vm_throw_exception were
+ *   separate APIs, and every throw site had to remember to call them in
+ *   the right order. Worse, the old recorder only captured the topmost frame,
+ *   so the trace lost every
  *   intermediate caller — a thrown exception emerged from a 10-deep
  *   call chain looking like it originated at depth 1.
  *
@@ -37,10 +37,9 @@
  *       (handler matching, frame_count / stack_top reset, pc
  *       redirect to catch / finally).
  *
- *   The legacy split APIs remain exported as thin wrappers so
- *   downstream code that hasn't migrated still compiles, but every
- *   throw site inside the VM and the cold paths has been pointed at
- *   the unified function.
+ *   Every trace-producing throw site uses the unified function. Callers that
+ *   intentionally need an untraced pending-error transition invoke the lower
+ *   level unwind operation directly.
  */
 
 #include "xvm_internal.h"
@@ -116,16 +115,7 @@ static void record_full_trace(XrVMRuntime *isolate, XrValue exception) {
  * Single-call throw helper. Records the full call chain into
  * exc.stackTrace and then performs the actual stack unwind.
  *
- * Callers that previously did
- *
- *     xr_vm_add_stacktrace(isolate, exc);
- *     xr_vm_throw_exception(isolate, exc);
- *
- * should now write
- *
- *     xr_vm_unwind_with_trace(isolate, exc);
- *
- * and let this function decide what gets recorded.
+ * This is the only stack-trace-producing unwind entry point.
  */
 void xr_vm_unwind_with_trace(XrVMRuntime *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_unwind_with_trace: NULL isolate");
