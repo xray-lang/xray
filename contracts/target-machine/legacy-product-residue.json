@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 105,
     "install": 2,
-    "source": 3441
+    "source": 3438
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -4007,9 +4007,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "12f74edb0c5ed222ce6da8359211ed63b019b13187a0ed698db1d02095f2ea13",
+      "evidence_sha256": "3b4bad05feef503aa1bca84af546aade4c35bf04db9cc88aaf2cd5ee22b53915",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 4,
+      "hit_count": 1,
       "path": "src/api/xruntime.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -9353,6 +9353,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "6474cef73c08e87ae3cd3bfbeda519b18ffc3d450115c6f9d87f4f412a851bc1",
-  "total": 3642
+  "source_tree_fingerprint": "589e2912987f90f610b1e58c69bc533a864c614bfaa9b4307833c84c22d6924a",
+  "total": 3639
 }
