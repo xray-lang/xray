@@ -70,7 +70,11 @@ no execution path.
 
 The separate scalar dispatcher may use this frame only when an independently
 verified, non-empty function instruction group grants its exact execution
-family. Zero instruction rows mean execution unavailable. The coroutine
+family. Zero instruction rows mean execution unavailable. A trivial
+signed-`i64` parameter-role slot is an ordinary uninitialized slot of this
+frame at creation: the dispatcher fills it through the verified parameter row
+that names its argument ordinal, so no slot is ever live before a store and
+the frame gains no argument-passing authority of its own. The coroutine
 state-call family proves only frozen state/resume/direct-call/result
 relations; it contains no child-frame, spill, root, cleanup, drop, cancel, or
 action authority. Aggregate, rooted, owned, caller-storage, coroutine, and
@@ -108,9 +112,9 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 44529fab61f1a8fd8e421e6c0a2099f2ab86e7e9e379182a7fcb716800d55dd6
+anchor-sha256: src/plan/target/xr_target_plan.h 2cc17ba0ea588020cf35447e84cd8ad11b52db9642bd575214a5dd2b03b3b512
 anchor-sha256: src/vm/xr_typed_frame.h 715f7ac98f468e004eed919fefb853a820375999cb1eba848122f9b418eb3401
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 1d022e49698baf5f52e65aab0fe1e4144b973cb6f2a5efb59c753c2cce2de75b
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 8c36b61c750ba54bb57b3b8ea487c0083fe99a865303f2ff25b935fb45554916
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7

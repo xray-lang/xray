@@ -393,6 +393,9 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status,
         case XR_TYPED_DISPATCH_FRAME_ERROR:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5001",
                         "scalar generation frame rejected a slot representation");
+        case XR_TYPED_DISPATCH_ARGUMENT_MISMATCH:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                        "sole-function scalar i64 route executes only a parameterless signature");
         case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
         case XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED:
         case XR_TYPED_DISPATCH_PROGRAM_INVALID:
@@ -482,10 +485,13 @@ XRAY_API bool xr_module_generation_execute_sole_scalar_i64(
            generation->identity.target_plan_fingerprint,
            sizeof(required_fingerprint.bytes));
     int64_t executed_result = 0;
+    /* This product route carries no argument vector, so a plan whose sole
+     * function declares parameters fails closed instead of being executed
+     * against implicit zeros. */
     XrTypedDispatchStatus status = eligible
                                        ? xr_typed_dispatch_execute_i64(
                                              generation->plan,
-                                             &required_fingerprint, 0,
+                                             &required_fingerprint, 0, NULL, 0,
                                              &executed_result)
                                        : XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
     if (!xr_module_generation_pin_release(

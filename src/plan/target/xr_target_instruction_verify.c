@@ -71,6 +71,30 @@ static bool operand_is_defined(const XrTargetPlan *plan,
            defined[slot - function->slot_begin] != 0;
 }
 
+/* Counted independently of the rows so that a group binding fewer arguments
+ * than the frame declares parameters can never become executable. */
+static uint32_t function_parameter_slot_count(const XrTargetPlan *plan,
+                                              const XrTargetFunctionRecord *function) {
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
+    if (!slots || !range_valid(function->slot_begin, function->slot_count,
+                               slot_count))
+        return UINT32_MAX;
+    uint32_t parameters = 0;
+    for (uint32_t i = 0; i < function->slot_count; i++)
+        parameters += slots[function->slot_begin + i].role == XR_TARGET_SLOT_PARAMETER;
+    return parameters;
+}
+
+static bool slot_role_is(const XrTargetPlan *plan,
+                         const XrTargetFunctionRecord *function,
+                         uint32_t function_index, uint32_t slot_index,
+                         uint8_t role) {
+    const XrTargetSlotRecord *slot = NULL;
+    return slot_is_i64(plan, function, function_index, slot_index, &slot) &&
+           slot->role == role;
+}
+
 static bool verify_function_group(const XrTargetPlan *plan,
                                   const XrTargetInstructionRecord *rows,
                                   uint32_t row_count, uint32_t function_index,
@@ -90,6 +114,8 @@ static bool verify_function_group(const XrTargetPlan *plan,
         return report(error, error_size, "XR_EXEC_5003",
                       "instruction verifier budget exhausted");
 
+    uint64_t bound_arguments = 0;
+    uint32_t parameter_rows = 0;
     bool valid = true;
     for (uint32_t i = 0; i < row_count && valid; i++) {
         const XrTargetInstructionRecord *row = &rows[i];
@@ -106,6 +132,20 @@ static bool verify_function_group(const XrTargetPlan *plan,
                         row->operand_slots[0] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
                         row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
                         !terminal;
+                break;
+            case XR_TARGET_INSTRUCTION_PARAM_I64:
+                valid = row->operand_count == 0 &&
+                        row->operand_slots[0] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
+                        row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
+                        row->immediate_bits < XR_TARGET_INSTRUCTION_MAX_PARAMETERS &&
+                        (bound_arguments & (UINT64_C(1) << row->immediate_bits)) == 0 &&
+                        slot_role_is(plan, function, function_index,
+                                     row->result_slot, XR_TARGET_SLOT_PARAMETER) &&
+                        !terminal;
+                if (valid) {
+                    bound_arguments |= UINT64_C(1) << row->immediate_bits;
+                    parameter_rows++;
+                }
                 break;
             case XR_TARGET_INSTRUCTION_COPY_I64:
             case XR_TARGET_INSTRUCTION_NEG_WRAP_I64:
@@ -143,8 +183,11 @@ static bool verify_function_group(const XrTargetPlan *plan,
         }
         if (!valid || row->opcode == XR_TARGET_INSTRUCTION_RETURN_I64)
             continue;
+        const XrTargetSlotRecord *result = NULL;
         if (!slot_is_i64(plan, function, function_index, row->result_slot,
-                         NULL)) {
+                         &result) ||
+            (row->opcode != XR_TARGET_INSTRUCTION_PARAM_I64 &&
+             result->role == XR_TARGET_SLOT_PARAMETER)) {
             valid = false;
             break;
         }
@@ -156,7 +199,16 @@ static bool verify_function_group(const XrTargetPlan *plan,
         defined[local] = 1;
     }
     xr_free(defined);
-    if (!valid || rows[row_count - 1u].opcode != XR_TARGET_INSTRUCTION_RETURN_I64)
+    /* Argument ordinals must be exactly 0..parameter_rows-1 and must cover
+     * every parameter slot the function frame declares, so the executor can
+     * read the incoming argument count straight off the verified rows. */
+    uint64_t dense_arguments =
+        parameter_rows == XR_TARGET_INSTRUCTION_MAX_PARAMETERS
+            ? UINT64_MAX
+            : (UINT64_C(1) << parameter_rows) - 1u;
+    if (!valid || bound_arguments != dense_arguments ||
+        function_parameter_slot_count(plan, function) != parameter_rows ||
+        rows[row_count - 1u].opcode != XR_TARGET_INSTRUCTION_RETURN_I64)
         return report(error, error_size, "XR_TARGET_1005",
                       "instruction program is not an exact closed i64 program");
     return true;

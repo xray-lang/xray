@@ -46,8 +46,11 @@ product activation path.
    scalar instruction table and typed frame. Every success and failure path
    releases the pin. DRAINING rejects new execution while permitting an
    already-started call to release its pin, and retirement still requires all
-   pins to reach zero. There is no compatibility VM, XRC translation, generic
-   tagged-frame execution, AOT/CGen fallback, or guessed export entry.
+   pins to reach zero. This route passes no arguments, so a sole function whose
+   verified rows declare parameters fails closed with `XR_EXEC_5004` rather
+   than executing against implicit zeros. There is no compatibility VM, XRC
+   translation, generic tagged-frame execution, AOT/CGen fallback, or guessed
+   export entry.
 7. The independent verifier re-derives immutable plan/native identity, stable
    generation fingerprint, state/poison invariants, counter sums, per-kind and
    global budgets. For every READY, ACTIVE, or DRAINING generation it separately
@@ -65,10 +68,10 @@ product activation path.
 
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation_internal.h 427d2d23bfa8991dd8d20463169fb9bb23d7486a38d5274cb5d84b089a14a96a
-anchor-sha256: src/runtime/xr_module_generation.c d02e74f29b281d354ea03b339205e457e62266c06bd4b1afb6692d90a2c0e1d7
+anchor-sha256: src/runtime/xr_module_generation.c 1cb970ecbc047520b330ce91ef62a3808881bd8c42aa9194ad6ef60066da0b54
 anchor-sha256: src/runtime/xr_module_generation_verify.c 4028ff528eeba7bb8db3c902901a36f45c085f5e2ecf54245bcc6a96de58e12d
-anchor-sha256: src/vm/xr_typed_dispatch.h f72964091ac427130a3ff00c6d051cf85a3edd6ae174846984e0c1d506adeecd
-anchor-sha256: src/vm/xr_typed_dispatch.c 7cfe0b4ec52f28b83f601fccf46f313c7c9b8961740e47a876dbf25f7d38d595
+anchor-sha256: src/vm/xr_typed_dispatch.h 396124e124d2c1c5806a09ec27357f9598928f5a22870b18655d9782d2b3e379
+anchor-sha256: src/vm/xr_typed_dispatch.c c5fa11530b6864daf364fb5e0c8fe904a9f0ea179871787c637be4768d891eae
 anchor-sha256: src/vm/xr_typed_frame.h 715f7ac98f468e004eed919fefb853a820375999cb1eba848122f9b418eb3401
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 54ee3affe064aabfb89fe1cc75ef5642837fd14b6e7e575a0badb4fc670efd74

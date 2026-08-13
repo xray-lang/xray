@@ -5242,8 +5242,41 @@ static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
         case XI_BXOR: return XR_TARGET_INSTRUCTION_BXOR_I64;
         case XI_NEG: return XR_TARGET_INSTRUCTION_NEG_WRAP_I64;
         case XI_BNOT: return XR_TARGET_INSTRUCTION_BNOT_I64;
+        case XI_PARAM: return XR_TARGET_INSTRUCTION_PARAM_I64;
         default: return XR_TARGET_INSTRUCTION_INVALID;
     }
+}
+
+/*
+ * A parameter operation computes nothing; it names the argument ordinal that
+ * fills the function's parameter slot. The whole function is rejected unless
+ * the operation and the frozen parameter record agree on ordinal, function,
+ * exact signed-i64 type, and SSA value, so no row may bind an argument the
+ * signature does not declare.
+ */
+static bool scalar_parameter_row_is_exact(
+    const XrSemanticPlan *semantic,
+    const XrTargetMaterializedPlan *materialized, uint32_t function_index,
+    const XrSemanticFunctionRecord *function,
+    const XrSemanticOperationRecord *operation, uint64_t *out_ordinal,
+    uint32_t *out_slot) {
+    if (operation->semantic_immediate < 0 ||
+        (uint64_t) operation->semantic_immediate >= function->parameter_count)
+        return false;
+    uint32_t ordinal = (uint32_t) operation->semantic_immediate;
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(semantic, function->parameter_begin + ordinal);
+    if (!parameter || parameter->function != function_index ||
+        parameter->ordinal != ordinal ||
+        parameter->value != operation->result_value ||
+        parameter->type != operation->result_type ||
+        !semantic_type_is_exact_i64(semantic, parameter->type) ||
+        !materialized_i64_slot(materialized, function_index, parameter->value,
+                               out_slot))
+        return false;
+    if (out_ordinal)
+        *out_ordinal = ordinal;
+    return true;
 }
 
 /*
@@ -5264,10 +5297,25 @@ static bool materialize_scalar_instruction_function(
     if (!function || function_index >= materialized->function_count ||
         materialized->functions[function_index].id != function_index ||
         materialized->functions[function_index].semantic_function != function_index ||
-        function->parameter_count != 0 || function->capture_count != 0 ||
-        function->block_count != 1 || function->semantic_effects != 0 ||
+        function->parameter_count > XR_TARGET_INSTRUCTION_MAX_PARAMETERS ||
+        function->capture_count != 0 || function->block_count != 1 ||
+        function->semantic_effects != 0 ||
         !semantic_type_is_exact_i64(semantic, function->return_type))
         return false;
+    /* Every declared parameter must be exact signed i64 before any row is
+     * emitted; a signature the executor could not fill stays unavailable
+     * instead of producing a group that silently drops an argument. */
+    for (uint16_t parameter_ordinal = 0;
+         parameter_ordinal < function->parameter_count; parameter_ordinal++) {
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(
+            semantic, function->parameter_begin + parameter_ordinal);
+        if (!parameter || parameter->function != function_index ||
+            parameter->ordinal != parameter_ordinal ||
+            !semantic_type_is_exact_i64(semantic, parameter->type) ||
+            !materialized_i64_slot(materialized, function_index,
+                                   parameter->value, NULL))
+            return false;
+    }
 
     const XrSemanticBlockRecord *block =
         xr_semantic_plan_block(semantic, function->block_begin);
@@ -5288,6 +5336,7 @@ static bool materialize_scalar_instruction_function(
         return false;
 
     bool return_defined = false;
+    uint64_t bound_parameters = 0;
     for (uint32_t ordinal = 0; ordinal < block->operation_count; ordinal++) {
         uint32_t operation_index = block->operation_begin + ordinal;
         const XrSemanticOperationRecord *operation =
@@ -5296,7 +5345,8 @@ static bool materialize_scalar_instruction_function(
                              ? scalar_instruction_opcode(operation->opcode)
                              : XR_TARGET_INSTRUCTION_INVALID;
         uint16_t expected_operands =
-            opcode == XR_TARGET_INSTRUCTION_CONST_I64
+            opcode == XR_TARGET_INSTRUCTION_CONST_I64 ||
+                    opcode == XR_TARGET_INSTRUCTION_PARAM_I64
                 ? 0
                 : opcode == XR_TARGET_INSTRUCTION_COPY_I64 ||
                           opcode == XR_TARGET_INSTRUCTION_NEG_WRAP_I64 ||
@@ -5321,6 +5371,7 @@ static bool materialize_scalar_instruction_function(
         if ((operation->opcode == XI_COPY &&
              operation->semantic_immediate != XI_COPY_KIND_IDENTITY) ||
             (operation->opcode != XI_CONST && operation->opcode != XI_COPY &&
+             operation->opcode != XI_PARAM &&
              operation->semantic_immediate != 0))
             return false;
 
@@ -5334,6 +5385,17 @@ static bool materialize_scalar_instruction_function(
             immediate_bits = (uint64_t) constant->integer;
         } else if (operation->constant != XR_SEMANTIC_INDEX_NONE) {
             return false;
+        }
+        if (operation->opcode == XI_PARAM) {
+            uint32_t parameter_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+            if (!scalar_parameter_row_is_exact(semantic, materialized,
+                                               function_index, function,
+                                               operation, &immediate_bits,
+                                               &parameter_slot) ||
+                parameter_slot != result_slot ||
+                (bound_parameters & (UINT64_C(1) << immediate_bits)) != 0)
+                return false;
+            bound_parameters |= UINT64_C(1) << immediate_bits;
         }
 
         uint32_t operand_slots[2] = {XR_TARGET_INSTRUCTION_SLOT_NONE,
@@ -5363,8 +5425,14 @@ static bool materialize_scalar_instruction_function(
                          operation->result_value == block->control_value;
     }
 
+    /* Dense coverage of the declared ordinals: a signature whose parameter is
+     * never bound by a row would let the executor read an unfilled slot. */
+    uint64_t declared_parameters =
+        function->parameter_count == XR_TARGET_INSTRUCTION_MAX_PARAMETERS
+            ? UINT64_MAX
+            : (UINT64_C(1) << function->parameter_count) - 1u;
     uint32_t return_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
-    if (!return_defined ||
+    if (bound_parameters != declared_parameters || !return_defined ||
         !materialized_i64_slot(materialized, function_index,
                                block->control_value, &return_slot))
         return false;

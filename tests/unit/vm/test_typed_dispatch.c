@@ -2,6 +2,7 @@
  * test_typed_dispatch.c - Closed typed TargetPlan scalar program execution
  */
 
+#include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
@@ -74,6 +75,37 @@ static XrSemanticPlan *build_unsupported_semantic(void) {
     divide->args[0] = left;
     divide->args[1] = right;
     xi_block_set_return(entry, divide);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
+
+/* fn(first, second) -> (first - second) * first: the operand order and the
+ * argument order are both asymmetric, so a swapped or zero-filled argument
+ * vector cannot reach the expected result by accident. */
+static XrSemanticPlan *build_parameter_semantic(void) {
+    XiFunc *function = xi_func_new("typed_dispatch_parameters", &stub_int);
+    REQUIRE(function != NULL);
+    function->nparams = 2;
+    function->min_params = 2;
+    function->params = (XiValue **) xr_calloc(2, sizeof(XiValue *));
+    REQUIRE(function->params != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    entry->sealed = true;
+    function->params[0] = xi_param(function, entry, 0, &stub_int);
+    function->params[1] = xi_param(function, entry, 1, &stub_int);
+    XiValue *difference = xi_value_new(function, entry, XI_SUB, &stub_int, 2);
+    XiValue *product = xi_value_new(function, entry, XI_MUL, &stub_int, 2);
+    REQUIRE(function->params[0] && function->params[1] && difference && product);
+    difference->args[0] = function->params[0];
+    difference->args[1] = function->params[1];
+    product->args[0] = difference;
+    product->args[1] = function->params[0];
+    xi_block_set_return(entry, product);
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
@@ -162,7 +194,7 @@ static void test_closed_program_and_unavailable_boundary(void) {
     int64_t result = 7;
     REQUIRE(xr_target_plan_function_execution_family_mask(fixture.base_plan, 0) == 0);
     REQUIRE(xr_typed_dispatch_execute_i64(fixture.base_plan, &base_fingerprint,
-                                          0, &result) ==
+                                          0, NULL, 0, &result) ==
             XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
     REQUIRE(result == 0);
 
@@ -171,25 +203,27 @@ static void test_closed_program_and_unavailable_boundary(void) {
     REQUIRE(xr_target_plan_function_execution_family_mask(fixture.program_plan, 0) ==
             XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
     REQUIRE(xr_typed_dispatch_execute_i64(fixture.program_plan, &fingerprint,
-                                          0, &result) == XR_TYPED_DISPATCH_OK);
+                                          0, NULL, 0,
+                                          &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN);
 
     XrSemanticPlan *retained_semantic = fixture.program_plan->semantic_plan;
     fixture.program_plan->semantic_plan = NULL;
     REQUIRE(xr_typed_dispatch_execute_i64(fixture.program_plan, &fingerprint,
-                                          0, &result) == XR_TYPED_DISPATCH_OK);
+                                          0, NULL, 0,
+                                          &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN);
     fixture.program_plan->semantic_plan = retained_semantic;
 
     fixture.program_plan->instructions[0].immediate_bits ^= UINT64_C(1);
     REQUIRE(xr_typed_dispatch_execute_i64(fixture.program_plan, &fingerprint,
-                                          0, &result) ==
+                                          0, NULL, 0, &result) ==
             XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED);
     fixture.program_plan->instructions[0].immediate_bits ^= UINT64_C(1);
 
     fingerprint.bytes[0] ^= 1;
     REQUIRE(xr_typed_dispatch_execute_i64(fixture.program_plan, &fingerprint,
-                                          0, &result) ==
+                                          0, NULL, 0, &result) ==
             XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH);
     dispose_fixture(&fixture);
 }
@@ -209,9 +243,119 @@ static void test_production_builder_keeps_unsupported_function_unavailable(void)
     REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) == 0);
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
     int64_t result = 7;
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, &result) ==
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 0,
+                                          &result) ==
             XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
     REQUIRE(result == 0);
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_parameters_reach_the_executed_program(void) {
+    XrSemanticPlan *semantic = build_parameter_semantic();
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_instructions(plan, &instruction_count);
+    REQUIRE(rows != NULL && instruction_count ==
+                                xr_semantic_plan_operation_count(semantic) + 1u);
+    uint32_t parameter_rows = 0;
+    uint64_t ordinals = 0;
+    for (uint32_t i = 0; i < instruction_count; i++) {
+        if (rows[i].opcode != XR_TARGET_INSTRUCTION_PARAM_I64)
+            continue;
+        ordinals |= UINT64_C(1) << rows[i].immediate_bits;
+        parameter_rows++;
+    }
+    REQUIRE(parameter_rows == 2 && ordinals == 3);
+    REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) ==
+            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
+
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    const int64_t arguments[2] = {7, 5};
+    int64_t result = 0;
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments, 2,
+                                          &result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(result == (arguments[0] - arguments[1]) * arguments[0]);
+
+    /* A different argument vector must produce a different result, so the
+     * value cannot be coming from a constant folded into the plan. */
+    const int64_t swapped[2] = {arguments[1], arguments[0]};
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, swapped, 2,
+                                          &result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(result == (swapped[0] - swapped[1]) * swapped[0]);
+
+    /* Argument-count disagreement is refused instead of truncated or zero
+     * filled, and the result stays untouched. */
+    result = 11;
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments, 1,
+                                          &result) ==
+            XR_TYPED_DISPATCH_ARGUMENT_MISMATCH);
+    REQUIRE(result == 0);
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments, 3,
+                                          &result) ==
+            XR_TYPED_DISPATCH_ARGUMENT_MISMATCH);
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 0,
+                                          &result) ==
+            XR_TYPED_DISPATCH_ARGUMENT_MISMATCH);
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 2,
+                                          &result) ==
+            XR_TYPED_DISPATCH_INVALID_ARGUMENT);
+
+    /* The independent verifier, not the executor, is what keeps a mutated
+     * argument binding out of an executable plan. */
+    TypedDispatchFixture mutable_source = {
+        .semantic = semantic, .profile = profile, .program_plan = plan};
+    XrTargetInstructionRecord mutated[16];
+    REQUIRE(instruction_count <= sizeof(mutated) / sizeof(mutated[0]));
+    uint32_t first = UINT32_MAX;
+    uint32_t second = UINT32_MAX;
+    for (uint32_t i = 0; i < instruction_count; i++) {
+        if (rows[i].opcode != XR_TARGET_INSTRUCTION_PARAM_I64)
+            continue;
+        if (first == UINT32_MAX)
+            first = i;
+        else if (second == UINT32_MAX)
+            second = i;
+    }
+    REQUIRE(first != UINT32_MAX && second != UINT32_MAX);
+    size_t row_bytes = (size_t) instruction_count * sizeof(*rows);
+    /* Positive control: the unmutated rows must still freeze, so each
+     * rejection below is attributable to its mutation. */
+    memcpy(mutated, rows, row_bytes);
+    XrTargetPlan *refrozen = NULL;
+    REQUIRE(freeze_with_rows(&mutable_source, mutated, instruction_count,
+                             &refrozen, error, sizeof(error)));
+    xr_target_plan_free(refrozen);
+    const struct {
+        uint32_t row;
+        uint8_t opcode;
+        uint64_t immediate;
+    } mutations[] = {
+        /* Two rows claiming the same argument leave one parameter unbound. */
+        {second, XR_TARGET_INSTRUCTION_PARAM_I64, rows[first].immediate_bits},
+        /* A sparse ordinal disagrees with the declared argument count. */
+        {second, XR_TARGET_INSTRUCTION_PARAM_I64, 5},
+        /* A constant may not define a parameter slot the caller must fill. */
+        {first, XR_TARGET_INSTRUCTION_CONST_I64, 3},
+    };
+    for (size_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
+        memcpy(mutated, rows, row_bytes);
+        mutated[mutations[i].row].opcode = mutations[i].opcode;
+        mutated[mutations[i].row].immediate_bits = mutations[i].immediate;
+        XrTargetPlan *rejected = (XrTargetPlan *) (uintptr_t) 1;
+        REQUIRE(!freeze_with_rows(&mutable_source, mutated, instruction_count,
+                                  &rejected, error, sizeof(error)));
+        REQUIRE(rejected == NULL);
+        REQUIRE(strncmp(error, "XR_TARGET_1005", strlen("XR_TARGET_1005")) == 0);
+    }
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
@@ -238,8 +382,8 @@ static void test_xtp_exact_roundtrip_executes_same_program(void) {
     REQUIRE(xr_target_plan_instructions(decoded, &instruction_count) != NULL &&
             instruction_count == fixture.row_count);
     int64_t result = 0;
-    REQUIRE(xr_typed_dispatch_execute_i64(decoded, &fingerprint, 0, &result) ==
-            XR_TYPED_DISPATCH_OK);
+    REQUIRE(xr_typed_dispatch_execute_i64(decoded, &fingerprint, 0, NULL, 0,
+                                          &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN);
     xr_target_plan_free(decoded);
     xr_xtp_candidate_release(candidate);
@@ -295,6 +439,7 @@ static void test_instruction_mutations_fail_closed(void) {
 int main(void) {
     test_closed_program_and_unavailable_boundary();
     test_production_builder_keeps_unsupported_function_unavailable();
+    test_parameters_reach_the_executed_program();
     test_xtp_exact_roundtrip_executes_same_program();
     test_instruction_mutations_fail_closed();
     puts("typed dispatch tests passed");

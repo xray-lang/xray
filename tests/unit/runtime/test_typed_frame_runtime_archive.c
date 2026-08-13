@@ -19,7 +19,7 @@ int main(void) {
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
         frame != NULL ||
         xr_typed_frame_cleanup(NULL) != XR_TYPED_FRAME_INVALID_ARGUMENT ||
-        xr_typed_dispatch_execute_i64(NULL, &fingerprint, 0, &result) !=
+        xr_typed_dispatch_execute_i64(NULL, &fingerprint, 0, NULL, 0, &result) !=
             XR_TYPED_DISPATCH_INVALID_ARGUMENT ||
         result != 0) {
         fputs("runtime-only typed frame boundary failed\n", stderr);

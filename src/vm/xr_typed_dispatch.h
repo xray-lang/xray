@@ -20,12 +20,18 @@ typedef enum XrTypedDispatchStatus {
     XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH,
     XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE,
     XR_TYPED_DISPATCH_PROGRAM_INVALID,
+    XR_TYPED_DISPATCH_ARGUMENT_MISMATCH,
     XR_TYPED_DISPATCH_FRAME_ERROR,
 } XrTypedDispatchStatus;
 
+/*
+ * Arguments are positional signed i64 values. The count must equal the
+ * parameter count the verified instruction group binds; a shorter, longer, or
+ * absent vector is rejected rather than truncated or zero filled.
+ */
 XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
     const XrTargetPlan *verified_plan,
     const XrFingerprint *required_plan_fingerprint, uint32_t function,
-    int64_t *result);
+    const int64_t *arguments, uint32_t argument_count, int64_t *result);
 
 #endif  // XR_TYPED_DISPATCH_H

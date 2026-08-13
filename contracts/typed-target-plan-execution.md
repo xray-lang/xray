@@ -5,27 +5,46 @@ Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
 family. A function with zero instruction rows is execution unavailable, never
 an empty successful program. The production builder emits a complete group
-only for a verified, parameter-free and capture-free, single-return-block
-signed-`i64` function whose operations are entirely in the supported family.
-Every other function emits zero rows; no partial group or fallback is allowed.
+only for a verified, capture-free, single-return-block signed-`i64` function
+whose declared parameters are all exact signed `i64` and whose operations are
+entirely in the supported family. Every other function emits zero rows; no
+partial group or fallback is allowed.
 
 The only supported execution family is a closed straight-line signed `i64`
-program consisting of constants, copies, wrapping addition, wrapping
-subtraction, wrapping multiplication, and one return. A non-empty function
-group must form an exact table partition in canonical function and dense row
-order. Its independent verifier requires every referenced slot to belong to
-that function and have identical trivial signed-`i64` register and memory
-representations. It also proves single assignment, use after definition,
-canonical arity and unused fields, and a unique final return. Unknown or
-unsupported instructions fail closed.
+program consisting of constants, parameter bindings, copies, wrapping
+addition, wrapping subtraction, wrapping multiplication, bitwise and, or,
+exclusive or, wrapping negation, bitwise complement, and one return. A
+non-empty function group must form an exact table partition in canonical
+function and dense row order. Its independent verifier requires every
+referenced slot to belong to that function and have identical trivial
+signed-`i64` register and memory representations. It also proves single
+assignment, use after definition, canonical arity and unused fields, and a
+unique final return. Unknown or unsupported instructions fail closed.
+
+A parameter row is a definition, not a computation: its immediate is the
+incoming argument ordinal and its result slot is the function's parameter
+slot. Nothing is implicitly live at entry, so reading a parameter is proved by
+the same use-after-definition rule as any other value. The builder commits a
+group only when the frozen parameter record and the operation agree on
+ordinal, function, exact type, and SSA value, and only when every declared
+parameter is bound exactly once. The independent verifier separately proves
+that argument ordinals are unique and dense from zero, that only a parameter
+row may define a parameter-role slot, and that the count of parameter rows
+equals the number of parameter-role slots the function frame declares. The
+executable family caps parameters at 64 so that density is proved without
+allocating.
 
 Instruction rows participate in the TargetPlan fingerprint, the bounded XTP
 section directory, the exact 32-byte row codec, and candidate materialization.
 The internal scalar dispatcher accepts only an immutable verified plan, its
-exact fingerprint, a derived nonzero function execution family, and exact
-typed-frame slot identities. It independently recomputes the target-content
-fingerprint and does not inspect SemanticPlan or Xi. It has no legacy VM
-opcode, `XrValue`, AOT, or generated-C fallback.
+exact fingerprint, a derived nonzero function execution family, a positional
+signed-`i64` argument vector, and exact typed-frame slot identities. It
+independently recomputes the target-content fingerprint and does not inspect
+SemanticPlan or Xi. The verified rows are the only signature it honours: the
+argument count must equal the number of parameter rows, and a shorter,
+longer, or absent vector is rejected before the frame exists rather than
+truncated, padded, or zero filled. It has no legacy VM opcode, `XrValue`, AOT,
+or generated-C fallback.
 
 Schema 19 is a hard cutover from v18 and all earlier schemas. It preserves all
 v17 authorities while adding exact source unit-enum ordinal storage for
@@ -122,7 +141,9 @@ scalar-i64 generation and execute function 0. PREPARE requires exactly one
 canonical function, this exact nonempty execution family, the typed-frame
 schema/family closure, and no storage, allocation, call, root, cleanup,
 adapter, or coroutine execution authority. Execution requires healthy ACTIVE
-state and a balanced in-flight-call pin. This adds no public CLI, export
+state and a balanced in-flight-call pin. That route carries no argument
+vector, so a generation whose sole function declares parameters fails closed
+instead of executing against implicit zeros. This adds no public CLI, export
 selection, or general typed VM instruction coverage, control flow, calls,
 aggregates, ownership, exceptions, coroutines, or complete typed TargetPlan
 VM execution.
@@ -138,7 +159,10 @@ Evidence:
   production construction and unsupported-function omission,
   SemanticPlan-independent execution, exact XTP roundtrip execution,
   fingerprint/content rejection, prior-schema rejection, and fail-closed mutation of
-  opcode, def-use, row identity, function identity, and return structure.
+  opcode, def-use, row identity, function identity, and return structure. It
+  also proves that a two-parameter function emits dense argument ordinals,
+  that both arguments reach the executed program in the right positions, and
+  that a short, long, or absent argument vector is refused.
 - `test_xtp_format` proves the instruction row width is part of the complete
   exact codec registry and exercises the public XSM/XTP generation route.
 - `test_typed_frame_runtime_archive` proves the dispatcher and verifier link
@@ -148,22 +172,22 @@ Evidence:
   execution, unsupported-plan rejection, bounded pins, drain, retirement, and
   unload without any legacy execution fallback.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 44529fab61f1a8fd8e421e6c0a2099f2ab86e7e9e379182a7fcb716800d55dd6
+anchor-sha256: src/plan/target/xr_target_plan.h 2cc17ba0ea588020cf35447e84cd8ad11b52db9642bd575214a5dd2b03b3b512
 anchor-sha256: src/plan/target/xr_target_plan.c 0755f79a32970d79e208eb005e2e647d25c6a46e4cea16ca3565f67bd7e38b42
-anchor-sha256: src/plan/target/xr_target_builder.c 45acf94fbcc29c258e3dcae8ee41614dbc0658d2c4d7d667f5aa4466698863f8
+anchor-sha256: src/plan/target/xr_target_builder.c 6597c1a0b8db43feac4fa602f627e2fc9baa8d45bb710837908db56206d45aaa
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 5eea43c77cf0e3802e30eacf12ca7e1a105b7b32de0497635cf7048de1b3438b
-anchor-sha256: src/plan/target/xr_target_instruction_verify.c b15ca485ea41187b84f8fcc7f439278573c8bcd9707dce4e6f865dd8efda78a0
+anchor-sha256: src/plan/target/xr_target_instruction_verify.c b3b43bb664c129939fccdb8676c989dc11f8b6af6a842e4f5888cc19e832f705
 anchor-sha256: src/plan/target/xr_target_verify.c 2cf7f6534a8db0831687873d3e0ac4f1cb5b890546e0e006cb218025d105f753
 anchor-sha256: src/plan/format/xr_xtp_schema.h 04840cf64073530619483953264b801358984d6559d7928b0b733b265ef2c668
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 8cb0983494ace434ec1d1f7389f19d4780ad82f6f88460144e04a9e28c1502bc
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
-anchor-sha256: src/vm/xr_typed_dispatch.h f72964091ac427130a3ff00c6d051cf85a3edd6ae174846984e0c1d506adeecd
-anchor-sha256: src/vm/xr_typed_dispatch.c 7cfe0b4ec52f28b83f601fccf46f313c7c9b8961740e47a876dbf25f7d38d595
+anchor-sha256: src/vm/xr_typed_dispatch.h 396124e124d2c1c5806a09ec27357f9598928f5a22870b18655d9782d2b3e379
+anchor-sha256: src/vm/xr_typed_dispatch.c c5fa11530b6864daf364fb5e0c8fe904a9f0ea179871787c637be4768d891eae
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c 52836fa969629698359a0df893581c3341b45b17977990178dbae12edd438f1c
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 57a0ca8f5d9959e1b0f99d0d00a21bfecd5e1ec9bb6a6b14933884dd1d4488a0
 anchor-sha256: tests/unit/plan/test_xtp_format.c ab7a3766a721d1aa2e6fc2ca67031e77ad1f7b44f974d5e8b532067f58705801
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 1d022e49698baf5f52e65aab0fe1e4144b973cb6f2a5efb59c753c2cce2de75b
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 8c36b61c750ba54bb57b3b8ea487c0083fe99a865303f2ff25b935fb45554916
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
-anchor-sha256: src/runtime/xr_module_generation.c d02e74f29b281d354ea03b339205e457e62266c06bd4b1afb6692d90a2c0e1d7
+anchor-sha256: src/runtime/xr_module_generation.c 1cb970ecbc047520b330ce91ef62a3808881bd8c42aa9194ad6ef60066da0b54
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7

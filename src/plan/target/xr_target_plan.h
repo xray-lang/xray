@@ -59,10 +59,19 @@ typedef enum XrTargetInstructionOpcode {
     XR_TARGET_INSTRUCTION_NEG_WRAP_I64,
     XR_TARGET_INSTRUCTION_BNOT_I64,
     XR_TARGET_INSTRUCTION_RETURN_I64,
+    /* Binds one incoming argument ordinal, carried in the immediate, to the
+     * function's parameter slot. It is a definition row, not a computation, so
+     * the same single-assignment and use-after-definition proof covers a
+     * parameter read without any implicitly live slot. */
+    XR_TARGET_INSTRUCTION_PARAM_I64,
     XR_TARGET_INSTRUCTION_COUNT,
 } XrTargetInstructionOpcode;
 
 #define XR_TARGET_INSTRUCTION_SLOT_NONE UINT32_MAX
+
+/* Argument ordinals are proved dense through a fixed-width bitmap, so the
+ * executable family caps its parameter count instead of allocating. */
+#define XR_TARGET_INSTRUCTION_MAX_PARAMETERS 64u
 
 #define XR_TARGET_REQUIRED_FAMILIES                                                         \
     ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                  \

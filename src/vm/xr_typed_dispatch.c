@@ -52,6 +52,8 @@ static XrTypedDispatchStatus store_i64_bits(XrTypedFrame *frame, uint32_t slot,
 
 static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                                          const XrTargetInstructionRecord *row,
+                                         const int64_t *arguments,
+                                         uint32_t argument_count,
                                          uint64_t *return_bits) {
     uint64_t left = 0;
     uint64_t right = 0;
@@ -59,6 +61,14 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
     switch ((XrTargetInstructionOpcode) row->opcode) {
         case XR_TARGET_INSTRUCTION_CONST_I64:
             return store_i64_bits(frame, row->result_slot, row->immediate_bits);
+        case XR_TARGET_INSTRUCTION_PARAM_I64:
+            /* The immediate is the argument ordinal the verifier proved dense;
+             * the bound is repeated here so a caller vector shorter than the
+             * program can never read past its end. */
+            if (!arguments || row->immediate_bits >= argument_count)
+                return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
+            memcpy(&left, &arguments[row->immediate_bits], sizeof(left));
+            return store_i64_bits(frame, row->result_slot, left);
         case XR_TARGET_INSTRUCTION_COPY_I64:
             status = load_i64_bits(frame, row->operand_slots[0], &left);
             return status == XR_TYPED_DISPATCH_OK
@@ -112,10 +122,11 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
 XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
     const XrTargetPlan *verified_plan,
     const XrFingerprint *required_plan_fingerprint, uint32_t function,
-    int64_t *result) {
+    const int64_t *arguments, uint32_t argument_count, int64_t *result) {
     if (result)
         *result = 0;
-    if (!verified_plan || !required_plan_fingerprint || !result)
+    if (!verified_plan || !required_plan_fingerprint || !result ||
+        (!arguments && argument_count))
         return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
     if (!xr_target_plan_is_verified(verified_plan))
         return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
@@ -137,6 +148,16 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
                                              &instruction_count);
     if (!instructions || !instruction_count)
         return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+    /* The verified group is the only declaration of the signature this
+     * executor honours: it binds one dense argument ordinal per parameter
+     * row. A caller vector of any other length is refused before the frame
+     * exists, so no slot is ever filled from a truncated or padded vector. */
+    uint32_t declared_parameters = 0;
+    for (uint32_t i = 0; i < instruction_count; i++)
+        declared_parameters +=
+            instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64;
+    if (declared_parameters != argument_count)
+        return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
     XrTypedFrameLimits limits;
     xr_typed_frame_limits_default(&limits);
     XrTypedFrame *frame = NULL;
@@ -147,7 +168,8 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
     uint64_t return_bits = 0;
     XrTypedDispatchStatus status = XR_TYPED_DISPATCH_OK;
     for (uint32_t i = 0; i < instruction_count; i++) {
-        status = execute_row(frame, &instructions[i], &return_bits);
+        status = execute_row(frame, &instructions[i], arguments, argument_count,
+                             &return_bits);
         if (status != XR_TYPED_DISPATCH_OK)
             break;
     }
