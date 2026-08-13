@@ -14,12 +14,12 @@
 #include "../coro/xmachine.h"
 #include <string.h>
 
-#define XR_VM_MACHINE_STACK_SIZE 1024
-#define XR_VM_MACHINE_FRAME_SIZE 64
+#define XR_WORKER_MACHINE_STACK_CAPACITY 1024
+#define XR_WORKER_MACHINE_FRAME_CAPACITY 64
 
 typedef struct XrVmMachineStorage {
-    XrValue stack[XR_VM_MACHINE_STACK_SIZE];
-    XrBcCallFrame frames[XR_VM_MACHINE_FRAME_SIZE];
+    XrValue stack[XR_WORKER_MACHINE_STACK_CAPACITY];
+    XrBcCallFrame frames[XR_WORKER_MACHINE_FRAME_CAPACITY];
     XrVMContext ctx;
 } XrVmMachineStorage;
 
@@ -30,10 +30,10 @@ static void vm_machine_ctx_init(XrVmMachineStorage *storage, XrVMRuntime *isolat
     memset(ctx, 0, sizeof(*ctx));
     ctx->stack = storage->stack;
     ctx->stack_top = storage->stack;
-    ctx->stack_capacity = XR_VM_MACHINE_STACK_SIZE;
+    ctx->stack_capacity = XR_WORKER_MACHINE_STACK_CAPACITY;
     ctx->frames = storage->frames;
     ctx->frame_count = 0;
-    ctx->frame_capacity = XR_VM_MACHINE_FRAME_SIZE;
+    ctx->frame_capacity = XR_WORKER_MACHINE_FRAME_CAPACITY;
     ctx->handlers = ctx->handler_inline;
     ctx->handler_count = 0;
     ctx->handler_capacity = XR_HANDLER_INLINE_CAP;
