@@ -238,6 +238,27 @@ BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.f
 BYTE_ARRAY_APPEND_OPERATIONS = {"xi.byte.array.append.from"}
 BYTE_ARRAY_REPEAT_OPERATIONS = {"xi.byte.array.repeat.from"}
 TARGET_LAYOUT_QUERY_OPERATIONS = {"xi.target.sizeof", "xi.target.alignof"}
+TARGET_SIMD_QUERY_OPERATIONS = {
+    "xi.target.simd.bytes",
+    "xi.target.simd.accelerated",
+    "xi.target.simd.runtime-selected",
+}
+# The simd module declares the portable baseline this owner defines. The
+# declarations and the owner must state the same machine.
+TARGET_SIMD_BASELINE_DECLARATIONS = (
+    ("nativeBytes", "return 16"),
+    ("isAccelerated", "return false"),
+    ("isRuntimeSelected", "return false"),
+    ("isScalable", "return false"),
+)
+# The emitters used to read the link target and fold these answers by hand.
+# Only the vocabulary adapter may touch the target description now.
+TARGET_SIMD_RETIRED_EMITTER_TOKENS = (
+    "simd_features",
+    "simd_mode",
+    "XAOT_SIMD_FEATURE_AVX2",
+    "XAOT_SIMD_FEATURE_AVX512",
+)
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -3466,6 +3487,112 @@ def verify_target_layout_query_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_target_simd_query_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.target-simd-query"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != TARGET_SIMD_QUERY_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.target-simd-query family")
+
+    core_relative = "src/shared/xr_target_simd_core.h"
+    core_text = (root / core_relative).read_text(encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_TARGET_SIMD_QUERY_OWNER_GUARD",
+                  "XR_TARGET_SIMD_QUERY_CONSUMER_GUARD", "XR_TARGET_SIMD_QUERY_KIND_GUARD",
+                  "XR_TARGET_SIMD_QUERY_OWNER_APPLY", "XR_TARGET_SIMD_FEATURE_WIDE_256",
+                  "XR_TARGET_SIMD_FEATURE_WIDE_512", "XR_TARGET_SIMD_BASELINE_BYTES",
+                  "XR_TARGET_SIMD_BASELINE_SELECTION", "XR_TARGET_SIMD_BASELINE_FEATURES",
+                  "xr_target_simd_static_bytes_core", "xr_target_simd_width_source_core",
+                  "xr_target_simd_query_core", "xr_target_simd_query_is_baseline_core"):
+        if token not in core_text:
+            errors.append(f"{core_relative}: shared target-simd owner lacks {token}")
+    if "xaot" in core_text or "XAOT" in core_text:
+        errors.append(f"{core_relative}: shared owner reads a backend target description")
+
+    vm_relative = "src/ir/xi_emit_call.c"
+    vm_text = (root / vm_relative).read_text(encoding="utf-8", errors="strict")
+    vm_body = extract_c_function(vm_text, "emit_target_simd_baseline_holds") or ""
+    for token in ("XR_TARGET_SIMD_QUERY_BYTES", "XR_TARGET_SIMD_QUERY_ACCELERATED",
+                  "XR_TARGET_SIMD_QUERY_RUNTIME_SELECTED", "XR_TARGET_SIMD_QUERY_SCALABLE",
+                  "xr_target_simd_query_is_baseline_core"):
+        if token not in vm_body:
+            errors.append(f"{vm_relative}: VM target-simd query does not resolve {token}")
+    macro_start = vm_text.find("#define EMIT_TARGET_SIMD_BASELINE_QUERY")
+    macro_end = vm_text.find("\n\n", macro_start) if macro_start >= 0 else -1
+    macro_body = vm_text[macro_start:macro_end] if macro_start >= 0 else ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_TARGET_SIMD_QUERY_OWNER_APPLY", "XR_TARGET_SIMD_BASELINE_SELECTION",
+                  "XR_TARGET_SIMD_BASELINE_FEATURES"):
+        if token not in macro_body:
+            errors.append(f"{vm_relative}: VM target-simd query bypasses the stable owner")
+            break
+    if "emit_target_simd_baseline_holds(v)" not in vm_text:
+        errors.append(f"{vm_relative}: semantic intrinsic lowering does not consult the owner")
+
+    cgen_relative = "src/aot/xi_cgen.c"
+    cgen_text = (root / cgen_relative).read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_target_simd_query_adapter_name") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_CGEN",
+                  "xr_semantic_owner_has_consumer", "xr_semantic_owner_cgen_adapter"):
+        if token not in resolver:
+            errors.append(f"{cgen_relative}: target-simd query does not resolve stable adapter")
+            break
+
+    dispatch_relative = "src/aot/xi_cgen_dispatch_helpers.inc.c"
+    dispatch = (root / dispatch_relative).read_text(encoding="utf-8", errors="strict")
+    macro_start = dispatch.find("#define XICGEN_TARGET_SIMD_QUERY")
+    macro_end = dispatch.find("\n\n", macro_start) if macro_start >= 0 else -1
+    cgen_macro = dispatch[macro_start:macro_end] if macro_start >= 0 else ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_CGEN",
+                  "XR_TARGET_SIMD_QUERY_OWNER_APPLY", "cg_target_simd_selection",
+                  "cg_target_simd_features"):
+        if token not in cgen_macro:
+            errors.append(f"{dispatch_relative}: CGen target-simd query bypasses the owner")
+            break
+    guard = extract_c_function(dispatch, "xicgen_target_simd_query_ok") or ""
+    if "cg_target_simd_query_adapter_name" not in guard or \
+            "xr_target_simd_query_core" not in guard:
+        errors.append(f"{dispatch_relative}: CGen target-simd query accepts an unresolved adapter")
+    for symbol, expected in (
+        ("xicgen_target_simd_bytes",
+         ("XICGEN_TARGET_SIMD_QUERY", "XR_TARGET_SIMD_QUERY_BYTES",
+          "XR_TARGET_SIMD_WIDTH_RUNTIME_SCALABLE", "XR_TARGET_SIMD_WIDTH_RUNTIME_DISPATCH")),
+        ("xicgen_target_simd_accelerated",
+         ("XICGEN_TARGET_SIMD_QUERY", "XR_TARGET_SIMD_QUERY_ACCELERATED")),
+        ("xicgen_target_simd_runtime_selected",
+         ("XICGEN_TARGET_SIMD_QUERY", "XR_TARGET_SIMD_QUERY_SCALABLE",
+          "XR_TARGET_SIMD_QUERY_RUNTIME_SELECTED")),
+    ):
+        body = extract_c_function(dispatch, symbol) or ""
+        for token in expected:
+            if token not in body:
+                errors.append(f"{dispatch_relative}: {symbol} does not answer through the owner")
+                break
+        for retired in TARGET_SIMD_RETIRED_EMITTER_TOKENS:
+            if retired in body:
+                errors.append(f"{dispatch_relative}: {symbol} reads the target description again")
+                break
+    for token in ("XAOT_SIMD_FEATURE_AVX2 == XR_TARGET_SIMD_FEATURE_WIDE_256",
+                  "XAOT_SIMD_FEATURE_AVX512 == XR_TARGET_SIMD_FEATURE_WIDE_512"):
+        if token not in dispatch:
+            errors.append(f"{dispatch_relative}: target feature bits are not pinned to the owner")
+
+    stdlib_relative = "stdlib/simd/simd.xr"
+    stdlib_text = (root / stdlib_relative).read_text(encoding="utf-8", errors="strict")
+    start = stdlib_text.find("struct Capabilities")
+    block = stdlib_text[start:stdlib_text.find("\n}\n", start)] if start >= 0 else ""
+    for method, answer in TARGET_SIMD_BASELINE_DECLARATIONS:
+        index = block.find(method)
+        if index < 0 or answer not in block[index:index + 120]:
+            errors.append(f"{stdlib_relative}: Capabilities.{method} no longer declares the "
+                          "portable baseline the owner defines")
+    if f"XR_TARGET_SIMD_BASELINE_BYTES {TARGET_SIMD_BASELINE_DECLARATIONS[0][1].split()[1]}" \
+            not in core_text:
+        errors.append(f"{core_relative}: owner baseline width differs from the simd declarations")
+    return errors
+
+
 def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     families = (
@@ -3676,8 +3803,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 44:
-        errors.append(f"shared-core inventory must contain exactly 44 headers, found {len(actual)}")
+    if len(actual) != 45:
+        errors.append(f"shared-core inventory must contain exactly 45 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -3734,6 +3861,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_byte_array_append_ratchet(root, registry))
         errors.extend(verify_byte_array_repeat_ratchet(root, registry))
         errors.extend(verify_target_layout_query_ratchet(root, registry))
+        errors.extend(verify_target_simd_query_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))
         errors.extend(verify_pod_slice_view_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)

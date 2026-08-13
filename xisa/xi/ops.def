@@ -2638,9 +2638,6 @@
   :operations (
     xi.const
     xi.param
-    xi.target.simd.bytes
-    xi.target.simd.accelerated
-    xi.target.simd.runtime-selected
     xi.add
     xi.sub
     xi.mul
@@ -2758,6 +2755,9 @@
     xi.owner.forward
     xi.target.sizeof
     xi.target.alignof
+    xi.target.simd.bytes
+    xi.target.simd.accelerated
+    xi.target.simd.runtime-selected
     xi.array.data.ptr
     xi.static.bytes.ptr
     xi.cell.get
@@ -3049,6 +3049,25 @@
     (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
     (vm "src/ir/xi_emit.c" "XR_TARGET_LAYOUT_QUERY_OWNER_APPLY")
     (cgen "src/aot/xi_cgen.c" "cg_target_layout_query_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.target-simd-query
+  :category shared-semantic-kernel
+  :operations (
+    xi.target.simd.bytes
+    xi.target.simd.accelerated
+    xi.target.simd.runtime-selected
+  )
+  :consumers (
+    semantic-plan
+    vm
+    cgen
+  )
+  :cgen-adapter xr_target_simd_query_core
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/ir/xi_emit_call.c" "XR_TARGET_SIMD_QUERY_OWNER_APPLY")
+    (cgen "src/aot/xi_cgen.c" "cg_target_simd_query_adapter_name")
   ))
 
 (define-xi-observable-owner shared.numeric-neg

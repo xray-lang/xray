@@ -13,6 +13,7 @@
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../runtime/mem/xobj_header.h"
 #include "../shared/xr_sync_core.h"
+#include "../shared/xr_target_simd_core.h"
 
 static bool emit_shared_slot_is_function(EmitCtx *ctx, int64_t slot) {
     if (!ctx || !ctx->func || slot < 0)
@@ -25,6 +26,43 @@ static bool emit_shared_slot_is_function(EmitCtx *ctx, int64_t slot) {
             return true;
     }
     return false;
+}
+
+/* Bytecode has no vector target of its own: it executes the portable baseline
+ * the shared owner defines, and the simd module's Capabilities declarations
+ * answer these queries with that baseline. Ask the owner for each answer on the
+ * baseline machine and refuse to lower the call when the two no longer agree,
+ * so a change to the owner cannot leave those declarations behind.
+ *
+ * The owner macro resolves a constant query kind, so each row below asks for
+ * exactly one answer rather than selecting a kind at run time. */
+#define EMIT_TARGET_SIMD_BASELINE_QUERY(kind)                                                      \
+    XR_TARGET_SIMD_QUERY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_HI,                  \
+                                     XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_LO,                  \
+                                     XR_SEM_CONSUMER_VM, (kind),                                   \
+                                     (uint8_t) XR_TARGET_SIMD_BASELINE_SELECTION,                  \
+                                     XR_TARGET_SIMD_BASELINE_FEATURES)
+
+static bool emit_target_simd_baseline_holds(const XiValue *v) {
+    if (!v)
+        return false;
+    if (v->op == XI_TARGET_SIMD_BYTES)
+        return xr_target_simd_query_is_baseline_core(
+                   XR_TARGET_SIMD_QUERY_BYTES,
+                   EMIT_TARGET_SIMD_BASELINE_QUERY(XR_TARGET_SIMD_QUERY_BYTES)) != 0;
+    if (v->op == XI_TARGET_SIMD_ACCELERATED)
+        return xr_target_simd_query_is_baseline_core(
+                   XR_TARGET_SIMD_QUERY_ACCELERATED,
+                   EMIT_TARGET_SIMD_BASELINE_QUERY(XR_TARGET_SIMD_QUERY_ACCELERATED)) != 0;
+    /* One Xi op answers two source questions: whether the width is settled at
+     * run time at all, and whether a scalable register settles it. */
+    if (v->xa_intrinsic_id == XA_INTRINSIC_SIMD_CAPABILITIES_IS_SCALABLE)
+        return xr_target_simd_query_is_baseline_core(
+                   XR_TARGET_SIMD_QUERY_SCALABLE,
+                   EMIT_TARGET_SIMD_BASELINE_QUERY(XR_TARGET_SIMD_QUERY_SCALABLE)) != 0;
+    return xr_target_simd_query_is_baseline_core(
+               XR_TARGET_SIMD_QUERY_RUNTIME_SELECTED,
+               EMIT_TARGET_SIMD_BASELINE_QUERY(XR_TARGET_SIMD_QUERY_RUNTIME_SELECTED)) != 0;
 }
 
 static bool emit_callee_is_plain_closure(EmitCtx *ctx, XiValue *callee) {
@@ -347,6 +385,13 @@ XR_FUNC void xi_emit_semantic_intrinsic_call(EmitCtx *ctx, XiValue *v, XiEmitReg
             XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO,
             XR_SEM_CONSUMER_VM, 4);
         if (!xr_atomic_store_plan_is_exact_core(plan)) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+    }
+    if (v->op == XI_TARGET_SIMD_BYTES || v->op == XI_TARGET_SIMD_ACCELERATED ||
+        v->op == XI_TARGET_SIMD_RUNTIME_SELECTED) {
+        if (!emit_target_simd_baseline_holds(v)) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
         }
