@@ -17,7 +17,8 @@
 #include "xr_typed_frame.h"
 #include "../plan/target/xr_target_instruction_verify.h"
 #include "../shared/xr_bits_core.h"
-#include "../shared/xr_int_arith.h"
+#include "../shared/xr_int_arith_core.h"
+#include "../shared/xr_semantic_owner_ids_gen.h"
 #include <string.h>
 
 static XrTypedDispatchStatus describe_i64(XrTypedFrame *frame, uint32_t slot,
@@ -165,8 +166,20 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
              * rather than refused: the shared helpers give the wrapping negate
              * and the zero remainder that the bytecode VM, the AOT runtime,
              * and constant folding all produce for it. */
-            int64_t computed = dividing ? xr_i64_div_wrap(dividend, divisor)
-                                        : xr_i64_mod_wrap(dividend, divisor);
+            /* The owner macro takes a constant kind, so the two rows resolve
+             * it separately rather than selecting one at run time. */
+            XrIntDivModResult evaluated =
+                dividing ? XR_INT_DIV_MOD_OWNER_APPLY(
+                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,
+                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,
+                               XR_SEM_CONSUMER_VM, XR_INT_DIV_MOD_DIV,
+                               XR_INT_DIV_MOD_PROOF_NONZERO, dividend, divisor)
+                         : XR_INT_DIV_MOD_OWNER_APPLY(
+                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,
+                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,
+                               XR_SEM_CONSUMER_VM, XR_INT_DIV_MOD_MOD,
+                               XR_INT_DIV_MOD_PROOF_NONZERO, dividend, divisor);
+            int64_t computed = evaluated.value;
             memcpy(&left, &computed, sizeof(left));
             return store_i64_bits(frame, row->result_slot, left);
         }
