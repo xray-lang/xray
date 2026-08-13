@@ -40,6 +40,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE = UINT64_C(1) << 13,
     XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE = UINT64_C(1) << 14,
     XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE = UINT64_C(1) << 15,
+    XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE = UINT64_C(1) << 16,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -101,7 +102,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE |                    \
                  XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |                    \
                  XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |                     \
-                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE))
+                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                  \
+                 XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -221,12 +223,15 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_RUNE,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_TO_STRING,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING,
+    XR_TARGET_CALL_CONVENTION_JSON_NAMESPACE_VALUE,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
  * wrapper proven by an ordered SemanticPlan module set; it never identifies a
  * private implementation or reuses a dependency function index as a local
- * index. CHANNEL_CLOSE names a sealed runtime receiver operation. */
+ * index. CHANNEL_CLOSE names a sealed runtime receiver operation.
+ * JSON_NAMESPACE_VALUE names the sealed compiler-owned JSON class namespace
+ * member, whose receiver is a reserved builtin global rather than a value. */
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
@@ -237,6 +242,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING,
+    XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetCallErrorMode {

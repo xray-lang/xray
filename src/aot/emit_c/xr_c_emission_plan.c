@@ -1422,7 +1422,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |
         XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |
         XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |
-        XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE;
+        XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |
+        XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",

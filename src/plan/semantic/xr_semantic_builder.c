@@ -13,6 +13,7 @@
 #include "xr_semantic_verify.h"
 #include "../ownership/xr_ownership_obligation.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
+#include "../../base/xglobal_indices.h"
 #include "../../base/xmalloc.h"
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../ir/xi.h"
@@ -2793,6 +2794,63 @@ static bool semantic_string_builder_append_string_exact(
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED;
 }
 
+/* `JSON` is a compiler-owned class namespace: its receiver is the reserved
+ * XI_GET_BUILTIN global, and no source declaration can produce that type
+ * record because a user class always carries its own class reference.  The
+ * namespace plus the frozen selector names exactly one implementation, so a
+ * `JSON.value(x)` callsite has a single dispatch target with no open domain. */
+static bool xi_json_namespace_value_exact(const XiValue *value) {
+    const XiValue *receiver = value && value->nargs == 2 ? value->args[0] : NULL;
+    return value && value->op == XI_CALL_METHOD && receiver && value->args[1] && value->aux &&
+           strcmp((const char *) value->aux, "value") == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
+           (value->aux_int & 1) == 0 && receiver->op == XI_GET_BUILTIN &&
+           receiver->aux_int == XR_GLOBAL_VAR_JSON && receiver->aux &&
+           strcmp((const char *) receiver->aux, "JSON") == 0 && receiver->type &&
+           receiver->type->kind == XR_KIND_CLASS && !receiver->type->instance.class_ref &&
+           value->type && value->type->kind == XR_KIND_JSON;
+}
+
+static bool semantic_json_namespace_type_exact(const XrSemanticTypeRecord *type) {
+    char expected[160];
+    int length = snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:4:JSON[0]",
+                          (unsigned) XR_KIND_CLASS, (unsigned) XR_TID_NULL,
+                          (unsigned) XR_SCALAR_REP_NONE);
+    XrStableId zero = {{0}};
+    return type && length > 0 && (size_t) length < sizeof(expected) &&
+           type->kind == XR_KIND_CLASS && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
+           strcmp(type->canonical_key, expected) == 0;
+}
+
+static bool semantic_json_namespace_value_exact(const XrSemanticBuildContext *ctx,
+                                                const XrSemanticOperationRecord *record) {
+    if (!ctx || !record || record->operand_count != 2 ||
+        record->operand_begin > ctx->plan->operand_count ||
+        record->operand_count > ctx->plan->operand_count - record->operand_begin ||
+        record->metadata_count != 1 || record->metadata_begin >= ctx->plan->metadata_count)
+        return false;
+    const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
+    const XrSemanticOperandRecord *argument = receiver + 1;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
+    const XrSemanticTypeRecord *result_type =
+        record->result_type < ctx->plan->type_count ? &ctx->plan->types[record->result_type] : NULL;
+    return semantic_json_namespace_type_exact(receiver_type) && result_type &&
+           result_type->kind == XR_KIND_JSON && result_type->builtin_type == XR_TID_NULL &&
+           result_type->child_count == 0 && result_type->scalar_rep == XR_SCALAR_REP_NONE &&
+           strcmp(ctx->plan->metadata[record->metadata_begin], "value") == 0 &&
+           receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
+           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           record->result_alias_operand == -1 &&
+           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED;
+}
+
 static bool semantic_string_builder_constructor_exact(const XrSemanticBuildContext *ctx,
                                                       const XrSemanticOperationRecord *record) {
     const XrSemanticTypeRecord *type =
@@ -2969,6 +3027,8 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     if (xi_string_builder_append_string_exact(value) &&
         semantic_string_builder_append_string_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING;
+    if (xi_json_namespace_value_exact(value) && semantic_json_namespace_value_exact(ctx, record))
+        record->intrinsic_kind = XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE;
     bool string_builder_candidate = xi_string_builder_constructor_candidate(value);
     bool string_builder_exact = xi_string_builder_constructor_exact(value);
     if (string_builder_candidate &&
