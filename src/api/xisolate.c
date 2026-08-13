@@ -97,7 +97,7 @@ XrVMRuntime *xray_vm_new(const XrVMConfig *params) {
         goto fail;
 
     // --- Core: VM engine ---
-    if (xr_vm_init(isolate) != 0)
+    if (xr_execution_engine_init(isolate) != 0)
         goto fail;
 
 #if XR_ENABLE_VM_PROFILER
@@ -116,7 +116,7 @@ XrVMRuntime *xray_vm_new(const XrVMConfig *params) {
 #if XR_ENABLE_VM_PROFILER
 fail_after_vm:
 #endif
-    xr_vm_cleanup(isolate);
+    xr_execution_engine_cleanup(isolate);
 fail:
     if (isolate->globals)
         xr_globals_destroy((XrGlobalsTable *) isolate->globals);
@@ -208,7 +208,7 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     lifecycle_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
-    xr_vm_cleanup(isolate);
+    xr_execution_engine_cleanup(isolate);
     vm_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();

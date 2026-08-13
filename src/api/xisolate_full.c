@@ -123,7 +123,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
         return -1;
 
     // Register core classes to VM builtins array (must be after all classes created).
-    // init_globals() in xr_vm_init ran before full VM initialization.
+    // init_globals() in xr_execution_engine_init ran before full VM initialization.
     if (isolate->core) {
         if (isolate->core->arrayClass)
             isolate->vm.builtins[XR_GLOBAL_VAR_ARRAY] =

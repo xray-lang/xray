@@ -249,7 +249,7 @@ static void init_vm_context(XrVMRuntime *isolate) {
 }
 
 // Initialize VM execution engine
-int xr_vm_init(XrVMRuntime *isolate) {
+int xr_execution_engine_init(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "vm_init: NULL isolate");
     isolate->vm.stack_top = isolate->vm.stack;
     for (int i = 0; i < XR_STACK_MAX; i++) {
@@ -283,7 +283,7 @@ int xr_vm_init(XrVMRuntime *isolate) {
 }
 
 // Cleanup VM execution engine
-void xr_vm_cleanup(XrVMRuntime *isolate) {
+void xr_execution_engine_cleanup(XrVMRuntime *isolate) {
     if (isolate->vm.strings_map != NULL) {
         xr_hashmap_free(isolate->vm.strings_map);
         isolate->vm.strings_map = NULL;

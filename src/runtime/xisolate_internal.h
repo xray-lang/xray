@@ -52,8 +52,8 @@ typedef struct XrGlobalStringPool XrGlobalStringPool;
 /* ========== VM Engine API (compile-time static linking) ========== */
 
 // VM initialization and cleanup
-XR_FUNC int xr_vm_init(XrVMRuntime *isolate);
-XR_FUNC void xr_vm_cleanup(XrVMRuntime *isolate);
+XR_FUNC int xr_execution_engine_init(XrVMRuntime *isolate);
+XR_FUNC void xr_execution_engine_cleanup(XrVMRuntime *isolate);
 
 /* ========== Fast Macros ========== */
 
