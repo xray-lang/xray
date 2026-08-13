@@ -453,8 +453,8 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
             for (uint16_t i = 0; i < layout->field_count; i++) {
                 XrValue va = xr_null();
                 XrValue vb = xr_null();
-                if (!xr_vm_instance_struct_get_field(ctx->isolate, ia, i, &va) ||
-                    !xr_vm_instance_struct_get_field(ctx->isolate, ib, i, &vb))
+                if (!xr_instance_struct_get_field(ctx->isolate, ia, i, &va) ||
+                    !xr_instance_struct_get_field(ctx->isolate, ib, i, &vb))
                     return false;
                 if (!deep_compare(ctx, va, vb))
                     return false;

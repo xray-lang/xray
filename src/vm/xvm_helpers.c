@@ -516,8 +516,8 @@ static uint8_t *xr_instance_struct_field_ptr(XrVMRuntime *isolate, XrInstance *i
     return payload + field->offset;
 }
 
-XR_FUNC bool xr_vm_instance_struct_get_field(XrVMRuntime *isolate, XrInstance *inst,
-                                             int field_index, XrValue *out) {
+XR_FUNC bool xr_instance_struct_get_field(XrVMRuntime *isolate, XrInstance *inst,
+                                          int field_index, XrValue *out) {
     XrAggregateFieldLayout *field = NULL;
     uint8_t *fp = xr_instance_struct_field_ptr(isolate, inst, field_index, &field);
     return xr_struct_read_field_value(isolate, fp, field, out);

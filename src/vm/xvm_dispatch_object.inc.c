@@ -170,7 +170,7 @@ vmcase(OP_GETFIELD) {
     if (xr_weak_instance_field_load(inst_obj, field_idx, &R(a)))
         vmbreak;
     if (inst_obj->klass && inst_obj->klass->struct_layout) {
-        if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
+        if (!xr_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
         }
     } else {
@@ -241,7 +241,7 @@ vmcase(OP_GETFIELD_IC) {
         if (xr_weak_instance_field_load(inst_obj, field_idx, &R(a)))
             vmbreak;
         if (cls->struct_layout) {
-            if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
+            if (!xr_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
             }
         } else {
@@ -255,7 +255,7 @@ vmcase(OP_GETFIELD_IC) {
         if (xr_weak_instance_field_load(inst_obj, field_idx, &R(a)))
             vmbreak;
         if (cls->struct_layout) {
-            if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
+            if (!xr_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
             }
         } else {
@@ -281,7 +281,7 @@ vmcase(OP_GETFIELD_IC) {
     if (xr_weak_instance_field_load(inst_obj, field_idx, &R(a)))
         vmbreak;
     if (cls->struct_layout) {
-        if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
+        if (!xr_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
         }
     } else {
@@ -743,7 +743,7 @@ getprop_instance:;
     if (cache && xr_ic_field_lookup_mono(cache, inst_class, prop_symbol, &field_index)) {
         // Monomorphic hit: direct field access!
         if (inst_class->struct_layout) {
-            if (!xr_vm_instance_struct_get_field(isolate, inst, field_index, &R(a))) {
+            if (!xr_instance_struct_get_field(isolate, inst, field_index, &R(a))) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
             }
         } else {
@@ -756,7 +756,7 @@ getprop_instance:;
     if (cache && xr_ic_field_lookup_poly(cache, inst_class, prop_symbol, &field_index)) {
         // Polymorphic hit: direct field access!
         if (inst_class->struct_layout) {
-            if (!xr_vm_instance_struct_get_field(isolate, inst, field_index, &R(a))) {
+            if (!xr_instance_struct_get_field(isolate, inst, field_index, &R(a))) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
             }
         } else {
@@ -780,7 +780,7 @@ getprop_instance:;
 
         // Field exists: access and update IC
         if (inst_class->struct_layout) {
-            if (!xr_vm_instance_struct_get_field(isolate, inst, field_index, &R(a))) {
+            if (!xr_instance_struct_get_field(isolate, inst, field_index, &R(a))) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
             }
         } else {
