@@ -4,7 +4,7 @@
 #include "../runtime/mem/xruntime_object_heap.h"
 #include "../shared/xr_elem_type.h"
 
-bool xr_vm_grapheme_iterator_init(XrVmGraphemeIterator *iterator, XrString *source) {
+bool xr_grapheme_iterator_init(XrVmGraphemeIterator *iterator, XrString *source) {
     if (!iterator || !source)
         return false;
     iterator->source = source;
@@ -15,7 +15,7 @@ bool xr_vm_grapheme_iterator_init(XrVmGraphemeIterator *iterator, XrString *sour
     return true;
 }
 
-void xr_vm_grapheme_iterator_dispose(XrVmGraphemeIterator *iterator) {
+void xr_grapheme_iterator_dispose(XrVmGraphemeIterator *iterator) {
     XrString *source;
     bool last = false;
     XrRuntimeAbiStatus status;
@@ -38,8 +38,8 @@ void xr_vm_grapheme_iterator_dispose(XrVmGraphemeIterator *iterator) {
     }
 }
 
-bool xr_vm_grapheme_iterator_next(XrVmGraphemeIterator *iterator, XrSliceView *out_span,
-                                  XrByteRange *out_range) {
+bool xr_grapheme_iterator_next(XrVmGraphemeIterator *iterator, XrSliceView *out_span,
+                               XrByteRange *out_range) {
     XrByteRange range;
     XrString *source;
     XR_DCHECK(iterator != NULL, "VM grapheme iterator must not be NULL");

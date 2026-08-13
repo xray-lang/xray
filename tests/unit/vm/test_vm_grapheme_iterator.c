@@ -52,7 +52,7 @@ TEST(vm_grapheme_iterator_keeps_source_alive_without_slice_owner) {
     object_count = heap->object_count;
     ASSERT_EQ_INT(atomic_load_explicit(&source->header.rc, memory_order_relaxed), 1);
 
-    ASSERT_TRUE(xr_vm_grapheme_iterator_init(&iterator, source));
+    ASSERT_TRUE(xr_grapheme_iterator_init(&iterator, source));
     ASSERT_EQ_INT(atomic_load_explicit(&source->header.rc, memory_order_relaxed), 2);
 
     /* Drop the caller's owner: the internal iterator is now the sole source
@@ -60,7 +60,7 @@ TEST(vm_grapheme_iterator_keeps_source_alive_without_slice_owner) {
     release_string(source);
     ASSERT_EQ_INT(atomic_load_explicit(&source->header.rc, memory_order_relaxed), 1);
 
-    ASSERT_TRUE(xr_vm_grapheme_iterator_next(&iterator, &span, &range));
+    ASSERT_TRUE(xr_grapheme_iterator_next(&iterator, &span, &range));
     ASSERT_EQ_UINT(range.start, 0);
     ASSERT_EQ_UINT(range.end, 3);
     ASSERT_EQ_PTR(span.data, source->data);
@@ -68,15 +68,15 @@ TEST(vm_grapheme_iterator_keeps_source_alive_without_slice_owner) {
     ASSERT_TRUE(memcmp(span.data, text, 3) == 0);
     ASSERT_EQ_UINT(heap->object_count, object_count);
 
-    ASSERT_TRUE(xr_vm_grapheme_iterator_next(&iterator, &span, &range));
+    ASSERT_TRUE(xr_grapheme_iterator_next(&iterator, &span, &range));
     ASSERT_EQ_UINT(range.start, 3);
     ASSERT_EQ_UINT(range.end, 4);
     ASSERT_EQ_PTR(span.data, source->data + 3);
     ASSERT_EQ_INT(span.length, 1);
     ASSERT_EQ_UINT(heap->object_count, object_count);
-    ASSERT_FALSE(xr_vm_grapheme_iterator_next(&iterator, &span, &range));
+    ASSERT_FALSE(xr_grapheme_iterator_next(&iterator, &span, &range));
 
-    xr_vm_grapheme_iterator_dispose(&iterator);
+    xr_grapheme_iterator_dispose(&iterator);
     ASSERT_EQ_UINT(heap->object_count, object_count - 1);
     teardown();
 }
@@ -91,9 +91,9 @@ TEST(vm_grapheme_iterator_empty_source) {
     heap = xr_coro_get_heap(main_coro);
     source = xr_string_new(X, "", 0);
     ASSERT_NOT_NULL(source);
-    ASSERT_TRUE(xr_vm_grapheme_iterator_init(&iterator, source));
-    ASSERT_FALSE(xr_vm_grapheme_iterator_next(&iterator, &span, NULL));
-    xr_vm_grapheme_iterator_dispose(&iterator);
+    ASSERT_TRUE(xr_grapheme_iterator_init(&iterator, source));
+    ASSERT_FALSE(xr_grapheme_iterator_next(&iterator, &span, NULL));
+    xr_grapheme_iterator_dispose(&iterator);
     release_string(source);
     teardown();
 }
