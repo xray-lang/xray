@@ -102,9 +102,3 @@ XrVMContext *xr_vm_machine_ctx(struct XrMachine *machine, XrVMRuntime *isolate) 
     machine->backend_storage_destroy = vm_machine_storage_destroy;
     return &storage->ctx;
 }
-
-void xr_vm_machine_ctx_set_isolate(struct XrMachine *machine, XrVMRuntime *isolate) {
-    XrVMContext *ctx = xr_vm_machine_ctx(machine, isolate);
-    if (ctx)
-        ctx->isolate = isolate;
-}

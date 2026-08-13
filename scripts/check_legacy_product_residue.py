@@ -383,6 +383,13 @@ def self_test() -> int:
         )
         dead_vm_lifecycle_drifted, _ = check(root, collect(root))
         retired_dead_vm_lifecycle.unlink()
+        retired_machine_ctx_setter = root / "include/xray_vm.h"
+        retired_machine_ctx_setter.write_text(
+            "void xr_vm_machine_ctx_set_isolate(void *, void *);\n",
+            encoding="utf-8",
+        )
+        machine_ctx_setter_drifted, _ = check(root, collect(root))
+        retired_machine_ctx_setter.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -406,6 +413,7 @@ def self_test() -> int:
             or multicore_init_api_drifted
             or tls_api_drifted
             or dead_vm_lifecycle_drifted
+            or machine_ctx_setter_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")
