@@ -48,7 +48,11 @@ product activation path.
    already-started call to release its pin, and retirement still requires all
    pins to reach zero. This route passes no arguments, so a sole function whose
    verified rows declare parameters fails closed with `XR_EXEC_5004` rather
-   than executing against implicit zeros. There is no compatibility VM, XRC
+   than executing against implicit zeros. A verified, eligible program that
+   divides by zero is a program fault, not an authority failure: it reports
+   `XR_EXEC_5009`, yields no result, releases its pin, and leaves the
+   generation ACTIVE, so it can never be read as a verification or identity
+   problem. There is no compatibility VM, XRC
    translation, generic tagged-frame execution, AOT/CGen fallback, or guessed
    export entry.
 7. The independent verifier re-derives immutable plan/native identity, stable
@@ -68,14 +72,14 @@ product activation path.
 
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation_internal.h 427d2d23bfa8991dd8d20463169fb9bb23d7486a38d5274cb5d84b089a14a96a
-anchor-sha256: src/runtime/xr_module_generation.c 1cb970ecbc047520b330ce91ef62a3808881bd8c42aa9194ad6ef60066da0b54
+anchor-sha256: src/runtime/xr_module_generation.c 6bf5ac5976ed0d6784d2c28531608299d500a521dd433877403fa23d80f75ec4
 anchor-sha256: src/runtime/xr_module_generation_verify.c 4028ff528eeba7bb8db3c902901a36f45c085f5e2ecf54245bcc6a96de58e12d
-anchor-sha256: src/vm/xr_typed_dispatch.h 396124e124d2c1c5806a09ec27357f9598928f5a22870b18655d9782d2b3e379
-anchor-sha256: src/vm/xr_typed_dispatch.c 223454983d24a56d1d8567e20e02c64b2fce4fc41588dfb426549232c6864184
+anchor-sha256: src/vm/xr_typed_dispatch.h 429949f7960b431fcbb0b14cd10ca5e720ef4deeb1f0d54d725bb435091c1c42
+anchor-sha256: src/vm/xr_typed_dispatch.c 13e610cad27b9be04aae0dede6624f59545e1931317c555457ca32a1ea691019
 anchor-sha256: src/vm/xr_typed_frame.h 715f7ac98f468e004eed919fefb853a820375999cb1eba848122f9b418eb3401
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
-anchor-sha256: contracts/target-machine/diagnostic-codes.toml 54ee3affe064aabfb89fe1cc75ef5642837fd14b6e7e575a0badb4fc670efd74
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7
+anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 6a877b4078e8b4bc9d1fcd3e432df7b5df4af6053ba8b6b11700686b37f4b2d5
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 42b13fdd86da1191714c9f5d2c4981bd8f40a338c9e0a5aa7d0276843f2fc867

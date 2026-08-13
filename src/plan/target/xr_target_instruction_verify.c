@@ -191,6 +191,17 @@ static bool verify_function_group(const XrTargetPlan *plan,
                 valid = binary_row_shape_is_exact(plan, function, function_index,
                                                   row, defined, terminal);
                 break;
+            case XR_TARGET_INSTRUCTION_DIV_TRAP_I64:
+            case XR_TARGET_INSTRUCTION_MOD_TRAP_I64:
+                /* The divisor is a runtime slot value, so no static proof here
+                 * can exclude a zero: the row shape is what is proved, and the
+                 * executor owns the error edge. Rejecting a non-zero immediate
+                 * keeps that edge reachable, since there is no immediate
+                 * divisor form that could carry a zero the executor never
+                 * inspects. */
+                valid = binary_row_shape_is_exact(plan, function, function_index,
+                                                  row, defined, terminal);
+                break;
             case XR_TARGET_INSTRUCTION_RETURN_I64:
                 valid = row->operand_count == 1 && row->immediate_bits == 0 &&
                         row->result_slot == XR_TARGET_INSTRUCTION_SLOT_NONE &&

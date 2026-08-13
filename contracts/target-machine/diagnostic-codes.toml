@@ -268,3 +268,8 @@ message = "loaded module generation poison identity is missing, conflicting, or 
 id = "XR_EXEC_5008"
 name = "generation-identity-mismatch"
 message = "loaded module generation identity, state, or counter proof is invalid"
+
+[[code]]
+id = "XR_EXEC_5009"
+name = "executed-program-divided-by-zero"
+message = "a verified typed program divided or took a modulo by zero at execution"

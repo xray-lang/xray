@@ -17,6 +17,7 @@
 #include "xr_typed_frame.h"
 #include "../plan/target/xr_target_instruction_verify.h"
 #include "../shared/xr_bits_core.h"
+#include "../shared/xr_int_arith.h"
 #include <string.h>
 
 static XrTypedDispatchStatus describe_i64(XrTypedFrame *frame, uint32_t slot,
@@ -138,6 +139,35 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                     : XR_SHIFT_RIGHT_SIGNED,
                 value, count);
             memcpy(&left, &shifted, sizeof(left));
+            return store_i64_bits(frame, row->result_slot, left);
+        }
+        case XR_TARGET_INSTRUCTION_DIV_TRAP_I64:
+        case XR_TARGET_INSTRUCTION_MOD_TRAP_I64: {
+            status = load_i64_bits(frame, row->operand_slots[0], &left);
+            if (status != XR_TYPED_DISPATCH_OK)
+                return status;
+            status = load_i64_bits(frame, row->operand_slots[1], &right);
+            if (status != XR_TYPED_DISPATCH_OK)
+                return status;
+            int64_t dividend = 0;
+            int64_t divisor = 0;
+            memcpy(&dividend, &left, sizeof(dividend));
+            memcpy(&divisor, &right, sizeof(divisor));
+            bool dividing = row->opcode == XR_TARGET_INSTRUCTION_DIV_TRAP_I64;
+            /* The divisor is a runtime value, so this is the only place the
+             * zero can be caught. The program stops here with the status that
+             * names the operator, leaving the frame untouched, rather than
+             * executing a division C leaves undefined. */
+            if (divisor == 0)
+                return dividing ? XR_TYPED_DISPATCH_DIVIDE_BY_ZERO
+                                : XR_TYPED_DISPATCH_MODULO_BY_ZERO;
+            /* INT64_MIN by -1 is the other C undefined case, and it is defined
+             * rather than refused: the shared helpers give the wrapping negate
+             * and the zero remainder that the bytecode VM, the AOT runtime,
+             * and constant folding all produce for it. */
+            int64_t computed = dividing ? xr_i64_div_wrap(dividend, divisor)
+                                        : xr_i64_mod_wrap(dividend, divisor);
+            memcpy(&left, &computed, sizeof(left));
             return store_i64_bits(frame, row->result_slot, left);
         }
         case XR_TARGET_INSTRUCTION_RETURN_I64:

@@ -73,14 +73,36 @@ static XrTargetPlan *build_plan(XrSemanticPlan **semantic_out,
     return finish_plan(function, semantic_out, profile_out);
 }
 
+/* A rotate is an exact-width bit intrinsic keyed on a receiver width the
+ * scalar execution family has no authority over, so it keeps the sole function
+ * outside that family and this route fail closed. */
 static XrTargetPlan *build_unsupported_plan(
     XrSemanticPlan **semantic_out, XrTargetProfile **profile_out) {
-    XiFunc *function = xi_func_new("generation_div_probe", &stub_int);
+    XiFunc *function = xi_func_new("generation_rotate_probe", &stub_int);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
     XiValue *left = xi_const_int(function, entry, 84, &stub_int);
     XiValue *right = xi_const_int(function, entry, 2, &stub_int);
+    XiValue *result = xi_binary(function, entry, XI_BIT_ROTL, &stub_int,
+                                left, right);
+    REQUIRE(left != NULL && right != NULL && result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    return finish_plan(function, semantic_out, profile_out);
+}
+
+/* Division is executable, so this sole function is eligible all the way to
+ * ACTIVE and only its zero divisor stops it. That separates a program fault
+ * from the authority failures the unsupported plan produces. */
+static XrTargetPlan *build_divide_by_zero_plan(
+    XrSemanticPlan **semantic_out, XrTargetProfile **profile_out) {
+    XiFunc *function = xi_func_new("generation_divide_by_zero_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *left = xi_const_int(function, entry, 84, &stub_int);
+    XiValue *right = xi_const_int(function, entry, 0, &stub_int);
     XiValue *result = xi_binary(function, entry, XI_DIV, &stub_int,
                                 left, right);
     REQUIRE(left != NULL && right != NULL && result != NULL);
@@ -259,6 +281,42 @@ static void test_unsupported_generation_remains_verified(
     REQUIRE(xr_runtime_generation_authority_destroy(
         &authority, diagnostic, sizeof(diagnostic)));
     REQUIRE(authority == NULL);
+}
+
+static void test_divide_by_zero_generation_fails_at_execution(
+    XrTargetPlan *plan) {
+    char diagnostic[512] = {0};
+    XrRuntimeGenerationBudget budget = make_budget(1);
+    XrRuntimeGenerationAuthority *authority = NULL;
+    REQUIRE(xr_runtime_generation_authority_create(
+        &budget, &authority, diagnostic, sizeof(diagnostic)));
+    XrLoadedModuleGeneration *generation = NULL;
+    REQUIRE(xr_module_generation_load_verified_target_plan(
+        authority, plan, &generation, diagnostic, sizeof(diagnostic)));
+    /* The row is verified and the generation is eligible: nothing here objects
+     * to the program before it runs. */
+    REQUIRE(xr_module_generation_prepare(generation, diagnostic,
+                                         sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_activate(generation, diagnostic,
+                                          sizeof(diagnostic)));
+    int64_t result = 99;
+    REQUIRE(!xr_module_generation_execute_sole_scalar_i64(
+        generation, &result, diagnostic, sizeof(diagnostic)));
+    /* A program fault, distinct from the authority and verification codes, and
+     * it yields no value. */
+    REQUIRE(result == 0 && strstr(diagnostic, "XR_EXEC_5009") != NULL);
+    XrModuleGenerationSnapshot after;
+    REQUIRE(xr_module_generation_snapshot(generation, &after));
+    REQUIRE(after.state == XR_MODULE_GENERATION_ACTIVE &&
+            after.total_pins == 0);
+    REQUIRE(xr_module_generation_begin_drain(generation, diagnostic,
+                                             sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_retire(generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_unload(&generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_runtime_generation_authority_destroy(
+        &authority, diagnostic, sizeof(diagnostic)));
 }
 
 static void seed_snapshot(XrModuleGenerationSnapshot *snapshot,
@@ -476,12 +534,18 @@ int main(void) {
     XrTargetProfile *unsupported_profile = NULL;
     XrTargetPlan *unsupported = build_unsupported_plan(
         &unsupported_semantic, &unsupported_profile);
+    XrSemanticPlan *zero_semantic = NULL;
+    XrTargetProfile *zero_profile = NULL;
+    XrTargetPlan *zero = build_divide_by_zero_plan(&zero_semantic,
+                                                   &zero_profile);
     XrSemanticPlan *multi_semantic = NULL;
     XrTargetProfile *multi_profile = NULL;
     XrTargetPlan *multi = build_multi_function_plan(
         &multi_semantic, &multi_profile);
     uint32_t function_count = 0;
     REQUIRE(xr_target_plan_function_execution_family_mask(unsupported, 0) == 0);
+    REQUIRE(xr_target_plan_function_execution_family_mask(zero, 0) ==
+            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
     REQUIRE(xr_target_plan_functions(multi, &function_count) != NULL &&
             function_count == 2);
     REQUIRE(xr_target_plan_function_execution_family_mask(multi, 0) ==
@@ -489,6 +553,7 @@ int main(void) {
     test_scalar_generation_lifecycle(plan);
     test_unsupported_generation_remains_verified(unsupported);
     test_unsupported_generation_remains_verified(multi);
+    test_divide_by_zero_generation_fails_at_execution(zero);
     test_independent_state_machine_verifier();
     test_actual_identity_mutations(plan);
     test_concurrent_generation_budget(plan);
@@ -498,6 +563,9 @@ int main(void) {
     xr_target_plan_free(unsupported);
     xr_target_profile_free(unsupported_profile);
     xr_semantic_plan_free(unsupported_semantic);
+    xr_target_plan_free(zero);
+    xr_target_profile_free(zero_profile);
+    xr_semantic_plan_free(zero_semantic);
     xr_target_plan_free(multi);
     xr_target_profile_free(multi_profile);
     xr_semantic_plan_free(multi_semantic);

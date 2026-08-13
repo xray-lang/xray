@@ -5237,6 +5237,11 @@ static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
         case XI_ADD: return XR_TARGET_INSTRUCTION_ADD_WRAP_I64;
         case XI_SUB: return XR_TARGET_INSTRUCTION_SUB_WRAP_I64;
         case XI_MUL: return XR_TARGET_INSTRUCTION_MUL_WRAP_I64;
+        /* Signed division only: an unsigned divisor never reaches here because
+         * every admitted operand and result is exact signed i64, so no row can
+         * silently read a u64 bit pattern as a negative dividend. */
+        case XI_DIV: return XR_TARGET_INSTRUCTION_DIV_TRAP_I64;
+        case XI_MOD: return XR_TARGET_INSTRUCTION_MOD_TRAP_I64;
         case XI_BAND: return XR_TARGET_INSTRUCTION_BAND_I64;
         case XI_BOR: return XR_TARGET_INSTRUCTION_BOR_I64;
         case XI_BXOR: return XR_TARGET_INSTRUCTION_BXOR_I64;
@@ -5266,6 +5271,8 @@ static uint16_t scalar_instruction_operand_count(uint8_t opcode) {
         case XR_TARGET_INSTRUCTION_ADD_WRAP_I64:
         case XR_TARGET_INSTRUCTION_SUB_WRAP_I64:
         case XR_TARGET_INSTRUCTION_MUL_WRAP_I64:
+        case XR_TARGET_INSTRUCTION_DIV_TRAP_I64:
+        case XR_TARGET_INSTRUCTION_MOD_TRAP_I64:
         case XR_TARGET_INSTRUCTION_BAND_I64:
         case XR_TARGET_INSTRUCTION_BOR_I64:
         case XR_TARGET_INSTRUCTION_BXOR_I64:

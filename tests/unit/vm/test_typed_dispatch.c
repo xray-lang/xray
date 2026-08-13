@@ -63,6 +63,10 @@ static XrSemanticPlan *build_semantic(void) {
     return semantic;
 }
 
+/* A two-operand integer operation that is deliberately outside the executable
+ * family: a rotate is an exact-width bit intrinsic keyed on a receiver width
+ * this family has no authority over, so it must leave the whole function
+ * unavailable rather than emit a partial group. */
 static XrSemanticPlan *build_unsupported_semantic(void) {
     XiFunc *function = xi_func_new("typed_dispatch_unsupported", &stub_int);
     REQUIRE(function != NULL);
@@ -70,11 +74,11 @@ static XrSemanticPlan *build_unsupported_semantic(void) {
     REQUIRE(entry != NULL);
     XiValue *left = xi_const_int(function, entry, 8, &stub_int);
     XiValue *right = xi_const_int(function, entry, 2, &stub_int);
-    XiValue *divide = xi_value_new(function, entry, XI_DIV, &stub_int, 2);
-    REQUIRE(left && right && divide);
-    divide->args[0] = left;
-    divide->args[1] = right;
-    xi_block_set_return(entry, divide);
+    XiValue *rotate = xi_value_new(function, entry, XI_BIT_ROTL, &stub_int, 2);
+    REQUIRE(left && right && rotate);
+    rotate->args[0] = left;
+    rotate->args[1] = right;
+    xi_block_set_return(entry, rotate);
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
@@ -140,6 +144,43 @@ static XrSemanticPlan *build_shift_semantic(void) {
     right->args[1] = function->params[1];
     difference->args[0] = left;
     difference->args[1] = right;
+    xi_block_set_return(entry, difference);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
+
+/* fn(first, second) -> (first OP second) - (second OP first) for an operation
+ * that is not commutative, so swapping the argument pair negates the answer
+ * and a folded constant could not track it. Both orders also reach the
+ * operation with the other argument as divisor, so either position can carry
+ * the zero that stops the program. */
+static XrSemanticPlan *build_opposed_pair_semantic(const char *name, XiOp op) {
+    XiFunc *function = xi_func_new(name, &stub_int);
+    REQUIRE(function != NULL);
+    function->nparams = 2;
+    function->min_params = 2;
+    function->params = (XiValue **) xr_calloc(2, sizeof(XiValue *));
+    REQUIRE(function->params != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    entry->sealed = true;
+    function->params[0] = xi_param(function, entry, 0, &stub_int);
+    function->params[1] = xi_param(function, entry, 1, &stub_int);
+    XiValue *forward = xi_value_new(function, entry, op, &stub_int, 2);
+    XiValue *reverse = xi_value_new(function, entry, op, &stub_int, 2);
+    XiValue *difference = xi_value_new(function, entry, XI_SUB, &stub_int, 2);
+    REQUIRE(function->params[0] && function->params[1] && forward && reverse &&
+            difference);
+    forward->args[0] = function->params[0];
+    forward->args[1] = function->params[1];
+    reverse->args[0] = function->params[1];
+    reverse->args[1] = function->params[0];
+    difference->args[0] = forward;
+    difference->args[1] = reverse;
     xi_block_set_return(entry, difference);
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
@@ -570,6 +611,143 @@ static void test_shift_rows_execute_with_masked_counts(void) {
     xr_semantic_plan_free(semantic);
 }
 
+/* Expected values are written out rather than recomputed from the division
+ * helpers the executor uses, so the assertions independently pin truncation
+ * toward zero, the sign of a remainder, and the two edges C leaves undefined. */
+static void test_division_rows_take_the_zero_divisor_edge(void) {
+    const struct {
+        const char *name;
+        XiOp op;
+        uint8_t opcode;
+        XrTypedDispatchStatus zero_status;
+        struct {
+            int64_t first;
+            int64_t second;
+            int64_t expected;
+        } cases[4];
+    } families[] = {
+        {"typed_dispatch_division", XI_DIV, XR_TARGET_INSTRUCTION_DIV_TRAP_I64,
+         XR_TYPED_DISPATCH_DIVIDE_BY_ZERO,
+         {/* 17/5 - 5/17 */
+          {17, 5, 3},
+          /* Swapping the pair negates the answer, so it is executed rather
+           * than folded into the plan. */
+          {5, 17, -3},
+          /* Truncation toward zero: a flooring division would give -4. */
+          {-17, 5, -3},
+          /* INT64_MIN / -1 wraps to INT64_MIN instead of trapping, and
+           * -1 / INT64_MIN is zero. */
+          {INT64_MIN, -1, INT64_MIN}}},
+        {"typed_dispatch_modulo", XI_MOD, XR_TARGET_INSTRUCTION_MOD_TRAP_I64,
+         XR_TYPED_DISPATCH_MODULO_BY_ZERO,
+         {/* 17%5 - 5%17 */
+          {17, 5, -3},
+          {5, 17, 3},
+          /* The remainder takes the dividend's sign: a floored modulo would
+           * make the first term 3 and the answer 8. */
+          {-17, 5, -7},
+          /* INT64_MIN % -1 is zero, and -1 % INT64_MIN is -1. */
+          {INT64_MIN, -1, 1}}},
+    };
+    for (size_t family = 0; family < sizeof(families) / sizeof(families[0]);
+         family++) {
+        XrSemanticPlan *semantic =
+            build_opposed_pair_semantic(families[family].name,
+                                        families[family].op);
+        XrTargetProfile *profile = xr_test_target_profile_build(
+            false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        REQUIRE(profile != NULL);
+        XrTargetPlan *plan = NULL;
+        char error[512] = {0};
+        REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                     sizeof(error)));
+        uint32_t instruction_count = 0;
+        const XrTargetInstructionRecord *rows =
+            xr_target_plan_instructions(plan, &instruction_count);
+        REQUIRE(rows != NULL &&
+                instruction_count ==
+                    xr_semantic_plan_operation_count(semantic) + 1u);
+        uint32_t first = UINT32_MAX;
+        uint32_t second = UINT32_MAX;
+        for (uint32_t i = 0; i < instruction_count; i++) {
+            if (rows[i].opcode != families[family].opcode)
+                continue;
+            if (first == UINT32_MAX)
+                first = i;
+            else if (second == UINT32_MAX)
+                second = i;
+        }
+        REQUIRE(first != UINT32_MAX && second != UINT32_MAX);
+        REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) ==
+                XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE);
+
+        XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+        for (size_t i = 0; i < 4; i++) {
+            const int64_t arguments[2] = {families[family].cases[i].first,
+                                          families[family].cases[i].second};
+            int64_t result = 0;
+            REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0,
+                                                  arguments, 2, &result) ==
+                    XR_TYPED_DISPATCH_OK);
+            REQUIRE(result == families[family].cases[i].expected);
+        }
+
+        /* The verifier admits the row, so the executor is what stops a zero
+         * divisor, in either operand position, and it leaves no result. */
+        const int64_t divisor_zero[2] = {17, 0};
+        const int64_t dividend_zero[2] = {0, 17};
+        int64_t result = 11;
+        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0,
+                                              divisor_zero, 2, &result) ==
+                families[family].zero_status);
+        REQUIRE(result == 0);
+        result = 11;
+        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0,
+                                              dividend_zero, 2, &result) ==
+                families[family].zero_status);
+        REQUIRE(result == 0);
+
+        TypedDispatchFixture mutable_source = {.semantic = semantic,
+                                               .profile = profile,
+                                               .program_plan = plan,
+                                               .row_count = instruction_count};
+        XrTargetInstructionRecord mutated[16];
+        REQUIRE(instruction_count <= sizeof(mutated) / sizeof(mutated[0]));
+        size_t row_bytes = (size_t) instruction_count * sizeof(*rows);
+        /* Positive control: the unmutated rows still freeze, so every
+         * rejection below is attributable to its own mutation. */
+        memcpy(mutated, rows, row_bytes);
+        XrTargetPlan *refrozen = NULL;
+        REQUIRE(freeze_with_rows(&mutable_source, mutated, instruction_count,
+                                 &refrozen, error, sizeof(error)));
+        xr_target_plan_free(refrozen);
+
+        /* There is no immediate divisor form, so no row can carry a divisor
+         * the executor never inspects for zero. */
+        memcpy(mutated, rows, row_bytes);
+        mutated[first].immediate_bits = 2;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        memcpy(mutated, rows, row_bytes);
+        mutated[second].operand_count = 1;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        memcpy(mutated, rows, row_bytes);
+        mutated[second].operand_slots[1] = XR_TARGET_INSTRUCTION_SLOT_NONE;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        /* The divisor must be defined before the division reads it. */
+        memcpy(mutated, rows, row_bytes);
+        mutated[first].operand_slots[1] =
+            mutated[instruction_count - 2u].result_slot;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        xr_target_plan_free(plan);
+        xr_target_profile_free(profile);
+        xr_semantic_plan_free(semantic);
+    }
+}
+
 int main(void) {
     test_closed_program_and_unavailable_boundary();
     test_production_builder_keeps_unsupported_function_unavailable();
@@ -577,6 +755,7 @@ int main(void) {
     test_xtp_exact_roundtrip_executes_same_program();
     test_instruction_mutations_fail_closed();
     test_shift_rows_execute_with_masked_counts();
+    test_division_rows_take_the_zero_divisor_edge();
     puts("typed dispatch tests passed");
     return 0;
 }

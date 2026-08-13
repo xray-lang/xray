@@ -396,6 +396,16 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status,
         case XR_TYPED_DISPATCH_ARGUMENT_MISMATCH:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
                         "sole-function scalar i64 route executes only a parameterless signature");
+        /* A program fault, not an authority failure: the generation was
+         * eligible and the row was verified, and the executed program divided
+         * by zero. It keeps its own code so an operator cannot read it as a
+         * verification or identity problem. */
+        case XR_TYPED_DISPATCH_DIVIDE_BY_ZERO:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
+                        "scalar generation divided by zero");
+        case XR_TYPED_DISPATCH_MODULO_BY_ZERO:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
+                        "scalar generation took a modulo by zero");
         case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
         case XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED:
         case XR_TYPED_DISPATCH_PROGRAM_INVALID:

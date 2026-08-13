@@ -22,6 +22,13 @@ typedef enum XrTypedDispatchStatus {
     XR_TYPED_DISPATCH_PROGRAM_INVALID,
     XR_TYPED_DISPATCH_ARGUMENT_MISMATCH,
     XR_TYPED_DISPATCH_FRAME_ERROR,
+    /* The executed program's own error edge, kept apart from every status
+     * above: those report that the plan or the call was unacceptable, while
+     * these report that an acceptable program divided by zero. They stay
+     * distinct from each other so a caller can raise the exact panic the
+     * language names for each operator. */
+    XR_TYPED_DISPATCH_DIVIDE_BY_ZERO,
+    XR_TYPED_DISPATCH_MODULO_BY_ZERO,
 } XrTypedDispatchStatus;
 
 /*

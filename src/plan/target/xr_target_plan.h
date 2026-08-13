@@ -53,6 +53,13 @@ typedef enum XrTargetInstructionOpcode {
     XR_TARGET_INSTRUCTION_ADD_WRAP_I64,
     XR_TARGET_INSTRUCTION_SUB_WRAP_I64,
     XR_TARGET_INSTRUCTION_MUL_WRAP_I64,
+    /* The only rows with an error edge. A zero divisor is not a value: it
+     * stops the program with a divide-by-zero status rather than executing an
+     * undefined division. The remaining C undefined case is defined instead of
+     * refused, matching the rest of the plan's wrapping rule: INT64_MIN
+     * divided by -1 wraps to INT64_MIN, and INT64_MIN modulo -1 is zero. */
+    XR_TARGET_INSTRUCTION_DIV_TRAP_I64,
+    XR_TARGET_INSTRUCTION_MOD_TRAP_I64,
     XR_TARGET_INSTRUCTION_BAND_I64,
     XR_TARGET_INSTRUCTION_BOR_I64,
     XR_TARGET_INSTRUCTION_BXOR_I64,

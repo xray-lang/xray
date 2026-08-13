@@ -14,7 +14,7 @@ The only supported execution family is a closed straight-line signed `i64`
 program consisting of constants, parameter bindings, copies, wrapping
 addition, wrapping subtraction, wrapping multiplication, bitwise and, or,
 exclusive or, wrapping negation, bitwise complement, masked left shift, masked
-arithmetic right shift, and one return. A
+arithmetic right shift, truncating division, remainder, and one return. A
 non-empty function group must form an exact table partition in canonical
 function and dense row order. Its independent verifier requires every
 referenced slot to belong to that function and have identical trivial
@@ -32,6 +32,21 @@ static range proof exists or is needed, because the language leaves no `i64`
 count undefined. The right shift is arithmetic; only exact signed `i64` rows
 are admitted at all, so an unsigned shift is unavailable rather than silently
 zero filling.
+
+Division and remainder are the only rows with an error edge, and the edge
+belongs to the executor. A divisor is a runtime slot value, so no static proof
+can exclude a zero; the verifier proves the row shape and rejects a non-zero
+immediate, so there is no immediate divisor form that could carry a zero the
+executor never inspects. On a zero divisor the program stops with a status
+that names the operator, distinct from every status that reports an
+unacceptable plan or call, and leaves no result, so a caller can raise the
+exact panic the language names for each. The other case C leaves undefined is
+defined rather than refused: `INT64_MIN` divided by `-1` wraps to `INT64_MIN`
+and `INT64_MIN` modulo `-1` is zero, through the same shared helpers the
+bytecode VM, the AOT runtime, and constant folding use. Division truncates
+toward zero and a remainder takes the dividend's sign. Only exact signed `i64`
+rows are admitted, so an unsigned division is unavailable rather than reading a
+`u64` bit pattern as a negative dividend.
 
 A parameter row is a definition, not a computation: its immediate is the
 incoming argument ordinal and its result slot is the function's parameter
@@ -180,6 +195,12 @@ Evidence:
   the same shift as 0 and 3, a left shift into the sign bit, and a swapped
   argument pair changing the answer. It rejects an immediate on a shift row,
   a shift missing its count operand, and a count read before its definition.
+  It proves the division rows the same way: truncation toward zero, a
+  remainder carrying the dividend's sign, both `INT64_MIN` by `-1` edges, and
+  a zero divisor in either operand position stopping the program with the
+  status for that operator and no result, after the verifier admitted the row.
+  It rejects an immediate on a division row, a division missing its divisor
+  operand, and a divisor read before its definition.
 - `test_xtp_format` proves the instruction row width is part of the complete
   exact codec registry and exercises the public XSM/XTP generation route.
 - `test_typed_frame_runtime_archive` proves the dispatcher and verifier link
@@ -187,24 +208,27 @@ Evidence:
   proves the exact XSM/XTP sole-function product route.
 - `test_runtime_generation` proves exact sole-function PREPARE, ACTIVE scalar
   execution, unsupported-plan rejection, bounded pins, drain, retirement, and
-  unload without any legacy execution fallback.
+  unload without any legacy execution fallback. It also proves that a program
+  which divides by zero reaches ACTIVE and is stopped at execution as a
+  program fault, separate from the authority failures an unsupported plan
+  gives.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 67daa7cd4dcbda848e7fa6a65acb708431b6d4544e82c2dae9bb8a10b01d60bf
+anchor-sha256: src/plan/target/xr_target_plan.h 5343bf685b608dff0c25885ce2acb121aeb23991eeca4d47b3036980d490a73d
 anchor-sha256: src/plan/target/xr_target_plan.c 0755f79a32970d79e208eb005e2e647d25c6a46e4cea16ca3565f67bd7e38b42
-anchor-sha256: src/plan/target/xr_target_builder.c 48c45f151440a711ec0b22b6f2603f7d001118e698666be77a74f4668be6c3ed
+anchor-sha256: src/plan/target/xr_target_builder.c a366020a42bcb1637619869d83b723d1888c426ea89720a6569735be24b6e3bd
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 5eea43c77cf0e3802e30eacf12ca7e1a105b7b32de0497635cf7048de1b3438b
-anchor-sha256: src/plan/target/xr_target_instruction_verify.c 2ff61a90195560e76b45d128c9a42a201cecd89b12818643127319397f6abb63
+anchor-sha256: src/plan/target/xr_target_instruction_verify.c 129dc21c35fbc66164bedddf719921658ad0ccbd5c6814f041098014518a75de
 anchor-sha256: src/plan/target/xr_target_verify.c 2cf7f6534a8db0831687873d3e0ac4f1cb5b890546e0e006cb218025d105f753
 anchor-sha256: src/plan/format/xr_xtp_schema.h 04840cf64073530619483953264b801358984d6559d7928b0b733b265ef2c668
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 8cb0983494ace434ec1d1f7389f19d4780ad82f6f88460144e04a9e28c1502bc
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
-anchor-sha256: src/vm/xr_typed_dispatch.h 396124e124d2c1c5806a09ec27357f9598928f5a22870b18655d9782d2b3e379
-anchor-sha256: src/vm/xr_typed_dispatch.c 223454983d24a56d1d8567e20e02c64b2fce4fc41588dfb426549232c6864184
+anchor-sha256: src/vm/xr_typed_dispatch.h 429949f7960b431fcbb0b14cd10ca5e720ef4deeb1f0d54d725bb435091c1c42
+anchor-sha256: src/vm/xr_typed_dispatch.c 13e610cad27b9be04aae0dede6624f59545e1931317c555457ca32a1ea691019
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c 7162cc6b5dd2fd1625d22e0c95657e8f42976fd7b27b1cd6a97fa5dc753905a8
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c f0aecbfc231a2cfa91cef6426950521eba5cb5ef934dbd53acd9c4a8f52b576c
 anchor-sha256: tests/unit/plan/test_xtp_format.c ab7a3766a721d1aa2e6fc2ca67031e77ad1f7b44f974d5e8b532067f58705801
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 1a8fcbe84ce64c733d0cb2614f745a1852fbd6991ef9ae8da5683b5f0eab6de5
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
-anchor-sha256: src/runtime/xr_module_generation.c 1cb970ecbc047520b330ce91ef62a3808881bd8c42aa9194ad6ef60066da0b54
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7
+anchor-sha256: src/runtime/xr_module_generation.c 6bf5ac5976ed0d6784d2c28531608299d500a521dd433877403fa23d80f75ec4
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 6a877b4078e8b4bc9d1fcd3e432df7b5df4af6053ba8b6b11700686b37f4b2d5
