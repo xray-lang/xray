@@ -266,11 +266,6 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->ngeneric_storage_plans = 0;
     bundle->generic_storage_plan_cap = 0;
 
-    xr_free(bundle->generic_code_size_plans);
-    bundle->generic_code_size_plans = NULL;
-    bundle->ngeneric_code_size_plans = 0;
-    bundle->generic_code_size_plan_cap = 0;
-
     xr_free(bundle->derive_plans);
     bundle->derive_plans = NULL;
     bundle->nderive_plans = 0;
@@ -1860,58 +1855,6 @@ static uint8_t generic_code_size_reason_for(const XgGlobalEvidence *evidence,
         (size->flags & XG_GENERIC_CODESIZE_SHARE_CANONICAL_BODY) == 0)
         return XAOT_GENERIC_DEEPEN_UNPROVEN_CODESIZE_THRESHOLD;
     return XAOT_GENERIC_DEEPEN_UNPROVEN_NONE;
-}
-
-static uint32_t generic_code_size_evidence_for(const XgGlobalEvidence *evidence,
-                                               const XgGenericCodeSizeSummary *size) {
-    uint32_t bits = XAOT_GENERIC_CODESIZE_EV_GLOBAL_ROW;
-    if (!size)
-        return bits;
-    bits |= generic_deepen_inst_evidence(evidence, size->generic_inst_id) &
-            XAOT_GENERIC_CODESIZE_EV_GENERIC_INST;
-    if (size->body_use_id != XG_NO_ID)
-        bits |= XAOT_GENERIC_CODESIZE_EV_BODY_USE;
-    if (size->threshold != 0)
-        bits |= XAOT_GENERIC_CODESIZE_EV_THRESHOLD;
-    return bits;
-}
-
-static bool xaot_bundle_add_generic_code_size_plan(XaotBundle *bundle,
-                                                   const XgGlobalEvidence *evidence,
-                                                   const XgGenericCodeSizeSummary *size) {
-    XaotGenericCodeSizePlan *plan;
-    if (!bundle || !evidence || !size)
-        return false;
-    if (!reserve_plan_array(
-            (void **) &bundle->generic_code_size_plans, &bundle->generic_code_size_plan_cap,
-            bundle->ngeneric_code_size_plans + 1, sizeof(XaotGenericCodeSizePlan), 8))
-        return false;
-    plan = &bundle->generic_code_size_plans[bundle->ngeneric_code_size_plans++];
-    memset(plan, 0, sizeof(*plan));
-    plan->code_size_id = size->code_size_id;
-    plan->generic_inst_id = size->generic_inst_id;
-    plan->module_id = size->module_id;
-    plan->body_use_id = size->body_use_id;
-    plan->origin_body_size_estimate = size->origin_body_size_estimate;
-    plan->specialized_body_size_estimate = size->specialized_body_size_estimate;
-    plan->instantiation_count = size->instantiation_count;
-    plan->threshold = size->threshold;
-    plan->action = generic_code_size_action_for(size);
-    plan->evidence = generic_code_size_evidence_for(evidence, size);
-    plan->unproven_reason = generic_code_size_reason_for(evidence, size);
-    return true;
-}
-
-static bool xaot_bundle_add_generic_code_size_plans(XaotBundle *bundle,
-                                                    const XgGlobalEvidence *evidence) {
-    if (!bundle || !evidence)
-        return false;
-    for (uint32_t i = 0; i < evidence->ngeneric_code_sizes; i++) {
-        if (!xaot_bundle_add_generic_code_size_plan(bundle, evidence,
-                                                    &evidence->generic_code_sizes[i]))
-            return false;
-    }
-    return true;
 }
 
 static uint8_t derive_action_for(const XgDeriveSummary *derive) {
@@ -4136,10 +4079,6 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         bundle->error_msg = "failed to allocate AOT generic storage plan";
         return false;
     }
-    if (!xaot_bundle_add_generic_code_size_plans(bundle, evidence)) {
-        bundle->error_msg = "failed to allocate AOT generic code-size plan";
-        return false;
-    }
     if (!xaot_bundle_add_derive_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT derive plan";
         return false;
@@ -4620,18 +4559,6 @@ xaot_bundle_find_generic_storage_plan(const XaotBundle *bundle, XgGenericStorage
     for (uint32_t i = 0; i < bundle->ngeneric_storage_plans; i++) {
         if (bundle->generic_storage_plans[i].storage_id == storage_id)
             return &bundle->generic_storage_plans[i];
-    }
-    return NULL;
-}
-
-XR_FUNC const XaotGenericCodeSizePlan *
-xaot_bundle_find_generic_code_size_plan(const XaotBundle *bundle,
-                                        XgGenericCodeSizeId code_size_id) {
-    if (!bundle || code_size_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < bundle->ngeneric_code_size_plans; i++) {
-        if (bundle->generic_code_size_plans[i].code_size_id == code_size_id)
-            return &bundle->generic_code_size_plans[i];
     }
     return NULL;
 }
@@ -7395,21 +7322,6 @@ static const char *generic_storage_action_name(uint8_t action) {
     }
 }
 
-static const char *generic_code_size_action_name(uint8_t action) {
-    switch ((XaotGenericCodeSizeAction) action) {
-        case XAOT_GENERIC_CODESIZE_ALLOW_CLONE:
-            return "allow_clone";
-        case XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY:
-            return "share_canonical_body";
-        case XAOT_GENERIC_CODESIZE_FORCE_CLONE:
-            return "force_clone";
-        case XAOT_GENERIC_CODESIZE_REJECT:
-            return "reject";
-        default:
-            return "unknown";
-    }
-}
-
 static const char *generic_deepen_unproven_reason_name(uint8_t reason) {
     switch (reason) {
         case XAOT_GENERIC_DEEPEN_UNPROVEN_NONE:
@@ -7462,24 +7374,6 @@ static void print_generic_storage_evidence_bits(FILE *out, uint32_t bits) {
     PRINT_BIT(XAOT_GENERIC_STORAGE_EV_GENERIC_INST, "inst");
     PRINT_BIT(XAOT_GENERIC_STORAGE_EV_SPECIALIZED_TYPE, "specialized_type");
     PRINT_BIT(XAOT_GENERIC_STORAGE_EV_CONTAINER_PLAN, "container_plan");
-    if (first)
-        fprintf(out, "none");
-#undef PRINT_BIT
-}
-
-static void print_generic_code_size_evidence_bits(FILE *out, uint32_t bits) {
-    bool first = true;
-#define PRINT_BIT(mask, name)                                                                      \
-    do {                                                                                           \
-        if ((bits & (mask)) != 0) {                                                                \
-            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
-            first = false;                                                                         \
-        }                                                                                          \
-    } while (0)
-    PRINT_BIT(XAOT_GENERIC_CODESIZE_EV_GLOBAL_ROW, "row");
-    PRINT_BIT(XAOT_GENERIC_CODESIZE_EV_GENERIC_INST, "inst");
-    PRINT_BIT(XAOT_GENERIC_CODESIZE_EV_BODY_USE, "body_use");
-    PRINT_BIT(XAOT_GENERIC_CODESIZE_EV_THRESHOLD, "threshold");
     if (first)
         fprintf(out, "none");
 #undef PRINT_BIT
@@ -8416,18 +8310,6 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 gp->specialized_type_key, gp->elem_type_key, gp->key_type_key, gp->value_type_key,
                 gp->container_plan_id);
         print_generic_storage_evidence_bits(out, gp->evidence);
-        fprintf(out, " reason=%s\n", generic_deepen_unproven_reason_name(gp->unproven_reason));
-    }
-
-    for (uint32_t gi = 0; gi < bundle->ngeneric_code_size_plans; gi++) {
-        const XaotGenericCodeSizePlan *gp = &bundle->generic_code_size_plans[gi];
-        fprintf(out,
-                "generic-code-size-plan %u id=%u inst=%u module=%u body_use=%u origin=%u "
-                "specialized=%u count=%u threshold=%u action=%s evidence=",
-                gi, gp->code_size_id, gp->generic_inst_id, gp->module_id, gp->body_use_id,
-                gp->origin_body_size_estimate, gp->specialized_body_size_estimate,
-                gp->instantiation_count, gp->threshold, generic_code_size_action_name(gp->action));
-        print_generic_code_size_evidence_bits(out, gp->evidence);
         fprintf(out, " reason=%s\n", generic_deepen_unproven_reason_name(gp->unproven_reason));
     }
 

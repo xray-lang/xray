@@ -958,20 +958,6 @@ typedef struct XaotGenericStoragePlan {
     uint8_t unproven_reason;
 } XaotGenericStoragePlan;
 
-typedef struct XaotGenericCodeSizePlan {
-    XgGenericCodeSizeId code_size_id;
-    XgGenericInstId generic_inst_id;
-    XgModuleId module_id;
-    XgGenericBodyUseId body_use_id;
-    uint32_t origin_body_size_estimate;
-    uint32_t specialized_body_size_estimate;
-    uint32_t instantiation_count;
-    uint32_t threshold;
-    uint8_t action;
-    uint32_t evidence;
-    uint8_t unproven_reason;
-} XaotGenericCodeSizePlan;
-
 typedef enum XaotDeriveAction {
     XAOT_DERIVE_FIELD_TABLE_SIDECAR = 1,
     XAOT_DERIVE_INLINE_GENERATED_BODY,
@@ -1806,9 +1792,6 @@ typedef struct XaotBundle {
     XaotGenericStoragePlan *generic_storage_plans;
     uint32_t ngeneric_storage_plans;
     uint32_t generic_storage_plan_cap;
-    XaotGenericCodeSizePlan *generic_code_size_plans;
-    uint32_t ngeneric_code_size_plans;
-    uint32_t generic_code_size_plan_cap;
     XaotDerivePlan *derive_plans;
     uint32_t nderive_plans;
     uint32_t derive_plan_cap;
@@ -1947,8 +1930,6 @@ XR_FUNC const XaotGenericBodyPlan *xaot_bundle_find_generic_body_plan(const Xaot
                                                                       XgGenericBodyUseId use_id);
 XR_FUNC const XaotGenericStoragePlan *
 xaot_bundle_find_generic_storage_plan(const XaotBundle *bundle, XgGenericStorageId storage_id);
-XR_FUNC const XaotGenericCodeSizePlan *
-xaot_bundle_find_generic_code_size_plan(const XaotBundle *bundle, XgGenericCodeSizeId code_size_id);
 XR_FUNC const XaotDerivePlan *xaot_bundle_find_derive_plan(const XaotBundle *bundle,
                                                            XgDeriveId derive_id);
 XR_FUNC const XaotDerivedEqHashPlan *xaot_bundle_find_derived_eq_hash_plan(const XaotBundle *bundle,

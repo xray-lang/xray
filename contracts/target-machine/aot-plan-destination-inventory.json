@@ -33,7 +33,7 @@
     "unclassified_row": "error",
     "unresolved_destination": "error"
   },
-  "row_count": 49,
+  "row_count": 48,
   "rows": [
     {
       "c_coupling_fields": [],
@@ -635,25 +635,6 @@
     },
     {
       "c_coupling_fields": [],
-      "category": "refinement",
-      "consumers": [
-        "none-current-gap"
-      ],
-      "current_fallback": "none-declared",
-      "current_type": "XaotGenericCodeSizePlan",
-      "deletion_task": 279,
-      "destination": "XrRefinementPlan",
-      "pointer_lifetime_fields": [],
-      "producer": "src/aot/xaot_bundle.c",
-      "reference_files": [
-        "src/aot/xaot_bundle.c",
-        "src/aot/xaot_bundle.h",
-        "src/aot/xaot_verify.c"
-      ],
-      "verifier": "src/aot/xaot_verify.c"
-    },
-    {
-      "c_coupling_fields": [],
       "category": "semantic",
       "consumers": [
         "none-current-gap"
@@ -1175,5 +1156,5 @@
     }
   ],
   "schema": 1,
-  "source_tree_fingerprint": "7c7fdf497dab5091e14cca18aab5e961ec740a20773515e149bcef949e6948e2"
+  "source_tree_fingerprint": "aa556b86ce0e6b6d2edb80e59bd3031a45c5603278c00bafcf8afbbff82c10bd"
 }

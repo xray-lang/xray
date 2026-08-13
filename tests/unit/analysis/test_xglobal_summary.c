@@ -7144,17 +7144,12 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(bundle.ngeneric_body_plans, 1);
     ASSERT_EQ_UINT(bundle.ngeneric_storage_plans, 1);
-    ASSERT_EQ_UINT(bundle.ngeneric_code_size_plans, 1);
     const XaotGenericBodyPlan *body_plan = xaot_bundle_find_generic_body_plan(&bundle, 1);
     const XaotGenericStoragePlan *storage_plan = xaot_bundle_find_generic_storage_plan(&bundle, 1);
-    const XaotGenericCodeSizePlan *code_size_plan =
-        xaot_bundle_find_generic_code_size_plan(&bundle, 1);
     ASSERT_NOT_NULL(body_plan);
     ASSERT_NOT_NULL(storage_plan);
-    ASSERT_NOT_NULL(code_size_plan);
     ASSERT_EQ_UINT(body_plan->action, XAOT_GENERIC_BODY_CLONE);
     ASSERT_EQ_UINT(storage_plan->action, XAOT_GENERIC_STORAGE_TYPED_INLINE);
-    ASSERT_EQ_UINT(code_size_plan->action, XAOT_GENERIC_CODESIZE_ALLOW_CLONE);
 
     char *plan_dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(plan_dump);
@@ -7162,7 +7157,6 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     ASSERT_NOT_NULL(strstr(plan_dump, "action=clone"));
     ASSERT_NOT_NULL(strstr(plan_dump, "generic-storage-plan 0 id=1 inst=1"));
     ASSERT_NOT_NULL(strstr(plan_dump, "action=typed_inline"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "generic-code-size-plan 0 id=1 inst=1"));
     ASSERT_NOT_NULL(strstr(plan_dump, "action=allow_clone"));
     xr_free(plan_dump);
 
@@ -7209,10 +7203,6 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     ev.generic_storages[0].flags &= ~XG_GENERIC_STORAGE_BOXED;
     bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
 
-    bundle.generic_code_size_plans[0].action = XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY;
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT generic code-size plan action does not re-derive"));
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -7323,23 +7313,15 @@ TEST(global_evidence_generic_code_size_policy_shares_large_body) {
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     const XaotGenericBodyPlan *body_plan = xaot_bundle_find_generic_body_plan(&bundle, 1);
-    const XaotGenericCodeSizePlan *code_size_plan =
-        xaot_bundle_find_generic_code_size_plan(&bundle, 1);
     ASSERT_NOT_NULL(body_plan);
-    ASSERT_NOT_NULL(code_size_plan);
     ASSERT_EQ_UINT(body_plan->action, XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY);
     ASSERT_EQ_UINT(body_plan->unproven_reason, XAOT_GENERIC_DEEPEN_UNPROVEN_CODESIZE_THRESHOLD);
-    ASSERT_EQ_UINT(code_size_plan->action, XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY);
-    ASSERT_EQ_UINT(code_size_plan->unproven_reason,
-                   XAOT_GENERIC_DEEPEN_UNPROVEN_CODESIZE_THRESHOLD);
 
     char *plan_dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(plan_dump);
     ASSERT_NOT_NULL(strstr(plan_dump, "generic-body-plan 0 id=1"));
     ASSERT_NOT_NULL(strstr(plan_dump, "action=share_canonical_body"));
     ASSERT_NOT_NULL(strstr(plan_dump, "reason=code_size_threshold"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "generic-code-size-plan 0 id=1"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=share_canonical_body"));
     xr_free(plan_dump);
 
     memset(&init_func, 0, sizeof(init_func));
@@ -7360,11 +7342,6 @@ TEST(global_evidence_generic_code_size_policy_shares_large_body) {
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT generic body plan action does not re-derive"));
     bundle.generic_body_plans[0].action = XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY;
-
-    bundle.generic_code_size_plans[0].action = XAOT_GENERIC_CODESIZE_ALLOW_CLONE;
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT generic code-size plan action does not re-derive"));
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);

@@ -4693,46 +4693,6 @@ static uint8_t verify_generic_code_size_reason_for(const XgGlobalEvidence *ev,
     return XAOT_GENERIC_DEEPEN_UNPROVEN_NONE;
 }
 
-static uint32_t verify_generic_code_size_evidence_for(const XgGlobalEvidence *ev,
-                                                      const XgGenericCodeSizeSummary *size) {
-    uint32_t bits = XAOT_GENERIC_CODESIZE_EV_GLOBAL_ROW;
-    if (!size)
-        return bits;
-    bits |= verify_generic_deepen_inst_evidence(ev, size->generic_inst_id) &
-            XAOT_GENERIC_CODESIZE_EV_GENERIC_INST;
-    if (size->body_use_id != XG_NO_ID)
-        bits |= XAOT_GENERIC_CODESIZE_EV_BODY_USE;
-    if (size->threshold != 0)
-        bits |= XAOT_GENERIC_CODESIZE_EV_THRESHOLD;
-    return bits;
-}
-
-static bool verify_generic_code_size_plan_rederives(const XgGlobalEvidence *ev,
-                                                    const XaotGenericCodeSizePlan *plan,
-                                                    const XgGenericCodeSizeSummary *size,
-                                                    char *errbuf, size_t errbuf_len) {
-    if (!ev || !plan || !size)
-        return set_error(errbuf, errbuf_len,
-                         "AOT generic code-size plan verifier has incomplete input");
-    if (plan->code_size_id != size->code_size_id ||
-        plan->generic_inst_id != size->generic_inst_id || plan->module_id != size->module_id ||
-        plan->body_use_id != size->body_use_id ||
-        plan->origin_body_size_estimate != size->origin_body_size_estimate ||
-        plan->specialized_body_size_estimate != size->specialized_body_size_estimate ||
-        plan->instantiation_count != size->instantiation_count ||
-        plan->threshold != size->threshold)
-        return set_error(errbuf, errbuf_len,
-                         "AOT generic code-size plan identity does not re-derive");
-    if (plan->action != verify_generic_code_size_action_for(size) ||
-        plan->unproven_reason != verify_generic_code_size_reason_for(ev, size))
-        return set_error(errbuf, errbuf_len,
-                         "AOT generic code-size plan action does not re-derive");
-    if (plan->evidence != verify_generic_code_size_evidence_for(ev, size))
-        return set_error(errbuf, errbuf_len,
-                         "AOT generic code-size plan evidence does not re-derive");
-    return true;
-}
-
 static uint8_t verify_derive_action_for(const XgDeriveSummary *derive) {
     if (!derive)
         return XAOT_DERIVE_REJECT;
@@ -6677,7 +6637,6 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_generic_instantiation_plans = 0;
     uint32_t expected_generic_body_plans = 0;
     uint32_t expected_generic_storage_plans = 0;
-    uint32_t expected_generic_code_size_plans = 0;
     uint32_t expected_derive_plans = 0;
     uint32_t expected_derived_eq_hash_plans = 0;
     uint32_t expected_derived_clone_plans = 0;
@@ -7024,21 +6983,6 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->ngeneric_storage_plans != expected_generic_storage_plans)
         return set_error(errbuf, errbuf_len, "AOT generic storage plan count mismatches evidence");
-
-    for (uint32_t i = 0; i < ev->ngeneric_code_sizes; i++) {
-        const XgGenericCodeSizeSummary *size = &ev->generic_code_sizes[i];
-        const XaotGenericCodeSizePlan *plan;
-        expected_generic_code_size_plans++;
-        plan = xaot_bundle_find_generic_code_size_plan(bundle, size->code_size_id);
-        if (!plan)
-            return set_error(errbuf, errbuf_len,
-                             "AOT generic code-size evidence has no code-size plan");
-        if (!verify_generic_code_size_plan_rederives(ev, plan, size, errbuf, errbuf_len))
-            return false;
-    }
-    if (bundle->ngeneric_code_size_plans != expected_generic_code_size_plans)
-        return set_error(errbuf, errbuf_len,
-                         "AOT generic code-size plan count mismatches evidence");
 
     for (uint32_t i = 0; i < ev->nderives; i++) {
         const XgDeriveSummary *derive = &ev->derives[i];
