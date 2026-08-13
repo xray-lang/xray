@@ -68,6 +68,7 @@ TRUTHINESS_SURROGATE_OWNER_TOKENS = (
 CGEN_TRUTHINESS_CONSUMERS = (
     ("src/aot/xi_cgen.c", "emit_condition_expr_ctx"),
     ("src/aot/xi_cgen_dispatch_helpers.inc.c", "xicgen_emit_assert_condition"),
+    ("src/aot/xi_cgen_dispatch_helpers.inc.c", "xicgen_select"),
 )
 TYPE_IDENTITY_CORE_CONSUMERS = (
     ("src/runtime/value/xvalue_typeid.c", "xr_value_typeid"),
@@ -558,6 +559,12 @@ def type_identity_surrogate_owner(body: str) -> str | None:
 def verify_truthiness_ratchet(root: Path) -> list[str]:
     errors: list[str] = []
     marker = owner_macro_prefix("shared.truthiness")
+    registry = json.loads((root / "contracts/semantic-owner-registry.json").read_text(
+        encoding="utf-8", errors="strict"))
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.truthiness"), None)
+    if owner is None or set(owner.get("operations", [])) != {"xi.not", "xi.select"}:
+        errors.append("semantic owner registry has no exact truthiness operation family")
     for relative, symbol in TRUTHINESS_CONSUMERS:
         text = (root / relative).read_text(encoding="utf-8", errors="strict")
         body = extract_c_function(text, symbol)
@@ -607,6 +614,14 @@ def verify_truthiness_ratchet(root: Path) -> list[str]:
         text = (root / relative).read_text(encoding="utf-8", errors="strict")
         if '"xr_truthy(' in text:
             errors.append(f"{relative}: CGen revived a source-name truthiness binding")
+
+    vm_text = (root / "src/ir/xi_emit.c").read_text(encoding="utf-8", errors="strict")
+    vm_select = extract_c_function(vm_text, "emit_select") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "xr_truthy_core_eval", "OP_TEST"):
+        if token not in vm_select:
+            errors.append("src/ir/xi_emit.c: select bypasses stable truthiness owner")
+            break
     return errors
 
 

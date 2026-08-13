@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "e942ca572d1cbc84753b83926fdb8d1ef056beaad713b8c0d666a39a73de31ed",
+  "canonical_fingerprint": "f4edf189781ac20f2d99b87968e35f6fcf7f244f3d8f69851b2c9f9c3b9ae1b2",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -1695,7 +1695,8 @@
       "owner_id_lo": "0x9f71c69f3e6c2b2d",
       "category": "shared-semantic-kernel",
       "operations": [
-        "xi.not"
+        "xi.not",
+        "xi.select"
       ],
       "consumers": [
         "semantic-plan",
@@ -3794,28 +3795,6 @@
       "category": "shared-semantic-kernel",
       "operations": [
         "xi.scope.exit"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.select",
-      "owner_id": "c778865edd5424b489e7064ce83ac96c",
-      "owner_id_hi": "0xc778865edd5424b4",
-      "owner_id_lo": "0x89e7064ce83ac96c",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.select"
       ],
       "consumers": [
         "semantic-plan"
@@ -10800,21 +10779,51 @@
       "operation_id": "c778865edd5424b489e7064ce83ac96c",
       "operation_id_hi": "0xc778865edd5424b4",
       "operation_id_lo": "0x89e7064ce83ac96c",
-      "owner": "xi.select",
-      "owner_id": "c778865edd5424b489e7064ce83ac96c",
-      "owner_id_hi": "0xc778865edd5424b4",
-      "owner_id_lo": "0x89e7064ce83ac96c",
-      "category": "declarative-primitive",
+      "owner": "shared.truthiness",
+      "owner_id": "7ec352d0136c63f99f71c69f3e6c2b2d",
+      "owner_id_hi": "0x7ec352d0136c63f9",
+      "owner_id_lo": "0x9f71c69f3e6c2b2d",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen",
+        "runtime"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000003f",
+      "cgen_adapter": "xr_truthy",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_internal.h",
+          "symbol": "vm_is_truthy"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_value.h",
+          "symbol": "xr_truthy"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xr_truthy"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "xr_semantic_owner_cgen_adapter"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/value/xvalue_truthy.c",
+          "symbol": "xr_value_is_truthy"
         }
       ]
     },

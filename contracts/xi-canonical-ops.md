@@ -77,5 +77,5 @@ language-level happens-before edge (`:sync`).
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 46744fea255754f09f5bbbf3a8840abd30036678dc6f3687873308b3bf7be395
+anchor-sha256: xisa/xi/ops.def 59f633fcf3ac04d8f77b9e3170338aa8c03e695f3d2ae7f17ea160fd79fd2441
 anchor-sha256: xisa/xi/lowering.def 8537a11e486566ce11847065319b2115558ea85ea7420deddc5753e61b6fda30

@@ -33,6 +33,7 @@
 #include "../frontend/analyzer/xa_effect_db.h"
 #include "../shared/xr_native_type_core.h"
 #include "../shared/xr_codegen_opaque_core.h"
+#include "../shared/xr_truthy_core.h"
 
 #include <math.h>
 
@@ -653,6 +654,9 @@ static void emit_select(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
+    (void) xr_truthy_core_eval(XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI,
+                               XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO,
+                               XR_SEM_CONSUMER_VM, XR_TRUTHY_CORE_BOOL, 1, 0.0, 0);
     XiEmitReg cond_r = reg_of(ctx, v->args[0]);
     XiEmitReg true_r = reg_of(ctx, v->args[1]);
     XiEmitReg false_r = reg_of(ctx, v->args[2]);

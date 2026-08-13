@@ -2718,7 +2718,6 @@
     xi.checktype
     xi.multi.ret
     xi.phi
-    xi.select
     xi.class.create
     xi.try
     xi.catch
@@ -2761,6 +2760,7 @@
     xi.static.addr
     xi.atomic.load
     xi.atomic.store
+    xi.select
     xi.retain
     xi.release
     xi.owner.forward
@@ -2988,7 +2988,10 @@
 
 (define-xi-observable-owner shared.truthiness
   :category shared-semantic-kernel
-  :operations (xi.not)
+  :operations (
+    xi.not
+    xi.select
+  )
   :consumers (
     semantic-plan
     vm

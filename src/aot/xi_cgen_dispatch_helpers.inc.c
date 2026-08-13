@@ -1195,6 +1195,10 @@ static void xicgen_select(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs == 3, "xicgen_select: need cond, true, false");
+    if (!cg_truthiness_adapter_name(ctx)) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     fprintf(out, "(");
     emit_condition_expr_ctx(ctx, out, v->args[0]);
     fprintf(out, " ? ");

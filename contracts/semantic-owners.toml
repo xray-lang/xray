@@ -431,6 +431,20 @@ fixtures = [
 ]
 
 [[operation]]
+id = "truthiness-selection"
+observable_contract = "src/shared/xr_truthy_core.h"
+semantic_kernel = "src/shared/xr_truthy_core.h"
+vm_adapter = "src/ir/xi_emit.c"
+aot_adapter = "src/aot/xi_cgen_dispatch_helpers.inc.c"
+typed_plan = "shared.truthiness"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_truthy_core.c",
+  "tests/unit/ir/test_xi_emit.c",
+  "tests/unit/ir/test_xi_cgen.c",
+]
+
+[[operation]]
 id = "assert-condition"
 observable_contract = "src/shared/xr_assert_condition_core.h"
 semantic_kernel = "src/shared/xr_assert_condition_core.h"

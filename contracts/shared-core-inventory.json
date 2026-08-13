@@ -1432,6 +1432,7 @@
       "production_callers": [
         "src/aot/xrt_core_freestanding.h",
         "src/aot/xrt_value.h",
+        "src/ir/xi_emit.c",
         "src/runtime/value/xvalue_truthy.c",
         "src/shared/xr_assert_condition_core.h",
         "src/vm/xvm_internal.h"
