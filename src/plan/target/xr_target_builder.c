@@ -860,6 +860,62 @@ static bool semantic_string_literal_is_exact(
                 XR_SEM_TYPE_OWNERSHIP_ROOT);
 }
 
+/* An owned String is the single non-scalar result shape a direct-local call may
+ * carry today. String is immutable and shared, so the outer XrValue slot is the
+ * whole storage fact; the callee's frozen return provenance is the only source
+ * of the ownership fact. Nullable, borrow-view, value, and aggregate spellings
+ * stay outside this shape. */
+static bool semantic_owned_string_type_is_exact(const XrSemanticTypeRecord *type) {
+    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT;
+    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
+    return type && type->kind == XR_KIND_STRING && type->child_count == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && (type->flags & forbidden) == 0 &&
+           (type->flags & required) == required;
+}
+
+/* A direct-local call returns an owned String only when the callee, the call
+ * operation, and the result type all agree. The result must be a fresh owner:
+ * an aliased or parameter-forwarded return would need a borrow whose extent
+ * this plan cannot yet state, so it stays fail closed. */
+static bool semantic_direct_local_string_result_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    const XrSemanticFunctionRecord *callee) {
+    return plan && operation && callee &&
+           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
+           operation->result_type == callee->return_type &&
+           operation->result_value != XR_SEMANTIC_INDEX_NONE &&
+           operation->result_alias_operand == -1 &&
+           operation->return_parameter == -1 && operation->return_complete == 1 &&
+           operation->return_provenance == XR_SEM_RETURN_OWNED &&
+           callee->return_parameter == -1 &&
+           callee->return_provenance == XR_SEM_RETURN_OWNED &&
+           semantic_owned_string_type_is_exact(
+               xr_semantic_plan_type(plan, operation->result_type));
+}
+
+/* Resolve the unique DIRECT_LOCAL call target that owns this operation. A
+ * duplicated or foreign target row leaves the operation unclaimed. */
+static const XrSemanticFunctionRecord *semantic_direct_local_callee_for_operation(
+    const XrSemanticPlan *plan, uint32_t operation_index) {
+    size_t target_count = xr_semantic_plan_call_target_count(plan);
+    const XrSemanticFunctionRecord *callee = NULL;
+    for (size_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(plan, i);
+        if (!target || target->operation != operation_index ||
+            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            continue;
+        if (callee)
+            return NULL;
+        callee = xr_semantic_plan_function(plan, target->function);
+        if (!callee)
+            return NULL;
+    }
+    return callee;
+}
+
 static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *type) {
     char expected_type_key[160];
     int written = snprintf(
@@ -3111,6 +3167,105 @@ static bool builder_add_stringbuilder_append_string_storage(
     return true;
 }
 
+/* Bind the owned String result of a direct-local call to its outer XrValue
+ * slot. This states storage and ownership only; allocation, roots, and cleanup
+ * stay with Semantic ownership and the existing AOT lifetime path, exactly as
+ * the String literal and StringBuilder result rows already do. */
+static bool note_direct_local_string_result_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticPlan *plan = builder->semantic_plan;
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(plan, semantic_operation);
+    if (!operation || operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >= xr_semantic_plan_function_count(plan) ||
+        analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "direct-local String result authority is incomplete");
+    XrTargetMachineRepRecord rep;
+    if (!make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize a direct-local String result");
+    XrStableId slot_identity;
+    if (!make_slot_identity(plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
+                            operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "direct-local String result slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_OWNED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[operation->result_type] &&
+         !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC,
+                               0, &rep, error, error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->used_types[operation->result_type] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    analysis->type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+static bool builder_add_direct_local_string_result_storage(
+    XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+    if (!builder_begin_family(builder,
+                              XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values) {
+            analysis.defined_values[value->semantic_value] = 1;
+            analysis.used_types[value->semantic_type] = 1;
+        }
+    }
+    uint32_t count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation)
+            continue;
+        const XrSemanticFunctionRecord *callee =
+            semantic_direct_local_callee_for_operation(builder->semantic_plan, i);
+        if (!callee || !semantic_direct_local_string_result_is_exact(
+                           builder->semantic_plan, operation, callee))
+            continue;
+        valid = note_direct_local_string_result_value(builder, &analysis, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE;
+    return true;
+}
+
 static bool builder_add_direct_local_callee_storage(
     XrTargetPlanBuilder *builder, char *error, size_t error_size) {
     if (!builder_begin_family(
@@ -4538,9 +4693,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
         callee->parameter_count >
             xr_semantic_plan_parameter_count(plan) - callee->parameter_begin ||
         operation->result_type != callee->return_type ||
-        !call_type_is_exact_scalar(plan, operation->result_type))
+        (!call_type_is_exact_scalar(plan, operation->result_type) &&
+         !semantic_direct_local_string_result_is_exact(plan, operation, callee)))
         return fail(error, error_size, "XR_TARGET_1003",
-                    "direct-local signature or scalar result storage is incomplete");
+                    "direct-local signature or result storage is incomplete");
     const XrSemanticOperandRecord *callee_operand = &operands[operation->operand_begin];
     if (callee_operand->role != XR_SEM_OPERAND_CALLEE ||
         callee_operand->parameter != -1 ||
@@ -4559,7 +4715,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
         .argument_begin = builder->call_argument_intent_count,
         .argument_count = callee->parameter_count,
         .result_mode = XR_TARGET_CALL_VALUE,
-        .result_ownership = XR_TARGET_CALL_NONE,
+        .result_ownership =
+            semantic_direct_local_string_result_is_exact(plan, operation, callee)
+                ? XR_TARGET_CALL_RETURN_OWNED
+                : XR_TARGET_CALL_NONE,
         .calling_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
         .target_kind = XR_TARGET_CALL_TARGET_DIRECT_LOCAL,
         .suspends = suspends,
@@ -6267,6 +6426,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_stringbuilder_to_string_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_append_string_storage(builder, error, error_size) ||
         !builder_add_json_namespace_value_storage(builder, error, error_size) ||
+        !builder_add_direct_local_string_result_storage(builder, error, error_size) ||
         !builder_add_direct_local_callee_storage(builder, error, error_size) ||
         !builder_add_direct_local_go_callee_storage(builder, error, error_size) ||
         !builder_add_channel_allocation_storage(builder, error, error_size) ||
