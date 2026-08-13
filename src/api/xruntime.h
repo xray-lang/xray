@@ -58,20 +58,6 @@ XRAY_API XrArray *xray_array_new_with_capacity(XrVMRuntime *X, size_t capacity);
 
 // Closure creation is declared in runtime/closure/xclosure.h.
 
-/* ========== String Operations ========== */
-
-// Concatenate two strings
-XR_FUNC XrString *xr_string_concat(XrVMRuntime *X, XrString *a, XrString *b);
-
-// Compare strings: 0=equal, <0=a<b, >0=a>b
-XR_FUNC int xr_string_compare(XrString *a, XrString *b);
-
-// Get string length
-XR_FUNC size_t xr_string_length(XrString *str);
-
-// Get C string pointer (null-terminated)
-XR_FUNC const char *xr_string_cstr(XrString *str);
-
 /* ========== Type Checking ========== */
 XR_FUNC bool xr_is_null(XrValue val);
 XR_FUNC bool xr_is_bool(XrValue val);

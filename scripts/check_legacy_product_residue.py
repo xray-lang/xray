@@ -523,6 +523,16 @@ def self_test() -> int:
         )
         array_operation_split_drifted, _ = check(root, collect(root))
         retired_array_operation_split.unlink()
+        retired_string_operation_split = root / "include/xray_runtime.h"
+        retired_string_operation_split.write_text(
+            "void *xr_string_concat(XrVMRuntime *, void *, void *);\n"
+            "int xr_string_compare(void *, void *);\n"
+            "size_t xr_string_length(void *);\n"
+            "const char *xr_string_cstr(void *);\n",
+            encoding="utf-8",
+        )
+        string_operation_split_drifted, _ = check(root, collect(root))
+        retired_string_operation_split.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -562,6 +572,7 @@ def self_test() -> int:
             or runtime_error_duplicate_drifted
             or map_operation_split_drifted
             or array_operation_split_drifted
+            or string_operation_split_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")
