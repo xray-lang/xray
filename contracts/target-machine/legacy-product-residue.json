@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 105,
     "install": 2,
-    "source": 3430
+    "source": 3427
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -418,9 +418,6 @@
     "xr_bundle_free",
     "xr_bundle_to_c_source",
     "xr_proto_add_symbol",
-    "xr_proto_children",
-    "xr_proto_name",
-    "xr_proto_set_param_types",
     "xr_vm_bind_proto_shared_slots",
     "xr_vm_bind_proto_shared_slots_recursive",
     "xr_vm_call_closure",
@@ -499,7 +496,7 @@
     "xray_vm_new_full",
     "xray_vm_set_script_info"
   ],
-  "owner_count": 697,
+  "owner_count": 696,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -2826,20 +2823,6 @@
       "surface": "source",
       "tokens": [
         "xr_proto_add_symbol"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "9ff7eacddf8c68747b830abb7221020cc0e444b720e1fc2be0639b4bebab53fa",
-      "family": "legacy-loader-proto-helper",
-      "hit_count": 3,
-      "path": "src/module/xproto_codec.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xr_proto_children",
-        "xr_proto_name",
-        "xr_proto_set_param_types"
       ]
     },
     {
@@ -9316,6 +9299,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "dbb6ce32fb5eb3e6b92165749ef142cd0bd6ea2593055667cfcc030e2b26a052",
-  "total": 3631
+  "source_tree_fingerprint": "25300a8648f69ce74ebd28ea4faa1b6a31eec50b2bec3fb9280b2945db882f2a",
+  "total": 3628
 }
