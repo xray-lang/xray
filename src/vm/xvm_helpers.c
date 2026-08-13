@@ -24,7 +24,7 @@
 
 /* ========== Struct Layout Registry ========== */
 
-static bool xr_vm_struct_layout_register_children(XrVMState *vm, XrAggregateLayout *layout) {
+static bool xr_struct_layout_register_children(XrVMState *vm, XrAggregateLayout *layout) {
     if (!vm || !layout)
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
@@ -38,7 +38,7 @@ static bool xr_vm_struct_layout_register_children(XrVMState *vm, XrAggregateLayo
     return true;
 }
 
-static bool xr_vm_struct_layout_reserve(XrVMState *vm, uint16_t capacity) {
+static bool xr_struct_layout_reserve(XrVMState *vm, uint16_t capacity) {
     if (!vm || capacity == 0)
         return false;
     XrAggregateLayout **layouts = (XrAggregateLayout **) xr_calloc(capacity, sizeof(*layouts));
@@ -70,7 +70,7 @@ uint16_t xr_vm_struct_layout_register(XrVMState *vm, XrAggregateLayout *layout) 
     if (!vm || !layout)
         return 0;
 
-    if (!xr_vm_struct_layout_register_children(vm, layout))
+    if (!xr_struct_layout_register_children(vm, layout))
         return 0;
 
     if (layout->layout_id != 0) {
@@ -91,13 +91,13 @@ uint16_t xr_vm_struct_layout_register(XrVMState *vm, XrAggregateLayout *layout) 
 
     if (vm->struct_layout_capacity == 0) {
         uint16_t cap = 16;
-        if (!xr_vm_struct_layout_reserve(vm, cap))
+        if (!xr_struct_layout_reserve(vm, cap))
             return 0;
         vm->struct_layout_count = 1;
     } else if (vm->struct_layout_count >= vm->struct_layout_capacity) {
         uint16_t old_cap = vm->struct_layout_capacity;
         uint16_t new_cap = (old_cap <= UINT16_MAX / 2) ? (uint16_t) (old_cap * 2) : UINT16_MAX;
-        if (!xr_vm_struct_layout_reserve(vm, new_cap))
+        if (!xr_struct_layout_reserve(vm, new_cap))
             return 0;
     }
 
@@ -229,10 +229,10 @@ int xr_vm_struct_layout_field_index(XrVMRuntime *isolate, const XrAggregateLayou
     return -1;
 }
 
-static bool xr_vm_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, XrInstance *inst);
+static bool xr_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, XrInstance *inst);
 
-static bool xr_vm_struct_write_array_bytes(uint8_t *fp, const XrAggregateFieldLayout *field,
-                                           XrValue src) {
+static bool xr_struct_write_array_bytes(uint8_t *fp, const XrAggregateFieldLayout *field,
+                                        XrValue src) {
     uint8_t es = xr_native_type_size(xr_target_data_layout_host(), field->elem_native_type);
     if (XR_IS_ARRAY(src)) {
         XrArray *arr = (XrArray *) src.ptr;
@@ -449,10 +449,10 @@ XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
                 return true;
             }
             if (XR_IS_INSTANCE(src))
-                return xr_vm_struct_write_instance_bytes(isolate, fp, XR_TO_INSTANCE(src));
+                return xr_struct_write_instance_bytes(isolate, fp, XR_TO_INSTANCE(src));
             return false;
         case XR_NATIVE_ARRAY:
-            return xr_vm_struct_write_array_bytes(fp, field, src);
+            return xr_struct_write_array_bytes(fp, field, src);
         case XR_NATIVE_ARRAY_REF:
         case XR_NATIVE_MAP_REF:
         case XR_NATIVE_SET_REF:
@@ -464,8 +464,7 @@ XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
     }
 }
 
-static bool xr_vm_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst,
-                                              XrInstance *inst) {
+static bool xr_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, XrInstance *inst) {
     if (!dst || !inst || !inst->klass || !inst->klass->struct_layout)
         return false;
 
@@ -531,8 +530,8 @@ XR_FUNC bool xr_vm_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *i
     return xr_vm_struct_write_field_value(isolate, fp, field, value);
 }
 
-static XrValue xr_vm_struct_materialize_instance_depth(XrVMRuntime *isolate, XrValue ref,
-                                                       uint32_t depth) {
+static XrValue xr_struct_materialize_instance_depth(XrVMRuntime *isolate, XrValue ref,
+                                                    uint32_t depth) {
     if (!isolate || !XR_IS_AGG_REF(ref) || XR_IS_ARRAY_REF(ref) || XR_IS_SLICE_REF(ref) ||
         !ref.ptr || depth > 16)
         return xr_null();
@@ -562,7 +561,7 @@ static XrValue xr_vm_struct_materialize_instance_depth(XrVMRuntime *isolate, XrV
         if (!xr_vm_struct_read_field_value(isolate, dst + field->offset, field, &value))
             return xr_null();
         if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
-            value = xr_vm_struct_materialize_instance_depth(isolate, value, depth + 1);
+            value = xr_struct_materialize_instance_depth(isolate, value, depth + 1);
             if (XR_IS_NULL(value))
                 return xr_null();
         } else if (field->native_type == XR_NATIVE_ARRAY) {
@@ -578,7 +577,7 @@ static XrValue xr_vm_struct_materialize_instance_depth(XrVMRuntime *isolate, XrV
 }
 
 XrValue xr_vm_struct_materialize_instance(XrVMRuntime *isolate, XrValue ref) {
-    return xr_vm_struct_materialize_instance_depth(isolate, ref, 0);
+    return xr_struct_materialize_instance_depth(isolate, ref, 0);
 }
 
 /* ========== Runtime Error Handling ========== */
