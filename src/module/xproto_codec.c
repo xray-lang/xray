@@ -556,7 +556,7 @@ static bool bc_reader_intern_layout(BcReader *r, uint32_t index) {
         entry->layout->fields[i].sub_layout = r->layouts[child].layout;
     }
     XrAggregateLayout *canonical =
-        xr_vm_struct_layout_intern_owned(xr_isolate_get_vm_state(r->X), entry->layout);
+        xr_struct_layout_intern_owned(xr_isolate_get_vm_state(r->X), entry->layout);
     if (!canonical) {
         r->error = XR_BOOTSTRAP_CONTAINER_ERR_ALLOC;
         return false;

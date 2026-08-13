@@ -107,7 +107,7 @@ uint16_t xr_vm_struct_layout_register(XrVMState *vm, XrAggregateLayout *layout) 
     return id;
 }
 
-XrAggregateLayout *xr_vm_struct_layout_intern_owned(XrVMState *vm, XrAggregateLayout *layout) {
+XrAggregateLayout *xr_struct_layout_intern_owned(XrVMState *vm, XrAggregateLayout *layout) {
     if (!vm || !layout)
         return NULL;
     uint64_t key = xr_aggregate_layout_stable_key(layout);

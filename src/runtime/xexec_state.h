@@ -201,6 +201,6 @@ XR_FUNC struct XrAggregateLayout *xr_vm_struct_layout_lookup_stable_key(XrVMStat
 /* Intern a validated heap-materialized layout by stable semantic identity.
  * Ownership transfers on success; an equal duplicate is released. */
 XR_FUNC struct XrAggregateLayout *
-xr_vm_struct_layout_intern_owned(XrVMState *vm, struct XrAggregateLayout *layout);
+xr_struct_layout_intern_owned(XrVMState *vm, struct XrAggregateLayout *layout);
 
 #endif  // XEXEC_STATE_H

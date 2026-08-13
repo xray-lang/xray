@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 106,
     "install": 2,
-    "source": 3376
+    "source": 3373
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -457,7 +457,6 @@
     "xr_vm_struct_layout_bind_class",
     "xr_vm_struct_layout_class",
     "xr_vm_struct_layout_field_index",
-    "xr_vm_struct_layout_intern_owned",
     "xr_vm_struct_layout_lookup",
     "xr_vm_struct_layout_lookup_stable_key",
     "xr_vm_struct_layout_register",
@@ -8118,16 +8117,15 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "d5f2b1119a5213df06215483a727f6e42100242012daa9d440faf0abc638b2ac",
+      "evidence_sha256": "5cdc6685d89a934f4d762ccb15ccb5f584d827300619e3866012462d588b311a",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 4,
+      "hit_count": 3,
       "path": "src/module/xproto_codec.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
         "xr_vm_entry_plan_derive",
-        "xr_vm_entry_plan_validate",
-        "xr_vm_struct_layout_intern_owned"
+        "xr_vm_entry_plan_validate"
       ]
     },
     {
@@ -8305,9 +8303,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "fe2d05adc72b8e730e955e737534ca6efabad1d73571dcc7ba2b9bcdb020c699",
+      "evidence_sha256": "27b11a39ff877bc015dfa3dcb39d679b3b97ae5b9e81e0337424b0d96ffb9717",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 7,
+      "hit_count": 6,
       "path": "src/runtime/xexec_state.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -8315,7 +8313,6 @@
         "xr_vm_current_ctx",
         "xr_vm_struct_layout_bind_class",
         "xr_vm_struct_layout_class",
-        "xr_vm_struct_layout_intern_owned",
         "xr_vm_struct_layout_lookup",
         "xr_vm_struct_layout_lookup_stable_key",
         "xr_vm_struct_layout_register"
@@ -8762,9 +8759,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "7180339b4b2cd1561105818c9e618d6bcc3969aa63e6ad487b068583f14a6875",
+      "evidence_sha256": "807af839da04400d9503b3e17d687ba18ec9f70c11a9aded0e5c502bd4f6131e",
       "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 40,
+      "hit_count": 39,
       "path": "src/vm/xvm_helpers.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -8778,7 +8775,6 @@
         "xr_vm_struct_layout_bind_class",
         "xr_vm_struct_layout_class",
         "xr_vm_struct_layout_field_index",
-        "xr_vm_struct_layout_intern_owned",
         "xr_vm_struct_layout_lookup",
         "xr_vm_struct_layout_lookup_stable_key",
         "xr_vm_struct_layout_register",
@@ -9189,6 +9185,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "e67ac46f1e4ab0c7be6e64cb9d3998c99e2f031a8a6459c114d66ef7fb3dd54b",
-  "total": 3578
+  "source_tree_fingerprint": "916f020a5e6d16cabf0d26062d175e2e316625f9c2ae27f6954570a16518dc81",
+  "total": 3575
 }
