@@ -17,6 +17,7 @@
 #include "shared/xr_owner_forward_core.h"
 #include "shared/xr_raw_scalar_core.h"
 #include "shared/xr_static_address_core.h"
+#include "shared/xr_reference_count_core.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -624,6 +625,29 @@ TEST(static_address_core_freezes_stability_and_borrow_contract) {
                   "xr_static_address_plan_core");
 }
 
+TEST(reference_count_core_freezes_retain_and_release_contract) {
+    XrReferenceCountPlan retain = XR_REFERENCE_COUNT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_HI,
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_LO, XR_SEM_CONSUMER_VM,
+        XR_REFERENCE_COUNT_RETAIN);
+    XrReferenceCountPlan release = XR_REFERENCE_COUNT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_HI,
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_LO, XR_SEM_CONSUMER_CGEN,
+        XR_REFERENCE_COUNT_RELEASE);
+
+    ASSERT(xr_reference_count_plan_is_exact_core(retain));
+    ASSERT(xr_reference_count_plan_is_exact_core(release));
+    ASSERT(retain.acquires_owner && !retain.relinquishes_owner);
+    ASSERT(!release.acquires_owner && release.relinquishes_owner);
+    ASSERT(release.destroys_on_last_release);
+    ASSERT_FALSE(xr_reference_count_plan_is_exact_core(
+        xr_reference_count_plan_core(XR_REFERENCE_COUNT_INVALID)));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_HI,
+                      XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_LO),
+                  "xr_reference_count_plan_core");
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -660,6 +684,7 @@ RUN_TEST(owner_forward_core_freezes_value_and_ownership_transfer);
 RUN_TEST(codegen_opaque_core_freezes_value_and_optimizer_barrier);
 RUN_TEST(copy_core_freezes_identity_clone_and_control_variants);
 RUN_TEST(static_address_core_freezes_stability_and_borrow_contract);
+RUN_TEST(reference_count_core_freezes_retain_and_release_contract);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()

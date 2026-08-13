@@ -11634,7 +11634,23 @@ static void xicgen_throw(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
 static void xicgen_ownership_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix, const char *fn_name) {
     (void) prefix;
-    XR_DCHECK(v->nargs >= 1, "xicgen_ownership_call: need arg");
+    XrReferenceCountAction action =
+        v && v->op == XI_RETAIN ? XR_REFERENCE_COUNT_RETAIN
+                                : v && v->op == XI_RELEASE ? XR_REFERENCE_COUNT_RELEASE
+                                                          : XR_REFERENCE_COUNT_INVALID;
+    XrReferenceCountPlan plan = XR_REFERENCE_COUNT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_HI,
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_LO, XR_SEM_CONSUMER_CGEN, action);
+    if (!v || v->nargs < 1 || !cg_reference_count_adapter_name(ctx) ||
+        !xr_reference_count_plan_is_exact_core(plan) ||
+        (action == XR_REFERENCE_COUNT_RETAIN && !plan.acquires_owner) ||
+        (action == XR_REFERENCE_COUNT_RELEASE &&
+         (!plan.relinquishes_owner || !plan.destroys_on_last_release))) {
+        if (ctx)
+            ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
     const XiValue *arg = v->args[0];
     /* ARC cleanups are attached after every value-rewriting pass.  Some of
      * their semantic owners are compile-time tokens or otherwise have no C

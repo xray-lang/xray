@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 267,
+  "operation_count": 268,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -851,6 +851,34 @@
       "observable_contract": "src/shared/xr_raw_scalar_core.h",
       "observable_edges": [],
       "operation_id": "shared.raw-scalar",
+      "ownership": "native",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/reference-count",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_reference_count_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/reference-count",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_reference_count_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.reference-count",
       "ownership": "native",
       "targets": [
         "vm",
@@ -5007,19 +5035,19 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_reference_count_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "releases"
       ],
       "error_panic_suspend_cancel_publication": [],
       "family": "allocation-and-ownership",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.reference-count",
       "independent_oracle": "ownership-certificate-plus-runtime-event-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_reference_count_core.h",
       "observable_edges": [],
       "operation_id": "xi.release",
       "ownership": "consume",
@@ -5032,19 +5060,19 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_reference_count_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "retains"
       ],
       "error_panic_suspend_cancel_publication": [],
       "family": "allocation-and-ownership",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.reference-count",
       "independent_oracle": "ownership-certificate-plus-runtime-event-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_reference_count_core.h",
       "observable_edges": [],
       "operation_id": "xi.retain",
       "ownership": "borrow",
@@ -6884,5 +6912,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "fba85b3e445b744ba59288de5f72578afb2ac041777a004c9d5f81de71fc1c48"
+  "source_tree_fingerprint": "82fd3fdac7721c139d06ad170687435d8b9a8f8fd786d7f5ad30b8accb46a706"
 }

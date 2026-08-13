@@ -98,6 +98,13 @@ owner = "shared-kernel"
 profiles = ["aot", "hosted", "freestanding"]
 
 [[core]]
+id = "reference-count"
+header = "src/shared/xr_reference_count_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "data-pointer"
 header = "src/shared/xr_data_pointer_core.h"
 representation = "native"
@@ -379,6 +386,20 @@ fixtures = [
   "tests/unit/stdlib/test_numeric_core.c",
   "tests/unit/ir/test_xi_cgen.c",
   "tests/aot/filetests/link/freestanding_mem_core.xr",
+]
+
+[[operation]]
+id = "reference-count"
+observable_contract = "src/shared/xr_reference_count_core.h"
+semantic_kernel = "src/shared/xr_reference_count_core.h"
+vm_adapter = "src/ir/xi_emit_eh.c"
+aot_adapter = "src/aot/xi_cgen_dispatch_helpers.inc.c"
+typed_plan = "shared.reference-count"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_numeric_core.c",
+  "tests/unit/ir/test_xi_emit.c",
+  "tests/unit/ir/test_xi_cgen.c",
 ]
 
 [[operation]]

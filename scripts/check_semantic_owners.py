@@ -171,6 +171,7 @@ OWNER_FORWARD_OPERATIONS = {"xi.owner.forward"}
 CODEGEN_OPAQUE_OPERATIONS = {"xi.codegen.opaque"}
 COPY_OPERATIONS = {"xi.copy"}
 STATIC_ADDRESS_OPERATIONS = {"xi.static.addr"}
+REFERENCE_COUNT_OPERATIONS = {"xi.retain", "xi.release"}
 REGEX_COMPILE_OPERATIONS = {"xi.regex.compile"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
@@ -2384,6 +2385,63 @@ def verify_static_address_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_reference_count_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.reference-count"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != REFERENCE_COUNT_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.reference-count family")
+    elif owner.get("cgen_adapter") != "xr_reference_count_plan_core":
+        errors.append("semantic owner registry has no exact reference-count CGen adapter")
+
+    core_text = (root / "src/shared/xr_reference_count_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_REFERENCE_COUNT_OWNER_PLAN",
+                  "XR_REFERENCE_COUNT_RETAIN", "XR_REFERENCE_COUNT_RELEASE",
+                  "acquires_owner", "relinquishes_owner", "destroys_on_last_release",
+                  "xr_reference_count_plan_core", "xr_reference_count_plan_is_exact_core"):
+        if token not in core_text:
+            errors.append("src/shared/xr_reference_count_core.h: reference count lacks stable owner")
+            break
+
+    vm_text = (root / "src/ir/xi_emit_eh.c").read_text(encoding="utf-8", errors="strict")
+    for function, action, opcode in (("xi_emit_retain", "XR_REFERENCE_COUNT_RETAIN", "OP_DUP"),
+                                     ("xi_emit_release", "XR_REFERENCE_COUNT_RELEASE", "OP_DROP")):
+        body = extract_c_function(vm_text, function) or ""
+        for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                      "XR_REFERENCE_COUNT_OWNER_PLAN",
+                      "xr_reference_count_plan_is_exact_core", action, opcode):
+            if token not in body:
+                errors.append(f"src/ir/xi_emit_eh.c: {function} bypasses reference-count owner")
+                break
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_reference_count_adapter_name") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_CGEN",
+                  "xr_semantic_owner_cgen_adapter", '"xr_reference_count_plan_core"'):
+        if token not in resolver:
+            errors.append("src/aot/xi_cgen.c: reference count does not resolve stable adapter")
+            break
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    body = extract_c_function(dispatch_text, "xicgen_ownership_call") or ""
+    for token in ("cg_reference_count_adapter_name", "XR_REFERENCE_COUNT_OWNER_PLAN",
+                  "xr_reference_count_plan_is_exact_core", "acquires_owner",
+                  "relinquishes_owner", "destroys_on_last_release", "fn_name"):
+        if token not in body:
+            errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: reference count bypasses owner")
+            break
+
+    test_text = (root / "tests/unit/stdlib/test_numeric_core.c").read_text(
+        encoding="utf-8", errors="strict")
+    if "reference_count_core_freezes_retain_and_release_contract" not in test_text:
+        errors.append("tests/unit/stdlib/test_numeric_core.c: reference-count KAT is missing")
+    return errors
+
+
 def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     owner_name = "shared.regex"
@@ -3133,8 +3191,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 41:
-        errors.append(f"shared-core inventory must contain exactly 41 headers, found {len(actual)}")
+    if len(actual) != 42:
+        errors.append(f"shared-core inventory must contain exactly 42 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -3180,6 +3238,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_codegen_opaque_ratchet(root, registry))
         errors.extend(verify_copy_ratchet(root, registry))
         errors.extend(verify_static_address_ratchet(root, registry))
+        errors.extend(verify_reference_count_ratchet(root, registry))
         errors.extend(verify_regex_compile_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_byte_array_copy_ratchet(root, registry))

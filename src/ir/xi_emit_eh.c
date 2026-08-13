@@ -13,6 +13,7 @@
 #include "../runtime/value/xtype.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_owner_forward_core.h"
+#include "../shared/xr_reference_count_core.h"
 #include <stdio.h>
 
 #define XI_PAR_FALLBACK_MAX_LANES XR_MAX_WORKERS
@@ -96,7 +97,12 @@ XR_FUNC void xi_emit_throw(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 /* dup(args[0]): emit OP_DUP on the value's register (no result). */
 XR_FUNC void xi_emit_retain(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
-    if (v->nargs < 1) {
+    XrReferenceCountPlan plan = XR_REFERENCE_COUNT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_HI,
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_LO, XR_SEM_CONSUMER_VM,
+        XR_REFERENCE_COUNT_RETAIN);
+    if (!xr_reference_count_plan_is_exact_core(plan) || !plan.acquires_owner ||
+        v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
@@ -109,7 +115,12 @@ XR_FUNC void xi_emit_retain(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 /* drop(args[0]): emit OP_DROP on the value's register (no result). */
 XR_FUNC void xi_emit_release(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
-    if (v->nargs < 1) {
+    XrReferenceCountPlan plan = XR_REFERENCE_COUNT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_HI,
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_LO, XR_SEM_CONSUMER_VM,
+        XR_REFERENCE_COUNT_RELEASE);
+    if (!xr_reference_count_plan_is_exact_core(plan) || !plan.relinquishes_owner ||
+        !plan.destroys_on_last_release || v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }

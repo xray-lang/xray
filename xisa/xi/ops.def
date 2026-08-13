@@ -2732,8 +2732,6 @@
     xi.get.builtin
     xi.import.ref
     xi.bounds.check
-    xi.retain
-    xi.release
     xi.source.move
     xi.stack.alloc
     xi.vec.load
@@ -2763,6 +2761,8 @@
     xi.codegen.opaque
     xi.copy
     xi.static.addr
+    xi.retain
+    xi.release
     xi.owner.forward
     xi.target.sizeof
     xi.target.alignof
@@ -2932,6 +2932,24 @@
   :production-bindings (
     (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
     (cgen "src/aot/xi_cgen.c" "cg_static_address_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.reference-count
+  :category shared-semantic-kernel
+  :operations (
+    xi.retain
+    xi.release
+  )
+  :consumers (
+    semantic-plan
+    vm
+    cgen
+  )
+  :cgen-adapter xr_reference_count_plan_core
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/ir/xi_emit_eh.c" "XR_REFERENCE_COUNT_OWNER_PLAN")
+    (cgen "src/aot/xi_cgen.c" "cg_reference_count_adapter_name")
   ))
 
 (define-xi-observable-owner shared.truthiness
