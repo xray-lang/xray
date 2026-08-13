@@ -58,23 +58,6 @@ XRAY_API XrArray *xray_array_new_with_capacity(XrVMRuntime *X, size_t capacity);
 
 // Closure creation is declared in runtime/closure/xclosure.h.
 
-/* ========== Array Operations ========== */
-
-// Push element to array end
-XR_FUNC void xr_array_push(XrVMRuntime *X, XrArray *arr, XrValue val);
-
-// Pop element from array end
-XR_FUNC XrValue xr_array_pop(XrVMRuntime *X, XrArray *arr);
-
-// Get array element by index
-XR_FUNC XrValue xr_array_get(XrVMRuntime *X, XrArray *arr, int index);
-
-// Set array element by index
-XR_FUNC void xr_array_set(XrVMRuntime *X, XrArray *arr, int index, XrValue val);
-
-// Get array length
-XR_FUNC size_t xr_array_length(XrArray *arr);
-
 /* ========== String Operations ========== */
 
 // Concatenate two strings
