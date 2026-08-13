@@ -1,0 +1,37 @@
+// anchor: string-result-direct-call
+// A direct-local call whose result is an owned String. This case cannot be
+// dropped, because each line below pins a separate storage fact that the two
+// backends have to agree on and that nothing else in the suite reaches:
+//   - the callee's result storage is the outer tagged value, stated by its own
+//     frozen family; without that family the AOT build refuses the whole module
+//     rather than emitting the call;
+//   - the Xi representation choice for the call result has to name the same
+//     tagged storage, or the backend materializes a box the frozen plan does
+//     not contain and the module is refused again;
+//   - `label` keeps an unused parameter on purpose. That keeps the callee out
+//     of the constant-folding path, so a real call boundary is emitted, and it
+//     also pins a parameter that dead-code elimination drops from its block
+//     while the parameter array still names it.
+// Both branches, a returned call result, and a bound local are covered so the
+// storage fact is proved at a use, at a return, and at a definition.
+
+fn label(n: int, unused: int) -> string {
+    if (n > 0) {
+        return "pos"
+    }
+    return "neg"
+}
+
+fn forward(n: int) -> string {
+    return label(n, 0)
+}
+
+fn main() {
+    print(label(1, 0))
+    print(label(-1, 0))
+    print(forward(2))
+    var bound = label(3, 0)
+    print(bound)
+}
+
+main()

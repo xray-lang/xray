@@ -854,6 +854,47 @@ static bool semantic_string_literal_is_exact(
            (type->flags & required) == required;
 }
 
+/* Rebuilt independently of both the TargetPlan collector and its verifier: a
+ * direct-local call may carry an owned String result, whose storage is the
+ * outer tagged XrValue. Every other non-scalar result stays fail closed. */
+static bool aot_direct_local_string_result_is_exact(
+    const XrSemanticPlan *semantic, uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, operation_index);
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
+    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT;
+    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
+    if (!semantic || !operation || !type ||
+        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        type->kind != XR_KIND_STRING || type->child_count != 0 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->aggregate_extent != 0 ||
+        type->aggregate_align != 0 || (type->flags & forbidden) != 0 ||
+        (type->flags & required) != required)
+        return false;
+    size_t target_count = xr_semantic_plan_call_target_count(semantic);
+    const XrSemanticFunctionRecord *callee = NULL;
+    for (size_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(semantic, i);
+        if (!target || target->operation != operation_index ||
+            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            continue;
+        if (callee)
+            return false;
+        callee = xr_semantic_plan_function(semantic, target->function);
+        if (!callee)
+            return false;
+    }
+    return callee && callee->return_type == operation->result_type &&
+           callee->return_parameter == -1 &&
+           callee->return_provenance == XR_SEM_RETURN_OWNED;
+}
+
 /* The reserved JSON class global is a compiler-owned namespace handle: it is
  * loaded from the runtime global table and never adapted to a native
  * representation, so its definition storage stays tagged.  Every other builtin
@@ -2998,6 +3039,73 @@ static bool oracle_dynamic_string_literal_storage(
     return true;
 }
 
+static bool oracle_dynamic_direct_local_string_result_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !aot_direct_local_string_result_is_exact(ctx->semantic, operation_index))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 /* The JSON namespace call materializes an owned dynamic value in its own
  * temporary slot.  Its storage is tagged because the runtime encoder returns a
  * boxed value; the call row proves the slot, layout, and ownership. */
@@ -3740,9 +3848,17 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
         case XI_ISNULL:
         case XI_IS:
         case XI_LEN:
+        case XI_CALL:
+            /* An owned String result is the one non-scalar direct-local shape
+             * with an exact target row; everything else keeps the scalar
+             * machine storage proof. */
+            if (oracle_dynamic_direct_local_string_result_storage(
+                    ctx, semantic_value, out_storage, out_machine_kind))
+                return true;
+            return oracle_machine_storage(ctx, semantic_value, out_storage,
+                                          out_machine_kind);
         case XI_CHAN_RECV_STATUS:
         case XI_CHAN_IS_CLOSED:
-        case XI_CALL:
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
         case XI_ATOMIC_LOAD:
@@ -3793,6 +3909,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             XrRep literal_storage = XR_REP_TAGGED;
             if (!oracle_dynamic_string_literal_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
+                !oracle_dynamic_direct_local_string_result_storage(
+                    ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_json_namespace_value_storage(
@@ -3818,6 +3936,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                                                 &machine_storage,
                                                 &ignored_kind) &&
                 !oracle_dynamic_string_literal_storage(
+                    ctx, source_value, &machine_storage, &ignored_kind) &&
+                !oracle_dynamic_direct_local_string_result_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
@@ -4126,7 +4246,16 @@ static bool authority_collect_obligations_indexed(
         if (!ctx->policy->force_return_tagged &&
             !oracle_machine_storage(oracle, block->control_value,
                                     &output_storage, &machine_kind)) {
+            /* A returned owned String is tagged storage. Each oracle re-proves
+             * its own exact TargetPlan row, so no unproven reference return
+             * reaches this path. */
             if (!oracle_dynamic_closure_storage(
+                    oracle, block->control_value, &output_storage,
+                    &machine_kind) &&
+                !oracle_dynamic_string_literal_storage(
+                    oracle, block->control_value, &output_storage,
+                    &machine_kind) &&
+                !oracle_dynamic_direct_local_string_result_storage(
                     oracle, block->control_value, &output_storage,
                     &machine_kind)) {
                 set_diag(ctx->diag,
@@ -5102,6 +5231,12 @@ static bool verify_exact_semantic_coverage(VerifyAuthority *ctx) {
             if (!oracle_machine_storage(ctx, block->control_value,
                                         &output_storage, &machine_kind) &&
                 !oracle_dynamic_closure_storage(
+                    ctx, block->control_value, &output_storage,
+                    &machine_kind) &&
+                !oracle_dynamic_string_literal_storage(
+                    ctx, block->control_value, &output_storage,
+                    &machine_kind) &&
+                !oracle_dynamic_direct_local_string_result_storage(
                     ctx, block->control_value, &output_storage,
                     &machine_kind)) {
                 set_diag(ctx->diag,

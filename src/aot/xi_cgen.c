@@ -6555,12 +6555,34 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
     return true;
 }
 
+/* A parameter whose last use disappeared is dropped from its block, while the
+ * function's parameter array keeps pointing at it. Such a value is no longer a
+ * member of the function, so it owns no storage to mirror, and the exact
+ * emission authority refuses any question about it. Ask the membership
+ * question first instead of turning a dropped parameter into a hard error. */
+static bool cg_value_is_live_block_member(const XiFunc *f, const XiValue *v) {
+    if (!f || !v || !v->block || v->block->func != f)
+        return false;
+    for (uint32_t i = 0; i < v->block->nvalues; i++) {
+        if (v->block->values[i] == v)
+            return true;
+    }
+    for (const XiPhi *phi = v->block->phis; phi; phi = phi->next) {
+        if (&phi->value == v)
+            return true;
+    }
+    return false;
+}
+
 static bool cg_debug_value_has_source_storage(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (!v || !xi_var_id_is_valid(v->var_id))
         return false;
     if (!cg_debug_source_var_name_is_usable(f, v->var_id))
         return false;
-    return cg_debug_value_has_storage_for_source(ctx, f, cg_debug_source_var_storage_value(f, v));
+    const XiValue *storage = cg_debug_source_var_storage_value(f, v);
+    if (!cg_value_is_live_block_member(f, storage))
+        return false;
+    return cg_debug_value_has_storage_for_source(ctx, f, storage);
 }
 
 static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, XiVarId var_id,
