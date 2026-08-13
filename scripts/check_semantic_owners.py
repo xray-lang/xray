@@ -167,6 +167,7 @@ ENUM_METADATA_ACCESS_OPERATIONS = {"xi.enum.variant.at", "xi.enum.payload.at"}
 CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
 NULL_TEST_OPERATIONS = {"xi.isnull"}
 ASSERT_CONDITION_OPERATIONS = {"xi.assert", "xi.assert.eq", "xi.assert.ne"}
+OWNER_FORWARD_OPERATIONS = {"xi.owner.forward"}
 REGEX_COMPILE_OPERATIONS = {"xi.regex.compile"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
@@ -2140,6 +2141,59 @@ def verify_assert_condition_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_owner_forward_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.owner-forward"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != OWNER_FORWARD_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.owner-forward family")
+    elif owner.get("cgen_adapter") != "xr_owner_forward_plan_core":
+        errors.append("semantic owner registry has no exact owner-forward CGen adapter")
+
+    core_text = (root / "src/shared/xr_owner_forward_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_OWNER_FORWARD_OWNER_APPLY",
+                  "xr_owner_forward_plan_core", "xr_owner_forward_plan_is_exact_core"):
+        if token not in core_text:
+            errors.append("src/shared/xr_owner_forward_core.h: forwarding lacks stable owner")
+            break
+
+    vm_text = (root / "src/ir/xi_emit_eh.c").read_text(encoding="utf-8", errors="strict")
+    vm_body = extract_c_function(vm_text, "xi_emit_move") or ""
+    for token in ("XI_OWNER_FORWARD", f"{marker}_HI", f"{marker}_LO",
+                  "XR_SEM_CONSUMER_VM", "XR_OWNER_FORWARD_OWNER_APPLY",
+                  "xr_owner_forward_plan_is_exact_core"):
+        if token not in vm_body:
+            errors.append("src/ir/xi_emit_eh.c: xi_emit_move bypasses owner-forward plan")
+            break
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_owner_forward_adapter_name") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_CGEN",
+                  "xr_semantic_owner_cgen_adapter", '"xr_owner_forward_plan_core"'):
+        if token not in resolver:
+            errors.append("src/aot/xi_cgen.c: owner forwarding does not resolve stable adapter")
+            break
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    body = extract_c_function(dispatch_text, "xicgen_move") or ""
+    for token in ("XI_OWNER_FORWARD", "cg_owner_forward_adapter_name",
+                  "XR_OWNER_FORWARD_OWNER_APPLY", "xr_owner_forward_plan_is_exact_core",
+                  "xicgen_identity"):
+        if token not in body:
+            errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: xicgen_move bypasses owner")
+            break
+
+    test_text = (root / "tests/unit/stdlib/test_numeric_core.c").read_text(
+        encoding="utf-8", errors="strict")
+    if "owner_forward_core_freezes_value_and_ownership_transfer" not in test_text:
+        errors.append("tests/unit/stdlib/test_numeric_core.c: owner-forward KAT is missing")
+    return errors
+
+
 def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     owner_name = "shared.regex"
@@ -2889,8 +2943,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 37:
-        errors.append(f"shared-core inventory must contain exactly 37 headers, found {len(actual)}")
+    if len(actual) != 38:
+        errors.append(f"shared-core inventory must contain exactly 38 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -2932,6 +2986,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_cell_access_ratchet(root, registry))
         errors.extend(verify_null_test_ratchet(root, registry))
         errors.extend(verify_assert_condition_ratchet(root, registry))
+        errors.extend(verify_owner_forward_ratchet(root, registry))
         errors.extend(verify_regex_compile_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_byte_array_copy_ratchet(root, registry))

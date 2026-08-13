@@ -12,6 +12,7 @@
 #include "shared/xr_bits_core.h"
 #include "shared/xr_numeric_conversion_core.h"
 #include "shared/xr_numeric_core.h"
+#include "shared/xr_owner_forward_core.h"
 #include "shared/xr_raw_scalar_core.h"
 #include <stdint.h>
 #include <string.h>
@@ -533,6 +534,22 @@ TEST(raw_scalar_access_owner_freezes_typed_load_store_matrix) {
                                      XR_RAW_ENDIAN_NATIVE, value));
 }
 
+TEST(owner_forward_core_freezes_value_and_ownership_transfer) {
+    XrOwnerForwardPlan vm_plan = XR_OWNER_FORWARD_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI,
+        XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO, XR_SEM_CONSUMER_VM);
+    XrOwnerForwardPlan cgen_plan = XR_OWNER_FORWARD_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI,
+        XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO, XR_SEM_CONSUMER_CGEN);
+
+    ASSERT(xr_owner_forward_plan_is_exact_core(vm_plan));
+    ASSERT(xr_owner_forward_plan_is_exact_core(cgen_plan));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI,
+                      XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO),
+                  "xr_owner_forward_plan_core");
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -565,6 +582,7 @@ RUN_TEST(raw_scalar_core_unaligned_integer_access_preserves_bytes);
 RUN_TEST(raw_scalar_core_dynamic_endian_is_only_a_value_transform);
 RUN_TEST(raw_scalar_core_float_and_pointer_access_preserve_bits);
 RUN_TEST(raw_scalar_access_owner_freezes_typed_load_store_matrix);
+RUN_TEST(owner_forward_core_freezes_value_and_ownership_transfer);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()

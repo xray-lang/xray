@@ -39,6 +39,7 @@
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_enum_metadata_core.h"
 #include "../shared/xr_native_type_core.h"
+#include "../shared/xr_owner_forward_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
@@ -4501,6 +4502,25 @@ static const char *cg_assert_condition_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: assert-condition owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_owner_forward_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI,
+                                        XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: owner-forward owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI,
+        XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO);
+    if (!adapter || strcmp(adapter, "xr_owner_forward_plan_core") != 0) {
+        fprintf(stderr, "[xi_cgen] ERROR: owner-forward owner has no exact CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }

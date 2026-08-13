@@ -12,6 +12,7 @@
 #include "xi_emit_internal.h"
 #include "../runtime/value/xtype.h"
 #include "../shared/xr_elem_type.h"
+#include "../shared/xr_owner_forward_core.h"
 #include <stdio.h>
 
 #define XI_PAR_FALLBACK_MAX_LANES XR_MAX_WORKERS
@@ -128,6 +129,15 @@ XR_FUNC void xi_emit_move(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
+    if (v->op == XI_OWNER_FORWARD) {
+        XrOwnerForwardPlan plan = XR_OWNER_FORWARD_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI,
+            XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO, XR_SEM_CONSUMER_VM);
+        if (!xr_owner_forward_plan_is_exact_core(plan)) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+    }
     if (src != dst)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
 }

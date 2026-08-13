@@ -15,8 +15,11 @@
 #define XR_SEM_CONSUMER_CGEN UINT32_C(0x00000010)
 #define XR_SEM_CONSUMER_RUNTIME UINT32_C(0x00000020)
 
-#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "e627ba8aedf0633fddbda20b4333097dd1eca44b559c457dcb1b5fe79c4fbf12"
+#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "2131b695c7fc6c1a610953c73c4459d0ac0ddff430b042a346c3be156cd5b58c"
 
+#define XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI UINT64_C(0xac617302a6f0c5e7)
+#define XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO UINT64_C(0xec024eedf7938361)
+#define XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_CONSUMERS UINT32_C(0x00000013)
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI UINT64_C(0x7ec352d0136c63f9)
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO UINT64_C(0x9f71c69f3e6c2b2d)
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_CONSUMERS UINT32_C(0x0000003f)
@@ -113,6 +116,9 @@
 
 static inline uint32_t xr_semantic_owner_consumer_bits(uint64_t owner_id_hi,
                                                         uint64_t owner_id_lo) {
+    if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI &&
+        owner_id_lo == XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO)
+        return XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_CONSUMERS;
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO)
         return XR_SEM_OWNER_ID_SHARED_TRUTHINESS_CONSUMERS;
@@ -218,6 +224,9 @@ static inline bool xr_semantic_owner_has_consumer(uint64_t owner_id_hi,
 
 static inline const char *xr_semantic_owner_cgen_adapter(uint64_t owner_id_hi,
                                                            uint64_t owner_id_lo) {
+    if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI &&
+        owner_id_lo == XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO)
+        return "xr_owner_forward_plan_core";
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO)
         return "xr_truthy";

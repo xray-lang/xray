@@ -2738,7 +2738,6 @@
     xi.retain
     xi.release
     xi.source.move
-    xi.owner.forward
     xi.stack.alloc
     xi.vec.load
     xi.vec.store
@@ -2764,6 +2763,7 @@
 
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
+    xi.owner.forward
     xi.target.sizeof
     xi.target.alignof
     xi.array.data.ptr
@@ -2874,6 +2874,21 @@
 (define-xi-semantic-owner generated-specialization
   :operations (
     xi.gen.call
+  ))
+
+(define-xi-observable-owner shared.owner-forward
+  :category shared-semantic-kernel
+  :operations (xi.owner.forward)
+  :consumers (
+    semantic-plan
+    vm
+    cgen
+  )
+  :cgen-adapter xr_owner_forward_plan_core
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/ir/xi_emit_eh.c" "XR_OWNER_FORWARD_OWNER_APPLY")
+    (cgen "src/aot/xi_cgen.c" "cg_owner_forward_adapter_name")
   ))
 
 (define-xi-observable-owner shared.truthiness

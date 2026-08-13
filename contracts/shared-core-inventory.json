@@ -941,6 +941,33 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_owner_forward_core.h",
+      "id": "owner-forward",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/ir/xi_emit_eh.c",
+        "src/shared/xr_semantic_owner_ids_gen.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_owner_forward_plan_core",
+        "xr_owner_forward_plan_is_exact_core"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_pod_slice_core.h",
       "id": "pod-slice",
       "owner": "shared-kernel",

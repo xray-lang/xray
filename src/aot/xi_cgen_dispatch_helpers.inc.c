@@ -753,6 +753,16 @@ static void xicgen_codegen_opaque(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
 
 static void xicgen_move(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
+    if (v && v->op == XI_OWNER_FORWARD) {
+        const char *adapter = cg_owner_forward_adapter_name(ctx);
+        XrOwnerForwardPlan plan = XR_OWNER_FORWARD_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI,
+            XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO, XR_SEM_CONSUMER_CGEN);
+        if (!adapter || !xr_owner_forward_plan_is_exact_core(plan)) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+    }
     xicgen_identity(ctx, out, f, v, prefix);
 }
 
