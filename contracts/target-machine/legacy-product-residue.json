@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 105,
     "install": 2,
-    "source": 3433
+    "source": 3432
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -4561,9 +4561,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "8416d2de829a4346ab207e03e7593c1caf2a9d555b8293adadb310117ca259fb",
+      "evidence_sha256": "08e951c20aaa1fee6e159214df6bbb8af29c9a279e2b0f1f2e137b0de2f0e301",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 16,
+      "hit_count": 15,
       "path": "src/coro/xsocket.h",
       "status": "transitional-owner",
       "surface": "source",
@@ -9328,6 +9328,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "c7c63f53d751bcf16d8bc4270d435eaf1516e9b973144d8f3434e533061eb67a",
-  "total": 3634
+  "source_tree_fingerprint": "ae7902a91c9f0e66e07d9ef4eb6321ad0cd22c4801149c5f12d5a738eac2187f",
+  "total": 3633
 }

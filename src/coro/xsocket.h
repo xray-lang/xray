@@ -165,8 +165,4 @@ XR_FUNC XrIOTryResult xr_socket_read_try(struct XrVMRuntime *X, int fd, char *bu
 XR_FUNC XrIOTryResult xr_socket_write_try(struct XrVMRuntime *X, int fd, const char *buf,
                                           size_t len);
 
-// Register I/O wait (called before xray layer yield)
-// Register fd with netpoll, coroutine can retry after resume
-XR_FUNC void xr_socket_register_wait(struct XrVMRuntime *X, int fd, int mode);
-
 #endif  // XSOCKET_H
