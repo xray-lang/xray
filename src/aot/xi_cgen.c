@@ -45,6 +45,7 @@
 #include "../shared/xr_static_address_core.h"
 #include "../shared/xr_reference_count_core.h"
 #include "../shared/xr_sync_core.h"
+#include "../shared/xr_target_simd_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
@@ -4939,6 +4940,24 @@ static const char *cg_target_layout_query_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: target-layout query owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_target_simd_query_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_HI,
+                                        XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: target-simd query owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_HI, XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: target-simd query owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }

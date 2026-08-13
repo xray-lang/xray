@@ -280,6 +280,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
+id = "target-simd"
+header = "src/shared/xr_target_simd_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "truthiness"
 header = "src/shared/xr_truthy_core.h"
 representation = "native"
@@ -343,6 +350,22 @@ fixtures = [
   "tests/unit/ir/test_xi_emit.c",
   "tests/unit/ir/test_xi_cgen.c",
   "tests/aot/filetests/link/freestanding_uintsize_target.xr",
+]
+
+[[operation]]
+id = "target-simd-query"
+observable_contract = "src/shared/xr_target_simd_core.h"
+semantic_kernel = "src/shared/xr_target_simd_core.h"
+vm_adapter = "src/ir/xi_emit_call.c"
+aot_adapter = "src/aot/xi_cgen_dispatch_helpers.inc.c"
+typed_plan = "shared.target-simd-query"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_target_simd_core.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/aot/filetests/cgen/simd_capabilities_runtime_selected_static.xr",
+  "tests/aot/filetests/cgen/simd_x86_runtime_dispatch.xr",
+  "tests/aot/filetests/cgen/simd_sve_scalable_stripe.xr",
 ]
 
 [[operation]]

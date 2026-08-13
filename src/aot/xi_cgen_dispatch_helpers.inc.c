@@ -268,58 +268,106 @@ static void xicgen_target_alignof(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     xicgen_target_layout_expr(ctx, out, v, XR_TARGET_LAYOUT_QUERY_ALIGN);
 }
 
+/* The owner reads the target's feature bitset by name for the two wide widths.
+ * Pin the AOT spelling to it so a renumbering of either breaks the build
+ * rather than silently answering with the wrong vector width. */
+_Static_assert((uint32_t) XAOT_SIMD_FEATURE_AVX2 == XR_TARGET_SIMD_FEATURE_WIDE_256,
+               "AVX2 is the 256-bit vector feature the target-simd owner reads");
+_Static_assert((uint32_t) XAOT_SIMD_FEATURE_AVX512 == XR_TARGET_SIMD_FEATURE_WIDE_512,
+               "AVX-512 is the 512-bit vector feature the target-simd owner reads");
+
+/* Map the link target onto the owner's vocabulary. A build with no resolved
+ * target has no vector machine to describe and runs the portable baseline. */
+static uint8_t cg_target_simd_selection(const XiCgenCtx *ctx) {
+    if (!ctx || !ctx->target)
+        return (uint8_t) XR_TARGET_SIMD_BASELINE_SELECTION;
+    if (ctx->target->simd_mode == XAOT_SIMD_SVE)
+        return (uint8_t) XR_TARGET_SIMD_SELECTION_SCALABLE;
+    if (ctx->target->simd_mode == XAOT_SIMD_DISPATCH)
+        return (uint8_t) XR_TARGET_SIMD_SELECTION_DISPATCH;
+    return (uint8_t) XR_TARGET_SIMD_SELECTION_STATIC;
+}
+
+static uint32_t cg_target_simd_features(const XiCgenCtx *ctx) {
+    return ctx && ctx->target ? ctx->target->simd_features : XR_TARGET_SIMD_BASELINE_FEATURES;
+}
+
+/* The owner macro resolves a constant query kind, so each row below asks for
+ * exactly one answer rather than selecting a kind at run time. */
+#define XICGEN_TARGET_SIMD_QUERY(ctx, kind)                                                        \
+    XR_TARGET_SIMD_QUERY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_HI,                  \
+                                     XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_LO,                  \
+                                     XR_SEM_CONSUMER_CGEN, (kind),                                 \
+                                     cg_target_simd_selection((ctx)),                              \
+                                     cg_target_simd_features((ctx)))
+
+static bool xicgen_target_simd_query_ok(XiCgenCtx *ctx, FILE *out,
+                                        XrTargetSimdQueryResult result) {
+    const char *adapter = cg_target_simd_query_adapter_name(ctx);
+    if (!adapter || strcmp(adapter, "xr_target_simd_query_core") != 0 ||
+        result.status != (uint8_t) XR_TARGET_SIMD_QUERY_OK) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+    return true;
+}
+
 static void xicgen_target_simd_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                      const char *prefix) {
     (void) f;
     (void) prefix;
-    bool runtime_dispatch =
-        ctx && ctx->target &&
-        (ctx->target->simd_mode == XAOT_SIMD_DISPATCH || ctx->target->simd_mode == XAOT_SIMD_SVE);
-    if (runtime_dispatch) {
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
-            fprintf(out, "XR_FROM_INT(%s)",
-                    ctx->target->simd_mode == XAOT_SIMD_SVE ? "(int64_t)xrt_sve_selected_bytes()"
-                                                            : "xrt_target_runtime_simd_bytes()");
-        else
-            fprintf(out, "%s",
-                    ctx->target->simd_mode == XAOT_SIMD_SVE ? "(int64_t)xrt_sve_selected_bytes()"
-                                                            : "xrt_target_runtime_simd_bytes()");
+    XrTargetSimdQueryResult query = XICGEN_TARGET_SIMD_QUERY(ctx, XR_TARGET_SIMD_QUERY_BYTES);
+    if (!xicgen_target_simd_query_ok(ctx, out, query))
         return;
-    }
-    int bytes =
-        ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX512) != 0 ? 64
-        : ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 ? 32
-                                                                                           : 16;
-    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
-        fprintf(out, "XR_FROM_INT(%d)", bytes);
+    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "XR_FROM_INT(");
+    /* Only the owner decides whether a width exists at compile time. When it
+     * does not, this profile names the run-time source it reports. */
+    if (query.width_source == (uint8_t) XR_TARGET_SIMD_WIDTH_RUNTIME_SCALABLE)
+        fprintf(out, "(int64_t)xrt_sve_selected_bytes()");
+    else if (query.width_source == (uint8_t) XR_TARGET_SIMD_WIDTH_RUNTIME_DISPATCH)
+        fprintf(out, "xrt_target_runtime_simd_bytes()");
     else
-        fprintf(out, "%d", bytes);
+        fprintf(out, "%d", (int) query.bytes);
+    if (boxed)
+        fprintf(out, ")");
 }
 
 static void xicgen_target_simd_accelerated(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    bool accelerated = ctx && ctx->target && ctx->target->simd_features != 0;
-    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
-        fprintf(out, "XR_FROM_BOOL(%s)", accelerated ? "true" : "false");
+    XrTargetSimdQueryResult query =
+        XICGEN_TARGET_SIMD_QUERY(ctx, XR_TARGET_SIMD_QUERY_ACCELERATED);
+    if (!xicgen_target_simd_query_ok(ctx, out, query))
+        return;
+    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "XR_FROM_BOOL(%s)", query.answer ? "true" : "false");
     else
-        fprintf(out, "%s", accelerated ? "true" : "false");
+        fprintf(out, "%s", query.answer ? "true" : "false");
 }
 
 static void xicgen_target_simd_runtime_selected(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                 const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    bool scalable_query = v && v->xa_intrinsic_id == XA_INTRINSIC_SIMD_CAPABILITIES_IS_SCALABLE;
-    bool selected = ctx && ctx->target &&
-                    (scalable_query ? ctx->target->simd_mode == XAOT_SIMD_SVE
-                                    : (ctx->target->simd_mode == XAOT_SIMD_DISPATCH ||
-                                       ctx->target->simd_mode == XAOT_SIMD_SVE));
-    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
-        fprintf(out, "XR_FROM_BOOL(%s)", selected ? "true" : "false");
+    /* One Xi op answers two source questions: whether the width is settled at
+     * run time at all, and whether a scalable register settles it. Each row
+     * resolves its own constant query kind. */
+    XrTargetSimdQueryResult query =
+        v && v->xa_intrinsic_id == XA_INTRINSIC_SIMD_CAPABILITIES_IS_SCALABLE
+            ? XICGEN_TARGET_SIMD_QUERY(ctx, XR_TARGET_SIMD_QUERY_SCALABLE)
+            : XICGEN_TARGET_SIMD_QUERY(ctx, XR_TARGET_SIMD_QUERY_RUNTIME_SELECTED);
+    if (!xicgen_target_simd_query_ok(ctx, out, query))
+        return;
+    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "XR_FROM_BOOL(%s)", query.answer ? "true" : "false");
     else
-        fprintf(out, "%s", selected ? "true" : "false");
+        fprintf(out, "%s", query.answer ? "true" : "false");
 }
 
 static bool xicgen_const_literal_is_freestanding_scalar(const XiConstLiteral *lit) {
