@@ -38,12 +38,12 @@ LF bytes on every host.  Their policy and contract digests therefore identify
 the exact executed input instead of the caller's `core.autocrlf` preference.
 
 anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json de562288bd08d9f176c2d81a5747c86c152a74f9737f142c31335840649e5b7e
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 8d6416d1cbdd8b8e95fdd9a5b0585294315f569d1b1a4fe64a5c82bc27c1549c
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 12f9ab423264086969ab976a98416c51e7631b53afd91f802986d876bd026fc5
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json 415474d306be206ecab565c78b51be190fb9c0b80e846076c62c6fd81be4e9b0
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c78b398f0358e936466f20b0ecae775c2f3766d39a49efa58a7fdfe966432d23
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
-anchor-sha256: contracts/target-machine/object-extent-inventory.json 9d83a61c406ffaf3761b3bd4484a26e28bf03c6046b6c206cd9204f10359b4a1
+anchor-sha256: contracts/target-machine/object-extent-inventory.json 09f0b189741cbf5b12153db6602dd2fe7b97435110f97ca8953333214df11831
 anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc66576441dcdfa3b8b52ee606fb6256abefefa2e848310aed
 anchor-sha256: contracts/target-machine/baseline-manifest.json 9264ec82b4e58d421c7b285e3bc2ff598ef09587622110de6cf72d79cbf7ddef
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 54ee3affe064aabfb89fe1cc75ef5642837fd14b6e7e575a0badb4fc670efd74
