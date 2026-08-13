@@ -28,13 +28,13 @@
  *         return xrs_string_value_c(X, s);
  *     }
  *
- *     XrModule* xr_load_module_example(XrVMRuntime *X) {
+ *     XrModule* xr_native_module_create_example(XrVMRuntime *X) {
  *         XrModule *m = xr_module_create_native(X, "example");
  *         XRS_EXPORT(m, X, "myFn", my_fn);
  *         return m;
  *     }
  *
- * Native loaders only construct exports. The module registry owns the single
+ * Native factories only construct exports. The module registry owns the single
  * INITIALIZING -> PUBLISHED transition after any script extension succeeds.
  */
 

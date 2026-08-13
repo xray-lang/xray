@@ -76,7 +76,7 @@ struct XrModule;
  *   - findText(re, text)         Return matched text only (string?)
  *   - findGroup(re, text, i)     Return capture group i only (string?)
  */
-XR_FUNC struct XrModule *xr_load_module_regex(XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_native_module_create_regex(XrVMRuntime *isolate);
 
 /*
  * Wrap XrRegex as XrValue (XrInstance with native body)

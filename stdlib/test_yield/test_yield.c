@@ -527,8 +527,8 @@ static XrCFuncResult test_yield_long_task(XrVMRuntime *X, XrValue *args, int arg
 // Module registration
 /* ========================================================================== */
 
-XR_FUNC XrModule *xr_load_module_test_yield(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_test_yield: NULL isolate");
+XR_FUNC XrModule *xr_native_module_create_test_yield(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_native_module_create_test_yield: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "test_yield");
     if (!mod)

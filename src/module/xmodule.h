@@ -84,7 +84,7 @@ typedef struct XrModule {
 
     /* Pure-Xray stdlib module: the stdlib/<name>/<name>.xr script layer
      * provides all exports, so a missing script file is a hard load
-     * error instead of a silently empty module. Set by the C loader. */
+     * error instead of a silently empty module. Set by the C factory. */
     bool requires_script;
 
     void *native_handle;
@@ -167,9 +167,9 @@ static inline bool xr_module_set_sym(XrModule *m, SymbolId sym, XrValue val) {
     return false;
 }
 
-/* ========== Native Module Loader Type ========== */
+/* ========== Native Module Factory Type ========== */
 
-typedef XrModule *(*NativeModuleLoader)(struct XrVMRuntime *isolate);
+typedef XrModule *(*XrNativeModuleFactory)(struct XrVMRuntime *isolate);
 
 /* ========== Module Registry ========== */
 
@@ -185,8 +185,8 @@ typedef XrProto *(*XrModuleCompileSourceHook)(XrCompilerSession *session, const 
 typedef void (*XrModuleAstFreeHook)(AstNode *ast);
 
 typedef struct XrModuleRegistry {
-    XrHashMap *native_loaders;  // Module name → NativeModuleLoader
-    XrHashMap *loaded_modules;  // Module path → XrModule*
+    XrHashMap *native_factories; // Module name -> XrNativeModuleFactory
+    XrHashMap *loaded_modules;   // Module path -> XrModule*
 
     char *stdlib_path;  // Stdlib path (default: stdlib/)
 
@@ -231,17 +231,17 @@ XR_FUNC void xr_module_system_init_with_script(struct XrVMRuntime *isolate,
 XR_FUNC void xr_module_system_free(struct XrVMRuntime *isolate);
 
 /*
-** Register Native module loader
+** Register a native module factory
 **
 ** @param isolate Isolate instance
 ** @param name    Module name (e.g. "time")
-** @param loader  Loader function
+** @param factory Factory function
 **
 ** Example:
-**   xr_module_register_native(isolate, "time", xr_load_module_time);
+**   xr_module_register_native_factory(isolate, "time", xr_native_module_create_time);
 */
-XR_FUNC void xr_module_register_native(struct XrVMRuntime *isolate, const char *name,
-                                       NativeModuleLoader loader);
+XR_FUNC void xr_module_register_native_factory(struct XrVMRuntime *isolate, const char *name,
+                                                XrNativeModuleFactory factory);
 
 /*
 ** Import module (called by VM instruction)

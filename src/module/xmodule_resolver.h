@@ -14,7 +14,7 @@
  *   across xmodule.c and xbundle.c.
  *
  * RESOLUTION RULES:
- *   Bare name         → stdlib native_loaders registry lookup
+ *   Bare name         -> stdlib native factory registry lookup
  *   "./" or "../"     → relative file (.xr) or directory (index.xr)
  *   "owner/name"      → third-party package under ~/.xray/packages/
  *   other quoted path → project-relative file or directory
@@ -60,13 +60,13 @@ XR_FUNC void xr_module_id_cleanup(XrModuleId *id);
 
 typedef struct {
     /*
-     * Hashmap of stdlib module names registered as native loaders.
+     * Hashmap of stdlib module names registered as native factories.
      * Keys are bare module names ("time", "io", …).  Values are
-     * NativeModuleLoader function pointers but the resolver only
-     * checks key existence — it never calls the loaders.
+     * XrNativeModuleFactory function pointers but the resolver only
+     * checks key existence; it never calls the factories.
      * Borrowed pointer; caller must keep alive for resolver lifetime.
      */
-    XrHashMap *native_loaders;
+    XrHashMap *native_factories;
 
     /*
      * Optional stdlib source directory (e.g. "stdlib/").

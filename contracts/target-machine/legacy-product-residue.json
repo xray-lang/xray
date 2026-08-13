@@ -1,17 +1,16 @@
 {
   "counts": {
-    "api": 40,
+    "api": 38,
     "build": 55,
     "cli": 105,
     "install": 2,
-    "source": 3606
+    "source": 3534
   },
   "generated_from": [
     "CMakeLists.txt",
     "include/xray.h",
     "include/xray_hosted_fragment_abi.h",
     "include/xray_hosted_fragment_runtime.h",
-    "include/xray_module_sdk.h",
     "include/xray_vm.h",
     "include/xray_yieldable_abi.h",
     "scripts/check_binary_public_native_readiness.py",
@@ -155,9 +154,9 @@
     "src/module/xbytecode_compile.c",
     "src/module/xmodule.c",
     "src/module/xmodule.h",
+    "src/module/xmodule_factories.h",
     "src/module/xmodule_graph.c",
     "src/module/xmodule_graph.h",
-    "src/module/xmodule_loaders.h",
     "src/module/xmodule_resolver.h",
     "src/module/xpkg_client.c",
     "src/module/xpkg_client.h",
@@ -419,40 +418,6 @@
     "xr_bundle_create_ex",
     "xr_bundle_free",
     "xr_bundle_to_c_source",
-    "xr_load_module_base64",
-    "xr_load_module_cluster",
-    "xr_load_module_codegen",
-    "xr_load_module_compress",
-    "xr_load_module_crypto",
-    "xr_load_module_csv",
-    "xr_load_module_datetime",
-    "xr_load_module_encoding",
-    "xr_load_module_http",
-    "xr_load_module_http2",
-    "xr_load_module_io",
-    "xr_load_module_log",
-    "xr_load_module_math",
-    "xr_load_module_mem",
-    "xr_load_module_net",
-    "xr_load_module_os",
-    "xr_load_module_parallel",
-    "xr_load_module_path",
-    "xr_load_module_prelude",
-    "xr_load_module_probe",
-    "xr_load_module_regex",
-    "xr_load_module_runtime",
-    "xr_load_module_simd",
-    "xr_load_module_strconv",
-    "xr_load_module_sync",
-    "xr_load_module_sys",
-    "xr_load_module_test_yield",
-    "xr_load_module_text",
-    "xr_load_module_time",
-    "xr_load_module_toml",
-    "xr_load_module_url",
-    "xr_load_module_ws",
-    "xr_load_module_xml",
-    "xr_load_module_yaml",
     "xr_proto_add_symbol",
     "xr_proto_children",
     "xr_proto_name",
@@ -545,7 +510,7 @@
     "xray_vm_new_full",
     "xray_vm_set_script_info"
   ],
-  "owner_count": 709,
+  "owner_count": 704,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -619,18 +584,6 @@
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 5,
       "path": "include/xray_hosted_fragment_runtime.h",
-      "status": "transitional-owner",
-      "surface": "api",
-      "tokens": [
-        "XrVMRuntime"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "fdac5dcb7950a3e86fdfe9851602f2604d9d0b315406091d85387ec51e089587",
-      "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 2,
-      "path": "include/xray_module_sdk.h",
       "status": "transitional-owner",
       "surface": "api",
       "tokens": [
@@ -5303,9 +5256,9 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "d22d93a0feebcf176ecbf39fd4b4ca14662342bd8ec5bce6c582a18ac2588ee5",
+      "evidence_sha256": "68a4a87df3c03a6825c388dd9cccc36d9f5e3d35218ddb02813d9a221c8c8e66",
       "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 26,
+      "hit_count": 24,
       "path": "src/module/xmodule.c",
       "status": "transitional-owner",
       "surface": "source",
@@ -5316,7 +5269,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "7f4f75394dcda05f90391e65ca76c294ee843daf7118cd9025275e4b41dd590e",
+      "evidence_sha256": "ed12f07738845b27f14b67cf3e419f1214e7b77210a4112873e35b9fc550847a",
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 20,
       "path": "src/module/xmodule.h",
@@ -5324,6 +5277,18 @@
       "surface": "source",
       "tokens": [
         "XrBytecodeModule",
+        "XrVMRuntime"
+      ]
+    },
+    {
+      "disposition": "remove-with-atomic-target-plan-product-cutover",
+      "evidence_sha256": "cf396a7bda7b884b83e1554755100fe9cf72f5ad8e1ede581ce0785f5b616b71",
+      "family": "legacy-vm-handle-or-bytecode-type",
+      "hit_count": 35,
+      "path": "src/module/xmodule_factories.h",
+      "status": "transitional-owner",
+      "surface": "source",
+      "tokens": [
         "XrVMRuntime"
       ]
     },
@@ -5345,18 +5310,6 @@
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 3,
       "path": "src/module/xmodule_graph.h",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "XrVMRuntime"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "7826f06ab0489ac198019a7095b29b5ab46a39953c725fc19e24175b49cfa74f",
-      "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 35,
-      "path": "src/module/xmodule_loaders.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -9413,120 +9366,6 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "735787f6697ed762853c9e240dd4ebadc5591a353a37168ba9a96db8c3090554",
-      "family": "legacy-vm-module-loader",
-      "hit_count": 34,
-      "path": "src/module/xmodule.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xr_load_module_base64",
-        "xr_load_module_cluster",
-        "xr_load_module_codegen",
-        "xr_load_module_compress",
-        "xr_load_module_crypto",
-        "xr_load_module_csv",
-        "xr_load_module_datetime",
-        "xr_load_module_encoding",
-        "xr_load_module_http",
-        "xr_load_module_http2",
-        "xr_load_module_io",
-        "xr_load_module_log",
-        "xr_load_module_math",
-        "xr_load_module_mem",
-        "xr_load_module_net",
-        "xr_load_module_os",
-        "xr_load_module_parallel",
-        "xr_load_module_path",
-        "xr_load_module_prelude",
-        "xr_load_module_probe",
-        "xr_load_module_regex",
-        "xr_load_module_runtime",
-        "xr_load_module_simd",
-        "xr_load_module_strconv",
-        "xr_load_module_sync",
-        "xr_load_module_sys",
-        "xr_load_module_test_yield",
-        "xr_load_module_text",
-        "xr_load_module_time",
-        "xr_load_module_toml",
-        "xr_load_module_url",
-        "xr_load_module_ws",
-        "xr_load_module_xml",
-        "xr_load_module_yaml"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "3a7102f0676715206778b7802a46d43bc8a474c0ec2b2604143acffa39498bfa",
-      "family": "legacy-vm-module-loader",
-      "hit_count": 1,
-      "path": "src/module/xmodule.h",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xr_load_module_time"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "34e9f5bb8040bda297002312c44e4674c99253c5f979c17fbc0172299f37e4fd",
-      "family": "legacy-vm-module-loader",
-      "hit_count": 34,
-      "path": "src/module/xmodule_loaders.h",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xr_load_module_base64",
-        "xr_load_module_cluster",
-        "xr_load_module_codegen",
-        "xr_load_module_compress",
-        "xr_load_module_crypto",
-        "xr_load_module_csv",
-        "xr_load_module_datetime",
-        "xr_load_module_encoding",
-        "xr_load_module_http",
-        "xr_load_module_http2",
-        "xr_load_module_io",
-        "xr_load_module_log",
-        "xr_load_module_math",
-        "xr_load_module_mem",
-        "xr_load_module_net",
-        "xr_load_module_os",
-        "xr_load_module_parallel",
-        "xr_load_module_path",
-        "xr_load_module_prelude",
-        "xr_load_module_probe",
-        "xr_load_module_regex",
-        "xr_load_module_runtime",
-        "xr_load_module_simd",
-        "xr_load_module_strconv",
-        "xr_load_module_sync",
-        "xr_load_module_sys",
-        "xr_load_module_test_yield",
-        "xr_load_module_text",
-        "xr_load_module_time",
-        "xr_load_module_toml",
-        "xr_load_module_url",
-        "xr_load_module_ws",
-        "xr_load_module_xml",
-        "xr_load_module_yaml"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "3a62df159842dea0be0d49f1d297306490480a063eb5578554ed8757e2093caf",
-      "family": "legacy-vm-module-loader",
-      "hit_count": 1,
-      "path": "src/runtime/xisolate_internal.h",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xr_load_module_prelude"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
       "evidence_sha256": "9fef8afa887d18db3d30967c6b8805651682e7a42c210db92b79a095edcbb952",
       "family": "xrc-artifact",
       "hit_count": 3,
@@ -9606,6 +9445,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "0415d76c3465f48a26da71b9bf38532e21c11f317b37059d50ca00b3788852c6",
-  "total": 3808
+  "source_tree_fingerprint": "56cae849f0997f6b6e3fd6f443739dc5eb58b902e8da8104802ead7cbb5da301",
+  "total": 3734
 }

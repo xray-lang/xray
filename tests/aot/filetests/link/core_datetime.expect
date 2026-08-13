@@ -17,4 +17,4 @@ c_contains=xrt_method_1(
 c_contains=xrt_method_2(
 c_not_contains=xrt_datetime
 c_not_contains=XR_TAG_DATETIME
-c_not_contains=xr_load_module_datetime
+c_not_contains=xr_native_module_create_datetime

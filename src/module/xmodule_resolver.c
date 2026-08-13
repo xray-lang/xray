@@ -170,8 +170,8 @@ static void copy_module_id(XrModuleId *dst, const XrModuleId *src) {
 
 static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out_id,
                           char **err_buf) {
-    /* Check native loader registry */
-    if (r->config.native_loaders && xr_hashmap_has(r->config.native_loaders, name)) {
+    /* Check native factory registry. */
+    if (r->config.native_factories && xr_hashmap_has(r->config.native_factories, name)) {
         out_id->kind = XR_MOD_STDLIB;
         out_id->canonical = xr_strdup(name);
         out_id->source_path = NULL;

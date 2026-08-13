@@ -17,6 +17,6 @@ struct XrVMRuntime;
 struct XrModule;
 typedef struct XrCluster XrCluster;
 
-XR_FUNC struct XrModule *xr_load_module_cluster(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_native_module_create_cluster(struct XrVMRuntime *isolate);
 
 #endif

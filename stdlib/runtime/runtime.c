@@ -145,8 +145,8 @@ static XrValue runtime_info(XrVMRuntime *isolate, XrValue *args, int argc) {
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_RUNTIME
 
-XR_FUNC XrModule *xr_load_module_runtime(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_runtime: NULL isolate");
+XR_FUNC XrModule *xr_native_module_create_runtime(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_native_module_create_runtime: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "runtime");
     if (!module)

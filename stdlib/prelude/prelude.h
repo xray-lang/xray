@@ -12,7 +12,7 @@
  *   (Array, Map, Json, BigInt, ...) the parser should recognise without
  *   the user writing `import prelude`. The lexer treats every such name
  *   as a plain identifier; the parser's type-context branch consults the
- *   per-isolate prelude symbol table (populated by xr_load_module_prelude
+ *   per-isolate prelude symbol table (populated by xr_native_module_create_prelude
  *   during isolate init) to decide whether a name maps to a generic
  *   container, a singleton type, or a simple
  *   named-instance type.
@@ -76,7 +76,7 @@ typedef struct XrPreludeSymbols {
  * `import prelude` works as a no-op alias; auto-invoked from
  * xisolate_full.c::isolate_init_full() so users do not need it.
  */
-XR_FUNC struct XrModule *xr_load_module_prelude(XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_native_module_create_prelude(XrVMRuntime *isolate);
 
 /*
  * Accessor used by the frontend (parser type-context branch) to retrieve
@@ -98,7 +98,7 @@ XR_FUNC const XrPreludeTypeEntry *xr_prelude_lookup_type(const XrPreludeSymbols 
 /*
  * Eagerly register every native XrClass that prelude entries refer to:
  * Regex (regex), NetConn / NetListener (net). Called from inside
- * xr_load_module_prelude during isolate init, so user code can use remaining
+ * xr_native_module_create_prelude during isolate init, so user code can use remaining
  * runtime-owned prelude native types without importing each owner module.
  *
  * The cost of this design is that the four stdlib modules above are

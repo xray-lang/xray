@@ -23,6 +23,6 @@
 struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_runtime(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_native_module_create_runtime(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_RUNTIME_H

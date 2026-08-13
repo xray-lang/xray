@@ -179,7 +179,7 @@ struct XrVMRuntime {
     /* ========== Prelude type marker registry ==========
      * Pointer to the process-wide constant XrPreludeSymbols table built
      * by stdlib/prelude/prelude.c. Populated during isolate init by
-     * xr_load_module_prelude(). Read by the parser when resolving a
+     * xr_native_module_create_prelude(). Read by the parser when resolving a
      * type-context identifier that is neither a primitive keyword nor a
      * user-defined class name. Kept as `void *` so the core header has
      * no dependency on stdlib types; consumers cast via

@@ -33,8 +33,8 @@ static void sync_export_native_class(XrVMRuntime *isolate, XrModule *module, con
         xr_module_add_export(isolate, module, name, xr_value_from_class(cls));
 }
 
-XR_FUNC XrModule *xr_load_module_sync(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_sync: NULL isolate");
+XR_FUNC XrModule *xr_native_module_create_sync(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_native_module_create_sync: NULL isolate");
 
     /* Hybrid module: C exports runtime primitives, script layer exports the
      * ergonomic pure-Xray wrappers. The script is still required because sync's

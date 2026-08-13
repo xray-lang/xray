@@ -34,8 +34,8 @@ HOSTED_ABI_SCALAR_RESULTS = {"()", "bool", "int", "float"}
 def check_manifest(root: Path) -> list[str]:
     manifest = load_manifest(root)
     errors: list[str] = []
-    if manifest.raw.get("schema") != 1:
-        errors.append(f"{MANIFEST_PATH}: schema must be 1")
+    if manifest.raw.get("schema") != 2:
+        errors.append(f"{MANIFEST_PATH}: schema must be 2")
     if manifest.raw.get("governance", {}).get("export_authority") != (
         "boundary_manifest_semantic_source"
     ):
@@ -74,19 +74,21 @@ def check_manifest(root: Path) -> list[str]:
             errors.append(f"module {name}: invalid layer {layer!r}")
         if policy not in VALID_POLICIES:
             errors.append(f"module {name}: invalid policy {policy!r}")
-        for field in ("semantic_source", "loader", "perf_suite"):
+        for field in ("semantic_source", "factory_source", "perf_suite"):
             if not module.get(field):
                 errors.append(f"module {name}: missing {field}")
-        for field in ("semantic_source", "loader"):
+        for field in ("semantic_source", "factory_source"):
             value = module.get(field)
             if value and not (root / str(value)).is_file():
                 errors.append(f"module {name}: {field} does not exist: {value}")
-        expected_loader = source_registry.get(name)
-        declared_loader = str(module.get("loader_symbol") or Path(str(module.get("loader", ""))).stem)
-        if expected_loader and declared_loader != expected_loader:
+        expected_factory = source_registry.get(name)
+        declared_factory = str(
+            module.get("factory_symbol") or Path(str(module.get("factory_source", ""))).stem
+        )
+        if expected_factory and declared_factory != expected_factory:
             errors.append(
-                f"module {name}: loader {declared_loader!r} does not match registry symbol "
-                f"xr_load_module_{expected_loader}"
+                f"module {name}: factory {declared_factory!r} does not match registry symbol "
+                f"xr_native_module_create_{expected_factory}"
             )
     return errors
 
@@ -95,7 +97,7 @@ def check_builtin_distribution(root: Path) -> list[str]:
     """Keep the retained native-library modules inside the one stdlib boundary.
 
     ws left this set once its connection layer became pure Xray: it now has no
-    core.def binding block and, like http, carries only a script loader.
+    core.def binding block and, like http, carries only a script factory.
     """
     errors: list[str] = []
     expected = {"cluster", "http2", "compress", "crypto"}
@@ -113,7 +115,7 @@ def check_builtin_distribution(root: Path) -> list[str]:
         if not re.search(rf"^module\s+{re.escape(name)}\s*\{{", core_def, re.M):
             errors.append(f"built-in standard module {name}: binding block missing from core.def")
         if f'{{"{name}",' not in registry:
-            errors.append(f"built-in standard module {name}: bare-name loader registration missing")
+            errors.append(f"built-in standard module {name}: bare-name factory registration missing")
         entry = manifest.by_name.get(name, {})
         if entry.get("perf_suite") != f"stdlib/{name}":
             errors.append(f"built-in standard module {name}: perf_suite must be stdlib/{name}")
@@ -337,12 +339,12 @@ def check_semantic_owners(root: Path) -> list[str]:
             if stale:
                 errors.append(f"module {name}: public_native has stale symbols: {', '.join(stale)}")
         if manual:
-            loader_text = (root / str(module["loader"])).read_text(encoding="utf-8")
+            factory_text = (root / str(module["factory_source"])).read_text(encoding="utf-8")
             for symbol in sorted(manual):
                 leaf = symbol.rsplit(".", 1)[-1]
-                if f'"{leaf}"' not in loader_text:
+                if f'"{leaf}"' not in factory_text:
                     errors.append(
-                        f"module {name}: manual public native {symbol!r} is not registered by loader"
+                        f"module {name}: manual public native {symbol!r} is not registered by factory"
                     )
         private_sources = module.get("private_native_sources", ())
         if private_sources and not module.get("private_native_reason"):

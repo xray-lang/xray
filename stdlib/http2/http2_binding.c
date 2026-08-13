@@ -294,7 +294,7 @@ XrValue h2_request_typed(XrVMRuntime *X, XrValue *args, int argc) {
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_HTTP2
 
-XR_FUNC XrModule *xr_load_module_http2(XrVMRuntime *isolate) {
+XR_FUNC XrModule *xr_native_module_create_http2(XrVMRuntime *isolate) {
     XrModule *module = xr_module_create_native(isolate, "http2");
     if (!module)
         return NULL;

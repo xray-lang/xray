@@ -1,6 +1,7 @@
 # GeneratePayloadManifest.cmake - installed payload inventory for xray-installer.
 
-set(_xray_root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+get_filename_component(_xray_install_prefix "${CMAKE_INSTALL_PREFIX}" ABSOLUTE)
+set(_xray_root "$ENV{DESTDIR}${_xray_install_prefix}")
 set(_xray_manifest_dir "${_xray_root}/share/xray/install")
 set(_xray_manifest "${_xray_manifest_dir}/payload-manifest.json")
 file(MAKE_DIRECTORY "${_xray_manifest_dir}")
@@ -85,14 +86,13 @@ endforeach()
 
 file(WRITE "${_xray_manifest}"
 "{\n"
-"  \"schema\":1,\n"
+"  \"schema\":2,\n"
 "  \"product\":\"xray-lang\",\n"
 "  \"version\":\"@PROJECT_VERSION@\",\n"
 "  \"commit\":\"@XRAY_GIT_COMMIT@\",\n"
 "  \"dirty\":@XRAY_GIT_DIRTY_JSON@,\n"
 "  \"target\":\"@XRAY_RELEASE_TARGET@\",\n"
 "  \"buildProfile\":\"@XRAY_BUILD_PROFILE@\",\n"
-"  \"moduleAbiVersion\":@XRAY_MODULE_ABI_VERSION@,\n"
 "  \"toolchainProtocol\":@XRAY_TOOLCHAIN_PROTOCOL@,\n"
 "  \"preferredZig\":\"@XRAY_PREFERRED_ZIG_VERSION@\",\n"
 "  \"requiredZig\":\"@XRAY_REQUIRED_ZIG_RANGE@\",\n"

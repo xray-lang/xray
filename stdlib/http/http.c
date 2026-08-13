@@ -17,8 +17,8 @@
 #include "../../src/runtime/xisolate_api.h"
 #include "http.h"
 
-XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_http: NULL isolate");
+XR_FUNC XrModule *xr_native_module_create_http(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_native_module_create_http: NULL isolate");
     XrModule *module = xr_module_create_native(isolate, "http");
     if (!module)
         return NULL;

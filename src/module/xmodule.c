@@ -33,7 +33,6 @@
 #include <string.h>
 #include <limits.h>
 #include "../os/os_fs.h"
-#include "../os/os_dylib.h"
 #include "../os/os_proc.h"
 
 /* ========== Forward Declarations ========== */
@@ -471,7 +470,7 @@ static XrModuleRegistry *create_registry(void) {
         return NULL;
 
     memset(registry, 0, sizeof(*registry));
-    registry->native_loaders = xr_hashmap_new();
+    registry->native_factories = xr_hashmap_new();
     registry->loaded_modules = xr_hashmap_new();
     registry->stdlib_path = resolve_stdlib_root();
 
@@ -485,8 +484,8 @@ static void destroy_registry(XrModuleRegistry *registry) {
     if (!registry)
         return;
 
-    if (registry->native_loaders) {
-        xr_hashmap_free(registry->native_loaders);
+    if (registry->native_factories) {
+        xr_hashmap_free(registry->native_factories);
     }
     if (registry->loaded_modules) {
         // Free module-owned payloads before destroying the non-owning hashmap.
@@ -582,11 +581,12 @@ void xr_module_system_free(XrVMRuntime *isolate) {
 /* ========== Module Registration ========== */
 
 /*
-** Register Native module loader
+** Register a native module factory
 */
-void xr_module_register_native(XrVMRuntime *isolate, const char *name, NativeModuleLoader loader) {
-    if (!isolate || !name || !loader) {
-        xr_log_warning("module", "invalid arguments to register_native");
+void xr_module_register_native_factory(XrVMRuntime *isolate, const char *name,
+                                       XrNativeModuleFactory factory) {
+    if (!isolate || !name || !factory) {
+        xr_log_warning("module", "invalid arguments to register native factory");
         return;
     }
 
@@ -596,9 +596,8 @@ void xr_module_register_native(XrVMRuntime *isolate, const char *name, NativeMod
         return;
     }
 
-    // Store loader function pointer
-    if (!xr_hashmap_set(registry->native_loaders, name, (void *) loader)) {
-        xr_log_warning("module", "out of memory registering native loader '%s'", name);
+    if (!xr_hashmap_set(registry->native_factories, name, (void *) factory)) {
+        xr_log_warning("module", "out of memory registering native factory '%s'", name);
     }
 }
 
@@ -606,14 +605,14 @@ void xr_module_register_native(XrVMRuntime *isolate, const char *name, NativeMod
 
 /*
  * Ensure the registry has a resolver instance.  Created lazily because
- * native_loaders are populated after create_registry() returns.
+ * native_factories are populated after create_registry() returns.
  */
 static XrModuleResolver *ensure_resolver(XrModuleRegistry *registry) {
     if (registry->resolver)
         return registry->resolver;
 
     XrModuleResolverConfig cfg = {
-        .native_loaders = registry->native_loaders,
+        .native_factories = registry->native_factories,
         .stdlib_path = registry->stdlib_path,
         .lockfile = NULL,
     };
@@ -971,7 +970,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
 ** Load Native module (supports hybrid loading)
 **
 ** Flow:
-** 1. Load C module (call registered loader)
+** 1. Create the C module through its registered factory
 ** 2. Find and execute same-named xray script extension (stdlib/<name>/<name>.xr)
 ** 3. Script extension can access C module exports and add/override exports
 */
@@ -980,50 +979,12 @@ static XrModule *load_native_module(XrVMRuntime *isolate, const char *module_nam
     if (!registry)
         return NULL;
 
-    // Find loader from static registry
-    void *loader_ptr = xr_hashmap_get(registry->native_loaders, module_name);
+    XrNativeModuleFactory factory =
+        (XrNativeModuleFactory) xr_hashmap_get(registry->native_factories, module_name);
+    if (!factory)
+        return NULL;
 
-    if (!loader_ptr) {
-        // Try dlopen from installed package path
-        char *dylib_path = xr_module_resolve_path(isolate, module_name);
-        if (!dylib_path)
-            return NULL;
-
-        // Only attempt dlopen for shared libraries
-        const char *ext = strrchr(dylib_path, '.');
-        if (!ext || (strcmp(ext, ".dylib") != 0 && strcmp(ext, ".so") != 0)) {
-            xr_free(dylib_path);
-            return NULL;  // Not a native module
-        }
-
-        XrDylib *handle = xr_dylib_open(dylib_path);
-        if (!handle) {
-            XR_DBG_MODULE("xr_dylib_open failed for '%s': %s", dylib_path, xr_dylib_last_error());
-            xr_free(dylib_path);
-            return NULL;
-        }
-        xr_free(dylib_path);
-
-        // Extract short name from module_name (owner/name -> name)
-        const char *short_name = strrchr(module_name, '/');
-        short_name = short_name ? short_name + 1 : module_name;
-
-        // Look for xr_load_module_<name>(XrVMRuntime*) symbol
-        char sym[128];
-        snprintf(sym, sizeof(sym), "xr_load_module_%s", short_name);
-        NativeModuleLoader dyn_loader = (NativeModuleLoader) xr_dylib_sym(handle, sym);
-        if (!dyn_loader) {
-            XR_DBG_MODULE("symbol '%s' not found in dylib", sym);
-            xr_dylib_close(handle);
-            return NULL;
-        }
-        loader_ptr = (void *) dyn_loader;
-    }
-
-    NativeModuleLoader loader = (NativeModuleLoader) loader_ptr;
-
-    // 1. Call C loader
-    XrModule *module = loader(isolate);
+    XrModule *module = factory(isolate);
 
     if (!module) {
         xr_log_warning("module", "failed to load native module '%s'", module_name);
@@ -1176,135 +1137,6 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
 
 /* ========== Main Interface Implementation ========== */
 
-/* ========== Native Third-Party Package Loader ========== */
-
-// ABI version must match between runtime and compiled native packages
-#ifndef XRAY_MODULE_ABI_VERSION
-#define XRAY_MODULE_ABI_VERSION 1
-#endif
-
-/*
-** Try to load a native third-party package via dlopen.
-** Expects module_name in "owner/name" format (e.g. "xray/sqlite").
-** Returns loaded XrModule* or NULL if not a native package.
-*/
-static XrModule *try_load_native_package(XrVMRuntime *isolate, const char *module_name) {
-    if (!isolate || !module_name)
-        return NULL;
-
-    // 1. Parse owner/name (must be exactly "owner/name", no extra slashes)
-    const char *slash = strchr(module_name, '/');
-    if (!slash || slash == module_name)
-        return NULL;
-    if (strchr(slash + 1, '/'))
-        return NULL;  // reject "a/b/c"
-    if (module_name[0] == '.' || module_name[0] == '/')
-        return NULL;
-
-    char owner[64], name[64];
-    size_t owner_len = (size_t) (slash - module_name);
-    size_t name_len = strlen(slash + 1);
-    if (owner_len >= sizeof(owner) || name_len >= sizeof(name) || name_len == 0)
-        return NULL;
-    memcpy(owner, module_name, owner_len);
-    owner[owner_len] = '\0';
-    memcpy(name, slash + 1, name_len);
-    name[name_len] = '\0';
-
-    // 2. Find package directory
-    const char *home = getenv("HOME");
-    if (!home)
-        return NULL;
-
-    char pkg_dir[XR_PATH_MAX];
-    snprintf(pkg_dir, sizeof(pkg_dir), "%s/.xray/packages/%s/%s/latest", home, owner, name);
-
-    // 3. Find native library (try platform-preferred suffix first)
-    char lib_path[XR_PATH_MAX];
-    static const char *suffixes[] = {
-#ifdef XR_OS_MACOS
-        ".dylib", ".so"
-#else
-        ".so", ".dylib"
-#endif
-    };
-    bool found = false;
-    for (int i = 0; i < 2 && !found; i++) {
-        snprintf(lib_path, sizeof(lib_path), "%s/lib/libxray_%s%s", pkg_dir, name, suffixes[i]);
-        if (xr_fs_exists(lib_path))
-            found = true;
-    }
-    if (!found)
-        return NULL;
-
-    // 4. Open the shared library
-    XrDylib *handle = xr_dylib_open(lib_path);
-    if (!handle) {
-        xr_log_warning("module", "xr_dylib_open failed for '%s': %s", lib_path,
-                       xr_dylib_last_error());
-        return NULL;
-    }
-
-    // 5. ABI version check
-    char abi_sym[128];
-    snprintf(abi_sym, sizeof(abi_sym), "xr_module_abi_version_%s", name);
-    int *abi_ver = (int *) xr_dylib_sym(handle, abi_sym);
-    if (!abi_ver || *abi_ver != XRAY_MODULE_ABI_VERSION) {
-        xr_log_warning("module", "ABI mismatch for '%s': package=%d, runtime=%d", module_name,
-                       abi_ver ? *abi_ver : -1, XRAY_MODULE_ABI_VERSION);
-        xr_dylib_close(handle);
-        return NULL;
-    }
-
-    // 6. Find entry point symbol
-    char sym_name[128];
-    snprintf(sym_name, sizeof(sym_name), "xr_load_module_%s", name);
-
-    NativeModuleLoader loader = (NativeModuleLoader) xr_dylib_sym(handle, sym_name);
-    if (!loader) {
-        xr_log_warning("module", "symbol '%s' not found in '%s'", sym_name, lib_path);
-        xr_dylib_close(handle);
-        return NULL;
-    }
-
-    // 7. Call loader — creates XrModule and registers exports
-    XrModule *module = loader(isolate);
-    if (!module) {
-        xr_dylib_close(handle);
-        return NULL;
-    }
-
-    // 8. Store the library handle. Symbols remain in use for the
-    // lifetime of the runtime, so we deliberately never close it
-    // on the success path; no native_handle_destroy callback is set
-    // for package dylib handles.
-    module->native_handle = (void *) handle;
-
-    // 9. Cache and finalize. An uncached module breaks identity for later
-    // imports (the loader would run again), so OOM fails the load.
-    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
-    XR_DCHECK(registry != NULL, "try_load_native_package: NULL registry");
-    if (!xr_module_begin_initialization(module)) {
-        xr_log_warning("module", "native package '%s' entered an invalid initialization state",
-                       module_name);
-        return NULL;
-    }
-    if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
-        xr_log_warning("module", "out of memory caching native package '%s'", module_name);
-        xr_module_fail(module);
-        return NULL;
-    }
-    if (!xr_module_publish(module)) {
-        xr_hashmap_delete(registry->loaded_modules, module_name);
-        xr_module_fail(module);
-        return NULL;
-    }
-
-    xr_log_notice("module", "loaded native package '%s' from '%s'", module_name, lib_path);
-
-    return module;
-}
-
 /*
 ** Import module
 **
@@ -1353,12 +1185,6 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
     // 2. Try to load Native module (standard library C layer)
     // Note: load_native_module already adds to cache internally
     module = load_native_module(isolate, module_name);
-    if (module) {
-        return xr_value_from_module(module);
-    }
-
-    // 2b. Try to load third-party native package (owner/name format via dlopen)
-    module = try_load_native_package(isolate, module_name);
     if (module) {
         return xr_value_from_module(module);
     }
@@ -1512,103 +1338,103 @@ bool xr_module_is_export_const(XrVMRuntime *isolate, XrModule *module, const cha
 
 /* ========== Module System Initialization (Standard Library Registration) ========== */
 
-#include "xmodule_loaders.h"
+#include "xmodule_factories.h"
 
 typedef struct {
     const char *name;
-    NativeModuleLoader loader;
+    XrNativeModuleFactory factory;
 } StdlibEntry;
 
 static const StdlibEntry stdlib_core[] = {
     /* prelude is auto-loaded during isolate init by xisolate_full.c so users
      * never need `import prelude`. Listed here so an explicit import is a
      * harmless no-op that resolves through the same registry. */
-    {"prelude", xr_load_module_prelude},
-    {"time", xr_load_module_time},
-    {"math", xr_load_module_math},
-    {"path", xr_load_module_path},
-    {"base64", xr_load_module_base64},
-    {"regex", xr_load_module_regex},
-    {"mem", xr_load_module_mem},
-    {"runtime", xr_load_module_runtime},
-    {"sync", xr_load_module_sync},
-    {"parallel", xr_load_module_parallel},
-    {"simd", xr_load_module_simd},
-    {"codegen", xr_load_module_codegen},
-    {"sys", xr_load_module_sys},
-    {"url", xr_load_module_url},
-    {"datetime", xr_load_module_datetime},
-    {"log", xr_load_module_log},
-    {"encoding", xr_load_module_encoding},
-    {"text", xr_load_module_text},
-    {"strconv", xr_load_module_strconv},
+    {"prelude", xr_native_module_create_prelude},
+    {"time", xr_native_module_create_time},
+    {"math", xr_native_module_create_math},
+    {"path", xr_native_module_create_path},
+    {"base64", xr_native_module_create_base64},
+    {"regex", xr_native_module_create_regex},
+    {"mem", xr_native_module_create_mem},
+    {"runtime", xr_native_module_create_runtime},
+    {"sync", xr_native_module_create_sync},
+    {"parallel", xr_native_module_create_parallel},
+    {"simd", xr_native_module_create_simd},
+    {"codegen", xr_native_module_create_codegen},
+    {"sys", xr_native_module_create_sys},
+    {"url", xr_native_module_create_url},
+    {"datetime", xr_native_module_create_datetime},
+    {"log", xr_native_module_create_log},
+    {"encoding", xr_native_module_create_encoding},
+    {"text", xr_native_module_create_text},
+    {"strconv", xr_native_module_create_strconv},
     /* Pure-Xray stdlib capability probe (task 148 phase 0 item 5): pins the
      * export shapes migrated modules rely on. Tiny and permanent. */
-    {"_probe", xr_load_module_probe},
+    {"_probe", xr_native_module_create_probe},
 };
 
 #if defined(XR_HAS_FILESYSTEM)
 static const StdlibEntry stdlib_filesystem[] = {
-    {"io", xr_load_module_io},
-    {"os", xr_load_module_os},
+    {"io", xr_native_module_create_io},
+    {"os", xr_native_module_create_os},
 };
 #endif
 
 #if defined(XR_HAS_TEST_MODULES)
 static const StdlibEntry stdlib_test_modules[] = {
-    {"test_yield", xr_load_module_test_yield},
+    {"test_yield", xr_native_module_create_test_yield},
 };
 #endif
 
 #if defined(XR_HAS_NETWORK)
 static const StdlibEntry stdlib_network[] = {
-    {"net", xr_load_module_net},
-    {"http", xr_load_module_http},
+    {"net", xr_native_module_create_net},
+    {"http", xr_native_module_create_http},
 };
 #endif
 
 #if defined(XR_HAS_WS)
 static const StdlibEntry stdlib_ws[] = {
-    {"ws", xr_load_module_ws},
+    {"ws", xr_native_module_create_ws},
 };
 #endif
 
 #if defined(XR_HAS_HTTP2)
 static const StdlibEntry stdlib_http2[] = {
-    {"http2", xr_load_module_http2},
+    {"http2", xr_native_module_create_http2},
 };
 #endif
 
 #if defined(XR_HAS_CRYPTO)
 static const StdlibEntry stdlib_crypto[] = {
-    {"crypto", xr_load_module_crypto},
+    {"crypto", xr_native_module_create_crypto},
 };
 #endif
 
 #if defined(XR_HAS_COMPRESS)
 static const StdlibEntry stdlib_compress[] = {
-    {"compress", xr_load_module_compress},
+    {"compress", xr_native_module_create_compress},
 };
 #endif
 
 #if defined(XR_HAS_CLUSTER)
 static const StdlibEntry stdlib_cluster[] = {
-    {"cluster", xr_load_module_cluster},
+    {"cluster", xr_native_module_create_cluster},
 };
 #endif
 
 #if defined(XR_HAS_DATA_FORMATS)
 static const StdlibEntry stdlib_data_formats[] = {
-    {"csv", xr_load_module_csv},
-    {"toml", xr_load_module_toml},
-    {"yaml", xr_load_module_yaml},
-    {"xml", xr_load_module_xml},
+    {"csv", xr_native_module_create_csv},
+    {"toml", xr_native_module_create_toml},
+    {"yaml", xr_native_module_create_yaml},
+    {"xml", xr_native_module_create_xml},
 };
 #endif
 
 #define REGISTER_TABLE(table)                                                                      \
     for (int i = 0; i < (int) (sizeof(table) / sizeof(table[0])); i++)                             \
-    xr_module_register_native(isolate, table[i].name, table[i].loader)
+    xr_module_register_native_factory(isolate, table[i].name, table[i].factory)
 
 /*
 ** Register all standard library modules

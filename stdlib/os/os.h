@@ -59,6 +59,6 @@ struct XrModule;
  *   sep                  - Path separator ("/" or "\\")
  *   eol                  - Line ending ("\n" or "\r\n")
  */
-XR_FUNC struct XrModule *xr_load_module_os(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_native_module_create_os(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_OS_H

@@ -2417,7 +2417,7 @@ void xr_netlistener_register_class(XrVMRuntime *isolate) {
     xr_stdlib_vm_register_net_listener_class_generated(isolate);
 }
 
-XrModule *xr_load_module_net(XrVMRuntime *isolate) {
+XrModule *xr_native_module_create_net(XrVMRuntime *isolate) {
     net_platform_init();
     XrModule *mod = xr_module_create_native(isolate, "net");
 

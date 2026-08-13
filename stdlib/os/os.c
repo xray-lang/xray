@@ -1153,8 +1153,8 @@ static const char *get_eol(void) {
 /* Private syscall declarations and VM binding names have one authority:
  * stdlib/defs/core.def. The script layer publishes the public API. */
 
-XR_FUNC XrModule *xr_load_module_os(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_os: NULL isolate");
+XR_FUNC XrModule *xr_native_module_create_os(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_native_module_create_os: NULL isolate");
 
     // 1. Create native module
     XrModule *mod = xr_module_create_native(isolate, "os");

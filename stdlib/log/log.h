@@ -16,6 +16,6 @@
 struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_log(XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_native_module_create_log(XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_LOG_H

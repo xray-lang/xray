@@ -78,15 +78,19 @@ def verify(root: Path, binary: Path | None) -> None:
         "dirty": bool,
         "target": str,
         "buildProfile": str,
-        "moduleAbiVersion": int,
         "toolchainProtocol": int,
         "preferredZig": str,
         "requiredZig": str,
     }
+    expected_fields = set(expected_scalars) | {"components", "files"}
+    if set(manifest) != expected_fields:
+        missing = sorted(expected_fields - set(manifest))
+        extra = sorted(set(manifest) - expected_fields)
+        fail(f"payload manifest fields are not exact: missing={missing} extra={extra}")
     for key, expected_type in expected_scalars.items():
         if type(manifest.get(key)) is not expected_type:
             fail(f"manifest field {key!r} must be {expected_type.__name__}")
-    if manifest["schema"] != 1 or manifest["product"] != "xray-lang":
+    if manifest["schema"] != 2 or manifest["product"] != "xray-lang":
         fail("unsupported payload manifest identity")
     if not re.fullmatch(r"[0-9a-f]{40}", manifest["commit"]):
         fail("payload commit must be a lowercase 40-hex Git identity")

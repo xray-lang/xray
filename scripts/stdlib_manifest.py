@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared loader and source inventory for stdlib governance manifests."""
+"""Shared factory and source inventory for stdlib governance manifests."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ VALID_LAYERS = {"L0", "L1", "L2", "L3", "L4", "L5"}
 VALID_POLICIES = {"xray_semantic", "native_primitive", "native_library"}
 REGISTRY_ENTRY_RE = re.compile(
     r'\{\s*"(?P<name>[A-Za-z_][A-Za-z0-9_]*)"\s*,\s*'
-    r'xr_load_module_(?P<loader>[A-Za-z_][A-Za-z0-9_]*)\s*\}'
+    r'xr_native_module_create_(?P<factory>[A-Za-z_][A-Za-z0-9_]*)\s*\}'
 )
 
 
@@ -73,7 +73,7 @@ def load_manifest(root: Path) -> BoundaryManifest:
 def registry_modules(root: Path) -> dict[str, str]:
     path = root / "src/module/xmodule.c"
     text = path.read_text(encoding="utf-8")
-    return {match.group("name"): match.group("loader") for match in REGISTRY_ENTRY_RE.finditer(text)}
+    return {match.group("name"): match.group("factory") for match in REGISTRY_ENTRY_RE.finditer(text)}
 
 
 def load_stdlibgen(root: Path):

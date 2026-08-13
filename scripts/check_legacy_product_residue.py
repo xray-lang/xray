@@ -26,6 +26,8 @@ CANDIDATE_RE = re.compile(
     r"(?P<public_vm_type>\bXr(?:VMRuntime|VMConfig|VMBackendType|BytecodeModule|BytecodeBundle)\b)|"
     r"(?P<internal_vm_alias>\bxr_vm_[A-Za-z0-9_]+\b)|"
     r"(?P<module_loader>\bxr_load_module_[A-Za-z0-9_]+\b)|"
+    r"(?P<module_sdk>\b(?:xray_module_sdk\.h|XRAY_MODULE_(?:ABI_VERSION|ENTRY)|"
+    r"xr_module_abi_version_[A-Za-z0-9_]+|XrModuleAPI)\b)|"
     r"(?P<bytecode_owner>\bxr_(?:bytecode[A-Za-z0-9_]*|compile_(?:stdlib_)?to_file|"
     r"eval_bytecode|run_bytecode_file|detect_output_format|output_c_source)\b)|"
     r"(?P<proto_loader_helper>\bxr_proto_[A-Za-z0-9_]+\b)|"
@@ -94,6 +96,7 @@ def family_for(group: str, token: str) -> str:
         "public_vm_type": "legacy-vm-handle-or-bytecode-type",
         "internal_vm_alias": "legacy-vm-internal-api-or-alias",
         "module_loader": "legacy-vm-module-loader",
+        "module_sdk": "legacy-native-module-sdk",
         "bytecode_owner": "legacy-loader-writer-or-converter",
         "proto_loader_helper": "legacy-loader-proto-helper",
         "bundle": "legacy-bundle-converter",
@@ -366,6 +369,16 @@ def self_test() -> int:
         )
         multicore_init_api_drifted, _ = check(root, collect(root))
         retired_multicore_init_api.unlink()
+        retired_module_sdk = root / "include/xray_module_sdk.h"
+        retired_module_sdk.write_text(
+            "#define XRAY_MODULE_ABI_VERSION 1\n"
+            "#define XRAY_MODULE_ENTRY(name) xr_load_module_##name\n"
+            "typedef struct XrModuleAPI XrModuleAPI;\n"
+            "int xr_module_abi_version_demo = XRAY_MODULE_ABI_VERSION;\n",
+            encoding="utf-8",
+        )
+        module_sdk_drifted, _ = check(root, collect(root))
+        retired_module_sdk.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -387,6 +400,7 @@ def self_test() -> int:
             or dofile_api_drifted
             or dostring_api_drifted
             or multicore_init_api_drifted
+            or module_sdk_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")

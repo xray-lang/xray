@@ -45,7 +45,7 @@ Status = report.Status
 # alternative tolerates an optional leading underscore.
 FORBIDDEN_SYMBOL_RE = re.compile(
     r"(^|[^A-Za-z0-9_])_?(xray_vm_|xray_isolate_|xr_vm_|xr_parse|xr_compile"
-    r"|xanalyzer_|xr_load_module_)"
+    r"|xanalyzer_|xr_native_module_create_)"
 )
 
 # Script builtins that must not be eagerly initialized in a minimal runtime.

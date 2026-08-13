@@ -154,7 +154,7 @@ typedef int ssize_t;
 
 // Force a symbol into the dynamic symbol table at definition site.
 // XRAY_API is for declarations; XR_EXPORT_SYM is the standalone form
-// used by macros that emit a definition (e.g. XRAY_MODULE_ENTRY).
+// used by macros that emit an exported definition.
 #if defined(XR_OS_WINDOWS) || defined(__CYGWIN__)
 #define XR_EXPORT_SYM __declspec(dllexport)
 #elif defined(XR_GCC_COMPAT)

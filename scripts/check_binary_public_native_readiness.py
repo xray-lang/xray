@@ -115,11 +115,11 @@ def check_boundary(
             if entry.get("perf_suite") != f"stdlib/{module}":
                 failures.append("perf_suite must use the stdlib namespace")
             semantic_source = root / str(entry.get("semantic_source", ""))
-            loader = root / str(entry.get("loader", ""))
+            factory = root / str(entry.get("factory_source", ""))
             if not semantic_source.is_file():
                 failures.append("semantic_source is missing")
-            if not loader.is_file():
-                failures.append("loader is missing")
+            if not factory.is_file():
+                failures.append("factory source is missing")
         results.append(result("BUILTIN_STDLIB_MODULE", module, failures))
 
     for module, expected in L2_PUBLIC_NATIVE.items():

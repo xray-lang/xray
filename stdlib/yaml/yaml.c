@@ -21,8 +21,8 @@
 #include "../../src/module/xmodule.h"
 #include "../../src/runtime/xisolate_api.h"
 
-XR_FUNC XrModule *xr_load_module_yaml(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_yaml: NULL isolate");
+XR_FUNC XrModule *xr_native_module_create_yaml(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_native_module_create_yaml: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "yaml");
     if (!module)

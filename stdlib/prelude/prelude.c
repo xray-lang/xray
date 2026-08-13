@@ -272,8 +272,8 @@ void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
 
 /* ========== Module loader ========== */
 
-XrModule *xr_load_module_prelude(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_prelude: NULL isolate");
+XrModule *xr_native_module_create_prelude(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_native_module_create_prelude: NULL isolate");
 
     /* Wire isolate to the (process-wide const) symbol table. Idempotent
      * because the right-hand side is constant and the field is just a

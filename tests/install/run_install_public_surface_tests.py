@@ -71,11 +71,18 @@ def is_executable(path: Path) -> bool:
     return path.is_file() and os.access(path, os.X_OK)
 
 
-def install(build: Path, prefix: Path, component: str | None = None) -> subprocess.CompletedProcess[str]:
-    command = ["cmake", "--install", str(build), "--prefix", str(prefix)]
+def install(
+    build: Path,
+    prefix: Path,
+    component: str | None = None,
+    *,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    prefix_argument = os.path.relpath(prefix, cwd) if cwd is not None else str(prefix)
+    command = ["cmake", "--install", str(build), "--prefix", prefix_argument]
     if component:
         command.extend(["--component", component])
-    return run(command)
+    return run(command, cwd=cwd)
 
 
 def main() -> int:
@@ -176,7 +183,10 @@ def main() -> int:
             c_compile.stdout,
         )
 
-        full_install = install(build, full)
+        # Exercise relocatable installs with a relative prefix from a directory
+        # other than the source or build tree. The manifest generator must
+        # inventory the same resolved prefix that CMake installs into.
+        full_install = install(build, full, cwd=work)
         gate.record(full_install.returncode == 0, "cmake install", full_install.stdout[-4000:])
         full_xray = full / "bin" / executable_name
         gate.record(is_executable(full_xray), "installed xray executable")
@@ -202,8 +212,6 @@ def main() -> int:
                     "installed tree excludes the legacy VM public header")
         gate.record(not (full / "include/xray/xray.h").exists(),
                     "installed tree excludes the legacy VM umbrella header")
-        gate.record(not (full / "include/xray/xray_module_sdk.h").exists(),
-                    "installed tree excludes the legacy native-module SDK header")
         gate.record(not (full / "lib/xray/sdk/src/runtime/xisolate_api.h").exists(),
                     "installed AOT SDK excludes unrelated isolate internals")
         gate.record(not (full / "lib/xray/sdk/src/runtime/value/xopcode_def.h").exists(),

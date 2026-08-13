@@ -22,8 +22,8 @@
 #include "../../src/module/xmodule.h"
 #include "../../src/runtime/xisolate_api.h"
 
-XR_FUNC XrModule *xr_load_module_csv(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_csv: NULL isolate");
+XR_FUNC XrModule *xr_native_module_create_csv(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_native_module_create_csv: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "csv");
     if (!module)

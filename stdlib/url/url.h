@@ -16,6 +16,6 @@
 struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_url(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_native_module_create_url(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_URL_H

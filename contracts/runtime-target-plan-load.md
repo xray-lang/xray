@@ -167,9 +167,11 @@ roots, or general module activation.
     the published tree and reject missing, additional, or digest-mismatched
     SDK files. In particular, the old VM umbrella/API, native-module SDK,
     opcode definitions, isolate internals, and proto container codec are not
-    installed aliases or compatibility surfaces.
+    installed aliases or compatibility surfaces. Payload manifest schema 2
+    carries no legacy bytecode or native-module ABI version fields; schema 1
+    is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt 2e0c46e9e146e7585519f156666bc742cea4d6d713e208e6a246ffadbb3d1cf3
+anchor-sha256: CMakeLists.txt 58845c423da645e753e7d6ede4b650b29779fcab718515ca79728e4f864238c1
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
@@ -195,8 +197,8 @@ anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd5
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
 anchor-sha256: src/runtime/xr_target_plan_load.c f48ff435aedf73dc30588af42bb6bf288282feb10a81762ad4ede9375b06d7c8
 anchor-sha256: src/app/cli/xcmd_run.c 8004ddc251024b92ee9def57e0b64ff9d9020f67e33b03c4491e0d5641bbffa0
-anchor-sha256: contracts/target-machine/legacy-product-residue.json dd38d78bb0b07c313ab1c60b5b6e9007f83ee3c22199e385ae2171298b320a02
-anchor-sha256: scripts/check_legacy_product_residue.py 567a4cd4baa5cbb91965e314822ce571a612ef6cf101980c078908a7d8ef406e
+anchor-sha256: contracts/target-machine/legacy-product-residue.json 69e9a81fecc78753aba832098c2a6814049dca5ea166b6dcc4073c8e35438992
+anchor-sha256: scripts/check_legacy_product_residue.py 8c0830644c5e2e6f797e7a160584d0400787b0c53f1dab2b4a83c87ed2df21ba
 anchor-sha256: tests/unit/plan/test_target_plan.c a48a69e60a26a1bbab90573841d5a47f2ea3a3d2aceaf7f36f5c11d2f4b9265c
 anchor-sha256: tests/unit/plan/test_xtp_format.c ab7a3766a721d1aa2e6fc2ca67031e77ad1f7b44f974d5e8b532067f58705801
 anchor-sha256: tests/unit/CMakeLists.txt 752aeacf0d91a025450c8285ad44dbf0f94077b77360f0519761ec9726ad3e3c

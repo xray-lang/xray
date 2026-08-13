@@ -73,7 +73,7 @@ static void make_importer(char *buf, size_t bufsz, const char *rel) {
 /* ========== Lifecycle Tests ========== */
 
 TEST(resolver_new_free) {
-    XrModuleResolverConfig cfg = {.native_loaders = NULL, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {.native_factories = NULL, .stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
     ASSERT_NOT_NULL(r);
     xr_module_resolver_free(r);
@@ -82,11 +82,12 @@ TEST(resolver_new_free) {
 /* ========== Stdlib Resolution Tests ========== */
 
 TEST(resolve_bare_stdlib_known) {
-    XrHashMap *loaders = xr_hashmap_new();
-    xr_hashmap_set(loaders, "time", (void *) 1);
-    xr_hashmap_set(loaders, "math", (void *) 1);
+    XrHashMap *factories = xr_hashmap_new();
+    xr_hashmap_set(factories, "time", (void *) 1);
+    xr_hashmap_set(factories, "math", (void *) 1);
 
-    XrModuleResolverConfig cfg = {.native_loaders = loaders, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {
+        .native_factories = factories, .stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
 
     XrModuleId mid;
@@ -106,14 +107,15 @@ TEST(resolve_bare_stdlib_known) {
     xr_module_id_cleanup(&mid);
 
     xr_module_resolver_free(r);
-    xr_hashmap_free(loaders);
+    xr_hashmap_free(factories);
 }
 
 TEST(resolve_bare_stdlib_unknown) {
-    XrHashMap *loaders = xr_hashmap_new();
-    xr_hashmap_set(loaders, "time", (void *) 1);
+    XrHashMap *factories = xr_hashmap_new();
+    xr_hashmap_set(factories, "time", (void *) 1);
 
-    XrModuleResolverConfig cfg = {.native_loaders = loaders, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {
+        .native_factories = factories, .stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
 
     XrModuleId mid;
@@ -124,7 +126,7 @@ TEST(resolve_bare_stdlib_unknown) {
     xr_free(err);
 
     xr_module_resolver_free(r);
-    xr_hashmap_free(loaders);
+    xr_hashmap_free(factories);
 }
 
 /* ========== Relative File Resolution Tests ========== */
@@ -134,7 +136,7 @@ TEST(resolve_relative_file) {
     create_file("src/main.xr", "// entry");
     create_file("src/utils.xr", "// utils");
 
-    XrModuleResolverConfig cfg = {.native_loaders = NULL, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {.native_factories = NULL, .stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
 
     char importer[1024];
@@ -160,7 +162,7 @@ TEST(resolve_relative_dir_index) {
     create_file("src/main.xr", "// entry");
     create_file("src/models/index.xr", "// models index");
 
-    XrModuleResolverConfig cfg = {.native_loaders = NULL, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {.native_factories = NULL, .stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
 
     char importer[1024];
@@ -184,7 +186,7 @@ TEST(resolve_relative_not_found) {
     setup_tmpdir();
     create_file("src/main.xr", "// entry");
 
-    XrModuleResolverConfig cfg = {.native_loaders = NULL, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {.native_factories = NULL, .stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
 
     char importer[1024];
@@ -206,7 +208,7 @@ TEST(resolve_parent_relative) {
     create_file("lib/helper.xr", "// helper");
     create_file("src/deep/nested.xr", "// nested");
 
-    XrModuleResolverConfig cfg = {.native_loaders = NULL, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {.native_factories = NULL, .stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
 
     char importer[1024];
@@ -232,7 +234,7 @@ TEST(resolve_caches_results) {
     create_file("src/main.xr", "// entry");
     create_file("src/utils.xr", "// utils");
 
-    XrModuleResolverConfig cfg = {.native_loaders = NULL, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {.native_factories = NULL, .stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
 
     char importer[1024];
@@ -278,7 +280,7 @@ TEST(resolve_single_segment_is_not_project_relative) {
     create_file("src/main.xr", "// entry");
     create_file("src/config.xr", "// config");
 
-    XrModuleResolverConfig cfg = {.native_loaders = NULL, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {.native_factories = NULL, .stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
 
     char importer[1024];

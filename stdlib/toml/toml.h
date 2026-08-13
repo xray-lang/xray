@@ -20,6 +20,6 @@
 struct XrModule;
 struct XrVMRuntime;
 
-XR_FUNC struct XrModule *xr_load_module_toml(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_native_module_create_toml(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_TOML_H

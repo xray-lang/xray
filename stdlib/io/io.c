@@ -1338,8 +1338,8 @@ static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_IO
 
-XR_FUNC XrModule *xr_load_module_io(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_io: NULL isolate");
+XR_FUNC XrModule *xr_native_module_create_io(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_native_module_create_io: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "io");
     if (!mod)

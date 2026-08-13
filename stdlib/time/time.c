@@ -137,8 +137,8 @@ static XrCFuncResult xr_time_sleep(XrVMRuntime *X, XrValue *args, int nargs, XrV
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_TIME
 
-XR_FUNC XrModule *xr_load_module_time(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_time: NULL isolate");
+XR_FUNC XrModule *xr_native_module_create_time(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_native_module_create_time: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "time");
     if (!module)

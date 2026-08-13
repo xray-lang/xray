@@ -20,6 +20,6 @@
 struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_csv(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_native_module_create_csv(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_CSV_H

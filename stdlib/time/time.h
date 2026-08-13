@@ -27,6 +27,6 @@
 struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_time(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_native_module_create_time(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_TIME_H

@@ -15,6 +15,6 @@
 #include "../../src/base/xdefs.h"
 
 // Load test_yield module
-XR_FUNC XrModule *xr_load_module_test_yield(XrVMRuntime *isolate);
+XR_FUNC XrModule *xr_native_module_create_test_yield(XrVMRuntime *isolate);
 
 #endif

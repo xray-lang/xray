@@ -1286,7 +1286,7 @@ static XrValue compress_adler32(XrVMRuntime *X, XrValue *args, int nargs) {
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_COMPRESS
 
-XR_FUNC XrModule *xr_load_module_compress(XrVMRuntime *isolate) {
+XR_FUNC XrModule *xr_native_module_create_compress(XrVMRuntime *isolate) {
     XrModule *module = xr_module_create_native(isolate, "compress");
     if (!module)
         return NULL;
