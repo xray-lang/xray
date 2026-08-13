@@ -641,6 +641,16 @@ add_test(NAME test_byte_array_append_core COMMAND $<TARGET_FILE:test_byte_array_
 add_xray_unit_test(test_math_core stdlib/test_math_core.c)
 add_xray_unit_test(test_numeric_core stdlib/test_numeric_core.c)
 add_xray_unit_test(test_null_test_core stdlib/test_null_test_core.c)
+add_xray_unit_test(test_compare_core stdlib/test_compare_core.c)
+add_executable(test_xrt_compare_owner_freestanding
+    aot/test_xrt_compare_owner_freestanding.c)
+target_include_directories(test_xrt_compare_owner_freestanding PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+add_test(NAME test_xrt_compare_owner_freestanding
+    COMMAND $<TARGET_FILE:test_xrt_compare_owner_freestanding>)
 add_xray_unit_test(test_range_core stdlib/test_range_core.c)
 add_executable(test_data_pointer_core stdlib/test_data_pointer_core.c)
 target_include_directories(test_data_pointer_core PRIVATE

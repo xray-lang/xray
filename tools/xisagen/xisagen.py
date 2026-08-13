@@ -1899,13 +1899,16 @@ XI_AOT_C_TEMPLATE_SHIFT = {
     'xi.shr': 'XR_SHIFT_RIGHT_SIGNED',
 }
 
+# (tagged runtime relation, shared-owner relation token, tagged args swap).
+# The relation token names the owner's relation; the raw C operator is spelled
+# once inside the shared compare kernel and never in generated code.
 XI_AOT_C_TEMPLATE_COMPARE = {
-    'xi.eq': ('xrt_eq', '==', False),
-    'xi.ne': ('!xrt_eq', '!=', False),
-    'xi.lt': ('xrt_lt', '<', False),
-    'xi.le': ('xrt_le', '<=', False),
-    'xi.gt': ('xrt_lt', '>', True),
-    'xi.ge': ('xrt_le', '>=', True),
+    'xi.eq': ('xrt_eq', 'EQ', False),
+    'xi.ne': ('!xrt_eq', 'NE', False),
+    'xi.lt': ('xrt_lt', 'LT', False),
+    'xi.le': ('xrt_le', 'LE', False),
+    'xi.gt': ('xrt_lt', 'GT', True),
+    'xi.ge': ('xrt_le', 'GE', True),
 }
 
 @dataclass
@@ -2714,11 +2717,11 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('    return "";')
     lines.append('}')
     lines.append('')
-    lines.append('static inline const char *xi_to_c_template_compare_native_op(uint16_t op) {')
+    lines.append('static inline const char *xi_to_c_template_compare_relation(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for entry in compare_entries:
-        _, native_op, _ = XI_AOT_C_TEMPLATE_COMPARE[entry.op_name]
-        lines.append(f'        case XI_{entry.ident}: return "{native_op}";')
+        _, relation, _ = XI_AOT_C_TEMPLATE_COMPARE[entry.op_name]
+        lines.append(f'        case XI_{entry.ident}: return "{relation}";')
     lines.append('        case XI_OP_COUNT: return "";')
     lines.append('        default: return "";')
     lines.append('    }')
@@ -2840,12 +2843,12 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
             lines.append(
                 f'    assert(strcmp(xi_to_c_template_shift_kind(XI_{entry.ident}), "{fn}") == 0);')
         if 'aot-c' in entry.target_drivers and entry.op_name in XI_AOT_C_TEMPLATE_COMPARE:
-            runtime_fn, native_op, swaps = XI_AOT_C_TEMPLATE_COMPARE[entry.op_name]
+            runtime_fn, relation, swaps = XI_AOT_C_TEMPLATE_COMPARE[entry.op_name]
             swaps_c = 'true' if swaps else 'false'
             lines.append(
                 f'    assert(strcmp(xi_to_c_template_compare_runtime_fn(XI_{entry.ident}), "{runtime_fn}") == 0);')
             lines.append(
-                f'    assert(strcmp(xi_to_c_template_compare_native_op(XI_{entry.ident}), "{native_op}") == 0);')
+                f'    assert(strcmp(xi_to_c_template_compare_relation(XI_{entry.ident}), "{relation}") == 0);')
             lines.append(
                 f'    assert(xi_to_c_template_compare_swaps_tagged_args(XI_{entry.ident}) == {swaps_c});')
         if 'aot-c' in entry.target_drivers and entry.template in {'narrow', 'widen'}:

@@ -182,38 +182,21 @@ static bool cg_structured_array_fill_loop_block_is_elided(XiCgenCtx *ctx, const 
 static bool emit_structured_loop_condition_expr(FILE *out, const XiValue *control) {
     if (!control || control->nargs < 2)
         return false;
-    const char *op = NULL;
-    switch ((XiOp) control->op) {
-        case XI_EQ:
-            op = "==";
-            break;
-        case XI_NE:
-            op = "!=";
-            break;
-        case XI_LT:
-            op = "<";
-            break;
-        case XI_LE:
-            op = "<=";
-            break;
-        case XI_GT:
-            op = ">";
-            break;
-        case XI_GE:
-            op = ">=";
-            break;
-        default:
-            return false;
-    }
+    const char *relation = xi_to_c_template_compare_relation(control->op);
+    if (!relation || !relation[0])
+        return false;
     XrRep lhs_rep = cg_rep(control->args[0]);
     XrRep rhs_rep = cg_rep(control->args[1]);
     if (lhs_rep == XR_REP_TAGGED || rhs_rep == XR_REP_TAGGED)
         return false;
     XrRep rep = (lhs_rep == XR_REP_F64 || rhs_rep == XR_REP_F64) ? XR_REP_F64 : XR_REP_I64;
+    const char *adapter = cg_compare_adapter_name(NULL);
+    if (!adapter)
+        return false;
     if (out) {
-        fprintf(out, "(");
+        fprintf(out, "%s(%s, ", adapter, relation);
         emit_value_as_rep(out, control->args[0], rep);
-        fprintf(out, " %s ", op);
+        fprintf(out, ", ");
         emit_value_as_rep(out, control->args[1], rep);
         fprintf(out, ")");
     }
@@ -224,38 +207,21 @@ static bool emit_structured_loop_condition_expr_ctx(XiCgenCtx *ctx, FILE *out,
                                                     const XiValue *control) {
     if (!control || control->nargs < 2)
         return false;
-    const char *op = NULL;
-    switch ((XiOp) control->op) {
-        case XI_EQ:
-            op = "==";
-            break;
-        case XI_NE:
-            op = "!=";
-            break;
-        case XI_LT:
-            op = "<";
-            break;
-        case XI_LE:
-            op = "<=";
-            break;
-        case XI_GT:
-            op = ">";
-            break;
-        case XI_GE:
-            op = ">=";
-            break;
-        default:
-            return false;
-    }
+    const char *relation = xi_to_c_template_compare_relation(control->op);
+    if (!relation || !relation[0])
+        return false;
     XrRep lhs_rep = cg_value_plan_storage_rep(ctx, control->args[0]);
     XrRep rhs_rep = cg_value_plan_storage_rep(ctx, control->args[1]);
     if (lhs_rep == XR_REP_TAGGED || rhs_rep == XR_REP_TAGGED)
         return false;
     XrRep rep = (lhs_rep == XR_REP_F64 || rhs_rep == XR_REP_F64) ? XR_REP_F64 : XR_REP_I64;
+    const char *adapter = cg_compare_adapter_name(ctx);
+    if (!adapter)
+        return false;
     if (out) {
-        fprintf(out, "(");
+        fprintf(out, "%s(%s, ", adapter, relation);
         emit_value_as_rep_ctx(ctx, out, control->args[0], rep);
-        fprintf(out, " %s ", op);
+        fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, control->args[1], rep);
         fprintf(out, ")");
     }
@@ -299,11 +265,14 @@ static bool emit_structured_array_fill_loop_stmt(XiCgenCtx *ctx, FILE *out, cons
     uint16_t body_idx = find_pred_idx(loop.body, loop.body);
     emit_phi_copies(ctx, out, f, loop.body, entry_idx);
     emit_value_source_line(ctx, out, loop.body->control);
-    fprintf(out, "    while (");
+    const char *fill_adapter = cg_compare_adapter_name(ctx);
+    if (!fill_adapter)
+        return false;
+    fprintf(out, "    while (%s(LT, ", fill_adapter);
     emit_value_as_rep_ctx(ctx, out, loop.fill.index_value, XR_REP_I64);
-    fprintf(out, " < ");
+    fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, loop.fill.cap_value, XR_REP_I64);
-    fprintf(out, ") {\n");
+    fprintf(out, ")) {\n");
     for (uint32_t i = 0; i < loop.body->nvalues; i++) {
         XiValue *v = loop.body->values[i];
         if (v && v != loop.body->control)

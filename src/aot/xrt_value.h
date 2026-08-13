@@ -39,6 +39,41 @@
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
 #include "../shared/xr_truthy_core.h"
+#include "../shared/xr_compare_core.h" /* canonical equality and order relations */
+#define xrt_compare_route(kind, left_class, right_class)                                          \
+    XR_COMPARE_OWNER_ROUTE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                     \
+                           XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED, (kind), \
+                           (left_class), (right_class))
+#define xrt_compare_i64(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_I64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,     \
+                               (kind), (a), (b))
+#define xrt_compare_u64(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_U64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,     \
+                               (kind), (a), (b))
+#define xrt_compare_f64(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_F64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,     \
+                               (kind), (a), (b))
+#define xrt_compare_ptr(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_PTR(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,     \
+                               (kind), (a), (b))
+#define xrt_compare_ordering(kind, ordering)                                                      \
+    XR_COMPARE_OWNER_APPLY_ORDERING(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                            \
+                                    XR_SEM_OWNER_ID_SHARED_COMPARE_LO,                            \
+                                    XR_SEM_CONSUMER_AOT_HOSTED, (kind), (ordering))
+#define xrt_compare_equal(kind, equal)                                                            \
+    XR_COMPARE_OWNER_APPLY_EQUAL(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                               \
+                                 XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,   \
+                                 (kind), (equal))
+/* Spelled into generated C for a proven scalar comparison: the relation comes
+ * from the owner while the operand type stays the one the plan chose. */
+#define xrt_compare_native(relation, a, b)                                                        \
+    XR_COMPARE_OWNER_APPLY_NATIVE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                              \
+                                  XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,  \
+                                  relation, (a), (b))
 #include "../runtime/abi/xr_runtime_string_object.h"
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -1009,54 +1044,62 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
  * Both must track their VM counterparts (xr_value_eq / xr_value_key_eq).
  * ========================================================================= */
 
-static inline int64_t xrt_eq(XrValue a, XrValue b) {
-    /* Normalize STR_ARC to STR so literal and allocated strings compare. */
+/* The hosted carrier rule: a tagged pair compares only within one tag class,
+ * with STR_ARC normalized to STR so a literal and an allocated string meet. The
+ * relation itself - what each class's lane answers - belongs to the shared
+ * owner. */
+static inline int64_t xrt_compare_tagged_equal(XrCompareKind kind, XrValue a, XrValue b) {
     uint32_t ta = (a.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : a.tag;
     uint32_t tb = (b.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : b.tag;
     if (ta != tb)
-        return 0;
+        return xrt_compare_equal(kind, false);
     if (ta == XR_TAG_ENUM)
-        return xrt_enum_key_eq(a, b);
+        return xrt_compare_equal(kind, xrt_enum_key_eq(a, b) != 0);
     if (ta == XR_TAG_BIGINT)
-        return xrt_bigint_eq_value(a, b);
+        return xrt_compare_equal(kind, xrt_bigint_eq_value(a, b) != 0);
     if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL || ta == XR_TAG_RUNE)
-        return a.i == b.i;
+        return xrt_compare_i64(kind, a.i, b.i);
     if (ta == XR_TAG_F64)
-        return a.f == b.f;
+        return xrt_compare_f64(kind, a.f, b.f);
     if (ta == XR_TAG_STR) {
         if (a.ptr == b.ptr)
-            return 1;
+            return xrt_compare_equal(kind, true);
         int64_t length = xr_str_len(a);
         if (length != xr_str_len(b))
-            return 0;
+            return xrt_compare_equal(kind, false);
         uint32_t hash_a = xrt_str_hash(a);
         uint32_t hash_b = xrt_str_hash(b);
         if (hash_a != hash_b)
-            return 0;
-        return memcmp(xr_str_data(a), xr_str_data(b), (size_t) length) == 0;
+            return xrt_compare_equal(kind, false);
+        return xrt_compare_equal(kind,
+                                 memcmp(xr_str_data(a), xr_str_data(b), (size_t) length) == 0);
     }
     if (ta == XR_TAG_AGG_REF) {
         if (a.ptr == b.ptr)
-            return 1;
+            return xrt_compare_equal(kind, true);
         if (!a.ptr || !b.ptr || a.ext != b.ext)
-            return 0;
+            return xrt_compare_equal(kind, false);
         if (XR_IS_ARRAY_REF(a)) {
             size_t size = xrt_value_native_type_size(XR_ARRAY_REF_ELEM_TYPE(a)) *
                           (size_t) XR_ARRAY_REF_ELEM_COUNT(a);
-            return memcmp(a.ptr, b.ptr, size) == 0;
+            return xrt_compare_equal(kind, memcmp(a.ptr, b.ptr, size) == 0);
         }
         if (a.heap_type != 0 || b.heap_type != 0) {
             if (a.heap_type == 0 || b.heap_type == 0 || a.heap_type != b.heap_type)
-                return 0;
-            return memcmp(a.ptr, b.ptr, (size_t) a.heap_type) == 0;
+                return xrt_compare_equal(kind, false);
+            return xrt_compare_equal(kind, memcmp(a.ptr, b.ptr, (size_t) a.heap_type) == 0);
         }
         uint32_t sa = *(uint32_t *) a.ptr;
         uint32_t sb = *(uint32_t *) b.ptr;
         if (sa == 0 || sb == 0 || sa != sb || sa > (16u * 1024u * 1024u))
-            return 0;
-        return memcmp(a.ptr, b.ptr, (size_t) sa) == 0;
+            return xrt_compare_equal(kind, false);
+        return xrt_compare_equal(kind, memcmp(a.ptr, b.ptr, (size_t) sa) == 0);
     }
-    return a.ptr == b.ptr;
+    return xrt_compare_ptr(kind, a.ptr, b.ptr);
+}
+
+static inline int64_t xrt_eq(XrValue a, XrValue b) {
+    return xrt_compare_tagged_equal(XR_COMPARE_EQ, a, b);
 }
 
 static inline int64_t xrt_key_eq(XrValue a, XrValue b) {

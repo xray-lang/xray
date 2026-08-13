@@ -32,6 +32,7 @@
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_null_test_core.h"
+#include "../shared/xr_compare_core.h"
 #include "../runtime/value/xtype.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include <string.h>
@@ -497,62 +498,64 @@ static SccpCell range_compare(uint16_t op, SccpCell a, SccpCell b, SccpCell fall
     return fallback;
 }
 
+/* SCCP evaluates the same relation the executors do, through the same owner. */
+#define SCCP_COMPARE_I64(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_I64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_SEMANTIC_PLAN,   \
+                               (kind), (a), (b))
+#define SCCP_COMPARE_U64(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_U64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_SEMANTIC_PLAN,   \
+                               (kind), (a), (b))
+#define SCCP_COMPARE_F64(kind, a, b)                                                               \
+    XR_COMPARE_OWNER_APPLY_F64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_SEMANTIC_PLAN,   \
+                               (kind), (a), (b))
+
+static bool sccp_compare_kind(uint16_t op, XrCompareKind *kind) {
+    switch (op) {
+        case XI_EQ:
+            *kind = XR_COMPARE_EQ;
+            return true;
+        case XI_NE:
+            *kind = XR_COMPARE_NE;
+            return true;
+        case XI_LT:
+            *kind = XR_COMPARE_LT;
+            return true;
+        case XI_LE:
+            *kind = XR_COMPARE_LE;
+            return true;
+        case XI_GT:
+            *kind = XR_COMPARE_GT;
+            return true;
+        case XI_GE:
+            *kind = XR_COMPARE_GE;
+            return true;
+        default:
+            return false;
+    }
+}
+
 /* Comparison ops produce a boolean cell, with range-aware fallback. */
 static SccpCell eval_compare(uint16_t op, SccpCell a, SccpCell b, bool use_unsigned) {
-    uint64_t ua = (uint64_t) a.ival;
-    uint64_t ub = (uint64_t) b.ival;
-    switch (op) {
-        case XI_LT:
-            if (both_int(a, b))
-                return sccp_bool(use_unsigned ? ua < ub : a.ival < b.ival);
-            if (both_float(a, b))
-                return sccp_bool(a.fval < b.fval);
-            if (use_unsigned)
-                return sccp_bot();
-            return range_compare(op, a, b, sccp_bot());
-        case XI_LE:
-            if (both_int(a, b))
-                return sccp_bool(use_unsigned ? ua <= ub : a.ival <= b.ival);
-            if (both_float(a, b))
-                return sccp_bool(a.fval <= b.fval);
-            if (use_unsigned)
-                return sccp_bot();
-            return range_compare(op, a, b, sccp_bot());
-        case XI_GT:
-            if (both_int(a, b))
-                return sccp_bool(use_unsigned ? ua > ub : a.ival > b.ival);
-            if (both_float(a, b))
-                return sccp_bool(a.fval > b.fval);
-            if (use_unsigned)
-                return sccp_bot();
-            return range_compare(op, a, b, sccp_bot());
-        case XI_GE:
-            if (both_int(a, b))
-                return sccp_bool(use_unsigned ? ua >= ub : a.ival >= b.ival);
-            if (both_float(a, b))
-                return sccp_bool(a.fval >= b.fval);
-            if (use_unsigned)
-                return sccp_bot();
-            return range_compare(op, a, b, sccp_bot());
-        case XI_EQ:
-            if (both_int(a, b))
-                return sccp_bool(a.ival == b.ival);
-            if (both_float(a, b))
-                return sccp_bool(a.fval == b.fval);
-            if (a.kind == SCCP_CONST_BOOL && b.kind == SCCP_CONST_BOOL)
-                return sccp_bool(a.ival == b.ival);
-            return range_compare(op, a, b, sccp_bot());
-        case XI_NE:
-            if (both_int(a, b))
-                return sccp_bool(a.ival != b.ival);
-            if (both_float(a, b))
-                return sccp_bool(a.fval != b.fval);
-            if (a.kind == SCCP_CONST_BOOL && b.kind == SCCP_CONST_BOOL)
-                return sccp_bool(a.ival != b.ival);
-            return range_compare(op, a, b, sccp_bot());
-        default:
-            return sccp_bot();
+    XrCompareKind kind;
+    if (!sccp_compare_kind(op, &kind))
+        return sccp_bot();
+    bool equality = xr_compare_kind_is_equality_core(kind);
+    if (both_int(a, b)) {
+        if (use_unsigned && !equality)
+            return sccp_bool(SCCP_COMPARE_U64(kind, (uint64_t) a.ival, (uint64_t) b.ival));
+        return sccp_bool(SCCP_COMPARE_I64(kind, a.ival, b.ival));
     }
+    if (both_float(a, b))
+        return sccp_bool(SCCP_COMPARE_F64(kind, a.fval, b.fval));
+    if (equality && a.kind == SCCP_CONST_BOOL && b.kind == SCCP_CONST_BOOL)
+        return sccp_bool(SCCP_COMPARE_I64(kind, a.ival, b.ival));
+    /* An unsigned order relation has no signed range to reason from. */
+    if (use_unsigned && !equality)
+        return sccp_bot();
+    return range_compare(op, a, b, sccp_bot());
 }
 
 /* True for ops dispatched to eval_compare (produce a boolean). */

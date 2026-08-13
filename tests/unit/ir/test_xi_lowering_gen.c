@@ -659,7 +659,7 @@ int main(void) {
     assert(xi_emit_vm_template_opcode(XI_EQ) == OP_CMP_EQ);
     assert(xi_emit_vm_template_swaps_args(XI_EQ) == false);
     assert(strcmp(xi_to_c_template_compare_runtime_fn(XI_EQ), "xrt_eq") == 0);
-    assert(strcmp(xi_to_c_template_compare_native_op(XI_EQ), "==") == 0);
+    assert(strcmp(xi_to_c_template_compare_relation(XI_EQ), "EQ") == 0);
     assert(xi_to_c_template_compare_swaps_tagged_args(XI_EQ) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_EQ) == false);
     assert(xi_lowering_generated_targets(XI_NE) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
@@ -670,7 +670,7 @@ int main(void) {
     assert(xi_emit_vm_template_opcode(XI_NE) == OP_CMP_NE);
     assert(xi_emit_vm_template_swaps_args(XI_NE) == false);
     assert(strcmp(xi_to_c_template_compare_runtime_fn(XI_NE), "!xrt_eq") == 0);
-    assert(strcmp(xi_to_c_template_compare_native_op(XI_NE), "!=") == 0);
+    assert(strcmp(xi_to_c_template_compare_relation(XI_NE), "NE") == 0);
     assert(xi_to_c_template_compare_swaps_tagged_args(XI_NE) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NE) == false);
     assert(xi_lowering_generated_targets(XI_LT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
@@ -681,7 +681,7 @@ int main(void) {
     assert(xi_emit_vm_template_opcode(XI_LT) == OP_CMP_LT);
     assert(xi_emit_vm_template_swaps_args(XI_LT) == false);
     assert(strcmp(xi_to_c_template_compare_runtime_fn(XI_LT), "xrt_lt") == 0);
-    assert(strcmp(xi_to_c_template_compare_native_op(XI_LT), "<") == 0);
+    assert(strcmp(xi_to_c_template_compare_relation(XI_LT), "LT") == 0);
     assert(xi_to_c_template_compare_swaps_tagged_args(XI_LT) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_LT) == false);
     assert(xi_lowering_generated_targets(XI_LE) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
@@ -692,7 +692,7 @@ int main(void) {
     assert(xi_emit_vm_template_opcode(XI_LE) == OP_CMP_LE);
     assert(xi_emit_vm_template_swaps_args(XI_LE) == false);
     assert(strcmp(xi_to_c_template_compare_runtime_fn(XI_LE), "xrt_le") == 0);
-    assert(strcmp(xi_to_c_template_compare_native_op(XI_LE), "<=") == 0);
+    assert(strcmp(xi_to_c_template_compare_relation(XI_LE), "LE") == 0);
     assert(xi_to_c_template_compare_swaps_tagged_args(XI_LE) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_LE) == false);
     assert(xi_lowering_generated_targets(XI_GT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
@@ -703,7 +703,7 @@ int main(void) {
     assert(xi_emit_vm_template_opcode(XI_GT) == OP_CMP_LT);
     assert(xi_emit_vm_template_swaps_args(XI_GT) == true);
     assert(strcmp(xi_to_c_template_compare_runtime_fn(XI_GT), "xrt_lt") == 0);
-    assert(strcmp(xi_to_c_template_compare_native_op(XI_GT), ">") == 0);
+    assert(strcmp(xi_to_c_template_compare_relation(XI_GT), "GT") == 0);
     assert(xi_to_c_template_compare_swaps_tagged_args(XI_GT) == true);
     assert(xi_emit_vm_requires_fresh_dst(XI_GT) == false);
     assert(xi_lowering_generated_targets(XI_GE) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
@@ -714,7 +714,7 @@ int main(void) {
     assert(xi_emit_vm_template_opcode(XI_GE) == OP_CMP_LE);
     assert(xi_emit_vm_template_swaps_args(XI_GE) == true);
     assert(strcmp(xi_to_c_template_compare_runtime_fn(XI_GE), "xrt_le") == 0);
-    assert(strcmp(xi_to_c_template_compare_native_op(XI_GE), ">=") == 0);
+    assert(strcmp(xi_to_c_template_compare_relation(XI_GE), "GE") == 0);
     assert(xi_to_c_template_compare_swaps_tagged_args(XI_GE) == true);
     assert(xi_emit_vm_requires_fresh_dst(XI_GE) == false);
     assert(xi_lowering_generated_targets(XI_NARROW_I8) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));

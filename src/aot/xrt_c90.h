@@ -220,6 +220,13 @@ typedef struct XrValue {
     uint8_t tag;
 } XrValue;
 
+/* Restricted C90 states the same relation as every other profile; only the
+ * owner guards, which need the stable-ID header, are left out. */
+#define XR_COMPARE_C90 1
+#include "../shared/xr_compare_core.h"
+#undef XR_COMPARE_C90
+#define xrt_compare_native(relation, a, b) XR_COMPARE_RELATION_##relation((a), (b))
+
 #define XR_NULL_TEST_C90 1
 #include "../shared/xr_null_test_core.h"
 #undef XR_NULL_TEST_C90

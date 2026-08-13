@@ -138,6 +138,7 @@
         "src/ir/xi_opt_sccp.c",
         "src/runtime/object/xbigint.h",
         "src/runtime/value/xvalue.h",
+        "src/vm/xr_typed_dispatch.c",
         "src/vm/xvm.c",
         "src/vm/xvm_dispatch_bitwise.inc.c"
       ],
@@ -398,6 +399,33 @@
       "status": "production",
       "test_callers": [
         "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_compare_core.h",
+      "id": "compare",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_c90.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/aot/xrt_value.h",
+        "src/ir/xi_opt.c",
+        "src/ir/xi_opt_sccp.c",
+        "src/vm/xvm_internal.h",
+        "src/vm/xvm_ops.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_compare_core.c"
       ]
     },
     {
@@ -689,7 +717,8 @@
         "src/runtime/value/xint_methods.h",
         "src/runtime/value/xvalue.h",
         "src/shared/xr_arith_core.h",
-        "src/shared/xr_numeric_core.h"
+        "src/shared/xr_numeric_core.h",
+        "src/vm/xr_typed_dispatch.c"
       ],
       "profiles": [
         "vm",

@@ -14,6 +14,7 @@
 
 #include "xvm_internal.h"
 #include "../base/xchecks.h"
+#include "../shared/xr_compare_core.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xvalue_format.h"
 #include <inttypes.h>
@@ -476,39 +477,77 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
 
 /* ========== Comparison Operation Helpers ========== */
 
+/* Carrier classification: which numeric domain a tagged VM value belongs to. */
+static XrCompareOperandClass vm_compare_operand_class(XrValue v) {
+    if (XR_IS_INT(v))
+        return XR_COMPARE_OPERAND_INT;
+    if (XR_IS_FLOAT(v))
+        return XR_COMPARE_OPERAND_FLOAT;
+    if (XR_IS_BIGINT(v))
+        return XR_COMPARE_OPERAND_BIGINT;
+    return XR_COMPARE_OPERAND_OTHER;
+}
+
+/* The single VM entry point for a relation over two tagged values.
+ *
+ * Returns false through `handled` when neither the numeric route nor the string
+ * route applies, so the caller can fall back to its own carrier rule (identity,
+ * aggregate walk, enum payloads). */
+static bool vm_compare_relation(XrCompareKind kind, XrValue left, XrValue right, bool *handled) {
+    *handled = true;
+    switch (VM_COMPARE_ROUTE(kind, vm_compare_operand_class(left),
+                             vm_compare_operand_class(right))) {
+        case XR_COMPARE_ROUTE_I64:
+            return VM_COMPARE_I64(kind, XR_TO_INT(left), XR_TO_INT(right));
+        case XR_COMPARE_ROUTE_F64:
+            return VM_COMPARE_F64(kind, XR_IS_INT(left) ? (double) XR_TO_INT(left)
+                                                        : XR_TO_FLOAT(left),
+                                  XR_IS_INT(right) ? (double) XR_TO_INT(right)
+                                                   : XR_TO_FLOAT(right));
+        case XR_COMPARE_ROUTE_BIGINT:
+            return VM_COMPARE_ORDERING(kind, xr_bigint_cmp((XrBigInt *) XR_TO_PTR(left),
+                                                           (XrBigInt *) XR_TO_PTR(right)));
+        case XR_COMPARE_ROUTE_BIGINT_INT:
+            return VM_COMPARE_ORDERING(
+                kind, xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(left), XR_TO_INT(right)));
+        case XR_COMPARE_ROUTE_INT_BIGINT:
+            /* The comparator answers big-against-int, so the mirrored relation
+             * reads that ordering from the left operand's side. */
+            return VM_COMPARE_ORDERING(
+                xr_compare_kind_mirrored_core(kind),
+                xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(right), XR_TO_INT(left)));
+        case XR_COMPARE_ROUTE_UNRELATED:
+            return VM_COMPARE_EQUAL(kind, false);
+        case XR_COMPARE_ROUTE_OTHER:
+            break;
+    }
+    if (XR_IS_STRING(left) && XR_IS_STRING(right)) {
+        return VM_COMPARE_ORDERING(kind,
+                                   xr_string_compare(XR_TO_STRING(left), XR_TO_STRING(right)));
+    }
+    *handled = false;
+    return false;
+}
+
 // Deep equality comparison (with isolate, supports Array/Map/Set)
 bool vm_values_equal_deep(XrVMRuntime *isolate, XrValue a, XrValue b) {
     if (xr_value_same(a, b))
         return true;
 
-    if (XR_IS_INT(a) && XR_IS_INT(b))
-        return XR_TO_INT(a) == XR_TO_INT(b);
-    if (XR_IS_FLOAT(a) && XR_IS_FLOAT(b))
-        return XR_TO_FLOAT(a) == XR_TO_FLOAT(b);
+    /* Scalars, strings and big integers answer through the shared relation
+     * owner, so the deep walker and the `==` operator cannot drift apart on the
+     * leaves they share. */
+    bool handled = false;
+    bool related = vm_compare_relation(XR_COMPARE_EQ, a, b, &handled);
+    if (handled)
+        return related;
+
     if (XR_IS_BOOL(a) && XR_IS_BOOL(b))
-        return XR_TO_BOOL(a) == XR_TO_BOOL(b);
+        return VM_COMPARE_I64(XR_COMPARE_EQ, XR_TO_BOOL(a), XR_TO_BOOL(b));
     if (XR_IS_NULL(a) && XR_IS_NULL(b))
-        return true;
-    if (XR_IS_STRING(a) && XR_IS_STRING(b)) {
-        uint32_t la = xr_value_str_len(&a), lb = xr_value_str_len(&b);
-        if (la != lb)
-            return false;
-        return memcmp(xr_value_str_data(&a), xr_value_str_data(&b), la) == 0;
-    }
+        return VM_COMPARE_EQUAL(XR_COMPARE_EQ, true);
     if (xr_value_is_json(a) && xr_value_is_json(b))
         return xr_value_deep_eq(a, b);
-
-    // BigInt equality
-    if (XR_IS_BIGINT(a) && XR_IS_BIGINT(b)) {
-        return xr_bigint_cmp((XrBigInt *) XR_TO_PTR(a), (XrBigInt *) XR_TO_PTR(b)) == 0;
-    }
-    // BigInt == int (mixed comparison)
-    if (XR_IS_BIGINT(a) && XR_IS_INT(b)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(a), XR_TO_INT(b)) == 0;
-    }
-    if (XR_IS_INT(a) && XR_IS_BIGINT(b)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(b), XR_TO_INT(a)) == 0;
-    }
 
     // Struct ref: field-by-field comparison via native layout
     if (XR_IS_AGG_REF(a) && XR_IS_AGG_REF(b)) {
@@ -517,8 +556,8 @@ bool vm_values_equal_deep(XrVMRuntime *isolate, XrValue a, XrValue b) {
         uint8_t *pa = xr_struct_ref_payload(isolate, a, &la);
         uint8_t *pb = xr_struct_ref_payload(isolate, b, &lb);
         if (!pa || !pb || la != lb)
-            return false;
-        return memcmp(pa, pb, la->total_size) == 0;
+            return VM_COMPARE_EQUAL(XR_COMPARE_EQ, false);
+        return VM_COMPARE_EQUAL(XR_COMPARE_EQ, memcmp(pa, pb, la->total_size) == 0);
     }
 
     if (XR_IS_ARRAY(a) || XR_IS_MAP(a) || XR_IS_SET(a) || xr_value_is_instance(a)) {
@@ -528,168 +567,77 @@ bool vm_values_equal_deep(XrVMRuntime *isolate, XrValue a, XrValue b) {
             visited_init(&ctx.visiting);
             bool eq = deep_compare(&ctx, a, b);
             visited_free(&ctx.visiting);
-            return eq;
+            return VM_COMPARE_EQUAL(XR_COMPARE_EQ, eq);
         }
     }
 
     if (XR_IS_PTR(a) && XR_IS_PTR(b))
-        return XR_TO_PTR(a) == XR_TO_PTR(b);
-    return false;
+        return VM_COMPARE_PTR(XR_COMPARE_EQ, XR_TO_PTR(a), XR_TO_PTR(b));
+    return VM_COMPARE_EQUAL(XR_COMPARE_EQ, false);
 }
 
 // General equality comparison (for == operator)
 // Uses pointer comparison for reference types (use vm_values_equal_deep for deep comparison)
 bool vm_values_equal(XrValue a, XrValue b) {
-    // NaN is never equal to itself (IEEE 754)
-    if (XR_IS_FLOAT(a) && XR_IS_FLOAT(b))
-        return XR_TO_FLOAT(a) == XR_TO_FLOAT(b);
+    /* The numeric and string routes belong to the shared relation owner, which
+     * also decides that an integer never equals a float: the language requires
+     * an explicit conversion between them and the analyzer rejects the static
+     * spelling, so a tagged comparison - a container element, a map key - must
+     * not answer true where the static rule rejects the program. Integer
+     * widening keeps its mixed comparison because it has a lossless common
+     * type. */
+    bool handled = false;
+    bool related = vm_compare_relation(XR_COMPARE_EQ, a, b, &handled);
+    if (handled)
+        return related;
     if (xr_value_same(a, b))
         return true;
 
-    if (XR_IS_INT(a) && XR_IS_INT(b))
-        return XR_TO_INT(a) == XR_TO_INT(b);
-    /* An integer never equals a float.  The language requires an explicit
-     * conversion between them, so the analyzer rejects the static spelling;
-     * answering true here would make a tagged comparison - a container
-     * element, a map key - disagree with both the static rule and the AOT
-     * runtime, which compares tags first.  Integer widening stays legal
-     * because it has a lossless common type; int against float does not. */
     if (XR_IS_BOOL(a) && XR_IS_BOOL(b))
-        return XR_TO_BOOL(a) == XR_TO_BOOL(b);
+        return VM_COMPARE_I64(XR_COMPARE_EQ, XR_TO_BOOL(a), XR_TO_BOOL(b));
     if (XR_IS_NULL(a) && XR_IS_NULL(b))
-        return true;
-    if (XR_IS_STRING(a) && XR_IS_STRING(b)) {
-        // Direct content comparison — works for SSO, heap, or mixed
-        uint32_t la = xr_value_str_len(&a);
-        uint32_t lb = xr_value_str_len(&b);
-        if (la != lb)
-            return false;
-        return memcmp(xr_value_str_data(&a), xr_value_str_data(&b), la) == 0;
-    }
-
-    // BigInt equality
-    if (XR_IS_BIGINT(a) && XR_IS_BIGINT(b)) {
-        return xr_bigint_cmp((XrBigInt *) XR_TO_PTR(a), (XrBigInt *) XR_TO_PTR(b)) == 0;
-    }
-    // BigInt == int (mixed comparison)
-    if (XR_IS_BIGINT(a) && XR_IS_INT(b)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(a), XR_TO_INT(b)) == 0;
-    }
-    if (XR_IS_INT(a) && XR_IS_BIGINT(b)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(b), XR_TO_INT(a)) == 0;
-    }
+        return VM_COMPARE_EQUAL(XR_COMPARE_EQ, true);
 
     XrEnumAggregateValue *ea = xr_value_to_enum_aggregate(a);
     XrEnumAggregateValue *eb = xr_value_to_enum_aggregate(b);
     if (ea || eb) {
-        if (!ea || !eb || !xr_enum_type_same_nominal(ea->enum_type, eb->enum_type) ||
-            ea->member_index != eb->member_index || ea->payload_count != eb->payload_count)
-            return false;
-        for (uint32_t i = 0; i < ea->payload_count; i++) {
-            if (!vm_values_equal(ea->payloads[i], eb->payloads[i]))
-                return false;
-        }
-        return true;
+        bool same = ea != NULL && eb != NULL &&
+                    xr_enum_type_same_nominal(ea->enum_type, eb->enum_type) &&
+                    ea->member_index == eb->member_index &&
+                    ea->payload_count == eb->payload_count;
+        for (uint32_t i = 0; same && i < ea->payload_count; i++)
+            same = vm_values_equal(ea->payloads[i], eb->payloads[i]);
+        return VM_COMPARE_EQUAL(XR_COMPARE_EQ, same);
     }
 
     if (XR_IS_PTR(a) && XR_IS_PTR(b))
-        return XR_TO_PTR(a) == XR_TO_PTR(b);
+        return VM_COMPARE_PTR(XR_COMPARE_EQ, XR_TO_PTR(a), XR_TO_PTR(b));
 
-    return false;
+    return VM_COMPARE_EQUAL(XR_COMPARE_EQ, false);
 }
 
-// Numeric less than
+/* The four ordering helpers below differ only in the relation they ask for, so
+ * they carry no rule of their own: each names its kind and the owner answers. */
 bool vm_numeric_less(XrValue left, XrValue right) {
-    // BigInt comparisons
-    if (XR_IS_BIGINT(left) && XR_IS_BIGINT(right)) {
-        return xr_bigint_cmp((XrBigInt *) XR_TO_PTR(left), (XrBigInt *) XR_TO_PTR(right)) < 0;
-    }
-    if (XR_IS_BIGINT(left) && XR_IS_INT(right)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(left), XR_TO_INT(right)) < 0;
-    }
-    if (XR_IS_INT(left) && XR_IS_BIGINT(right)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(right), XR_TO_INT(left)) > 0;
-    }
-
-    if ((XR_IS_INT(left) || XR_IS_FLOAT(left)) && (XR_IS_INT(right) || XR_IS_FLOAT(right))) {
-        double nl = XR_IS_INT(left) ? (double) XR_TO_INT(left) : XR_TO_FLOAT(left);
-        double nr = XR_IS_INT(right) ? (double) XR_TO_INT(right) : XR_TO_FLOAT(right);
-        return nl < nr;
-    }
-    if (XR_IS_STRING(left) && XR_IS_STRING(right)) {
-        return xr_string_compare(XR_TO_STRING(left), XR_TO_STRING(right)) < 0;
-    }
-    return false;
+    bool handled = false;
+    bool result = vm_compare_relation(XR_COMPARE_LT, left, right, &handled);
+    return handled ? result : VM_COMPARE_EQUAL(XR_COMPARE_LT, false);
 }
 
-// Numeric less than or equal
 bool vm_numeric_less_equal(XrValue left, XrValue right) {
-    // BigInt comparisons
-    if (XR_IS_BIGINT(left) && XR_IS_BIGINT(right)) {
-        return xr_bigint_cmp((XrBigInt *) XR_TO_PTR(left), (XrBigInt *) XR_TO_PTR(right)) <= 0;
-    }
-    if (XR_IS_BIGINT(left) && XR_IS_INT(right)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(left), XR_TO_INT(right)) <= 0;
-    }
-    if (XR_IS_INT(left) && XR_IS_BIGINT(right)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(right), XR_TO_INT(left)) >= 0;
-    }
-
-    if ((XR_IS_INT(left) || XR_IS_FLOAT(left)) && (XR_IS_INT(right) || XR_IS_FLOAT(right))) {
-        double nl = XR_IS_INT(left) ? (double) XR_TO_INT(left) : XR_TO_FLOAT(left);
-        double nr = XR_IS_INT(right) ? (double) XR_TO_INT(right) : XR_TO_FLOAT(right);
-        return nl <= nr;
-    }
-    if (XR_IS_STRING(left) && XR_IS_STRING(right)) {
-        return xr_string_compare(XR_TO_STRING(left), XR_TO_STRING(right)) <= 0;
-    }
-    return false;
+    bool handled = false;
+    bool result = vm_compare_relation(XR_COMPARE_LE, left, right, &handled);
+    return handled ? result : VM_COMPARE_EQUAL(XR_COMPARE_LE, false);
 }
 
-// Numeric greater than
 bool vm_numeric_greater(XrValue left, XrValue right) {
-    // BigInt comparisons
-    if (XR_IS_BIGINT(left) && XR_IS_BIGINT(right)) {
-        return xr_bigint_cmp((XrBigInt *) XR_TO_PTR(left), (XrBigInt *) XR_TO_PTR(right)) > 0;
-    }
-    if (XR_IS_BIGINT(left) && XR_IS_INT(right)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(left), XR_TO_INT(right)) > 0;
-    }
-    if (XR_IS_INT(left) && XR_IS_BIGINT(right)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(right), XR_TO_INT(left)) < 0;
-    }
-
-    if ((XR_IS_INT(left) || XR_IS_FLOAT(left)) && (XR_IS_INT(right) || XR_IS_FLOAT(right))) {
-        double nl = XR_IS_INT(left) ? (double) XR_TO_INT(left) : XR_TO_FLOAT(left);
-        double nr = XR_IS_INT(right) ? (double) XR_TO_INT(right) : XR_TO_FLOAT(right);
-        return nl > nr;
-    }
-    if (XR_IS_STRING(left) && XR_IS_STRING(right)) {
-        return xr_string_compare(XR_TO_STRING(left), XR_TO_STRING(right)) > 0;
-    }
-    return false;
+    bool handled = false;
+    bool result = vm_compare_relation(XR_COMPARE_GT, left, right, &handled);
+    return handled ? result : VM_COMPARE_EQUAL(XR_COMPARE_GT, false);
 }
 
-// Numeric greater than or equal
 bool vm_numeric_greater_equal(XrValue left, XrValue right) {
-    // BigInt comparisons
-    if (XR_IS_BIGINT(left) && XR_IS_BIGINT(right)) {
-        return xr_bigint_cmp((XrBigInt *) XR_TO_PTR(left), (XrBigInt *) XR_TO_PTR(right)) >= 0;
-    }
-    if (XR_IS_BIGINT(left) && XR_IS_INT(right)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(left), XR_TO_INT(right)) >= 0;
-    }
-    if (XR_IS_INT(left) && XR_IS_BIGINT(right)) {
-        return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(right), XR_TO_INT(left)) <= 0;
-    }
-
-    if ((XR_IS_INT(left) || XR_IS_FLOAT(left)) && (XR_IS_INT(right) || XR_IS_FLOAT(right))) {
-        double nl = XR_IS_INT(left) ? (double) XR_TO_INT(left) : XR_TO_FLOAT(left);
-        double nr = XR_IS_INT(right) ? (double) XR_TO_INT(right) : XR_TO_FLOAT(right);
-        return nl >= nr;
-    }
-    if (XR_IS_STRING(left) && XR_IS_STRING(right)) {
-        return xr_string_compare(XR_TO_STRING(left), XR_TO_STRING(right)) >= 0;
-    }
-    return false;
+    bool handled = false;
+    bool result = vm_compare_relation(XR_COMPARE_GE, left, right, &handled);
+    return handled ? result : VM_COMPARE_EQUAL(XR_COMPARE_GE, false);
 }

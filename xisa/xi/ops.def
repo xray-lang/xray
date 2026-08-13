@@ -2645,12 +2645,6 @@
     xi.sub
     xi.mul
     xi.codegen.compiler-fence
-    xi.eq
-    xi.ne
-    xi.lt
-    xi.le
-    xi.gt
-    xi.ge
     xi.convert
     xi.box
     xi.unbox
@@ -2779,6 +2773,12 @@
     xi.range
     xi.div
     xi.mod
+    xi.eq
+    xi.ne
+    xi.lt
+    xi.le
+    xi.gt
+    xi.ge
     xi.neg
     xi.not
     xi.bnot
@@ -3089,6 +3089,25 @@
     (aot-hosted "src/aot/xrt.h" "xrt_int_div_mod_eval")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_int_div_mod_eval")
     (cgen "src/aot/xi_cgen.c" "cg_int_div_mod_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.compare
+  :category shared-semantic-kernel
+  :operations (xi.eq xi.ne xi.lt xi.le xi.gt xi.ge)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_compare_native
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_internal.h" "VM_COMPARE_ROUTE")
+    (aot-hosted "src/aot/xrt_value.h" "xrt_compare_route")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_compare_route")
+    (cgen "src/aot/xi_cgen.c" "cg_compare_adapter_name")
   ))
 
 (define-xi-observable-owner shared.range

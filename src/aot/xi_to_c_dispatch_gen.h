@@ -331,14 +331,14 @@ static inline const char *xi_to_c_template_compare_runtime_fn(uint16_t op) {
     return "";
 }
 
-static inline const char *xi_to_c_template_compare_native_op(uint16_t op) {
+static inline const char *xi_to_c_template_compare_relation(uint16_t op) {
     switch ((XiOp) op) {
-        case XI_EQ: return "==";
-        case XI_NE: return "!=";
-        case XI_LT: return "<";
-        case XI_LE: return "<=";
-        case XI_GT: return ">";
-        case XI_GE: return ">=";
+        case XI_EQ: return "EQ";
+        case XI_NE: return "NE";
+        case XI_LT: return "LT";
+        case XI_LE: return "LE";
+        case XI_GT: return "GT";
+        case XI_GE: return "GE";
         case XI_OP_COUNT: return "";
         default: return "";
     }

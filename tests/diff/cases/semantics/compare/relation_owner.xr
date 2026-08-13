@@ -1,0 +1,114 @@
+// anchor: compare-relation-owner
+// The six relations have one semantic owner (shared.compare). Every executor
+// evaluates it: the VM dispatch fast paths, the hosted and freestanding AOT
+// preludes, the CGen scalar lowering, and both constant folders. This case
+// walks each lane the owner can route to - signed, unsigned, IEEE double,
+// float32, boolean - through both a runtime value and a folded constant, so a
+// backend that went back to a private operator shows up as a diff.
+
+fn opaque_int(a: int, b: int) -> int { return a }
+fn opaque_float(a: float, b: int) -> float { return a }
+fn opaque_bool(a: bool, b: int) -> bool { return a }
+
+// 有符号整数：两端与零点
+var lo: int = -9223372036854775807 - 1
+var hi: int = 9223372036854775807
+var vlo = opaque_int(lo, 0)
+var vhi = opaque_int(hi, 0)
+var vzero = opaque_int(0, 0)
+print(vlo < vhi)                      // true
+print(vhi <= vlo)                     // false
+print(vlo == vlo)                     // true
+print(vlo != vhi)                     // true
+print(vhi > vzero)                    // true
+print(vlo >= vzero)                   // false
+
+// 寄存器-立即数比较
+print(vzero < 1)                      // true
+print(vzero <= 0)                     // true
+print(vzero > -1)                     // true
+print(vzero >= 1)                     // false
+print(vzero == 0)                     // true
+print(vzero != 0)                     // false
+
+// 常量折叠必须给出与运行期相同的答案
+print(-1 < 0)                         // true
+print(9223372036854775807 > 0)        // true
+print(7 == 7)                         // true
+print(7 != 7)                         // false
+
+// 无符号车道：最高位置位的操作数排在零之上
+var uhi: u64 = 0x8000_0000
+var utop: u64 = uhi << 32
+var uones: u64 = 0xFFFF_FFFF
+var uall: u64 = (uones << 32) | uones
+var ufive: u64 = 5
+print(utop > ufive)                   // true
+print(utop < ufive)                   // false
+print(uall >= utop)                   // true
+print(utop != uall)                   // true
+print(utop == utop)                   // true
+var u32a: u32 = 0x8000_0000
+var u32b: u32 = 1
+print(u32a > u32b)                    // true
+var byteA: byte = 200
+var byteB: byte = 3
+print(byteA > byteB)                  // true
+print(byteB >= byteA)                 // false
+
+// 窄有符号车道按符号排序，而不是按位型
+var i8a: i8 = -100
+var i8b: i8 = 100
+print(i8a < i8b)                      // true
+var i32a: i32 = -70000
+var i32b: i32 = 70000
+print(i32a < i32b)                    // true
+print(i32a == i32a)                   // true
+
+// IEEE 双精度车道：NaN 与任何值的比较都为假，不等于为真
+var f0 = opaque_float(0.0, 0)
+var fneg0 = opaque_float(-0.0, 0)
+var f1 = opaque_float(1.0, 0)
+var fnan = opaque_float(0.0, 0) / opaque_float(0.0, 0)
+var finf = opaque_float(1.0, 0) / opaque_float(0.0, 0)
+print(f0 == fneg0)                    // true
+print(f0 < f1)                        // true
+print(f1 >= f1)                       // true
+print(fnan == fnan)                   // false
+print(fnan != fnan)                   // true
+print(fnan < f1)                      // false
+print(fnan <= f1)                     // false
+print(fnan > f1)                      // false
+print(fnan >= f1)                     // false
+print(f1 < fnan)                      // false
+print(finf > f1)                      // true
+print(0.0 == -0.0)                    // true（折叠）
+print(1.0 < 2.0)                      // true（折叠）
+
+// float32 车道
+var g1: f32 = 1.5
+var g2: f32 = 2.5
+print(g1 < g2)                        // true
+print(g2 <= g1)                       // false
+print(g1 == g1)                       // true
+print(g1 != g2)                       // false
+
+// 布尔按整数车道比较
+var bt = opaque_bool(true, 0)
+var bf = opaque_bool(false, 0)
+print(bt == bt)                       // true
+print(bt == bf)                       // false
+print(bt != bf)                       // true
+
+// 循环守卫由同一个所有者下降
+fn count_below(limit: int) -> int {
+    var total = 0
+    var i = 0
+    while (i < limit) {
+        total = total + 1
+        i = i + 1
+    }
+    return total
+}
+print(count_below(5))                 // 5
+print(count_below(0))                 // 0

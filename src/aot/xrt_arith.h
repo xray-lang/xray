@@ -632,24 +632,23 @@ static inline XrValue xrt_neg(XrValue a) {
  * Inline tagged comparisons
  * ========================================================================= */
 
-static inline int64_t xrt_lt(XrValue a, XrValue b) {
+/* Hosted ordering over a tagged pair. The prelude reads the tags and produces
+ * the lane values; which lane and which boolean are the owner's. */
+static inline int64_t xrt_compare_tagged_order(XrCompareKind kind, XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return a.i < b.i;
+        return xrt_compare_i64(kind, a.i, b.i);
     if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
-        return xrt_bigint_cmp_value(a, b) < 0;
-    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
-    return fa < fb;
+        return xrt_compare_ordering(kind, xrt_bigint_cmp_value(a, b));
+    return xrt_compare_f64(kind, (a.tag == XR_TAG_I64) ? (double) a.i : a.f,
+                           (b.tag == XR_TAG_I64) ? (double) b.i : b.f);
+}
+
+static inline int64_t xrt_lt(XrValue a, XrValue b) {
+    return xrt_compare_tagged_order(XR_COMPARE_LT, a, b);
 }
 
 static inline int64_t xrt_le(XrValue a, XrValue b) {
-    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return a.i <= b.i;
-    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
-        return xrt_bigint_cmp_value(a, b) <= 0;
-    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
-    return fa <= fb;
+    return xrt_compare_tagged_order(XR_COMPARE_LE, a, b);
 }
 
 /* =========================================================================
