@@ -8,7 +8,7 @@
  * test_api_defense.c - Unit tests for API boundary defense
  *
  * KEY CONCEPT:
- *   Verifies that all public API functions (xray_vm_*, xray_alloc, etc.)
+ *   Verifies that public isolate API functions
  *   gracefully handle NULL parameters without crashing.
  *   In Release builds, these return early with safe defaults.
  *   In Debug builds, XR_DCHECK fires before the early return.

@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   This header defines the public runtime API shared by all execution backends.
- *   It provides memory allocation, object creation, and type checking.
+ *   It provides object creation and type checking.
  *
  * WHY THIS DESIGN:
  *   - Backend-agnostic: works with the VM and AOT backends
@@ -56,14 +56,6 @@ XRAY_API void xray_runtime_cleanup(XrVMRuntime *X);
 
 // Get runtime version string
 XRAY_API const char *xray_runtime_version(void);
-
-/* ========== Memory Allocation ========== */
-
-// Allocate runtime-managed memory.
-XRAY_API void *xray_alloc(XrVMRuntime *X, size_t size);
-
-// Reallocate memory (for non-GC-managed memory only)
-XRAY_API void *xray_realloc(XrVMRuntime *X, void *ptr, size_t old_size, size_t new_size);
 
 /* ========== Object Creation ========== */
 
