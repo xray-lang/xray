@@ -1004,6 +1004,89 @@ static bool semantic_stringbuilder_append_string_is_exact(
     return true;
 }
 
+static bool semantic_array_push_receiver_type_is_exact(const XrSemanticTypeRecord *type) {
+    char expected_type_key[96];
+    int written = snprintf(expected_type_key, sizeof(expected_type_key),
+                           "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
+                           (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
+    XrStableId zero = {{0}};
+    return type && written > 0 && (size_t) written < sizeof(expected_type_key) &&
+           type->kind == XR_KIND_ARRAY && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 1 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
+           strncmp(type->canonical_key, expected_type_key, (size_t) written) == 0;
+}
+
+static bool semantic_array_push_unit_type_is_exact(const XrSemanticTypeRecord *type) {
+    char expected_type_key[96];
+    int written = snprintf(expected_type_key, sizeof(expected_type_key),
+                           "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:", (unsigned) XR_KIND_UNIT,
+                           (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
+    return type && written > 0 && (size_t) written < sizeof(expected_type_key) &&
+           type->kind == XR_KIND_UNIT && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0 && type->canonical_key &&
+           strcmp(type->canonical_key, expected_type_key) == 0;
+}
+
+/* `Array<T>` is a compiler-owned container: no declaration produces the array
+ * kind and the language admits no member declaration on it, so the frozen
+ * `push` selector on that receiver names one implementation.  The argument is
+ * proven against the receiver's own element entry, and a reference capable
+ * element is refused because `push` consumes its argument: only a scalar
+ * element makes that consumption a copy with no reference-count obligation.
+ * The call carries no argument intent and folds the argument value into its
+ * identity, matching the other sealed builtin member families. */
+static bool semantic_array_push_scalar_is_exact(const XrSemanticPlan *plan,
+                                                const XrSemanticOperationRecord *operation,
+                                                uint32_t *argument_value) {
+    uint32_t operands_count = 0, metadata_count = 0, child_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operands_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    if (!plan || !operation ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_PUSH_SCALAR ||
+        operation->opcode != XI_CALL_METHOD || operation->semantic_immediate <= 0 ||
+        (operation->semantic_immediate & 1) != 0 || operation->operand_count != 2 ||
+        operation->operand_begin + 1u >= operands_count || operation->metadata_count != 1 ||
+        operation->metadata_begin >= metadata_count || !metadata || !children ||
+        strcmp(metadata[operation->metadata_begin], "push") != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        operation->result_alias_operand != -1 ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
+        operation->return_provenance != XR_SEM_RETURN_NONE ||
+        operation->return_parameter != -1 || operation->return_complete != 0)
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *argument = receiver + 1;
+    const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(plan, receiver->type);
+    const XrSemanticTypeRecord *argument_type = xr_semantic_plan_type(plan, argument->type);
+    const XrSemanticTypeRecord *result_type = xr_semantic_plan_type(plan, operation->result_type);
+    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, operation->function);
+    if (!semantic_array_push_receiver_type_is_exact(receiver_type) || !argument_type || !function ||
+        receiver_type->child_begin >= child_count ||
+        children[receiver_type->child_begin] != argument->type ||
+        (argument_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 ||
+        !semantic_array_push_unit_type_is_exact(result_type) ||
+        receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != 0 ||
+        argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        argument->ownership_action != XR_SEM_OPERAND_CONSUME ||
+        receiver->value < function->value_begin ||
+        receiver->value >= function->value_begin + function->value_count ||
+        operation->result_value < function->value_begin ||
+        operation->result_value >= function->value_begin + function->value_count)
+        return false;
+    if (argument_value)
+        *argument_value = argument->value;
+    return true;
+}
+
 static bool semantic_json_namespace_type_is_exact(const XrSemanticTypeRecord *type) {
     char expected_type_key[160];
     int written = snprintf(expected_type_key, sizeof(expected_type_key),
@@ -4503,6 +4586,43 @@ static bool collect_json_namespace_value_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_array_push_scalar_call_intent(XrTargetPlanBuilder *builder,
+                                                  uint32_t operation_index,
+                                                  const XrSemanticOperationRecord *operation,
+                                                  char *error, size_t error_size) {
+    uint32_t argument = XR_SEMANTIC_INDEX_NONE;
+    if (!semantic_array_push_scalar_is_exact(builder->semantic_plan, operation, &argument) ||
+        !call_type_is_exact_scalar(builder->semantic_plan, operation->result_type))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Array.push dispatch authority is incomplete");
+    uint32_t operands_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(builder->semantic_plan, &operands_count);
+    const XrSemanticTypeRecord *receiver_type =
+        xr_semantic_plan_type(builder->semantic_plan, operands[operation->operand_begin].type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_ARRAY_PUSH_SCALAR,
+        .target_kind = XR_TARGET_CALL_TARGET_ARRAY_PUSH_SCALAR,
+    };
+    if (!receiver_type || !stable_identity_from_pair("xray-target-array-push-scalar-v1",
+                                                     operation->id, receiver_type->id, argument,
+                                                     &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Array.push call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
                                              uint32_t target_index,
                                              const XrSemanticCallTargetRecord *target,
@@ -4839,6 +4959,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_json_namespace_value_is_exact(plan, operation, NULL)) {
             valid = collect_json_namespace_value_call_intent(builder, i, operation, error,
                                                              error_size);
+        } else if (semantic_array_push_scalar_is_exact(plan, operation, NULL)) {
+            valid = collect_array_push_scalar_call_intent(builder, i, operation, error, error_size);
         } else if (semantic_operation_is_call_shaped(plan, operation)) {
             uint32_t metadata_count = 0;
             uint32_t operand_count = 0;

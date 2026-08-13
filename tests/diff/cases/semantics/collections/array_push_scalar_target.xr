@@ -1,0 +1,34 @@
+// anchor: array-push-scalar-target
+// `push` on an array receiver is a compiler-owned container member, not an
+// open-domain method dispatch: the array kind is produced by no declaration
+// and carries no source class, so the receiver record plus the frozen selector
+// name one implementation. Passing under the VM is not evidence the native
+// backend accepts the callsite — the VM dispatches the selector at run time
+// while the native backend demands an exact dispatch authority for it, so this
+// case is the coverage that pins the scalar-element form on both paths.
+// The authority stops at a scalar element on purpose: `push` consumes its
+// argument, and only an element that carries no reference makes that
+// consumption a copy with no reference-count obligation left behind.
+fn main() {
+    var counts = [1, 2, 3]
+    counts.push(4)
+    counts.push(-5)
+    print(len(counts))
+    print(counts[3])
+    print(counts[4])
+
+    var ratios = [0.5]
+    ratios.push(1.25)
+    print(len(ratios))
+    print(ratios[1])
+
+    var flags = [true]
+    flags.push(false)
+    print(flags[1])
+
+    var seed = 7
+    counts.push(seed)
+    print(counts[5])
+}
+
+main()
