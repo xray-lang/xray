@@ -430,7 +430,7 @@ XR_ERROR_CORE_NORETURN static void cleanup_throw_abort(XrVMRuntime *isolate, XrV
                                     cleanup_error_message_cstr(isolate, in_flight));
 }
 
-XR_FUNC void xr_vm_cleanup_enter(XrVMRuntime *isolate, XrVMContext *ctx) {
+XR_FUNC void xr_cleanup_scope_enter(XrVMRuntime *isolate, XrVMContext *ctx) {
     if (!ctx || ctx->cleanup_depth < 0 || ctx->cleanup_depth >= XR_CLEANUP_NESTING_MAX)
         cleanup_throw_abort(isolate, xr_null(), ctx ? ctx->pending_error : xr_null());
     int depth = ctx->cleanup_depth;
@@ -440,17 +440,17 @@ XR_FUNC void xr_vm_cleanup_enter(XrVMRuntime *isolate, XrVMContext *ctx) {
     ctx->cleanup_depth = depth + 1;
 }
 
-XR_FUNC void xr_vm_cleanup_err_check(XrVMRuntime *isolate, XrVMContext *ctx) {
+XR_FUNC void xr_cleanup_scope_check_error(XrVMRuntime *isolate, XrVMContext *ctx) {
     if (!ctx || ctx->cleanup_depth <= 0 || XR_IS_NULL(ctx->pending_error))
         return;
     cleanup_throw_abort(isolate, ctx->pending_error,
                         ctx->cleanup_saved_errors[ctx->cleanup_depth - 1]);
 }
 
-XR_FUNC void xr_vm_cleanup_leave(XrVMRuntime *isolate, XrVMContext *ctx) {
+XR_FUNC void xr_cleanup_scope_leave(XrVMRuntime *isolate, XrVMContext *ctx) {
     if (!ctx || ctx->cleanup_depth <= 0)
         cleanup_throw_abort(isolate, xr_null(), ctx ? ctx->pending_error : xr_null());
-    xr_vm_cleanup_err_check(isolate, ctx);
+    xr_cleanup_scope_check_error(isolate, ctx);
     int depth = ctx->cleanup_depth - 1;
     ctx->pending_error = ctx->cleanup_saved_errors[depth];
     ctx->cleanup_saved_errors[depth] = xr_null();

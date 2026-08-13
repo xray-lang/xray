@@ -255,9 +255,9 @@ XR_FUNC bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto)
 
 // Exception handling
 XR_FUNC void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception);
-XR_FUNC void xr_vm_cleanup_enter(XrVMRuntime *isolate, XrVMContext *ctx);
-XR_FUNC void xr_vm_cleanup_leave(XrVMRuntime *isolate, XrVMContext *ctx);
-XR_FUNC void xr_vm_cleanup_err_check(XrVMRuntime *isolate, XrVMContext *ctx);
+XR_FUNC void xr_cleanup_scope_enter(XrVMRuntime *isolate, XrVMContext *ctx);
+XR_FUNC void xr_cleanup_scope_leave(XrVMRuntime *isolate, XrVMContext *ctx);
+XR_FUNC void xr_cleanup_scope_check_error(XrVMRuntime *isolate, XrVMContext *ctx);
 /*
  * Uncaught value-return error diagnostic (spec §8.1.1). Shared by every
  * top-level finalization path so the wording stays in one place; honours

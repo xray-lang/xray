@@ -237,18 +237,18 @@ vmcase(OP_ERR_CATCH) {
 
 vmcase(OP_CLEANUP_ENTER) {
     TRACE_EXECUTION();
-    xr_vm_cleanup_enter(isolate, vm_ctx);
+    xr_cleanup_scope_enter(isolate, vm_ctx);
     vmbreak;
 }
 
 vmcase(OP_CLEANUP_LEAVE) {
     TRACE_EXECUTION();
-    xr_vm_cleanup_leave(isolate, vm_ctx);
+    xr_cleanup_scope_leave(isolate, vm_ctx);
     vmbreak;
 }
 
 vmcase(OP_CLEANUP_ERR_CHECK) {
     TRACE_EXECUTION();
-    xr_vm_cleanup_err_check(isolate, vm_ctx);
+    xr_cleanup_scope_check_error(isolate, vm_ctx);
     vmbreak;
 }
