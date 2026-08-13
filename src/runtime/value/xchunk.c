@@ -401,7 +401,7 @@ static void xr_entry_plan_scan_proto(const XrProto *proto, bool is_root, XrEntry
         xr_entry_plan_scan_proto(DYNARRAY_GET(&proto->protos, i, XrProto *), false, plan);
 }
 
-bool xr_vm_entry_plan_derive(XrProto *root) {
+bool xr_entry_plan_derive(XrProto *root) {
     XrEntryPlan plan;
     if (!root)
         return false;
@@ -424,10 +424,10 @@ bool xr_vm_entry_plan_derive(XrProto *root) {
     else if (plan.root_representation != XR_ROOT_ELIDED)
         plan.scheduler_mode = XR_SCHED_SINGLE;
     root->entry_plan = plan;
-    return xr_vm_entry_plan_validate(root);
+    return xr_entry_plan_validate(root);
 }
 
-bool xr_vm_entry_plan_validate(const XrProto *root) {
+bool xr_entry_plan_validate(const XrProto *root) {
     const XrEntryPlan *plan;
     if (!root)
         return false;

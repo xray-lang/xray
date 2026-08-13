@@ -862,7 +862,7 @@ TEST(e2e_time_sleep_uses_dedicated_vm_suspend) {
     XrProto *p = compile_source("import time\ntime.sleep(1)\nprint(7)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_SLEEP));
-    assert(xr_vm_entry_plan_derive(p));
+    assert(xr_entry_plan_derive(p));
     assert(p->entry_plan.root_representation == XR_ROOT_RESUMABLE_FRAME);
     assert(p->entry_plan.scheduler_mode == XR_SCHED_SINGLE);
     xr_instruction_unit_free(p);

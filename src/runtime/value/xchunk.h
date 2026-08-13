@@ -368,8 +368,8 @@ XR_FUNC int xr_instruction_unit_add_child(XrProto *proto, XrProto *child);
 XR_FUNC int xr_instruction_unit_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode,
                                     uint8_t is_const, uint8_t slot_type, uint8_t source,
                                     uint8_t capture_action, struct XrType *type_info);
-XR_FUNC bool xr_vm_entry_plan_derive(XrProto *root);
-XR_FUNC bool xr_vm_entry_plan_validate(const XrProto *root);
+XR_FUNC bool xr_entry_plan_derive(XrProto *root);
+XR_FUNC bool xr_entry_plan_validate(const XrProto *root);
 XR_FUNC int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol);
 
 /* ========== Debug Helpers ========== */

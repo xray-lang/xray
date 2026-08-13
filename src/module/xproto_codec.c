@@ -2152,7 +2152,7 @@ static uint8_t *bytecode_write_impl(XrVMRuntime *X, const char *stdlib_module, X
         return NULL;
     }
     *out_size = 0;
-    if (!xr_vm_entry_plan_validate(proto) && !xr_vm_entry_plan_derive(proto)) {
+    if (!xr_entry_plan_validate(proto) && !xr_entry_plan_derive(proto)) {
         if (error)
             *error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
         return NULL;
@@ -2336,7 +2336,7 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
     }
     if (proto)
         proto->shared_count = (int) shared_count;
-    if (proto && !xr_vm_entry_plan_validate(proto)) {
+    if (proto && !xr_entry_plan_validate(proto)) {
         xr_instruction_unit_free(proto);
         proto = NULL;
         r.error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;

@@ -108,7 +108,7 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
     ctx->graph_module_count = graph_module_count;
 
     XrProto *proto = xr_compile(ctx, ast);
-    if (proto && !xr_vm_entry_plan_derive(proto)) {
+    if (proto && !xr_entry_plan_derive(proto)) {
         xr_instruction_unit_free(proto);
         proto = NULL;
     }
@@ -190,7 +190,7 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
 
     // Compile
     XrProto *proto = xr_compile(ctx, ast);
-    if (proto && !xr_vm_entry_plan_derive(proto)) {
+    if (proto && !xr_entry_plan_derive(proto)) {
         xr_instruction_unit_free(proto);
         proto = NULL;
     }

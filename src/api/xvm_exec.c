@@ -75,7 +75,7 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
     if (!xr_vm_bind_proto_shared_slots(isolate, proto))
         return -1;
 
-    if (!xr_vm_entry_plan_validate(proto)) {
+    if (!xr_entry_plan_validate(proto)) {
         xr_log_warning("vm", "bytecode has no verified entry plan");
         return -1;
     }

@@ -257,7 +257,7 @@ static char *execute_and_capture(XrProto *proto, int *out_rc) {
      * instruction.  Deriving per path is also the honest comparison: the
      * plan is scanned out of the emitted opcodes, so legacy and Xi each get
      * the plan their own bytecode earns. */
-    if (!xr_vm_entry_plan_derive(proto))
+    if (!xr_entry_plan_derive(proto))
         return NULL;
 
     fflush(stdout);

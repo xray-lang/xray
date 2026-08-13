@@ -230,7 +230,7 @@ TEST(bytecode_roundtrips_reachable_entry_plan) {
     ASSERT_TRUE((roundtrip->entry_plan.required_capability_bits & XR_CAP_TASK) != 0);
     ASSERT_EQ_UINT(roundtrip->entry_plan.root_representation, XR_ROOT_DESCRIPTOR);
     ASSERT_EQ_UINT(roundtrip->entry_plan.scheduler_mode, XR_SCHED_SINGLE);
-    ASSERT_TRUE(xr_vm_entry_plan_validate(roundtrip));
+    ASSERT_TRUE(xr_entry_plan_validate(roundtrip));
 
     xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
