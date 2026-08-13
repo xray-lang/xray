@@ -4,7 +4,7 @@
     "build": 56,
     "cli": 105,
     "install": 2,
-    "source": 3438
+    "source": 3436
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -37,7 +37,6 @@
     "src/api/xisolate_tls.c",
     "src/api/xrepl.c",
     "src/api/xrepl.h",
-    "src/api/xruntime.h",
     "src/api/xvm_compile.c",
     "src/api/xvm_exec.c",
     "src/app/cli/xcmd_build.c",
@@ -500,7 +499,7 @@
     "xray_vm_new_full",
     "xray_vm_set_script_info"
   ],
-  "owner_count": 700,
+  "owner_count": 698,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -2211,18 +2210,6 @@
       "family": "legacy-installed-header",
       "hit_count": 1,
       "path": "src/api/xisolate_profile.h",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xray_vm.h"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "a88d89c813caa03308d98f43ee8ed8ddf74bd38008ce3539c7462ac4c324fa47",
-      "family": "legacy-installed-header",
-      "hit_count": 1,
-      "path": "src/api/xruntime.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -3999,18 +3986,6 @@
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 8,
       "path": "src/api/xrepl.h",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "XrVMRuntime"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "3b4bad05feef503aa1bca84af546aade4c35bf04db9cc88aaf2cd5ee22b53915",
-      "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 1,
-      "path": "src/api/xruntime.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -9353,6 +9328,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "589e2912987f90f610b1e58c69bc533a864c614bfaa9b4307833c84c22d6924a",
-  "total": 3639
+  "source_tree_fingerprint": "d1d772949e6bae82fd5c694eeac1da600808a6309bb419f19ec250acdcc4009a",
+  "total": 3637
 }
