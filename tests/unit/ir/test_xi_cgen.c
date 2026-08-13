@@ -4197,6 +4197,36 @@ TEST(cgen_native_bool_assert_does_not_materialize_box) {
     xi_func_free(ir);
 }
 
+TEST(cgen_assert_equality_consumes_stable_owner_adapter) {
+    const char *src = "fn checkEquality(value: int) {\n"
+                      "    assert_eq(value, 7)\n"
+                      "    assert_ne(value, 8)\n"
+                      "}\n"
+                      "checkEquality(7)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "assert equality owner test should generate");
+    const char *check = find_static_function_definition(code, "checkEquality");
+    TEST_REQUIRE(check != NULL, "assert equality function should be emitted");
+    const char *check_end = next_static_after(check);
+    TEST_REQUIRE(count_between(check, check_end,
+                               "xrt_assert_condition_failed(xrt_eq(") == 2,
+                 "assert_eq and assert_ne must consume the stable assertion owner adapter");
+    TEST_REQUIRE(contains_between(check, check_end, "), true)"),
+                 "assert_eq must expect equality");
+    TEST_REQUIRE(contains_between(check, check_end, "), false)"),
+                 "assert_ne must expect inequality");
+
+    printf("  Generated owner-backed assertion equality %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_span_phi_snapshot_is_debug_only) {
     const char *src =
         "import mem\n"
@@ -13429,6 +13459,7 @@ int main(void) {
     run_cgen_struct_scalar_field_ref_skips_release_load();
     run_cgen_mem_slice_struct_pointer_owner_load_is_elided();
     run_cgen_native_bool_assert_does_not_materialize_box();
+    run_cgen_assert_equality_consumes_stable_owner_adapter();
     run_cgen_span_phi_snapshot_is_debug_only();
     run_cgen_span_ref_only_value_omits_unused_data_cache();
     run_cgen_struct_value_abi_uses_canonical_layout_typedef();

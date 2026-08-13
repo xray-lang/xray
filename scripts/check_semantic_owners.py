@@ -165,7 +165,7 @@ RAW_SCALAR_ACCESS_OPERATIONS = {"xi.ptr.load", "xi.ptr.store"}
 ENUM_METADATA_ACCESS_OPERATIONS = {"xi.enum.variant.at", "xi.enum.payload.at"}
 CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
 NULL_TEST_OPERATIONS = {"xi.isnull"}
-ASSERT_CONDITION_OPERATIONS = {"xi.assert"}
+ASSERT_CONDITION_OPERATIONS = {"xi.assert", "xi.assert.eq", "xi.assert.ne"}
 REGEX_COMPILE_OPERATIONS = {"xi.regex.compile"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
@@ -2081,6 +2081,21 @@ def verify_assert_condition_ratchet(root: Path, registry: dict) -> list[str]:
     if "negate ? truthy : !truthy" in vm_body:
         errors.append("src/vm/xvm_dispatch_assert.inc.c: OP_ASSERT revived a private decision")
 
+    for opcode, expected, legacy in (("OP_ASSERT_EQ", "true", "if (!xr_value_deep_eq"),
+                                     ("OP_ASSERT_NE", "false", "if (xr_value_deep_eq")):
+        start = vm_text.find(f"vmcase({opcode})")
+        end = vm_text.find("vmbreak;", start)
+        vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+        for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                      "XR_ASSERT_CONDITION_OWNER_APPLY", "xr_value_deep_eq", expected):
+            if token not in vm_body:
+                errors.append(
+                    f"src/vm/xvm_dispatch_assert.inc.c: {opcode} bypasses assertion owner")
+                break
+        if legacy in vm_body:
+            errors.append(
+                f"src/vm/xvm_dispatch_assert.inc.c: {opcode} revived a private decision")
+
     for relative, consumer in (("src/aot/xrt.h", "XR_SEM_CONSUMER_AOT_HOSTED"),
                                ("src/aot/xrt_core_freestanding.h",
                                 "XR_SEM_CONSUMER_AOT_FREESTANDING")):
@@ -2112,6 +2127,15 @@ def verify_assert_condition_ratchet(root: Path, registry: dict) -> list[str]:
             break
     if 'fprintf(out, "(%s("' in body:
         errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: xicgen_assert revived private decision")
+    for function, expected in (("xicgen_assert_eq", "true"),
+                               ("xicgen_assert_ne", "false")):
+        body = extract_c_function(dispatch_text, function) or ""
+        for token in ("cg_assert_condition_adapter_name", "(!%s(xrt_eq(",
+                      f"), {expected}) ?"):
+            if token not in body:
+                errors.append(
+                    f"src/aot/xi_cgen_dispatch_helpers.inc.c: {function} bypasses assertion owner")
+                break
     return errors
 
 

@@ -309,6 +309,7 @@ fixtures = [
   "tests/unit/aot/test_xrt_assert_condition_owner_freestanding.c",
   "tests/unit/aot/test_xrt_assert_condition_owner_c90.c",
   "tests/unit/ir/test_xi_cgen.c",
+  "tests/unit/vm/test_vm_exception.c",
   "tests/aot/filetests/link/freestanding_assert_hook.xr",
 ]
 

@@ -11,5 +11,6 @@ c_contains=#include "xrt_core_freestanding.h"
 c_contains=xrt_freestanding_trap("Assertion failed
 c_contains=xrt_freestanding_trap("assert_eq failed
 c_contains=xrt_freestanding_trap("assert_ne failed
+c_contains=xrt_assert_condition_failed(xrt_eq(
 c_not_contains=fprintf(stderr
 c_not_contains=abort()

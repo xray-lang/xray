@@ -2729,8 +2729,6 @@
     xi.try
     xi.catch
     xi.end.try
-    xi.assert.eq
-    xi.assert.ne
     xi.assert.throws
     xi.typeid
     xi.typename
@@ -2774,6 +2772,8 @@
     xi.cell.get
     xi.cell.set
     xi.assert
+    xi.assert.eq
+    xi.assert.ne
     xi.isnull
     xi.enum.variant.at
     xi.enum.payload.at
@@ -2899,7 +2899,11 @@
 
 (define-xi-observable-owner shared.assert-condition
   :category shared-semantic-kernel
-  :operations (xi.assert)
+  :operations (
+    xi.assert
+    xi.assert.eq
+    xi.assert.ne
+  )
   :consumers (
     semantic-plan
     vm

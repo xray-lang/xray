@@ -70,7 +70,10 @@ vmcase(OP_ASSERT_EQ) {
     XrValue actual = R(actual_reg);
     XrValue expect = R(expect_reg);
 
-    if (!xr_value_deep_eq(actual, expect)) {
+    bool equal = xr_value_deep_eq(actual, expect);
+    if (XR_ASSERT_CONDITION_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI,
+            XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO, XR_SEM_CONSUMER_VM, equal, true)) {
         XrValue loc_val = K(loc_idx);
         const char *loc_str = XR_IS_STRING(loc_val) ? XR_TO_STRING(loc_val)->data : "unknown";
         if (!isolate->suppress_exception_print) {
@@ -98,7 +101,10 @@ vmcase(OP_ASSERT_NE) {
     XrValue actual = R(actual_reg);
     XrValue unexpected = R(unexpected_reg);
 
-    if (xr_value_deep_eq(actual, unexpected)) {
+    bool equal = xr_value_deep_eq(actual, unexpected);
+    if (XR_ASSERT_CONDITION_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI,
+            XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO, XR_SEM_CONSUMER_VM, equal, false)) {
         XrValue loc_val = K(loc_idx);
         const char *loc_str = XR_IS_STRING(loc_val) ? XR_TO_STRING(loc_val)->data : "unknown";
 

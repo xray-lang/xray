@@ -1269,9 +1269,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-side-effect",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_assert_condition_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "may-throw"
@@ -1280,10 +1280,10 @@
         "may-throw"
       ],
       "family": "xi-class-side-effect",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.assert-condition",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_assert_condition_core.h",
       "observable_edges": [],
       "operation_id": "xi.assert.eq",
       "ownership": "borrow",
@@ -1296,9 +1296,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-side-effect",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_assert_condition_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "may-throw"
@@ -1307,10 +1307,10 @@
         "may-throw"
       ],
       "family": "xi-class-side-effect",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.assert-condition",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_assert_condition_core.h",
       "observable_edges": [],
       "operation_id": "xi.assert.ne",
       "ownership": "borrow",
@@ -6774,5 +6774,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "43c377a7c6f21f2cd87519c356f9f5940acb84c293e2fe0a7d98a444177c6b63"
+  "source_tree_fingerprint": "109ad20f2c1b634f79d7a148d5721fb8aed4d3ecf8fc2a4553d894e02a3e8942"
 }

@@ -4127,23 +4127,28 @@ static void xicgen_assert_eq(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     (void) prefix;
     XR_DCHECK(v->nargs >= 2, "xicgen_assert_eq: need 2 args");
     const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
+    const char *adapter = cg_assert_condition_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (ctx && ctx->freestanding_profile) {
-        fprintf(out, "(xrt_eq(");
+        fprintf(out, "(!%s(xrt_eq(", adapter);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out,
-                ") ? XR_NULL_VAL : (xrt_freestanding_trap(\"assert_eq failed: %s\"), "
+                "), true) ? XR_NULL_VAL : (xrt_freestanding_trap(\"assert_eq failed: %s\"), "
                 "XR_NULL_VAL))",
                 loc);
         return;
     }
-    fprintf(out, "(xrt_eq(");
+    fprintf(out, "(!%s(xrt_eq(", adapter);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out,
-            ") ? XR_NULL_VAL : (fprintf(stderr, \"assert_eq failed: %s\\n\"), abort(), "
+            "), true) ? XR_NULL_VAL : (fprintf(stderr, \"assert_eq failed: %s\\n\"), abort(), "
             "XR_NULL_VAL))",
             loc);
 }
@@ -4154,23 +4159,28 @@ static void xicgen_assert_ne(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     (void) prefix;
     XR_DCHECK(v->nargs >= 2, "xicgen_assert_ne: need 2 args");
     const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
+    const char *adapter = cg_assert_condition_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (ctx && ctx->freestanding_profile) {
-        fprintf(out, "(!xrt_eq(");
+        fprintf(out, "(!%s(xrt_eq(", adapter);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out,
-                ") ? XR_NULL_VAL : (xrt_freestanding_trap(\"assert_ne failed: %s\"), "
+                "), false) ? XR_NULL_VAL : (xrt_freestanding_trap(\"assert_ne failed: %s\"), "
                 "XR_NULL_VAL))",
                 loc);
         return;
     }
-    fprintf(out, "(!xrt_eq(");
+    fprintf(out, "(!%s(xrt_eq(", adapter);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out,
-            ") ? XR_NULL_VAL : (fprintf(stderr, \"assert_ne failed: %s\\n\"), abort(), "
+            "), false) ? XR_NULL_VAL : (fprintf(stderr, \"assert_ne failed: %s\\n\"), abort(), "
             "XR_NULL_VAL))",
             loc);
 }

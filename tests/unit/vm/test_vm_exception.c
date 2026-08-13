@@ -147,7 +147,8 @@ TEST(catch_clears_pending_error_state) {
                       "}\n"
                       "assert(caught)\n"
                       "var x = 42\n"
-                      "assert_eq(x, 42)\n";
+                      "assert_eq(x, 42)\n"
+                      "assert_ne(x, 41)\n";
 
     int rc = xr_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
@@ -155,6 +156,26 @@ TEST(catch_clears_pending_error_state) {
     XrVMContext *ctx = xr_vm_current_ctx(iso);
     ASSERT(XR_IS_NULL(ctx->pending_error));
 
+    xray_vm_delete(iso);
+}
+
+TEST(assert_equality_opcodes_cover_both_expectations) {
+    XrVMRuntime *iso = make_quiet_isolate();
+    ASSERT_NOT_NULL(iso);
+    ASSERT_EQ_INT(xr_isolate_dostring(iso,
+                                     "assert_eq(7, 7)\n"
+                                     "assert_ne(7, 8)\n"),
+                  0);
+    xray_vm_delete(iso);
+
+    iso = make_quiet_isolate();
+    ASSERT_NOT_NULL(iso);
+    ASSERT(xr_isolate_dostring(iso, "assert_eq(7, 8)\n") != 0);
+    xray_vm_delete(iso);
+
+    iso = make_quiet_isolate();
+    ASSERT_NOT_NULL(iso);
+    ASSERT(xr_isolate_dostring(iso, "assert_ne(7, 7)\n") != 0);
     xray_vm_delete(iso);
 }
 
@@ -198,6 +219,7 @@ RUN_TEST(map_getk_missing_key_throws_e0431);
 
 RUN_TEST_SUITE("Catch state cleanup");
 RUN_TEST(catch_clears_pending_error_state);
+RUN_TEST(assert_equality_opcodes_cover_both_expectations);
 
 RUN_TEST_SUITE("Error rethrow surface");
 RUN_TEST(caught_error_rethrow_reaches_top_level);

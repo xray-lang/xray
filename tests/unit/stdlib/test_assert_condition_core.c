@@ -16,7 +16,17 @@ TEST(assert_condition_owner_covers_both_expectations) {
     ASSERT_FALSE(ASSERT_FAILED(XR_SEM_CONSUMER_CGEN, true, true));
 }
 
+TEST(assert_condition_owner_accepts_classified_equality) {
+    bool equal = true;
+    ASSERT_FALSE(ASSERT_FAILED(XR_SEM_CONSUMER_VM, equal, true));
+    ASSERT_TRUE(ASSERT_FAILED(XR_SEM_CONSUMER_AOT_HOSTED, equal, false));
+    equal = false;
+    ASSERT_TRUE(ASSERT_FAILED(XR_SEM_CONSUMER_AOT_FREESTANDING, equal, true));
+    ASSERT_FALSE(ASSERT_FAILED(XR_SEM_CONSUMER_CGEN, equal, false));
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Assertion Condition Owner");
 RUN_TEST(assert_condition_owner_covers_both_expectations);
+RUN_TEST(assert_condition_owner_accepts_classified_equality);
 TEST_MAIN_END()
