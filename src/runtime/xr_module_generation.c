@@ -375,7 +375,7 @@ static bool sole_scalar_generation_eligible(
         !sole_instructions || instruction_count == 0 ||
         instruction_count != sole_instruction_count ||
         xr_target_plan_function_execution_family_mask(generation->plan, 0) !=
-            XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE)
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
         return false;
     return plan_has_no_non_scalar_execution_authority(generation->plan);
 }
@@ -406,6 +406,12 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status,
         case XR_TYPED_DISPATCH_MODULO_BY_ZERO:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
                         "scalar generation took a modulo by zero");
+        /* Also a program fault: the generation was eligible and every row was
+         * verified, and the program did not reach a return inside the step
+         * budget. It is reported rather than waited out. */
+        case XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
+                        "scalar generation exceeded the executor step budget");
         case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
         case XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED:
         case XR_TYPED_DISPATCH_PROGRAM_INVALID:

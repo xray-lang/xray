@@ -25,23 +25,11 @@
 #define XR_TYPED_FRAME_MAX_ALIGNMENT ((size_t) 4096u)
 #define XR_TYPED_FRAME_MAX_TOTAL_BYTES ((size_t) 80u * 1024u * 1024u)
 #define XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION UINT32_C(19)
-#define XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK                                               \
-    ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                   \
-                 XR_TARGET_FAMILY_CALL_ADAPTER |                                          \
-                 XR_TARGET_FAMILY_CLOSURE_STORAGE |                                       \
-                 XR_TARGET_FAMILY_COROUTINE_STATE_CALL |                                  \
-                 XR_TARGET_FAMILY_STRING_LITERAL_STORAGE |                                \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE |                           \
-                 XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |                            \
-                 XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |                               \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE |                         \
-                 XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE |                              \
-                 XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |                        \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE |                \
-                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |                    \
-                 XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |                     \
-                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                   \
-                 XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE))
+/* The exact closure the production builder completes, named once rather than
+ * copied. A second hand-kept list of the same families is what let this
+ * boundary fall a family behind and silently reject every plan the builder
+ * emits, which reads as a frame failure rather than as a missing family. */
+#define XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK XR_TARGET_REQUIRED_FAMILIES
 
 typedef enum XrTypedFrameStatus {
     XR_TYPED_FRAME_OK = 0,

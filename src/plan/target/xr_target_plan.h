@@ -45,7 +45,11 @@ typedef enum XrTargetPlanFamily {
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
-    XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE = UINT64_C(1) << 0,
+    /* One closed signed-i64 program per function. It is not a straight line:
+     * the family admits several basic blocks joined by unconditional jumps and
+     * conditional branches, and its control flow is proved from the rows
+     * alone rather than assumed from their order. */
+    XR_TARGET_EXECUTION_SCALAR_I64_CLOSED = UINT64_C(1) << 0,
 } XrTargetExecutionFamily;
 
 typedef enum XrTargetInstructionOpcode {
@@ -79,6 +83,17 @@ typedef enum XrTargetInstructionOpcode {
      * the same single-assignment and use-after-definition proof covers a
      * parameter read without any implicitly live slot. */
     XR_TARGET_INSTRUCTION_PARAM_I64,
+    /* The two terminators that are not a return. Their targets are row indexes
+     * relative to the function's own row group, not block identifiers, because
+     * the plan carries no target-level block table: the block partition is
+     * derived from the rows themselves, so a target can be proved to be a block
+     * entry rather than trusted to name one. */
+    XR_TARGET_INSTRUCTION_JUMP,
+    /* The condition is an ordinary defined i64 slot and the branch is taken
+     * when it is not zero. There is no boolean slot, machine representation, or
+     * comparison row in this family, so the condition needs no type the slot
+     * proof does not already establish. */
+    XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64,
     XR_TARGET_INSTRUCTION_COUNT,
 } XrTargetInstructionOpcode;
 
@@ -87,6 +102,28 @@ typedef enum XrTargetInstructionOpcode {
 /* Argument ordinals are proved dense through a fixed-width bitmap, so the
  * executable family caps its parameter count instead of allocating. */
 #define XR_TARGET_INSTRUCTION_MAX_PARAMETERS 64u
+
+/* The definite-assignment proof holds one slot bitmap per block, so the
+ * executable family caps blocks instead of letting the proof allocate without
+ * bound. A function past the cap is unavailable, never partially proved. */
+#define XR_TARGET_INSTRUCTION_MAX_BLOCKS 4096u
+
+/* A jump carries one target in the low half of its immediate and leaves the
+ * high half zero. A conditional branch carries the nonzero-condition target in
+ * the low half and the zero-condition target in the high half, so both edges
+ * are explicit and neither depends on row adjacency. */
+#define XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(immediate)                                          \
+    ((uint32_t) ((immediate) & UINT64_C(0xffffffff)))
+#define XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(immediate) ((uint32_t) ((immediate) >> 32))
+#define XR_TARGET_INSTRUCTION_TARGET_PACK(nonzero, zero)                                            \
+    (((uint64_t) (uint32_t) (zero) << 32) | (uint64_t) (uint32_t) (nonzero))
+
+/* A terminator ends its basic block. The set is spelled out rather than derived
+ * from an enum range so that a new opcode cannot silently join or leave it. */
+#define XR_TARGET_INSTRUCTION_IS_TERMINATOR(opcode)                                                 \
+    ((opcode) == XR_TARGET_INSTRUCTION_RETURN_I64 ||                                                \
+     (opcode) == XR_TARGET_INSTRUCTION_JUMP ||                                                      \
+     (opcode) == XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64)
 
 #define XR_TARGET_REQUIRED_FAMILIES                                                         \
     ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                  \

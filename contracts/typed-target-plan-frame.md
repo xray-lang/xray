@@ -2,12 +2,10 @@
 
 The typed frame is a runtime-only consumer of an immutable, independently
 verified TargetPlan. It accepts exactly TargetPlan schema 19 with the complete
-scalar, aggregate, direct-local call, closure-storage, minimal coroutine
-state-call, String-literal-storage, direct-local-callee-storage, and
-Channel-allocation-storage, Channel-receive-storage, and
-direct-local-GO-callee-storage, SOURCE-namespace-storage, and
-String-byte-slice-view-storage and direct-local-unit-enum-argument-storage
-family mask.
+required family closure the production builder completes, and nothing else: the
+accepted mask is that whole closure rather than a hand-kept subset of it, so a
+family added to the closure cannot leave this boundary silently rejecting every
+plan the builder emits.
 Schema 19 is a breaking hard cutover: schema 18 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
@@ -74,7 +72,14 @@ family. Zero instruction rows mean execution unavailable. A trivial
 signed-`i64` parameter-role slot is an ordinary uninitialized slot of this
 frame at creation: the dispatcher fills it through the verified parameter row
 that names its argument ordinal, so no slot is ever live before a store and
-the frame gains no argument-passing authority of its own. The coroutine
+the frame gains no argument-passing authority of its own. A slot the
+dispatcher writes on one path and reads on another is proved defined by the
+instruction group's own control-flow judgement before the frame is created, so
+the frame keeps its single rule that a load requires a prior store and gains no
+knowledge of blocks or edges. The frame's supported family mask is the exact
+completed closure the production builder emits, so a plan built for any other
+closure is refused rather than executed against a frame that never saw one of
+its families. The coroutine
 state-call family proves only frozen state/resume/direct-call/result
 relations; it contains no child-frame, spill, root, cleanup, drop, cancel, or
 action authority. Aggregate, rooted, owned, caller-storage, coroutine, and
@@ -112,9 +117,9 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h e5b41f30d372a6266e5f8c36e6186d9b91d74aab9d4831d06787b08141e7ccfe
-anchor-sha256: src/vm/xr_typed_frame.h 19d1f77e23efdec170fb60c617a496be341c9579deaa4953a17e669c6f59fb4a
+anchor-sha256: src/plan/target/xr_target_plan.h 9db376e7bca0ef4cf89ab162af2c54448502f317aee3889ff80a93c47ee0e8a8
+anchor-sha256: src/vm/xr_typed_frame.h b51b7f45110ccd0f05a1b6595a4a960eec1606d2bae6dbd21e95633fed2b0151
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 1a8fcbe84ce64c733d0cb2614f745a1852fbd6991ef9ae8da5683b5f0eab6de5
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 6a877b4078e8b4bc9d1fcd3e432df7b5df4af6053ba8b6b11700686b37f4b2d5
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

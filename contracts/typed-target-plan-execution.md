@@ -5,22 +5,55 @@ Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
 family. A function with zero instruction rows is execution unavailable, never
 an empty successful program. The production builder emits a complete group
-only for a verified, capture-free, single-return-block signed-`i64` function
-whose declared parameters are all exact signed `i64` and whose operations are
-entirely in the supported family. Every other function emits zero rows; no
-partial group or fallback is allowed.
+only for a verified, capture-free signed-`i64` function whose declared
+parameters are all exact signed `i64`, whose blocks are all returns, plain
+jumps, or two-way branches, and whose operations are entirely in the supported
+family. Every other function emits zero rows; no partial group or fallback is
+allowed.
 
-The only supported execution family is a closed straight-line signed `i64`
-program consisting of constants, parameter bindings, copies, wrapping
-addition, wrapping subtraction, wrapping multiplication, bitwise and, or,
-exclusive or, wrapping negation, bitwise complement, masked left shift, masked
-arithmetic right shift, truncating division, remainder, and one return. A
-non-empty function group must form an exact table partition in canonical
-function and dense row order. Its independent verifier requires every
+The only supported execution family is a closed signed `i64` program consisting
+of constants, parameter bindings, copies, wrapping addition, wrapping
+subtraction, wrapping multiplication, bitwise and, or, exclusive or, wrapping
+negation, bitwise complement, masked left shift, masked arithmetic right shift,
+truncating division, remainder, unconditional jumps, conditional branches, and
+returns. A non-empty function group must form an exact table partition in
+canonical function and dense row order. Its independent verifier requires every
 referenced slot to belong to that function and have identical trivial
 signed-`i64` register and memory representations. It also proves single
-assignment, use after definition, canonical arity and unused fields, and a
-unique final return. Unknown or unsupported instructions fail closed.
+assignment, canonical arity and unused fields, and that a computation row is
+never the last row of a group. Unknown or unsupported instructions fail closed.
+
+Control flow is proved from the rows, never declared alongside them. There is
+no target-level block table: a basic block begins at the group's first row and
+after every terminator, so every block ends in a terminator by construction and
+the group's last row must be one. A jump target is a row index relative to the
+group's first row, and it is accepted only when it is exactly the first row of
+a block of that same group, which is what forbids an edge into the middle of a
+block. Both edges of a branch are carried explicitly in its immediate, so
+neither depends on row adjacency, and a jump must leave the unused half of its
+immediate zero so it cannot hide a second edge. Every block must be reachable
+from the entry; an unreachable block is refused rather than carried, because
+the intersection over its absent predecessors would read as "everything is
+defined".
+
+Once a function has several blocks, where a value is defined and where it is
+read are separated by control flow, so use after definition is proved by a
+definite-assignment fixed point rather than by row order: a slot is defined on
+entry to a block only when it is defined on leaving every predecessor, the
+entry block starts with nothing defined, and the fixed point is iterated in
+reverse postorder and refused if it has not settled. Reading a value that only
+one arm of a branch defines is therefore rejected even though the row defining
+it exists in the group. This one judgement is what the production builder
+admits against, so a group can never be emitted that verification would then
+refuse. Blocks per function are capped so the proof's per-block slot bitmaps
+are bounded rather than trimmed.
+
+A conditional branch tests an ordinary defined `i64` slot against zero and
+takes its first edge when the slot is not zero. There is no boolean slot,
+machine representation, or comparison row in this family, so a condition needs
+no proof the slot proof does not already give it, and every `i64` value selects
+an edge. A block whose condition is not exact signed `i64` leaves the whole
+function unavailable rather than being coerced.
 
 A shift row takes its count modulo 64, which is the language rule and the
 same shared shift owner the bytecode VM, the AOT runtime, and constant folding
@@ -72,6 +105,16 @@ argument count must equal the number of parameter rows, and a shorter,
 longer, or absent vector is rejected before the frame exists rather than
 truncated, padded, or zero filled. It has no legacy VM opcode, `XrValue`, AOT,
 or generated-C fallback.
+
+The dispatcher carries an instruction pointer that starts at the group's first
+row and moves only where a row says, repeating the verifier's target bound so a
+table that changed underneath cannot move it out of the group. A verified
+program may loop forever, since no static proof could forbid that without also
+forbidding ordinary loops, so executed rows per call are capped by a fixed
+budget rather than a wall clock. Exhausting the budget stops the call with its
+own status, distinct from every status that reports an unacceptable plan or
+call, so a plan can never hang the caller that ran it and the same call refused
+once is refused every time.
 
 Schema 19 is a hard cutover from v18 and all earlier schemas. It preserves all
 v17 authorities while adding exact source unit-enum ordinal storage for
@@ -171,9 +214,12 @@ adapter, or coroutine execution authority. Execution requires healthy ACTIVE
 state and a balanced in-flight-call pin. That route carries no argument
 vector, so a generation whose sole function declares parameters fails closed
 instead of executing against implicit zeros. This adds no public CLI, export
-selection, or general typed VM instruction coverage, control flow, calls,
-aggregates, ownership, exceptions, coroutines, or complete typed TargetPlan
-VM execution.
+selection, or general typed VM instruction coverage, calls, aggregates,
+ownership, exceptions, coroutines, or complete typed TargetPlan VM execution.
+The control flow it does cover is jumps and two-way branches between blocks of
+one function; there is no phi, no comparison row, and therefore no way to merge
+a value produced by two arms, which leaves any function that needs one
+unavailable.
 
 The required `COROUTINE_STATE_CALL` family is independent of this
 dispatcher. It freezes only the state/resume/direct-call/result-slot relation;
@@ -201,6 +247,23 @@ Evidence:
   status for that operator and no result, after the verifier admitted the row.
   It rejects an immediate on a division row, a division missing its divisor
   operand, and a divisor read before its definition.
+  It proves control flow on programs the production builder emits from several
+  blocks. A branch program returns opposite differences from its two arms, so
+  taking the wrong edge negates the answer; zero and only zero takes the second
+  edge, and a negative condition and one whose low 32 bits are zero both count
+  as nonzero. A jump program chains three blocks, each reading a value the
+  previous block defined. It refuses an edge past the end of the group, an edge
+  back into the middle of a block, an edge whose only fault is landing on a row
+  that does not begin a block, a branch whose edges leave the other arm
+  unreachable, a jump carrying a second edge in the unused half of its
+  immediate, a jump carrying an operand, a condition read before its
+  definition, a last row that is not a terminator, a jump over the block whose
+  value the next block reads, and one arm reading the value the other arm
+  defines. Weakening the definite-assignment, block-entry, or reachability rule
+  in turn makes exactly those refusals stop firing, so each assertion is
+  attributable to its own rule. It also proves that a program whose last row
+  jumps backward verifies and then stops on the executor's step budget instead
+  of running forever.
 - `test_xtp_format` proves the instruction row width is part of the complete
   exact codec registry and exercises the public XSM/XTP generation route.
 - `test_typed_frame_runtime_archive` proves the dispatcher and verifier link
@@ -213,22 +276,22 @@ Evidence:
   program fault, separate from the authority failures an unsupported plan
   gives.
 
-anchor-sha256: src/plan/target/xr_target_plan.h e5b41f30d372a6266e5f8c36e6186d9b91d74aab9d4831d06787b08141e7ccfe
-anchor-sha256: src/plan/target/xr_target_plan.c 88fad5600e6810c7fcfe1c57bf79cb0aee53a3b2071f71f12f4612e956e7a015
-anchor-sha256: src/plan/target/xr_target_builder.c 0eb1fdb43445fe8ce037b79430f9e29a6df93afadd0d5956161672ebe90d1a22
-anchor-sha256: src/plan/target/xr_target_instruction_verify.h 5eea43c77cf0e3802e30eacf12ca7e1a105b7b32de0497635cf7048de1b3438b
-anchor-sha256: src/plan/target/xr_target_instruction_verify.c 129dc21c35fbc66164bedddf719921658ad0ccbd5c6814f041098014518a75de
+anchor-sha256: src/plan/target/xr_target_plan.h 9db376e7bca0ef4cf89ab162af2c54448502f317aee3889ff80a93c47ee0e8a8
+anchor-sha256: src/plan/target/xr_target_plan.c 868089fd22c110dc090e0236a14ae8941d5d28f66f7c0cd414787050b35f1237
+anchor-sha256: src/plan/target/xr_target_builder.c aa297bad727c16677f2b371491b4e1da5ac9f6a23fbb581531d016c4e18ef673
+anchor-sha256: src/plan/target/xr_target_instruction_verify.h 6099812f9cee4af8b01c5ffb422c9e359cbd95ec7ebc61c927bc051bc2bf904b
+anchor-sha256: src/plan/target/xr_target_instruction_verify.c 1b7eb7533380ba84c66c7d772e8bd239e3fad261d8bbc99962a4cd02cdc70f14
 anchor-sha256: src/plan/target/xr_target_verify.c 28fd1717c4b57459c8c7b0429c39982975162c91c44b334b7df4711a1b6329ab
 anchor-sha256: src/plan/format/xr_xtp_schema.h 04840cf64073530619483953264b801358984d6559d7928b0b733b265ef2c668
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 8cb0983494ace434ec1d1f7389f19d4780ad82f6f88460144e04a9e28c1502bc
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
-anchor-sha256: src/vm/xr_typed_dispatch.h 429949f7960b431fcbb0b14cd10ca5e720ef4deeb1f0d54d725bb435091c1c42
-anchor-sha256: src/vm/xr_typed_dispatch.c 7e3bc7db834ba7a5eb9fd764c2e06c61749b680473d1f790f7f91a1b61c8b871
+anchor-sha256: src/vm/xr_typed_dispatch.h 30b893c4f791e6b99a87cf46194c982b63972072675d2bfbc329ab55fcba1b25
+anchor-sha256: src/vm/xr_typed_dispatch.c b89abe0916835904f3ea7bc7394e7a8eab23d2f2c37bf3a711d44941858e0591
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c f0aecbfc231a2cfa91cef6426950521eba5cb5ef934dbd53acd9c4a8f52b576c
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 2a372c17d0959bb4e3b086259c54db5623449f77d2b624b7b7c347f05f18545b
 anchor-sha256: tests/unit/plan/test_xtp_format.c ab7a3766a721d1aa2e6fc2ca67031e77ad1f7b44f974d5e8b532067f58705801
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 1a8fcbe84ce64c733d0cb2614f745a1852fbd6991ef9ae8da5683b5f0eab6de5
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
-anchor-sha256: src/runtime/xr_module_generation.c 6bf5ac5976ed0d6784d2c28531608299d500a521dd433877403fa23d80f75ec4
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 6a877b4078e8b4bc9d1fcd3e432df7b5df4af6053ba8b6b11700686b37f4b2d5
+anchor-sha256: src/runtime/xr_module_generation.c f3fe95413105fbb79fb40b5a0a6f718179b997ad4b823a90baae94a045ba103a
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1
