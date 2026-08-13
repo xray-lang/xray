@@ -540,6 +540,14 @@ def self_test() -> int:
         )
         value_print_split_drifted, _ = check(root, collect(root))
         retired_value_print_split.unlink()
+        retired_public_array_constructors = root / "include/xray_runtime.h"
+        retired_public_array_constructors.write_text(
+            "void *xray_array_new(XrVMRuntime *);\n"
+            "void *xray_array_new_with_capacity(XrVMRuntime *, size_t);\n",
+            encoding="utf-8",
+        )
+        public_array_constructors_drifted, _ = check(root, collect(root))
+        retired_public_array_constructors.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -581,6 +589,7 @@ def self_test() -> int:
             or array_operation_split_drifted
             or string_operation_split_drifted
             or value_print_split_drifted
+            or public_array_constructors_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")

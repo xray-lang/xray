@@ -45,14 +45,6 @@ typedef struct XrProto XrProto;
 // XrValue is defined in xvalue.h (16-byte tagged union struct)
 // Include xvalue.h to get the complete definition
 
-/* ========== Object Creation ========== */
-
-// Create empty array
-XRAY_API XrArray *xray_array_new(XrVMRuntime *X);
-
-// Create array with pre-allocated capacity
-XRAY_API XrArray *xray_array_new_with_capacity(XrVMRuntime *X, size_t capacity);
-
 // Create class - declared in xclass.h
 // Use: XrClass* xr_class_new(XrVMRuntime *X, const char *name, XrClass *super);
 
