@@ -1399,14 +1399,16 @@ static XrSemanticPlan *build_unproven_root_parent_shared_plan(bool conditional_s
     target->parent_func = root;
     caller->parent_func = root;
 
+    /* The reference outlives the branch that installs it: the plan builder reads
+     * it back when the whole root function is lowered further below. */
+    XiImportRef import_ref = {
+        .module_path = "./root_init_barrier",
+        .member_name = "barrier",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+    };
     if (!conditional_store) {
-        XiImportRef import_ref = {
-            .module_path = "./root_init_barrier",
-            .member_name = "barrier",
-            .resolved_mod_index = -1,
-            .resolved_shared_slot = -1,
-            .resolved_export_slot = -1,
-        };
         XiValue *callee = xi_value_new(root, entry, XI_IMPORT_REF, &stub_function, 0);
         XiValue *barrier = xi_value_new(root, entry, XI_CALL, &stub_int, 1);
         REQUIRE(callee != NULL && barrier != NULL);
@@ -2157,11 +2159,11 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "76663ab50eff6e8738c5613237ad7d0ce466d798a7a9c0784a68f461a899e6eb") == 0);
+                   "9a0ca0b669cfb1966816b60ce5e2cb47aeaef3bcf72168cc8067e7ce185cde7e") == 0);
     REQUIRE(strcmp(registry_hex,
-                   "1371ce599ce33327ec37ec43a7d4d4b54a52dde457e3a66ee75c51775f00efc7") == 0);
+                   "a12989a8fe2c01385e4a410ae0d83c84fff1936742ab9e7d06aa6ba16b45622b") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "6b1efce44b1c2c56b5c2c054b65c9242c16fac66e77d4f8e94b645425b8c19fb") == 0);
+                   "6049085b81971186a65f74d47be0ec08f1a9c2bb5252b843d796ae5c089fd0b2") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -2839,9 +2841,9 @@ static void test_source_export_call_target_authority(void) {
     xr_stable_id_hex(plan->dependencies[0].id, dependency_id);
     xr_stable_id_hex(dependency->source_exports[0].id, export_id);
     xr_stable_id_hex(target->id, target_id);
-    REQUIRE(strcmp(dependency_id, "08614e5c1f30c72f90aff2ed1e4b233f") == 0);
+    REQUIRE(strcmp(dependency_id, "61f03355861345d8d623a8b7e9c57668") == 0);
     REQUIRE(strcmp(export_id, "d8a790daff41e4e19e5a2c8910093df3") == 0);
-    REQUIRE(strcmp(target_id, "fb57f2b96d24be64f2b54788d0dfa829") == 0);
+    REQUIRE(strcmp(target_id, "bc458ad771e3dd44110074cef06690c0") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));

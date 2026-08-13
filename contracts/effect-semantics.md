@@ -331,4 +331,4 @@ anchor-sha256: src/plan/semantic/xr_semantic_plan.h 83486fbaa7cdcfd43285326bf43b
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
 anchor-sha256: src/plan/semantic/xr_semantic_verify.c 6e06bea77035872d2bd79ecddb36d6e3a519da4b2df9c53bd84dbda866c7817e
 anchor-sha256: src/stdlib/xstdlib_metadata.h 4f0d9628ff18ec6522c48bf602a9ba738813cb1a11f2d059dc7d9c7daf179c14
-anchor-sha256: tests/unit/plan/test_semantic_plan.c c78d240af78d32c8c39e129219cfe0427e778fb9428d46dbd337525c529b35e7
+anchor-sha256: tests/unit/plan/test_semantic_plan.c e1ac83687f5c72f019e103d079e9a749b86a2ee4ff12ea1200854bbfa7f76ffd
