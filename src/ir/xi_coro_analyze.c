@@ -446,6 +446,31 @@ static const XiFunc *xi_coro_resolve_method_callee(const XiFunc *caller,
     return target ? target : xi_coro_resolve_local_method_callee(caller, call);
 }
 
+/* A call through an open function value — a parameter, an upvalue, a value
+ * read out of a container — has no statically closed target set.  The
+ * semantic plan already classifies exactly this shape as
+ * XR_SEM_CALL_TARGET_INDIRECT_CALLABLE and its verifier requires one
+ * coroutine state for it, so the Xi layer answers the same way instead of
+ * rejecting the call as unresolved.  This is the same predicate the semantic
+ * builder uses, kept in step with it deliberately.
+ *
+ * The excluded spellings all carry a statically recoverable target that
+ * xi_coro_resolve_local_callee already resolves, so they never reach here. */
+static bool xi_coro_call_is_open_callable(const XiValue *v) {
+    if (!v || v->op != XI_CALL || v->nargs < 1)
+        return false;
+    const XiValue *callee = v->args[0];
+    if (!callee || !callee->type || callee->type->kind != XR_KIND_FUNCTION)
+        return false;
+    while (callee && xi_copy_is_identity_alias(callee) && callee->nargs == 1)
+        callee = callee->args[0];
+    if (!callee)
+        return false;
+    return callee->op != XI_IMPORT_REF && callee->op != XI_GET_BUILTIN &&
+           callee->op != XI_GET_SHARED && callee->op != XI_CLOSURE_NEW &&
+           !(callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW);
+}
+
 static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResolver *resolver,
                                               int depth) {
     if (f && f->coro_plan && f->coro_plan->analysis_complete) {
@@ -491,6 +516,8 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
             int native_suspendability = xi_coro_native_import_suspendability(f, v);
             if (!target && native_suspendability > 0)
                 return true;
+            if (!target && native_suspendability < 0 && xi_coro_call_is_open_callable(v))
+                return true;
             if (!target && resolver && resolver->call_suspendability &&
                 (v->op == XI_CALL || v->op == XI_CALL_METHOD ||
                  v->op == XI_CALL_METHOD_DIRECT)) {
@@ -511,6 +538,7 @@ XR_FUNC bool xi_coro_func_is_suspendable(const XiFunc *f, const XiCoroResolver *
     return xi_coro_func_is_suspendable_depth(f, resolver, 0);
 }
 
+
 /* A direct call whose resolved target is (transitively) suspendable is itself
  * a suspension site in the caller. */
 static bool xi_coro_call_suspends(const XiFunc *f, const XiValue *v,
@@ -529,6 +557,8 @@ static bool xi_coro_call_suspends(const XiFunc *f, const XiValue *v,
     int native_suspendability = xi_coro_native_import_suspendability(f, v);
     if (native_suspendability >= 0)
         return native_suspendability > 0;
+    if (xi_coro_call_is_open_callable(v))
+        return true;
     if (resolver && resolver->call_suspendability) {
         int prepared = resolver->call_suspendability(resolver->ud, f, v);
         /* Unknown targets are rejected independently before a plan is
@@ -742,6 +772,8 @@ static bool xi_coro_call_resolution_complete(const XiFunc *f, const XiValue *v,
                 target = xi_coro_resolve_local_callee(f, v->args[0]);
         }
         if (target)
+            return true;
+        if (xi_coro_call_is_open_callable(v))
             return true;
         return resolver && resolver->call_suspendability &&
                resolver->call_suspendability(resolver->ud, f, v) >= 0;
