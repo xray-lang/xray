@@ -101,7 +101,7 @@ static XrValue vm_recv_closed(XrVMRuntime *isolate) {
     return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 3, NULL, 0);
 }
 
-XR_FUNC XrValue xr_vm_send_result_value(XrVMRuntime *isolate, uint32_t member_index) {
+XR_FUNC XrValue xr_send_result_value(XrVMRuntime *isolate, uint32_t member_index) {
     return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_SEND_RESULT, member_index);
 }
 
@@ -281,10 +281,10 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
     // ch.trySend(value) — unified helper
     if (nargs == 1 && method_symbol == SYMBOL_TRYSEND) {
         if (xr_channel_is_closed(ch)) {
-            base[a] = xr_vm_send_result_value(isolate, 3);
+            base[a] = xr_send_result_value(isolate, 3);
             return XR_DISP_NEXT;
         }
-        base[a] = xr_vm_send_result_value(
+        base[a] = xr_send_result_value(
             isolate, xr_chan_try_send_transfer(isolate, ch, base[a + 2], transfer_mode) ? 0 : 1);
         return XR_DISP_NEXT;
     }
@@ -415,15 +415,15 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
 
         XrCoroBlockResult resumed = xr_coro_chan_send_resume(current, result_slot);
         if (resumed.kind == XR_CORO_BLOCK_READY) {
-            base[a] = xr_vm_send_result_value(isolate, 0);
+            base[a] = xr_send_result_value(isolate, 0);
             return XR_DISP_NEXT;
         }
         if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
-            base[a] = xr_vm_send_result_value(isolate, 2);
+            base[a] = xr_send_result_value(isolate, 2);
             return XR_DISP_NEXT;
         }
         if (resumed.kind == XR_CORO_BLOCK_CLOSED) {
-            base[a] = xr_vm_send_result_value(isolate, 3);
+            base[a] = xr_send_result_value(isolate, 3);
             return XR_DISP_NEXT;
         }
 
@@ -432,21 +432,21 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
                                                               timeout_ms, transfer_mode);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_continue_from_next(frame, pc);
-            base[a] = xr_vm_send_result_value(isolate, 0);
+            base[a] = xr_send_result_value(isolate, 0);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_TIMEOUT) {
             vm_suspend_continue_from_next(frame, pc);
-            base[a] = xr_vm_send_result_value(isolate, 2);
+            base[a] = xr_send_result_value(isolate, 2);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             vm_suspend_continue_from_next(frame, pc);
-            base[a] = xr_vm_send_result_value(isolate, 3);
+            base[a] = xr_send_result_value(isolate, 3);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             return XR_DISP_BLOCKED;
         }
         vm_suspend_continue_from_next(frame, pc);
-        base[a] = xr_vm_send_result_value(isolate, 3);
+        base[a] = xr_send_result_value(isolate, 3);
         return XR_DISP_NEXT;
     }
 
