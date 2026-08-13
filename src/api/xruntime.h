@@ -92,9 +92,6 @@ XR_FUNC XrValue xr_value_object(void *obj);
 
 /* ========== Debug and Printing ========== */
 
-// Print value for debugging
-XR_FUNC void xr_value_print(XrVMRuntime *X, XrValue val);
-
 // Get type name of value
 XR_FUNC const char *xr_value_type_name(XrValue val);
 
