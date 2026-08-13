@@ -576,7 +576,7 @@ static XrValue xr_struct_materialize_instance_depth(XrVMRuntime *isolate, XrValu
     return XR_FROM_PTR(inst);
 }
 
-XrValue xr_vm_struct_materialize_instance(XrVMRuntime *isolate, XrValue ref) {
+XrValue xr_struct_materialize_instance(XrVMRuntime *isolate, XrValue ref) {
     return xr_struct_materialize_instance_depth(isolate, ref, 0);
 }
 

@@ -62,7 +62,7 @@ XR_FUNC bool xr_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
                                          const XrAggregateFieldLayout *field, XrValue src);
 /* Cross the frame-local aggregate boundary by creating a stable nominal value
  * instance. Returns null when the aggregate is anonymous or allocation fails. */
-XR_FUNC XrValue xr_vm_struct_materialize_instance(XrVMRuntime *isolate, XrValue ref);
+XR_FUNC XrValue xr_struct_materialize_instance(XrVMRuntime *isolate, XrValue ref);
 XR_FUNC bool xr_instance_struct_get_field(XrVMRuntime *isolate, XrInstance *inst,
                                           int field_index, XrValue *out);
 XR_FUNC bool xr_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *inst,

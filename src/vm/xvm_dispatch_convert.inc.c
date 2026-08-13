@@ -371,7 +371,7 @@ vmcase(OP_COPY) {
     int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) GETARG_C(i));
     XrValue _src = R(b);
     if (XR_IS_AGG_REF(_src) && !XR_IS_ARRAY_REF(_src) && !XR_IS_SLICE_REF(_src)) {
-        R(a) = xr_vm_struct_materialize_instance(isolate, _src);
+        R(a) = xr_struct_materialize_instance(isolate, _src);
         if (XR_IS_NULL(R(a)))
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to materialize value-struct copy");
         vmbreak;

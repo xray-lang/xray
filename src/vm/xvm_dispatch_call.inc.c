@@ -685,7 +685,7 @@ vmcase(OP_RETURN) {
             return_slot[j] = R(a + j);
             if (XR_IS_AGG_REF(return_slot[j]) && !XR_IS_ARRAY_REF(return_slot[j]) &&
                 !XR_IS_SLICE_REF(return_slot[j])) {
-                return_slot[j] = xr_vm_struct_materialize_instance(isolate, return_slot[j]);
+                return_slot[j] = xr_struct_materialize_instance(isolate, return_slot[j]);
                 if (XR_IS_NULL(return_slot[j])) {
                     VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
                                      "failed to materialize returned value struct");
@@ -846,7 +846,7 @@ vmcase(OP_RETURN1) {
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to rescue fixed array return value");
         }
     } else if (return_slot && XR_IS_AGG_REF(ret_val) && !XR_IS_SLICE_REF(ret_val)) {
-        XrValue materialized = xr_vm_struct_materialize_instance(isolate, ret_val);
+        XrValue materialized = xr_struct_materialize_instance(isolate, ret_val);
         if (XR_IS_NULL(materialized)) {
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to materialize returned value struct");
         }

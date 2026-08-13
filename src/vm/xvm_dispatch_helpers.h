@@ -419,7 +419,7 @@ static inline bool invoke_unwrap_primitive_args(XrVMContext *vm_ctx, XrValue *ar
         }
     materialize_aggregate:
         if (XR_IS_AGG_REF(args[i]) && !XR_IS_ARRAY_REF(args[i]) && !XR_IS_SLICE_REF(args[i])) {
-            args[i] = xr_vm_struct_materialize_instance(vm_ctx->isolate, args[i]);
+            args[i] = xr_struct_materialize_instance(vm_ctx->isolate, args[i]);
             if (XR_IS_NULL(args[i]))
                 return false;
         }
