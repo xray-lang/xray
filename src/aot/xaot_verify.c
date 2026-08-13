@@ -3670,30 +3670,9 @@ static uint32_t verify_capability_profile_action(const XaotBundle *bundle, uint3
     if (profile == XG_BUILD_FREESTANDING) {
         if ((bundle->target_provider.provided_capability_bits & capability) != 0)
             return XAOT_CAPABILITY_ACTION_LINK;
-        switch (capability) {
-            case XG_CAP_NATIVE:
-            case XG_CAP_EXTERN:
-            case XG_CAP_COROUTINE:
-            case XG_CAP_CHANNEL:
-            case XG_CAP_EXCEPTION:
-            case XG_CAP_SYS_THREAD:
-            case XG_CAP_SCOPE:
-            case XG_CAP_TIMER:
-            case XG_CAP_NETPOLL:
-            case XG_CAP_TASK:
-            case XG_CAP_ATOMIC:
-            case XG_CAP_WORK_QUEUE:
-            case XG_CAP_RESULT_GROUP:
-            case XG_CAP_COUNTDOWN_LATCH:
-            case XG_CAP_SEMAPHORE:
-            case XG_CAP_EVENT_COUNT:
-            case XG_CAP_GENERATOR:
-            case XG_CAP_STACKTRACE:
-            case XG_CAP_DEEP_COPY:
-                return XAOT_CAPABILITY_ACTION_REJECT;
-            default:
-                return XAOT_CAPABILITY_ACTION_LINK;
-        }
+        if ((xr_freestanding_hosted_only_capabilities() & capability) != 0)
+            return XAOT_CAPABILITY_ACTION_REJECT;
+        return XAOT_CAPABILITY_ACTION_LINK;
     }
     return XAOT_CAPABILITY_ACTION_LINK;
 }
