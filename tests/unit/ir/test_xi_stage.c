@@ -703,8 +703,8 @@ static void test_semantic_stage_cannot_skip_coroutine_lowering(void) {
     printf("  PASS\n");
 }
 
-static void test_coroutine_transition_rolls_back_unresolved_call(void) {
-    printf("--- test_coroutine_transition_rolls_back_unresolved_call ---\n");
+static void test_coroutine_transition_accepts_open_callable(void) {
+    printf("--- test_coroutine_transition_accepts_open_callable ---\n");
 
     XiFunc *f = xi_func_new("unresolved_coro_transition", &stub_int);
     XiBlock *entry = xi_block_new(f);
@@ -733,14 +733,19 @@ static void test_coroutine_transition_rolls_back_unresolved_call(void) {
     uint64_t ir_revision_before = f->ir_revision;
     uint64_t cfg_revision_before = f->cfg_version;
     error[0] = '\0';
-    assert(xi_program_lower_coroutines(semantic, NULL, error, sizeof(error)) == NULL);
-    assert(strstr(error, "failed closed") != NULL);
-    assert(f->stage == XI_STAGE_SEMANTIC_LOWERED);
-    assert(f->nblocks == blocks_before && entry->nvalues == values_before);
-    assert(f->ir_revision == ir_revision_before && f->cfg_version == cfg_revision_before);
-    assert(f->coro_plan == NULL);
+    XiCoroLoweredProgram *lowered =
+        xi_program_lower_coroutines(semantic, NULL, error, sizeof(error));
+    assert(lowered != NULL);
+    assert(f->stage == XI_STAGE_CORO_LOWERED);
+    assert(f->nblocks == blocks_before + 2 && entry->nvalues < values_before);
+    assert(f->ir_revision > ir_revision_before && f->cfg_version > cfg_revision_before);
+    assert(f->coro_plan != NULL && f->coro_plan->nstates == 1);
+    assert(f->coro_plan->points[0].op == call);
+    assert(f->coro_plan->points[0].resolved_callee == NULL);
+    assert(f->coro_plan->points[0].edges[XI_CORO_EDGE_CHILD].indirect_child);
+    assert(xi_coro_plan_is_current(f, f->coro_plan));
 
-    xi_func_free(xi_semantic_lowered_program_release(semantic));
+    xi_func_free(xi_coro_lowered_program_release(lowered));
     printf("  PASS\n");
 }
 
@@ -977,6 +982,17 @@ static void attach_only_child(XiFunc *parent, XiFunc *child) {
     child->parent_func = parent;
 }
 
+static void set_single_source_var(XiFunc *func, const char *name, XrType *type) {
+    func->source_var_names =
+        (const char **) xi_func_arena_alloc(func, sizeof(*func->source_var_names));
+    func->source_var_types =
+        (XrType **) xi_func_arena_alloc(func, sizeof(*func->source_var_types));
+    assert(func->source_var_names && func->source_var_types);
+    func->source_var_count = 1;
+    func->source_var_names[0] = name;
+    func->source_var_types[0] = type;
+}
+
 static void test_close_materializes_first_class_capture_cells(void) {
     printf("--- test_close_materializes_first_class_capture_cells ---\n");
 
@@ -984,6 +1000,7 @@ static void test_close_materializes_first_class_capture_cells(void) {
     XiFunc *middle = xi_func_new("cell_middle", &stub_int);
     XiFunc *leaf = xi_func_new("cell_leaf", &stub_int);
     assert(root && middle && leaf);
+    set_single_source_var(root, "value", &stub_int);
     attach_only_child(root, middle);
     attach_only_child(middle, leaf);
 
@@ -1040,6 +1057,8 @@ static void test_close_materializes_first_class_capture_cells(void) {
 
     char error[512] = {0};
     XiRawProgram *raw = xi_stage_adopt_raw(root, error, sizeof(error));
+    if (!raw)
+        fprintf(stderr, "first-class capture raw adoption failed: %s\n", error);
     assert(raw != NULL);
     XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
     assert(canonical != NULL);
@@ -1123,6 +1142,7 @@ static void test_close_shares_one_cell_across_closures(void) {
     XiFunc *writer = xi_func_new("shared_writer", &stub_int);
     XiFunc *reader = xi_func_new("shared_reader", &stub_int);
     assert(root && writer && reader);
+    set_single_source_var(root, "shared", &stub_int);
     attach_two_children(root, writer, reader);
 
     XiBlock *root_entry = xi_block_new(root);
@@ -1216,7 +1236,7 @@ int main(void) {
     test_corrupt_stage_contract_is_rejected();
     test_lowering_fact_corruption_fails_closed();
     test_semantic_stage_cannot_skip_coroutine_lowering();
-    test_coroutine_transition_rolls_back_unresolved_call();
+    test_coroutine_transition_accepts_open_callable();
     test_coroutine_transition_uses_builtin_string_builder_identity();
     test_coroutine_transition_keeps_known_builtin_sync();
     test_coroutine_transition_rejects_invalid_cfg_before_rewrite();

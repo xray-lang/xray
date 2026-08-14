@@ -1903,8 +1903,8 @@ TEST(coro_lower_accepts_frame_backed_static_cleanup_region) {
     xi_func_free(f);
 }
 
-TEST(coro_lower_rejects_unresolved_call_before_cfg_mutation) {
-    XiFunc *f = make_func("coro_unresolved_call");
+TEST(coro_lower_accepts_open_callable_as_state_obligation) {
+    XiFunc *f = make_func("coro_open_callable");
     ASSERT(f != NULL);
     XiValue *callee = xi_value_new(f, f->entry, XI_CONST, &stub_func, 0);
     XiValue *call = xi_value_new(f, f->entry, XI_CALL, &stub_int, 1);
@@ -1915,11 +1915,14 @@ TEST(coro_lower_rejects_unresolved_call_before_cfg_mutation) {
     mark_coro_lower_input(f);
 
     uint32_t blocks = f->nblocks;
-    uint32_t values = f->entry->nvalues;
-    ASSERT(!xi_coro_lower(f, NULL));
-    ASSERT(f->nblocks == blocks);
-    ASSERT(f->entry->nvalues == values);
-    ASSERT(f->coro_plan == NULL);
+    ASSERT(xi_coro_lower(f, NULL));
+    ASSERT(f->nblocks == blocks + 2);
+    ASSERT(f->coro_plan != NULL);
+    ASSERT(f->coro_plan->nstates == 1);
+    ASSERT(f->coro_plan->points[0].op == call);
+    ASSERT(f->coro_plan->points[0].resolved_callee == NULL);
+    ASSERT(f->coro_plan->points[0].edges[XI_CORO_EDGE_CHILD].indirect_child);
+    ASSERT(verify_ok(f));
     xi_func_free(f);
 }
 
@@ -2415,7 +2418,7 @@ int main(void) {
     run_coro_lower_mutation_rejects_invalid_child_edge();
     run_coro_lower_rejects_exception_region_before_cfg_mutation();
     run_coro_lower_accepts_frame_backed_static_cleanup_region();
-    run_coro_lower_rejects_unresolved_call_before_cfg_mutation();
+    run_coro_lower_accepts_open_callable_as_state_obligation();
     run_coro_lower_rejects_raw_stage_before_analysis();
     run_coro_lower_preserves_successor_phi_pred_position();
     run_coro_lower_rejects_stale_cached_analysis();
