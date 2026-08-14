@@ -2452,15 +2452,16 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
              exact_native_module_namespaces[operation->result_value] != 0))
             exact_types[operation->result_type] = 1;
     }
-    /* The constructor receiver is the one dynamic value in the plan that no
-     * operation result names: it is bound on entry rather than computed, so its
-     * type reaches this collector through the parameter table or not at all. */
+    /* A class instance crossing a parameter boundary is the one dynamic value in
+     * the plan that no operation result names: it is bound on entry rather than
+     * computed, so its type reaches this collector through the parameter table
+     * or not at all. */
     size_t parameter_count = xr_semantic_plan_parameter_count(plan->semantic_plan);
     for (uint32_t i = 0; i < (uint32_t) parameter_count; i++) {
         const XrSemanticParameterRecord *parameter =
             xr_semantic_plan_parameter(plan->semantic_plan, i);
         if (!parameter || parameter->type >= type_count ||
-            xr_semantic_class_constructor_receiver_source_class(plan->semantic_plan, i) ==
+            xr_semantic_class_instance_parameter_source_class(plan->semantic_plan, i) ==
                 XR_SEMANTIC_INDEX_NONE)
             continue;
         exact_types[parameter->type] = 1;
@@ -2580,18 +2581,19 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     bool exact_string_byte_parameter = semantic_u8_slice_parameter_is_exact(
         plan->semantic_plan, parameter) && parameter->type == semantic_type;
     /* Recomputed through the shared judgement for the same reason the class
-     * object and the instance are. The receiver is the one value in the family
+     * object and the instance are. A receiver is the one value in the family
      * whose declaration its type row cannot name, so the judgement reads it off
-     * the constructor's own identity; a builder row this verifier cannot
-     * re-derive from that identity stays unproven. */
+     * the member's own identity; a builder row this verifier cannot re-derive
+     * from that identity, or from the class an ordinary parameter was declared
+     * with, stays unproven. */
     uint32_t receiver_parameter =
         operation ? XR_SEMANTIC_INDEX_NONE
                   : xr_semantic_class_parameter_for_value(plan->semantic_plan, semantic_value);
     const XrSemanticParameterRecord *receiver_record =
         xr_semantic_plan_parameter(plan->semantic_plan, receiver_parameter);
     bool exact_class_receiver =
-        xr_semantic_class_constructor_receiver_source_class(plan->semantic_plan,
-                                                            receiver_parameter) !=
+        xr_semantic_class_instance_parameter_source_class(plan->semantic_plan,
+                                                          receiver_parameter) !=
             XR_SEMANTIC_INDEX_NONE &&
         receiver_record && receiver_record->type == semantic_type &&
         receiver_record->function == semantic_function;
@@ -4351,6 +4353,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 bool argument_unit_enum = parameter && parameter->type == operand->type &&
                                           semantic_unit_enum_type_is_exact(
                                               xr_semantic_plan_type(semantic, operand->type));
+                /* Recomputed through the same shared judgement the callee's own
+                 * storage family uses, so an argument this verifier admits can
+                 * never be a parameter that family refused. */
+                bool argument_class_instance =
+                    parameter && parameter->type == operand->type &&
+                    xr_semantic_class_argument_source_class(semantic, parameter_index) !=
+                        XR_SEMANTIC_INDEX_NONE;
                 uint8_t ownership =
                     operand->ownership_action == XR_SEM_OPERAND_CONSUME
                         ? XR_TARGET_CALL_CONSUME
@@ -4362,12 +4371,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         operand->parameter_mode == parameter->mode &&
                         operand->transfer_mode == parameter->transfer_mode &&
                         (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
-                        (argument_scalar == 1 || argument_u8_slice || argument_unit_enum) &&
+                        (argument_scalar == 1 || argument_u8_slice || argument_unit_enum ||
+                         argument_class_instance) &&
                         parameter->mode == XR_PARAM_READ &&
                         operand->access == XR_CALL_ARG_PLAIN &&
                         (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0 &&
                         (parameter->ownership == XI_OWN_NONE ||
-                         ((argument_u8_slice || argument_unit_enum) &&
+                         ((argument_u8_slice || argument_unit_enum || argument_class_instance) &&
                           parameter->ownership == XI_OWN_BORROWED)) &&
                         caller_value &&
                         callee_value &&
@@ -4394,8 +4404,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         plan->machine_reps[argument->register_rep].kind ==
                             (argument_u8_slice
                                  ? XR_MACHINE_REP_VIEW
-                                 : argument_unit_enum ? XR_MACHINE_REP_ENUM_ORDINAL
-                                                      : argument_kind) &&
+                                 : argument_unit_enum
+                                       ? XR_MACHINE_REP_ENUM_ORDINAL
+                                       : argument_class_instance ? XR_MACHINE_REP_DYN_VALUE
+                                                                 : argument_kind) &&
                         argument->ordinal == ordinal &&
                         argument->mode == XR_TARGET_CALL_VALUE &&
                         argument->ownership == ownership &&

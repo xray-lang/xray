@@ -4076,23 +4076,25 @@ static bool builder_add_source_class_instance_storage(XrTargetPlanBuilder *build
     return true;
 }
 
-/* Binds the instance a constructor receives. The receiver is the one value in
+/* Binds a class instance that crosses a parameter boundary: the receiver a
+ * constructor builds, the receiver an instance method borrows, and an ordinary
+ * parameter declared with the class as its type. A receiver is the one value in
  * the construction family whose declaration its own type row cannot name, so it
- * is bound from the function's identity instead; everything else about it is
- * the same outer tagged value the construction returns, because the IR gives an
- * instance no machine geometry a bare object pointer could state. The ownership
- * is the parameter's own recorded ownership rather than a property of the
- * family, and the slot is a parameter slot rather than a temporary, because the
- * value is bound on entry rather than computed. The allocation, its roots and
- * its cleanup stay with semantic ownership and the existing AOT class lifetime
- * path, so this family adds no root or cleanup row. */
-static bool note_source_class_receiver_storage_value(XrTargetPlanBuilder *builder,
-                                                     XrTargetValueStorageAnalysis *analysis,
-                                                     uint32_t parameter_index, char *error,
-                                                     size_t error_size) {
+ * is bound from the function's identity instead; everything else about all
+ * three is the same outer tagged value the construction returns, because the IR
+ * gives an instance no machine geometry a bare object pointer could state. The
+ * ownership is the parameter's own recorded ownership rather than a property of
+ * the family, and the slot is a parameter slot rather than a temporary, because
+ * the value is bound on entry rather than computed. The allocation, its roots
+ * and its cleanup stay with semantic ownership and the existing AOT class
+ * lifetime path, so this family adds no root or cleanup row. */
+static bool note_source_class_parameter_storage_value(XrTargetPlanBuilder *builder,
+                                                      XrTargetValueStorageAnalysis *analysis,
+                                                      uint32_t parameter_index, char *error,
+                                                      size_t error_size) {
     const XrSemanticPlan *plan = builder->semantic_plan;
     const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
-    if (xr_semantic_class_constructor_receiver_source_class(plan, parameter_index) ==
+    if (xr_semantic_class_instance_parameter_source_class(plan, parameter_index) ==
             XR_SEMANTIC_INDEX_NONE ||
         !parameter || parameter->value >= analysis->total_values ||
         parameter->type >= analysis->type_count ||
@@ -4156,10 +4158,14 @@ static bool note_source_class_receiver_storage_value(XrTargetPlanBuilder *builde
     return true;
 }
 
-static bool builder_add_source_class_receiver_storage(XrTargetPlanBuilder *builder, char *error,
-                                                      size_t error_size) {
-    if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE, error,
-                              error_size))
+/* The three parameter shapes are collected by three families rather than one so
+ * that a plan states which of them it actually contains; they share one
+ * collector because the storage row they bind is the same. */
+static bool builder_add_source_class_parameter_family(XrTargetPlanBuilder *builder, uint64_t family,
+                                                      uint32_t (*judge)(const XrSemanticPlan *,
+                                                                        uint32_t),
+                                                      char *error, size_t error_size) {
+    if (!builder_begin_family(builder, family, error, error_size))
         return false;
     XrTargetValueStorageAnalysis analysis = {0};
     bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
@@ -4171,18 +4177,38 @@ static bool builder_add_source_class_receiver_storage(XrTargetPlanBuilder *build
     }
     uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
     for (uint32_t i = 0; valid && i < parameter_count; i++) {
-        if (xr_semantic_class_constructor_receiver_source_class(builder->semantic_plan, i) ==
-            XR_SEMANTIC_INDEX_NONE)
+        if (judge(builder->semantic_plan, i) == XR_SEMANTIC_INDEX_NONE)
             continue;
-        valid = note_source_class_receiver_storage_value(builder, &analysis, i, error, error_size);
+        valid = note_source_class_parameter_storage_value(builder, &analysis, i, error, error_size);
     }
     value_storage_analysis_dispose(&analysis);
     if (!valid) {
         builder->poisoned = true;
         return false;
     }
-    builder->completed_family_mask |= XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE;
+    builder->completed_family_mask |= family;
     return true;
+}
+
+static bool builder_add_source_class_receiver_storage(XrTargetPlanBuilder *builder, char *error,
+                                                      size_t error_size) {
+    return builder_add_source_class_parameter_family(
+        builder, XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE,
+        xr_semantic_class_constructor_receiver_source_class, error, error_size);
+}
+
+static bool builder_add_source_class_method_receiver_storage(XrTargetPlanBuilder *builder,
+                                                             char *error, size_t error_size) {
+    return builder_add_source_class_parameter_family(
+        builder, XR_TARGET_FAMILY_SOURCE_CLASS_METHOD_RECEIVER_STORAGE,
+        xr_semantic_class_method_receiver_source_class, error, error_size);
+}
+
+static bool builder_add_source_class_argument_storage(XrTargetPlanBuilder *builder, char *error,
+                                                      size_t error_size) {
+    return builder_add_source_class_parameter_family(
+        builder, XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE,
+        xr_semantic_class_argument_source_class, error, error_size);
 }
 
 /* Binds the String a concatenation allocates to its own owned dynamic slot.
@@ -6236,16 +6262,23 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
         bool exact_unit_enum = parameter && parameter->type == operand->type &&
                                semantic_unit_enum_type_is_exact(
                                    xr_semantic_plan_type(plan, operand->type));
+        /* A class instance is admitted as an argument through the same shared
+         * judgement that binds its storage on the callee side, so a parameter
+         * this call passes can never be one the callee's own family refused. */
+        bool exact_class_instance =
+            parameter && parameter->type == operand->type &&
+            xr_semantic_class_argument_source_class(plan, parameter_index) !=
+                XR_SEMANTIC_INDEX_NONE;
         if (!parameter || operand->role != XR_SEM_OPERAND_ARGUMENT ||
             operand->parameter != (int16_t) ordinal || operand->type != parameter->type ||
             operand->parameter_mode != parameter->mode ||
             operand->transfer_mode != parameter->transfer_mode ||
             (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
-            (!exact_scalar && !exact_u8_slice && !exact_unit_enum) ||
+            (!exact_scalar && !exact_u8_slice && !exact_unit_enum && !exact_class_instance) ||
             parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
             (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0 ||
             (parameter->ownership != XI_OWN_NONE &&
-             !((exact_u8_slice || exact_unit_enum) &&
+             !((exact_u8_slice || exact_unit_enum || exact_class_instance) &&
                parameter->ownership == XI_OWN_BORROWED)))
             return fail(error, error_size, "XR_TARGET_1003",
                         "direct-local argument contract needs unsupported storage or ownership");
@@ -8201,6 +8234,8 @@ bool xr_target_plan_build_module_set(
         !builder_add_source_class_object_storage(builder, error, error_size) ||
         !builder_add_source_class_instance_storage(builder, error, error_size) ||
         !builder_add_source_class_receiver_storage(builder, error, error_size) ||
+        !builder_add_source_class_method_receiver_storage(builder, error, error_size) ||
+        !builder_add_source_class_argument_storage(builder, error, error_size) ||
         !builder_add_string_concat_result_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
         !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||

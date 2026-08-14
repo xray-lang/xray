@@ -276,12 +276,12 @@ Evidence:
   program fault, separate from the authority failures an unsupported plan
   gives.
 
-anchor-sha256: src/plan/target/xr_target_plan.h e7cebf77179827beecc14ad119d9433d66eedda81be80bb1c4e9f871849303d4
+anchor-sha256: src/plan/target/xr_target_plan.h b6264500610c9072d3897ff9937552cd7c67a2f483f45ff127551c89cb09ff88
 anchor-sha256: src/plan/target/xr_target_plan.c f1655cd0444d528918f85ff62b5af3da3744d8fdddd92b497261e9d8f687b204
-anchor-sha256: src/plan/target/xr_target_builder.c a0395969f74f420e76f302349cf1a02bb1b9e7809464824d5e25efdff740a6f9
+anchor-sha256: src/plan/target/xr_target_builder.c f362c04694d953471d7346584932bcc5e2437ea650a68c2a830d1ccb40235d33
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 6099812f9cee4af8b01c5ffb422c9e359cbd95ec7ebc61c927bc051bc2bf904b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 687ab0df5479e46e51e200e54ea8b935579e6319598fd9830009f935eb057b77
-anchor-sha256: src/plan/target/xr_target_verify.c d38a8140328c470fcfb60cf1236d6a17ccbdff3a9942643ccb6d2fa468da02f0
+anchor-sha256: src/plan/target/xr_target_verify.c 520cde352879b718fba2f0a49609ba028f2753188170b6058916b1a22cb79700
 anchor-sha256: src/plan/format/xr_xtp_schema.h 04840cf64073530619483953264b801358984d6559d7928b0b733b265ef2c668
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 2f6f1fa32e35fd1681ab07bc8a3808d133f33f27e43139224d3f9e253447bd74

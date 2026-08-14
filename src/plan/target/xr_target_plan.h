@@ -50,6 +50,8 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE = UINT64_C(1) << 23,
     XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE = UINT64_C(1) << 24,
     XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE = UINT64_C(1) << 25,
+    XR_TARGET_FAMILY_SOURCE_CLASS_METHOD_RECEIVER_STORAGE = UINT64_C(1) << 26,
+    XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE = UINT64_C(1) << 27,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -189,6 +191,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_SOURCE_CLASS_OBJECT_STORAGE |                    \
                  XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE |                  \
                  XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE |                  \
+                 XR_TARGET_FAMILY_SOURCE_CLASS_METHOD_RECEIVER_STORAGE |           \
+                 XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE |                  \
                  XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE))
 
 typedef enum XrMachineRepKind {
