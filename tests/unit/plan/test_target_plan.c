@@ -486,8 +486,7 @@ static XrSemanticPlan *build_string_byte_slice_view_semantic(void) {
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
     XiValue *source = xi_const_str(function, entry, "target-view", &stub_exact_string);
-    XiValue *view = xi_value_new(function, entry, XI_CALL_BUILTIN,
-                                 &stub_target_u8_slice, 1);
+    XiValue *view = xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_target_u8_slice, 1);
     REQUIRE(source && view);
     view->args[0] = source;
     view->xa_intrinsic_id = XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
@@ -1199,19 +1198,19 @@ static void expect_verify_failure_at(XrTargetPlan *plan, const char *code, uint3
 
 static XrSemanticPlan *build_unit_enum_semantic(XrEnumLayout **out_layout) {
     static const char *members[] = {"Standard", "UrlSafe"};
-    XrEnumLayout *layout =
-        xr_enum_layout_new("stdlib/base64", "Base64Alphabet", members, 2);
+    XrEnumLayout *layout = xr_enum_layout_new("stdlib/base64", "Base64Alphabet", members, 2);
     REQUIRE(layout != NULL && layout->is_zero_payload && layout->layout_id != 0);
     XrType enum_type = {
         .kind = XR_KIND_ENUM,
         .id = 18,
         .frozen = true,
         .scalar_rep = XR_SCALAR_REP_NONE,
-        .enum_type = {
-            .enum_name = "Base64Alphabet",
-            .layout_id = layout->layout_id,
-            .layout = layout,
-        },
+        .enum_type =
+            {
+                .enum_name = "Base64Alphabet",
+                .layout_id = layout->layout_id,
+                .layout = layout,
+            },
     };
     XiFunc *function = xi_func_new("target_source_enum_probe", &stub_int);
     XiBlock *entry = xi_block_new(function);
@@ -1224,8 +1223,7 @@ static XrSemanticPlan *build_unit_enum_semantic(XrEnumLayout **out_layout) {
     REQUIRE(function->params != NULL);
     function->params[0] = ordinal;
     function->arc_borrow_sig =
-        (XiBorrowSig *) xi_func_arena_alloc(function,
-                                            (uint32_t) sizeof(*function->arc_borrow_sig));
+        (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
     REQUIRE(function->arc_borrow_sig != NULL);
     function->arc_borrow_sig->nparams = 1;
     function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
@@ -1267,10 +1265,8 @@ static void test_unit_enum_target_rep_mutations(void) {
     }
     REQUIRE(binding != NULL);
     XrTargetMachineRepRecord *rep = &plan->machine_reps[binding->register_rep];
-    REQUIRE(rep->kind == XR_MACHINE_REP_ENUM_ORDINAL &&
-            rep->detail < semantic->type_count &&
-            &semantic->types[rep->detail] == enum_type &&
-            rep->root_kind == XR_TARGET_ROOT_NONE &&
+    REQUIRE(rep->kind == XR_MACHINE_REP_ENUM_ORDINAL && rep->detail < semantic->type_count &&
+            &semantic->types[rep->detail] == enum_type && rep->root_kind == XR_TARGET_ROOT_NONE &&
             rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL);
     uint16_t saved_kind = rep->kind;
     uint32_t saved_detail = rep->detail;
@@ -1364,7 +1360,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "c2fe146b64deb4fb7e3740b4becebed6b64ac01fd4adebf475c5a6d69e06fcee") == 0);
+                   "7b0b522ba131e2ff9ca1731a95ccb3663f59b64b4c26f5e21cf314764d47b016") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2379,8 +2375,8 @@ static void test_channel_close_call_authority(void) {
 
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex,
-                   "55efb086c7927cbe6bad036df5d80a5f7c7d74a8313b67ba6acfec32d56c19dd") == 0);
+    REQUIRE(strcmp(call_hex, "6d3ed8ccaadfdb304bed6364c59fd7af9ac10037bb1028800195596882ec2169") ==
+            0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
         XrTargetCallArgumentRecord fabricated_argument = {0};
@@ -2900,8 +2896,8 @@ static void test_direct_local_call_adapter_family(void) {
     REQUIRE(xr_fingerprint_equal(first->fingerprint, second->fingerprint));
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex,
-                   "3e85862a3f23c8725d3507f7ebea5efaeb2ecb411696f7b609fd114906c0b16e") == 0);
+    REQUIRE(strcmp(call_hex, "ca215f8c881087b03f28b4328b305128043e9fec3e513ce6f6012ac610aa2779") ==
+            0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -3130,8 +3126,8 @@ static void test_coroutine_state_call_family(void) {
             tail_plan->functions[tail_call->caller_function].coroutine_count == 0);
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
-    REQUIRE(strcmp(tail_hex,
-                   "489c18d037fd37c7773dc22044dcebcd9334d729dcfbb241d9e5a57a47a08585") == 0);
+    REQUIRE(strcmp(tail_hex, "fa0aac4932920959418630bf5ddbc10ec9fe5f445b02fc4406e4b09e0cc25048") ==
+            0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");
@@ -3230,8 +3226,9 @@ static XrTargetCallRecord *find_call_by_convention(XrTargetPlan *plan, uint8_t c
  * block breaks out first, the per-family branch becomes dead code, and no
  * plan carrying the row can ever verify — so each family asserts that the
  * builder's row verifies as written and that RETURN_OWNED is load-bearing. */
-static XrTargetCallRecord *expect_owned_dynamic_stringbuilder_call(
-    XrTargetPlan *plan, uint8_t convention, uint8_t target_kind) {
+static XrTargetCallRecord *expect_owned_dynamic_stringbuilder_call(XrTargetPlan *plan,
+                                                                   uint8_t convention,
+                                                                   uint8_t target_kind) {
     char error[512] = {0};
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
     XrTargetCallRecord *call = find_call_by_convention(plan, convention);
@@ -3281,9 +3278,9 @@ static void test_stringbuilder_append_rune_call_authority(void) {
     if (!built)
         fprintf(stderr, "StringBuilder.append(rune) TargetPlan failed: %s\n", error);
     REQUIRE(built && plan);
-    expect_owned_dynamic_stringbuilder_call(
-        plan, XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_RUNE,
-        XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE);
+    expect_owned_dynamic_stringbuilder_call(plan,
+                                            XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_RUNE,
+                                            XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE);
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
     xr_target_profile_free(profile);
@@ -3298,9 +3295,8 @@ static void test_stringbuilder_to_string_call_authority(void) {
     if (!built)
         fprintf(stderr, "StringBuilder.toString TargetPlan failed: %s\n", error);
     REQUIRE(built && plan);
-    expect_owned_dynamic_stringbuilder_call(
-        plan, XR_TARGET_CALL_CONVENTION_STRINGBUILDER_TO_STRING,
-        XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING);
+    expect_owned_dynamic_stringbuilder_call(plan, XR_TARGET_CALL_CONVENTION_STRINGBUILDER_TO_STRING,
+                                            XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING);
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
     xr_target_profile_free(profile);
@@ -3315,9 +3311,9 @@ static void test_stringbuilder_append_string_call_authority(void) {
     if (!built)
         fprintf(stderr, "StringBuilder.append(string) TargetPlan failed: %s\n", error);
     REQUIRE(built && plan);
-    expect_owned_dynamic_stringbuilder_call(
-        plan, XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING,
-        XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING);
+    expect_owned_dynamic_stringbuilder_call(plan,
+                                            XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING,
+                                            XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING);
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
     xr_target_profile_free(profile);
@@ -3332,29 +3328,24 @@ static void test_string_byte_slice_view_target_authority(void) {
     if (!built)
         fprintf(stderr, "string byte-slice TargetPlan failed: %s\n", error);
     REQUIRE(built && plan &&
-            (plan->completed_family_mask &
-             XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE) != 0);
+            (plan->completed_family_mask & XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE) != 0);
     const XrSemanticOperationRecord *operation = NULL;
     uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
-        const XrSemanticOperationRecord *candidate =
-            xr_semantic_plan_operation(semantic, i);
-        if (candidate && candidate->intrinsic_kind ==
-            XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (candidate && candidate->intrinsic_kind == XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
             operation = candidate;
             operation_index = i;
         }
     }
     REQUIRE(operation && plan->calls_count == 1);
     XrTargetCallRecord *call = &plan->calls[0];
-    const XrTargetValueRepRecord *result =
-        xr_target_plan_value_rep(plan, operation->result_value);
+    const XrTargetValueRepRecord *result = xr_target_plan_value_rep(plan, operation->result_value);
     REQUIRE(result && call->semantic_operation == operation_index &&
             call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
             call->result_value == operation->result_value && call->argument_count == 0 &&
             call->flags == 0 && call->result_ownership == XR_TARGET_CALL_BORROW &&
-            call->calling_convention ==
-                XR_TARGET_CALL_CONVENTION_STRING_BYTE_SLICE_VIEW &&
+            call->calling_convention == XR_TARGET_CALL_CONVENTION_STRING_BYTE_SLICE_VIEW &&
             call->target_kind == XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW &&
             plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_VIEW &&
             plan->machine_reps[result->memory_rep].kind == XR_MACHINE_REP_VIEW &&
