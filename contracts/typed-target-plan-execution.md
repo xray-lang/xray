@@ -276,7 +276,7 @@ Evidence:
   program fault, separate from the authority failures an unsupported plan
   gives.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 8afcf581feba296220e3139cf77e7f0ad70ab4a162a7518284dbfbcd709c68cd
+anchor-sha256: src/plan/target/xr_target_plan.h 8b276152846ea38c82b691f11ddec393f42f79d2f32fa2de640be751d84af167
 anchor-sha256: src/plan/target/xr_target_plan.c 2d79f835b429d524ae7d4f35c8382135961b237e0adf7f023aea419a12e0b1b6
 anchor-sha256: src/plan/target/xr_target_builder.c 5f64b2609075826f85d37bd500a97481d807f094b76cc880a45f897f5c1916f5
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 6099812f9cee4af8b01c5ffb422c9e359cbd95ec7ebc61c927bc051bc2bf904b
