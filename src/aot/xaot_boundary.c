@@ -13,7 +13,6 @@
 #include "../ir/xi_module.h"
 #include <string.h>
 
-static const XiValue *unwrap_identity_value(const XiValue *v);
 static const XiImportRef *module_import_ref_for_value(const XaotBundle *bundle,
                                                       const XiFunc *current, const XiValue *value);
 static const XiClassData *resolve_imported_class(const XaotBundle *bundle, const XiImportRef *ref,
@@ -67,7 +66,7 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_constructor_call_target(const XaotBu
     if (!bundle || !current || !call || call->nargs < 1)
         return NULL;
     if (call->op == XI_CALL) {
-        const XiValue *callee = unwrap_identity_value(call->args[0]);
+        const XiValue *callee = xi_value_trace_repr(call->args[0]);
         if (callee && callee->op == XI_GET_SHARED)
             target = boundary_resolve_shared_constructor(bundle, current, (int) callee->aux_int);
     } else if (call->op == XI_CALL_METHOD && call->aux && (call->aux_int & 1) == 0) {
@@ -144,18 +143,8 @@ XR_FUNC const char *xaot_boundary_step_kind_name(XaotBoundaryStepKind kind) {
     }
 }
 
-static const XiValue *unwrap_identity_value(const XiValue *v) {
-    while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY ||
-            xi_op_is_identity_forward(v->op)) &&
-           v->nargs >= 1) {
-        v = v->args[0];
-    }
-    return v;
-}
-
 static const XiImportRef *value_import_ref(const XiValue *v) {
-    v = unwrap_identity_value(v);
+    v = xi_value_trace_repr(v);
     if (!v || v->op != XI_IMPORT_REF || !v->aux)
         return NULL;
     return (const XiImportRef *) v->aux;
@@ -260,7 +249,7 @@ static const XiFunc *resolve_import_ref(const XaotBundle *bundle, const XiImport
 static const XiImportRef *module_import_ref_for_value(const XaotBundle *bundle,
                                                       const XiFunc *current, const XiValue *value) {
     const XiModule *mod;
-    const XiValue *v = unwrap_identity_value(value);
+    const XiValue *v = xi_value_trace_repr(value);
     const XiImportRef *ref = value_import_ref(v);
 
     if (ref && !ref->member_name)
@@ -305,7 +294,7 @@ static const XiFunc *resolve_module_member_target(const XaotBundle *bundle, cons
 static const XiImportRef *binding_import_ref_for_value(const XaotBundle *bundle,
                                                        const XiFunc *current,
                                                        const XiValue *value) {
-    const XiValue *v = unwrap_identity_value(value);
+    const XiValue *v = xi_value_trace_repr(value);
     const XiImportRef *ref = value_import_ref(v);
     const XiModule *mod;
 
@@ -368,7 +357,7 @@ static const XiFunc *resolve_imported_static_method_target(const XaotBundle *bun
         return NULL;
     ref = binding_import_ref_for_value(bundle, current, call->args[0]);
     if (!ref) {
-        const XiValue *receiver = unwrap_identity_value(call->args[0]);
+        const XiValue *receiver = xi_value_trace_repr(call->args[0]);
         const XiImportRef *module_ref =
             receiver && receiver->op == XI_LOAD_FIELD && receiver->nargs >= 1 && receiver->aux
                 ? module_import_ref_for_value(bundle, current, receiver->args[0])
@@ -403,7 +392,7 @@ static const XiFunc *resolve_local_static_method_target(const XaotBundle *bundle
     if (!bundle || !current || !call || call->op != XI_CALL_METHOD || call->nargs < 1 ||
         !call->aux || (call->aux_int & 1) != 0)
         return NULL;
-    const XiValue *receiver = unwrap_identity_value(call->args[0]);
+    const XiValue *receiver = xi_value_trace_repr(call->args[0]);
     const XiModule *mod = bundle_module_for_func(bundle, current);
     if (!receiver || receiver->op != XI_GET_SHARED || !mod || !mod->slot_classes ||
         receiver->aux_int < 0 || receiver->aux_int >= mod->nslots)
@@ -580,7 +569,7 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
     if (first_arg_out)
         *first_arg_out = 1;
 
-    callee = unwrap_identity_value(call->args[0]);
+    callee = xi_value_trace_repr(call->args[0]);
     if (!callee)
         return NULL;
     if (callee->op == XI_CLOSURE_NEW && callee->aux)

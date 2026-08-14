@@ -1439,6 +1439,58 @@ static inline bool xi_copy_is_branch_hint(const XiValue *v) {
 }
 
 /*
+ * Identity tracing transparency, in three widening layers.
+ *
+ * A pass that walks back from a result to the value it stands for has to agree
+ * with every other pass on which ops forward the same thing.  That answer
+ * lives here once; the layers differ only in what "the same thing" means:
+ *
+ *   identity  the same value in the same representation.  Only an identity
+ *             alias copy qualifies, because a clone (XI_COPY_KIND_VALUE_CLONE)
+ *             and a copy carrying enum metadata each produce a value distinct
+ *             from their operand.  A tracer that tests the raw XI_COPY opcode
+ *             instead walks straight through both and reports two distinct
+ *             values as one, which is exactly what the copy-kind guard exists
+ *             to prevent.
+ *   repr      the same value through a representation change (box/unbox).
+ *   referent  the same referent through a retain, which only moves a count.
+ *
+ * A caller picks the widest layer its question tolerates and nothing wider.
+ * Walking through an op no layer names lets the tracer claim an identity the
+ * IR does not carry; refusing to walk through one it should only costs the
+ * caller a resolution it would otherwise have made.
+ */
+static inline bool xi_value_forwards_identity(const XiValue *v) {
+    return v && (xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op));
+}
+
+static inline bool xi_value_forwards_repr(const XiValue *v) {
+    return xi_value_forwards_identity(v) || (v && (v->op == XI_BOX || v->op == XI_UNBOX));
+}
+
+static inline bool xi_value_forwards_referent(const XiValue *v) {
+    return xi_value_forwards_repr(v) || (v && v->op == XI_RETAIN);
+}
+
+static inline const XiValue *xi_value_trace_identity(const XiValue *v) {
+    while (xi_value_forwards_identity(v) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+static inline const XiValue *xi_value_trace_repr(const XiValue *v) {
+    while (xi_value_forwards_repr(v) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+static inline const XiValue *xi_value_trace_referent(const XiValue *v) {
+    while (xi_value_forwards_referent(v) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+/*
  * Phi node: placed at block entry for control-flow merges.
  * Kept separate from the instruction list for efficient iteration.
  * args[i] corresponds to block->preds[i].

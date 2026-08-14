@@ -1549,10 +1549,7 @@ static int lower_resolved_object_field_ordinal(XiLower *l, AstNode *node, XrType
 }
 
 static const XiImportRef *lower_import_ref_from_value(XiLower *l, const XiValue *v) {
-    while (v &&
-           (v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_BOX ||
-            v->op == XI_UNBOX || v->op == XI_RETAIN || v->op == XI_RELEASE) &&
-           v->nargs >= 1) {
+    while ((xi_value_forwards_referent(v) || (v && v->op == XI_RELEASE)) && v->nargs >= 1) {
         v = v->args[0];
     }
     if (!v)

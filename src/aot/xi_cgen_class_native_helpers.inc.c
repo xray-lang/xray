@@ -5784,9 +5784,7 @@ static bool cg_class_shared_native_alias_safe_uses(XiCgenCtx *ctx, const XiFunc 
                 if (v->op == XI_LOAD_FIELD && ai == 0 &&
                     cg_class_shared_native_getter_field_accepts_slot(ctx, f, v, slot))
                     continue;
-                if ((v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_BOX ||
-                     v->op == XI_UNBOX) &&
-                    ai == 0) {
+                if (xi_value_forwards_repr(v) && ai == 0) {
                     if (!cg_class_shared_native_value_traces_to_slot(v, slot))
                         return false;
                     if (!cg_class_shared_native_alias_safe_uses(ctx, f, v, slot,
@@ -5937,9 +5935,7 @@ static bool cg_class_shared_native_import_alias_safe_uses(XiCgenCtx *ctx, const 
                 if (v->op == XI_LOAD_FIELD && ai == 0 &&
                     cg_class_shared_native_getter_field_accepts_class(ctx, f, v, source))
                     continue;
-                if ((v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_BOX ||
-                     v->op == XI_UNBOX) &&
-                    ai == 0) {
+                if (xi_value_forwards_repr(v) && ai == 0) {
                     if (!cg_class_shared_native_value_traces_to_export_slot(
                             ctx, module, f, v, exporter_index, exporter_slot))
                         return false;

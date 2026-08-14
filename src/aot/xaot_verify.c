@@ -7711,10 +7711,8 @@ static bool verify_func_stack_allocations_recursive(const XiFunc *func, char *er
 }
 
 static const XiFunc *verify_spawn_capture_target(const XiValue *callee) {
-    while (
-        callee &&
-        (callee->op == XI_BOX || callee->op == XI_COPY || xi_op_is_identity_forward(callee->op)) &&
-        callee->nargs > 0)
+    while (callee && (callee->op == XI_BOX || xi_value_forwards_identity(callee)) &&
+           callee->nargs > 0)
         callee = callee->args[0];
     if (callee && callee->op == XI_CLOSURE_NEW && callee->aux)
         return (const XiFunc *) callee->aux;
