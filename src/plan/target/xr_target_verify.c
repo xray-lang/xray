@@ -717,6 +717,51 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *semantic,
            operation->result_value < function->value_begin + function->value_count;
 }
 
+/* Rebuilt here from the frozen semantic rows, not read back from the builder.
+ * `T?` is `T | null`, and the language surface requires the nullable primitives
+ * to carry `null` in the tagged representation so a null renders as "null" and
+ * not as the payload's zero, with the interpreter and the native backend
+ * agreeing. The payload admitted here is exactly one machine scalar that cannot
+ * hold a reference, so the tagged carrier owes no reference count. A nullable
+ * String, object, or container is reference capable and stays refused. */
+static bool semantic_nullable_scalar_type_is_exact(const XrSemanticTypeRecord *type) {
+    const uint8_t allowed = (uint8_t) (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_CONST);
+    XrStableId zero = {{0}};
+    if (!type || (type->flags & (uint8_t) ~allowed) != 0 ||
+        type->builtin_type != XR_TID_NULL || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(type->source_class_identity, zero) ||
+        type->source_enum_key || type->enum_layout_id != 0 ||
+        type->enum_member_count != 0 || type->enum_flags != 0 ||
+        type->reserved_enum != 0)
+        return false;
+    /* The type of the `null` spelling itself is the degenerate member of this
+     * shape: its carrier holds the null tag and nothing else, which is the same
+     * storage the payload-carrying members use and owes no reference count
+     * either. It is what a nullable scalar is initialized from and compared
+     * against, so leaving it out would refuse every program that names null. */
+    if (type->kind == XR_KIND_NULL)
+        return type->scalar_rep == XR_SCALAR_REP_NONE;
+    if ((type->flags & XR_SEM_TYPE_NULLABLE) == 0)
+        return false;
+    /* The authority stops at the three payload spellings whose whole path is
+     * proved, `int`, `float` and `bool`. A narrower or unsigned integer, a
+     * single-precision float, and a rune each imply a boxing recipe this
+     * authority does not state, so they stay refused along with every other
+     * payload. */
+    switch ((XrTypeKind) type->kind) {
+        case XR_KIND_INT:
+            return type->scalar_rep == XR_NATIVE_I64;
+        case XR_KIND_FLOAT:
+            return type->scalar_rep == XR_NATIVE_F64;
+        case XR_KIND_BOOL:
+            return type->scalar_rep == XR_SCALAR_REP_NONE;
+        default:
+            return false;
+    }
+}
+
 static bool semantic_unit_enum_type_is_exact(const XrSemanticTypeRecord *type) {
     XrStableId zero = {{0}};
     return type && type->kind == XR_KIND_ENUM && type->source_enum_key &&
@@ -2445,6 +2490,13 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
     if (type_count && !exact_types)
         return report(error, error_size, "XR_EXEC_5003",
                       "dynamic-type verification allocation failed");
+    /* The nullable scalar family is driven by the semantic type rather than by
+     * one producing operation, so its types are marked from the type table: a
+     * nullable parameter has no operation whose result type would name it. */
+    for (uint32_t i = 0; i < (uint32_t) type_count; i++)
+        if (semantic_nullable_scalar_type_is_exact(
+                xr_semantic_plan_type(plan->semantic_plan, i)))
+            exact_types[i] = 1;
     for (uint32_t i = 0; i < (uint32_t) operation_count; i++) {
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(plan->semantic_plan, i);
@@ -2573,6 +2625,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     bool exact_string_byte_parameter = semantic_u8_slice_parameter_is_exact(
         plan->semantic_plan, parameter) && parameter->type == semantic_type;
     bool exact_unit_enum = semantic_unit_enum_type_is_exact(type);
+    bool exact_nullable_scalar = semantic_nullable_scalar_type_is_exact(type);
     uint16_t receive_scalar_kind = XR_MACHINE_REP_COUNT;
     bool scalar_channel_receive =
         operation && operation->opcode == XI_CHAN_TRY_RECV && type &&
@@ -2591,7 +2644,8 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                               exact_direct_callee || exact_go_callee ||
                               exact_channel || exact_source_namespace ||
                               exact_native_module_namespace || exact_string_byte_view ||
-                              exact_string_byte_parameter || exact_unit_enum
+                              exact_string_byte_parameter || exact_unit_enum ||
+                              exact_nullable_scalar
                           ? 1
                           : (type ? semantic_type_expected_rep(type,
                                                                &expected_kind)
@@ -2619,7 +2673,8 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         exact_array_member_result ||
         exact_direct_callee ||
         exact_go_callee ||
-        exact_channel || exact_source_namespace || exact_native_module_namespace) {
+        exact_channel || exact_source_namespace || exact_native_module_namespace ||
+        exact_nullable_scalar) {
         expected_kind = XR_MACHINE_REP_DYN_VALUE;
         expected_layout = target_plan_layout_for_type(plan, semantic_type);
         eligibility = expected_layout >= 0 &&
@@ -2669,9 +2724,11 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
           plan->machine_reps[record->memory_rep].detail != (uint32_t) expected_layout)))
         XR_VALUE_BINDING_FAIL(3);
     if (expected_kind == XR_MACHINE_REP_DYN_VALUE) {
+        /* A nullable scalar carrier holds the null tag or a plain machine
+         * scalar, so it claims no allocation, root map, or cleanup. */
         uint8_t expected_ownership =
             (exact_direct_callee || exact_go_callee || exact_source_namespace ||
-             exact_native_module_namespace ||
+             exact_native_module_namespace || exact_nullable_scalar ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
                 : XR_TARGET_OWNERSHIP_OWNED;

@@ -931,6 +931,51 @@ static bool aot_array_allocation_is_exact(const XrSemanticPlan *semantic,
            operation->result_value < function->value_begin + function->value_count;
 }
 
+/* Rebuilt independently of both the TargetPlan collector and its verifier:
+ * `T?` is `T | null`, and the language surface requires the nullable primitives
+ * to carry `null` in the tagged representation so a null renders as "null" and
+ * not as the payload's zero, with the interpreter and the native backend
+ * agreeing. The payload admitted here is exactly one machine scalar that cannot
+ * hold a reference, so the tagged carrier owes no reference count. A nullable
+ * String, object, or container is reference capable and stays refused. */
+static bool aot_nullable_scalar_type_is_exact(const XrSemanticTypeRecord *type) {
+    const uint8_t allowed = (uint8_t) (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_CONST);
+    XrStableId zero = {{0}};
+    if (!type || (type->flags & (uint8_t) ~allowed) != 0 ||
+        type->builtin_type != XR_TID_NULL || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(type->source_class_identity, zero) ||
+        type->source_enum_key || type->enum_layout_id != 0 ||
+        type->enum_member_count != 0 || type->enum_flags != 0 ||
+        type->reserved_enum != 0)
+        return false;
+    /* The type of the `null` spelling itself is the degenerate member of this
+     * shape: its carrier holds the null tag and nothing else, which is the same
+     * storage the payload-carrying members use and owes no reference count
+     * either. It is what a nullable scalar is initialized from and compared
+     * against, so leaving it out would refuse every program that names null. */
+    if (type->kind == XR_KIND_NULL)
+        return type->scalar_rep == XR_SCALAR_REP_NONE;
+    if ((type->flags & XR_SEM_TYPE_NULLABLE) == 0)
+        return false;
+    /* The authority stops at the three payload spellings whose whole path is
+     * proved, `int`, `float` and `bool`. A narrower or unsigned integer, a
+     * single-precision float, and a rune each imply a boxing recipe this
+     * authority does not state, so they stay refused along with every other
+     * payload. */
+    switch ((XrTypeKind) type->kind) {
+        case XR_KIND_INT:
+            return type->scalar_rep == XR_NATIVE_I64;
+        case XR_KIND_FLOAT:
+            return type->scalar_rep == XR_NATIVE_F64;
+        case XR_KIND_BOOL:
+            return type->scalar_rep == XR_SCALAR_REP_NONE;
+        default:
+            return false;
+    }
+}
+
 /* Rebuilt independently of both the TargetPlan collector and its verifier: a
  * direct-local call may carry an owned String result, whose storage is the
  * outer tagged XrValue. Every other non-scalar result stays fail closed. */
@@ -3534,6 +3579,93 @@ static bool oracle_array_element_access_is_exact(const VerifyAuthority *ctx,
            element->ownership_action == XR_SEM_OPERAND_CONSUME;
 }
 
+/* A nullable scalar lives in the tagged carrier at every point of its life: the
+ * definition, every use, and the return boundary all name the same storage, so
+ * this value never asks for a representation adapter. The frozen rep, slot, and
+ * layout rows are rebuilt here rather than read back from the collector. The
+ * value may be a parameter or an operation result; both carry the same fact. */
+static bool oracle_nullable_scalar_storage(const VerifyAuthority *ctx,
+                                           uint32_t semantic_value,
+                                           XrRep *out_storage,
+                                           uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    uint32_t parameter_index = ctx->parameter_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    const XrSemanticParameterRecord *parameter =
+        parameter_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
+            : NULL;
+    if ((!parameter && !operation) ||
+        (!parameter && operation->result_value != semantic_value))
+        return false;
+    uint32_t type_index = parameter ? parameter->type : operation->result_type;
+    if (!aot_nullable_scalar_type_is_exact(
+            xr_semantic_plan_type(ctx->semantic, type_index)))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != type_index)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        binding->semantic_value != semantic_value ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation !=
+            (parameter ? XR_SEMANTIC_INDEX_NONE : operation_index) ||
+        slot->function != (parameter ? parameter->function : operation->function) ||
+        slot->role != (parameter ? XR_TARGET_SLOT_PARAMETER
+                                 : (operation->opcode == XI_PHI
+                                        ? XR_TARGET_SLOT_PHI
+                                        : XR_TARGET_SLOT_TEMPORARY)) ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static bool oracle_dynamic_direct_local_string_result_storage(
     const VerifyAuthority *ctx, uint32_t semantic_value,
     XrRep *out_storage, uint16_t *out_machine_kind) {
@@ -4257,6 +4389,11 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
                                       uint32_t semantic_value,
                                       XrRep *out_storage,
                                       uint16_t *out_machine_kind) {
+    /* A nullable scalar names the tagged carrier whatever produced it, so the
+     * question is settled by its type before any opcode is consulted. */
+    if (oracle_nullable_scalar_storage(ctx, semantic_value, out_storage,
+                                       out_machine_kind))
+        return true;
     if (ctx->parameter_by_value[semantic_value] != XR_SEMANTIC_INDEX_NONE)
         return oracle_machine_storage(ctx, semantic_value, out_storage,
                                       out_machine_kind);
@@ -4467,6 +4604,11 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
     if (!operation || operand_index >= operation->operand_count)
         return false;
     uint16_t ignored_kind = 0;
+    /* A nullable scalar operand stays in the tagged carrier its definition
+     * already named, so no use of it can request an adapter. */
+    if (oracle_nullable_scalar_storage(ctx, source_value, out_storage,
+                                       &ignored_kind))
+        return true;
     switch (operation->opcode) {
         case XI_CALL_BUILTIN:
             *out_storage = XR_REP_TAGGED;
@@ -4846,7 +4988,10 @@ static bool authority_collect_obligations_indexed(
             /* A returned owned String is tagged storage. Each oracle re-proves
              * its own exact TargetPlan row, so no unproven reference return
              * reaches this path. */
-            if (!oracle_dynamic_closure_storage(
+            if (!oracle_nullable_scalar_storage(
+                    oracle, block->control_value, &output_storage,
+                    &machine_kind) &&
+                !oracle_dynamic_closure_storage(
                     oracle, block->control_value, &output_storage,
                     &machine_kind) &&
                 !oracle_dynamic_string_literal_storage(
@@ -5829,6 +5974,9 @@ static bool verify_exact_semantic_coverage(VerifyAuthority *ctx) {
             uint16_t machine_kind = 0;
             if (!oracle_machine_storage(ctx, block->control_value,
                                         &output_storage, &machine_kind) &&
+                !oracle_nullable_scalar_storage(
+                    ctx, block->control_value, &output_storage,
+                    &machine_kind) &&
                 !oracle_dynamic_closure_storage(
                     ctx, block->control_value, &output_storage,
                     &machine_kind) &&

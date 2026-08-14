@@ -44,6 +44,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE = UINT64_C(1) << 17,
     XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE = UINT64_C(1) << 18,
     XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE = UINT64_C(1) << 19,
+    XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE = UINT64_C(1) << 20,
     XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE = UINT64_C(1) << 21,
 } XrTargetPlanFamily;
 
@@ -179,6 +180,7 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE |            \
                  XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |                       \
                  XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE |                \
+                 XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE |                        \
                  XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE))
 
 typedef enum XrMachineRepKind {
