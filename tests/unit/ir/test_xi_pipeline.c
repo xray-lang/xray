@@ -66,7 +66,12 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
 
     xa_analyzer_analyze(analyzer, "test.xr", program);
 
-    XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, cfg);
+    /* SemanticPlan debug identities require the same canonical source file
+     * that the analyzer used. Keep the caller's policy intact while making
+     * this in-memory fixture equivalent to a real file compilation. */
+    XiPipelineConfig effective = cfg ? *cfg : xi_pipeline_default_config();
+    effective.source_file = "test.xr";
+    XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, &effective);
 
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
