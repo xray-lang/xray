@@ -9,7 +9,7 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 23 preserves exact `String.runes()` builtin-member identity
+SemanticPlan schema 26 preserves exact `String.runes()` builtin-member identity
 as a frozen intrinsic and retains the pointer-free `DIRECT_LOCAL` call-target
 authority to lexical shared slots. Direct SSA callees still resolve only
 through exact identity copies to a closure/function binding. A shared callee
@@ -28,7 +28,7 @@ stores, late root stores, and stores in any other lexical parent remain
 unavailable rather than assuming closure-creation order. The verifier rebuilds
 this relation from frozen operation, operand, function-parent, CFG-dominance,
 slot, and callable-function facts rather than trusting the builder's target row.
-Schema 22 also freezes `core.string.bytes` as an exact non-allocating borrowed
+Schema 23 also freezes `core.string.bytes` as an exact non-allocating borrowed
 `Slice<byte>` view. Its record binds the numeric intrinsic identity, String
 source operand and semantic root, byte element type, read capability, and
 caller lifetime. Independent verification reconstructs these facts; selector
@@ -86,7 +86,7 @@ static suspend operation (or `XI_GO`), the same row also authorizes exactly one
 coroutine-state entity for an ordinary call. A direct tail-call edge propagates
 the target's suspendability to its caller but has no resume state of its own.
 The record never copies caller-authored
-effects, provider spellings, symbols, pointers, or raw digests. Schema 16 retains
+effects, provider spellings, symbols, pointers, or raw digests. Schema 17 retains
 one separate `NATIVE_YIELDABLE` authority for an ordinary `XI_CALL` whose
 callee resolves through exact identity copies to a bare canonical
 `XI_IMPORT_REF`. The module/member pair must name exactly one generated stdlib
@@ -400,12 +400,13 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
 anchor-sha256: src/plan/format/xr_xsm_encode.c 9b66a6e25f0bd3557a005617fce7ce569a5d00a38475bcdbdd484225392f5bae
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c ed42ce40ee1bca1c7838a537ea7ff5d978d3cf405859d9281566bfd9b1f4c5f9
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h 82b8b74b4d03318a6190e66b82efdd9356c1a8c45e4eac86fd10017118c7ed3f
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c bf29b7258f17dd03c356741b05f122bdea104d81cd4fe4170b519910aa36ea37
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h d3f4fdee66ecab0b8d68fe18c8a7961304553cc1113b492d0f72f6af70e59f3b
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 90528b2d34429cb148751cdac7479de616c18c43280f0248f77070b454e28257
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 446d3c78ca343bd3f3aa2daaf68f7847bfa9f84d8e3fbd7dfa1459de6586ba23
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 2d116ea59543bf6e5d4f61fb59d0719a42388e2875c25f7df9c8c67edf33a5cf
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h bbcaf57e24a92de079a0cefa2bdf5c753327b3c737d656cb57fbe2b6a648616c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 586e54c32d9c534293301af0c9e11908825d0c6c715c0c663dd1c167ff32b8ee
+anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d19001054ed1aa8334872e2998949bb515a8a2cf46fc2d682a681c82d6529f9d
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c f086c2a37afbaf13e8e6c983d0243d6edc466b8022022fbdb920b3caca28d453
 anchor-sha256: src/stdlib/xstdlib_metadata.h fea5c1b87e5cf4650f62720540f9728ac71dc475fdab683ba30b6458d3e3902b
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 59a23701436cc08552ed6970ef754b6ecab31af212b14b9674a5db2b53fd813a
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 876eabf168fd940a90806537dabb662857be1fc02f2c0d1b5dac26b4cd0d1f98

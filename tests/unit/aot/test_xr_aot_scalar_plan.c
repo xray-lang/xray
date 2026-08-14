@@ -1446,6 +1446,89 @@ static void test_string_runes_c_emission_recipe_is_exact(void) {
     xi_func_free(root);
 }
 
+static void test_iterator_rune_has_next_c_emission_recipe_is_exact(void) {
+    XiFunc *root = xi_func_new("iterator_rune_has_next_recipe", &scalar_unit);
+    REQUIRE(root != NULL);
+    XiBlock *entry = xi_block_new(root);
+    REQUIRE(entry != NULL);
+    XiValue *source = xi_const_str(root, entry, "authority", &scalar_string);
+    XiValue *runes = xi_value_new(root, entry, XI_CALL_METHOD,
+                                  &iterator_rune_type, 1);
+    XiValue *has_next = xi_value_new(root, entry, XI_CALL_METHOD,
+                                     &scalar_bool, 1);
+    REQUIRE(source && runes && has_next);
+    runes->args[0] = source;
+    runes->aux = (void *) "runes";
+    runes->aux_int = 470;
+    has_next->args[0] = runes;
+    has_next->aux = (void *) "hasNext";
+    has_next->aux_int = 112;
+    XiValue *release = xi_value_new(root, entry, XI_RELEASE, &scalar_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = runes;
+    xi_block_set_return(entry, NULL);
+    root->stage = XI_STAGE_OPTIMIZED;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    XrTargetProfile *profile = build_exact_profile();
+    XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic refinement_diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &refinement, &refinement_diag));
+    xr_aot_refinement_plan_free(refinement);
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+    uint32_t ignored_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t runes_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t has_next_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, root, runes, &ignored_function, &runes_value, error,
+        sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, root, has_next, &ignored_function, &has_next_value, error,
+        sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, has_next_value, &view,
+                                          error, sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_BOOL &&
+            view.target_register_kind == XR_MACHINE_REP_I1 &&
+            view.target_memory_kind == XR_MACHINE_REP_I1 &&
+            view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_HAS_NEXT &&
+            view.recipe_operand_value == runes_value && view.recipe_symbol &&
+            strcmp(view.recipe_symbol, "xrt_iterator_rune_has_next") == 0);
+    XrCValueEmissionView *row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == has_next_value)
+            row = &emission->values[i];
+    REQUIRE(row != NULL);
+    uint8_t saved_recipe = row->materialization;
+    row->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                        error, sizeof(error)));
+    row->materialization = saved_recipe;
+    uint32_t saved_operand = row->recipe_operand_value;
+    row->recipe_operand_value = has_next_value;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                        error, sizeof(error)));
+    row->recipe_operand_value = saved_operand;
+    const char *saved_symbol = row->recipe_symbol;
+    row->recipe_symbol = "xrt_iterator_has_next";
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                        error, sizeof(error)));
+    row->recipe_symbol = saved_symbol;
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(root);
+}
+
 static void test_string_byte_slice_view_c_emission_recipe_is_exact(void) {
     XiFunc *root = xi_func_new("string_byte_slice_view_recipe", &scalar_unit);
     REQUIRE(root != NULL);
@@ -1639,6 +1722,7 @@ int main(void) {
     test_channel_new_c_emission_recipe_is_exact();
     test_stringbuilder_new_c_emission_recipe_is_exact();
     test_string_runes_c_emission_recipe_is_exact();
+    test_iterator_rune_has_next_c_emission_recipe_is_exact();
     test_string_byte_slice_view_c_emission_recipe_is_exact();
     test_channel_receive_c_emission_recipe_is_exact();
     printf("AOT scalar TargetPlan tests passed\n");

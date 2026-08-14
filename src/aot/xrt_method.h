@@ -843,6 +843,13 @@ static inline XrValue xrt_string_runes(XrValue receiver) {
     return xrt_method_0(receiver, XRT_SYM_RUNES);
 }
 
+/* Dedicated target-plan spelling for Iterator<rune>.hasNext. The generic
+ * method remains responsible for validation and the pending-error channel;
+ * generated C neither selects a method symbol nor infers the scalar result. */
+static inline uint8_t xrt_iterator_rune_has_next(XrValue receiver) {
+    return (uint8_t) XR_TO_BOOL(xrt_method_0(receiver, XRT_SYM_HAS_NEXT));
+}
+
 static inline XrValue xrt_len_value(XrValue recv) {
     XrValue result = xrt_method_0(recv, XRT_SYM_LENGTH);
     if (!XR_IS_NULL(result))

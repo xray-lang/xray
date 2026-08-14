@@ -23,6 +23,7 @@
 #include "../../plan/semantic/xr_semantic_string_shape.h"
 #include "../../plan/semantic/xr_semantic_task_shape.h"
 #include "../../plan/semantic/xr_semantic_string_runes_shape.h"
+#include "../../plan/semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../../plan/semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
@@ -3323,6 +3324,90 @@ static bool oracle_dynamic_string_runes_storage(
     return true;
 }
 
+/* Iterator<rune>.hasNext is admitted only when its receiver is the exact
+ * String.runes result this plan already proved and its scalar result is bound
+ * by the unique sealed TargetPlan call row. */
+static bool oracle_iterator_rune_has_next_call(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index < ctx->operation_count
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_semantic_iterator_rune_has_next_is_exact(
+            ctx->semantic, operation, &receiver) ||
+        operation->result_value != semantic_value)
+        return false;
+    XrRep receiver_storage = XR_REP_TAGGED;
+    uint16_t receiver_kind = XR_MACHINE_REP_COUNT;
+    if (!oracle_dynamic_string_runes_storage(ctx, receiver, &receiver_storage,
+                                             &receiver_kind) ||
+        receiver_storage != XR_REP_TAGGED ||
+        receiver_kind != XR_MACHINE_REP_DYN_VALUE)
+        return false;
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(ctx->semantic, operation->result_type);
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(ctx->target_plan, &call_count);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (call)
+            return false;
+        call = &calls[i];
+    }
+    char first_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char second_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[208];
+    XrStableId expected_call;
+    XrFingerprint digest;
+    xr_stable_id_hex(operation->id, first_hex);
+    xr_stable_id_hex(result_type ? result_type->id : (XrStableId) {{0}},
+                     second_hex);
+    int written = snprintf(
+        key, sizeof(key),
+        "xray-target-iterator-rune-has-next-v1:first=%s:second=%s:ordinal=%u",
+        first_hex, second_hex, receiver);
+    if (!result_type || !binding || !call || written <= 0 ||
+        (size_t) written >= sizeof(key) ||
+        !xr_stable_id_from_key(key, &expected_call, &digest) ||
+        !xr_stable_id_equal(call->identity, expected_call) ||
+        call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->caller_function != operation->function ||
+        call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !aot_stable_id_is_zero(call->source_export_identity) ||
+        !aot_stable_id_is_zero(call->source_callee_identity) ||
+        call->result_value != semantic_value || call->result_slot != binding->slot ||
+        call->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE || call->argument_count != 0 ||
+        call->adapter_count != 0 || call->flags != 0 ||
+        call->result_register_rep != binding->register_rep ||
+        call->result_memory_rep != binding->memory_rep ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->calling_convention !=
+            XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_HAS_NEXT ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ITERATOR_RUNE_HAS_NEXT ||
+        call->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL ||
+        call->reserved8[0] != 0 || call->reserved8[1] != 0 ||
+        call->reserved8[2] != 0)
+        return false;
+    return oracle_machine_storage(ctx, semantic_value, out_storage,
+                                  out_machine_kind) &&
+           *out_machine_kind == XR_MACHINE_REP_I1;
+}
+
 /* The array allocation materializes an owned dynamic value in its own temporary
  * slot. Its storage is tagged because the runtime allocator returns a boxed
  * object; the frozen slot, layout, and ownership rows are rebuilt here rather
@@ -5290,6 +5375,10 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             return oracle_machine_storage(ctx, semantic_value, out_storage,
                                           out_machine_kind);
         case XI_CALL_METHOD:
+            if (xr_semantic_iterator_rune_has_next_is_exact(
+                    ctx->semantic, operation, NULL))
+                return oracle_iterator_rune_has_next_call(
+                    ctx, semantic_value, out_storage, out_machine_kind);
             if (oracle_dynamic_string_runes_storage(
                     ctx, semantic_value, out_storage, out_machine_kind))
                 return true;
@@ -5623,6 +5712,20 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                                           &ignored_kind);
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
+            if (operation->opcode == XI_CALL_METHOD &&
+                xr_semantic_iterator_rune_has_next_is_exact(
+                    ctx->semantic, operation, NULL)) {
+                XrRep result_storage = XR_REP_TAGGED;
+                if (operand_index != 0 ||
+                    !oracle_iterator_rune_has_next_call(
+                        ctx, operation->result_value, &result_storage,
+                        &ignored_kind) ||
+                    !oracle_dynamic_string_runes_storage(
+                        ctx, source_value, out_storage, &ignored_kind))
+                    return false;
+                *out_storage = XR_REP_TAGGED;
+                return true;
+            }
             if (operation->opcode == XI_CALL_METHOD &&
                 xr_semantic_string_runes_is_exact(ctx->semantic, operation,
                                                   NULL)) {

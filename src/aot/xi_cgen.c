@@ -2875,6 +2875,31 @@ static bool cg_string_runes_emission_view(
     return true;
 }
 
+static bool cg_iterator_rune_has_next_emission_view(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    XrCValueEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !value || !out)
+        return false;
+    CgValueEmissionStatus status =
+        cg_value_emission_view(ctx, function, value, out);
+    if (status != CG_VALUE_EMISSION_FOUND ||
+        out->materialization !=
+            XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_HAS_NEXT)
+        return false;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    if (!value->args || !value->args[0] || out->rep != XR_C_VALUE_REP_BOOL ||
+        !out->recipe_symbol || !out->recipe_symbol[0] ||
+        !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
+        receiver != out->recipe_operand_value) {
+        (void) cg_value_emission_fail(
+            ctx, "Iterator<rune>.hasNext has no exact immutable C recipe");
+        return false;
+    }
+    return true;
+}
+
 static void cg_emit_channel_receive_payload_expression(
     FILE *out, const XrCValueEmissionView *view, uint32_t value_id,
     bool coroutine) {

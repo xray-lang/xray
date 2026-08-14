@@ -2436,6 +2436,27 @@ TEST(cgen_string_runes_consumes_immutable_emission_recipe) {
     xi_func_free(ir);
 }
 
+TEST(cgen_iterator_rune_has_next_consumes_immutable_emission_recipe) {
+    XiFunc *ir = compile_to_ir(
+        "var iter = \"0123456789abcdef\".runes()\n"
+        "print(iter.hasNext())\n");
+    TEST_REQUIRE(ir != NULL, "Iterator<rune>.hasNext recipe fixture should compile");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "iterator_rune_has_next_recipe",
+                                        &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "sealed Iterator<rune>.hasNext recipe should generate");
+    TEST_REQUIRE(count_between(code, code + strlen(code),
+                               "xrt_iterator_rune_has_next(") == 1,
+                 "CGen must consume the exact hasNext recipe once");
+    TEST_REQUIRE(!contains(code, "XRT_SYM_HAS_NEXT"),
+                 "CGen must not select Iterator.hasNext by symbol id");
+    TEST_REQUIRE(contains(code, "xrt_has_pending_error("),
+                 "Iterator.hasNext must preserve the pending-error poll");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_span_passed_only_to_direct_call_omits_data_cache) {
     const char *src = "fn viewLength(view: Slice<byte>) -> int { return len(view) }\n"
                       "fn slicedLength(bytes: Array<byte>) -> int {\n"
@@ -13458,6 +13479,7 @@ int main(void) {
     run_cgen_direct_stdlib_import_call_emits_no_function_token_local();
     run_cgen_string_literal_runes_receiver_emits_immediate_without_local();
     run_cgen_string_runes_consumes_immutable_emission_recipe();
+    run_cgen_iterator_rune_has_next_consumes_immutable_emission_recipe();
     run_cgen_span_passed_only_to_direct_call_omits_data_cache();
     run_cgen_unused_shared_load_is_debug_only_when_source_bound();
     run_cgen_consumed_shared_load_stays_release_materialized();

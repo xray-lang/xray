@@ -11330,6 +11330,14 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
 
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
+    XrCValueEmissionView iterator_rune_has_next = {0};
+    if (cg_iterator_rune_has_next_emission_view(
+            ctx, f, v, &iterator_rune_has_next)) {
+        fprintf(out, "%s(", iterator_rune_has_next.recipe_symbol);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        return;
+    }
     XrCValueEmissionView string_runes = {0};
     if (cg_string_runes_emission_view(ctx, f, v, &string_runes)) {
         bool discard = cg_unused_call_result_emits_statement(ctx, f, v);
