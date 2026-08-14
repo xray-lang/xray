@@ -9,6 +9,7 @@
  */
 
 #include "xr_semantic_verify.h"
+#include "xr_semantic_allocation_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_graph.h"
 #include "xr_semantic_ops.h"
@@ -23,6 +24,7 @@
 #include "../../runtime/value/xtype.h"
 #include "../../shared/xr_hash_core.h"
 #include "../../stdlib/xstdlib_metadata.h"
+#include "xr_semantic_array_member_shape.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1419,18 +1421,6 @@ static bool semantic_type_is_exact_string_builder(const XrSemanticTypeRecord *ty
            type->canonical_key && strcmp(type->canonical_key, expected) == 0;
 }
 
-static bool allocation_identity_is_exact(const XrSemanticOperationRecord *operation) {
-    if (!operation || !operation->canonical_key || !operation->allocation_key ||
-        !verify_id(operation->allocation_key, operation->allocation_id))
-        return false;
-    size_t operation_length = strlen(operation->canonical_key);
-    static const char suffix[] = "/allocation";
-    size_t allocation_length = strlen(operation->allocation_key);
-    return allocation_length == operation_length + sizeof(suffix) - 1u &&
-           memcmp(operation->allocation_key, operation->canonical_key, operation_length) == 0 &&
-           memcmp(operation->allocation_key + operation_length, suffix, sizeof(suffix)) == 0;
-}
-
 static bool semantic_type_is_exact_string(const XrSemanticTypeRecord *type) {
     return type && type->kind == XR_KIND_STRING && type->builtin_type == XR_TID_NULL &&
            type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
@@ -1665,44 +1655,6 @@ static bool verify_json_namespace_value(const XrSemanticPlan *plan,
  * consumes an element or moves elements inside the container, and that traffic
  * must stay free of any reference-count obligation for this authority to be
  * complete. */
-typedef enum XrArrayMemberResultShape {
-    XR_ARRAY_MEMBER_RESULT_UNIT = 0,
-    XR_ARRAY_MEMBER_RESULT_INT,
-    XR_ARRAY_MEMBER_RESULT_BOOL,
-    XR_ARRAY_MEMBER_RESULT_RECEIVER,
-} XrArrayMemberResultShape;
-
-typedef struct XrArrayMemberShape {
-    const char *selector;
-    uint16_t min_operands;
-    uint16_t max_operands;
-    uint8_t result_shape;
-    uint16_t element_operand;
-} XrArrayMemberShape;
-
-static const XrArrayMemberShape xr_array_member_shapes[] = {
-    {"push", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1},
-    {"unshift", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1},
-    {"indexOf", 2, 2, XR_ARRAY_MEMBER_RESULT_INT, 1},
-    {"contains", 2, 2, XR_ARRAY_MEMBER_RESULT_BOOL, 1},
-    {"fill", 2, 4, XR_ARRAY_MEMBER_RESULT_RECEIVER, 1},
-    {"reverse", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0},
-    {"sort", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0},
-};
-
-static const XrArrayMemberShape *xr_array_member_shape(const char *selector,
-                                                       uint16_t operand_count) {
-    if (!selector)
-        return NULL;
-    for (size_t i = 0; i < sizeof(xr_array_member_shapes) / sizeof(xr_array_member_shapes[0]); i++) {
-        const XrArrayMemberShape *shape = &xr_array_member_shapes[i];
-        if (strcmp(shape->selector, selector) == 0 && operand_count >= shape->min_operands &&
-            operand_count <= shape->max_operands)
-            return shape;
-    }
-    return NULL;
-}
-
 static bool semantic_type_is_exact_member_array(const XrSemanticTypeRecord *type) {
     char expected[96];
     int length = snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:",
@@ -2034,7 +1986,7 @@ static bool verify_string_builder_constructor(const XrSemanticPlan *plan,
                  operation->flags == xi_generated_op_default_flags(XI_CALL_BUILTIN) &&
                  operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
                  operation->return_provenance == XR_SEM_RETURN_OWNED &&
-                 operation->return_complete == 1 && allocation_identity_is_exact(operation);
+                 operation->return_complete == 1 && xr_semantic_allocation_identity_is_canonical(operation);
     return exact || report(error, error_size, "XR_SEM_0019",
                            "StringBuilder constructor authority is not exact");
 }

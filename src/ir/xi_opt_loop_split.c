@@ -46,27 +46,6 @@
 /* ========== Eligibility ========== */
 
 /* Check for a simple loop shape with a single body-level exit. */
-static bool loop_shape_eligible(const XiLoop *loop) {
-    if (!loop || !loop->header || !loop->preheader || !loop->latch)
-        return false;
-    XiBlock *header = loop->header;
-    if (header->kind != XI_BLOCK_IF || !header->control)
-        return false;
-    if (header->npreds != 2)
-        return false;
-    if (loop->child)
-        return false;
-
-    bool has_pre = false, has_latch = false;
-    for (uint16_t p = 0; p < header->npreds; p++) {
-        if (header->preds[p] == loop->preheader)
-            has_pre = true;
-        else if (header->preds[p] == loop->latch)
-            has_latch = true;
-    }
-    return has_pre && has_latch;
-}
-
 static XiValue *basic_iv_preheader_value(const XiLoop *loop, const XiValue *arg) {
     if (!loop || !arg)
         return NULL;
@@ -274,7 +253,7 @@ XR_FUNC XiPassChange xi_opt_loop_split(XiFunc *f) {
 
     for (uint32_t li = 0; li < loops->nloop; li++) {
         XiLoop *loop = loops->all_loops[li];
-        if (!loop_shape_eligible(loop))
+        if (!xi_loop_shape_is_simple(loop))
             continue;
 
         XiValue *check = NULL;

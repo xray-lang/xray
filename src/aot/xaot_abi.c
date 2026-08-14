@@ -265,19 +265,9 @@ static const XrAggregateLayout *struct_layout_for_type(const XaotBundle *bundle,
     return NULL;
 }
 
-static const XiValue *unwrap_identity_value(const XiValue *v) {
-    while (v &&
-           (v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_RETAIN ||
-            v->op == XI_BOX || v->op == XI_UNBOX) &&
-           v->nargs >= 1) {
-        v = v->args[0];
-    }
-    return v;
-}
-
 static const XrAggregateLayout *struct_layout_for_value_uses(const XiFunc *func,
                                                              const XiValue *value) {
-    value = unwrap_identity_value(value);
+    value = xi_value_trace_referent(value);
     if (!func || !value)
         return NULL;
     if (value->op == XI_AGG_NEW && value->aux)
@@ -291,7 +281,7 @@ static const XrAggregateLayout *struct_layout_for_value_uses(const XiFunc *func,
             if (!v || !v->aux || v->nargs < 1)
                 continue;
             if ((v->op == XI_AGG_GET || v->op == XI_AGG_SET) &&
-                unwrap_identity_value(v->args[0]) == value)
+                xi_value_trace_referent(v->args[0]) == value)
                 return (const XrAggregateLayout *) v->aux;
         }
     }
@@ -319,7 +309,7 @@ static const XrAggregateLayout *struct_layout_for_value_uses(const XiFunc *func,
  */
 static const XrAggregateLayout *struct_layout_for_place_param_uses(const XiFunc *func,
                                                                    const XiValue *value) {
-    value = unwrap_identity_value(value);
+    value = xi_value_trace_referent(value);
     if (!func || !value || value->op != XI_PARAM)
         return NULL;
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
@@ -332,9 +322,9 @@ static const XrAggregateLayout *struct_layout_for_place_param_uses(const XiFunc 
                 continue;
             if (v->op != XI_AGG_GET && v->op != XI_AGG_SET)
                 continue;
-            const XiValue *operand = unwrap_identity_value(v->args[0]);
+            const XiValue *operand = xi_value_trace_referent(v->args[0]);
             if (operand && operand->op == XI_PLACE_LOAD && operand->nargs == 1 &&
-                operand->args[0] && unwrap_identity_value(operand->args[0]) == value)
+                operand->args[0] && xi_value_trace_referent(operand->args[0]) == value)
                 return (const XrAggregateLayout *) v->aux;
         }
     }

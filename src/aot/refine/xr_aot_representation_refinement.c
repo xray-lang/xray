@@ -17,6 +17,7 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../plan/semantic/xr_semantic_graph.h"
+#include "../../plan/semantic/xr_semantic_allocation_shape.h"
 #include "../../plan/semantic/xr_semantic_class_shape.h"
 #include "../../plan/semantic/xr_semantic_string_shape.h"
 #include "../../runtime/value/xtype.h"
@@ -333,24 +334,70 @@ static void verify_authority_dispose(VerifyAuthority *ctx) {
     ctx->exact_native_module_namespace_value = NULL;
 }
 
-static bool semantic_allocation_identity_is_canonical(
-    const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
-    if (!operation || !operation->canonical_key || !operation->allocation_key)
+static bool verify_bounded_string_length(VerifyAuthority *ctx,
+                                         const char *text,
+                                         size_t *out_length) {
+    if (out_length)
+        *out_length = 0;
+    if (!ctx || !text || !out_length)
         return false;
-    size_t canonical_length = strlen(operation->canonical_key);
-    size_t allocation_length = strlen(operation->allocation_key);
-    if (canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix,
-               sizeof(suffix)) != 0)
+    size_t length = 0;
+    while (length < XR_AOT_REP_VERIFY_MAX_TYPE_KEY_BYTES && text[length])
+        length++;
+    if (length == XR_AOT_REP_VERIFY_MAX_TYPE_KEY_BYTES) {
+        set_diag(ctx->diag, XR_AOT_REFINEMENT_RESOURCE_BUDGET,
+                 (uint32_t) ctx->work, 0, 0);
         return false;
-    XrStableId expected;
-    XrFingerprint digest;
-    return xr_stable_id_from_key(operation->allocation_key, &expected, &digest) &&
-           xr_stable_id_equal(expected, operation->allocation_id);
+    }
+    if (!verify_charge_work(ctx, length + 1u))
+        return false;
+    *out_length = length;
+    return true;
+}
+
+static bool verify_scalar_type_authority(VerifyAuthority *ctx,
+                                         uint32_t type_index,
+                                         const XrType *live) {
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(ctx ? ctx->semantic : NULL, type_index);
+    if (!ctx || !live || !type || !type->canonical_key ||
+        !source_type_matches(live, type) || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0)
+        return false;
+    switch (live->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_NULL:
+        case XR_KIND_NEVER:
+        case XR_KIND_UNIT:
+        case XR_KIND_POINTER:
+        case XR_KIND_RUNE:
+            break;
+        default:
+            return false;
+    }
+    const char *alias = live->alias_name ? live->alias_name : "";
+    size_t alias_length = 0;
+    size_t canonical_length = 0;
+    if (!verify_bounded_string_length(ctx, alias, &alias_length) ||
+        !verify_bounded_string_length(ctx, type->canonical_key,
+                                      &canonical_length))
+        return false;
+    char prefix[256];
+    int prefix_length = snprintf(
+        prefix, sizeof(prefix),
+        "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:",
+        (unsigned) live->kind, live->semantic_type_id, live_builtin_type(live),
+        live->is_nullable ? 1u : 0u, live->is_const ? 1u : 0u,
+        live->is_value_type ? 1u : 0u, live->is_literal ? 1u : 0u,
+        live->is_cycle_candidate ? 1u : 0u, live->ptr_is_mut ? 1u : 0u,
+        (unsigned) live->scalar_rep, alias_length);
+    return prefix_length > 0 && (size_t) prefix_length < sizeof(prefix) &&
+           canonical_length == (size_t) prefix_length + alias_length &&
+           memcmp(type->canonical_key, prefix, (size_t) prefix_length) == 0 &&
+           memcmp(type->canonical_key + prefix_length, alias, alias_length) == 0;
 }
 
 static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
@@ -358,7 +405,7 @@ static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
     if (!semantic || !operation || operation->opcode != XI_CLOSURE_NEW ||
         operation->callable_function >= xr_semantic_plan_function_count(semantic) ||
         operation->operand_count != 0 ||
-        !semantic_allocation_identity_is_canonical(operation) ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
         return false;
     const XrSemanticFunctionRecord *callee =
@@ -476,7 +523,7 @@ static bool aot_array_allocation_is_exact(const XrSemanticPlan *semantic,
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
         operation->return_complete != 1 || operation->return_parameter != -1 ||
         operation->result_alias_operand != -1 ||
-        !semantic_allocation_identity_is_canonical(operation))
+        !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(semantic, operation->result_type);
@@ -710,7 +757,7 @@ static bool aot_stringbuilder_constructor_is_exact(
            operation->result_alias_operand == -1 &&
            operation->return_provenance == XR_SEM_RETURN_OWNED &&
            operation->return_parameter == -1 && operation->return_complete == 1 &&
-           semantic_allocation_identity_is_canonical(operation) &&
+           xr_semantic_allocation_identity_is_canonical(operation) &&
            type->kind == XR_KIND_INSTANCE &&
            type->builtin_type == XR_TID_STRINGBUILDER &&
            type->child_count == 0 &&
@@ -780,7 +827,7 @@ static bool aot_channel_allocation_is_exact(
     if (!ctx || !operation || operation->opcode != XI_CHAN_NEW ||
         operation->result_value >= ctx->value_count ||
         operation->operand_count != 1 ||
-        !semantic_allocation_identity_is_canonical(operation) ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         operation->constant != XR_SEMANTIC_INDEX_NONE ||
         operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
         operation->auxiliary_kind != 0 ||

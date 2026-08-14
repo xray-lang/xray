@@ -13,6 +13,7 @@
 #include "../target/xr_target_verify.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
+#include "../../shared/xr_align_guard.h"
 #include <string.h>
 
 typedef struct XrXtpSectionInput {
@@ -27,14 +28,6 @@ static bool checked_add(size_t left, size_t right, size_t *out) {
     if (left > SIZE_MAX - right)
         return false;
     *out = left + right;
-    return true;
-}
-
-static bool checked_align(size_t value, size_t alignment, size_t *out) {
-    size_t mask = alignment - 1u;
-    if ((alignment & mask) != 0 || value > SIZE_MAX - mask)
-        return false;
-    *out = (value + mask) & ~mask;
     return true;
 }
 
@@ -127,7 +120,7 @@ static bool layout_sections(XrXtpSectionInput sections[], size_t *artifact_size,
         (size_t) XR_XTP_TABLE_SECTION_COUNT * XR_XTP_DIRECTORY_ENTRY_SIZE;
     size_t cursor = 0;
     if (!checked_add(XR_XTP_HEADER_SIZE, directory_length, &cursor) ||
-        !checked_align(cursor, XR_XTP_SECTION_ALIGNMENT, &cursor)) {
+        !xr_checked_align_size(cursor, XR_XTP_SECTION_ALIGNMENT, &cursor)) {
         xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
                          "artifact directory size overflows");
         return false;
@@ -135,7 +128,7 @@ static bool layout_sections(XrXtpSectionInput sections[], size_t *artifact_size,
     for (uint32_t i = 0; i < XR_XTP_TABLE_SECTION_COUNT; i++) {
         sections[i].offset = cursor;
         if (!checked_add(cursor, sections[i].length, &cursor) ||
-            !checked_align(cursor, XR_XTP_SECTION_ALIGNMENT, &cursor) ||
+            !xr_checked_align_size(cursor, XR_XTP_SECTION_ALIGNMENT, &cursor) ||
             cursor > XR_XTP_MAX_ARTIFACT_SIZE) {
             xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
                              "artifact byte budget is exhausted");

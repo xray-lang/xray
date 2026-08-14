@@ -24,10 +24,13 @@
 #include "../../ir/xi_ops_gen.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../semantic/xr_semantic_verify.h"
+#include "../semantic/xr_semantic_allocation_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../stdlib/xstdlib_metadata.h"
+#include "../semantic/xr_semantic_array_member_shape.h"
+#include "../../shared/xr_align_guard.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -381,14 +384,6 @@ static bool semantic_nullable_scalar_type_is_exact(const XrSemanticTypeRecord *t
         default:
             return false;
     }
-}
-
-static bool checked_align_u32(uint32_t value, uint32_t alignment, uint32_t *out) {
-    if (!alignment || (alignment & (alignment - 1u)) != 0 ||
-        value > UINT32_MAX - alignment + 1u)
-        return false;
-    *out = (value + alignment - 1u) & ~(alignment - 1u);
-    return true;
 }
 
 static bool rep_layout_for_kind(const XrTargetMachineFacts *profile, uint16_t kind,
@@ -808,32 +803,12 @@ static bool index_value_operations(const XrSemanticPlan *plan,
     return true;
 }
 
-static bool semantic_allocation_identity_is_canonical(
-    const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
-    if (!operation || !operation->canonical_key || !operation->allocation_key)
-        return false;
-    size_t canonical_length = strlen(operation->canonical_key);
-    size_t allocation_length = strlen(operation->allocation_key);
-    if (canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix,
-               sizeof(suffix)) != 0)
-        return false;
-    XrStableId expected;
-    XrFingerprint digest;
-    return xr_stable_id_from_key(operation->allocation_key, &expected, &digest) &&
-           xr_stable_id_equal(expected, operation->allocation_id);
-}
-
 static bool semantic_heap_closure_is_exact(const XrSemanticPlan *plan,
                                            const XrSemanticOperationRecord *operation) {
     if (!plan || !operation || operation->opcode != XI_CLOSURE_NEW ||
         operation->callable_function >= xr_semantic_plan_function_count(plan) ||
         operation->operand_count != 0 ||
-        !semantic_allocation_identity_is_canonical(operation) ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
         return false;
     const XrSemanticFunctionRecord *callee =
@@ -909,21 +884,6 @@ static bool semantic_string_literal_is_exact(
                 XR_SEM_TYPE_OWNERSHIP_ROOT);
 }
 
-/* An owned String is the single non-scalar result shape a direct-local call may
- * carry today. String is immutable and shared, so the outer XrValue slot is the
- * whole storage fact; the callee's frozen return provenance is the only source
- * of the ownership fact. Nullable, borrow-view, value, and aggregate spellings
- * stay outside this shape. */
-static bool semantic_owned_string_type_is_exact(const XrSemanticTypeRecord *type) {
-    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
-                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT;
-    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
-    return type && type->kind == XR_KIND_STRING && type->child_count == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE && type->aggregate_extent == 0 &&
-           type->aggregate_align == 0 && (type->flags & forbidden) == 0 &&
-           (type->flags & required) == required;
-}
-
 /* A direct-local call returns an owned String only when the callee, the call
  * operation, and the result type all agree. The result must be a fresh owner:
  * an aliased or parameter-forwarded return would need a borrow whose extent
@@ -940,7 +900,7 @@ static bool semantic_direct_local_string_result_is_exact(
            operation->return_provenance == XR_SEM_RETURN_OWNED &&
            callee->return_parameter == -1 &&
            callee->return_provenance == XR_SEM_RETURN_OWNED &&
-           semantic_owned_string_type_is_exact(
+           xr_semantic_owned_string_type_is_exact(
                xr_semantic_plan_type(plan, operation->result_type));
 }
 
@@ -1005,7 +965,7 @@ static bool semantic_stringbuilder_constructor_is_exact(
         operation->result_alias_operand != -1 ||
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
         operation->return_parameter != -1 || operation->return_complete != 1 ||
-        !semantic_allocation_identity_is_canonical(operation))
+        !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(plan, operation->result_type);
@@ -1161,44 +1121,6 @@ static bool semantic_array_member_bool_type_is_exact(const XrSemanticTypeRecord 
  * reference-count obligation.  The call carries no argument intent and folds
  * the element argument value into its identity, matching the other sealed
  * builtin member families. */
-typedef enum XrArrayMemberResultShape {
-    XR_ARRAY_MEMBER_RESULT_UNIT = 0,
-    XR_ARRAY_MEMBER_RESULT_INT,
-    XR_ARRAY_MEMBER_RESULT_BOOL,
-    XR_ARRAY_MEMBER_RESULT_RECEIVER,
-} XrArrayMemberResultShape;
-
-typedef struct XrArrayMemberShape {
-    const char *selector;
-    uint16_t min_operands;
-    uint16_t max_operands;
-    uint8_t result_shape;
-    uint16_t element_operand;
-} XrArrayMemberShape;
-
-static const XrArrayMemberShape xr_array_member_shapes[] = {
-    {"push", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1},
-    {"unshift", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1},
-    {"indexOf", 2, 2, XR_ARRAY_MEMBER_RESULT_INT, 1},
-    {"contains", 2, 2, XR_ARRAY_MEMBER_RESULT_BOOL, 1},
-    {"fill", 2, 4, XR_ARRAY_MEMBER_RESULT_RECEIVER, 1},
-    {"reverse", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0},
-    {"sort", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0},
-};
-
-static const XrArrayMemberShape *xr_array_member_shape(const char *selector,
-                                                       uint16_t operand_count) {
-    if (!selector)
-        return NULL;
-    for (size_t i = 0; i < sizeof(xr_array_member_shapes) / sizeof(xr_array_member_shapes[0]); i++) {
-        const XrArrayMemberShape *shape = &xr_array_member_shapes[i];
-        if (strcmp(shape->selector, selector) == 0 && operand_count >= shape->min_operands &&
-            operand_count <= shape->max_operands)
-            return shape;
-    }
-    return NULL;
-}
-
 static bool semantic_array_member_result_is_exact(const XrSemanticPlan *plan,
                                                   const XrSemanticOperationRecord *operation,
                                                   const XrArrayMemberShape *shape,
@@ -1563,7 +1485,7 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *plan,
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
         operation->return_complete != 1 || operation->return_parameter != -1 ||
         operation->result_alias_operand != -1 ||
-        !semantic_allocation_identity_is_canonical(operation))
+        !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, operation->result_type);
     if (!semantic_array_member_receiver_type_is_exact(type) ||
@@ -1691,7 +1613,7 @@ static bool semantic_channel_allocation_is_exact(
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->operand_count != 1 ||
         operation->operand_begin >= operand_count ||
-        !semantic_allocation_identity_is_canonical(operation) ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         !semantic_channel_type_is_exact(plan, operation->result_type,
                                         &element_type) ||
         operation->constant != XR_SEMANTIC_INDEX_NONE ||
@@ -6804,7 +6726,7 @@ static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
             return false;
         const XrTargetLayoutRecord *child = &materialized->layouts[child_layout];
         uint32_t aligned = 0;
-        if (!checked_align_u32(offset, child->align, &aligned) ||
+        if (!xr_checked_align_u32(offset, child->align, &aligned) ||
             child->fixed_prefix_size > UINT32_MAX - aligned)
             return fail(error, error_size, "XR_EXEC_5003",
                         "aggregate field offset or size overflows");
@@ -6831,7 +6753,7 @@ static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
     }
     if (!offset)
         offset = 1;
-    if (!checked_align_u32(offset, aggregate_align, &layout->fixed_prefix_size) ||
+    if (!xr_checked_align_u32(offset, aggregate_align, &layout->fixed_prefix_size) ||
         layout->fixed_prefix_size > UINT16_MAX / 8u)
         return fail(error, error_size, "XR_EXEC_5003",
                     "aggregate representation exceeds its checked width budget");
@@ -7019,7 +6941,7 @@ static bool materialize_functions_and_slots(XrTargetPlanBuilder *builder,
                             "slot intent has no exact representation");
             const XrTargetMachineRepRecord *resolved_memory =
                 &materialized->machine_reps[memory_rep];
-            if (!checked_align_u32(offset, resolved_memory->memory_align, &aligned) ||
+            if (!xr_checked_align_u32(offset, resolved_memory->memory_align, &aligned) ||
                 resolved_memory->memory_size > UINT32_MAX - aligned)
                 return fail(error, error_size, "XR_EXEC_5003", "packed slot frame overflows");
             XrTargetSlotRecord *slot = &materialized->slots[next_slot];
@@ -7046,7 +6968,7 @@ static bool materialize_functions_and_slots(XrTargetPlanBuilder *builder,
             next_slot++;
         }
         function_record->slot_count = next_slot - function_record->slot_begin;
-        if (!checked_align_u32(offset, function_record->frame_align,
+        if (!xr_checked_align_u32(offset, function_record->frame_align,
                                &function_record->frame_size))
             return fail(error, error_size, "XR_EXEC_5003", "packed function frame overflows");
     }

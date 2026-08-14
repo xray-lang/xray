@@ -151,4 +151,38 @@ XR_FUNC bool xi_loop_contains_block(const XiLoop *loop, const XiBlock *blk);
  * bound, and the body entry is the true-branch successor. */
 XR_FUNC uint32_t xi_loop_trip_count(const XiLoop *loop);
 
+/*
+ * Loop shape eligibility, in the two pieces the rewriting passes need.
+ *
+ * A pass that edits a loop header has to know the header's phis have
+ * unambiguous slots: the header is a two-way branch reached from exactly the
+ * preheader and the latch, and nothing else. That is one question, so it is
+ * asked here rather than restated by each pass. A pass that also rewrites the
+ * body needs the stronger shape, which additionally has no nested loop inside:
+ * a rewrite that assumes the body is straight-line loop-free would otherwise
+ * reach into an inner loop it never examined.
+ *
+ * Passes keep their own extra requirements; they only stop respelling these.
+ */
+static inline bool xi_loop_header_shape_is_simple(const XiLoop *loop) {
+    if (!loop || !loop->header || !loop->preheader || !loop->latch)
+        return false;
+    const XiBlock *header = loop->header;
+    if (header->kind != XI_BLOCK_IF || !header->control || header->npreds != 2)
+        return false;
+
+    bool has_pre = false, has_latch = false;
+    for (uint16_t p = 0; p < header->npreds; p++) {
+        if (header->preds[p] == loop->preheader)
+            has_pre = true;
+        else if (header->preds[p] == loop->latch)
+            has_latch = true;
+    }
+    return has_pre && has_latch;
+}
+
+static inline bool xi_loop_shape_is_simple(const XiLoop *loop) {
+    return xi_loop_header_shape_is_simple(loop) && !loop->child;
+}
+
 #endif  // XI_LOOP_H

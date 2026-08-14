@@ -10,6 +10,7 @@
 
 #include "xr_c_emission_plan.h"
 #include "../../plan/target/xr_target_plan.h"
+#include "../../plan/semantic/xr_semantic_allocation_shape.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include "../../ir/xi.h"
@@ -373,27 +374,6 @@ static bool verify_exact_string_byte_slice_view_recipe(
     return true;
 }
 
-static bool emission_allocation_identity_is_canonical(
-    const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
-    if (!operation || !operation->canonical_key || !operation->allocation_key)
-        return false;
-    size_t canonical_length = strlen(operation->canonical_key);
-    size_t allocation_length = strlen(operation->allocation_key);
-    if (canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix,
-               sizeof(suffix)) != 0)
-        return false;
-    XrStableId expected;
-    XrFingerprint digest;
-    return xr_stable_id_from_key(operation->allocation_key, &expected,
-                                 &digest) &&
-           xr_stable_id_equal(expected, operation->allocation_id);
-}
-
 static const XrTargetCallRecord *stringbuilder_constructor_call(
     const XrTargetPlan *target_plan,
     const XrTargetValueRepRecord *binding) {
@@ -479,7 +459,7 @@ static bool exact_stringbuilder_new_recipe(
            operation->return_provenance == XR_SEM_RETURN_OWNED &&
            operation->return_parameter == -1 &&
            operation->return_complete == 1 &&
-           emission_allocation_identity_is_canonical(operation) &&
+           xr_semantic_allocation_identity_is_canonical(operation) &&
            type->kind == XR_KIND_INSTANCE &&
            type->builtin_type == XR_TID_STRINGBUILDER &&
            type->child_count == 0 &&
@@ -703,16 +683,7 @@ static bool exact_channel_new_recipe(const XrTargetPlan *target_plan,
     if (!semantic || !operation || operation->opcode != XI_CHAN_NEW ||
         operation->result_value != binding->semantic_value ||
         operation->operand_count != 1 || operation->operand_begin >= operand_count ||
-        !operation->canonical_key || !operation->allocation_key ||
-        canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix,
-               sizeof(suffix)) != 0 ||
-        !xr_stable_id_from_key(operation->allocation_key,
-                               &expected_allocation, &allocation_digest) ||
-        !xr_stable_id_equal(expected_allocation, operation->allocation_id) ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         operation->result_ownership !=
             xi_generated_op_result_ownership(XI_CHAN_NEW) ||
         operation->effects != xi_generated_op_effects(XI_CHAN_NEW) ||

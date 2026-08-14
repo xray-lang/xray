@@ -1813,8 +1813,7 @@ static const XiValue *cg_trace_struct_new(const XiValue *v) {
 }
 
 static const XiValue *cg_trace_struct_new_identity(const XiValue *v) {
-    while (v && (v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_RETAIN) &&
-           v->nargs >= 1)
+    while ((xi_value_forwards_identity(v) || (v && v->op == XI_RETAIN)) && v->nargs >= 1)
         v = v->args[0];
     return (v && v->op == XI_AGG_NEW) ? v : NULL;
 }
@@ -1931,8 +1930,7 @@ static const XrAggregateLayout *cg_value_struct_layout(XiCgenCtx *ctx, const XiF
     for (int depth = 0; cur && depth <= 8; depth++) {
         if (cur->op == XI_AGG_NEW)
             return (const XrAggregateLayout *) cur->aux;
-        if ((cur->op == XI_COPY || xi_op_is_identity_forward(cur->op) || cur->op == XI_RETAIN) &&
-            cur->nargs >= 1) {
+        if ((xi_value_forwards_identity(cur) || cur->op == XI_RETAIN) && cur->nargs >= 1) {
             cur = cur->args[0];
             continue;
         }

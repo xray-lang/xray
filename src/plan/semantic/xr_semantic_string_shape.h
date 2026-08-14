@@ -22,6 +22,7 @@
 
 #include "xr_semantic_plan.h"
 #include "xr_semantic_ids.h"
+#include "xr_semantic_allocation_shape.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
@@ -39,28 +40,6 @@ static inline bool xr_semantic_owned_string_type_is_exact(const XrSemanticTypeRe
            type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->source_class == XR_SEMANTIC_INDEX_NONE && (type->flags & forbidden) == 0 &&
            (type->flags & required) == required;
-}
-
-/* The allocation identity a heap-allocating operation carries is the operation's
- * own canonical key with one fixed suffix, and the stable id is that key's own
- * digest. Rebuilding it here is what makes the allocation a proved fresh owner
- * rather than a name the builder asserted. */
-static inline bool xr_semantic_string_allocation_identity_is_canonical(
-    const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
-    XrStableId expected;
-    XrFingerprint digest;
-    size_t canonical_length =
-        operation && operation->canonical_key ? strlen(operation->canonical_key) : 0;
-    size_t allocation_length =
-        operation && operation->allocation_key ? strlen(operation->allocation_key) : 0;
-    return operation && operation->canonical_key && operation->allocation_key &&
-           canonical_length <= SIZE_MAX - sizeof(suffix) &&
-           allocation_length == canonical_length + sizeof(suffix) - 1u &&
-           memcmp(operation->allocation_key, operation->canonical_key, canonical_length) == 0 &&
-           memcmp(operation->allocation_key + canonical_length, suffix, sizeof(suffix)) == 0 &&
-           xr_stable_id_from_key(operation->allocation_key, &expected, &digest) &&
-           xr_stable_id_equal(expected, operation->allocation_id);
 }
 
 /* One judgement for a string concatenation: it joins two or more owned String
@@ -98,7 +77,7 @@ static inline bool xr_semantic_string_concat_is_exact(
         operation->return_parameter != -1 || operation->return_complete != 1 ||
         operation->view_complete != 0 || operation->view_source_operand != -1 ||
         operation->view_source_parameter != -1 ||
-        !xr_semantic_string_allocation_identity_is_canonical(operation) ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         !xr_semantic_owned_string_type_is_exact(
             xr_semantic_plan_type(plan, operation->result_type)) ||
         operation->result_value < function->value_begin ||

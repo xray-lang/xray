@@ -6464,8 +6464,7 @@ static const XrAggregateLayout *cg_debug_value_struct_layout(XiCgenCtx *ctx, con
     for (int depth = 0; cur && depth <= 8; depth++) {
         if (cur->op == XI_AGG_NEW)
             return (const XrAggregateLayout *) cur->aux;
-        if ((cur->op == XI_COPY || xi_op_is_identity_forward(cur->op) || cur->op == XI_RETAIN) &&
-            cur->nargs >= 1) {
+        if ((xi_value_forwards_identity(cur) || cur->op == XI_RETAIN) && cur->nargs >= 1) {
             cur = cur->args[0];
             continue;
         }

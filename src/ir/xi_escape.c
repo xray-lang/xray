@@ -183,8 +183,7 @@ static bool propagate_transparent(XiFunc *f) {
             if (!v)
                 continue;
             /* Transparent ops: output escape ≥ input escape, and vice versa */
-            if (v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_BOX ||
-                v->op == XI_UNBOX) {
+            if (xi_value_forwards_repr(v)) {
                 if (v->nargs < 1 || !v->args[0])
                     continue;
                 XiValue *src = v->args[0];

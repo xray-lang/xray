@@ -87,27 +87,6 @@ static XiValue *umap_find(const UnrollMap *m, const XiValue *old_val) {
 
 /* ========== Eligibility ========== */
 
-static bool loop_shape_eligible(const XiLoop *loop) {
-    if (!loop || !loop->header || !loop->preheader || !loop->latch)
-        return false;
-    XiBlock *header = loop->header;
-    if (header->kind != XI_BLOCK_IF || !header->control)
-        return false;
-    if (header->npreds != 2)
-        return false;
-    if (loop->child)
-        return false;
-
-    bool has_pre = false, has_latch = false;
-    for (uint16_t p = 0; p < header->npreds; p++) {
-        if (header->preds[p] == loop->preheader)
-            has_pre = true;
-        else if (header->preds[p] == loop->latch)
-            has_latch = true;
-    }
-    return has_pre && has_latch;
-}
-
 static uint32_t count_body_values(const XiLoop *loop) {
     uint32_t total = 0;
     for (uint32_t i = 0; i < loop->nbody; i++) {
@@ -502,7 +481,7 @@ XR_FUNC XiPassChange xi_opt_loop_unroll(XiFunc *f) {
     /* Process innermost loops first. */
     for (uint32_t li = 0; li < loops->nloop; li++) {
         XiLoop *loop = loops->all_loops[li];
-        if (!loop_shape_eligible(loop))
+        if (!xi_loop_shape_is_simple(loop))
             continue;
 
         uint32_t body_vals = count_body_values(loop);

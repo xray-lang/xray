@@ -23,11 +23,14 @@
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../../stdlib/xstdlib_metadata.h"
+#include "../semantic/xr_semantic_allocation_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
+#include "../semantic/xr_semantic_array_member_shape.h"
+#include "../../shared/xr_align_guard.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -51,13 +54,6 @@ static bool checked_u32_add(uint32_t left, uint32_t right, uint32_t *out) {
     if (left > UINT32_MAX - right)
         return false;
     *out = left + right;
-    return true;
-}
-
-static bool checked_align_u32(uint32_t value, uint32_t alignment, uint32_t *out) {
-    if (!is_power_of_two(alignment) || value > UINT32_MAX - alignment + 1u)
-        return false;
-    *out = (value + alignment - 1u) & ~(alignment - 1u);
     return true;
 }
 
@@ -662,18 +658,11 @@ static bool semantic_array_allocation_type_is_exact(const XrSemanticTypeRecord *
 
 static bool semantic_array_allocation_is_exact(const XrSemanticPlan *semantic,
                                                const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
-    XrStableId expected_allocation;
-    XrFingerprint allocation_digest;
     uint32_t operand_count = 0, child_count = 0;
     const XrSemanticOperandRecord *operands =
         semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
     const uint32_t *children =
         semantic ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
-    size_t canonical_length =
-        operation && operation->canonical_key ? strlen(operation->canonical_key) : 0;
-    size_t allocation_length =
-        operation && operation->allocation_key ? strlen(operation->allocation_key) : 0;
     if (!semantic || !operation || !operands || !children ||
         operation->opcode != XI_ARRAY_NEW || operation->operand_count != 1 ||
         operation->operand_begin >= operand_count ||
@@ -685,14 +674,8 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *semantic,
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
         operation->return_complete != 1 || operation->return_parameter != -1 ||
-        operation->result_alias_operand != -1 || !operation->canonical_key ||
-        !operation->allocation_key || canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key, canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix, sizeof(suffix)) != 0 ||
-        !xr_stable_id_from_key(operation->allocation_key, &expected_allocation,
-                               &allocation_digest) ||
-        !xr_stable_id_equal(expected_allocation, operation->allocation_id))
+        operation->result_alias_operand != -1 ||
+        !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(semantic, operation->result_type);
@@ -946,30 +929,10 @@ static int target_plan_layout_for_type(const XrTargetPlan *plan, uint32_t semant
 
 static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
                                            const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
-    XrStableId expected_allocation;
-    XrFingerprint allocation_digest;
-    size_t canonical_length =
-        operation && operation->canonical_key
-            ? strlen(operation->canonical_key)
-            : 0;
-    size_t allocation_length =
-        operation && operation->allocation_key
-            ? strlen(operation->allocation_key)
-            : 0;
     if (!semantic || !operation || operation->opcode != XI_CLOSURE_NEW ||
         operation->callable_function >= xr_semantic_plan_function_count(semantic) ||
-        operation->operand_count != 0 || !operation->canonical_key ||
-        !operation->allocation_key ||
-        canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix,
-               sizeof(suffix)) != 0 ||
-        !xr_stable_id_from_key(operation->allocation_key,
-                               &expected_allocation, &allocation_digest) ||
-        !xr_stable_id_equal(expected_allocation, operation->allocation_id) ||
+        operation->operand_count != 0 ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
         return false;
     const XrSemanticFunctionRecord *callee =
@@ -1043,19 +1006,6 @@ static bool semantic_string_literal_is_exact(
            (type->flags & required) == required;
 }
 
-/* Rebuilt independently of the builder: an owned String is the one non-scalar
- * result a direct-local call may name. The shape proof stays on the frozen
- * type row and the ownership proof on the callee's return provenance. */
-static bool semantic_owned_string_type_is_exact(const XrSemanticTypeRecord *type) {
-    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
-                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT;
-    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
-    return type && type->kind == XR_KIND_STRING && type->child_count == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE && type->aggregate_extent == 0 &&
-           type->aggregate_align == 0 && (type->flags & forbidden) == 0 &&
-           (type->flags & required) == required;
-}
-
 static const XrSemanticFunctionRecord *semantic_direct_local_callee_for_operation(
     const XrSemanticPlan *semantic, uint32_t operation_index) {
     size_t target_count = xr_semantic_plan_call_target_count(semantic);
@@ -1087,7 +1037,7 @@ static bool semantic_direct_local_string_result_is_exact(
         operation->result_alias_operand != -1 ||
         operation->return_parameter != -1 || operation->return_complete != 1 ||
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
-        !semantic_owned_string_type_is_exact(
+        !xr_semantic_owned_string_type_is_exact(
             xr_semantic_plan_type(semantic, operation->result_type)))
         return false;
     const XrSemanticFunctionRecord *callee =
@@ -1141,18 +1091,9 @@ static bool operation_is_exact_native_module_scalar_call(
 static bool semantic_stringbuilder_constructor_is_exact(
     const XrSemanticPlan *semantic,
     const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
     uint32_t metadata_count = 0;
     const char *const *metadata =
         xr_semantic_plan_metadata(semantic, &metadata_count);
-    size_t canonical_length = operation && operation->canonical_key
-                                  ? strlen(operation->canonical_key)
-                                  : 0;
-    size_t allocation_length = operation && operation->allocation_key
-                                   ? strlen(operation->allocation_key)
-                                   : 0;
-    XrStableId expected_allocation;
-    XrFingerprint digest;
     if (!semantic || !operation || operation->opcode != XI_CALL_BUILTIN ||
         operation->operand_count != 0 || operation->metadata_count != 1 ||
         operation->metadata_begin >= metadata_count || !metadata ||
@@ -1172,16 +1113,7 @@ static bool semantic_stringbuilder_constructor_is_exact(
         operation->result_alias_operand != -1 ||
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
         operation->return_parameter != -1 || operation->return_complete != 1 ||
-        !operation->canonical_key || !operation->allocation_key ||
-        canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix,
-               sizeof(suffix)) != 0 ||
-        !xr_stable_id_from_key(operation->allocation_key,
-                               &expected_allocation, &digest) ||
-        !xr_stable_id_equal(expected_allocation, operation->allocation_id))
+        !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(semantic, operation->result_type);
@@ -1289,15 +1221,6 @@ static bool verifier_channel_allocation_is_exact(
     const XrSemanticOperationRecord *operation) {
     if (!semantic || !operation)
         return false;
-    static const char suffix[] = "/allocation";
-    size_t key_length = operation->canonical_key
-                            ? strlen(operation->canonical_key)
-                            : 0;
-    size_t allocation_length = operation->allocation_key
-                                   ? strlen(operation->allocation_key)
-                                   : 0;
-    XrStableId expected_allocation;
-    XrFingerprint digest;
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands =
         xr_semantic_plan_operands(semantic, &operand_count);
@@ -1305,16 +1228,7 @@ static bool verifier_channel_allocation_is_exact(
     if (operation->opcode != XI_CHAN_NEW ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->operand_count != 1 || operation->operand_begin >= operand_count ||
-        !operation->canonical_key || !operation->allocation_key ||
-        key_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != key_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               key_length) != 0 ||
-        memcmp(operation->allocation_key + key_length, suffix,
-               sizeof(suffix)) != 0 ||
-        !xr_stable_id_from_key(operation->allocation_key,
-                               &expected_allocation, &digest) ||
-        !xr_stable_id_equal(expected_allocation, operation->allocation_id) ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         !verifier_channel_type_is_exact(semantic, operation->result_type,
                                         &element_type) ||
         operation->constant != XR_SEMANTIC_INDEX_NONE ||
@@ -3195,7 +3109,7 @@ static bool verify_layouts(const XrTargetPlan *plan,
             uint32_t expected_offset = 0;
             if (field->layout != i || !field->size || !is_power_of_two(field->align) ||
                 field->semantic_field != f || child_layout_index < 0 ||
-                !checked_align_u32(previous_end, field->align, &expected_offset) ||
+                !xr_checked_align_u32(previous_end, field->align, &expected_offset) ||
                 field->offset != expected_offset ||
                 field->offset > layout->fixed_prefix_size ||
                 field->size > layout->fixed_prefix_size - field->offset ||
@@ -3234,7 +3148,7 @@ static bool verify_layouts(const XrTargetPlan *plan,
         uint32_t expected_size = previous_end ? previous_end : 1u;
         if (semantic_type->aggregate_align > expected_align)
             expected_align = semantic_type->aggregate_align;
-        if (!checked_align_u32(expected_size, expected_align, &expected_size) ||
+        if (!xr_checked_align_u32(expected_size, expected_align, &expected_size) ||
             roots != layout->root_field_count ||
             (layout->kind == XR_TARGET_LAYOUT_AGGREGATE &&
              (layout->align != expected_align || layout->fixed_prefix_size != expected_size)))
@@ -3315,7 +3229,7 @@ static bool verify_functions_and_slots(const XrTargetPlan *plan, char *error,
             if (slot->id != slot_index || slot->function != i ||
                 stable_id_is_zero(slot->identity) || !slot->size ||
                 !is_power_of_two(slot->align) || slot->offset % slot->align != 0 ||
-                !checked_align_u32(previous_end, slot->align, &expected_offset) ||
+                !xr_checked_align_u32(previous_end, slot->align, &expected_offset) ||
                 slot->offset != expected_offset ||
                 !checked_u32_add(slot->offset, slot->size, &slot_end) ||
                 slot->register_rep >= plan->machine_reps_count ||
@@ -3340,7 +3254,7 @@ static bool verify_functions_and_slots(const XrTargetPlan *plan, char *error,
             previous_end = slot_end;
         }
         uint32_t expected_frame_size = 0;
-        if (!checked_align_u32(previous_end, expected_frame_align, &expected_frame_size) ||
+        if (!xr_checked_align_u32(previous_end, expected_frame_align, &expected_frame_size) ||
             function->frame_align != expected_frame_align ||
             function->frame_size != expected_frame_size)
             return report(error, error_size, "XR_TARGET_1002",
@@ -3579,44 +3493,6 @@ static bool operation_is_exact_json_namespace_value(const XrSemanticPlan *semant
  * the result is.  The element clause is matched against the receiver's own
  * element entry and refused when that element is reference capable, so the
  * traffic this authority admits is always a plain copy. */
-typedef enum XrArrayMemberResultShape {
-    XR_ARRAY_MEMBER_RESULT_UNIT = 0,
-    XR_ARRAY_MEMBER_RESULT_INT,
-    XR_ARRAY_MEMBER_RESULT_BOOL,
-    XR_ARRAY_MEMBER_RESULT_RECEIVER,
-} XrArrayMemberResultShape;
-
-typedef struct XrArrayMemberShape {
-    const char *selector;
-    uint16_t min_operands;
-    uint16_t max_operands;
-    uint8_t result_shape;
-    uint16_t element_operand;
-} XrArrayMemberShape;
-
-static const XrArrayMemberShape xr_array_member_shapes[] = {
-    {"push", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1},
-    {"unshift", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1},
-    {"indexOf", 2, 2, XR_ARRAY_MEMBER_RESULT_INT, 1},
-    {"contains", 2, 2, XR_ARRAY_MEMBER_RESULT_BOOL, 1},
-    {"fill", 2, 4, XR_ARRAY_MEMBER_RESULT_RECEIVER, 1},
-    {"reverse", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0},
-    {"sort", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0},
-};
-
-static const XrArrayMemberShape *xr_array_member_shape(const char *selector,
-                                                       uint16_t operand_count) {
-    if (!selector)
-        return NULL;
-    for (size_t i = 0; i < sizeof(xr_array_member_shapes) / sizeof(xr_array_member_shapes[0]); i++) {
-        const XrArrayMemberShape *shape = &xr_array_member_shapes[i];
-        if (strcmp(shape->selector, selector) == 0 && operand_count >= shape->min_operands &&
-            operand_count <= shape->max_operands)
-            return shape;
-    }
-    return NULL;
-}
-
 static bool semantic_array_member_receiver_type_is_exact(const XrSemanticTypeRecord *type) {
     char expected_type_key[96];
     int written = snprintf(expected_type_key, sizeof(expected_type_key),
