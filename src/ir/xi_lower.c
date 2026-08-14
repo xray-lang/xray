@@ -1085,7 +1085,12 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
                 row->kind != XG_CALL_CLASS_ALLOC)
                 continue;
         } else {
-            if (row->kind != XG_CALL_METHOD && row->kind != XG_CALL_INTERFACE)
+            /* Namespace members lower through XI_CALL_METHOD even when the
+             * resolved semantic target is a function, boundary, or allocation.
+             * Owner plus stable source identity remains the discriminator. */
+            if (row->kind != XG_CALL_METHOD && row->kind != XG_CALL_INTERFACE &&
+                row->kind != XG_CALL_DIRECT_FUNC && row->kind != XG_CALL_NATIVE &&
+                row->kind != XG_CALL_EXTERN && row->kind != XG_CALL_CLASS_ALLOC)
                 continue;
         }
         if (match)

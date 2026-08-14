@@ -10,11 +10,13 @@
 
 #include "../test_framework.h"
 
+#include "analysis/xglobal_summary.h"
 #include "ir/xi.h"
 #include "ir/xi_analysis.h"
 #include "ir/xi_analysis_manager.h"
 #include "ir/xi_evidence.h"
 #include "ir/xi_edit.h"
+#include "ir/xi_lower_internal.h"
 #include "ir/xi_range.h"
 #include "runtime/value/xtype.h"
 #include <assert.h>
@@ -252,6 +254,60 @@ TEST(edit_session_precisely_rebases_unaffected_proofs) {
     xi_func_free(func);
 }
 
+TEST(namespace_method_form_calls_bind_semantic_callsite_kinds) {
+    XgBuildKey key = {.source_hash = 1,
+                      .compiler_semver_hash = 2,
+                      .profile_hash = 3,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence evidence;
+    xg_global_evidence_init(&evidence, key);
+    XgCallsiteSummary rows[] = {
+        {.callsite_id = 1,
+         .owner_func_id = 17,
+         .source_node_id = 101,
+         .kind = XG_CALL_DIRECT_FUNC,
+         .static_target_func_id = 31},
+        {.callsite_id = 2,
+         .owner_func_id = 17,
+         .source_node_id = 102,
+         .kind = XG_CALL_NATIVE,
+         .method_id = 23},
+        {.callsite_id = 3,
+         .owner_func_id = 17,
+         .source_node_id = 103,
+         .kind = XG_CALL_EXTERN,
+         .method_id = 24},
+        {.callsite_id = 4,
+         .owner_func_id = 17,
+         .source_node_id = 104,
+         .kind = XG_CALL_CLASS_ALLOC,
+         .receiver_static_class_id = 7},
+    };
+    for (uint32_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+        ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&evidence, &rows[i]));
+
+    XiFunc *func = xi_func_new("namespace_calls", &stub_int);
+    ASSERT_NOT_NULL(func);
+    func->xg_body_func_id = rows[0].owner_func_id;
+    XiBlock *entry = xi_block_new(func);
+    ASSERT_NOT_NULL(entry);
+    XiValue *receiver = xi_const_int(func, entry, 0, &stub_int);
+    ASSERT_NOT_NULL(receiver);
+    XiLower lowering = {0};
+    lowering.func = func;
+    lowering.global_evidence = &evidence;
+    for (uint32_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++) {
+        XiValue *call = xi_value_new(func, entry, XI_CALL_METHOD, &stub_int, 1);
+        ASSERT_NOT_NULL(call);
+        call->args[0] = receiver;
+        xi_lower_bind_callsite_id(&lowering, call, rows[i].source_node_id);
+        ASSERT_EQ_UINT(call->xg_callsite_id, rows[i].callsite_id);
+    }
+    xi_func_free(func);
+    xg_global_evidence_free(&evidence);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("revisioned Xi evidence");
 RUN_TEST(published_proof_is_bound_to_current_revision);
@@ -268,4 +324,5 @@ RUN_TEST(orphan_value_proof_is_pruned_after_rewrite);
 RUN_TEST(range_query_rejects_stale_subject_payload);
 RUN_TEST(edit_session_rejects_unreported_value_mutation);
 RUN_TEST(edit_session_precisely_rebases_unaffected_proofs);
+RUN_TEST(namespace_method_form_calls_bind_semantic_callsite_kinds);
 TEST_MAIN_END()

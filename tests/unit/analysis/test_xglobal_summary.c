@@ -7739,6 +7739,74 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_methods) {
+    setup_parser_session();
+    const char *http_source =
+        "export class Server {\n"
+        "    constructor() {}\n"
+        "    route(path: string) -> bool { return true }\n"
+        "}\n";
+    const char *entry_source =
+        "import http\n"
+        "fn serve() -> bool {\n"
+        "    var server = http.Server()\n"
+        "    return server.route(\"/ok\")\n"
+        "}\n";
+    AstNode *http_ast = xr_parse(g_session, http_source);
+    AstNode *entry_ast = xr_parse(g_session, entry_source);
+    ASSERT_NOT_NULL(http_ast);
+    ASSERT_NOT_NULL(entry_ast);
+
+    XrModuleSpec specs[2];
+    int entry_deps[1] = {0};
+    int topo_order[2] = {0, 1};
+    XrModuleGraph graph;
+    memset(specs, 0, sizeof(specs));
+    specs[0].canonical = "http";
+    specs[0].source_path = "<embedded stdlib>/http/http.xr";
+    specs[0].kind = XR_MOD_STDLIB;
+    specs[0].ast = http_ast;
+    specs[1].canonical = "entry";
+    specs[1].source_path = "entry.xr";
+    specs[1].kind = XR_MOD_FILE;
+    specs[1].ast = entry_ast;
+    specs[1].dep_indices = entry_deps;
+    specs[1].dep_count = 1;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = specs;
+    graph.spec_count = 2;
+    graph.topo_order = topo_order;
+    graph.topo_count = 2;
+    graph.entry_index = 1;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(ev.nclasses, 1);
+    const XgBodySummary *serve = evidence_find_body_by_name(&ev, "serve");
+    ASSERT_NOT_NULL(serve);
+    ASSERT_EQ_UINT(serve->callsite_count, 2);
+    ASSERT_TRUE((serve->effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
+
+    const XgCallsiteSummary *constructor =
+        xg_global_evidence_find_callsite(&ev, serve->callsite_start);
+    const XgCallsiteSummary *route =
+        xg_global_evidence_find_callsite(&ev, serve->callsite_start + 1);
+    ASSERT_NOT_NULL(constructor);
+    ASSERT_NOT_NULL(route);
+    ASSERT_EQ_UINT(constructor->kind, XG_CALL_METHOD);
+    ASSERT_EQ_UINT(constructor->receiver_static_class_id, ev.classes[0].class_id);
+    ASSERT_EQ_UINT(constructor->method_name_id, xg_name_id("constructor"));
+    ASSERT_TRUE(constructor->method_id != XG_NO_ID);
+    ASSERT_EQ_UINT(route->kind, XG_CALL_METHOD);
+    ASSERT_EQ_UINT(route->receiver_static_class_id, ev.classes[0].class_id);
+    ASSERT_EQ_UINT(route->method_name_id, xg_name_id("route"));
+    ASSERT_TRUE(route->method_id != XG_NO_ID);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_seeds_xi_ids_during_lowering) {
     setup_parser_session();
     const char *source = "class Sink {\n"
@@ -13833,6 +13901,7 @@ RUN_TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_bou
 RUN_TEST(global_evidence_composes_recursive_direct_call_effects);
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
+RUN_TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_methods);
 RUN_TEST(global_evidence_seeds_xi_ids_during_lowering);
 RUN_TEST(global_evidence_producer_resolves_super_constructor_callsite);
 RUN_TEST(global_evidence_producer_resolves_module_init_constructor_callsite);

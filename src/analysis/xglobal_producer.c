@@ -2652,6 +2652,8 @@ static const XgClassFieldSummary *
 body_find_class_field_in_hierarchy(XgBodyCollect *bc, XgClassId class_id, uint32_t field_name_id);
 static const XgClassSummary *body_find_class_summary(XgBodyCollect *bc, XgClassId class_id);
 static XgLocalType *body_lookup_local_sequence(XgBodyCollect *bc, const AstNode *expr);
+static XgClassNameRow *body_resolve_module_member_class(XgBodyCollect *bc,
+                                                        const MemberAccessNode *member);
 
 static XgClassId body_resolve_expr_class(XgBodyCollect *bc, const AstNode *expr) {
     const AstNode *callee;
@@ -2668,6 +2670,11 @@ static XgClassId body_resolve_expr_class(XgBodyCollect *bc, const AstNode *expr)
             callee = expr->as.call_expr.callee;
             if (callee && callee->type == AST_VARIABLE)
                 return producer_lookup_class(bc->producer, callee->as.variable.name);
+            if (callee && callee->type == AST_MEMBER_ACCESS) {
+                XgClassNameRow *class_row =
+                    body_resolve_module_member_class(bc, &callee->as.member_access);
+                return class_row ? class_row->class_id : XG_NO_ID;
+            }
             return XG_NO_ID;
         case AST_AS_EXPR:
             return producer_lookup_class_from_tref(bc->producer, expr->as.as_expr.type);
@@ -2997,6 +3004,18 @@ static const char *body_stdlib_module_for_expr(XgBodyCollect *bc, const AstNode 
         producer_stdlib_module_known(expr->as.variable.name))
         return expr->as.variable.name;
     return NULL;
+}
+
+static XgClassNameRow *body_resolve_module_member_class(XgBodyCollect *bc,
+                                                        const MemberAccessNode *member) {
+    const char *module;
+    XgModuleId module_id;
+    if (!bc || !member || !member->name)
+        return NULL;
+    module = body_stdlib_module_for_expr(bc, member->object);
+    module_id = producer_module_id_for_canonical(bc->producer, module);
+    return producer_lookup_class_row_scoped(bc->producer, module_id, hash_name32(member->name),
+                                            false);
 }
 
 static bool body_call_is_sys_thread_spawn(const CallExprNode *call) {
@@ -8418,6 +8437,17 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         XgModuleId stdlib_module_id = producer_module_id_for_canonical(bc->producer, stdlib_module);
         XgFuncNameRow *stdlib_target = producer_lookup_func_row_scoped(
             bc->producer, stdlib_module_id, callee->as.member_access.name);
+        XgClassNameRow *stdlib_class =
+            body_resolve_module_member_class(bc, &callee->as.member_access);
+        XgClassSummary *stdlib_class_summary =
+            stdlib_class && stdlib_class->summary_index < bc->evidence->nclasses
+                ? &bc->evidence->classes[stdlib_class->summary_index]
+                : NULL;
+        XgMethodSummary *stdlib_constructor =
+            stdlib_class_summary
+                ? producer_find_class_method_by_name(bc->evidence, stdlib_class_summary,
+                                                     hash_name32("constructor"), true)
+                : NULL;
         const XaBuiltinReceiverMethodSpec *builtin_receiver_method =
             body_builtin_receiver_method_spec(bc, &callee->as.member_access,
                                               call->as.call_expr.arg_count);
@@ -8432,12 +8462,28 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 stdlib_module, callee->as.member_access.name);
         bc->capability_bits |=
             body_capabilities_for_builtin_member_constructor(&callee->as.member_access);
+        if (stdlib_class)
+            bc->capability_bits |= XG_CAP_OBJECTS;
         if (stdlib_target && (stdlib_target->decl_flags & (XG_DECL_EXTERN | XG_DECL_NATIVE)) == 0) {
             row.kind = XG_CALL_DIRECT_FUNC;
             row.static_target_func_id = stdlib_target->func_id;
             generic_origin_decl_id = stdlib_target->decl_id;
             generic_origin_func_id = stdlib_target->func_id;
             generic_kind = XG_GENERIC_INST_FUNCTION;
+        } else if (stdlib_constructor) {
+            row.kind = XG_CALL_METHOD;
+            row.receiver_static_class_id = stdlib_class->class_id;
+            row.method_id = stdlib_constructor->method_id;
+            row.method_name_id = stdlib_constructor->name_id;
+            row.method_signature_key = stdlib_constructor->signature_key;
+            generic_kind = XG_GENERIC_INST_CLASS;
+            generic_origin_class_id = stdlib_class->class_id;
+            generic_origin_method_id = stdlib_constructor->method_id;
+        } else if (stdlib_class && stdlib_class_summary) {
+            row.kind = XG_CALL_CLASS_ALLOC;
+            row.receiver_static_class_id = stdlib_class->class_id;
+            generic_kind = XG_GENERIC_INST_CLASS;
+            generic_origin_class_id = stdlib_class->class_id;
         } else if (receiver_interface != XG_NO_ID) {
             const XgInterfaceMethodSummary *interface_method =
                 producer_find_interface_method_summary(bc->producer, receiver_interface,
