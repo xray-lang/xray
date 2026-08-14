@@ -166,6 +166,45 @@ TEST(basic_diamond) {
     xi_func_free(f);
 }
 
+/* ========== Test: the merged source variable keeps one writer ========== */
+
+/* A value carrying a var_id is a write to that source variable's storage, and
+ * the VM emitter coalesces every version of a variable into one register. Two
+ * arms that each assign the same variable were exclusive before the diamond was
+ * flattened; afterwards they sit in one straight line, so the second write
+ * would overwrite the first and the merge would read one location twice. The
+ * hoisted writes therefore give up the variable and the select takes it. */
+TEST(merged_variable_moves_to_select) {
+    XiFunc *f = make_func();
+    XiBlock *entry, *then_b, *else_b, *join;
+    XiPhi *phi;
+    XiValue *cond, *tv, *ev;
+    build_diamond(f, &entry, &then_b, &else_b, &join, &phi, &cond, &tv, &ev);
+
+    /* Both arms assign the same source variable, and so does the merge. */
+    tv->var_id = 3;
+    ev->var_id = 3;
+    phi->value.var_id = 3;
+
+    XiPassChange chg = xi_opt_ifconv(f);
+    ASSERT(chg.cfg_changed);
+
+    ASSERT(!xi_var_id_is_valid(tv->var_id));
+    ASSERT(!xi_var_id_is_valid(ev->var_id));
+
+    bool found_select = false;
+    for (uint32_t i = 0; i < entry->nvalues; i++) {
+        XiValue *v = entry->values[i];
+        if (v && v->op == XI_SELECT) {
+            ASSERT(v->var_id == 3);
+            found_select = true;
+        }
+    }
+    ASSERT(found_select);
+
+    xi_func_free(f);
+}
+
 /* ========== Test: arm with > IFCONV_MAX_INS pure values is rejected ========== */
 
 TEST(rejects_oversized_arm) {
@@ -303,6 +342,7 @@ int main(void) {
     printf("=== Xi if-conversion tests ===\n\n");
 
     run_basic_diamond();
+    run_merged_variable_moves_to_select();
     run_rejects_oversized_arm();
     run_rejects_side_effect_arm();
     run_rejects_owning_phi();
