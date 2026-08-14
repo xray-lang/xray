@@ -37,7 +37,7 @@ print(high)
 print(all)
 print(string(high))
 print(high as string)
-print("concat:" + high + ":" + all)
+print("concat:" + string(high) + ":" + string(all))
 print("tmpl:${high}:${all}")
 
 print(high > zero)

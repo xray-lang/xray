@@ -161,6 +161,59 @@ static inline int64_t xr_numeric_core_i64_neg_wrap(int64_t value) {
  * xr_int_arith_core.h; restating the wrap rule here would be a second
  * semantic source. */
 
+/* ==========================================================================
+ * BigInt binary dispatch
+ *
+ * Whether an operand pair evaluates in the BigInt domain is a language
+ * question, not a per-backend one. The VM read it as "either side is a
+ * BigInt" while the hosted AOT profile read it as "both sides are BigInt", so
+ * `100n + 5` produced a BigInt under the interpreter and, once compiled, a
+ * double read off the BigInt pointer. Both dispatchers now ask here.
+ * ========================================================================== */
+
+typedef enum XrBigIntOperandKind {
+    XR_BIGINT_OPERAND_INT = 0,    /* int64 payload: promotes to a BigInt exactly */
+    XR_BIGINT_OPERAND_BIGINT = 1, /* already a BigInt */
+    XR_BIGINT_OPERAND_OTHER = 2   /* float, string, object, null: no promotion */
+} XrBigIntOperandKind;
+
+typedef enum XrBigIntBinaryDispatch {
+    XR_BIGINT_BINARY_NONE = 0,     /* no BigInt operand: the numeric lanes decide */
+    XR_BIGINT_BINARY_EVALUATE = 1, /* evaluate as BigInt, promoting an int operand */
+    XR_BIGINT_BINARY_INVALID = 2   /* BigInt paired with an operand it has no rule for */
+} XrBigIntBinaryDispatch;
+
+/* A BigInt on either side pulls the whole operation into the BigInt domain,
+ * and the other side may only be an int. Anything else has no rule, so it
+ * fails closed instead of reinterpreting that operand's payload. */
+static inline XrBigIntBinaryDispatch xr_bigint_binary_dispatch(XrBigIntOperandKind left,
+                                                               XrBigIntOperandKind right) {
+    if (left != XR_BIGINT_OPERAND_BIGINT && right != XR_BIGINT_OPERAND_BIGINT)
+        return XR_BIGINT_BINARY_NONE;
+    if (left == XR_BIGINT_OPERAND_OTHER || right == XR_BIGINT_OPERAND_OTHER)
+        return XR_BIGINT_BINARY_INVALID;
+    return XR_BIGINT_BINARY_EVALUATE;
+}
+
+/* Sign-magnitude limb form of an int64, the representation a BigInt stores.
+ * The VM allocator and the AOT promotion both encode through this, so a
+ * promoted operand carries identical limbs whichever backend built it. */
+typedef struct XrBigIntI64Limbs {
+    uint32_t limbs[2];
+    uint32_t len;
+    int8_t sign;
+} XrBigIntI64Limbs;
+
+static inline XrBigIntI64Limbs xr_bigint_limbs_from_i64(int64_t value) {
+    uint64_t magnitude = xr_numeric_core_i64_abs_magnitude(value);
+    XrBigIntI64Limbs out;
+    out.limbs[0] = (uint32_t) (magnitude & 0xFFFFFFFFu);
+    out.limbs[1] = (uint32_t) (magnitude >> 32);
+    out.len = out.limbs[1] != 0u ? 2u : 1u;
+    out.sign = value < 0 ? (int8_t) -1 : (int8_t) 1;
+    return out;
+}
+
 static inline int xr_numeric_core_format_i64(char *buf, size_t bufsz, int64_t value) {
     if (!buf || bufsz == 0)
         return -1;

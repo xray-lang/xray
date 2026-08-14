@@ -47,7 +47,7 @@ class Person {
         this.age = age
     }
     greet() -> string {
-        return this.name + " is " + this.age
+        return this.name + " is " + this.age.toString()
     }
 }
 

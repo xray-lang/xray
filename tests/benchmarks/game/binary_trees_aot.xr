@@ -33,7 +33,8 @@ fn run(maxDepth: int) {
     var minDepth = 4
     var stretchDepth = maxDepth + 1
     var stretchTree = makeTree(stretchDepth)
-    print("stretch tree of depth " + stretchDepth + "\t check: " + checksum(stretchTree))
+    print("stretch tree of depth " + stretchDepth.toString() + "\t check: " +
+          checksum(stretchTree).toString())
     var longLivedTree = makeTree(maxDepth)
     var depth = minDepth
     while (depth <= maxDepth) {
@@ -50,10 +51,12 @@ fn run(maxDepth: int) {
             check = check + checksum(tree)
             i = i + 1
         }
-        print(iterations + "\t trees of depth " + depth + "\t check: " + check)
+        print(iterations.toString() + "\t trees of depth " + depth.toString() + "\t check: " +
+              check.toString())
         depth = depth + 2
     }
-    print("long lived tree of depth " + maxDepth + "\t check: " + checksum(longLivedTree))
+    print("long lived tree of depth " + maxDepth.toString() + "\t check: " +
+          checksum(longLivedTree).toString())
 }
 
 var maxDepth = len(process.args) > 0 ? int(process.args[0]) ?? 16 : 16

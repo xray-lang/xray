@@ -114,7 +114,7 @@ export class DateTime {
                 out = out + _pad(this._second, 2)
                 i = i + 2
             } else {
-                out = out + pattern.runes().nth(i)
+                out = out + pattern.runes().nth(i).toString()
                 i = i + 1
             }
         }

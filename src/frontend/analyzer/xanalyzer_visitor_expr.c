@@ -1236,17 +1236,13 @@ static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
     if (XR_TYPE_IS_UNKNOWN(left) || XR_TYPE_IS_UNKNOWN(right))
         return NULL;
 
-    if (op == AST_BINARY_ADD) {
-        // string + string => string; string + (int|float|bool) => string
-        // (dynamic concat handled by OP_ADD)
-        if (XR_TYPE_IS_STRING(left) || XR_TYPE_IS_STRING(right))
-            return xr_type_new_string(NULL);
-    }
-    if (op == AST_BINARY_MUL) {
-        if ((XR_TYPE_IS_STRING(left) && XR_TYPE_IS_INT(right)) ||
-            (XR_TYPE_IS_INT(left) && XR_TYPE_IS_STRING(right)))
-            return xr_type_new_string(NULL);
-    }
+    // `+` joins two strings and nothing else: a mixed operand pair has no
+    // result type, and `*` never repeats a string. Both spellings were once
+    // accepted here and existed only in the VM, so the same source produced a
+    // string under the interpreter and read a string pointer as a double once
+    // compiled. The supported spellings are `.toString()` and `.repeat(n)`.
+    if (op == AST_BINARY_ADD && XR_TYPE_IS_STRING(left) && XR_TYPE_IS_STRING(right))
+        return xr_type_new_string(NULL);
 
     if (op == AST_BINARY_MOD && (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_FLOAT(right)))
         return NULL;
@@ -1346,14 +1342,29 @@ static const char *binary_operator_spelling(int op) {
     }
 }
 
+/* A string operand under `+` or `*` is the one operator-typing failure with a
+ * single obvious repair, so name it instead of leaving the programmer with a
+ * bare "not defined" verdict. */
+static const char *xa_binary_string_operand_hint(int op, XrType *left, XrType *right) {
+    if (!XR_TYPE_IS_STRING(left) && !XR_TYPE_IS_STRING(right))
+        return NULL;
+    if (op == AST_BINARY_MUL)
+        return "; '*' does not repeat a string, use s.repeat(n)";
+    if (op == AST_BINARY_ADD)
+        return "; '+' joins two strings, convert the other operand with .toString()";
+    return NULL;
+}
+
 static void xa_report_binary_operator_type_error(XaInferContext *ctx, AstNode *node, int op,
                                                  XrType *left, XrType *right) {
     if (!ctx || !ctx->analyzer || !node || !left || !right)
         return;
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    const char *hint = xa_binary_string_operand_hint(op, left, right);
     char msg[256];
-    snprintf(msg, sizeof(msg), "operator '%s' is not defined for '%s' and '%s'",
-             binary_operator_spelling(op), xr_type_to_string(left), xr_type_to_string(right));
+    snprintf(msg, sizeof(msg), "operator '%s' is not defined for '%s' and '%s'%s",
+             binary_operator_spelling(op), xr_type_to_string(left), xr_type_to_string(right),
+             hint ? hint : "");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }

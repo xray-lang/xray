@@ -9,5 +9,5 @@ fn gt_zero(x: u64) -> bool {
 print(high)
 print(string(high))
 print(high as string)
-print("u=" + high + ":" + all)
+print("u=" + string(high) + ":" + string(all))
 print(gt_zero(high))

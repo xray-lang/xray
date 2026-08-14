@@ -13,7 +13,7 @@ fn run(n: int) {
     var bigMap: JSON.Object = JSON.parseObject("{}")
     var i = 0
     while (i < 1000) {
-        bigMap["key_" + i] = i
+        bigMap["key_" + i.toString()] = i
         i = i + 1
     }
     print("Phase 1: built map with 1000 keys")
@@ -23,14 +23,14 @@ fn run(n: int) {
     while (round < n) {
         i = 0
         while (i < 1000) {
-            bigMap.set("key_" + i, JSON.value({ v: round * 1000 + i }))
+            bigMap.set("key_" + i.toString(), JSON.value({ v: round * 1000 + i }))
             i = i + 1
         }
         round = round + 1
     }
     // Verify
     var check = JSON.require<int>(bigMap, ["key_500", "v"])
-    print("Phase 1 done: " + n + " rounds, check=" + check)
+    print("Phase 1 done: " + n.toString() + " rounds, check=" + check.toString())
 
     // Phase 2: Create and discard many small maps (allocation churn)
     var total = 0
@@ -39,13 +39,13 @@ fn run(n: int) {
         var m: Map<string, int> = Map()
         var j = 0
         while (j < 20) {
-            m["k" + j] = j * j
+            m["k" + j.toString()] = j * j
             j = j + 1
         }
         total = total + m["k10"]
         i = i + 1
     }
-    print("Phase 2 (small map churn x" + (n * 10) + "): total=" + total)
+    print("Phase 2 (small map churn x" + (n * 10).toString() + "): total=" + total.toString())
 
     // Phase 3: Nested maps (deep reference chains, mark traversal stress)
     var root: Map<string, Map<string, DataRecord>> = Map()
@@ -54,14 +54,14 @@ fn run(n: int) {
         var inner: Map<string, DataRecord> = Map()
         var j = 0
         while (j < 10) {
-            inner["field_" + j] = { data: i * 10 + j }
+            inner["field_" + j.toString()] = { data: i * 10 + j }
             j = j + 1
         }
-        root["node_" + (i % 100)] = inner
+        root["node_" + (i % 100).toString()] = inner
         i = i + 1
     }
     var deepCheck = root.get("node_0")!.get("field_5")!.data
-    print("Phase 3 (nested maps): check=" + deepCheck)
+    print("Phase 3 (nested maps): check=" + deepCheck.toString())
 }
 
 var n = len(process.args) > 0 ? int(process.args[0]) ?? 500 : 500

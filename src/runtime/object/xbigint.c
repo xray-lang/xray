@@ -118,31 +118,11 @@ XrBigInt *xr_bigint_new(struct XrCoroutine *coro, int64_t value) {
     if (!b)
         return NULL;
 
-    if (value < 0) {
-        b->sign = -1;
-        // Handle INT64_MIN special case
-        if (value == INT64_MIN) {
-            b->limbs[0] = 0;
-            b->limbs[1] = 0x80000000U;
-            b->len = 2;
-            return b;
-        }
-        value = -value;
-    }
-
-    if (value == 0) {
-        b->limbs[0] = 0;
-        b->len = 1;
-    } else {
-        b->limbs[0] = (uint32_t) (value & 0xFFFFFFFFULL);
-        uint32_t high = (uint32_t) (value >> 32);
-        if (high == 0) {
-            b->len = 1;
-        } else {
-            b->limbs[1] = high;
-            b->len = 2;
-        }
-    }
+    XrBigIntI64Limbs encoded = xr_bigint_limbs_from_i64(value);
+    b->limbs[0] = encoded.limbs[0];
+    b->limbs[1] = encoded.limbs[1];
+    b->len = encoded.len;
+    b->sign = encoded.sign;
     return b;
 }
 
@@ -270,29 +250,11 @@ XrBigInt *xr_bigint_new_on_fixed_heap(struct XrFixedHeap *fixed_heap, int64_t va
     XrBigInt *b = bigint_alloc_on_fixed_heap(fixed_heap, 2);
     if (!b)
         return NULL;
-    if (value < 0) {
-        b->sign = -1;
-        if (value == INT64_MIN) {
-            b->limbs[0] = 0;
-            b->limbs[1] = 0x80000000U;
-            b->len = 2;
-            return b;
-        }
-        value = -value;
-    }
-    if (value == 0) {
-        b->limbs[0] = 0;
-        b->len = 1;
-    } else {
-        b->limbs[0] = (uint32_t) (value & 0xFFFFFFFFULL);
-        uint32_t high = (uint32_t) (value >> 32);
-        if (high == 0) {
-            b->len = 1;
-        } else {
-            b->limbs[1] = high;
-            b->len = 2;
-        }
-    }
+    XrBigIntI64Limbs encoded = xr_bigint_limbs_from_i64(value);
+    b->limbs[0] = encoded.limbs[0];
+    b->limbs[1] = encoded.limbs[1];
+    b->len = encoded.len;
+    b->sign = encoded.sign;
     return b;
 }
 
