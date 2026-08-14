@@ -1598,10 +1598,36 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
 
 /* ========== Check 14: Tail Call Safety ========== */
 
-/* XI_FLAG_TAIL may only appear on call ops.
- * XI_CALL with tail flag must either be a self-call (aux_int & 0xFF == 1)
- * or the callee must be typed as a function.  Class constructors etc.
- * are not safe tail-call targets because OP_TAILCALL only handles closures. */
+/* True when the value's callee slot holds a value typed as a function.
+ * Both tail forms load args[0] as the thing to enter, so this is the whole
+ * question for either of them. */
+static bool verify_tail_callee_is_function(const XiValue *v) {
+    return v->nargs >= 1 && v->args[0] && v->args[0]->type &&
+           v->args[0]->type->kind == XR_KIND_FUNCTION;
+}
+
+static uint32_t verify_tail_callee_kind(const XiValue *v) {
+    return v->nargs >= 1 && v->args[0] && v->args[0]->type ? v->args[0]->type->kind : 0;
+}
+
+/* Tail calls reach the emitters in two shapes, and both must be checked
+ * through the spelling they actually carry.
+ *
+ * XI_FLAG_TAIL may only appear on call ops.  A flagged XI_CALL must either be
+ * a self-call (its callee slot holds the placeholder constant the self
+ * encoding uses, and only the self-aware emission reads the frame's own
+ * closure) or its callee must be typed as a function.  Class constructors etc.
+ * are not safe tail-call targets because OP_TAILCALL only handles closures.
+ *
+ * XI_TAIL_CALL is the promoted form: xi_opt_tail_call moves the tail semantics
+ * into the opcode and clears the flag, so a flag-keyed scan stops seeing the
+ * call at exactly the point the general tail path takes it over.  From there
+ * xi_emit_tail_call reads args[0] as the callee register unconditionally, so
+ * the promoted form needs the callee contract stated against its opcode: a
+ * function-typed callee, and never the self placeholder, which promotion
+ * refuses precisely because that slot holds a constant nobody may enter.
+ * XI_CALL and XI_TAIL_CALL are both variadic, so verify_op_arity skips them
+ * and this is the only place the callee slot is required to exist at all. */
 static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -1612,7 +1638,45 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
             continue;
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v || !(v->flags & XI_FLAG_TAIL))
+            if (!v)
+                continue;
+
+            if (v->op == XI_TAIL_CALL) {
+                /* The flag is absorbed into the opcode; carrying both means
+                 * two owners of the same fact. */
+                if (v->flags & XI_FLAG_TAIL) {
+                    verr(ctx,
+                         "func '%s': XI_TAIL_CALL v%u in b%u still carries "
+                         "XI_FLAG_TAIL",
+                         f->name, v->id, blk->id);
+                    return;
+                }
+                if (v->nargs < 1 || !v->args[0]) {
+                    verr(ctx, "func '%s': XI_TAIL_CALL v%u in b%u has no callee operand", f->name,
+                         v->id, blk->id);
+                    return;
+                }
+                /* The self flag survives in aux_int even though the opcode is
+                 * no longer XI_CALL, so ask the immediate directly. */
+                if ((v->aux_int & XI_CALL_FLAGS_MASK) == XI_CALL_FLAG_SELF) {
+                    verr(ctx,
+                         "func '%s': XI_TAIL_CALL v%u in b%u targets its own "
+                         "activation, whose callee slot is a placeholder the "
+                         "general tail path would enter",
+                         f->name, v->id, blk->id);
+                    return;
+                }
+                if (!verify_tail_callee_is_function(v)) {
+                    verr(ctx,
+                         "func '%s': XI_TAIL_CALL v%u in b%u has a callee that "
+                         "is not a function (kind=%u)",
+                         f->name, v->id, blk->id, verify_tail_callee_kind(v));
+                    return;
+                }
+                continue;
+            }
+
+            if (!(v->flags & XI_FLAG_TAIL))
                 continue;
 
             /* Only call ops may carry tail flag */
@@ -1627,15 +1691,12 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
             /* XI_CALL: must be self-call or callee typed as function */
             if (v->op == XI_CALL) {
                 bool is_self = xi_call_targets_own_frame(v->op, v->aux_int);
-                bool callee_is_func = v->nargs >= 1 && v->args[0] && v->args[0]->type &&
-                                      v->args[0]->type->kind == XR_KIND_FUNCTION;
-                if (!is_self && !callee_is_func) {
+                if (!is_self && !verify_tail_callee_is_function(v)) {
                     verr(ctx,
                          "func '%s': XI_CALL v%u in b%u has XI_FLAG_TAIL "
                          "but callee is not a function (kind=%u) and "
                          "not a self-call",
-                         f->name, v->id, blk->id,
-                         v->args[0] && v->args[0]->type ? v->args[0]->type->kind : 0);
+                         f->name, v->id, blk->id, verify_tail_callee_kind(v));
                     return;
                 }
             }
