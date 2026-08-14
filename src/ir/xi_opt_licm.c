@@ -95,6 +95,42 @@ static bool load_is_alias_safe(const XiValue *load, const XiLoop *L) {
     return true;
 }
 
+/* ========== Source-Variable Storage ========== */
+
+/* A value carrying a var_id is a write to that source variable's storage, not
+ * just an SSA definition: the VM emitter coalesces every version of a variable
+ * into one register, so the write lands in a location the loop body shares.
+ *
+ * Hoisting such a write to the preheader runs it once per loop entry.  That is
+ * only equivalent to running it every iteration while nothing else in the loop
+ * writes the same variable.  When the loop also holds a phi or another
+ * definition for it — an inner loop counter reset lifted out of the enclosing
+ * loop is the shape that bites — the shared location is overwritten inside the
+ * body and the hoisted write is never re-established on the next iteration.
+ *
+ * Returns true when some value or phi in the loop body other than `v` writes
+ * `v`'s source variable. */
+static bool licm_var_written_elsewhere_in_loop(const XiValue *v, const XiLoop *L) {
+    if (!v || !xi_var_id_is_valid(v->var_id))
+        return false;
+
+    for (uint32_t bi = 0; bi < L->nbody; bi++) {
+        const XiBlock *blk = L->body[bi];
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (phi->value.var_id == v->var_id)
+                return true;
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *u = blk->values[vi];
+            if (u && u != v && u->var_id == v->var_id)
+                return true;
+        }
+    }
+    return false;
+}
+
 /* Combined hoistability check: speculatable pure values OR alias-safe loads. */
 static bool licm_can_hoist_value(const XiValue *v, const uint32_t *def_blk, uint32_t max_id,
                                  const bool *in_loop, uint32_t nblocks, const XiLoop *L) {
@@ -108,6 +144,9 @@ static bool licm_can_hoist_value(const XiValue *v, const uint32_t *def_blk, uint
      * an over-release that aborts the allocator. Keyed on the shared ownership
      * model so this stays in step with what ARC actually refcounts. */
     if (xi_own_type_is_rc(v->type))
+        return false;
+
+    if (licm_var_written_elsewhere_in_loop(v, L))
         return false;
 
     bool is_speculatable = licm_is_speculatable_value(v);

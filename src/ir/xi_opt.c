@@ -4226,14 +4226,32 @@ static const XiPassDesc xi_pass_table[] = {
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
 
+/* Pass names in XI_OPT_PASS_LIST order.  The disable mask addresses passes by
+ * table index, so this list and the table must stay in lockstep. */
+static const char *const xi_opt_pass_id_names[] = {
+#define XI_OPT_PASS_NAME_ENTRY(upper, lower) lower,
+    XI_OPT_PASS_LIST(XI_OPT_PASS_NAME_ENTRY)
+#undef XI_OPT_PASS_NAME_ENTRY
+};
+
+XR_STATIC_ASSERT(XI_OPT_PASS_ID_COUNT <= 32,
+                 "XiOptDisableMask is 32 bits wide; the pass list outgrew it");
+XR_STATIC_ASSERT(sizeof(xi_opt_pass_id_names) / sizeof(xi_opt_pass_id_names[0]) ==
+                     (size_t) XI_OPT_PASS_ID_COUNT,
+                 "pass id list and pass name list disagree");
+
 /* Validate pass table invariants at startup. */
 static void validate_pass_table_once(void) {
+    XR_CHECK(XI_PASS_TABLE_SIZE == (size_t) XI_OPT_PASS_ID_COUNT,
+             "pass table size does not match the pass id list");
     for (size_t i = 0; i < XI_PASS_TABLE_SIZE; i++) {
         const XiPassDesc *d = &xi_pass_table[i];
         (void) d;
         XR_DCHECK(d->name != NULL, "pass table entry has NULL name");
         XR_DCHECK(d->fn != NULL, "pass table entry has NULL fn");
         XR_DCHECK(d->max_stage >= d->min_stage, "pass has an invalid stage window");
+        XR_CHECK(strcmp(d->name, xi_opt_pass_id_names[i]) == 0,
+                 "pass table order diverged from the pass id list");
     }
 
     /* Check declarative pass ordering constraints */
@@ -4323,23 +4341,35 @@ static void init_xi_shuffle_config(void) {
 }
 
 typedef struct XiPassRuntimeConfig {
-    bool disable;
     bool dump;
 } XiPassRuntimeConfig;
 
 static XiPassRuntimeConfig xi_pass_cfg[XI_PASS_TABLE_SIZE];
+
+/* Passes switched off through XRAY_XI_PASS.  Merged into the caller's mask so
+ * the environment and a pipeline configuration reach the driver by one path. */
+static XiOptDisableMask xi_pass_env_disable_mask = XI_OPT_DISABLE_NONE;
 static xr_once_t xi_pass_cfg_once = XR_ONCE_INITIALIZER;
 
 static void init_xi_pass_config(void) {
     memset(xi_pass_cfg, 0, sizeof(xi_pass_cfg));
+    xi_pass_env_disable_mask = XI_OPT_DISABLE_NONE;
     const char *env = getenv("XRAY_XI_PASS");
     if (!env || !env[0])
         return;
 
-    char buf[256];
-    strncpy(buf, env, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-    char *tok = strtok(buf, ",");
+    /* The whole pass list can be named at once, so the request is copied to a
+     * heap buffer rather than truncated into a fixed one. */
+    size_t len = strlen(env);
+    char *buf = (char *) xr_malloc(len + 1);
+    if (!buf) {
+        fprintf(stderr, "[xi_pass] error: out of memory parsing XRAY_XI_PASS\n");
+        return;
+    }
+    memcpy(buf, env, len + 1);
+
+    char *save = NULL;
+    char *tok = strtok_r(buf, ",", &save);
     while (tok) {
         char *colon = strchr(tok, ':');
         if (colon) {
@@ -4348,10 +4378,15 @@ static void init_xi_pass_config(void) {
             const char *kv = colon + 1;
             int idx = pass_index_by_name(pname);
             if (idx >= 0) {
-                if (strncmp(kv, "enable=0", 8) == 0)
-                    xi_pass_cfg[idx].disable = true;
-                else if (strncmp(kv, "dump=1", 6) == 0)
+                if (strcmp(kv, "enable=0") == 0)
+                    xi_pass_env_disable_mask |= XI_OPT_DISABLE_BIT(idx);
+                else if (strcmp(kv, "dump=1") == 0)
                     xi_pass_cfg[idx].dump = true;
+                else
+                    fprintf(stderr,
+                            "[xi_pass] warning: unknown setting '%s' for pass '%s' "
+                            "in XRAY_XI_PASS\n",
+                            kv, pname);
             } else {
                 fprintf(stderr,
                         "[xi_pass] warning: unknown pass '%s' "
@@ -4359,8 +4394,9 @@ static void init_xi_pass_config(void) {
                         pname);
             }
         }
-        tok = strtok(NULL, ",");
+        tok = strtok_r(NULL, ",", &save);
     }
+    xr_free(buf);
 }
 
 XR_FUNC bool xi_pass_order_check(void) {
@@ -4421,12 +4457,13 @@ static XiPassStats *stats_slot(XiPipelineStats *st, const char *name) {
     return s;
 }
 
-static bool pass_disabled_by_mask(const XiPassDesc *desc, XiOptDisableMask disabled_passes) {
+/* A pass is switched off when the bit at its table index is set.  Required
+ * passes are structural and ignore the mask. */
+static bool pass_disabled_by_mask(const XiPassDesc *desc, size_t pass_index,
+                                  XiOptDisableMask disabled_passes) {
     if (!desc || (desc->flags & XI_PASS_REQUIRED))
         return false;
-    if ((disabled_passes & XI_OPT_DISABLE_IVSR) && strcmp(desc->name, "ivsr") == 0)
-        return true;
-    return false;
+    return (disabled_passes & XI_OPT_DISABLE_BIT(pass_index)) != 0;
 }
 
 static void stats_merge(XiPipelineStats *dst, const XiPipelineStats *src) {
@@ -4671,6 +4708,8 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
      * Examples: "dce:enable=0", "gvn:dump=1,licm:enable=0" */
     xr_once_call(&xi_pass_cfg_once, init_xi_pass_config);
 
+    const XiOptDisableMask effective_disable = disabled_passes | xi_pass_env_disable_mask;
+
     uint64_t pipeline_start = xr_time_monotonic_ns();
     XiPassChange total = xi_pass_no_change();
 
@@ -4684,10 +4723,8 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
             if (desc->min_level > level)
                 continue;
 
-            /* XRAY_XI_PASS: skip disabled passes (unless required) */
-            if (xi_pass_cfg[p].disable && !(desc->flags & XI_PASS_REQUIRED))
-                continue;
-            if (pass_disabled_by_mask(desc, disabled_passes))
+            /* Configuration and XRAY_XI_PASS both land in one mask. */
+            if (pass_disabled_by_mask(desc, p, effective_disable))
                 continue;
             /* Structural rewrites may delete or merge the frozen suspend,
              * resume, and dispatch anchors.  Until a pass publishes an audited
