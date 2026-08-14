@@ -1644,6 +1644,35 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth);
 
 #define BC_MAX_NESTING_DEPTH 64
 
+/* Shape-carrying opcodes: every opcode whose VM handler reinterprets one of
+ * its constant operands as an XrClass *. The emitter parks that class in the
+ * constant pool as a raw host address (xi_emit_object.c), so the writer must
+ * recognize each one and persist the stable shape manifest instead. An opcode
+ * missing here serializes the host address verbatim, which makes the artifact
+ * both non-reproducible and unusable in any other process.
+ *
+ * The authority for this set is the group of dispatch cases in
+ * src/vm/xvm_dispatch_object.inc.c that cast a constant to XrClass *. Adding
+ * such an opcode requires adding it here in the same change. */
+static bool bc_shape_constant_index(XrInstruction inst, int *out_index) {
+    switch (GET_OPCODE(inst)) {
+        case OP_NEWOBJECT:
+            *out_index = GETARG_B(inst);
+            return true;
+        case OP_JSON_DECODE:
+        case OP_JSON_DECODE_IGNORE:
+        case OP_JSON_DECODE_REQUIRE:
+        case OP_JSON_PARSE_TYPED:
+        case OP_JSON_PARSE_TYPED_IGNORE:
+        case OP_JSON_PARSE_WITH_REST:
+        case OP_JSON_PARSE_WITH_REST_IGNORE:
+            *out_index = GETARG_C(inst);
+            return true;
+        default:
+            return false;
+    }
+}
+
 static bool *bc_collect_dynamic_shape_constants(XrProto *proto, uint32_t const_count) {
     if (const_count == 0)
         return NULL;
@@ -1655,15 +1684,9 @@ static bool *bc_collect_dynamic_shape_constants(XrProto *proto, uint32_t const_c
     uint32_t code_count = (uint32_t) PROTO_CODE_COUNT(proto);
     for (uint32_t i = 0; i < code_count; i++) {
         XrInstruction inst = PROTO_CODE(proto, i);
-        OpCode op = GET_OPCODE(inst);
         int kidx = -1;
-        if (op == OP_NEWOBJECT) {
-            kidx = GETARG_B(inst);
-        } else if (op == OP_JSON_DECODE || op == OP_JSON_DECODE_IGNORE ||
-                   op == OP_JSON_PARSE_TYPED || op == OP_JSON_PARSE_TYPED_IGNORE ||
-                   op == OP_JSON_PARSE_WITH_REST || op == OP_JSON_PARSE_WITH_REST_IGNORE) {
-            kidx = GETARG_C(inst);
-        }
+        if (!bc_shape_constant_index(inst, &kidx))
+            continue;
         if (kidx >= 0 && (uint32_t) kidx < const_count) {
             shape_consts[kidx] = true;
         }
