@@ -3586,16 +3586,17 @@ if(BUILD_TESTS)
         )
     endforeach()
 
-    # Reordering regressions are invisible at the default -O0 differential
-    # level: LICM, GVN-PRE and the rest of the Xi middle end only run from
-    # XI_OPT_FULL (-O2). These cases exist to catch code motion, so they get
-    # their own lane at the level where code motion happens.
+    # Reordering regressions are invisible under the shared light pre-plan
+    # default: LICM, GVN-PRE and the rest of the deep Xi middle end require
+    # XI_OPT_FULL. This lane states the same full policy for both executors;
+    # XRAY_AOT_TEST_OPT separately selects -O2 for the host C compiler.
     add_test(
         NAME backend_diff_optimized
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/optimizer_cases.txt
                 XRAY_DIFF_EXTRA_CASES_FILE=
                 XRAY_AOT_TEST_OPT=2
+                XRAY_XI_OPT=vm=full,aot=full
                 XRAY_DIFF_MAX_AUTO_JOBS=4
                 ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.py

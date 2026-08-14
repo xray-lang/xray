@@ -9,6 +9,7 @@
 # Consequently, XRAY_AOT_TEST_OPT=2 still changes only the host compiler's flag.
 # This manifest names programs whose answers depend on the middle end; a lane
 # that intends to exercise deeper Xi passes must also provide XRAY_XI_OPT.
+# backend_diff_optimized sets both executors to full explicitly.
 #
 # A VM-only full-policy lane remains useful when the native backend rejects a
 # program before reaching the middle-end behavior under test.
