@@ -105,7 +105,7 @@ A change to these rules re-runs and, where the expected output moves, updates:
 anchor-sha256: xisa/xi/ops.def c8e95c3af82658e20b2cc68e2245a96f060c62866b63e6fd1c0309161053a2c7
 anchor-sha256: src/ir/xi_tbaa.c 304e00919092f45875e76dc0d9e958bc706ecc8cf0f0b89ed80d51392276f6f4
 anchor-sha256: src/ir/xi_tbaa.h 3f361c253c2a6073043d9a8c77f100cf3b51bc16077fbff3f6f3a381d634c027
-anchor-sha256: src/ir/xi_opt_licm.c 89d57c968d90e08f7fed4df46308630d00c92df47ab1c5a059f9e4a7bc750ee0
+anchor-sha256: src/ir/xi_opt_licm.c 06f7494501b87db38c4426987c7f8242451624d10686309e100f3ca66dac819f
 anchor-sha256: src/ir/xi_opt_gvn_pre.c 1f4bd9cb11456fc45547c485381b1a49a46985c0bbfacf586970612e037d2def
 anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a5b384a2b2174598be7
 anchor-sha256: src/coro/xchannel.c 4ac92d6b0cc987bc5c2809812b6728843231f0c6887f0dde2595f532e474a943
