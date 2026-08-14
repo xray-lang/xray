@@ -17,6 +17,7 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../plan/semantic/xr_semantic_graph.h"
+#include "../../plan/semantic/xr_semantic_class_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
 #include <stdio.h>
@@ -3184,6 +3185,79 @@ static bool oracle_dynamic_array_allocation_storage(
     return true;
 }
 
+/* The module-level class object. This oracle re-proves the TargetPlan row from
+ * the same shared judgement the plan builder and the plan verifier use, so no
+ * layer can admit a class object the others would refuse. The storage answer is
+ * the outer tagged value, which is the representation Xi selects for the erased
+ * reference the allocation produces. */
+static bool oracle_dynamic_source_class_object_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !xr_semantic_class_object_is_exact(ctx->semantic, operation))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        binding->semantic_value != semantic_value ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 /* An element read or write is admitted only against a container this authority
  * already proved to be an exact array allocation. The index is an exact signed
  * 64-bit integer, the stored element matches the container's own element entry,
@@ -3989,6 +4063,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
         case XI_ARRAY_NEW:
             return oracle_dynamic_array_allocation_storage(
                 ctx, semantic_value, out_storage, out_machine_kind);
+        case XI_CLASS_CREATE:
+            return oracle_dynamic_source_class_object_storage(
+                ctx, semantic_value, out_storage, out_machine_kind);
         case XI_INDEX_GET:
             /* Only an element read off an exact array allocation is admitted;
              * its storage is the element's own scalar machine storage. */
@@ -4165,6 +4242,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 !oracle_dynamic_channel_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_json_namespace_value_storage(
+                    ctx, source_value, &machine_storage, &ignored_kind) &&
+                !oracle_dynamic_source_class_object_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_source_namespace_storage(
                     ctx, source_value, &machine_storage, &ignored_kind))

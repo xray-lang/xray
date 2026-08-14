@@ -24,6 +24,7 @@
 #include "../../ir/xi_ops_gen.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../semantic/xr_semantic_verify.h"
+#include "../semantic/xr_semantic_class_shape.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -3199,6 +3200,132 @@ static bool builder_add_array_allocation_storage(
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE;
+    return true;
+}
+
+/* Binds the class object to its own owned dynamic slot. The allocation is a
+ * module-level ownership root: Semantic ownership and the existing AOT class
+ * lifetime path still own the allocation, the roots and the cleanup, so this
+ * family adds no root or cleanup row. The representation is the outer tagged
+ * value because that is what Xi selects for an erased reference; freezing a
+ * bare object pointer here would state a machine fact the IR does not carry. */
+static bool note_source_class_object_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticPlan *plan = builder->semantic_plan;
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(plan, semantic_operation);
+    if (!operation || operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >= xr_semantic_plan_function_count(plan) ||
+        analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "source class object storage authority is incomplete");
+    if (analysis->type_rep_kinds[operation->result_type] != XR_MACHINE_REP_COUNT &&
+        analysis->type_rep_kinds[operation->result_type] != XR_MACHINE_REP_DYN_VALUE)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "semantic class object type has conflicting storage representations");
+    XrTargetMachineRepRecord rep;
+    if (!make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize exact class object storage");
+    XrStableId slot_identity;
+    if (!make_slot_identity(plan, operation->function, XR_TARGET_SLOT_TEMPORARY, operation->id,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "class object slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_OWNED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[operation->result_type] &&
+         !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep,
+                               error, error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->used_types[operation->result_type] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    analysis->type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+static bool builder_add_source_class_object_storage(XrTargetPlanBuilder *builder, char *error,
+                                                    size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_CLASS_OBJECT_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    /* A value another family already bound is not this family's to claim. */
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values)
+            analysis.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    uint32_t class_count =
+        (uint32_t) xr_semantic_plan_source_class_count(builder->semantic_plan);
+    uint8_t *claimed = class_count
+                           ? (uint8_t *) allocate_records(class_count, sizeof(*claimed))
+                           : NULL;
+    if (valid && class_count && !claimed) {
+        value_storage_analysis_dispose(&analysis);
+        builder->poisoned = true;
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "class object storage collector allocation failed");
+    }
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation) {
+            valid = fail(error, error_size, "XR_TARGET_1001", "semantic operation is missing");
+            break;
+        }
+        if (operation->opcode != XI_CLASS_CREATE)
+            continue;
+        uint32_t source_class =
+            xr_semantic_class_object_source_class(builder->semantic_plan, operation);
+        /* Every class allocation in the module must land in this family: an
+         * allocation the shared judgement cannot name would otherwise leave a
+         * value with no representation row at all. */
+        if (source_class >= class_count || claimed[source_class]) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "class allocation has no exact source class authority");
+            break;
+        }
+        claimed[source_class] = 1;
+        valid = note_source_class_object_storage_value(builder, &analysis, i, error, error_size);
+    }
+    xr_free(claimed);
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_SOURCE_CLASS_OBJECT_STORAGE;
     return true;
 }
 
@@ -6964,6 +7091,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_direct_local_unit_enum_argument_storage(builder, error, error_size) ||
         !builder_add_closure_storage(builder, error, error_size) ||
         !builder_add_array_allocation_storage(builder, error, error_size) ||
+        !builder_add_source_class_object_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
         !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_append_rune_storage(builder, error, error_size) ||
