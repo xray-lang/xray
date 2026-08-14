@@ -13,7 +13,6 @@
 
 #include "xi_opt_call_specialize.h"
 
-#define CALL_SPEC_FLAG (1u << 6)
 
 XR_FUNC XiPassChange xi_opt_call_specialize(XiFunc *f) {
     if (!f)
@@ -40,8 +39,8 @@ XR_FUNC XiPassChange xi_opt_call_specialize(XiFunc *f) {
                 }
             }
 
-            if (all_const_args && v->nargs > 1 && (v->flags & CALL_SPEC_FLAG) == 0) {
-                v->flags |= CALL_SPEC_FLAG;
+            if (all_const_args && v->nargs > 1 && (v->flags & XI_FLAG_SPEC_CONST) == 0) {
+                v->flags |= XI_FLAG_SPEC_CONST;
                 n_spec++;
             }
         }
