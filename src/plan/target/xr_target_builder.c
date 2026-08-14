@@ -335,6 +335,51 @@ static XrTargetScalarEligibility classify_scalar_type(const XrSemanticTypeRecord
     }
 }
 
+/* `T?` is `T | null`, and the language surface requires the nullable primitives
+ * to carry `null` in the tagged representation so a null renders as "null" and
+ * not as the payload's zero, with the interpreter and the native backend
+ * agreeing. The payload admitted here is exactly one machine scalar that cannot
+ * hold a reference, so the tagged carrier owes no reference count. A nullable
+ * String, object, or container is reference capable and stays refused: its
+ * storage would carry a release obligation this family states no row for. */
+static bool semantic_nullable_scalar_type_is_exact(const XrSemanticTypeRecord *type) {
+    const uint8_t allowed = (uint8_t) (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_CONST);
+    XrStableId zero = {{0}};
+    if (!type || (type->flags & (uint8_t) ~allowed) != 0 ||
+        type->builtin_type != XR_TID_NULL || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(type->source_class_identity, zero) ||
+        type->source_enum_key || type->enum_layout_id != 0 ||
+        type->enum_member_count != 0 || type->enum_flags != 0 ||
+        type->reserved_enum != 0)
+        return false;
+    /* The type of the `null` spelling itself is the degenerate member of this
+     * shape: its carrier holds the null tag and nothing else, which is the same
+     * storage the payload-carrying members use and owes no reference count
+     * either. It is what a nullable scalar is initialized from and compared
+     * against, so leaving it out would refuse every program that names null. */
+    if (type->kind == XR_KIND_NULL)
+        return type->scalar_rep == XR_SCALAR_REP_NONE;
+    if ((type->flags & XR_SEM_TYPE_NULLABLE) == 0)
+        return false;
+    /* The authority stops at the three payload spellings whose whole path is
+     * proved, `int`, `float` and `bool`. A narrower or unsigned integer, a
+     * single-precision float, and a rune each imply a boxing recipe this
+     * authority does not state, so they stay refused along with every other
+     * payload. */
+    switch ((XrTypeKind) type->kind) {
+        case XR_KIND_INT:
+            return type->scalar_rep == XR_NATIVE_I64;
+        case XR_KIND_FLOAT:
+            return type->scalar_rep == XR_NATIVE_F64;
+        case XR_KIND_BOOL:
+            return type->scalar_rep == XR_SCALAR_REP_NONE;
+        default:
+            return false;
+    }
+}
+
 static bool checked_align_u32(uint32_t value, uint32_t alignment, uint32_t *out) {
     if (!alignment || (alignment & (alignment - 1u)) != 0 ||
         value > UINT32_MAX - alignment + 1u)
@@ -3199,6 +3244,144 @@ static bool builder_add_array_allocation_storage(
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE;
+    return true;
+}
+
+/* Binds one nullable scalar to its own borrowed dynamic slot. BORROWED is the
+ * storage fact that this row claims no allocation, no root map, and no cleanup:
+ * the carrier holds either the null tag or a plain machine scalar, so nothing
+ * in it is ever released. Every nullable scalar of one semantic type shares the
+ * single tagged geometry, so the type carries one dynamic layout. */
+static bool note_nullable_scalar_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_value, uint32_t semantic_type, uint32_t semantic_function,
+    uint32_t semantic_operation, uint8_t role, XrStableId source_identity,
+    char *error, size_t error_size) {
+    if (semantic_value >= analysis->total_values ||
+        semantic_type >= analysis->type_count ||
+        semantic_function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
+        analysis->defined_values[semantic_value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "nullable scalar storage identity is incomplete");
+    if (analysis->type_rep_kinds[semantic_type] != XR_MACHINE_REP_COUNT &&
+        analysis->type_rep_kinds[semantic_type] != XR_MACHINE_REP_DYN_VALUE)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "semantic nullable type has conflicting storage representations");
+    XrTargetMachineRepRecord rep;
+    if (!make_borrowed_dynamic_value_rep(
+            xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize nullable scalar storage");
+    XrStableId slot_identity;
+    const bool parameter_slot = role == XR_TARGET_SLOT_PARAMETER;
+    if ((!parameter_slot &&
+         semantic_operation >= xr_semantic_plan_operation_count(builder->semantic_plan)) ||
+        !make_slot_identity(builder->semantic_plan, semantic_function, role,
+                            source_identity, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "nullable scalar slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = semantic_function,
+        .semantic_value = semantic_value,
+        .semantic_operation = parameter_slot ? XR_SEMANTIC_INDEX_NONE : semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = role,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_BORROWED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = semantic_value,
+        .semantic_function = semantic_function,
+        .semantic_type = semantic_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[semantic_type] &&
+         !append_layout_intent(builder, semantic_type, XR_TARGET_LAYOUT_DYNAMIC, 0,
+                               &rep, error, error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[semantic_value] = 1;
+    analysis->used_types[semantic_type] = 1;
+    analysis->value_types[semantic_value] = semantic_type;
+    analysis->value_functions[semantic_value] = semantic_function;
+    analysis->type_rep_kinds[semantic_type] = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+/* This family is driven by the semantic type rather than by one opcode: every
+ * value spelled `T?` over an exact machine scalar has the same single storage
+ * fact whatever produced it, so parameters and operation results are walked in
+ * the same order the scalar family walks them and are claimed on the same
+ * ground. A value another family already bound is not this family's to claim. */
+static bool builder_add_nullable_scalar_storage(XrTargetPlanBuilder *builder,
+                                                char *error, size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis,
+                                             error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values)
+            analysis.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t parameter_count =
+        (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(builder->semantic_plan, i);
+        if (!parameter || parameter->value >= analysis.total_values) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "semantic parameter is invalid");
+            break;
+        }
+        if (!semantic_nullable_scalar_type_is_exact(
+                xr_semantic_plan_type(builder->semantic_plan, parameter->type)) ||
+            analysis.defined_values[parameter->value])
+            continue;
+        valid = note_nullable_scalar_storage_value(
+            builder, &analysis, parameter->value, parameter->type,
+            parameter->function, XR_SEMANTIC_INDEX_NONE, XR_TARGET_SLOT_PARAMETER,
+            parameter->id, error, error_size);
+    }
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "semantic operation is missing");
+            break;
+        }
+        if (operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+            operation->result_value >= analysis.total_values ||
+            analysis.defined_values[operation->result_value] ||
+            !semantic_nullable_scalar_type_is_exact(
+                xr_semantic_plan_type(builder->semantic_plan, operation->result_type)))
+            continue;
+        uint8_t role = operation->opcode == XI_PHI ? XR_TARGET_SLOT_PHI
+                                                   : XR_TARGET_SLOT_TEMPORARY;
+        valid = note_nullable_scalar_storage_value(
+            builder, &analysis, operation->result_value, operation->result_type,
+            operation->function, i, role, operation->id, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE;
     return true;
 }
 
@@ -6867,6 +7050,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_direct_local_unit_enum_argument_storage(builder, error, error_size) ||
         !builder_add_closure_storage(builder, error, error_size) ||
         !builder_add_array_allocation_storage(builder, error, error_size) ||
+        !builder_add_nullable_scalar_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
         !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_append_rune_storage(builder, error, error_size) ||

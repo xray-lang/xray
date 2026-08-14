@@ -1,0 +1,48 @@
+// anchor: nullable-scalar-target
+// Nullable scalars built, compared, narrowed and printed. Passing under the VM
+// is not evidence the native backend accepts it: the VM carries every value in
+// the tagged carrier already, while the native backend demands a frozen storage
+// fact for every value it emits, and before this case nothing stated one for a
+// value spelled `T?`. Each line below pins a separate fact the two backends
+// have to agree on:
+//   - `T?` is `T | null`, so a null must render as "null" and not as the
+//     payload's zero; that is only true if both backends keep the value in the
+//     tagged carrier, which is the storage fact this case pins;
+//   - the type of the `null` spelling itself carries the same fact, so a
+//     nullable scalar can be initialized from it and compared against it;
+//   - a comparison against null yields an ordinary boolean in its own native
+//     scalar storage, so the comparison crosses a boundary the plan states;
+//   - narrowing a nullable binding hands the arithmetic an ordinary integer,
+//     so the narrowed use leaves the tagged carrier behind.
+// The authority stops at `int`, `float` and `bool` on purpose: a nullable
+// String or object would leave a reference-count obligation on the carrier that
+// no frozen row here describes, and a narrower payload or a rune would imply a
+// boxing recipe the authority does not state.
+fn main() {
+    var absent: int? = null
+    var present: int? = 7
+    print(absent)
+    print(present)
+
+    print(absent == null)
+    print(present != null)
+
+    if (present != null) {
+        print(present + 1)
+    }
+    if (absent == null) {
+        print(-1)
+    }
+
+    var flag: bool? = true
+    var missing: bool? = null
+    print(flag)
+    print(missing)
+
+    var ratio: float? = 1.5
+    var noratio: float? = null
+    print(ratio)
+    print(noratio)
+}
+
+main()
