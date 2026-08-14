@@ -106,9 +106,27 @@ static bool xi_opt_pipeline_by_name(const char *name, XiOptPipelineId *out) {
 
 /* ========== Built-in default ========== */
 
-/* Passes withheld from the native backend at the full level. Carried over
- * unchanged from the configuration this policy replaces. */
-#define XI_PASS_AOT_WITHHELD_PASSES (XI_OPT_DISABLE_IVSR)
+/* Passes withheld from the native backend at the full level.
+ *
+ * ifconv and loop_split answer programs incorrectly today, and the native
+ * backend runs both on every build. Over the 52 differential cases under
+ * tests/diff/cases/semantics/optimizer the full level answers 8 wrongly and
+ * fails to build 24; with these two withheld it answers none wrongly, builds
+ * all but 9, and regresses no case. The same corpus run through the VM at the
+ * full level -- the more sensitive probe, because a case the backend cannot
+ * build cannot disagree -- gives 24 wrong answers, of which disabling one pass
+ * at a time attributes 13 to ifconv and 9 each to loop_split and licm over the
+ * same guarded loop exits.
+ *
+ * ivsr is withheld for an older and separate reason carried over unchanged:
+ * its rewrite is not honoured through representation selection.
+ *
+ * This set is containment, not a repair: the defects are in the passes. Take a
+ * pass out of this set once that corpus passes with it enabled -- 52/52 on the
+ * VM at the full level and no new wrong answer or build failure on the native
+ * backend. This is the only place either pass is withheld. */
+#define XI_PASS_AOT_WITHHELD_PASSES                                                                \
+    (XI_OPT_DISABLE_IVSR | XI_OPT_DISABLE_IFCONV | XI_OPT_DISABLE_LOOP_SPLIT)
 
 XR_FUNC XiOptPolicy xi_pass_policy_builtin_default(void) {
     XiOptPolicy policy;
