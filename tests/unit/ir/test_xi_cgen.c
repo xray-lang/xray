@@ -1594,6 +1594,17 @@ TEST(cgen_rep_identical_source_alias_shares_immutable_c_local) {
     XiValue *source = xi_param(ir, entry, 0, &int_type);
     TEST_REQUIRE(source != NULL, "manual C-alias source allocated");
     ir->params[0] = source;
+    ir->source_var_count = 2;
+    ir->source_var_names =
+        (const char **) xi_func_arena_alloc(ir, 2 * sizeof(*ir->source_var_names));
+    ir->source_var_types =
+        (XrType **) xi_func_arena_alloc(ir, 2 * sizeof(*ir->source_var_types));
+    TEST_REQUIRE(ir->source_var_names && ir->source_var_types,
+                 "manual C-alias source-variable tables allocated");
+    ir->source_var_names[0] = "source";
+    ir->source_var_names[1] = "alias";
+    ir->source_var_types[0] = &int_type;
+    ir->source_var_types[1] = &int_type;
     source->var_id = 0;
     XiValue *alias = xi_value_new(ir, entry, XI_COPY, &int_type, 1);
     TEST_REQUIRE(alias != NULL, "manual C-alias boundary allocated");
