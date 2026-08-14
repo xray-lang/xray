@@ -55,9 +55,17 @@ static bool verify_func(XiFunc *f) {
     return ok;
 }
 
-/* Build a loop with an early-exit condition based on an invariant check. */
-static XiFunc *build_loop_with_early_exit(void) {
-    XiFunc *f = xi_func_new("split_target", &stub_int);
+/* Build `for (i = 0; i < header_bound; i++) { if (i < exit_bound) body else
+ * early_exit }`, or the mirrored `if (i >= exit_bound) early_exit else body`
+ * when exit_on_true is set.  header_bound_value overrides the header's
+ * constant bound with a caller-supplied value so the same skeleton can carry
+ * a bound that is not known at compile time. */
+static XiFunc *build_loop_with_body_exit(const char *name, int64_t header_bound,
+                                         int64_t exit_bound, bool exit_on_true,
+                                         XiValue *(*make_bound)(XiFunc *, XiBlock *),
+                                         XiBlock **out_check, XiBlock **out_body,
+                                         XiBlock **out_early_exit) {
+    XiFunc *f = xi_func_new(name, &stub_int);
     XiBlock *entry = xi_block_new(f);
     XiBlock *header = xi_block_new(f);
     XiBlock *check_blk = xi_block_new(f);
@@ -68,9 +76,11 @@ static XiFunc *build_loop_with_early_exit(void) {
     body->sealed = early_exit->sealed = exit_blk->sealed = true;
 
     XiValue *start = xi_const_int(f, entry, 0, &stub_int);
-    XiValue *limit = xi_const_int(f, entry, 10, &stub_int);
-    XiValue *array_len = xi_const_int(f, entry, 5, &stub_int);
     XiValue *step = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *shared_bound = make_bound ? make_bound(f, entry) : NULL;
+    XiValue *limit = shared_bound ? shared_bound : xi_const_int(f, entry, header_bound, &stub_int);
+    XiValue *array_len =
+        shared_bound ? shared_bound : xi_const_int(f, entry, exit_bound, &stub_int);
 
     xi_block_set_jump(entry, header);
     xi_block_set_jump(body, header);
@@ -79,47 +89,13 @@ static XiFunc *build_loop_with_early_exit(void) {
     XiValue *cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, limit);
     xi_block_set_if(header, cond, check_blk, exit_blk);
 
-    XiValue *check_cond = xi_binary(f, check_blk, XI_LT, &stub_bool, &iv->value, array_len);
-    xi_block_set_if(check_blk, check_cond, body, early_exit);
-
-    XiValue *next = xi_binary(f, body, XI_ADD, &stub_int, &iv->value, step);
-
-    int pre_idx = pred_index(header, entry);
-    int latch_idx = pred_index(header, body);
-    iv->value.args[pre_idx] = start;
-    iv->value.args[latch_idx] = next;
-
-    xi_block_set_return(exit_blk, xi_const_int(f, exit_blk, 0, &stub_int));
-    xi_block_set_return(early_exit, xi_const_int(f, early_exit, -1, &stub_int));
-    return f;
-}
-
-static XiFunc *build_loop_with_true_early_exit(XiBlock **out_entry, XiBlock **out_header,
-                                               XiBlock **out_early_exit) {
-    XiFunc *f = xi_func_new("split_true_exit", &stub_int);
-    XiBlock *entry = xi_block_new(f);
-    XiBlock *header = xi_block_new(f);
-    XiBlock *check_blk = xi_block_new(f);
-    XiBlock *body = xi_block_new(f);
-    XiBlock *early_exit = xi_block_new(f);
-    XiBlock *exit_blk = xi_block_new(f);
-    entry->sealed = header->sealed = check_blk->sealed = true;
-    body->sealed = early_exit->sealed = exit_blk->sealed = true;
-
-    XiValue *start = xi_const_int(f, entry, 0, &stub_int);
-    XiValue *limit = xi_const_int(f, entry, 10, &stub_int);
-    XiValue *array_len = xi_const_int(f, entry, 5, &stub_int);
-    XiValue *step = xi_const_int(f, entry, 1, &stub_int);
-
-    xi_block_set_jump(entry, header);
-    xi_block_set_jump(body, header);
-
-    XiPhi *iv = xi_phi_new(f, header, &stub_int, header->npreds);
-    XiValue *cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, limit);
-    xi_block_set_if(header, cond, check_blk, exit_blk);
-
-    XiValue *check_cond = xi_binary(f, check_blk, XI_GE, &stub_bool, &iv->value, array_len);
-    xi_block_set_if(check_blk, check_cond, early_exit, body);
+    if (exit_on_true) {
+        XiValue *check_cond = xi_binary(f, check_blk, XI_GE, &stub_bool, &iv->value, array_len);
+        xi_block_set_if(check_blk, check_cond, early_exit, body);
+    } else {
+        XiValue *check_cond = xi_binary(f, check_blk, XI_LT, &stub_bool, &iv->value, array_len);
+        xi_block_set_if(check_blk, check_cond, body, early_exit);
+    }
 
     XiValue *next = xi_binary(f, body, XI_ADD, &stub_int, &iv->value, step);
 
@@ -131,46 +107,122 @@ static XiFunc *build_loop_with_true_early_exit(XiBlock **out_entry, XiBlock **ou
     xi_block_set_return(exit_blk, xi_const_int(f, exit_blk, 0, &stub_int));
     xi_block_set_return(early_exit, xi_const_int(f, early_exit, -1, &stub_int));
 
-    if (out_entry)
-        *out_entry = entry;
-    if (out_header)
-        *out_header = header;
+    if (out_check)
+        *out_check = check_blk;
+    if (out_body)
+        *out_body = body;
     if (out_early_exit)
         *out_early_exit = early_exit;
     return f;
 }
 
-TEST(splits_loop_with_invariant_exit) {
-    XiFunc *f = build_loop_with_early_exit();
+/* An opaque loop-invariant bound: not a constant, so only an operand-identity
+ * match can relate the header's comparison to the body's. */
+static XiValue *make_opaque_bound(XiFunc *f, XiBlock *entry) {
+    XiValue *a = xi_const_int(f, entry, 10, &stub_int);
+    XiValue *b = xi_const_int(f, entry, 1, &stub_int);
+    return xi_binary(f, entry, XI_ADD, &stub_int, a, b);
+}
+
+/* `i < 10` in the header leaves the whole range [5, 10) able to take a
+ * `i < 5` body exit, so the exit edge is live and must survive. */
+TEST(keeps_exit_the_header_bound_does_not_rule_out) {
+    XiBlock *check_blk = NULL;
+    XiFunc *f = build_loop_with_body_exit("keeps_false_exit", 10, 5, false, NULL, &check_blk, NULL,
+                                          NULL);
+    ASSERT(f != NULL);
+    ASSERT(verify_func(f));
+
+    uint32_t orig_nblocks = f->nblocks;
+    XiPassChange chg = xi_opt_loop_split(f);
+    ASSERT(!chg.cfg_changed);
+    ASSERT(!chg.values_changed);
+    ASSERT(f->nblocks == orig_nblocks);
+    ASSERT(check_blk->kind == XI_BLOCK_IF);
+    ASSERT(verify_func(f));
+    xi_func_free(f);
+}
+
+/* Same range, exit taken on the true edge instead. */
+TEST(keeps_true_exit_the_header_bound_does_not_rule_out) {
+    XiBlock *check_blk = NULL;
+    XiFunc *f =
+        build_loop_with_body_exit("keeps_true_exit", 10, 5, true, NULL, &check_blk, NULL, NULL);
+    ASSERT(f != NULL);
+    ASSERT(verify_func(f));
+
+    uint32_t orig_nblocks = f->nblocks;
+    XiPassChange chg = xi_opt_loop_split(f);
+    ASSERT(!chg.cfg_changed);
+    ASSERT(!chg.values_changed);
+    ASSERT(f->nblocks == orig_nblocks);
+    ASSERT(check_blk->kind == XI_BLOCK_IF);
+    ASSERT(verify_func(f));
+    xi_func_free(f);
+}
+
+/* `i < 5` in the header rules out the `i >= 10` exit for every iteration, so
+ * the exit edge is dead.  It is dropped in place: the branch becomes a jump
+ * onward into the loop, and no guard block appears in front of the header. */
+TEST(drops_true_exit_the_header_bound_rules_out) {
+    XiBlock *check_blk = NULL;
+    XiBlock *body = NULL;
+    XiBlock *early_exit = NULL;
+    XiFunc *f = build_loop_with_body_exit("drops_true_exit", 5, 10, true, NULL, &check_blk, &body,
+                                          &early_exit);
     ASSERT(f != NULL);
     ASSERT(verify_func(f));
 
     uint32_t orig_nblocks = f->nblocks;
     XiPassChange chg = xi_opt_loop_split(f);
     ASSERT(chg.cfg_changed);
-    ASSERT(f->nblocks > orig_nblocks);
+    ASSERT(f->nblocks == orig_nblocks);
+    ASSERT(check_blk->kind == XI_BLOCK_PLAIN);
+    ASSERT(check_blk->control == NULL);
+    ASSERT(check_blk->succs[0] == body);
+    ASSERT(check_blk->succs[1] == NULL);
+    ASSERT(pred_index(early_exit, check_blk) < 0);
     ASSERT(verify_func(f));
     xi_func_free(f);
 }
 
-TEST(splits_loop_with_true_early_exit) {
-    XiBlock *entry = NULL;
-    XiBlock *header = NULL;
+/* The mirrored shape: `i < 5` in the header rules out exiting on `i < 10`
+ * being false. */
+TEST(drops_false_exit_the_header_bound_rules_out) {
+    XiBlock *check_blk = NULL;
+    XiBlock *body = NULL;
     XiBlock *early_exit = NULL;
-    XiFunc *f = build_loop_with_true_early_exit(&entry, &header, &early_exit);
+    XiFunc *f = build_loop_with_body_exit("drops_false_exit", 5, 10, false, NULL, &check_blk, &body,
+                                          &early_exit);
     ASSERT(f != NULL);
     ASSERT(verify_func(f));
 
     XiPassChange chg = xi_opt_loop_split(f);
     ASSERT(chg.cfg_changed);
+    ASSERT(check_blk->kind == XI_BLOCK_PLAIN);
+    ASSERT(check_blk->succs[0] == body);
+    ASSERT(pred_index(early_exit, check_blk) < 0);
+    ASSERT(verify_func(f));
+    xi_func_free(f);
+}
+
+/* Neither bound is a constant, but both comparisons name the same value, so
+ * `i < bound` in the header still rules out an `i >= bound` exit. */
+TEST(drops_exit_against_the_same_opaque_bound) {
+    XiBlock *check_blk = NULL;
+    XiBlock *body = NULL;
+    XiBlock *early_exit = NULL;
+    XiFunc *f = build_loop_with_body_exit("drops_opaque_exit", 0, 0, true, make_opaque_bound,
+                                          &check_blk, &body, &early_exit);
+    ASSERT(f != NULL);
     ASSERT(verify_func(f));
 
-    XiBlock *guard = entry->succs[0];
-    ASSERT(guard != NULL);
-    ASSERT(guard->kind == XI_BLOCK_IF);
-    ASSERT(guard->succs[0] == early_exit);
-    ASSERT(guard->succs[1] == header);
-
+    XiPassChange chg = xi_opt_loop_split(f);
+    ASSERT(chg.cfg_changed);
+    ASSERT(check_blk->kind == XI_BLOCK_PLAIN);
+    ASSERT(check_blk->succs[0] == body);
+    ASSERT(pred_index(early_exit, check_blk) < 0);
+    ASSERT(verify_func(f));
     xi_func_free(f);
 }
 
@@ -319,8 +371,11 @@ TEST(skips_non_basic_loop_carried_phi_exit_check) {
 int main(void) {
     printf("=== Xi Loop Split Tests ===\n\n");
 
-    run_splits_loop_with_invariant_exit();
-    run_splits_loop_with_true_early_exit();
+    run_keeps_exit_the_header_bound_does_not_rule_out();
+    run_keeps_true_exit_the_header_bound_does_not_rule_out();
+    run_drops_true_exit_the_header_bound_rules_out();
+    run_drops_false_exit_the_header_bound_rules_out();
+    run_drops_exit_against_the_same_opaque_bound();
     run_no_loop_no_change();
     run_skips_loop_without_early_exit();
     run_skips_body_defined_exit_check();
