@@ -4477,6 +4477,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 bool argument_unit_enum = parameter && parameter->type == operand->type &&
                                           semantic_unit_enum_type_is_exact(
                                               xr_semantic_plan_type(semantic, operand->type));
+                /* Recomputed through the same shared judgement the callee's own
+                 * storage family uses, so an argument this verifier admits can
+                 * never be a parameter that family refused. */
+                bool argument_class_instance =
+                    parameter && parameter->type == operand->type &&
+                    xr_semantic_class_argument_source_class(semantic, parameter_index) !=
+                        XR_SEMANTIC_INDEX_NONE;
                 uint8_t ownership =
                     operand->ownership_action == XR_SEM_OPERAND_CONSUME
                         ? XR_TARGET_CALL_CONSUME
@@ -4488,12 +4495,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         operand->parameter_mode == parameter->mode &&
                         operand->transfer_mode == parameter->transfer_mode &&
                         (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
-                        (argument_scalar == 1 || argument_u8_slice || argument_unit_enum) &&
+                        (argument_scalar == 1 || argument_u8_slice || argument_unit_enum ||
+                         argument_class_instance) &&
                         parameter->mode == XR_PARAM_READ &&
                         operand->access == XR_CALL_ARG_PLAIN &&
                         (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0 &&
                         (parameter->ownership == XI_OWN_NONE ||
-                         ((argument_u8_slice || argument_unit_enum) &&
+                         ((argument_u8_slice || argument_unit_enum || argument_class_instance) &&
                           parameter->ownership == XI_OWN_BORROWED)) &&
                         caller_value &&
                         callee_value &&
@@ -4520,8 +4528,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         plan->machine_reps[argument->register_rep].kind ==
                             (argument_u8_slice
                                  ? XR_MACHINE_REP_VIEW
-                                 : argument_unit_enum ? XR_MACHINE_REP_ENUM_ORDINAL
-                                                      : argument_kind) &&
+                                 : argument_unit_enum
+                                       ? XR_MACHINE_REP_ENUM_ORDINAL
+                                       : argument_class_instance ? XR_MACHINE_REP_DYN_VALUE
+                                                                 : argument_kind) &&
                         argument->ordinal == ordinal &&
                         argument->mode == XR_TARGET_CALL_VALUE &&
                         argument->ownership == ownership &&

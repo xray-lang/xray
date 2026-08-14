@@ -5222,6 +5222,14 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 *out_storage = XR_REP_TAGGED;
                 return true;
             }
+            /* A class instance argument has no native scalar storage a policy
+             * could prefer: it is the tagged carrier its own storage family
+             * bound, whether the caller computed it or received it. */
+            if (oracle_dynamic_source_class_instance_storage(ctx, source_value, out_storage,
+                                                             &ignored_kind) ||
+                oracle_dynamic_source_class_parameter_storage(ctx, source_value, out_storage,
+                                                              &ignored_kind))
+                return true;
             return oracle_machine_storage(ctx, source_value, out_storage,
                                           &ignored_kind);
         case XI_CALL_METHOD:

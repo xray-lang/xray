@@ -6340,16 +6340,23 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
         bool exact_unit_enum = parameter && parameter->type == operand->type &&
                                semantic_unit_enum_type_is_exact(
                                    xr_semantic_plan_type(plan, operand->type));
+        /* A class instance is admitted as an argument through the same shared
+         * judgement that binds its storage on the callee side, so a parameter
+         * this call passes can never be one the callee's own family refused. */
+        bool exact_class_instance =
+            parameter && parameter->type == operand->type &&
+            xr_semantic_class_argument_source_class(plan, parameter_index) !=
+                XR_SEMANTIC_INDEX_NONE;
         if (!parameter || operand->role != XR_SEM_OPERAND_ARGUMENT ||
             operand->parameter != (int16_t) ordinal || operand->type != parameter->type ||
             operand->parameter_mode != parameter->mode ||
             operand->transfer_mode != parameter->transfer_mode ||
             (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
-            (!exact_scalar && !exact_u8_slice && !exact_unit_enum) ||
+            (!exact_scalar && !exact_u8_slice && !exact_unit_enum && !exact_class_instance) ||
             parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
             (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0 ||
             (parameter->ownership != XI_OWN_NONE &&
-             !((exact_u8_slice || exact_unit_enum) &&
+             !((exact_u8_slice || exact_unit_enum || exact_class_instance) &&
                parameter->ownership == XI_OWN_BORROWED)))
             return fail(error, error_size, "XR_TARGET_1003",
                         "direct-local argument contract needs unsupported storage or ownership");
