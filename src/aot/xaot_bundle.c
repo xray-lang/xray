@@ -366,12 +366,8 @@ static const char *arg_class_name(XaotArgClass cls) {
             return "ptr";
         case XAOT_ARG_AGG_BY_VALUE:
             return "agg-by-value";
-        case XAOT_ARG_AGG_BY_REF:
-            return "agg-by-ref";
         case XAOT_ARG_TAGGED:
             return "tagged";
-        case XAOT_ARG_AOT_CTX:
-            return "aot-ctx";
         default:
             return "?";
     }

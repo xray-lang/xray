@@ -31,9 +31,7 @@ typedef enum XaotArgClass {
     XAOT_ARG_SCALAR,
     XAOT_ARG_PTR,
     XAOT_ARG_AGG_BY_VALUE,
-    XAOT_ARG_AGG_BY_REF,
     XAOT_ARG_TAGGED,
-    XAOT_ARG_AOT_CTX,
 } XaotArgClass;
 
 typedef struct XaotAbiSlot {
