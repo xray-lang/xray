@@ -149,6 +149,12 @@ TEST(shuffle_pipeline_recomputes_dom_after_permutation) {
  */
 static XiFunc *build_sum_loop(void) {
     XiFunc *f = xi_func_new("sum_loop", &stub_int);
+    /* The loop names two source variables, i and sum, at var_id 1 and 2. A
+     * var_id is an index into this table and the emitter reads var_reg with
+     * it, so the table has to be wide enough to hold the largest id the
+     * fixture assigns; leaving it empty would build IR whose var_ids run off
+     * the end of every per-variable array. */
+    f->source_var_count = 3;
     XiBlock *pre = xi_block_new(f);
     XiBlock *hdr = xi_block_new(f);
     XiBlock *body = xi_block_new(f);
