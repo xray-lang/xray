@@ -165,6 +165,20 @@ typedef uint32_t XiOptDisableMask;
 /* Pass function signature: mutates XiFunc in-place, returns change record */
 typedef XiPassChange (*XiPassFn)(XiFunc *f);
 
+/* Signature of a pass that runs other passes inside itself. XiPassFn cannot
+ * describe such a pass: the mask that withholds its constituents never
+ * reaches it, so every constituent would run whatever the caller asked for,
+ * and a measurement taken with one of them named would report the wrong
+ * pass' contribution. A composite pass publishes this entry point instead
+ * and receives the same mask the driver applies to the pass table. */
+typedef XiPassChange (*XiPassMaskedFn)(XiFunc *f, XiOptDisableMask disabled);
+
+/* True when `disabled` withholds the pass at `pass_id`. Required passes are
+ * structural and are never withheld. This is the single predicate that
+ * decides it, so a composite pass reaches exactly the same answer as the
+ * driver's walk over the pass table. Out-of-range ids are not withheld. */
+XR_FUNC bool xi_pass_withheld_by_mask(XiOptDisableMask disabled, int pass_id);
+
 /* Flags describing per-pass properties */
 #define XI_PASS_NONE 0u
 #define XI_PASS_NEEDS_DOM (1u << 0)    /* requires dominator tree */
@@ -176,6 +190,9 @@ typedef XiPassChange (*XiPassFn)(XiFunc *f);
 typedef struct XiPassDesc {
     const char *name;     /* human-readable name for logging */
     XiPassFn fn;          /* pass entry point */
+    /* Entry point for a pass that re-runs other passes. Exactly one of `fn`
+     * and `fn_masked` is set; the pass-table validator checks that. */
+    XiPassMaskedFn fn_masked;
     XiOptLevel min_level; /* minimum opt level to run this pass */
     uint32_t flags;       /* XI_PASS_* flags */
 

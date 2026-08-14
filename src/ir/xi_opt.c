@@ -4164,6 +4164,24 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
         .preserves_evidence = 0,                                                                   \
     }
 
+/* A rewrite pass that re-runs other passes and therefore has to be handed the
+ * withheld-pass mask. Everything else about it is a plain rewrite pass. */
+#define XI_MASKED_REWRITE_PASS(pass_name, pass_fn, level, pass_flags, required_evidence)           \
+    {                                                                                              \
+        .name = pass_name,                                                                         \
+        .fn_masked = pass_fn,                                                                      \
+        .min_level = level,                                                                        \
+        .flags = pass_flags,                                                                       \
+        .min_stage = XI_STAGE_RAW,                                                                 \
+        .max_stage = XI_STAGE_CORO_LOWERED,                                                        \
+        .requires_inv_mask = 0,                                                                    \
+        .produces_inv_mask = 0,                                                                    \
+        .requires_evidence = required_evidence,                                                    \
+        .produces_evidence = 0,                                                                    \
+        .invalidates_evidence = 0,                                                                 \
+        .preserves_evidence = 0,                                                                   \
+    }
+
 #define XI_ANALYSIS_PASS(pass_name, pass_fn, level, pass_flags, produced_evidence)                 \
     {                                                                                              \
         .name = pass_name,                                                                         \
@@ -4213,10 +4231,11 @@ static const XiPassDesc xi_pass_table[] = {
     XI_REWRITE_PASS("ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
     XI_REWRITE_PASS("jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
     XI_REWRITE_PASS("block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_MASKED_REWRITE_PASS("const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, 0),
 };
 
 #undef XI_ANALYSIS_PASS
+#undef XI_MASKED_REWRITE_PASS
 #undef XI_REWRITE_PASS
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
@@ -4237,7 +4256,10 @@ static void validate_pass_table_once(void) {
         const XiPassDesc *d = &xi_pass_table[i];
         (void) d;
         XR_DCHECK(d->name != NULL, "pass table entry has NULL name");
-        XR_DCHECK(d->fn != NULL, "pass table entry has NULL fn");
+        /* Exactly one entry point. A pass with both would run twice under one
+         * name; a pass with neither would be silently skipped. */
+        XR_CHECK((d->fn != NULL) != (d->fn_masked != NULL),
+                 "pass table entry must publish exactly one entry point");
         XR_DCHECK(d->max_stage >= d->min_stage, "pass has an invalid stage window");
         XR_CHECK(xi_pass_name_by_id((int) i) != NULL,
                  "pass table is longer than the pass id list");
@@ -4442,6 +4464,12 @@ static bool pass_disabled_by_mask(const XiPassDesc *desc, size_t pass_index,
     if (!desc || (desc->flags & XI_PASS_REQUIRED))
         return false;
     return (disabled_passes & XI_OPT_DISABLE_BIT(pass_index)) != 0;
+}
+
+XR_FUNC bool xi_pass_withheld_by_mask(XiOptDisableMask disabled, int pass_id) {
+    if (pass_id < 0 || (size_t) pass_id >= XI_PASS_TABLE_SIZE)
+        return false;
+    return pass_disabled_by_mask(&xi_pass_table[pass_id], (size_t) pass_id, disabled);
 }
 
 static void stats_merge(XiPipelineStats *dst, const XiPipelineStats *src) {
@@ -4806,7 +4834,11 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                          "pass '%s' could not open an Xi edit session", desc->name);
                 goto done;
             }
-            XiPassChange pc = desc->fn(f);
+            /* A composite pass gets the same mask the walk above applies, so
+             * a pass it re-runs internally is withheld exactly when the
+             * driver would have withheld it. */
+            XiPassChange pc =
+                desc->fn_masked ? desc->fn_masked(f, effective_disable) : desc->fn(f);
 
             XiPassOutcome pass_outcome;
             char edit_error[256] = {0};
