@@ -26,6 +26,12 @@ tagged outer value backed by the separate runtime String-literal
 materialization contract. It adds no object body, allocation, root-map,
 root-slot, cleanup, tuple, or general owned-String authority and remains
 outside the trivial frame allocator.
+The array-member-result-storage family describes only the dynamic/owned/tagged
+outer value of an array member that hands back its own receiver. That result is
+a second name for a container the array-allocation family already describes, so
+this family adds no element storage, object body, allocation, root map, root
+slot, cleanup, or layout of its own, and its slot stays outside the trivial
+frame allocator.
 The direct-local-callee-storage family describes only the borrowed dynamic
 outer `XrValue` token loaded from one shared slot whose every use is the callee
 of the same frozen direct-local call target. The target is the unique canonical
@@ -117,7 +123,7 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 0e1fca9d4ab16f59f206b8adc8ef48f9f50d7a3d1824efbdf6b84f3f1a75a548
+anchor-sha256: src/plan/target/xr_target_plan.h 8176bcdc330da3f4fb201b074dd172012f9b940d938af648aa664e46f581b75b
 anchor-sha256: src/vm/xr_typed_frame.h b51b7f45110ccd0f05a1b6595a4a960eec1606d2bae6dbd21e95633fed2b0151
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816

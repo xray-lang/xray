@@ -606,12 +606,12 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING;
         bool json_namespace_value =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE;
-        bool array_push_scalar =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_PUSH_SCALAR;
+        bool array_member_scalar =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR;
         if ((!direct_local && !channel_close && !source_export &&
              !stringbuilder_constructor && !string_byte_slice_view &&
              !stringbuilder_append_rune && !stringbuilder_to_string && !stringbuilder_append_string &&
-             !json_namespace_value && !array_push_scalar) ||
+             !json_namespace_value && !array_member_scalar) ||
             plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
             ((direct_local || source_export) &&
@@ -619,7 +619,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
                  xr_semantic_plan_call_target_count(plan->semantic_plan)) ||
             ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
               stringbuilder_append_rune || stringbuilder_to_string || stringbuilder_append_string ||
-              json_namespace_value || array_push_scalar) &&
+              json_namespace_value || array_member_scalar) &&
              plan->calls[i].semantic_call_target != XR_SEMANTIC_INDEX_NONE) ||
             plan->calls[i].result_register_rep >= plan->machine_reps_count ||
             plan->calls[i].result_memory_rep >= plan->machine_reps_count ||

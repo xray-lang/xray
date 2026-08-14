@@ -3192,8 +3192,14 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                 (user->args[arg_idx]->op == XI_LOCAL_ADDR ||
                  sr_param_is_call_bound_place(user->args[arg_idx])))
                 return XR_REP_RAWPTR;
+            /* Same rule the container operand of an index access follows: a
+             * freshly allocated heap array has a single storage fact, the owned
+             * tagged outer value, so a native pointer view of it as a member
+             * receiver would need a representation adapter no frozen storage
+             * row can state. Every other receiver keeps the native boundary it
+             * already carries at its own definition. */
             if (arg_idx == 0 && sr_is_typed_array_native_receiver_method(user))
-                return sr_type_native_boundary_rep(user->args[0]->type);
+                return sr_container_operand_rep(user->args[0]);
             if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
                 return sr_type_native_boundary_rep(user->args[arg_idx]->type);

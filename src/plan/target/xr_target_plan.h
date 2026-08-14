@@ -43,6 +43,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE = UINT64_C(1) << 16,
     XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE = UINT64_C(1) << 17,
     XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE = UINT64_C(1) << 18,
+    XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE = UINT64_C(1) << 19,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -144,7 +145,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                  \
                  XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE |                  \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE |            \
-                 XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE))
+                 XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |                      \
+                 XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -265,7 +267,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_TO_STRING,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING,
     XR_TARGET_CALL_CONVENTION_JSON_NAMESPACE_VALUE,
-    XR_TARGET_CALL_CONVENTION_ARRAY_PUSH_SCALAR,
+    XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -274,9 +276,12 @@ typedef enum XrTargetCallConvention {
  * index. CHANNEL_CLOSE names a sealed runtime receiver operation.
  * JSON_NAMESPACE_VALUE names the sealed compiler-owned JSON class namespace
  * member, whose receiver is a reserved builtin global rather than a value.
- * ARRAY_PUSH_SCALAR names the sealed builtin container member on an array
- * receiver whose element carries no reference, so the consumed argument leaves
- * no reference-count obligation behind the call. */
+ * ARRAY_MEMBER_SCALAR names a sealed builtin container member on an array
+ * receiver whose element carries no reference, so neither a consumed argument
+ * nor the element traffic inside the container leaves a reference-count
+ * obligation behind the call. A member that hands back its receiver claims no
+ * result storage at all: its result is the receiver's own reference, so the row
+ * binds no value and every use of that result stays without authority. */
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
@@ -288,7 +293,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING,
     XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE,
-    XR_TARGET_CALL_TARGET_ARRAY_PUSH_SCALAR,
+    XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetCallErrorMode {
