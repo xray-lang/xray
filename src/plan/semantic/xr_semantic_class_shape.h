@@ -457,7 +457,14 @@ static inline uint32_t xr_semantic_class_construction_source_class(
         operation->auxiliary_kind != 0 ||
         operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
         operation->effects != xi_generated_op_effects(XI_CALL) ||
-        operation->flags != xi_generated_op_default_flags(XI_CALL) ||
+        /* Every flag but one must be the generated default. The exception is
+         * the speculation annotation an optimizer writes on a call whose
+         * arguments are all constants: it records that a later pass may
+         * specialize the call, and states nothing about its effects, ownership
+         * or contract, so a construction spelled `P(7)` is the same
+         * construction as one spelled `P(n)`. */
+        (uint8_t) (operation->flags & (uint8_t) ~XI_FLAG_SPEC_CONST) !=
+            xi_generated_op_default_flags(XI_CALL) ||
         operation->ownership_use != xi_generated_op_own_use(XI_CALL) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
         operation->transfer_mode != 0 || operation->parameter_mode != 0 ||
@@ -473,7 +480,8 @@ static inline uint32_t xr_semantic_class_construction_source_class(
         return XR_SEMANTIC_INDEX_NONE;
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
-    if (!operands || operation->operand_begin >= operand_count)
+    if (!operands || operation->operand_begin >= operand_count ||
+        operand_count - operation->operand_begin < operation->operand_count)
         return XR_SEMANTIC_INDEX_NONE;
     const XrSemanticOperandRecord *callee = &operands[operation->operand_begin];
     if (callee->role != XR_SEM_OPERAND_CALLEE || callee->parameter != -1 ||
@@ -486,6 +494,42 @@ static inline uint32_t xr_semantic_class_construction_source_class(
     if (!load || load->result_type != callee->type ||
         xr_semantic_class_object_read_source_class(plan, load) != source_class)
         return XR_SEMANTIC_INDEX_NONE;
+    /* The arguments the construction passes. A declaration that declares no
+     * constructor takes none. One that declares a constructor takes exactly the
+     * parameters that follow its receiver, matched one for one and in order:
+     * the receiver is not among them, because the construction supplies it
+     * itself, so argument ordinal zero binds the constructor's parameter
+     * ordinal one. Only a parameter the plan records as carrying no owning
+     * reference is admitted, so an argument whose lifetime this family cannot
+     * account for keeps the whole construction outside it. */
+    uint16_t argument_count = (uint16_t) (operation->operand_count - 1u);
+    uint32_t constructor = xr_semantic_class_constructor_function(plan, source_class);
+    const XrSemanticFunctionRecord *function =
+        constructor != XR_SEMANTIC_INDEX_NONE ? xr_semantic_plan_function(plan, constructor)
+                                              : NULL;
+    if (!function)
+        return argument_count == 0 ? source_class : XR_SEMANTIC_INDEX_NONE;
+    if (function->parameter_count != argument_count + 1u ||
+        xr_semantic_class_constructor_receiver_source_class(plan, function->parameter_begin) !=
+            source_class)
+        return XR_SEMANTIC_INDEX_NONE;
+    for (uint16_t i = 0; i < argument_count; i++) {
+        const XrSemanticOperandRecord *argument = &operands[operation->operand_begin + 1u + i];
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan, function->parameter_begin + 1u + i);
+        if (!parameter || parameter->value == XR_SEMANTIC_INDEX_NONE ||
+            parameter->function != constructor || parameter->ordinal != i + 1u ||
+            parameter->mode != XR_PARAM_READ || parameter->ownership != XI_OWN_NONE ||
+            parameter->reserved != 0 ||
+            (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
+            argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) i ||
+            argument->type != parameter->type || argument->parameter_mode != parameter->mode ||
+            argument->transfer_mode != parameter->transfer_mode ||
+            argument->access != XR_CALL_ARG_PLAIN || argument->origin != 0 ||
+            argument->lifetime != 0 || argument->escape != 0 ||
+            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+            return XR_SEMANTIC_INDEX_NONE;
+    }
     return source_class;
 }
 

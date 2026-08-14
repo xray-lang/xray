@@ -4081,6 +4081,17 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             if (!valid)
                 break;
         } else if (class_construction) {
+            /* The construction passes the declaration's own constructor
+             * parameters after its receiver. The shared judgement has already
+             * proved that contract, so what stays this loop's own is that every
+             * argument row names the operand and the parameter the contract
+             * fixed, and that caller and callee agree on one representation. */
+            uint32_t constructor_function = xr_semantic_class_constructor_function(
+                semantic, xr_semantic_class_construction_source_class(semantic, operation));
+            const XrSemanticFunctionRecord *constructor_callee =
+                constructor_function != XR_SEMANTIC_INDEX_NONE
+                    ? xr_semantic_plan_function(semantic, constructor_function)
+                    : NULL;
             valid = !suspends && operation->opcode == XI_CALL &&
                     reconstruct_call_identity("xray-target-source-class-constructor-v1",
                                               target->id, operation->id, 0, &expected_identity) &&
@@ -4090,7 +4101,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     call->source_export == XR_SEMANTIC_INDEX_NONE &&
                     stable_id_is_zero(call->source_export_identity) &&
                     stable_id_is_zero(call->source_callee_identity) &&
-                    call->argument_count == 0 && call->flags == 0 &&
+                    call->argument_count == operation->operand_count - 1u &&
+                    (call->argument_count == 0 || constructor_callee) &&
+                    call->flags == 0 &&
                     call->calling_convention ==
                         XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR &&
                     call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
@@ -4098,6 +4111,55 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     result->slot < plan->slots_count &&
                     plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
                     plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
+            if (!valid)
+                break;
+            for (uint32_t ordinal = 0; valid && ordinal < call->argument_count; ordinal++) {
+                const XrTargetCallArgumentRecord *argument =
+                    &plan->call_arguments[next_argument];
+                uint32_t parameter_index = constructor_callee->parameter_begin + 1u + ordinal;
+                uint32_t semantic_operand = operation->operand_begin + ordinal + 1u;
+                const XrSemanticParameterRecord *parameter =
+                    xr_semantic_plan_parameter(semantic, parameter_index);
+                const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+                const XrTargetValueRepRecord *caller_value =
+                    xr_target_plan_value_rep(plan, operand->value);
+                const XrTargetValueRepRecord *callee_value =
+                    parameter ? xr_target_plan_value_rep(plan, parameter->value) : NULL;
+                XrStableId argument_identity;
+                uint16_t argument_kind = XR_MACHINE_REP_COUNT;
+                int argument_scalar =
+                    operand->type < xr_semantic_plan_type_count(semantic)
+                        ? semantic_type_expected_rep(
+                              xr_semantic_plan_type(semantic, operand->type), &argument_kind)
+                        : -1;
+                uint8_t ownership = operand->ownership_action == XR_SEM_OPERAND_CONSUME
+                                        ? XR_TARGET_CALL_CONSUME
+                                        : XR_TARGET_CALL_READ;
+                valid = parameter && argument_scalar == 1 && caller_value && callee_value &&
+                        slot_binds_value_in_function(plan, caller_value, operation->function) &&
+                        slot_binds_value_in_function(plan, callee_value,
+                                                     constructor_function) &&
+                        caller_value->register_rep == callee_value->register_rep &&
+                        caller_value->memory_rep == callee_value->memory_rep &&
+                        reconstruct_call_identity("xray-target-call-argument-v1", target->id,
+                                                  parameter->id, ordinal, &argument_identity) &&
+                        xr_stable_id_equal(argument->identity, argument_identity) &&
+                        argument->call == i &&
+                        argument->semantic_operand == semantic_operand &&
+                        argument->semantic_value == operand->value &&
+                        argument->callee_parameter == parameter_index &&
+                        argument->caller_slot == caller_value->slot &&
+                        argument->callee_slot == callee_value->slot &&
+                        argument->register_rep == caller_value->register_rep &&
+                        argument->memory_rep == caller_value->memory_rep &&
+                        plan->machine_reps[argument->register_rep].kind == argument_kind &&
+                        argument->ordinal == ordinal &&
+                        argument->mode == XR_TARGET_CALL_VALUE &&
+                        argument->ownership == ownership &&
+                        argument->transfer_mode == operand->transfer_mode &&
+                        argument->flags == 0;
+                next_argument++;
+            }
             if (!valid)
                 break;
         } else if (channel_close) {

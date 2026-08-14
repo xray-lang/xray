@@ -5069,11 +5069,14 @@ static bool collect_channel_close_call_intent(
 }
 
 /* The construction of a declared class. The SemanticPlan target names the
- * declaration and nothing else, so the intent carries no callee function, no
- * argument and no suspension: the shared class-shape judgement admits only a
- * call whose effects are the generated call effects, which excludes suspension.
- * The result is the owned instance the construction returns, and its storage
- * belongs to the source-class instance family. */
+ * declaration and nothing else, so the intent carries no callee function and no
+ * suspension: the shared class-shape judgement admits only a call whose effects
+ * are the generated call effects, which excludes suspension. The result is the
+ * owned instance the construction returns, and its storage belongs to the
+ * source-class instance family. The arguments are the declaration's own
+ * constructor parameters after its receiver, which the same shared judgement
+ * has already matched one for one; the receiver itself is never an argument,
+ * because the construction supplies it rather than passing it. */
 static bool collect_source_class_constructor_call_intent(
     XrTargetPlanBuilder *builder, uint32_t target_index,
     const XrSemanticCallTargetRecord *target, char *error, size_t error_size) {
@@ -5089,6 +5092,14 @@ static bool collect_source_class_constructor_call_intent(
         source_class == XR_SEMANTIC_INDEX_NONE)
         return fail(error, error_size, "XR_TARGET_1003",
                     "source class construction dispatch authority is incomplete");
+    uint16_t argument_count = (uint16_t) (operation->operand_count - 1u);
+    uint32_t constructor = xr_semantic_class_constructor_function(plan, source_class);
+    const XrSemanticFunctionRecord *callee =
+        constructor != XR_SEMANTIC_INDEX_NONE ? xr_semantic_plan_function(plan, constructor)
+                                              : NULL;
+    if (argument_count != 0 && !callee)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "source class construction argument authority is incomplete");
     XrTargetCallIntent call = {
         .semantic_call_target = target_index,
         .semantic_operation = target->operation,
@@ -5098,7 +5109,7 @@ static bool collect_source_class_constructor_call_intent(
         .source_export = XR_SEMANTIC_INDEX_NONE,
         .result_value = operation->result_value,
         .argument_begin = builder->call_argument_intent_count,
-        .argument_count = 0,
+        .argument_count = argument_count,
         .result_mode = XR_TARGET_CALL_VALUE,
         .result_ownership = XR_TARGET_CALL_RETURN_OWNED,
         .calling_convention = XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR,
@@ -5108,6 +5119,42 @@ static bool collect_source_class_constructor_call_intent(
                                    operation->id, 0, &call.identity))
         return fail(error, error_size, "XR_TARGET_1003",
                     "source class construction call identity is incomplete");
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    uint32_t call_intent = builder->call_intent_count;
+    for (uint16_t ordinal = 0; ordinal < argument_count; ordinal++) {
+        uint32_t parameter_index = callee->parameter_begin + 1u + ordinal;
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan, parameter_index);
+        uint32_t semantic_operand = operation->operand_begin + 1u + ordinal;
+        if (!operands || !parameter || semantic_operand >= operand_count)
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "source class construction argument authority is incomplete");
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        /* The shared judgement already proved the contract; what stays this
+         * collector's own is that the argument has a storage this profile can
+         * name, so a construction taking an argument the plan cannot represent
+         * is refused rather than emitted. */
+        if (!call_type_is_exact_scalar(plan, operand->type))
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "source class construction argument needs unsupported storage");
+        XrTargetCallArgumentIntent argument = {
+            .call_intent = call_intent,
+            .semantic_operand = semantic_operand,
+            .semantic_value = operand->value,
+            .callee_parameter = parameter_index,
+            .ordinal = ordinal,
+            .mode = XR_TARGET_CALL_VALUE,
+            .ownership = operand->ownership_action == XR_SEM_OPERAND_CONSUME
+                             ? XR_TARGET_CALL_CONSUME
+                             : XR_TARGET_CALL_READ,
+            .transfer_mode = operand->transfer_mode,
+        };
+        if (!stable_identity_from_pair("xray-target-call-argument-v1", target->id, parameter->id,
+                                       ordinal, &argument.identity) ||
+            !append_call_argument_intent(builder, &argument, error, error_size))
+            return false;
+    }
     return append_call_intent(builder, &call, error, error_size);
 }
 
