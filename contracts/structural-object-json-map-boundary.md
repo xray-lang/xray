@@ -96,7 +96,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_capability.c ac463c04a436c01e9f37
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_expr.c f6176a2650e660e65b347bde03f53fc9948ac07136b35eaa8be7de9528a4ec52
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
 anchor-sha256: src/frontend/analyzer/xtype_ref_resolve.c 1375247b83e16da337634775d3445506f12c68bf51055832b5e0e9eff7416349
-anchor-sha256: src/analysis/xglobal_summary.h f558e9806e957e7fa10f63049feff1cc67b47e0f7489618936f57d51f118caae
+anchor-sha256: src/analysis/xglobal_summary.h 44414a9b1150d78367df9926185fe9b729b8048f199f82ca53e59a2bfd9978ae
 anchor-sha256: src/ir/xi.h c215b18a09e101d32ce662289ed2ac2b6b8d778c36e5c40cb1a6724d5a06f661
 anchor-sha256: xisa/xi/ops.def c8e95c3af82658e20b2cc68e2245a96f060c62866b63e6fd1c0309161053a2c7
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
@@ -109,4 +109,4 @@ anchor-sha256: src/runtime/object/xjson_serde.c 27b2d72aabf93e95a66c4f56446310e9
 anchor-sha256: stdlib/types/json.xr 9e473fe3884a61f6e903c64d3512b27a9d2d2f25f3586226090eb3d644e8486d
 anchor-sha256: src/module/xproto_codec.h a86c74e6c5559e04355f5119e2939d8513523710724d8518578cb957f311527f
 anchor-sha256: src/module/xproto_codec.c ab5d2b294b31c022c2b61123c82b547f327326dbd96148f1b9d39e2a2eba200d
-anchor-sha256: src/aot/xaot_verify.c 484e2f52275a5ab27e2376bc78007a46972ca1cc47faac2425bdc830b0d2788e
+anchor-sha256: src/aot/xaot_verify.c ee4c2466e3250301a02839b44a38f4b7466277550f80fda1e927ceadda703f21

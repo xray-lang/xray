@@ -94,6 +94,17 @@ roots, or general module activation.
    dependency, module identity, shared slot, complete use sets, and receiver binding. This row
    grants no imported module object body, allocation, root, cleanup, member
    lookup, argument ABI, dependency activation, or cross-module frame.
+   Source-class-object storage covers only the owned dynamic outer `XrValue`
+   produced by an exact frozen `XI_CLASS_CREATE`. The allocation's result type
+   is the erased reference the IR selects for it, so the class identity is
+   proved instead from the plan's own source-class table matched by the
+   operation's own class name; a name matching two declarations or none names
+   nothing and is refused. Every class allocation in the module must be named,
+   and no two may claim one declaration. Builder, Target verifier, and AOT
+   representation oracle re-derive the same judgement independently. The row
+   grants no class object body, field table, method table, allocation
+   execution, root map, root slot, cleanup, construction, or member lookup
+   authority.
    Foundation capability masks are also exact. Allocator and panic
    requirements have dense records bound to the same canonical provider kinds.
    Missing, duplicate, additional, or mismatched family,
@@ -192,10 +203,10 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h 5ea9aa4ff63d88b62db
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 6487ae39149a4ea28fab04bdf2ccbf88c0bccaded75cf20376b38c8447dbdd1c
 anchor-sha256: src/plan/target/xr_target_profile.h ca2efb60bc630cc5cfd8ed1c0a5b9442d0bcdb16edac1a7463d7be4a6e7384d2
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h 30d186c4d32ab6c40a58601f78bc4b80cc82b4986370900cc948c6074b9ec484
+anchor-sha256: src/plan/target/xr_target_plan.h 9347e26d27a500d8dafc8555a987b3fe4f1e12c18c829936ab1ae16701be13fa
 anchor-sha256: src/plan/target/xr_target_plan.c 868089fd22c110dc090e0236a14ae8941d5d28f66f7c0cd414787050b35f1237
-anchor-sha256: src/plan/target/xr_target_builder.c 2497d253ac80f0031ff6d5eecdac050ef7f0b54871ea9b878c2230f6726589f7
-anchor-sha256: src/plan/target/xr_target_verify.c 7b59bd7c19ba229835ea24260d5bcb8e9f5032c48add72a3d8cec6d57e01a309
+anchor-sha256: src/plan/target/xr_target_builder.c bb87c84de18c875f6141a94f0d5b13c1387958e61f97399a14824337f91fd756
+anchor-sha256: src/plan/target/xr_target_verify.c af3620e7cdf13e076f835d452e41de8e0a6f6ce2fa5a1c7fccd5f0c9b2a98e77
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
