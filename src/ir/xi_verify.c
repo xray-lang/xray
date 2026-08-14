@@ -587,6 +587,60 @@ static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk
     }
 }
 
+/* Check 7a: var_id names a source variable of this function.
+ *
+ * var_id is an index, not a label: the VM emitter reads var_reg[var_id] to
+ * decide which register a value is pinned to, closure conversion binds local
+ * cells by it, ARC matches same-variable stores through it, and copy
+ * propagation refuses to cross definitions that share it.  A var_id past
+ * source_var_count therefore reads a neighbouring variable's storage or runs
+ * off the end of the per-variable arrays.
+ *
+ * The lowerer already asserts this on the IR it produces, but that assertion
+ * is compiled out of release builds and only ever sees the pre-optimization
+ * shape.  It could not be promoted to a verifier check while inlining cloned
+ * callee values with the callee's own numbering intact, because the verifier
+ * also runs after inlining; now that a cloned value carries no source-variable
+ * identity in the caller, the bound holds at every stage and every pass
+ * boundary, which is where the consumers above actually read it. */
+static void verify_var_ids(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed)
+        return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *v = blk->values[i];
+            if (!v || !xi_var_id_is_valid(v->var_id))
+                continue;
+            if (v->var_id >= f->source_var_count) {
+                verr(ctx,
+                     "func '%s': v%u %s in b%u has var_id %u but the function "
+                     "declares %u source variables",
+                     f->name, v->id, xi_op_name(v->op), blk->id, (unsigned) v->var_id,
+                     f->source_var_count);
+                return;
+            }
+        }
+
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (!xi_var_id_is_valid(phi->value.var_id))
+                continue;
+            if (phi->value.var_id >= f->source_var_count) {
+                verr(ctx,
+                     "func '%s': phi v%u in b%u has var_id %u but the function "
+                     "declares %u source variables",
+                     f->name, phi->value.id, blk->id, (unsigned) phi->value.var_id,
+                     f->source_var_count);
+                return;
+            }
+        }
+    }
+}
+
 /* Check 7: unique value IDs within function */
 static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
@@ -3106,6 +3160,11 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
 
         /* CFG edges */
         verify_cfg_edges(&ctx, f, blk);
+    }
+
+    /* Source variable identity domain */
+    if (!ctx.failed) {
+        verify_var_ids(&ctx, f);
     }
 
     /* Unique IDs */
