@@ -4145,6 +4145,17 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
         case XI_CLASS_CREATE:
             return oracle_dynamic_source_class_object_storage(
                 ctx, semantic_value, out_storage, out_machine_kind);
+        case XI_LOAD_FIELD:
+            /* A field read is admitted only against a receiver this authority
+             * already proved to be an exact source-class instance. The read
+             * borrows, so its result keeps the machine storage the target plan
+             * bound for it; a field whose type has no such storage row stays
+             * without authority instead of falling back to a tagged guess. */
+            if (xr_semantic_class_field_read_source_class(ctx->semantic, operation) ==
+                XR_SEMANTIC_INDEX_NONE)
+                return false;
+            return oracle_machine_storage(ctx, semantic_value, out_storage,
+                                          out_machine_kind);
         case XI_INDEX_GET:
             /* Only an element read off an exact array allocation is admitted;
              * its storage is the element's own scalar machine storage. */
@@ -4487,6 +4498,15 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                     ctx, source_value, out_storage, &ignored_kind);
             return oracle_machine_storage(ctx, source_value, out_storage,
                                           &ignored_kind);
+        case XI_LOAD_FIELD:
+            /* The receiver is the tagged instance the construction family
+             * proved; the read has no other operand. */
+            if (operand_index != 0 ||
+                xr_semantic_class_field_read_source_class(ctx->semantic, operation) ==
+                    XR_SEMANTIC_INDEX_NONE)
+                return false;
+            return oracle_dynamic_source_class_instance_storage(ctx, source_value, out_storage,
+                                                                &ignored_kind);
         case XI_BOX:
         case XI_ENUM_DESCRIPTOR_BOX:
             return oracle_machine_storage(ctx, source_value, out_storage,

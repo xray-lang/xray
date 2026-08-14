@@ -359,4 +359,54 @@ static inline bool xr_semantic_class_instance_value_is_exact(
     return true;
 }
 
+/* The declaration whose instance a field read borrows from, or NONE. The read
+ * is the generated field load: one borrowed plain operand, one metadata name,
+ * and no allocation, constant, callee or view of its own. Which field the name
+ * selects is the frontend's proof and is already frozen in the result type; what
+ * this judgement adds is that the receiver is an instance this family named, so
+ * the read borrows from a proved allocation rather than from an open object. */
+static inline uint32_t xr_semantic_class_field_read_source_class(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    XrStableId zero = {{0}};
+    if (!plan || xr_semantic_plan_source_class_count(plan) == 0 || !operation ||
+        operation->opcode != XI_LOAD_FIELD || operation->operand_count != 1 ||
+        operation->metadata_count != 1 || operation->semantic_immediate < 0 ||
+        operation->allocation_key || !xr_stable_id_equal(operation->allocation_id, zero) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != 0 ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->effects != xi_generated_op_effects(XI_LOAD_FIELD) ||
+        operation->flags != xi_generated_op_default_flags(XI_LOAD_FIELD) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_LOAD_FIELD) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        operation->result_ownership != xi_generated_op_result_ownership(XI_LOAD_FIELD) ||
+        operation->transfer_mode != 0 || operation->parameter_mode != 0 ||
+        operation->parameter_ownership != 0 || operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 || operation->view_complete != 0 ||
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1)
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    if (!operands || operation->operand_begin >= operand_count)
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    if (receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
+        receiver->transfer_mode != 0 || receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        receiver->parameter_mode != 0 || receiver->access != 0 || receiver->origin != 0 ||
+        receiver->lifetime != 0 || receiver->escape != 0 || receiver->flags != 0)
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_class = xr_semantic_class_instance_type_source_class(
+        plan, xr_semantic_plan_type(plan, receiver->type));
+    const XrSemanticOperationRecord *definition =
+        xr_semantic_class_value_definition(plan, receiver->value);
+    uint32_t receiver_class = XR_SEMANTIC_INDEX_NONE;
+    if (source_class == XR_SEMANTIC_INDEX_NONE || !definition ||
+        definition->result_type != receiver->type ||
+        !xr_semantic_class_instance_value_is_exact(plan, definition, &receiver_class) ||
+        receiver_class != source_class)
+        return XR_SEMANTIC_INDEX_NONE;
+    return source_class;
+}
+
 #endif  // XR_SEMANTIC_CLASS_SHAPE_H
