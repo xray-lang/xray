@@ -29,6 +29,7 @@
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
+#include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_semantic_array_member_shape.h"
@@ -7480,6 +7481,16 @@ static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
                     "aggregate layout has no exact semantic field range");
     uint32_t offset = 0;
     uint32_t aggregate_align = 1;
+    XrSemanticValueAggregateShape aggregate_shape = {0};
+    bool named_value_aggregate =
+        xr_semantic_value_aggregate_shape_for_type(
+            builder->semantic_plan, intent->semantic_type,
+            &aggregate_shape);
+    if (type->kind == XR_KIND_INSTANCE &&
+        (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0 &&
+        !named_value_aggregate)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "value aggregate field identity is incomplete");
     for (uint32_t field_index = 0; field_index < intent->element_count; field_index++) {
         uint32_t child_ordinal = type->kind == XR_KIND_FIXED_ARRAY ? 0u : field_index;
         if (child_ordinal >= type->child_count)
@@ -7502,6 +7513,9 @@ static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
         *field = (XrTargetFieldRecord) {
             .layout = index,
             .semantic_field = field_index,
+            .semantic_name = named_value_aggregate
+                                 ? aggregate_shape.field_metadata_begin + field_index
+                                 : XR_SEMANTIC_INDEX_NONE,
             .offset = aligned,
             .size = child->fixed_prefix_size,
             .align = child->align,

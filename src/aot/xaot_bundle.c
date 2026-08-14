@@ -7415,6 +7415,22 @@ static const XiValue *dump_func_value_by_id(const XiFunc *func, uint32_t value_i
     return count == 1 ? result : NULL;
 }
 
+static const XrSemanticOperationRecord *dump_semantic_operation_by_value(
+    const XrSemanticPlan *plan, uint32_t semantic_value) {
+    const XrSemanticOperationRecord *result = NULL;
+    size_t count = xr_semantic_plan_operation_count(plan);
+    for (size_t i = 0; i < count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(plan, (uint32_t) i);
+        if (!candidate || candidate->result_value != semantic_value)
+            continue;
+        if (result)
+            return NULL;
+        result = candidate;
+    }
+    return result;
+}
+
 static uint32_t dump_legacy_value_plan_count(const XaotBundle *bundle, const XiFunc *func,
                                              const XiValue *value,
                                              const XaotValuePlan **first) {
@@ -8281,9 +8297,24 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         for (uint32_t value_id = 0; value_id < semantic_function->value_count; value_id++) {
             const XiValue *value = dump_func_value_by_id(func, value_id, NULL);
             XaotDumpValueAuthority authority;
-            if (!value)
-                continue;
-            (void) dump_value_authority(bundle, plan, semantic_function, value, &authority);
+            const XrSemanticOperationRecord *frozen_operation = NULL;
+            if (value) {
+                (void) dump_value_authority(bundle, plan, semantic_function, value,
+                                            &authority);
+            } else {
+                memset(&authority, 0, sizeof(authority));
+                authority.semantic_value = semantic_function->value_begin + value_id;
+                authority.target = xr_target_plan_value_rep(
+                    target_plan, authority.semantic_value);
+                frozen_operation = dump_semantic_operation_by_value(
+                    func->semantic_plan, authority.semantic_value);
+                /* Parameters and other pre-operation values can retain a
+                 * Target binding after Xi DCE but have no operation name to
+                 * print. Preserve their verified count without inventing a
+                 * synthetic opcode; operation-backed aggregates are dumped. */
+                if (!authority.target || !frozen_operation)
+                    continue;
+            }
             if (authority.target) {
                 const XrTargetMachineRepRecord *register_rep =
                     xr_target_plan_machine_rep(target_plan, authority.target->register_rep);
@@ -8294,13 +8325,16 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                         "family=target-plan "
                         "register=%u(kind=%u,bits=%u) "
                         "memory=%u(kind=%u,size=%u,align=%u) slot=%u",
-                        value->op == XI_PHI ? "phi" : "v", value->id, xi_op_name(value->op),
+                        value && value->op == XI_PHI ? "phi" : "v", value_id,
+                        value ? xi_op_name(value->op)
+                              : xi_op_name(frozen_operation->opcode),
                         authority.semantic_value, authority.target->register_rep,
                         (unsigned) register_rep->kind, (unsigned) register_rep->register_bits,
                         authority.target->memory_rep, (unsigned) memory_rep->kind,
                         memory_rep->memory_size, (unsigned) memory_rep->memory_align,
                         authority.target->slot);
-                dump_value_metadata(out, value);
+                if (value)
+                    dump_value_metadata(out, value);
                 fprintf(out, "\n");
                 continue;
             }

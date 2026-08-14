@@ -15,6 +15,7 @@
 #include "xaot_link.h"
 #include "refine/xr_aot_representation_refinement.h"
 #include "refine/xr_aot_scalar_value.h"
+#include "xr_target_aggregate_c_projection.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
@@ -119,6 +120,22 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
     machine = xr_target_plan_machine_rep(target_plan, binding->memory_rep);
     if (!machine)
         return false;
+    if (machine->kind == XR_MACHINE_REP_AGGREGATE) {
+        XrCAggregateProjection projection = {0};
+        if (!xr_c_aggregate_projection(target_plan, binding, &projection))
+            return false;
+        memset(out, 0, sizeof(*out));
+        out->kind = XAOT_VALUE_AGGREGATE;
+        out->rep = XAOT_REP_TAGGED;
+        out->type = value->type;
+        out->c_type = xr_strdup(projection.c_type);
+        if (!out->c_type)
+            return false;
+        out->flags = XAOT_VALUE_FLAG_STRUCT |
+                     XAOT_VALUE_FLAG_DYNAMIC_C_TYPE |
+                     XAOT_VALUE_FLAG_OWNED_C_TYPE;
+        return true;
+    }
     switch ((XrMachineRepKind) machine->kind) {
         case XR_MACHINE_REP_VOID: rep = XAOT_REP_VOID; break;
         case XR_MACHINE_REP_I1: rep = XAOT_REP_BOOL; break;
@@ -4030,7 +4047,10 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                 }
                 record_value_stats(&bundle->stats, target_rep.kind, false,
                                    false);
-                if (!prepare_type_plans_for_type(bundle, phi->value.type, 0))
+                bool type_plans =
+                    prepare_type_plans_for_type(bundle, phi->value.type, 0);
+                xaot_value_rep_dispose(&target_rep);
+                if (!type_plans)
                     return false;
                 continue;
             }
@@ -4078,7 +4098,10 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                 }
                 record_value_stats(&bundle->stats, target_rep.kind, false,
                                    false);
-                if (!prepare_type_plans_for_type(bundle, blk->values[vi]->type, 0))
+                bool type_plans = prepare_type_plans_for_type(
+                    bundle, blk->values[vi]->type, 0);
+                xaot_value_rep_dispose(&target_rep);
+                if (!type_plans)
                     return false;
                 continue;
             }

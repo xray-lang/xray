@@ -37,6 +37,7 @@ typedef enum XrCValueRep {
     XR_C_VALUE_REP_RUNE,
     XR_C_VALUE_REP_TAGGED,
     XR_C_VALUE_REP_VIEW,
+    XR_C_VALUE_REP_AGGREGATE,
     XR_C_VALUE_REP_COUNT,
 } XrCValueRep;
 

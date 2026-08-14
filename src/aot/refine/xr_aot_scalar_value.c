@@ -92,8 +92,18 @@ static bool semantic_type_is_exact(const XrSemanticTypeRecord *semantic,
                    (reference_capable && !borrow_view
                         ? XR_SEM_TYPE_OWNERSHIP_ROOT
                         : 0u));
-    return semantic->builtin_type == builtin_type &&
-           semantic->flags == flags;
+    /* AGGREGATE_EXACT is a frozen SemanticPlan/TargetPlan conclusion, not a
+     * mutable XrType bit. The live value only has to retain the value-instance
+     * category from which that conclusion was built; the exact fields and
+     * layout are verified in the immutable plans. */
+    if ((semantic->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0) {
+        if (type->kind != XR_KIND_INSTANCE || !type->is_value_type ||
+            semantic->child_count == 0 ||
+            semantic->aggregate_extent != semantic->child_count)
+            return false;
+        flags |= XR_SEM_TYPE_AGGREGATE_EXACT;
+    }
+    return semantic->builtin_type == builtin_type && semantic->flags == flags;
 }
 
 static bool semantic_value_shape_is_exact(const XrSemanticPlan *plan,

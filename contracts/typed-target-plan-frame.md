@@ -6,7 +6,7 @@ required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
 plan the builder emits.
-Schema 20 is a breaking hard cutover: schema 19 and earlier and a plan missing
+Schema 21 is a breaking hard cutover: schema 20 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
@@ -147,7 +147,7 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 42e11e8b6cd4929dac9233e14ed5df536025a57e111ef81b3a1ef6f0dd584f9c
+anchor-sha256: src/plan/target/xr_target_plan.h 2cdf56268c188337ee14bda4aa47af39d89f5b339a63b81e9fa7797e9d192ba6
 anchor-sha256: src/vm/xr_typed_frame.h 66642c1b44238b10c46533c3619d9f752f1f9f8f2e03fed1e27dbaafa3ed68ef
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816

@@ -519,6 +519,7 @@ typedef struct XrTargetLayoutRecord {
 typedef struct XrTargetFieldRecord {
     uint32_t layout;
     uint32_t semantic_field;
+    uint32_t semantic_name;
     uint32_t offset;
     uint32_t size;
     uint16_t align;

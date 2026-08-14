@@ -137,7 +137,8 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U32, fixed_prefix_size) F(U32, extent) F(U32, field_begin) F(U16, field_count)               \
     F(U16, root_field_count) F(ID, destructor) F(ID, clone) F(ID, equality_hash) F(FP, fingerprint)
 #define XR_XTP_FIELD_FIELDS(F)                                                                     \
-    F(U32, layout) F(U32, semantic_field) F(U32, offset) F(U32, size) F(U16, align)                \
+    F(U32, layout) F(U32, semantic_field) F(U32, semantic_name) F(U32, offset) F(U32, size)         \
+    F(U16, align)                                                                                     \
     F(U16, memory_rep) F(U8, root_kind) F(U8, flags) F(U16, reserved)
 #define XR_XTP_STORAGE_FIELDS(F)                                                                   \
     F(U32, id) F(U8, kind) F(U8, ownership) F(U16, flags) F(ID, domain) F(ID, destructor)

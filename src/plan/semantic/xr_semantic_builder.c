@@ -1527,6 +1527,23 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
             return !match || (add_metadata(ctx, record, "source-export-v1") &&
                               add_metadata(ctx, record, match->name));
         }
+        case XI_AGG_NEW: {
+            const XiClassData *aggregate =
+                value_aggregate_class_data(ctx, value->type);
+            if (!aggregate || !aggregate->struct_layout ||
+                aggregate->instance_field_count !=
+                    aggregate->struct_layout->field_count ||
+                (aggregate->instance_field_count != 0 &&
+                 !aggregate->instance_field_names))
+                return fail(ctx, "XR_SEM_0019",
+                            "value aggregate field identity is incomplete");
+            for (uint16_t i = 0; i < aggregate->instance_field_count; i++) {
+                const char *name = aggregate->instance_field_names[i];
+                if (!name || !name[0] || !add_metadata(ctx, record, name))
+                    return false;
+            }
+            return true;
+        }
         case XI_CLASS_CREATE: {
             const XiClassData *class_data = (const XiClassData *) value->aux;
             if (!class_data)

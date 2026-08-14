@@ -28,6 +28,7 @@
 #include "../semantic/xr_semantic_enum_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
+#include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
@@ -2882,6 +2883,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                         : 0;
     int expected_layout = -1;
     if (exact_heap_closure || exact_panic_catch || exact_array_allocation ||
+        exact_class_object ||
         exact_class_instance || exact_class_receiver ||
         exact_string_literal || exact_string_concat ||
         exact_direct_string_result ||
@@ -3344,14 +3346,28 @@ static bool verify_layouts(const XrTargetPlan *plan,
         uint32_t previous_end = 0;
         uint32_t expected_align = 1;
         uint32_t roots = 0;
+        XrSemanticValueAggregateShape aggregate_shape = {0};
+        bool named_value_aggregate =
+            xr_semantic_value_aggregate_shape_for_type(
+                plan->semantic_plan, layout->semantic_type,
+                &aggregate_shape);
+        if (semantic_type->kind == XR_KIND_INSTANCE &&
+            (semantic_type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0 &&
+            !named_value_aggregate)
+            return report(error, error_size, "XR_TARGET_1002",
+                          "value aggregate field identity is incomplete");
         for (uint32_t f = 0; f < layout->field_count; f++) {
             const XrTargetFieldRecord *field = &plan->fields[layout->field_begin + f];
             uint32_t child_ordinal = semantic_type->kind == XR_KIND_FIXED_ARRAY ? 0u : f;
             uint32_t child_type = children[semantic_type->child_begin + child_ordinal];
             int child_layout_index = target_plan_layout_for_type(plan, child_type);
             uint32_t expected_offset = 0;
+            uint32_t expected_name = named_value_aggregate
+                                         ? aggregate_shape.field_metadata_begin + f
+                                         : XR_SEMANTIC_INDEX_NONE;
             if (field->layout != i || !field->size || !is_power_of_two(field->align) ||
-                field->semantic_field != f || child_layout_index < 0 ||
+                field->semantic_field != f || field->semantic_name != expected_name ||
+                child_layout_index < 0 ||
                 !xr_checked_align_u32(previous_end, field->align, &expected_offset) ||
                 field->offset != expected_offset ||
                 field->offset > layout->fixed_prefix_size ||

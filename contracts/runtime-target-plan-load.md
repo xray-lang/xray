@@ -169,10 +169,11 @@ roots, or general module activation.
    requirements have dense records bound to the same canonical provider kinds.
    Missing, duplicate, additional, or mismatched family,
    capability, or provider records fail before any activation boundary.
-5. Runtime loading accepts only an XTP v20 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v21 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
-   independent TargetPlan verification. V20 is a breaking hard cutover from
-   v19 and all earlier schemas. It preserves all v19 facts while adding the
+   independent TargetPlan verification. V21 is a breaking hard cutover from
+   v20 and all earlier schemas. It adds an exact semantic field-name identity
+   to every Target aggregate field row. V20 added the
    exact ADT-enum storage and constructor authority described above and the
    expanded caller/callee representation fields in call-argument rows. V19
    and all earlier schemas are rejected rather than reinterpreted.
@@ -254,31 +255,31 @@ anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b428893718
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
 anchor-sha256: src/plan/format/xr_xsm_decode.c b379bc41fadbc3f992b2c8ba0d9b64da00ce8ef6c4db386f016b3c55c2a5de93
-anchor-sha256: src/plan/format/xr_xtp_schema.h 365f1b6f6177e269d0ae0293f9bc3cab5565a286610b7d72d8f541d99985b89f
+anchor-sha256: src/plan/format/xr_xtp_schema.h 2d3bc7c371f4b677c61bc455b369bfc1f4fff4e5c0647758512cf74ce6606a67
 anchor-sha256: src/plan/format/xr_xtp_internal.h 2d1a76e7dd0a7d1f623ce3fc8118c4235d2694e03cceea8db756ec8f67e3a346
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1
 anchor-sha256: src/plan/format/xr_xtp_decode.c debe51ef7fd15e75b2b120642e7d4d69518784bb59b747503ea37f0e3b332d04
-anchor-sha256: src/plan/format/xr_xtp_rows.c db81206e1e9e158605e3672f79e635df5717baa6b3d4f56c832288a2306a5c4d
+anchor-sha256: src/plan/format/xr_xtp_rows.c 2f757dc0712f6b0a7ae3e1db571388e53c66d9a790df2938240553c6471d419e
 anchor-sha256: src/runtime/abi/xr_target_machine_facts.h 8c8d1c341fb4639bb47c982ac6dfd851571d154823101e00011a63fcb14486d8
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h 5ea9aa4ff63d88b62dbf1f43bea9ab2875d9d63ef2722d73df5a71c59eedda1b
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 6487ae39149a4ea28fab04bdf2ccbf88c0bccaded75cf20376b38c8447dbdd1c
 anchor-sha256: src/plan/target/xr_target_profile.h 84ed89d8d1d593010bcb7b12c57f71158f24f2a66e196bb67356619ede2b08bb
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h 42e11e8b6cd4929dac9233e14ed5df536025a57e111ef81b3a1ef6f0dd584f9c
-anchor-sha256: src/plan/target/xr_target_plan.c 86de22949827da2bac028fb0e655cc60ab2735bd9f6ad1e2d11cbd5969e9f171
-anchor-sha256: src/plan/target/xr_target_builder.c 20d2df275d7349dd7b066bd73a0ea6b3e54d714329e9086b9db60c31b164f460
-anchor-sha256: src/plan/target/xr_target_verify.c d2dbf8c39ac8ba129633a6a639d2a4180991cbd0f97ea8706198075edf119bdd
+anchor-sha256: src/plan/target/xr_target_plan.h 2cdf56268c188337ee14bda4aa47af39d89f5b339a63b81e9fa7797e9d192ba6
+anchor-sha256: src/plan/target/xr_target_plan.c dcef4b81aad18ceddc34dae1ce253b417ed840c052ac97e651cebd8f8c0c9605
+anchor-sha256: src/plan/target/xr_target_builder.c ca9858603629960e0ba0fa46b6c829a5796edfdd293f8dd0cd8dd43cd68dcd3b
+anchor-sha256: src/plan/target/xr_target_verify.c 1ac7af1b7b76dd59362d86b755d0bd6e243c0ac710b39762eb1166ce624a821c
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
-anchor-sha256: src/runtime/xr_target_plan_load.c e7ff26e61ac4f163b7fac20b5fbef9fc0aaf54fe9aa3c5e2c6d054ca299c4f83
-anchor-sha256: src/app/cli/xcmd_run.c d2b322e5fbb45f85e1fbee30735d44241066965d0f30315e19aaa1853ea2fd1e
+anchor-sha256: src/runtime/xr_target_plan_load.c 47451f65578b1b4fcfdd376b55759f99fcb221bc83a8665cdd00c5c0f0548155
+anchor-sha256: src/app/cli/xcmd_run.c 30a541bdc1bb9d83c23981d1fa6a62dd7c45bc11cd69eab0f42e82160238432f
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 577aa49d6502b2b1cf3a88191851bbbc82775fe2e53f51ec7ea83ca58281a548
 anchor-sha256: scripts/check_legacy_product_residue.py d160f8b9ab1d16da893bcc30a7ed90d583dda9e478dd11f67c9ce299629f8d2f
-anchor-sha256: tests/unit/plan/test_target_plan.c 436353bb84404d6f3879aa0bb614b33211d3e55e7fbe373db5911f0ddc0e33c3
-anchor-sha256: tests/unit/plan/test_xtp_format.c 086d4a3c6bc7f62ddfc4ba36c4d0416b43d3e7957033a4062dd8eaf39f86f784
-anchor-sha256: tests/unit/CMakeLists.txt a216aada90e731f1c6bcddb93bb8a088d1c2cd4fa4e888799c5d113d4a6b28a9
+anchor-sha256: tests/unit/plan/test_target_plan.c f2a7f1d66df3c491431ab1e5c6ccd75be446326dc81c5981a87d2ba3a0ff65d4
+anchor-sha256: tests/unit/plan/test_xtp_format.c eb52f5455b2068e4f4ea6ee79a702cdd4b020466ede4154e3816602dd5aa3611
+anchor-sha256: tests/unit/CMakeLists.txt 943ec07fc6aea77934787c44fc2f9e172b2980e90a61a7929a09c9ee2150a2e6
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
-anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 29bea3f92778b4b38906795661725ece16716575108e1906f57079e1312124c1
+anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 2eb463ae0bb501f46dd38300db8c4527acb0de23f557ef9a5498d2f902813910
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 0ab2232c6731a2366bbd270f838d2a9fd33c1480bfe4d75de8c9ededbadfda51

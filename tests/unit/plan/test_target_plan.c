@@ -15,6 +15,7 @@
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
 #include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/plan/target/xr_target_verify.h"
@@ -882,14 +883,36 @@ static XrSemanticPlan *build_struct_and_named_aggregate_semantic(bool unknown_ca
         .needs_runtime_type = false,
         .struct_layout = &native_layout,
     };
+    XrType class_object = {
+        .kind = XR_KIND_UNKNOWN,
+        .id = 105,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+    };
 
     XiFunc *function = xi_func_new("target_struct_aggregate_probe", &named);
     REQUIRE(function != NULL);
+    XiModule *module = xi_module_new("pkg/target_struct_aggregate.xr",
+                                     "target_struct_aggregate", function);
+    REQUIRE(module != NULL);
+    function->module = module;
+    module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
+    REQUIRE(module->classes != NULL);
+    module->classes[0] = &declaration;
+    module->nclasses = 1;
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
-    XiValue *class_declaration = xi_value_new(function, entry, XI_CLASS_CREATE, &stub_unit, 0);
+    XiValue *class_declaration =
+        xi_value_new(function, entry, XI_CLASS_CREATE, &class_object, 0);
     REQUIRE(class_declaration != NULL);
     class_declaration->aux = &declaration;
+    XiValue *class_store = xi_value_new(function, entry, XI_SET_SHARED, &stub_unit, 1);
+    XiValue *class_load = xi_value_new(function, entry, XI_GET_SHARED, &class_object, 0);
+    REQUIRE(class_store != NULL && class_load != NULL);
+    class_store->args[0] = class_declaration;
+    class_store->aux_int = 0;
+    class_load->aux_int = 0;
+    function->nshared = 1;
     XiValue *structural_value = xi_value_new(function, entry, XI_OBJECT_NEW, &structural, 0);
     REQUIRE(structural_value != NULL);
     structural_value->aux = (void *) struct_names;
@@ -900,12 +923,12 @@ static XrSemanticPlan *build_struct_and_named_aggregate_semantic(bool unknown_ca
     dynamic_value->aux_int = xi_object_pack_aux(2, 0);
     XiValue *named_value = xi_value_new(function, entry, XI_AGG_NEW, &named, 1);
     REQUIRE(named_value != NULL);
-    named_value->args[0] = class_declaration;
+    named_value->args[0] = class_load;
     named_value->aux = &native_layout;
     if (unknown_call) {
         XiValue *deferred_call = xi_value_new(function, entry, XI_CALL, &named, 1);
         REQUIRE(deferred_call != NULL);
-        deferred_call->args[0] = class_declaration;
+        deferred_call->args[0] = class_load;
     }
     xi_block_set_return(entry, named_value);
     function->stage = XI_STAGE_OPTIMIZED;
@@ -916,7 +939,10 @@ static XrSemanticPlan *build_struct_and_named_aggregate_semantic(bool unknown_ca
     if (!built)
         fprintf(stderr, "struct aggregate semantic fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL);
+    function->module = NULL;
     xi_func_free(function);
+    module->init = NULL;
+    xi_module_free(module);
     return plan;
 }
 
@@ -1364,7 +1390,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "979084b870a8485fa8bf4869510dd05ab055299a9c725af6bbc3c32d86146b5f") == 0);
+                   "c335608adf6ff6390d00858d08f898e589f517858718a078054808c056bf8d9f") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -1882,7 +1908,11 @@ static void test_builder_materializes_struct_and_named_aggregates(void) {
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
-    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    bool built = xr_target_plan_build(semantic, profile, &plan, error,
+                                      sizeof(error));
+    if (!built)
+        fprintf(stderr, "named aggregate TargetPlan fixture failed: %s\n", error);
+    REQUIRE(built);
 
     uint32_t structural_type = XR_SEMANTIC_INDEX_NONE;
     uint32_t dynamic_type = XR_SEMANTIC_INDEX_NONE;
@@ -1914,13 +1944,16 @@ static void test_builder_materializes_struct_and_named_aggregates(void) {
 
     const XrTargetLayoutRecord *structural_layout = NULL;
     const XrTargetLayoutRecord *named_layout = NULL;
+    uint32_t named_layout_index = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < plan->layouts_count; i++) {
         const XrTargetLayoutRecord *layout = &plan->layouts[i];
         REQUIRE(layout->semantic_type != dynamic_type);
         if (layout->semantic_type == structural_type)
             structural_layout = layout;
-        else if (layout->semantic_type == named_type)
+        else if (layout->semantic_type == named_type) {
             named_layout = layout;
+            named_layout_index = i;
+        }
     }
     REQUIRE(structural_layout != NULL && structural_layout->kind == XR_TARGET_LAYOUT_AGGREGATE &&
             structural_layout->field_count == 2 && structural_layout->fixed_prefix_size == 16 &&
@@ -1928,6 +1961,52 @@ static void test_builder_materializes_struct_and_named_aggregates(void) {
     REQUIRE(named_layout != NULL && named_layout->kind == XR_TARGET_LAYOUT_AGGREGATE &&
             named_layout->field_count == 2 && named_layout->fixed_prefix_size == 16 &&
             named_layout->align == 16);
+    const XrTargetValueRepRecord *named_binding = NULL;
+    for (uint32_t i = 0; i < plan->value_reps_count; i++) {
+        const XrTargetMachineRepRecord *rep =
+            &plan->machine_reps[plan->value_reps[i].memory_rep];
+        if (rep->kind == XR_MACHINE_REP_AGGREGATE &&
+            rep->detail == named_layout_index) {
+            REQUIRE(named_binding == NULL);
+            named_binding = &plan->value_reps[i];
+        }
+    }
+    REQUIRE(named_binding != NULL);
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(plan, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+    XrCValueEmissionView aggregate_view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+                emission, named_binding->semantic_value, &aggregate_view,
+                error, sizeof(error)) &&
+            aggregate_view.rep == XR_C_VALUE_REP_AGGREGATE &&
+            aggregate_view.target_memory_kind == XR_MACHINE_REP_AGGREGATE &&
+            aggregate_view.c_type &&
+            strncmp(aggregate_view.c_type, "xrt_struct_abi_", 15) == 0);
+    uint32_t metadata_count = 0;
+    const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);
+    XrTargetFieldRecord *named_first =
+        &plan->fields[named_layout->field_begin];
+    XrTargetFieldRecord *named_second =
+        &plan->fields[named_layout->field_begin + 1u];
+    REQUIRE(metadata && named_first->semantic_name < metadata_count &&
+            named_second->semantic_name < metadata_count &&
+            strcmp(metadata[named_first->semantic_name], "x") == 0 &&
+            strcmp(metadata[named_second->semantic_name], "flag") == 0);
+
+    XrFingerprint saved_named_fingerprint = named_layout->fingerprint;
+    uint32_t saved_name = named_first->semantic_name;
+    named_first->semantic_name = named_second->semantic_name;
+    xr_target_layout_compute_fingerprint(plan, named_layout_index,
+                                         &plan->layouts[named_layout_index].fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                        error, sizeof(error)));
+    named_first->semantic_name = saved_name;
+    plan->layouts[named_layout_index].fingerprint = saved_named_fingerprint;
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                      error, sizeof(error)));
 
     uint32_t supported_bindings = 0;
     bool dynamic_binding = false;
@@ -1949,6 +2028,7 @@ static void test_builder_materializes_struct_and_named_aggregates(void) {
     REQUIRE(supported_bindings == 2 && !dynamic_binding);
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
 
+    xr_c_emission_plan_free(emission);
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
@@ -2901,7 +2981,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "95eaffc72f8eb9456ef9db7cd24705a1b1791a2319a0a38d49f6385aafb6aad0") == 0);
+                   "130beab8a06cbf481874496790b4ece986c2e63db27e5bcb40ad874a955a394b") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -3131,7 +3211,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "544aad186968d17265b0da81e19e378254fdac0495b6db8662ed28b67c5a3065") == 0);
+                   "53c69e63ac652ae7c1141ac0c27dabcd19bd01b37fdb4aeb9bf0a437ddebe2cd") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");

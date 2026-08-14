@@ -846,6 +846,7 @@
         "src/aot/xi_cgen.c",
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
         "src/aot/xi_to_c_dispatch_gen.h",
+        "src/aot/xr_target_aggregate_c_projection.c",
         "src/aot/xrt_value.h",
         "src/coro/xdeep_copy.c",
         "src/frontend/analyzer/xa_intrinsic_registry.h",

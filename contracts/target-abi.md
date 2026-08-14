@@ -291,6 +291,13 @@ emission rather than falling back to compiler-host layout.
   `READ` constructs a temporary box with independently retained payload lanes;
   a consuming parameter transfers the lanes without retaining. The bridge may
   change representation but cannot silently duplicate or discard ownership.
+- T14: a named value aggregate receives a native C spelling only when its
+  ordered field names, source declaration, scalar field representations, and
+  physical layout are all reconstructible from frozen SemanticPlan and
+  TargetPlan rows. CEmission stores that exact spelling and independently
+  verifies it before CGen consumes it. Mutable Xi type, name, and arity facts
+  cannot fill a missing row; anonymous, nested, rooted, fixed-array, raw,
+  object, code, and vector families remain unsupported and fail closed.
 
 The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
@@ -322,14 +329,22 @@ the compiler core does not download a provider.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de082761402165a3c36919
-anchor-sha256: src/aot/xaot_prepare.c 354a1922121a6ce0478295dd42dec3a55e66ee7ca066aed62669878c7cf2fe3a
+anchor-sha256: src/aot/xaot_prepare.c 5ccff477109a3a49a48198316effd917d381d724c008d66462801317859f4395
+anchor-sha256: src/aot/xaot_bundle.c fec202ced130e07f3b837ec29409bf08fd846eacd67f6bf3322c30cd2fbf6c35
 anchor-sha256: src/aot/xaot_verify.c 5974e4a1970b73d5dc6fbfa2073bf55e1ded8c8f878219bc6463c10f1290c907
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 688b57e171265894652e329863376ea5134f275e9ed93aa20bffdfc6b1eb75f3
+anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 58aaa8ba6c87541420f0647cd5f27625587fb280bb469553f3b45394f22bb79e
+anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h cad0541365c7d3843025cf9814c138f371c69cb6fedf3ebd86332274673f4981
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 30ad863ba3655651c4a4b373d8166fbbf4dec9d7c669a78613d2e30b1e6b445d
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.h 3b15121cb6b155db2013d23e65b17027d5d9d8309a8796819d79c7799aa7f9f0
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 4e3e92b683979f70bfcca0157984a467aafb6b48f219069915a178044d6a8406
+anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h c73cff6cc95acdd375a3ede48b49ae7313500d3e3824725757b299f48d687243
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 4e63b69f6828aefd149170dc7815da693d3ef88d7cefb182c807acacbbaa3dec
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c f0110919fa8e0b939577fa1ce860249510c887a428bd16b561f4a00b883b1974
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c fb4d62fa1fcc577b7905fa99329f697a77b08d96a5d6a133c749ab48451ddbc2
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 375af2e4b45271d06e6ce6ed798be2e6f9f8786c25e68d38ea3f4ca6f41160c6
-anchor-sha256: src/aot/xi_cgen.c 2ec92ab6fdc0ef6beb569f841c4bfd32bb8608c68093fba5778fd4562295dc75
+anchor-sha256: src/aot/xi_cgen.c 71e233e15bcd33f7499a3a61af79d676b12cd7ed6a9f35c5e2301b4b5d8605a1
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
 anchor-sha256: src/aot/xrt_core_freestanding.h 4637d9be259b16363f74d330ad0bc3d016c71f588d418e71ed9a57cffcf6ecfb
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7

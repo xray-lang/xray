@@ -166,6 +166,7 @@ static void hash_layout_base(XrSHA256Context *ctx, const XrTargetLayoutRecord *r
 static void hash_field(XrSHA256Context *ctx, const XrTargetFieldRecord *record) {
     hash_u64(ctx, record->layout);
     hash_u64(ctx, record->semantic_field);
+    hash_u64(ctx, record->semantic_name);
     hash_u64(ctx, record->offset);
     hash_u64(ctx, record->size);
     hash_u64(ctx, record->align);
@@ -362,7 +363,7 @@ static void hash_coroutine(XrSHA256Context *ctx,
 
 void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t layout_index,
                                           XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-layout-v4\0";
+    static const uint8_t domain[] = "xray-target-layout-v5\0";
     const XrTargetLayoutRecord *layout = &plan->layouts[layout_index];
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
@@ -425,7 +426,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v17\0";
+    static const uint8_t domain[] = "xray-target-plan-v18\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);

@@ -35,8 +35,9 @@ product activation path.
    call-argument, root-map, root-slot, cleanup, adapter, or coroutine execution
    authority. Any other verified plan remains VERIFIED and fails PREPARE with
    `XR_EXEC_5004`; it is not partially activated.
-   TargetPlan schema 21 preserves SOURCE-namespace storage and adds exact
-   ADT-enum storage in the required family mask. Those dynamic rows remain
+   TargetPlan schema 21 preserves SOURCE-namespace and exact ADT-enum storage
+   in the required family mask and adds exact aggregate field-name identity.
+   Those dynamic rows remain
    storage/call authority and
    therefore continue to make this sole-scalar PREPARE route fail closed.
    Its sealed StringBuilder constructor call likewise remains non-executable

@@ -116,8 +116,11 @@ own status, distinct from every status that reports an unacceptable plan or
 call, so a plan can never hang the caller that ran it and the same call refused
 once is refused every time.
 
-Schema 20 is a hard cutover from v19 and all earlier schemas. It preserves all
-v19 authorities while adding exact source-backed ADT-enum storage and
+Schema 21 is a hard cutover from v20 and all earlier schemas. It preserves all
+v20 authorities while adding an exact semantic field-name identity to each
+Target aggregate field row. Named value aggregates can therefore derive their
+C type spelling from frozen SemanticPlan/TargetPlan authority without mutable
+Xi type, name, or arity inference. Schema 20 added exact source-backed ADT-enum storage and
 payload-bearing constructor dispatch. The family binds declaration, member,
 nominal layout, discriminant, ordered payload types, namespace receiver,
 ownership, and direct-local argument/return relations. Call-argument rows bind
@@ -289,21 +292,21 @@ Evidence:
   program fault, separate from the authority failures an unsupported plan
   gives.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 42e11e8b6cd4929dac9233e14ed5df536025a57e111ef81b3a1ef6f0dd584f9c
-anchor-sha256: src/plan/target/xr_target_plan.c 86de22949827da2bac028fb0e655cc60ab2735bd9f6ad1e2d11cbd5969e9f171
-anchor-sha256: src/plan/target/xr_target_builder.c 20d2df275d7349dd7b066bd73a0ea6b3e54d714329e9086b9db60c31b164f460
+anchor-sha256: src/plan/target/xr_target_plan.h 2cdf56268c188337ee14bda4aa47af39d89f5b339a63b81e9fa7797e9d192ba6
+anchor-sha256: src/plan/target/xr_target_plan.c dcef4b81aad18ceddc34dae1ce253b417ed840c052ac97e651cebd8f8c0c9605
+anchor-sha256: src/plan/target/xr_target_builder.c ca9858603629960e0ba0fa46b6c829a5796edfdd293f8dd0cd8dd43cd68dcd3b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 6099812f9cee4af8b01c5ffb422c9e359cbd95ec7ebc61c927bc051bc2bf904b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 687ab0df5479e46e51e200e54ea8b935579e6319598fd9830009f935eb057b77
-anchor-sha256: src/plan/target/xr_target_verify.c d2dbf8c39ac8ba129633a6a639d2a4180991cbd0f97ea8706198075edf119bdd
-anchor-sha256: src/plan/format/xr_xtp_schema.h 365f1b6f6177e269d0ae0293f9bc3cab5565a286610b7d72d8f541d99985b89f
-anchor-sha256: src/plan/format/xr_xtp_rows.c db81206e1e9e158605e3672f79e635df5717baa6b3d4f56c832288a2306a5c4d
+anchor-sha256: src/plan/target/xr_target_verify.c 1ac7af1b7b76dd59362d86b755d0bd6e243c0ac710b39762eb1166ce624a821c
+anchor-sha256: src/plan/format/xr_xtp_schema.h 2d3bc7c371f4b677c61bc455b369bfc1f4fff4e5c0647758512cf74ce6606a67
+anchor-sha256: src/plan/format/xr_xtp_rows.c 2f757dc0712f6b0a7ae3e1db571388e53c66d9a790df2938240553c6471d419e
 anchor-sha256: src/plan/format/xr_xtp_encode.c 2f6f1fa32e35fd1681ab07bc8a3808d133f33f27e43139224d3f9e253447bd74
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/vm/xr_typed_dispatch.h 30b893c4f791e6b99a87cf46194c982b63972072675d2bfbc329ab55fcba1b25
 anchor-sha256: src/vm/xr_typed_dispatch.c 551515f2222a29214a6a0902189934bf4517d40424b6c4eff52589b47dfb208d
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 6d43ca3a24b401123ee9a8948e2e8ee70994abafc4a5441630415c92569d1c29
-anchor-sha256: tests/unit/plan/test_xtp_format.c 086d4a3c6bc7f62ddfc4ba36c4d0416b43d3e7957033a4062dd8eaf39f86f784
+anchor-sha256: tests/unit/plan/test_xtp_format.c eb52f5455b2068e4f4ea6ee79a702cdd4b020466ede4154e3816602dd5aa3611
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c c5aef805d149418055367d92e34f263bdea0853904b437548a21d6691292e3ba
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation.c f3fe95413105fbb79fb40b5a0a6f718179b997ad4b823a90baae94a045ba103a

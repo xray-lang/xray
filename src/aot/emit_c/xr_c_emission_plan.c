@@ -9,6 +9,7 @@
  */
 
 #include "xr_c_emission_plan.h"
+#include "../xr_target_aggregate_c_projection.h"
 #include "../../plan/target/xr_target_plan.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
 #include "../../plan/semantic/xr_semantic_enum_shape.h"
@@ -1143,7 +1144,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v14\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v15\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -1289,6 +1290,14 @@ static bool verify_value(const XrCValueEmissionView *value) {
         case XR_MACHINE_REP_VIEW:
             expected_rep = XR_C_VALUE_REP_VIEW;
             expected_c_type = "xr_span_t";
+            break;
+        case XR_MACHINE_REP_AGGREGATE:
+            expected_rep = XR_C_VALUE_REP_AGGREGATE;
+            expected_c_type = value->c_type;
+            if (!expected_c_type ||
+                strncmp(expected_c_type, "xrt_struct_abi_", 15) != 0 ||
+                strlen(expected_c_type) != 31)
+                return false;
             break;
         default: return false;
     }
@@ -1600,6 +1609,15 @@ bool xr_c_emission_plan_verify(
         bool memory_supported = memory_rep &&
             verify_target_kind_projection(memory_rep->kind, &expected_memory,
                                           &memory_c_type);
+        XrCAggregateProjection aggregate = {0};
+        if (register_rep && memory_rep &&
+            register_rep->kind == XR_MACHINE_REP_AGGREGATE &&
+            memory_rep->kind == XR_MACHINE_REP_AGGREGATE &&
+            xr_c_aggregate_projection(target_plan, binding, &aggregate)) {
+            expected_register = expected_memory = XR_C_VALUE_REP_AGGREGATE;
+            register_c_type = memory_c_type = aggregate.c_type;
+            register_supported = memory_supported = true;
+        }
         if (!register_supported && !memory_supported)
             continue;
         if (!register_supported || !memory_supported ||
@@ -1859,6 +1877,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |
         XR_TARGET_FAMILY_PANIC_CATCH_STORAGE |
         XR_TARGET_FAMILY_ADT_ENUM_STORAGE |
+        XR_TARGET_FAMILY_AGGREGATE |
         XR_TARGET_FAMILY_CALL_ADAPTER;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
@@ -1894,6 +1913,15 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         bool memory_is_value =
             memory_rep && machine_kind_to_c_rep(memory_rep->kind, &memory_c_rep,
                                                  &memory_c_type);
+        XrCAggregateProjection aggregate = {0};
+        if (register_rep && memory_rep &&
+            register_rep->kind == XR_MACHINE_REP_AGGREGATE &&
+            memory_rep->kind == XR_MACHINE_REP_AGGREGATE &&
+            xr_c_aggregate_projection(target_plan, binding, &aggregate)) {
+            register_c_rep = memory_c_rep = XR_C_VALUE_REP_AGGREGATE;
+            register_c_type = memory_c_type = aggregate.c_type;
+            register_is_value = memory_is_value = true;
+        }
         if (!register_is_value && !memory_is_value)
             continue;
         if (!register_is_value || !memory_is_value || register_rep->kind != memory_rep->kind ||
@@ -1989,8 +2017,19 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             xr_target_plan_machine_rep(target_plan, binding->memory_rep);
         XrCValueRep c_rep = XR_C_VALUE_REP_COUNT;
         const char *c_type = NULL;
+        XrCAggregateProjection aggregate = {0};
+        bool aggregate_supported =
+            register_rep && memory_rep &&
+            register_rep->kind == XR_MACHINE_REP_AGGREGATE &&
+            memory_rep->kind == XR_MACHINE_REP_AGGREGATE &&
+            xr_c_aggregate_projection(target_plan, binding, &aggregate);
+        if (aggregate_supported) {
+            c_rep = XR_C_VALUE_REP_AGGREGATE;
+            c_type = aggregate.c_type;
+        }
         if (!register_rep || !memory_rep || register_rep->kind != memory_rep->kind ||
-            !machine_kind_to_c_rep(register_rep->kind, &c_rep, &c_type))
+            (!aggregate_supported &&
+             !machine_kind_to_c_rep(register_rep->kind, &c_rep, &c_type)))
             continue;
         XrCValueEmissionView *value = &plan->values[value_index++];
         value->semantic_value = binding->semantic_value;
@@ -2004,7 +2043,12 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         value->rep = (uint8_t) c_rep;
         value->recipe_operand_value = UINT32_MAX;
         value->recipe_argument_value = UINT32_MAX;
-        value->c_type = c_type;
+        value->c_type = aggregate_supported ? xr_strdup(c_type) : c_type;
+        if (!value->c_type) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  "aggregate C type allocation failed");
+        }
         const char *literal = build_exact_string_literal(target_plan, binding);
         const XrSemanticOperandRecord *concat_arguments = NULL;
         uint16_t concat_argument_count = 0;
@@ -2249,6 +2293,9 @@ void xr_c_emission_plan_free(XrCEmissionPlan *plan) {
         return;
     for (uint32_t i = 0; i < plan->value_count; i++)
         xr_free((void *) plan->values[i].literal_bytes);
+    for (uint32_t i = 0; i < plan->value_count; i++)
+        if (plan->values[i].rep == XR_C_VALUE_REP_AGGREGATE)
+            xr_free((void *) plan->values[i].c_type);
     for (uint32_t i = 0; i < plan->value_count; i++)
         xr_free((void *) plan->values[i].recipe_symbol);
     for (uint32_t i = 0; i < plan->value_count; i++) {
