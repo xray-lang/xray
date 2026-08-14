@@ -94,6 +94,32 @@ roots, or general module activation.
    dependency, module identity, shared slot, complete use sets, and receiver binding. This row
    grants no imported module object body, allocation, root, cleanup, member
    lookup, argument ABI, dependency activation, or cross-module frame.
+   Source-class-object storage covers only the owned dynamic outer `XrValue`
+   produced by an exact frozen `XI_CLASS_CREATE`. The allocation's result type
+   is the erased reference the IR selects for it, so the class identity is
+   proved instead from the plan's own source-class table matched by the
+   operation's own class name; a name matching two declarations or none names
+   nothing and is refused. Every class allocation in the module must be named,
+   and no two may claim one declaration. Builder, Target verifier, and AOT
+   representation oracle re-derive the same judgement independently. The row
+   grants no class object body, field table, method table, allocation
+   execution, root map, root slot, cleanup, construction, or member lookup
+   authority.
+   Source-class-instance storage covers the three values a construction
+   produces: the borrowed read of the class object the call dispatches on, the
+   owned instance the call returns, and the borrowed reads of that instance out
+   of its own module slot. All three are outer tagged dynamic values for the
+   same reason the class object is, and ownership is never a property of the
+   family: it is the operation's own result ownership, owned for the
+   construction and borrowed for either read, so a read can never be frozen as
+   an owning root. The construction itself carries a call dispatch kind driven
+   by the SemanticPlan call target of the same name; it names no callee
+   function, carries no argument, and never makes its caller suspendable,
+   because the shared judgement admits only a call whose effects are the
+   generated call effects. Builder, Target verifier, and AOT representation
+   oracle re-derive both the storage and the dispatch through that one
+   judgement. These rows grant no class body, field table, method table, root
+   map, root slot, cleanup, or member lookup authority.
    Foundation capability masks are also exact. Allocator and panic
    requirements have dense records bound to the same canonical provider kinds.
    Missing, duplicate, additional, or mismatched family,
@@ -192,10 +218,10 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h 5ea9aa4ff63d88b62db
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 6487ae39149a4ea28fab04bdf2ccbf88c0bccaded75cf20376b38c8447dbdd1c
 anchor-sha256: src/plan/target/xr_target_profile.h ca2efb60bc630cc5cfd8ed1c0a5b9442d0bcdb16edac1a7463d7be4a6e7384d2
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h f536c32ee7af148f1d77e68cff1212d0f1386ea6c1602f3e3ab7cb39fc940274
-anchor-sha256: src/plan/target/xr_target_plan.c 2d79f835b429d524ae7d4f35c8382135961b237e0adf7f023aea419a12e0b1b6
-anchor-sha256: src/plan/target/xr_target_builder.c 59f20af5442c53f017c2e90ed7cb6017fab2ed330983a928c7ed00edec5b4957
-anchor-sha256: src/plan/target/xr_target_verify.c fc9dddf0b96260590207593f79e2231de5dffefb48de45b4ba31fce9be9c05a2
+anchor-sha256: src/plan/target/xr_target_plan.h 4b15ee52999b7efdb426d0d28a554bdfdde14384d1393e17aa7b553b16a60cfb
+anchor-sha256: src/plan/target/xr_target_plan.c f1655cd0444d528918f85ff62b5af3da3744d8fdddd92b497261e9d8f687b204
+anchor-sha256: src/plan/target/xr_target_builder.c be2f8e911d949d9b2bb756924c61e7269214d4f927cc4f560f72c99cb133cb1a
+anchor-sha256: src/plan/target/xr_target_verify.c c5e7d2f30638972be17af419b35fc1915f4b9f2b1ea1cc4e4ac011bfcb2de726
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317

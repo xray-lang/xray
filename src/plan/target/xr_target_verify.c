@@ -23,6 +23,7 @@
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../../stdlib/xstdlib_metadata.h"
+#include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
@@ -2507,6 +2508,8 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
         }
         if (semantic_heap_closure_is_exact(plan->semantic_plan, operation) ||
             semantic_array_allocation_is_exact(plan->semantic_plan, operation) ||
+            xr_semantic_class_object_is_exact(plan->semantic_plan, operation) ||
+            xr_semantic_class_instance_value_is_exact(plan->semantic_plan, operation, NULL) ||
             semantic_string_literal_is_exact(plan->semantic_plan, operation) ||
             semantic_direct_local_string_result_is_exact(plan->semantic_plan, i) ||
             semantic_stringbuilder_constructor_is_exact(plan->semantic_plan,
@@ -2577,6 +2580,23 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         semantic_array_allocation_is_exact(plan->semantic_plan, operation);
     bool exact_string_literal =
         semantic_string_literal_is_exact(plan->semantic_plan, operation);
+    /* Recomputed from the plan through the shared judgement rather than read
+     * back from the builder, so a builder row this verifier cannot re-derive
+     * stays unproven. */
+    bool exact_class_object =
+        xr_semantic_class_object_is_exact(plan->semantic_plan, operation) && operation &&
+        operation->result_value == semantic_value && operation->result_type == semantic_type;
+    /* Recomputed the same way, and for the same reason: the construction, the
+     * class object read it dispatches on and the instance reads that follow it
+     * all carry an outer tagged value, and whether that value owns its
+     * allocation is the operation's own result ownership. */
+    bool exact_class_instance =
+        xr_semantic_class_instance_value_is_exact(plan->semantic_plan, operation, NULL) &&
+        operation && operation->result_value == semantic_value &&
+        operation->result_type == semantic_type;
+    bool exact_class_instance_borrowed =
+        exact_class_instance &&
+        operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
     bool exact_direct_string_result =
         semantic_direct_local_string_result_is_exact(plan->semantic_plan,
                                                      operation_index) &&
@@ -2634,7 +2654,8 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     if (scalar_channel_receive && !exact_channel_receive)
         XR_VALUE_BINDING_FAIL(10);
     int eligibility = operation_result_void || exact_heap_closure ||
-                              exact_array_allocation ||
+                              exact_array_allocation || exact_class_object ||
+                              exact_class_instance ||
                               exact_string_literal || exact_direct_string_result ||
                               exact_stringbuilder ||
                               exact_stringbuilder_append ||
@@ -2663,8 +2684,9 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                                                          aggregate_stack, 0)
                         : 0;
     int expected_layout = -1;
-    if (exact_heap_closure || exact_array_allocation || exact_string_literal ||
-        exact_direct_string_result ||
+    if (exact_heap_closure || exact_array_allocation || exact_class_object ||
+        exact_class_instance ||
+        exact_string_literal || exact_direct_string_result ||
         exact_stringbuilder ||
         exact_stringbuilder_append ||
         exact_stringbuilder_to_string ||
@@ -2729,6 +2751,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         uint8_t expected_ownership =
             (exact_direct_callee || exact_go_callee || exact_source_namespace ||
              exact_native_module_namespace || exact_nullable_scalar ||
+             exact_class_instance_borrowed ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
                 : XR_TARGET_OWNERSHIP_OWNED;
@@ -4117,11 +4140,14 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 : NULL;
         bool direct = target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
-        if (!target || !operation || (!direct && !source) ||
+        bool class_construction =
+            target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
+        if (!target || !operation || (!direct && !source && !class_construction) ||
             (direct && target->function >= semantic_functions) ||
             (direct && operation->opcode != XI_CALL &&
              operation->opcode != XI_TAIL_CALL) ||
-            (source && operation->opcode != XI_CALL_METHOD)) {
+            (source && operation->opcode != XI_CALL_METHOD) ||
+            (class_construction && operation->opcode != XI_CALL)) {
             valid = false;
             break;
         }
@@ -4129,7 +4155,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         if (direct) {
             reverse_next[target_index] = reverse_head[target->function];
             reverse_head[target->function] = target_index;
-        } else if (!suspendable[operation->function]) {
+        } else if (!class_construction && !suspendable[operation->function]) {
             suspendable[operation->function] = 1;
             queue[queue_end++] = operation->function;
         }
@@ -4172,6 +4198,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             xr_semantic_plan_operation(semantic, call->semantic_operation);
         bool direct = target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
+        /* Re-derived from the plan, never read back from the row: a target row
+         * that claims a construction the shared judgement cannot re-prove is
+         * rejected together with the intent that names it. */
+        bool class_construction =
+            target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+            xr_semantic_class_construction_source_class(semantic, operation) !=
+                XR_SEMANTIC_INDEX_NONE;
         const XrSemanticFunctionRecord *callee = direct
                                                       ? xr_semantic_plan_function(
                                                             semantic, target->function)
@@ -4245,7 +4278,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             direct && semantic_direct_local_string_result_is_exact(
                           semantic, call->semantic_operation);
         if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string ||
-            direct_string_result || json_namespace_value) {
+            direct_string_result || json_namespace_value || class_construction) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -4312,7 +4345,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                              stringbuilder_append_rune ||
                              stringbuilder_to_string ||
                              stringbuilder_append_string ||
-                             json_namespace_value
+                             json_namespace_value || class_construction
                          ? XR_TARGET_CALL_RETURN_OWNED
                      : string_byte_slice_view ? XR_TARGET_CALL_BORROW
                                               : XR_TARGET_CALL_NONE) &&
@@ -4472,6 +4505,26 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     call->calling_convention ==
                         XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
                     call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
+            if (!valid)
+                break;
+        } else if (class_construction) {
+            valid = !suspends && operation->opcode == XI_CALL &&
+                    reconstruct_call_identity("xray-target-source-class-constructor-v1",
+                                              target->id, operation->id, 0, &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    call->argument_count == 0 && call->flags == 0 &&
+                    call->calling_convention ==
+                        XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR &&
+                    call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+                    call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && result &&
+                    result->slot < plan->slots_count &&
+                    plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                    plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
             if (!valid)
                 break;
         } else if (channel_close) {

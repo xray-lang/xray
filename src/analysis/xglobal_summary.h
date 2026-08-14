@@ -60,8 +60,10 @@ enum {
     /* 33: combines the sequence/native-class evidence carried by schema 32
      * with enum static-domain and descriptor metadata evidence from task 210.
      * Use a fresh version so caches from either parent lineage are invalidated.
-     * 41: bodies and methods publish return ownership. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 42,
+     * 41: bodies and methods publish return ownership.
+     * 43: constructions of a class without a declared constructor carry their
+     * own callsite kind instead of the open closure kind. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 43,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -194,6 +196,13 @@ typedef enum XgCallsiteKind {
     XG_CALL_CLOSURE,
     XG_CALL_NATIVE,
     XG_CALL_EXTERN,
+    /* Construction of a declared class that declares no instance constructor.
+     * The construction runs no user body at all: it allocates the instance and
+     * applies the declared field defaults. Naming it here keeps it out of the
+     * closure kind, whose open function-value target set is deliberately
+     * unprovable and would otherwise make every such construction refuse the
+     * whole-program effect and reachability proofs. */
+    XG_CALL_CLASS_ALLOC,
 } XgCallsiteKind;
 
 typedef enum XgBodyKind {

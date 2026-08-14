@@ -337,6 +337,28 @@ it cannot add, remove, or complete a source-semantic effect dimension.
     came from inference. The diagnostic never changes the function type,
     effect product, exit status, or runtime semantics.
 
+Constructing a declared class that declares no instance constructor runs no
+user body: it allocates the instance and applies the declared field defaults.
+The whole-program callsite evidence names that construction in its own right
+instead of leaving it on the open closure kind, so its composed effect set is
+empty and it marks no reachable body, exactly as a sealed native call does. The
+row names the declared class and no callee at all; a method identity on such a
+row is refused as stale, and a class that does declare an instance constructor
+keeps the ordinary method callsite and composes that body's effects.
+
+The SemanticPlan names that construction in its own right as well, through a
+call-target kind whose row names the declaration and nothing else: no callee
+identity, no dependency, no export. What the call builds is proved from the
+instance type it returns and from the class object its callee operand loads out
+of its module slot, and the two must name the same declaration. A slot the
+module writes more than once, a value it defines more than once, or a call whose
+effects are not the generated call effects names nothing and is refused rather
+than guessed, so a construction that may suspend keeps no row at all. The row
+grounds no reachable callee and therefore leaves the coroutine-state expectation
+of its operation unchanged. The plan builder and the plan verifier derive the
+construction from the same shared judgement, and the verifier reads the frozen
+plan rather than the row it is checking.
+
 ## Digest anchors
 
 anchor-sha256: src/frontend/analyzer/xa_effect_db.h 3f8e0952e2b25291fa4aaeb96baa05197f789c4292db2ec2291da407d9724b01
@@ -353,7 +375,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 266c952fd177c41a2b
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 02940d35a66fa77ad3e67a9a7b11322f48c87a7af6a2829760ad514f65985b50
 anchor-sha256: src/runtime/value/xtype.h e0f9c44c615d8a91f501d3952b1804c793abe68e3eba39744c9a000ae00f10cf
 anchor-sha256: src/ir/xi.h c215b18a09e101d32ce662289ed2ac2b6b8d778c36e5c40cb1a6724d5a06f661
-anchor-sha256: src/ir/xi_lower.c 66376000591f3126f5d0202134c502b3f2b048f31e29337ea4f09e6f433e79af
+anchor-sha256: src/ir/xi_lower.c 408f6d07d35fcb02816af5a6909c2a27773b6a27611be457afe4306586e099c5
 anchor-sha256: src/app/cli/xcmd_verify.c 5fd6d66c6bc2c4be29cb121963eea94682cb48ea20f42aacdeb52fb2a2285b9b
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
 anchor-sha256: tests/unit/analyzer/test_analyzer.c 34bbb2512ed40c85db6fe91bf6da083abc457792e3e3b76ab56611dce7ccb1ca
@@ -364,11 +386,11 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
 anchor-sha256: src/plan/format/xr_xsm_encode.c e56ac921cb9c4be957086f9b6b960c5d194a04b066986ddefafc9efc838e8876
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 2131bd23a3042751047c51567ff1885dc1dac20d9901af40477d7be516bdbb6a
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 0d0a84d74cf25dfb68ebd5b4214e54ea264d2332021a6b6a44ebfb61cbdcad13
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 6f5048cf95e341617e68eba47ffbf51ae396b72f9771328ff2ba8f8f500bf459
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c ea4675808fc8b4cc1bd3539b4b437756b9b0b92afd5a2afd1dd17ad9b1e9e7b0
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 18c70c2aef92375fc869a3962ea99256ed740fbd1cd3594a37a0a55b3a2d685b
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 55404c417d7138c1b9db1260444a2ec5f04f8b6d8783f4edade595a1c168d3e2
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 810feaa393be82e1a30ba9dc091c3e00800dbb015b3f8b29c9571e4be51bc548
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 02b29f14fd681956c509822fdcd23d2e4f3ea13a8a003d9e31eba95edbc78ec5
 anchor-sha256: src/stdlib/xstdlib_metadata.h fea5c1b87e5cf4650f62720540f9728ac71dc475fdab683ba30b6458d3e3902b
 anchor-sha256: tests/unit/plan/test_semantic_plan.c e1ac83687f5c72f019e103d079e9a749b86a2ee4ff12ea1200854bbfa7f76ffd

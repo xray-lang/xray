@@ -46,6 +46,8 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE = UINT64_C(1) << 19,
     XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE = UINT64_C(1) << 20,
     XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE = UINT64_C(1) << 21,
+    XR_TARGET_FAMILY_SOURCE_CLASS_OBJECT_STORAGE = UINT64_C(1) << 22,
+    XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE = UINT64_C(1) << 23,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -181,7 +183,9 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |                       \
                  XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE |                \
                  XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE |                        \
-                 XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE))
+                 XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE |                    \
+                 XR_TARGET_FAMILY_SOURCE_CLASS_OBJECT_STORAGE |                    \
+                 XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -304,6 +308,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_JSON_NAMESPACE_VALUE,
     XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR,
     XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR,
+    XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -321,7 +326,11 @@ typedef enum XrTargetCallConvention {
  * NATIVE_MODULE_SCALAR names the member the frozen stdlib definition registry
  * binds for one imported native module namespace and selector, whose receiver
  * is a module handle rather than a value and whose arguments and result are all
- * plain scalars, so the row carries no argument intent of its own. */
+ * plain scalars, so the row carries no argument intent of its own.
+ * SOURCE_CLASS_CONSTRUCTOR names the construction of a declared class through
+ * its own class object, taken from the SemanticPlan call target of the same
+ * name; it names no callee function and carries no argument, and it never
+ * suspends. */
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
@@ -335,6 +344,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE,
     XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR,
     XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR,
+    XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetCallErrorMode {

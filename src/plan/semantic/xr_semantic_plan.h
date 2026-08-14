@@ -84,6 +84,12 @@ typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE,
     XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL,
     XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN,
+    /* Construction of a declared class through its own class object. The row
+     * names the declaration it builds and no callee function at all: a class
+     * that declares no instance constructor enters no body, and one that does
+     * reaches that body through the declaration rather than through this row.
+     * A construction whose call may suspend is outside this kind. */
+    XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 

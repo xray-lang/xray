@@ -8387,6 +8387,16 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             generic_kind = XG_GENERIC_INST_CLASS;
             generic_origin_class_id = class_row->class_id;
             generic_origin_method_id = constructor->method_id;
+        } else if (class_row && class_summary) {
+            /* The class is declared and declares no instance constructor, so
+             * the construction allocates the instance and applies the declared
+             * field defaults without entering any user body. Leaving it on the
+             * closure kind would hand it an open function-value target set that
+             * no whole-program proof can close. */
+            row.kind = XG_CALL_CLASS_ALLOC;
+            row.receiver_static_class_id = class_row->class_id;
+            generic_kind = XG_GENERIC_INST_CLASS;
+            generic_origin_class_id = class_row->class_id;
         } else if (body_global_builtin_call_is_leaf_intrinsic(callee_name,
                                                               call->as.call_expr.arg_count)) {
             row.kind = XG_CALL_NATIVE;

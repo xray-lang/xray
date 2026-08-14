@@ -500,3 +500,43 @@ XR_FUNC bool xi_value_known_ge_at(const XiFunc *f, const XiValue *value, const X
         return true;
     return xi_value_has_ge_dominating_guard(f, v, site, lower_bound);
 }
+
+XR_FUNC const struct XiClassData *xi_value_class_constructor_call(const XiFunc *func,
+                                                                  const XiValue *call,
+                                                                  const XiFunc **out_constructor) {
+    if (out_constructor)
+        *out_constructor = NULL;
+    if (!func || !call || call->op != XI_CALL || call->nargs < 1 ||
+        !xi_value_is_constructor_call(call))
+        return NULL;
+    const XiValue *callee = call->args[0];
+    while (callee && callee->nargs > 0 &&
+           (xi_copy_is_identity_alias(callee) || xi_op_is_identity_forward(callee->op)))
+        callee = callee->args[0];
+    const XiModule *module = NULL;
+    for (const XiFunc *owner = func; owner; owner = owner->parent_func) {
+        if (owner->module) {
+            module = owner->module;
+            break;
+        }
+    }
+    if (!callee || callee->op != XI_GET_SHARED || callee->aux_int < 0 || !module ||
+        !module->slot_classes || callee->aux_int >= module->nslots)
+        return NULL;
+    const XiClassData *class_data = module->slot_classes[callee->aux_int];
+    if (!class_data)
+        return NULL;
+    for (uint16_t i = 0; class_data->methods && i < class_data->nmethod; i++) {
+        if (!class_data->methods[i].is_constructor || class_data->methods[i].is_static)
+            continue;
+        if (!out_constructor)
+            return class_data;
+        if (*out_constructor)
+            return NULL; /* Two instance constructors name no single body. */
+        uint16_t child = class_data->child_idx ? class_data->child_idx[i] : UINT16_MAX;
+        if (!module->init || child >= module->init->nchildren || !module->init->children[child])
+            return NULL;
+        *out_constructor = module->init->children[child];
+    }
+    return class_data;
+}
