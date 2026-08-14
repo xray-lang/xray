@@ -6,6 +6,36 @@
  * Licensed under the MIT License
  *
  * test_xr_aot_refinement.c - TargetPlan-native AOT refinement KAT
+ *
+ * COVERAGE THIS FILE NO LONGER HAS
+ *
+ * Two verifiers used to sit beside the ones exercised here.
+ * xr_aot_representation_refinement_verify re-derived every source value,
+ * use-site, type and layout obligation from the live Xi graph, and
+ * xr_aot_backend_run / xr_aot_representation_backend_run drove a record
+ * visitor. Neither had a production caller, so both were removed along with
+ * the assertions that only they could carry. Those assertions mutated a live
+ * Xi graph after the plan was frozen and required the mutation to be
+ * rejected:
+ *
+ *   - a string literal whose payload was swapped for another literal, and
+ *     one whose type was made nullable      (XR_AOT_REFINEMENT_SOURCE_TYPE)
+ *   - a closure whose callee was pointed at a detached copy of its child,
+ *     and one pointed at the enclosing function       (... SOURCE_TYPE)
+ *   - a store whose slot index was shifted by one (... SOURCE_IDENTITY)
+ *   - a plan holding fewer adapters than the graph needs, and one holding an
+ *     adapter the graph does not need     (... INCOMPLETE_COVERAGE)
+ *   - a representation policy changed after the plan was frozen
+ *                                              (... STALE_EVIDENCE)
+ *   - a backend interface with a missing callback, a wrong ABI version, or a
+ *     visit that fails midway                (... BACKEND_* issues, also gone)
+ *
+ * Nothing in the tree re-derives those facts from the live Xi graph today.
+ * What remains is xr_aot_refinement_verify, which checks a frozen plan
+ * against the TargetPlan baseline, and
+ * xr_aot_representation_materialization_verify, which checks that a
+ * backend-stage graph is the exact materialization of that plan; both run in
+ * the driver and are exercised below.
  */
 
 #include "../../../src/aot/refine/xr_aot_refinement.h"
