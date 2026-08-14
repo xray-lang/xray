@@ -10,7 +10,9 @@ import { WsConn } from ws
 
 var port = 9100
 if (len(process.args) > 0) {
-    port = int(process.args[0]) ?? 9100
+    // int(s) throws on a non-decimal argument (spec 13.2) rather than
+    // yielding a null to fall back from.
+    port = int(process.args[0])
 }
 
 print("=== WebSocket Echo Server (Pure Benchmark) ===")

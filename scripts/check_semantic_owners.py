@@ -3803,8 +3803,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 45:
-        errors.append(f"shared-core inventory must contain exactly 45 headers, found {len(actual)}")
+    if len(actual) != 46:
+        errors.append(f"shared-core inventory must contain exactly 46 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":

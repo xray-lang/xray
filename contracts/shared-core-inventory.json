@@ -1410,8 +1410,8 @@
       "production_callers": [
         "src/aot/xrt_method.h",
         "src/runtime/object/xstring.c",
-        "src/vm/xvm.c",
-        "src/vm/xvm_dispatch_convert.inc.c"
+        "src/shared/xr_string_parse_core.h",
+        "src/vm/xvm.c"
       ],
       "profiles": [
         "vm",
@@ -1436,15 +1436,12 @@
         "xr_string_core_pad_fill",
         "xr_string_core_pad_plan",
         "xr_string_core_pad_write",
-        "xr_string_core_parse_float64",
-        "xr_string_core_parse_int64",
         "xr_string_core_range_slice",
         "xr_string_core_repeat_plan",
         "xr_string_core_repeat_write",
         "xr_string_core_replace_plan",
         "xr_string_core_replace_write",
         "xr_string_core_reverse_utf8_write",
-        "xr_string_core_skip_number_leading_ws",
         "xr_string_core_slice_at",
         "xr_string_core_split_each",
         "xr_string_core_split_plan",
@@ -1459,6 +1456,38 @@
         "xr_string_core_utf8_rune_count",
         "xr_string_core_utf8_rune_size",
         "xr_string_core_utf8_rune_slice_at"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_string_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_string_parse_core.h",
+      "id": "string-parse",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_core_freestanding.h",
+        "src/aot/xrt_method.h",
+        "src/shared/xr_string_core.h",
+        "src/vm/xvm_dispatch_convert.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_string_parse_float64",
+        "xr_string_parse_infinity",
+        "xr_string_parse_int64",
+        "xr_string_parse_is_digit",
+        "xr_string_parse_is_space",
+        "xr_string_parse_pow10",
+        "xr_string_parse_scale_pow10"
       ],
       "status": "production",
       "test_callers": [

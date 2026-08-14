@@ -337,52 +337,105 @@ TEST(string_core_split_plan_and_each) {
     ASSERT_EQ_INT(xr_string_core_split_plan("abc", 3, NULL, 1).kind, XR_STRING_CORE_SPLIT_INVALID);
 }
 
-TEST(string_core_parse_int64) {
-    XrStringCoreParseIntResult parsed =
-        xr_string_core_parse_int64(" \t\r\n-123tail", strlen(" \t\r\n-123tail"));
+/* The parse core accepts a whole decimal number and nothing else: surrounding
+ * whitespace is allowed, but any residue after the digits rejects the input,
+ * so int("12abc") fails instead of quietly yielding 12. */
+TEST(string_parse_int64) {
+    XrStringParseIntResult parsed =
+        xr_string_parse_int64(" \t\r\n-123 \t", strlen(" \t\r\n-123 \t"));
     ASSERT_TRUE(parsed.ok);
     ASSERT_EQ_INT(parsed.value, -123);
 
-    parsed = xr_string_core_parse_int64("+42", 3);
+    parsed = xr_string_parse_int64("+42", 3);
     ASSERT_TRUE(parsed.ok);
     ASSERT_EQ_INT(parsed.value, 42);
 
+    /* The span, not a NUL, bounds the parse. */
     const char bounded[] = {'1', '2', '3', '4'};
-    parsed = xr_string_core_parse_int64(bounded, 2);
+    parsed = xr_string_parse_int64(bounded, 2);
     ASSERT_TRUE(parsed.ok);
     ASSERT_EQ_INT(parsed.value, 12);
 
-    parsed = xr_string_core_parse_int64("abc", 3);
-    ASSERT_FALSE(parsed.ok);
+    /* Trailing residue of every shape is a rejection. */
+    ASSERT_FALSE(xr_string_parse_int64("12abc", 5).ok);
+    ASSERT_FALSE(xr_string_parse_int64("-123tail", 8).ok);
+    ASSERT_FALSE(xr_string_parse_int64("1.5", 3).ok);
+    ASSERT_FALSE(xr_string_parse_int64("12 34", 5).ok);
+    ASSERT_FALSE(xr_string_parse_int64("0x10", 4).ok);
 
-    parsed = xr_string_core_parse_int64("   ", 3);
-    ASSERT_FALSE(parsed.ok);
+    ASSERT_FALSE(xr_string_parse_int64("abc", 3).ok);
+    ASSERT_FALSE(xr_string_parse_int64("   ", 3).ok);
+    ASSERT_FALSE(xr_string_parse_int64("", 0).ok);
+    ASSERT_FALSE(xr_string_parse_int64("+", 1).ok);
+    ASSERT_FALSE(xr_string_parse_int64("-", 1).ok);
+    ASSERT_FALSE(xr_string_parse_int64(NULL, 0).ok);
 
-    ASSERT_FALSE(xr_string_core_parse_int64(NULL, 0).ok);
+    /* Both int64 extremes are representable; one past either end is rejected
+     * rather than saturated the way strtoll would. */
+    parsed = xr_string_parse_int64("9223372036854775807", 19);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.value, INT64_MAX);
+
+    parsed = xr_string_parse_int64("-9223372036854775808", 20);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.value, INT64_MIN);
+
+    ASSERT_FALSE(xr_string_parse_int64("9223372036854775808", 19).ok);
+    ASSERT_FALSE(xr_string_parse_int64("-9223372036854775809", 20).ok);
+    ASSERT_FALSE(xr_string_parse_int64("99999999999999999999", 20).ok);
 }
 
-TEST(string_core_parse_float64) {
-    XrStringCoreParseFloatResult parsed =
-        xr_string_core_parse_float64(" \n-3.5e2tail", strlen(" \n-3.5e2tail"));
+TEST(string_parse_float64) {
+    XrStringParseFloatResult parsed = xr_string_parse_float64(" \n-3.5e2 ", strlen(" \n-3.5e2 "));
     ASSERT_TRUE(parsed.ok);
     ASSERT_FLOAT_EQ(parsed.value, -350.0, 0.000001);
 
-    parsed = xr_string_core_parse_float64("+0.25", 5);
+    parsed = xr_string_parse_float64("+0.25", 5);
     ASSERT_TRUE(parsed.ok);
     ASSERT_FLOAT_EQ(parsed.value, 0.25, 0.000001);
 
     const char bounded[] = {'1', '.', '2', '5', '9'};
-    parsed = xr_string_core_parse_float64(bounded, 4);
+    parsed = xr_string_parse_float64(bounded, 4);
     ASSERT_TRUE(parsed.ok);
     ASSERT_FLOAT_EQ(parsed.value, 1.25, 0.000001);
 
-    parsed = xr_string_core_parse_float64("nope", 4);
-    ASSERT_FALSE(parsed.ok);
+    /* The forms strconv.parseFloat validates and then hands to this core. */
+    parsed = xr_string_parse_float64(".5", 2);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_FLOAT_EQ(parsed.value, 0.5, 0.000001);
 
-    parsed = xr_string_core_parse_float64("\t", 1);
-    ASSERT_FALSE(parsed.ok);
+    parsed = xr_string_parse_float64("1.", 2);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_FLOAT_EQ(parsed.value, 1.0, 0.000001);
 
-    ASSERT_FALSE(xr_string_core_parse_float64(NULL, 0).ok);
+    parsed = xr_string_parse_float64("0.001", 5);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_FLOAT_EQ(parsed.value, 0.001, 0.0000001);
+
+    /* Exactly representable inputs must come back bit-exact, not merely close:
+     * this is the fast path that keeps the result correctly rounded. */
+    parsed = xr_string_parse_float64("1.5e3", 5);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_TRUE(parsed.value == 1500.0);
+
+    parsed = xr_string_parse_float64("-0", 2);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_TRUE(parsed.value == 0.0);
+
+    ASSERT_FALSE(xr_string_parse_float64("1.5x", 4).ok);
+    ASSERT_FALSE(xr_string_parse_float64("-3.5e2tail", 10).ok);
+    ASSERT_FALSE(xr_string_parse_float64("1e", 2).ok);
+    ASSERT_FALSE(xr_string_parse_float64("1e+", 3).ok);
+    ASSERT_FALSE(xr_string_parse_float64(".", 1).ok);
+    ASSERT_FALSE(xr_string_parse_float64("nope", 4).ok);
+    /* Spellings a libc strtod would accept but the language grammar does not. */
+    ASSERT_FALSE(xr_string_parse_float64("inf", 3).ok);
+    ASSERT_FALSE(xr_string_parse_float64("nan", 3).ok);
+    ASSERT_FALSE(xr_string_parse_float64("0x1p3", 5).ok);
+
+    ASSERT_FALSE(xr_string_parse_float64("\t", 1).ok);
+    ASSERT_FALSE(xr_string_parse_float64("", 0).ok);
+    ASSERT_FALSE(xr_string_parse_float64(NULL, 0).ok);
 }
 
 TEST(string_core_substring_bounds) {
@@ -496,8 +549,8 @@ RUN_TEST(string_core_repeat_plan_and_write);
 RUN_TEST(string_core_pad_plan_and_write);
 RUN_TEST(string_core_replace_plan_and_write);
 RUN_TEST(string_core_split_plan_and_each);
-RUN_TEST(string_core_parse_int64);
-RUN_TEST(string_core_parse_float64);
+RUN_TEST(string_parse_int64);
+RUN_TEST(string_parse_float64);
 RUN_TEST(string_core_substring_bounds);
 RUN_TEST(string_core_slice_bounds);
 RUN_TEST(string_core_utf8_char_slice);

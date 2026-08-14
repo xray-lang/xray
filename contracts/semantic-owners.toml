@@ -273,6 +273,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted"]
 
 [[core]]
+id = "string-parse"
+header = "src/shared/xr_string_parse_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "synchronization"
 header = "src/shared/xr_sync_core.h"
 representation = "native"
