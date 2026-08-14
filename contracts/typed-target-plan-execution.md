@@ -1,6 +1,6 @@
 # Typed TargetPlan scalar execution contract
 
-TargetPlan schema 21 may carry a canonical per-function instruction table.
+TargetPlan schema 22 may carry a canonical per-function instruction table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
 family. A function with zero instruction rows is execution unavailable, never
@@ -194,7 +194,7 @@ dependency/module identity, unique shared slot, complete use sets, and receiver
 binding. They grant no imported module object body, allocation,
 root, cleanup, member lookup, dependency activation, argument ABI, or
 cross-module frame.
-The C emission projection schema 15 mechanically spells all verified dynamic
+The C emission projection schema 16 mechanically spells all verified dynamic
 families as exact `TAGGED`/`XrValue` rows. For an exact String literal it also
 owns the immutable literal bytes and the explicit String-view materialization
 recipe. For exact `XI_CHAN_NEW` it owns the helper spelling and capacity
@@ -289,22 +289,22 @@ Evidence:
   program fault, separate from the authority failures an unsupported plan
   gives.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 42e11e8b6cd4929dac9233e14ed5df536025a57e111ef81b3a1ef6f0dd584f9c
-anchor-sha256: src/plan/target/xr_target_plan.c 86de22949827da2bac028fb0e655cc60ab2735bd9f6ad1e2d11cbd5969e9f171
-anchor-sha256: src/plan/target/xr_target_builder.c 20d2df275d7349dd7b066bd73a0ea6b3e54d714329e9086b9db60c31b164f460
+anchor-sha256: src/plan/target/xr_target_plan.h 807147d00c1a2ebf5bed7550d8bda1280b64e49c3b06adeed910a3865fa81059
+anchor-sha256: src/plan/target/xr_target_plan.c 92bab7625703ef35b72c3409a4d17c3fed5ae1b321680d6c4a6e8df73f200a90
+anchor-sha256: src/plan/target/xr_target_builder.c eca00484e430a520937157599070bbb3c66b8c036864e852e1d7ab2c700a876b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 6099812f9cee4af8b01c5ffb422c9e359cbd95ec7ebc61c927bc051bc2bf904b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 687ab0df5479e46e51e200e54ea8b935579e6319598fd9830009f935eb057b77
-anchor-sha256: src/plan/target/xr_target_verify.c d2dbf8c39ac8ba129633a6a639d2a4180991cbd0f97ea8706198075edf119bdd
+anchor-sha256: src/plan/target/xr_target_verify.c 7e7ed3deeeffa3a374ccc34ac9ef14056dfe5b2686bf9ce5d004b9e9c4d59421
 anchor-sha256: src/plan/format/xr_xtp_schema.h 365f1b6f6177e269d0ae0293f9bc3cab5565a286610b7d72d8f541d99985b89f
-anchor-sha256: src/plan/format/xr_xtp_rows.c db81206e1e9e158605e3672f79e635df5717baa6b3d4f56c832288a2306a5c4d
+anchor-sha256: src/plan/format/xr_xtp_rows.c 4e3135a1fb65b5f28cd7e9be0b3aaac81eb3448503a8e6f6b660ace1e94381af
 anchor-sha256: src/plan/format/xr_xtp_encode.c 2f6f1fa32e35fd1681ab07bc8a3808d133f33f27e43139224d3f9e253447bd74
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/vm/xr_typed_dispatch.h 30b893c4f791e6b99a87cf46194c982b63972072675d2bfbc329ab55fcba1b25
 anchor-sha256: src/vm/xr_typed_dispatch.c 551515f2222a29214a6a0902189934bf4517d40424b6c4eff52589b47dfb208d
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 6d43ca3a24b401123ee9a8948e2e8ee70994abafc4a5441630415c92569d1c29
-anchor-sha256: tests/unit/plan/test_xtp_format.c 086d4a3c6bc7f62ddfc4ba36c4d0416b43d3e7957033a4062dd8eaf39f86f784
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c c5aef805d149418055367d92e34f263bdea0853904b437548a21d6691292e3ba
+anchor-sha256: tests/unit/plan/test_xtp_format.c 1339a44504e25c5b7da80b59887f1fc93ae1d634bc0c018990b8a6a4c986fd88
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 6e1a7fbc33eb1bd41d9cd80373e512eb60b9c3eaa45a6db5f3d0cf17f34a06d3
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation.c f3fe95413105fbb79fb40b5a0a6f718179b997ad4b823a90baae94a045ba103a
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

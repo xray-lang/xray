@@ -762,11 +762,12 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
     /* Container-building intrinsics allocate a new array on both backends;
      * the result aliases no argument, so it is a fresh +1 the caller owns
      * (and must drop at its death point when never consumed). */
-    if (v->op == XI_CALL_BUILTIN && v->aux &&
-        (strcmp((const char *) v->aux, "copy") == 0 ||
-         strcmp((const char *) v->aux, "array_copy_new") == 0 ||
-         strcmp((const char *) v->aux, "array_filled_new") == 0 ||
-         strcmp((const char *) v->aux, "array_with_capacity") == 0))
+    if (v->op == XI_CALL_BUILTIN &&
+        (v->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY ||
+         v->array_intrinsic_kind == XI_ARRAY_INTRINSIC_FILLED_NEW ||
+         (v->aux &&
+          (strcmp((const char *) v->aux, "copy") == 0 ||
+           strcmp((const char *) v->aux, "array_copy_new") == 0))))
         return true;
     if (arc_mem_allocator_returns_fresh_buffer(f, v))
         return true;

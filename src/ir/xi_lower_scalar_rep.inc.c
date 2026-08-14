@@ -219,3 +219,9 @@ static int64_t xi_array_cfield_from_type(struct XrType *type) {
     uint8_t tid = xr_type_to_tid(type->container.element_type);
     return (int64_t) (tid << 2);
 }
+
+static uint8_t xi_array_intrinsic_storage_from_type(struct XrType *type) {
+    if (!type || !XR_TYPE_IS_ARRAY(type) || !type->container.element_type)
+        return XR_ELEM_ANY;
+    return (uint8_t) xr_tid_to_elem_type(xr_type_to_tid(type->container.element_type));
+}

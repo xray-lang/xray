@@ -72,6 +72,8 @@ typedef enum XrSemanticIntrinsicKind {
     XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE = 5,
     XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR = 6,
     XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL = 7,
+    XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY = 8,
+    XR_SEM_INTRINSIC_ARRAY_FILLED_NEW = 9,
     XR_SEM_INTRINSIC_COUNT,
 } XrSemanticIntrinsicKind;
 
@@ -392,7 +394,8 @@ typedef struct XrSemanticOperationRecord {
     uint8_t view_capability;
     uint8_t view_lifetime;
     uint8_t view_complete;
-    uint8_t reserved_view[3];
+    uint8_t array_element_storage;
+    uint8_t reserved_view[2];
 } XrSemanticOperationRecord;
 
 typedef struct XrSemanticEdgeRecord {
