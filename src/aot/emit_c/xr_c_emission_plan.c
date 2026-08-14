@@ -1427,7 +1427,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE |
         XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE |
         XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE |
-        XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE;
+        XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |
+        XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",

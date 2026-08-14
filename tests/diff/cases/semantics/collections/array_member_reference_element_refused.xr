@@ -1,0 +1,22 @@
+// anchor: array-member-reference-element-refused
+// diff-backends: vm
+// diff-aot-reject: selector=fill intrinsic=0
+// The container member authority stops at an element that carries no
+// reference. These members either consume an element or move elements inside
+// the container, and for a reference capable element that traffic is a
+// reference-count transfer the backend would have to honour, which no frozen
+// row here describes. A string element therefore never reaches the authority:
+// the operation carries no intrinsic identity at all (intrinsic=0), so the
+// native backend finds no dispatch target and refuses the module, while the VM
+// keeps executing the same program.
+fn main() {
+    var names = ["a", "b", "c"]
+    names.fill("z")
+    print(names[0])
+    names.push("w")
+    print(names[3])
+    print(names.indexOf("z"))
+    print(names.contains("w"))
+}
+
+main()

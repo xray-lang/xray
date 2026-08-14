@@ -1,0 +1,68 @@
+// anchor: array-member-scalar-target
+// Every member here is a compiler-owned container operation, not an
+// open-domain method dispatch: the array kind is produced by no declaration and
+// carries no source class, so the receiver record plus the frozen selector name
+// one implementation. Passing under the VM is not evidence the native backend
+// accepts the callsite -- the VM dispatches the selector at run time while the
+// native backend demands an exact dispatch authority for it, so this case is
+// the coverage that pins each frozen shape on both paths.
+// The shapes differ and each is pinned separately: `push` and `unshift` consume
+// one element and return unit, `indexOf` and `contains` return a fresh scalar,
+// and `fill`, `reverse` and `sort` hand back their own receiver, whose result
+// names the container again rather than a new value. `fill` is exercised at all
+// three arities because its bound arguments are proven as exact signed 64-bit
+// integers while its first argument is proven against the receiver's own
+// element entry.
+// The authority stops at a scalar element on purpose: these members either
+// consume an element or move elements inside the container, and only an element
+// that carries no reference makes that traffic a copy with no reference-count
+// obligation left behind.
+fn main() {
+    var counts = [1, 2, 3]
+    counts.push(4)
+    counts.unshift(0)
+    print(counts[0])
+    print(counts[4])
+
+    print(counts.indexOf(3))
+    print(counts.indexOf(42))
+    print(counts.contains(2))
+    print(counts.contains(42))
+
+    counts.reverse()
+    print(counts[0])
+    counts.sort()
+    print(counts[0])
+    print(counts[4])
+
+    var span = [1, 2, 3, 4, 5, 6]
+    span.fill(9, 2, 5)
+    print(span[1])
+    print(span[2])
+    print(span[4])
+    print(span[5])
+    span.fill(7, 4)
+    print(span[3])
+    print(span[5])
+    span.fill(4)
+    print(span[0])
+    print(span[5])
+
+    // A bound that is not a literal must reach the same authority: the frozen
+    // rows never mention constants, so a run-time value is admitted exactly
+    // where a folded one is.
+    var seed = 8
+    var lo = 1
+    var hi = 3
+    var bounded = [1, 2, 3, 4, 5]
+    bounded.fill(seed, lo, hi)
+    print(bounded[0])
+    print(bounded[1])
+    print(bounded[2])
+    print(bounded[3])
+    print(bounded.indexOf(seed))
+    span.fill(seed)
+    print(span[2])
+}
+
+main()

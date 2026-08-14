@@ -2797,33 +2797,91 @@ static bool semantic_string_builder_append_string_exact(
 /* `Array<T>` is a compiler-owned container: the array kind is produced only by
  * the builtin container type, never by a declaration, and the language admits
  * no way to declare a member on it.  A receiver carrying the array kind plus
- * the frozen `push` selector therefore names exactly one implementation, so a
- * user class that happens to declare `push` never reaches this authority: its
- * receiver record carries the instance kind and its own class authority.
+ * one of the frozen selectors below therefore names exactly one implementation,
+ * so a user class that happens to declare the same name never reaches this
+ * authority: its receiver record carries the instance kind and its own class
+ * authority.
  *
  * The authority is deliberately limited to an element type that is not
- * reference capable.  `push` consumes its argument, and for a reference
- * capable element that consumption is a reference-count transfer the backend
- * would have to honour; for a scalar element the transfer is a copy and there
- * is no ownership obligation left for anyone to discharge. */
-static bool xi_array_push_scalar_exact(const XiValue *value) {
-    const XiValue *receiver = value && value->nargs == 2 ? value->args[0] : NULL;
-    const XiValue *argument = receiver ? value->args[1] : NULL;
+ * reference capable.  Every member here either consumes an element argument or
+ * moves elements inside the container, and for a reference capable element that
+ * traffic is a reference-count transfer the backend would have to honour; for a
+ * scalar element it is a copy and there is no ownership obligation left for
+ * anyone to discharge.
+ *
+ * Each row states the whole shape one selector may present: the operand count
+ * range, which operand carries the element (0 means the member takes none,
+ * because operand 0 is always the receiver), and what the result is.  A member
+ * that hands back its receiver states RESULT_RECEIVER: its result is the
+ * receiver's own reference rather than a new value, so the row claims no
+ * storage for it and every use of that result stays without authority. */
+typedef enum XrArrayMemberResultShape {
+    XR_ARRAY_MEMBER_RESULT_UNIT = 0,
+    XR_ARRAY_MEMBER_RESULT_INT,
+    XR_ARRAY_MEMBER_RESULT_BOOL,
+    XR_ARRAY_MEMBER_RESULT_RECEIVER,
+} XrArrayMemberResultShape;
+
+typedef struct XrArrayMemberShape {
+    const char *selector;
+    uint16_t min_operands;
+    uint16_t max_operands;
+    uint8_t result_shape;
+    uint16_t element_operand;
+} XrArrayMemberShape;
+
+static const XrArrayMemberShape xr_array_member_shapes[] = {
+    {"push", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1},
+    {"unshift", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1},
+    {"indexOf", 2, 2, XR_ARRAY_MEMBER_RESULT_INT, 1},
+    {"contains", 2, 2, XR_ARRAY_MEMBER_RESULT_BOOL, 1},
+    {"fill", 2, 4, XR_ARRAY_MEMBER_RESULT_RECEIVER, 1},
+    {"reverse", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0},
+    {"sort", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0},
+};
+
+static const XrArrayMemberShape *xr_array_member_shape(const char *selector,
+                                                       uint16_t operand_count) {
+    if (!selector)
+        return NULL;
+    for (size_t i = 0; i < sizeof(xr_array_member_shapes) / sizeof(xr_array_member_shapes[0]); i++) {
+        const XrArrayMemberShape *shape = &xr_array_member_shapes[i];
+        if (strcmp(shape->selector, selector) == 0 && operand_count >= shape->min_operands &&
+            operand_count <= shape->max_operands)
+            return shape;
+    }
+    return NULL;
+}
+
+static bool xi_array_member_scalar_exact(const XiValue *value) {
+    const XiValue *receiver = value && value->nargs >= 1 ? value->args[0] : NULL;
     const XrType *receiver_type = receiver ? receiver->type : NULL;
-    return value && value->op == XI_CALL_METHOD && receiver && argument && value->aux &&
-           strcmp((const char *) value->aux, "push") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 && (value->flags & XI_FLAG_MAY_SUSPEND) == 0 &&
-           receiver_type && receiver_type->kind == XR_KIND_ARRAY &&
-           receiver_type->container.element_type && argument->type && value->type &&
-           value->type->kind == XR_KIND_UNIT;
+    const XrArrayMemberShape *shape =
+        value && value->op == XI_CALL_METHOD && value->aux && value->aux_kind == XI_AUX_KIND_NONE
+            ? xr_array_member_shape((const char *) value->aux, value->nargs)
+            : NULL;
+    if (!shape || !receiver || !receiver_type || value->aux_int <= 0 ||
+        (value->aux_int & 1) != 0 || (value->flags & XI_FLAG_MAY_SUSPEND) != 0 ||
+        receiver_type->kind != XR_KIND_ARRAY || !receiver_type->container.element_type ||
+        !value->type)
+        return false;
+    for (uint16_t i = 1; i < value->nargs; i++) {
+        if (!value->args[i] || !value->args[i]->type)
+            return false;
+    }
+    switch (shape->result_shape) {
+        case XR_ARRAY_MEMBER_RESULT_UNIT: return value->type->kind == XR_KIND_UNIT;
+        case XR_ARRAY_MEMBER_RESULT_INT: return value->type->kind == XR_KIND_INT;
+        case XR_ARRAY_MEMBER_RESULT_BOOL: return value->type->kind == XR_KIND_BOOL;
+        default: return value->type == receiver_type;
+    }
 }
 
 /* Recomputed from the frozen records: the array header pins every type bit the
  * key carries, and the element clause is proven separately through the child
  * table so the argument contract is checked against the receiver's own
  * element rather than against a spelled type name. */
-static bool semantic_array_push_receiver_type_exact(const XrSemanticTypeRecord *type) {
+static bool semantic_array_member_receiver_type_exact(const XrSemanticTypeRecord *type) {
     char expected[96];
     int length = snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:",
                           (unsigned) XR_KIND_ARRAY, (unsigned) XR_TID_NULL,
@@ -2839,7 +2897,7 @@ static bool semantic_array_push_receiver_type_exact(const XrSemanticTypeRecord *
            strncmp(type->canonical_key, expected, (size_t) length) == 0;
 }
 
-static bool semantic_array_push_unit_type_exact(const XrSemanticTypeRecord *type) {
+static bool semantic_array_member_unit_type_exact(const XrSemanticTypeRecord *type) {
     char expected[96];
     int length = snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:",
                           (unsigned) XR_KIND_UNIT, (unsigned) XR_TID_NULL,
@@ -2851,38 +2909,85 @@ static bool semantic_array_push_unit_type_exact(const XrSemanticTypeRecord *type
            strcmp(type->canonical_key, expected) == 0;
 }
 
-static bool semantic_array_push_scalar_exact(const XrSemanticBuildContext *ctx,
-                                             const XrSemanticOperationRecord *record) {
-    if (!ctx || !record || record->operand_count != 2 ||
-        record->operand_begin > ctx->plan->operand_count ||
-        record->operand_count > ctx->plan->operand_count - record->operand_begin ||
-        record->metadata_count != 1 || record->metadata_begin >= ctx->plan->metadata_count)
-        return false;
-    const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
-    const XrSemanticOperandRecord *argument = receiver + 1;
-    const XrSemanticTypeRecord *receiver_type =
-        receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
-    const XrSemanticTypeRecord *argument_type =
-        argument->type < ctx->plan->type_count ? &ctx->plan->types[argument->type] : NULL;
-    const XrSemanticTypeRecord *result_type =
-        record->result_type < ctx->plan->type_count ? &ctx->plan->types[record->result_type] : NULL;
-    return semantic_array_push_receiver_type_exact(receiver_type) && argument_type &&
-           receiver_type->child_begin < ctx->plan->type_child_count &&
-           ctx->plan->type_children[receiver_type->child_begin] == argument->type &&
-           (argument_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 &&
-           semantic_array_push_unit_type_exact(result_type) &&
-           strcmp(ctx->plan->metadata[record->metadata_begin], "push") == 0 &&
-           record->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
-           receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
-           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
-           argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
-           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           argument->ownership_action == XR_SEM_OPERAND_CONSUME &&
-           record->result_alias_operand == -1 &&
+static bool semantic_array_member_i64_type_exact(const XrSemanticTypeRecord *type) {
+    return type && type->kind == XR_KIND_INT && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_NATIVE_I64 && type->flags == 0;
+}
+
+static bool semantic_array_member_bool_type_exact(const XrSemanticTypeRecord *type) {
+    return type && type->kind == XR_KIND_BOOL && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0;
+}
+
+/* The result clause the frozen shape demands. A unit, int, or bool result is a
+ * fresh value the call owns outright; a receiver result is the receiver's own
+ * reference handed straight back, which the operation records as an alias of
+ * operand 0 with a complete owned return provenance. */
+static bool semantic_array_member_result_exact(const XrSemanticOperationRecord *record,
+                                               const XrArrayMemberShape *shape,
+                                               const XrSemanticTypeRecord *result_type,
+                                               uint32_t receiver_type_index) {
+    if (shape->result_shape == XR_ARRAY_MEMBER_RESULT_RECEIVER)
+        return record->result_type == receiver_type_index && record->result_alias_operand == 0 &&
+               record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+               record->return_provenance == XR_SEM_RETURN_OWNED &&
+               record->return_parameter == -1 && record->return_complete == 1;
+    bool typed = shape->result_shape == XR_ARRAY_MEMBER_RESULT_UNIT
+                     ? semantic_array_member_unit_type_exact(result_type)
+                     : shape->result_shape == XR_ARRAY_MEMBER_RESULT_INT
+                           ? semantic_array_member_i64_type_exact(result_type)
+                           : semantic_array_member_bool_type_exact(result_type);
+    return typed && record->result_alias_operand == -1 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
            record->return_provenance == XR_SEM_RETURN_NONE && record->return_parameter == -1 &&
            record->return_complete == 0;
+}
+
+static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx,
+                                               const XrSemanticOperationRecord *record) {
+    if (!ctx || !record || record->operand_begin > ctx->plan->operand_count ||
+        record->operand_count > ctx->plan->operand_count - record->operand_begin ||
+        record->metadata_count != 1 || record->metadata_begin >= ctx->plan->metadata_count)
+        return false;
+    const XrArrayMemberShape *shape =
+        xr_array_member_shape(ctx->plan->metadata[record->metadata_begin], record->operand_count);
+    const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
+    const XrSemanticTypeRecord *receiver_type =
+        receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
+    const XrSemanticTypeRecord *result_type =
+        record->result_type < ctx->plan->type_count ? &ctx->plan->types[record->result_type] : NULL;
+    if (!shape || !semantic_array_member_receiver_type_exact(receiver_type) ||
+        receiver_type->child_begin >= ctx->plan->type_child_count)
+        return false;
+    uint32_t element_type_index = ctx->plan->type_children[receiver_type->child_begin];
+    const XrSemanticTypeRecord *element_type =
+        element_type_index < ctx->plan->type_count ? &ctx->plan->types[element_type_index] : NULL;
+    if (!element_type || (element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 ||
+        !semantic_array_member_result_exact(record, shape, result_type, receiver->type) ||
+        record->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW)
+        return false;
+    /* The element argument is proven against the receiver's own element entry
+     * rather than a spelled type name; every other argument is an exact signed
+     * 64-bit bound the container reads. */
+    for (uint16_t i = 1; i < record->operand_count; i++) {
+        const XrSemanticOperandRecord *argument = receiver + i;
+        const XrSemanticTypeRecord *argument_type =
+            argument->type < ctx->plan->type_count ? &ctx->plan->types[argument->type] : NULL;
+        bool element = i == shape->element_operand;
+        if (!argument_type || argument->role != XR_SEM_OPERAND_ARGUMENT ||
+            argument->parameter != (int16_t) (i - 1) ||
+            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+            argument->ownership_action != XR_SEM_OPERAND_CONSUME ||
+            (element ? argument->type != element_type_index
+                     : !semantic_array_member_i64_type_exact(argument_type)))
+            return false;
+    }
+    return true;
 }
 
 /* One plain machine scalar with no reference, no null encoding and no
@@ -3297,8 +3402,8 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING;
     if (xi_json_namespace_value_exact(value) && semantic_json_namespace_value_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE;
-    if (xi_array_push_scalar_exact(value) && semantic_array_push_scalar_exact(ctx, record))
-        record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_PUSH_SCALAR;
+    if (xi_array_member_scalar_exact(value) && semantic_array_member_scalar_exact(ctx, record))
+        record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR;
     if (xi_native_module_scalar_call_exact(ctx, function, value) &&
         semantic_native_module_scalar_call_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL;

@@ -41,17 +41,26 @@ declaration can never produce that receiver record because every declared class
 records its own class authority, so the namespace plus the selector names one
 implementation. Every other namespace member stays without dispatch authority.
 A member call on a compiler-owned container receiver carries its own numeric
-intrinsic identity on the same terms. `Array.push` is frozen when the receiver
-type record is an array with no source-class index and no source-class
-identity, the selector is the sole frozen metadata entry, the single
-call-contract argument is the receiver's own element entry and consumed, and
-the result is the unit type with no alias and no returned ownership. No
-declaration can produce an array receiver record, so the container kind plus
-the selector names one implementation, and a declared member that happens to
-share the selector never reaches this authority. The frozen element must not be
-reference capable: `push` consumes its argument, and only an element carrying
-no reference makes that consumption a copy that leaves no reference-count
-obligation for a backend to discharge. Every other container member, and every
+intrinsic identity on the same terms. The array member authority is frozen when
+the receiver type record is an array with no source-class index and no
+source-class identity, the selector is the sole frozen metadata entry and names
+one of the frozen shapes below, every call-contract argument is consumed, and
+the result matches the shape the selector states. No declaration can produce an
+array receiver record, so the container kind plus the selector names one
+implementation, and a declared member that happens to share the selector never
+reaches this authority. Each frozen shape states the operand count range it
+admits, which operand carries the element, and what the result is: `push` and
+`unshift` consume one element operand and return the unit type with no alias and
+no returned ownership; `indexOf` and `contains` consume one element operand and
+return an exact signed 64-bit integer or an exact boolean on the same terms;
+`fill`, `reverse` and `sort` return the receiver itself, recorded as an alias of
+operand 0 with a complete owned return provenance. The element operand is proven
+against the receiver's own element entry and every remaining argument is an
+exact signed 64-bit bound. The frozen element must not be reference capable:
+these members either consume an element or move elements inside the container,
+and only an element carrying no reference makes that traffic a copy that leaves
+no reference-count obligation for a backend to discharge. Every other container
+member, every operand count outside the frozen range, and every
 reference-capable element, stays without dispatch authority.
 A member call on an imported native stdlib module namespace carries its own
 numeric intrinsic identity, stated once for every module rather than per module
@@ -355,11 +364,11 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
 anchor-sha256: src/plan/format/xr_xsm_encode.c e56ac921cb9c4be957086f9b6b960c5d194a04b066986ddefafc9efc838e8876
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 3ff5d3fa15aadd105d92399b00d7dfc12a6330047cfef66222abc22a135d41a6
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 2131bd23a3042751047c51567ff1885dc1dac20d9901af40477d7be516bdbb6a
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 6f5048cf95e341617e68eba47ffbf51ae396b72f9771328ff2ba8f8f500bf459
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c ea4675808fc8b4cc1bd3539b4b437756b9b0b92afd5a2afd1dd17ad9b1e9e7b0
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 19db98628552ea2cce9e4f3f64ab79e26ee333f508777e5d44b13d9220984227
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 18c70c2aef92375fc869a3962ea99256ed740fbd1cd3594a37a0a55b3a2d685b
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 77b49fcc3909b65c7bf68a713896656689a79ba5c0888731dc3910eb7e0539cc
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 810feaa393be82e1a30ba9dc091c3e00800dbb015b3f8b29c9571e4be51bc548
 anchor-sha256: src/stdlib/xstdlib_metadata.h fea5c1b87e5cf4650f62720540f9728ac71dc475fdab683ba30b6458d3e3902b
 anchor-sha256: tests/unit/plan/test_semantic_plan.c e1ac83687f5c72f019e103d079e9a749b86a2ee4ff12ea1200854bbfa7f76ffd
