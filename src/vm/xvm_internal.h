@@ -337,19 +337,6 @@ XR_FUNC XrValue vm_numeric_mul(XrValue left, XrValue right);
 XR_FUNC XrValue vm_numeric_div(XrVMRuntime *isolate, XrValue left, XrValue right);
 XR_FUNC XrValue vm_numeric_mod(XrVMRuntime *isolate, XrValue left, XrValue right);
 
-/* ========== BigInt Mixed Operations Helper ========== */
-
-// Check if either value is BigInt and the other is int/BigInt
-static inline bool vm_is_bigint_mixed(XrValue left, XrValue right) {
-    bool left_bigint = XR_IS_BIGINT(left);
-    bool right_bigint = XR_IS_BIGINT(right);
-    bool left_int = XR_IS_INT(left);
-    bool right_int = XR_IS_INT(right);
-    // At least one BigInt, and the other is int or BigInt
-    return (left_bigint && (right_bigint || right_int)) ||
-           (right_bigint && (left_bigint || left_int));
-}
-
 /* Every VM comparison evaluates the shared relation owner. The VM owns only
  * the carrier work - reading a tag, reaching a string or big integer, walking
  * an aggregate - and hands the owner either a lane value pair or the verdict a
