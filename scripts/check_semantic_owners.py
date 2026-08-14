@@ -243,6 +243,29 @@ TARGET_SIMD_QUERY_OPERATIONS = {
     "xi.target.simd.accelerated",
     "xi.target.simd.runtime-selected",
 }
+SLICE_WINDOW_OPERATIONS = {"xi.slice.window"}
+SLICE_WINDOW_ADAPTER_BINDINGS = (
+    "src/aot/xrt.h",
+    "src/aot/xrt_core_freestanding.h",
+)
+SLICE_WINDOW_RETIRED_SOURCES = (
+    "src/shared/xr_slice_window_core.h",
+    "src/vm/xvm_dispatch_collection.inc.c",
+    "src/aot/xrt_c90.h",
+    "src/aot/xi_cgen_dispatch_helpers.inc.c",
+)
+# Every spelling of the window rule that used to live outside the owner. The
+# admissibility condition, the base-advance select and the resolved-count
+# specialisation each stated the rule once; none of them may come back.
+SLICE_WINDOW_RETIRED_TOKENS = (
+    "_src.length < 0 || _start < 0",
+    "_count > _src.length - _start",
+    "_start > _src.length - INT64_C",
+    "(_src.data && _count > 0)",
+    "count > length - start",
+    "count > source.length - start",
+    "count > src->length - start",
+)
 # The simd module declares the portable baseline this owner defines. The
 # declarations and the owner must state the same machine.
 TARGET_SIMD_BASELINE_DECLARATIONS = (
@@ -3668,6 +3691,81 @@ def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_slice_window_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.slice-window"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != SLICE_WINDOW_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.slice-window family")
+
+    core_relative = "src/shared/xr_slice_window_core.h"
+    core_text = (root / core_relative).read_text(encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SLICE_WINDOW_OWNER_GUARD",
+                  "XR_SLICE_WINDOW_CONSUMER_GUARD", "XR_SLICE_WINDOW_PROOF_GUARD",
+                  "XR_SLICE_WINDOW_PROVEN_GUARD", "XR_SLICE_WINDOW_OWNER_APPLY",
+                  "XR_SLICE_WINDOW_OWNER_APPLY_PROVEN", "XR_SLICE_WINDOW_ADMITS",
+                  "XR_SLICE_WINDOW_ADVANCES", "XR_SLICE_WINDOW_FAULT_OPERAND",
+                  "xr_slice_window_eval"):
+        if token not in core_text:
+            errors.append(f"{core_relative}: shared slice-window owner lacks {token}")
+
+    vm_relative = "src/vm/xvm_dispatch_collection.inc.c"
+    vm_text = (root / vm_relative).read_text(encoding="utf-8", errors="strict")
+    start = vm_text.find("vmcase(OP_SLICE_WINDOW)")
+    stop = vm_text.find("vmcase(", start + 1) if start >= 0 else -1
+    vm_body = vm_text[start:stop] if start >= 0 and stop > start else ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_SLICE_WINDOW_OWNER_APPLY", "XR_SLICE_WINDOW_PROOF_NONE",
+                  "window.admitted", "window.advances", "window.byte_offset", "window.length"):
+        if token not in vm_body:
+            errors.append(f"{vm_relative}: VM slice window bypasses the stable owner")
+            break
+
+    for relative in SLICE_WINDOW_ADAPTER_BINDINGS:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "xrt_slice_window_plan" not in text or
+                "XR_SLICE_WINDOW_OWNER_APPLY" not in text):
+            errors.append(f"{relative}: AOT slice-window adapter bypasses the stable owner")
+
+    c90_relative = "src/aot/xrt_c90.h"
+    c90_text = (root / c90_relative).read_text(encoding="utf-8", errors="strict")
+    if "XR_SLICE_WINDOW_C90" not in c90_text or "xr_slice_window_core.h" not in c90_text:
+        errors.append(f"{c90_relative}: restricted C90 does not include the shared window owner")
+    for symbol in ("xrt_c90_span_window", "xrt_c90_span_window_unchecked"):
+        body = extract_c_function(c90_text, symbol)
+        if body is None or "xrt_slice_window_plan" not in body:
+            errors.append(f"{c90_relative}: {symbol} bypasses the shared window owner")
+
+    cgen_relative = "src/aot/xi_cgen.c"
+    cgen_text = (root / cgen_relative).read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_slice_window_adapter_name") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_CGEN",
+                  "xr_semantic_owner_has_consumer", "xr_semantic_owner_cgen_adapter"):
+        if token not in resolver:
+            errors.append(f"{cgen_relative}: slice window does not resolve the stable adapter")
+            break
+
+    dispatch_relative = "src/aot/xi_cgen_dispatch_helpers.inc.c"
+    dispatch = (root / dispatch_relative).read_text(encoding="utf-8", errors="strict")
+    emitter = extract_c_function(dispatch, "xicgen_span_window") or ""
+    for token in ("cg_slice_window_adapter_name", "XR_SLICE_WINDOW_PROOF_BOUNDS",
+                  "XR_SLICE_WINDOW_PROOF_NONE", "_win.admitted", "_win.advances",
+                  "_win.byte_offset", "_win.length", "_win.fault_operand"):
+        if token not in emitter:
+            errors.append(f"{dispatch_relative}: CGen slice window bypasses the owner")
+            break
+
+    for relative in SLICE_WINDOW_RETIRED_SOURCES:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for token in SLICE_WINDOW_RETIRED_TOKENS:
+            if token in text:
+                errors.append(f"{relative}: retired window semantic source remains: {token}")
+    return errors
+
+
 def verify_pod_slice_view_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     owner_name = "shared.pod-slice-view"
@@ -3803,8 +3901,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 46:
-        errors.append(f"shared-core inventory must contain exactly 46 headers, found {len(actual)}")
+    if len(actual) != 47:
+        errors.append(f"shared-core inventory must contain exactly 47 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -3862,6 +3960,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_byte_array_repeat_ratchet(root, registry))
         errors.extend(verify_target_layout_query_ratchet(root, registry))
         errors.extend(verify_target_simd_query_ratchet(root, registry))
+        errors.extend(verify_slice_window_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))
         errors.extend(verify_pod_slice_view_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)

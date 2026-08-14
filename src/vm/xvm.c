@@ -69,6 +69,7 @@
 #include "../shared/xr_null_test_core.h"
 #include "../shared/xr_pod_slice_core.h"
 #include "../shared/xr_regex_core.h"
+#include "../shared/xr_slice_window_core.h"
 
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xalloc_unified.h"

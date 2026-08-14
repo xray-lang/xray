@@ -2531,7 +2531,9 @@ vmcase(OP_SLICE) {
 vmcase(OP_SLICE_WINDOW) {
     /* Strict count-based borrowed view. Unlike slice syntax this operation
      * never clamps and never interprets negative values from the end. One
-     * successful check proves every access inside [0, count). */
+     * successful check proves every access inside [0, count), and the shared
+     * owner states what that check is; this profile only publishes the
+     * rejection as a VM runtime error. */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
@@ -2541,18 +2543,26 @@ vmcase(OP_SLICE_WINDOW) {
                          "Slice.window(start, count) expects a Slice and integer bounds");
     }
     XrSliceView *src = XR_TO_SLICE_REF(R(b));
+    if (!src) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                         "Slice.window(start, count) is outside the source Slice");
+    }
     int64_t start = XR_TO_INT(R(c));
     int64_t count = XR_TO_INT(R(c + 1));
-    if (!src || start < 0 || count < 0 || start > src->length || count > src->length - start) {
+    uint16_t elem_size = XR_SLICE_REF_ELEM_SIZE(R(b));
+    XrSliceWindowPlan window = XR_SLICE_WINDOW_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_HI, XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_LO,
+        XR_SEM_CONSUMER_VM, XR_SLICE_WINDOW_PROOF_NONE, src->length, start, count, src->data,
+        elem_size);
+    if (!window.admitted) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
                          "Slice.window(start, count) is outside the source Slice");
     }
     XrSliceView *span = VM_SLICE_SLOT(R(c + 2));
     *span = *src;
-    uint16_t elem_size = XR_SLICE_REF_ELEM_SIZE(R(b));
-    span->length = count;
-    span->data = (src->data && count > 0) ? (uint8_t *) src->data + (size_t) start * elem_size
-                                          : (uint8_t *) src->data;
+    span->length = window.length;
+    span->data = window.advances ? (uint8_t *) src->data + (size_t) window.byte_offset
+                                 : (uint8_t *) src->data;
     R(a) = xr_span_ref_typed(
         span, XR_SLICE_REF_ELEM_TYPE(R(b)), elem_size, XR_SLICE_REF_ELEM_TID(R(b)),
         XR_SLICE_REF_LAYOUT_ID(R(b)),

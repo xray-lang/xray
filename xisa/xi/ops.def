@@ -2654,7 +2654,6 @@
     xi.index.get
     xi.index.set
     xi.enum.meta.get
-    xi.slice.window
     xi.slice.from.ptr
     xi.buffer.materialize
     xi.local.addr
@@ -2758,6 +2757,7 @@
     xi.target.simd.bytes
     xi.target.simd.accelerated
     xi.target.simd.runtime-selected
+    xi.slice.window
     xi.array.data.ptr
     xi.static.bytes.ptr
     xi.cell.get
@@ -3517,6 +3517,25 @@
     (aot-hosted "src/aot/xrt_coll.h" "xrt_pod_slice_compare_semantics")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_pod_slice_compare_semantics")
     (cgen "src/aot/xi_cgen.c" "cg_pod_slice_compare_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.slice-window
+  :category shared-semantic-kernel
+  :operations (xi.slice.window)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_slice_window_plan
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_collection.inc.c" "XR_SLICE_WINDOW_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_slice_window_plan")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_slice_window_plan")
+    (cgen "src/aot/xi_cgen.c" "cg_slice_window_adapter_name")
   ))
 
 (define-xi-observable-owner shared.pod-slice-view

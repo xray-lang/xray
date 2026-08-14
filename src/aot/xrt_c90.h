@@ -146,6 +146,15 @@ typedef struct xr_span {
 #include "../shared/xr_pod_slice_core.h"
 #undef XR_POD_SLICE_C90
 
+/* Restricted C90 admits the same window as every other profile; only the owner
+ * guards, which need the stable-ID header, are left out. */
+#define XR_SLICE_WINDOW_C90 1
+#include "../shared/xr_slice_window_core.h"
+#undef XR_SLICE_WINDOW_C90
+#define xrt_slice_window_plan(proof, length, start, count, data, element_size)                     \
+    xr_slice_window_eval((int64_t) (length), (int64_t) (start), (int64_t) (count),                 \
+                         (const void *) (data), (int64_t) (element_size), (proof))
+
 static xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t value) {
     if (!xr_byte_slice_fill_core(span.data, span.length, XR_ELEM_U8, value))
         abort();
@@ -364,22 +373,29 @@ static void xrt_fixed_index_oob(int64_t index, int64_t length) {
     xrt_index_oob(index, length);
 }
 
-static xr_span_t xrt_c90_span_window_unchecked(xr_span_t source, int64_t start, int64_t count,
-                                               size_t element_size) {
+static xr_span_t xrt_c90_span_view(xr_span_t source, XrSliceWindowPlan plan) {
     xr_span_t result;
     result.data = source.data;
-    if (count > 0)
-        result.data = (void *) ((uint8_t *) source.data + (size_t) start * element_size);
-    result.length = count;
+    if (plan.advances)
+        result.data = (void *) ((uint8_t *) source.data + (size_t) plan.byte_offset);
+    result.length = plan.length;
     return result;
+}
+
+static xr_span_t xrt_c90_span_window_unchecked(xr_span_t source, int64_t start, int64_t count,
+                                               size_t element_size) {
+    return xrt_c90_span_view(source, xrt_slice_window_plan(XR_SLICE_WINDOW_PROOF_BOUNDS,
+                                                           source.length, start, count,
+                                                           source.data, element_size));
 }
 
 static xr_span_t xrt_c90_span_window(xr_span_t source, int64_t start, int64_t count,
                                      size_t element_size) {
-    if (source.length < 0 || start < 0 || count < 0 || start > source.length ||
-        count > source.length - start || (count > 0 && source.data == NULL))
-        xrt_index_oob(start, source.length);
-    return xrt_c90_span_window_unchecked(source, start, count, element_size);
+    XrSliceWindowPlan plan = xrt_slice_window_plan(XR_SLICE_WINDOW_PROOF_NONE, source.length, start,
+                                                   count, source.data, element_size);
+    if (!plan.admitted)
+        xrt_index_oob(plan.fault_operand, source.length);
+    return xrt_c90_span_view(source, plan);
 }
 
 static uint8_t xrt_c90_span_u8_get_unchecked(xr_span_t span, int64_t index) {

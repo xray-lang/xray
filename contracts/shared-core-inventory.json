@@ -1322,6 +1322,31 @@
       ]
     },
     {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_slice_window_core.h",
+      "id": "slice-window",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xrt.h",
+        "src/aot/xrt_c90.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/vm/xvm.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_slice_window_core.c"
+      ]
+    },
+    {
       "contains_tagged_value": true,
       "header": "src/shared/xr_sort_core.h",
       "id": "array-sort",

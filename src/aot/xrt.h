@@ -46,6 +46,7 @@
 #include "../shared/xr_null_test_core.h"   // L0: canonical tagged/pointer null observation
 #include "../shared/xr_assert_condition_core.h" // L0: canonical assertion decision
 #include "../shared/xr_numeric_conversion_core.h"  // L0: deterministic scalar narrowing
+#include "../shared/xr_slice_window_core.h" // L0: canonical strict contiguous window
 #define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
                               XR_SEM_OWNER_ID_SHARED_BITS_LO,                                     \
@@ -78,6 +79,13 @@
     XR_INT_DIV_MOD_OWNER_APPLY_PROVEN(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                      \
                                       XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,                      \
                                       XR_SEM_CONSUMER_AOT_HOSTED, (kind), (proof), (lhs), (rhs))
+/* Generated C asks the window owner through this name; the proof token decides
+ * whether the admissibility probe is still the kernel's job. */
+#define xrt_slice_window_plan(proof, length, start, count, data, element_size)                     \
+    XR_SLICE_WINDOW_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_HI,                           \
+                                XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_LO,                           \
+                                XR_SEM_CONSUMER_AOT_HOSTED, (proof), (length), (start), (count),  \
+                                (data), (element_size))
 #define xrt_null_test_tagged(tag)                                                                 \
     XR_NULL_TEST_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,                                \
                              XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,                                \
