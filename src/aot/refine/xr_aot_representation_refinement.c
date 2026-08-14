@@ -3668,6 +3668,79 @@ static bool oracle_dynamic_source_class_instance_storage(
     return true;
 }
 
+/* The same proof for the instance a constructor receives. It re-proves the
+ * TargetPlan row from the same shared judgement the plan builder and the plan
+ * verifier use, so no layer can admit a receiver the others would refuse. The
+ * receiver is bound on entry rather than computed, so the row it carries is a
+ * parameter slot and its ownership is the parameter's own recorded ownership
+ * rather than a property of the family. */
+static bool oracle_dynamic_source_class_receiver_storage(const VerifyAuthority *ctx,
+                                                         uint32_t semantic_value,
+                                                         XrRep *out_storage,
+                                                         uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t parameter_index = ctx->parameter_by_value[semantic_value];
+    const XrSemanticParameterRecord *parameter =
+        parameter_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
+            : NULL;
+    if (!parameter || parameter->value != semantic_value ||
+        xr_semantic_class_constructor_receiver_source_class(ctx->semantic, parameter_index) ==
+            XR_SEMANTIC_INDEX_NONE)
+        return false;
+    uint8_t ownership = parameter->ownership == XI_OWN_OWNED ? XR_TARGET_OWNERSHIP_OWNED
+                                                             : XR_TARGET_OWNERSHIP_BORROWED;
+    if (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED)
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep) : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != parameter->type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        binding->semantic_value != semantic_value ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != ownership || memory_rep->ownership != ownership ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != XR_SEMANTIC_INDEX_NONE ||
+        slot->function != parameter->function || slot->role != XR_TARGET_SLOT_PARAMETER ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC || slot->ownership != ownership)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 /* An element read or write is admitted only against a container this authority
  * already proved to be an exact array allocation. The index is an exact signed
  * 64-bit integer, the stored element matches the container's own element entry,
@@ -4547,9 +4620,15 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
     if (oracle_nullable_scalar_storage(ctx, semantic_value, out_storage,
                                        out_machine_kind))
         return true;
-    if (ctx->parameter_by_value[semantic_value] != XR_SEMANTIC_INDEX_NONE)
+    if (ctx->parameter_by_value[semantic_value] != XR_SEMANTIC_INDEX_NONE) {
+        /* A constructor receiver is a tagged instance, which has no scalar
+         * machine storage to report; every other parameter keeps its own. */
+        if (oracle_dynamic_source_class_receiver_storage(ctx, semantic_value, out_storage,
+                                                         out_machine_kind))
+            return true;
         return oracle_machine_storage(ctx, semantic_value, out_storage,
                                       out_machine_kind);
+    }
     uint32_t operation_index = ctx->operation_by_value[semantic_value];
     const XrSemanticOperationRecord *operation =
         operation_index != XR_SEMANTIC_INDEX_NONE
@@ -5001,6 +5080,20 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 return false;
             return oracle_dynamic_source_class_instance_storage(ctx, source_value, out_storage,
                                                                 &ignored_kind);
+        case XI_STORE_FIELD:
+            /* The receiver is the tagged instance the constructor received; the
+             * stored value keeps its own native scalar storage. A field whose
+             * type has no storage row stays without authority rather than
+             * falling back to a tagged guess, so a class that stores a field
+             * this authority cannot represent is refused here. */
+            if (operand_index > 1 ||
+                xr_semantic_class_field_store_source_class(ctx->semantic, operation) ==
+                    XR_SEMANTIC_INDEX_NONE)
+                return false;
+            if (operand_index == 0)
+                return oracle_dynamic_source_class_receiver_storage(ctx, source_value, out_storage,
+                                                                    &ignored_kind);
+            return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_BOX:
         case XI_ENUM_DESCRIPTOR_BOX:
             return oracle_machine_storage(ctx, source_value, out_storage,
@@ -5091,6 +5184,24 @@ static bool authority_add_obligation(CollectContext *ctx,
     return true;
 }
 
+/* The storage a returned value carries. A scalar return keeps its own native
+ * storage, and the reference returns this authority can name are tagged: a
+ * closure, a string literal, the receiver a constructor hands back, and a
+ * direct local string result. The collecting pass and the verifying pass ask
+ * this one judgement rather than each spelling the same chain, so a return one
+ * admits can never be a return the other refuses. */
+static bool oracle_return_storage(const VerifyAuthority *ctx, uint32_t value,
+                                  XrRep *out_storage, uint16_t *out_machine_kind) {
+    return oracle_machine_storage(ctx, value, out_storage, out_machine_kind) ||
+           oracle_nullable_scalar_storage(ctx, value, out_storage, out_machine_kind) ||
+           oracle_dynamic_closure_storage(ctx, value, out_storage, out_machine_kind) ||
+           oracle_dynamic_string_literal_storage(ctx, value, out_storage, out_machine_kind) ||
+           oracle_dynamic_source_class_receiver_storage(ctx, value, out_storage,
+                                                        out_machine_kind) ||
+           oracle_dynamic_direct_local_string_result_storage(ctx, value, out_storage,
+                                                             out_machine_kind);
+}
+
 static bool authority_collect_obligations_indexed(
     CollectContext *ctx, const VerifyAuthority *oracle) {
     uint32_t operand_count = 0;
@@ -5169,30 +5280,17 @@ static bool authority_collect_obligations_indexed(
                      XR_SEMANTIC_INDEX_NONE);
             return false;
         }
+        /* A returned owned String is tagged storage. Each oracle re-proves its
+         * own exact TargetPlan row, so no unproven reference return reaches
+         * this path. */
         if (!ctx->policy->force_return_tagged &&
-            !oracle_machine_storage(oracle, block->control_value,
-                                    &output_storage, &machine_kind)) {
-            /* A returned owned String is tagged storage. Each oracle re-proves
-             * its own exact TargetPlan row, so no unproven reference return
-             * reaches this path. */
-            if (!oracle_nullable_scalar_storage(
-                    oracle, block->control_value, &output_storage,
-                    &machine_kind) &&
-                !oracle_dynamic_closure_storage(
-                    oracle, block->control_value, &output_storage,
-                    &machine_kind) &&
-                !oracle_dynamic_string_literal_storage(
-                    oracle, block->control_value, &output_storage,
-                    &machine_kind) &&
-                !oracle_dynamic_direct_local_string_result_storage(
-                    oracle, block->control_value, &output_storage,
-                    &machine_kind)) {
-                set_diag(ctx->diag,
-                         XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
-                         ctx->record_count, block->control_value,
-                         XR_SEMANTIC_INDEX_NONE);
-                return false;
-            }
+            !oracle_return_storage(oracle, block->control_value, &output_storage,
+                                   &machine_kind)) {
+            set_diag(ctx->diag,
+                     XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+                     ctx->record_count, block->control_value,
+                     XR_SEMANTIC_INDEX_NONE);
+            return false;
         }
         if (!authority_add_obligation(
                 ctx, oracle, block->control_value,
@@ -6159,20 +6257,8 @@ static bool verify_exact_semantic_coverage(VerifyAuthority *ctx) {
         XrRep output_storage = XR_REP_TAGGED;
         if (!ctx->policy->force_return_tagged) {
             uint16_t machine_kind = 0;
-            if (!oracle_machine_storage(ctx, block->control_value,
-                                        &output_storage, &machine_kind) &&
-                !oracle_nullable_scalar_storage(
-                    ctx, block->control_value, &output_storage,
-                    &machine_kind) &&
-                !oracle_dynamic_closure_storage(
-                    ctx, block->control_value, &output_storage,
-                    &machine_kind) &&
-                !oracle_dynamic_string_literal_storage(
-                    ctx, block->control_value, &output_storage,
-                    &machine_kind) &&
-                !oracle_dynamic_direct_local_string_result_storage(
-                    ctx, block->control_value, &output_storage,
-                    &machine_kind)) {
+            if (!oracle_return_storage(ctx, block->control_value, &output_storage,
+                                       &machine_kind)) {
                 set_diag(ctx->diag,
                          XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                          i, block->control_value, XR_SEMANTIC_INDEX_NONE);

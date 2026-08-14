@@ -2536,6 +2536,19 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
              exact_native_module_namespaces[operation->result_value] != 0))
             exact_types[operation->result_type] = 1;
     }
+    /* The constructor receiver is the one dynamic value in the plan that no
+     * operation result names: it is bound on entry rather than computed, so its
+     * type reaches this collector through the parameter table or not at all. */
+    size_t parameter_count = xr_semantic_plan_parameter_count(plan->semantic_plan);
+    for (uint32_t i = 0; i < (uint32_t) parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan->semantic_plan, i);
+        if (!parameter || parameter->type >= type_count ||
+            xr_semantic_class_constructor_receiver_source_class(plan->semantic_plan, i) ==
+                XR_SEMANTIC_INDEX_NONE)
+            continue;
+        exact_types[parameter->type] = 1;
+    }
     *out = exact_types;
     return true;
 }
@@ -2644,6 +2657,26 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                                                            semantic_value);
     bool exact_string_byte_parameter = semantic_u8_slice_parameter_is_exact(
         plan->semantic_plan, parameter) && parameter->type == semantic_type;
+    /* Recomputed through the shared judgement for the same reason the class
+     * object and the instance are. The receiver is the one value in the family
+     * whose declaration its type row cannot name, so the judgement reads it off
+     * the constructor's own identity; a builder row this verifier cannot
+     * re-derive from that identity stays unproven. */
+    uint32_t receiver_parameter =
+        operation ? XR_SEMANTIC_INDEX_NONE
+                  : xr_semantic_class_parameter_for_value(plan->semantic_plan, semantic_value);
+    const XrSemanticParameterRecord *receiver_record =
+        xr_semantic_plan_parameter(plan->semantic_plan, receiver_parameter);
+    bool exact_class_receiver =
+        xr_semantic_class_constructor_receiver_source_class(plan->semantic_plan,
+                                                            receiver_parameter) !=
+            XR_SEMANTIC_INDEX_NONE &&
+        receiver_record && receiver_record->type == semantic_type &&
+        receiver_record->function == semantic_function;
+    /* Whether the receiver owns its allocation is the parameter's own recorded
+     * ownership, never a property of the family. */
+    bool exact_class_receiver_borrowed =
+        exact_class_receiver && receiver_record->ownership == XI_OWN_BORROWED;
     bool exact_unit_enum = semantic_unit_enum_type_is_exact(type);
     bool exact_nullable_scalar = semantic_nullable_scalar_type_is_exact(type);
     uint16_t receive_scalar_kind = XR_MACHINE_REP_COUNT;
@@ -2655,7 +2688,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         XR_VALUE_BINDING_FAIL(10);
     int eligibility = operation_result_void || exact_heap_closure ||
                               exact_array_allocation || exact_class_object ||
-                              exact_class_instance ||
+                              exact_class_instance || exact_class_receiver ||
                               exact_string_literal || exact_direct_string_result ||
                               exact_stringbuilder ||
                               exact_stringbuilder_append ||
@@ -2685,7 +2718,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                         : 0;
     int expected_layout = -1;
     if (exact_heap_closure || exact_array_allocation || exact_class_object ||
-        exact_class_instance ||
+        exact_class_instance || exact_class_receiver ||
         exact_string_literal || exact_direct_string_result ||
         exact_stringbuilder ||
         exact_stringbuilder_append ||
@@ -2751,7 +2784,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         uint8_t expected_ownership =
             (exact_direct_callee || exact_go_callee || exact_source_namespace ||
              exact_native_module_namespace || exact_nullable_scalar ||
-             exact_class_instance_borrowed ||
+             exact_class_instance_borrowed || exact_class_receiver_borrowed ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
                 : XR_TARGET_OWNERSHIP_OWNED;
@@ -4508,6 +4541,17 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             if (!valid)
                 break;
         } else if (class_construction) {
+            /* The construction passes the declaration's own constructor
+             * parameters after its receiver. The shared judgement has already
+             * proved that contract, so what stays this loop's own is that every
+             * argument row names the operand and the parameter the contract
+             * fixed, and that caller and callee agree on one representation. */
+            uint32_t constructor_function = xr_semantic_class_constructor_function(
+                semantic, xr_semantic_class_construction_source_class(semantic, operation));
+            const XrSemanticFunctionRecord *constructor_callee =
+                constructor_function != XR_SEMANTIC_INDEX_NONE
+                    ? xr_semantic_plan_function(semantic, constructor_function)
+                    : NULL;
             valid = !suspends && operation->opcode == XI_CALL &&
                     reconstruct_call_identity("xray-target-source-class-constructor-v1",
                                               target->id, operation->id, 0, &expected_identity) &&
@@ -4517,7 +4561,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     call->source_export == XR_SEMANTIC_INDEX_NONE &&
                     stable_id_is_zero(call->source_export_identity) &&
                     stable_id_is_zero(call->source_callee_identity) &&
-                    call->argument_count == 0 && call->flags == 0 &&
+                    call->argument_count == operation->operand_count - 1u &&
+                    (call->argument_count == 0 || constructor_callee) &&
+                    call->flags == 0 &&
                     call->calling_convention ==
                         XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR &&
                     call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
@@ -4525,6 +4571,55 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     result->slot < plan->slots_count &&
                     plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
                     plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
+            if (!valid)
+                break;
+            for (uint32_t ordinal = 0; valid && ordinal < call->argument_count; ordinal++) {
+                const XrTargetCallArgumentRecord *argument =
+                    &plan->call_arguments[next_argument];
+                uint32_t parameter_index = constructor_callee->parameter_begin + 1u + ordinal;
+                uint32_t semantic_operand = operation->operand_begin + ordinal + 1u;
+                const XrSemanticParameterRecord *parameter =
+                    xr_semantic_plan_parameter(semantic, parameter_index);
+                const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+                const XrTargetValueRepRecord *caller_value =
+                    xr_target_plan_value_rep(plan, operand->value);
+                const XrTargetValueRepRecord *callee_value =
+                    parameter ? xr_target_plan_value_rep(plan, parameter->value) : NULL;
+                XrStableId argument_identity;
+                uint16_t argument_kind = XR_MACHINE_REP_COUNT;
+                int argument_scalar =
+                    operand->type < xr_semantic_plan_type_count(semantic)
+                        ? semantic_type_expected_rep(
+                              xr_semantic_plan_type(semantic, operand->type), &argument_kind)
+                        : -1;
+                uint8_t ownership = operand->ownership_action == XR_SEM_OPERAND_CONSUME
+                                        ? XR_TARGET_CALL_CONSUME
+                                        : XR_TARGET_CALL_READ;
+                valid = parameter && argument_scalar == 1 && caller_value && callee_value &&
+                        slot_binds_value_in_function(plan, caller_value, operation->function) &&
+                        slot_binds_value_in_function(plan, callee_value,
+                                                     constructor_function) &&
+                        caller_value->register_rep == callee_value->register_rep &&
+                        caller_value->memory_rep == callee_value->memory_rep &&
+                        reconstruct_call_identity("xray-target-call-argument-v1", target->id,
+                                                  parameter->id, ordinal, &argument_identity) &&
+                        xr_stable_id_equal(argument->identity, argument_identity) &&
+                        argument->call == i &&
+                        argument->semantic_operand == semantic_operand &&
+                        argument->semantic_value == operand->value &&
+                        argument->callee_parameter == parameter_index &&
+                        argument->caller_slot == caller_value->slot &&
+                        argument->callee_slot == callee_value->slot &&
+                        argument->register_rep == caller_value->register_rep &&
+                        argument->memory_rep == caller_value->memory_rep &&
+                        plan->machine_reps[argument->register_rep].kind == argument_kind &&
+                        argument->ordinal == ordinal &&
+                        argument->mode == XR_TARGET_CALL_VALUE &&
+                        argument->ownership == ownership &&
+                        argument->transfer_mode == operand->transfer_mode &&
+                        argument->flags == 0;
+                next_argument++;
+            }
             if (!valid)
                 break;
         } else if (channel_close) {

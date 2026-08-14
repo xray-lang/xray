@@ -4153,6 +4153,115 @@ static bool builder_add_source_class_instance_storage(XrTargetPlanBuilder *build
     return true;
 }
 
+/* Binds the instance a constructor receives. The receiver is the one value in
+ * the construction family whose declaration its own type row cannot name, so it
+ * is bound from the function's identity instead; everything else about it is
+ * the same outer tagged value the construction returns, because the IR gives an
+ * instance no machine geometry a bare object pointer could state. The ownership
+ * is the parameter's own recorded ownership rather than a property of the
+ * family, and the slot is a parameter slot rather than a temporary, because the
+ * value is bound on entry rather than computed. The allocation, its roots and
+ * its cleanup stay with semantic ownership and the existing AOT class lifetime
+ * path, so this family adds no root or cleanup row. */
+static bool note_source_class_receiver_storage_value(XrTargetPlanBuilder *builder,
+                                                     XrTargetValueStorageAnalysis *analysis,
+                                                     uint32_t parameter_index, char *error,
+                                                     size_t error_size) {
+    const XrSemanticPlan *plan = builder->semantic_plan;
+    const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
+    if (xr_semantic_class_constructor_receiver_source_class(plan, parameter_index) ==
+            XR_SEMANTIC_INDEX_NONE ||
+        !parameter || parameter->value >= analysis->total_values ||
+        parameter->type >= analysis->type_count ||
+        parameter->function >= xr_semantic_plan_function_count(plan) ||
+        analysis->defined_values[parameter->value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "source class receiver storage authority is incomplete");
+    bool owned = parameter->ownership == XI_OWN_OWNED;
+    if (!owned && parameter->ownership != XI_OWN_BORROWED)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "source class receiver has no exact ownership authority");
+    if (analysis->type_rep_kinds[parameter->type] != XR_MACHINE_REP_COUNT &&
+        analysis->type_rep_kinds[parameter->type] != XR_MACHINE_REP_DYN_VALUE)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "semantic class receiver type has conflicting storage representations");
+    XrTargetMachineRepRecord rep;
+    const XrTargetMachineFacts *facts = xr_target_profile_machine_facts(builder->profile);
+    if (!(owned ? make_dynamic_value_rep(facts, &rep)
+                : make_borrowed_dynamic_value_rep(facts, &rep)) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize exact class receiver storage");
+    XrStableId slot_identity;
+    if (!make_slot_identity(plan, parameter->function, XR_TARGET_SLOT_PARAMETER, parameter->id,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "class receiver slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = parameter->function,
+        .semantic_value = parameter->value,
+        .semantic_operation = XR_SEMANTIC_INDEX_NONE,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_PARAMETER,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = owned ? XR_TARGET_OWNERSHIP_OWNED : XR_TARGET_OWNERSHIP_BORROWED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = parameter->value,
+        .semantic_function = parameter->function,
+        .semantic_type = parameter->type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[parameter->type] &&
+         !append_layout_intent(builder, parameter->type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                               error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[parameter->value] = 1;
+    analysis->used_types[parameter->type] = 1;
+    analysis->value_types[parameter->value] = parameter->type;
+    analysis->value_functions[parameter->value] = parameter->function;
+    analysis->type_rep_kinds[parameter->type] = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+static bool builder_add_source_class_receiver_storage(XrTargetPlanBuilder *builder, char *error,
+                                                      size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    /* A value another family already bound is not this family's to claim. */
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values)
+            analysis.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < parameter_count; i++) {
+        if (xr_semantic_class_constructor_receiver_source_class(builder->semantic_plan, i) ==
+            XR_SEMANTIC_INDEX_NONE)
+            continue;
+        valid = note_source_class_receiver_storage_value(builder, &analysis, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE;
+    return true;
+}
+
 static bool builder_add_string_literal_storage(
     XrTargetPlanBuilder *builder, char *error, size_t error_size) {
     if (!builder_begin_family(builder,
@@ -5671,11 +5780,14 @@ static bool collect_channel_close_call_intent(
 }
 
 /* The construction of a declared class. The SemanticPlan target names the
- * declaration and nothing else, so the intent carries no callee function, no
- * argument and no suspension: the shared class-shape judgement admits only a
- * call whose effects are the generated call effects, which excludes suspension.
- * The result is the owned instance the construction returns, and its storage
- * belongs to the source-class instance family. */
+ * declaration and nothing else, so the intent carries no callee function and no
+ * suspension: the shared class-shape judgement admits only a call whose effects
+ * are the generated call effects, which excludes suspension. The result is the
+ * owned instance the construction returns, and its storage belongs to the
+ * source-class instance family. The arguments are the declaration's own
+ * constructor parameters after its receiver, which the same shared judgement
+ * has already matched one for one; the receiver itself is never an argument,
+ * because the construction supplies it rather than passing it. */
 static bool collect_source_class_constructor_call_intent(
     XrTargetPlanBuilder *builder, uint32_t target_index,
     const XrSemanticCallTargetRecord *target, char *error, size_t error_size) {
@@ -5691,6 +5803,14 @@ static bool collect_source_class_constructor_call_intent(
         source_class == XR_SEMANTIC_INDEX_NONE)
         return fail(error, error_size, "XR_TARGET_1003",
                     "source class construction dispatch authority is incomplete");
+    uint16_t argument_count = (uint16_t) (operation->operand_count - 1u);
+    uint32_t constructor = xr_semantic_class_constructor_function(plan, source_class);
+    const XrSemanticFunctionRecord *callee =
+        constructor != XR_SEMANTIC_INDEX_NONE ? xr_semantic_plan_function(plan, constructor)
+                                              : NULL;
+    if (argument_count != 0 && !callee)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "source class construction argument authority is incomplete");
     XrTargetCallIntent call = {
         .semantic_call_target = target_index,
         .semantic_operation = target->operation,
@@ -5700,7 +5820,7 @@ static bool collect_source_class_constructor_call_intent(
         .source_export = XR_SEMANTIC_INDEX_NONE,
         .result_value = operation->result_value,
         .argument_begin = builder->call_argument_intent_count,
-        .argument_count = 0,
+        .argument_count = argument_count,
         .result_mode = XR_TARGET_CALL_VALUE,
         .result_ownership = XR_TARGET_CALL_RETURN_OWNED,
         .calling_convention = XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR,
@@ -5710,6 +5830,42 @@ static bool collect_source_class_constructor_call_intent(
                                    operation->id, 0, &call.identity))
         return fail(error, error_size, "XR_TARGET_1003",
                     "source class construction call identity is incomplete");
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    uint32_t call_intent = builder->call_intent_count;
+    for (uint16_t ordinal = 0; ordinal < argument_count; ordinal++) {
+        uint32_t parameter_index = callee->parameter_begin + 1u + ordinal;
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan, parameter_index);
+        uint32_t semantic_operand = operation->operand_begin + 1u + ordinal;
+        if (!operands || !parameter || semantic_operand >= operand_count)
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "source class construction argument authority is incomplete");
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        /* The shared judgement already proved the contract; what stays this
+         * collector's own is that the argument has a storage this profile can
+         * name, so a construction taking an argument the plan cannot represent
+         * is refused rather than emitted. */
+        if (!call_type_is_exact_scalar(plan, operand->type))
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "source class construction argument needs unsupported storage");
+        XrTargetCallArgumentIntent argument = {
+            .call_intent = call_intent,
+            .semantic_operand = semantic_operand,
+            .semantic_value = operand->value,
+            .callee_parameter = parameter_index,
+            .ordinal = ordinal,
+            .mode = XR_TARGET_CALL_VALUE,
+            .ownership = operand->ownership_action == XR_SEM_OPERAND_CONSUME
+                             ? XR_TARGET_CALL_CONSUME
+                             : XR_TARGET_CALL_READ,
+            .transfer_mode = operand->transfer_mode,
+        };
+        if (!stable_identity_from_pair("xray-target-call-argument-v1", target->id, parameter->id,
+                                       ordinal, &argument.identity) ||
+            !append_call_argument_intent(builder, &argument, error, error_size))
+            return false;
+    }
     return append_call_intent(builder, &call, error, error_size);
 }
 
@@ -8026,6 +8182,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_array_member_result_storage(builder, error, error_size) ||
         !builder_add_source_class_object_storage(builder, error, error_size) ||
         !builder_add_source_class_instance_storage(builder, error, error_size) ||
+        !builder_add_source_class_receiver_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
         !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_append_rune_storage(builder, error, error_size) ||

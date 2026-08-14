@@ -67,6 +67,14 @@ The source-class-object-storage family describes only the owned dynamic outer
 source-class table rather than through its erased result type. It grants no
 class object body, field or method table, construction, root, cleanup, or
 member lookup, and remains outside the trivial frame allocator.
+The source-class-receiver-storage family describes only the outer dynamic
+`XrValue` of the instance a constructor is entered with, named through the
+function the plan records as the constructor of one frozen declaration rather
+than through its own type row, which names no declaration at all. Its slot is a
+parameter role because the value is bound on entry rather than computed, and
+its ownership is the parameter's own recorded ownership. It grants no class
+body, field or method table, allocation, root, cleanup, or member lookup, and
+remains outside the trivial frame allocator.
 The SOURCE-namespace-storage family describes only borrowed dynamic outer
 `XrValue` tokens in an exact import/store/load chain whose load is consumed as
 the receiver of a SOURCE_EXPORT call. It grants no imported module object
@@ -128,7 +136,7 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 4b15ee52999b7efdb426d0d28a554bdfdde14384d1393e17aa7b553b16a60cfb
+anchor-sha256: src/plan/target/xr_target_plan.h 29847211996d4c6a8d860fe724cc994e649ddf7c3b0f69b7f7f0be4deaf047a8
 anchor-sha256: src/vm/xr_typed_frame.h b51b7f45110ccd0f05a1b6595a4a960eec1606d2bae6dbd21e95633fed2b0151
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
