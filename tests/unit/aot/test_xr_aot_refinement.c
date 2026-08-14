@@ -1947,6 +1947,26 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
             task_machine->kind == XR_MACHINE_REP_DYN_VALUE &&
             task_machine->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
             task_machine->root_kind == XR_TARGET_ROOT_DYNAMIC);
+    uint32_t live_task_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t live_task_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        fixture.target_plan, fixture.function, fixture.go,
+        &live_task_function, &live_task_value, error, sizeof(error)));
+    REQUIRE(live_task_function == task_function &&
+            live_task_value == task_value);
+
+    /* A source class that reuses the Task spelling is not the frozen builtin
+     * declaration. The live bridge must reject it even when every scalar
+     * representation field remains otherwise identical. */
+    XrClassInfo *saved_class_ref = fixture.go->type->instance.class_ref;
+    fixture.go->type->instance.class_ref = (XrClassInfo *) fixture.function;
+    REQUIRE(!xr_aot_scalar_semantic_value_id(
+        fixture.target_plan, fixture.function, fixture.go,
+        &live_task_function, &live_task_value, error, sizeof(error)));
+    fixture.go->type->instance.class_ref = saved_class_ref;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        fixture.target_plan, fixture.function, fixture.go,
+        &live_task_function, &live_task_value, error, sizeof(error)));
 
     XrCEmissionPlan *emission = NULL;
     REQUIRE(xr_c_emission_plan_build(

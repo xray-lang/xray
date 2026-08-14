@@ -52,22 +52,48 @@ static bool parameter_identity_is_exact(const XiFunc *function, const XiValue *v
     return function->params[parameter] == value;
 }
 
+/* Independently reconstruct the builtin declaration identity used by the
+ * SemanticPlan type producer. A matching spelling with a source class_ref is
+ * deliberately not a builtin and cannot inherit its frozen storage flags. */
+static uint32_t live_frozen_builtin_type(const XrType *type) {
+    if (xr_type_is_builtin_named_class(type, "StringBuilder"))
+        return XR_TID_STRINGBUILDER;
+    if (xr_type_is_builtin_named_class(type, "Task"))
+        return XR_TID_COROUTINE;
+    if (xr_type_is_builtin_named_class(type, "WorkQueue"))
+        return XR_TID_WORKQUEUE;
+    if (xr_type_is_builtin_named_class(type, "ResultGroup"))
+        return XR_TID_RESULTGROUP;
+    if (xr_type_is_builtin_named_class(type, "CountdownLatch"))
+        return XR_TID_COUNTDOWNLATCH;
+    if (xr_type_is_builtin_named_class(type, "Semaphore"))
+        return XR_TID_SEMAPHORE;
+    if (xr_type_is_builtin_named_class(type, "EventCount"))
+        return XR_TID_EVENTCOUNT;
+    return XR_TID_NULL;
+}
+
 static bool semantic_type_is_exact(const XrSemanticTypeRecord *semantic,
                                    const XrType *type) {
     if (!semantic || !type || semantic->kind != (uint32_t) type->kind ||
         semantic->scalar_rep != type->scalar_rep)
         return false;
+    uint32_t builtin_type = live_frozen_builtin_type(type);
+    bool reference_capable =
+        builtin_type != XR_TID_NULL || xi_own_type_is_rc(type);
+    bool borrow_view = type->kind == XR_KIND_SLICE;
     uint8_t flags =
         (uint8_t) ((type->is_nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
                    (type->is_const ? XR_SEM_TYPE_CONST : 0u) |
                    (type->is_value_type ? XR_SEM_TYPE_VALUE : 0u) |
                    (type->is_literal ? XR_SEM_TYPE_LITERAL : 0u) |
-                   (xi_own_type_is_rc(type) ? XR_SEM_TYPE_REFERENCE_CAPABLE : 0u) |
-                   (type->kind == XR_KIND_SLICE ? XR_SEM_TYPE_BORROW_VIEW : 0u) |
-                   (xi_own_type_is_rc(type) && type->kind != XR_KIND_SLICE
+                   (reference_capable ? XR_SEM_TYPE_REFERENCE_CAPABLE : 0u) |
+                   (borrow_view ? XR_SEM_TYPE_BORROW_VIEW : 0u) |
+                   (reference_capable && !borrow_view
                         ? XR_SEM_TYPE_OWNERSHIP_ROOT
                         : 0u));
-    return semantic->flags == flags;
+    return semantic->builtin_type == builtin_type &&
+           semantic->flags == flags;
 }
 
 static bool semantic_value_shape_is_exact(const XrSemanticPlan *plan,
