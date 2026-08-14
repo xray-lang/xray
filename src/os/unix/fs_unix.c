@@ -102,7 +102,11 @@ int xr_fs_mkdir(const char *path, unsigned int mode) {
     }
     if (errno == EEXIST) {
         struct stat st;
-        if (lstat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
+        /* The contract is "already names a directory", which path resolution
+         * answers after following a final symlink.  lstat here would reject a
+         * symlinked directory such as the macOS /var -> private/var hop and
+         * break every recursive create that walks through it. */
+        if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
             return 0;
         }
     }

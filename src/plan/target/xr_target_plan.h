@@ -92,10 +92,29 @@ typedef enum XrTargetInstructionOpcode {
      * entry rather than trusted to name one. */
     XR_TARGET_INSTRUCTION_JUMP,
     /* The condition is an ordinary defined i64 slot and the branch is taken
-     * when it is not zero. There is no boolean slot, machine representation, or
-     * comparison row in this family, so the condition needs no type the slot
-     * proof does not already establish. */
+     * when it is not zero, so it needs no type the slot proof does not already
+     * establish. */
     XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64,
+    /* The six relations over a pair of exact signed i64 slots. Their result is
+     * a truth value, so it lands in a truth slot rather than in the signed i64
+     * slot every other computation writes: the language types a comparison
+     * `bool`, and the plan gives a bool value a one-byte I1 slot, which no
+     * spelling in this family can turn into an eight-byte signed one. Each
+     * relation is its own opcode rather than one opcode selecting a relation
+     * from its immediate, so a row's meaning never depends on a field the
+     * opcode does not already fix. */
+    XR_TARGET_INSTRUCTION_CMP_EQ_I64,
+    XR_TARGET_INSTRUCTION_CMP_NE_I64,
+    XR_TARGET_INSTRUCTION_CMP_LT_I64,
+    XR_TARGET_INSTRUCTION_CMP_LE_I64,
+    XR_TARGET_INSTRUCTION_CMP_GT_I64,
+    XR_TARGET_INSTRUCTION_CMP_GE_I64,
+    /* The branch a comparison feeds. Its condition is a defined truth slot and
+     * it takes its first edge when that slot is not zero, which is the same
+     * edge rule the i64 branch carries; only the width of the condition it
+     * reads differs, and that width is fixed by the opcode rather than looked
+     * up while the row runs. */
+    XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL,
     XR_TARGET_INSTRUCTION_COUNT,
 } XrTargetInstructionOpcode;
 
@@ -125,7 +144,19 @@ typedef enum XrTargetInstructionOpcode {
 #define XR_TARGET_INSTRUCTION_IS_TERMINATOR(opcode)                                                 \
     ((opcode) == XR_TARGET_INSTRUCTION_RETURN_I64 ||                                                \
      (opcode) == XR_TARGET_INSTRUCTION_JUMP ||                                                      \
-     (opcode) == XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64)
+     (opcode) == XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64 ||                                     \
+     (opcode) == XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL)
+
+/* The rows whose result is a truth value rather than a signed i64. Spelled out
+ * for the same reason as the terminator set: which slot family a row writes is
+ * a property of the opcode, and no enum range may decide it. */
+#define XR_TARGET_INSTRUCTION_IS_COMPARE(opcode)                                                    \
+    ((opcode) == XR_TARGET_INSTRUCTION_CMP_EQ_I64 ||                                                \
+     (opcode) == XR_TARGET_INSTRUCTION_CMP_NE_I64 ||                                                \
+     (opcode) == XR_TARGET_INSTRUCTION_CMP_LT_I64 ||                                                \
+     (opcode) == XR_TARGET_INSTRUCTION_CMP_LE_I64 ||                                                \
+     (opcode) == XR_TARGET_INSTRUCTION_CMP_GT_I64 ||                                                \
+     (opcode) == XR_TARGET_INSTRUCTION_CMP_GE_I64)
 
 #define XR_TARGET_REQUIRED_FAMILIES                                                         \
     ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                  \

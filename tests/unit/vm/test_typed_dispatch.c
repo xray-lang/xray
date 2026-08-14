@@ -34,6 +34,13 @@ typedef struct TypedDispatchFixture {
 } TypedDispatchFixture;
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+/* The type a comparison answers. It is not an integer with a restricted range:
+ * the plan lays a `bool` value out as a one-byte I1 slot, which is exactly why
+ * the executable family needs a truth slot beside its signed i64 one. */
+static XrType stub_bool = {.kind = XR_KIND_BOOL,
+                           .id = 2,
+                           .frozen = true,
+                           .scalar_rep = XR_SCALAR_REP_NONE};
 
 static XrSemanticPlan *build_semantic(void) {
     XiFunc *function = xi_func_new("typed_dispatch_probe", &stub_int);
@@ -264,6 +271,52 @@ static XrSemanticPlan *build_jump_semantic(void) {
     xi_block_set_return(exit, answer);
     middle->sealed = true;
     exit->sealed = true;
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
+
+/* fn(first, second) -> if (first REL second) { return first + second }
+ *                      return first - second
+ *
+ * This is the shape a real `if (a > b)` has: the condition is the bool a
+ * comparison produced, not an integer the caller handed in. The two arms are
+ * different functions of the same pair, so the answer names which edge ran, and
+ * the greater/less/equal argument pairs the test drives it with separate all
+ * six relations from one another. */
+static XrSemanticPlan *build_compare_semantic(const char *name, XiOp op) {
+    XiFunc *function = xi_func_new(name, &stub_int);
+    REQUIRE(function != NULL);
+    function->nparams = 2;
+    function->min_params = 2;
+    function->params = (XiValue **) xr_calloc(2, sizeof(XiValue *));
+    REQUIRE(function->params != NULL);
+    XiBlock *entry = xi_block_new(function);
+    XiBlock *taken = xi_block_new(function);
+    XiBlock *untaken = xi_block_new(function);
+    REQUIRE(entry && taken && untaken);
+    entry->sealed = true;
+    function->params[0] = xi_param(function, entry, 0, &stub_int);
+    function->params[1] = xi_param(function, entry, 1, &stub_int);
+    XiValue *relation = xi_value_new(function, entry, op, &stub_bool, 2);
+    XiValue *sum = xi_value_new(function, taken, XI_ADD, &stub_int, 2);
+    XiValue *difference = xi_value_new(function, untaken, XI_SUB, &stub_int, 2);
+    REQUIRE(function->params[0] && function->params[1] && relation && sum &&
+            difference);
+    relation->args[0] = function->params[0];
+    relation->args[1] = function->params[1];
+    sum->args[0] = function->params[0];
+    sum->args[1] = function->params[1];
+    difference->args[0] = function->params[0];
+    difference->args[1] = function->params[1];
+    xi_block_set_if(entry, relation, taken, untaken);
+    xi_block_set_return(taken, sum);
+    xi_block_set_return(untaken, difference);
+    taken->sealed = true;
+    untaken->sealed = true;
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
@@ -1066,6 +1119,146 @@ static void test_unconditional_jumps_chain_blocks(void) {
     xr_semantic_plan_free(semantic);
 }
 
+/* Expected values are written out rather than recomputed from the comparison
+ * owner the executor consumes, so the assertions are an independent oracle for
+ * each relation instead of a restatement of the implementation. */
+static void test_comparison_rows_drive_the_branch(void) {
+    const struct {
+        const char *name;
+        XiOp op;
+        uint8_t opcode;
+        /* greater, less, equal: the taken arm answers first + second and the
+         * other answers first - second, so these three triples are pairwise
+         * distinct across all six relations and no relation can pass with
+         * another relation's edges. */
+        int64_t expected[3];
+    } relations[] = {
+        {"typed_dispatch_eq", XI_EQ, XR_TARGET_INSTRUCTION_CMP_EQ_I64, {2, -2, 10}},
+        {"typed_dispatch_ne", XI_NE, XR_TARGET_INSTRUCTION_CMP_NE_I64, {12, 12, 0}},
+        {"typed_dispatch_lt", XI_LT, XR_TARGET_INSTRUCTION_CMP_LT_I64, {2, 12, 0}},
+        {"typed_dispatch_le", XI_LE, XR_TARGET_INSTRUCTION_CMP_LE_I64, {2, 12, 10}},
+        {"typed_dispatch_gt", XI_GT, XR_TARGET_INSTRUCTION_CMP_GT_I64, {12, -2, 0}},
+        {"typed_dispatch_ge", XI_GE, XR_TARGET_INSTRUCTION_CMP_GE_I64, {12, -2, 10}},
+    };
+    const int64_t pairs[3][2] = {{7, 5}, {5, 7}, {5, 5}};
+    for (size_t relation = 0; relation < sizeof(relations) / sizeof(relations[0]);
+         relation++) {
+        XrSemanticPlan *semantic =
+            build_compare_semantic(relations[relation].name,
+                                   relations[relation].op);
+        XrTargetProfile *profile = xr_test_target_profile_build(
+            false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        REQUIRE(profile != NULL);
+        XrTargetPlan *plan = NULL;
+        char error[512] = {0};
+        REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                     sizeof(error)));
+        uint32_t instruction_count = 0;
+        const XrTargetInstructionRecord *rows =
+            xr_target_plan_instructions(plan, &instruction_count);
+        REQUIRE(rows != NULL &&
+                instruction_count ==
+                    xr_semantic_plan_operation_count(semantic) + 3u);
+        uint32_t compare = row_of_opcode(rows, instruction_count,
+                                         relations[relation].opcode, 0);
+        uint32_t branch = row_of_opcode(rows, instruction_count,
+                                        XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL, 0);
+        uint32_t sum = row_of_opcode(rows, instruction_count,
+                                     XR_TARGET_INSTRUCTION_ADD_WRAP_I64, 0);
+        uint32_t difference = row_of_opcode(rows, instruction_count,
+                                            XR_TARGET_INSTRUCTION_SUB_WRAP_I64, 0);
+        REQUIRE(compare != UINT32_MAX && branch != UINT32_MAX &&
+                sum != UINT32_MAX && difference != UINT32_MAX);
+        /* The branch reads exactly what the comparison wrote, and each edge
+         * names the first row of an arm rather than the row that follows. */
+        REQUIRE(rows[branch].operand_slots[0] == rows[compare].result_slot);
+        REQUIRE(XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(rows[branch].immediate_bits) ==
+                sum);
+        REQUIRE(XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(rows[branch].immediate_bits) ==
+                difference);
+        /* The relation's answer really did land in a truth slot: one byte with
+         * an I1 representation, not the eight-byte signed slot every arithmetic
+         * row writes. */
+        uint32_t slot_count = 0;
+        const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
+        REQUIRE(slots != NULL && rows[compare].result_slot < slot_count);
+        const XrTargetSlotRecord *truth = &slots[rows[compare].result_slot];
+        REQUIRE(truth->size == 1 && truth->align == 1);
+        REQUIRE(xr_target_plan_machine_rep(plan, truth->memory_rep)->kind ==
+                XR_MACHINE_REP_I1);
+        REQUIRE(slots[rows[sum].result_slot].size == 8);
+        REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) ==
+                XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
+
+        XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+        for (size_t i = 0; i < 3; i++) {
+            int64_t result = 0;
+            REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, pairs[i],
+                                                  2, &result) ==
+                    XR_TYPED_DISPATCH_OK);
+            REQUIRE(result == relations[relation].expected[i]);
+        }
+
+        TypedDispatchFixture mutable_source = {.semantic = semantic,
+                                               .profile = profile,
+                                               .program_plan = plan,
+                                               .row_count = instruction_count};
+        XrTargetInstructionRecord mutated[16];
+        REQUIRE(instruction_count <= sizeof(mutated) / sizeof(mutated[0]));
+        size_t row_bytes = (size_t) instruction_count * sizeof(*rows);
+        /* Positive control: the unmutated rows still freeze, so every rejection
+         * below is attributable to its own mutation. */
+        memcpy(mutated, rows, row_bytes);
+        XrTargetPlan *refrozen = NULL;
+        REQUIRE(freeze_with_rows(&mutable_source, mutated, instruction_count,
+                                 &refrozen, error, sizeof(error)));
+        xr_target_plan_free(refrozen);
+
+        /* There is no immediate comparison form: an operand folded into the row
+         * would be a value the def-use proof never saw. */
+        memcpy(mutated, rows, row_bytes);
+        mutated[compare].immediate_bits = 3;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        /* A relation is binary; dropping the second operand may not leave a row
+         * the executor would read an unwritten slot for. */
+        memcpy(mutated, rows, row_bytes);
+        mutated[compare].operand_count = 1;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        memcpy(mutated, rows, row_bytes);
+        mutated[compare].operand_slots[1] = XR_TARGET_INSTRUCTION_SLOT_NONE;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        /* Both operands must be defined where the relation reads them, and the
+         * arm's value is not defined on the path through the entry block. */
+        memcpy(mutated, rows, row_bytes);
+        mutated[compare].operand_slots[0] = rows[sum].result_slot;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        /* The three rules the truth slot adds, each mutated on its own.
+         * An arithmetic row may not write a truth slot. */
+        memcpy(mutated, rows, row_bytes);
+        mutated[compare].opcode = XR_TARGET_INSTRUCTION_ADD_WRAP_I64;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        /* A relation may not write a signed i64 slot. */
+        memcpy(mutated, rows, row_bytes);
+        mutated[sum].opcode = XR_TARGET_INSTRUCTION_CMP_EQ_I64;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        /* The branch that reads eight bytes may not take a truth slot as its
+         * condition; which branch row it is fixes the width it reads. */
+        memcpy(mutated, rows, row_bytes);
+        mutated[branch].opcode = XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64;
+        expect_rows_rejected(&mutable_source, mutated);
+
+        xr_target_plan_free(plan);
+        xr_target_profile_free(profile);
+        xr_semantic_plan_free(semantic);
+    }
+}
+
 /* A verified program may loop forever, and no static proof could forbid that
  * without also forbidding ordinary loops. The executor's step budget is what
  * keeps such a program from hanging its caller. */
@@ -1112,6 +1305,7 @@ int main(void) {
     test_division_rows_take_the_zero_divisor_edge();
     test_conditional_branch_selects_its_edge();
     test_unconditional_jumps_chain_blocks();
+    test_comparison_rows_drive_the_branch();
     test_backward_jump_stops_at_the_step_budget();
     puts("typed dispatch tests passed");
     return 0;

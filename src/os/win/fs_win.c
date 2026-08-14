@@ -125,8 +125,15 @@ int xr_fs_mkdir(const char *path, unsigned int mode) {
     if (CreateDirectoryA(path, NULL)) {
         return 0;
     }
-    if (GetLastError() == ERROR_ALREADY_EXISTS && xr_fs_is_dir(path)) {
-        return 0;
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        /* The contract is "already names a directory", which path resolution
+         * answers after following a reparse point.  xr_fs_is_dir reports a
+         * directory junction as XR_FS_OTHER, so query the raw attributes and
+         * accept any existing directory the OS will resolve through. */
+        DWORD attributes = GetFileAttributesA(path);
+        if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            return 0;
+        }
     }
     return -1;
 }
