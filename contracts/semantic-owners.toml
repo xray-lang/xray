@@ -252,6 +252,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted"]
 
 [[core]]
+id = "slice-window"
+header = "src/shared/xr_slice_window_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "array-sort"
 header = "src/shared/xr_sort_core.h"
 representation = "native-and-tagged"
@@ -888,6 +895,22 @@ fixtures = [
   "tests/unit/ir/test_xi_cgen.c",
   "tests/aot/basic/pod_slice_owner.xr",
   "tests/aot/filetests/container/span_compare_pod_storage.xr",
+]
+
+[[operation]]
+id = "slice-window"
+observable_contract = "src/shared/xr_slice_window_core.h"
+semantic_kernel = "src/shared/xr_slice_window_core.h"
+vm_adapter = "src/vm/xvm_dispatch_collection.inc.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "shared.slice-window"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_slice_window_core.c",
+  "tests/diff/cases/semantics/collections/slice_window_shared_core.xr",
+  "tests/aot/filetests/cgen/slice_window_unsafe.xr",
+  "tests/aot/filetests/cgen/span_window_assert_bounds_plan.xr",
+  "tests/aot/filetests/cgen/span_window_dominating_false_guard.xr",
 ]
 
 [[operation]]

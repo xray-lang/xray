@@ -643,6 +643,7 @@ add_xray_unit_test(test_numeric_core stdlib/test_numeric_core.c)
 add_xray_unit_test(test_null_test_core stdlib/test_null_test_core.c)
 add_xray_unit_test(test_compare_core stdlib/test_compare_core.c)
 add_xray_unit_test(test_target_simd_core stdlib/test_target_simd_core.c)
+add_xray_unit_test(test_slice_window_core stdlib/test_slice_window_core.c)
 add_executable(test_xrt_compare_owner_freestanding
     aot/test_xrt_compare_owner_freestanding.c)
 target_include_directories(test_xrt_compare_owner_freestanding PRIVATE

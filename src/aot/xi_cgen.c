@@ -46,6 +46,7 @@
 #include "../shared/xr_reference_count_core.h"
 #include "../shared/xr_sync_core.h"
 #include "../shared/xr_target_simd_core.h"
+#include "../shared/xr_slice_window_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
@@ -5055,6 +5056,24 @@ static const char *cg_pod_slice_view_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: POD-slice view owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_slice_window_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_HI,
+                                        XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: slice-window owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: slice-window owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
@@ -10558,6 +10577,9 @@ static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
         "xrt_shift_eval",
         /* Proven-divisor division resolves to a native divide after inlining. */
         "xrt_int_div_mod_eval",
+        /* The window owner is header-inline arithmetic over the slice header;
+         * the bounds branch it feeds is accounted as R4 below. */
+        "xrt_slice_window_plan",
         "xrt_rotl",
         "xrt_rotr",
         "xrt_min",

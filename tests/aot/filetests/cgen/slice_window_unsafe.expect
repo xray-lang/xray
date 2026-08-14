@@ -1,3 +1,4 @@
 c_count=1:/* unchecked Slice.window access */
-c_contains=if (XR_UNLIKELY(_src.length < 0 || _start < 0 || _count < 0
+c_contains=xrt_slice_window_plan(XR_SLICE_WINDOW_PROOF_NONE, _src.length, _start, _count, _src.data
+c_contains=if (XR_UNLIKELY(!_win.admitted)) xrt_index_oob(_win.fault_operand, _src.length);
 c_syntax=pass

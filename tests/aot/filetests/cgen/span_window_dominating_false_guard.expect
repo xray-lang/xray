@@ -1,4 +1,4 @@
 args=--dump-xaot-plan
 contains=kind=window evidence=recv_agg+byte_slice+pod+range+no_clobber+dominating_guard drop=bounds
-c_contains=XR_ASSUME(_src.length >= 0 && _start >= 0 && _count >= 0
-c_not_contains=xrt_index_oob((_start < 0 || _start > _src.length)
+c_contains=xrt_slice_window_plan(XR_SLICE_WINDOW_PROOF_BOUNDS, _src.length, _start, _count, _src.data
+c_not_contains=xrt_index_oob(

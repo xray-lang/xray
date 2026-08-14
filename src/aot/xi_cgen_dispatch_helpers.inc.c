@@ -14716,6 +14716,16 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         emit_codegen_abort_expr(out);
         return;
     }
+    const char *adapter = cg_slice_window_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    /* A discharged bounds proof - an unsafe access the program asserted, or a
+     * span access plan the verifier eliminated - selects the narrower rule from
+     * the same owner instead of a private unchecked lowering. */
+    const char *proof =
+        bounds_proven ? "XR_SLICE_WINDOW_PROOF_BOUNDS" : "XR_SLICE_WINDOW_PROOF_NONE";
     if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
         fprintf(out, "%s(",
                 bounds_proven ? "xrt_c90_span_window_unchecked" : "xrt_c90_span_window");
@@ -14733,42 +14743,22 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     if (unchecked_access)
         fprintf(out, "; /* unchecked Slice.window access */ ");
-    if (has_fixed_count) {
-        fprintf(out, "; XR_ASSUME(_src.length >= 0); ");
-        if (!bounds_proven)
-            fprintf(out,
-                    "if (XR_UNLIKELY(_start < 0 || "
-                    "_start > _src.length - INT64_C(%" PRId64 "))) "
-                    "xrt_index_oob(_start, _src.length); ",
-                    fixed_count);
-        fprintf(out,
-                "XR_ASSUME(_start >= 0 && "
-                "_start <= _src.length - INT64_C(%" PRId64 ")); xr_span_t _out = _src; ",
-                fixed_count);
-        if (fixed_count > 0) {
-            fprintf(out,
-                    "XR_ASSUME(_src.data != NULL); _out.data = (void *)((uint8_t *)_src.data + "
-                    "(size_t)_start * ");
-            fprintf(out, "sizeof(%s)", elem.ctype);
-            fprintf(out, "); ");
-        }
-        fprintf(out, "_out.length = INT64_C(%" PRId64 "); _out; })", fixed_count);
-        return;
-    }
     fprintf(out, "; int64_t _count = ");
-    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-    fprintf(out, "; ");
+    /* A count the plan already resolved is spelled as the literal it is, so the
+     * owner folds against a constant here exactly as it does in the VM. */
+    if (has_fixed_count)
+        fprintf(out, "INT64_C(%" PRId64 ")", fixed_count);
+    else
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+    fprintf(out, "; XrSliceWindowPlan _win = %s(%s, _src.length, _start, _count, _src.data, "
+                 "sizeof(%s)); ",
+            adapter, proof, elem.ctype);
     if (!bounds_proven)
-        fprintf(out, "if (XR_UNLIKELY(_src.length < 0 || _start < 0 || _count < 0 || "
-                     "_start > _src.length || _count > _src.length - _start)) "
-                     "xrt_index_oob((_start < 0 || _start > _src.length) ? _start : _count, "
-                     "_src.length); ");
-    fprintf(out, "XR_ASSUME(_src.length >= 0 && _start >= 0 && _count >= 0 && "
-                 "_start <= _src.length && _count <= _src.length - _start); "
-                 "xr_span_t _out = _src; _out.data = (_src.data && _count > 0) ? "
-                 "(void *)((uint8_t *)_src.data + (size_t)_start * ");
-    fprintf(out, "sizeof(%s)", elem.ctype);
-    fprintf(out, ") : _src.data; _out.length = _count; _out; })");
+        fprintf(out, "if (XR_UNLIKELY(!_win.admitted)) "
+                     "xrt_index_oob(_win.fault_operand, _src.length); ");
+    fprintf(out, "XR_ASSUME(_win.admitted); xr_span_t _out = _src; _out.data = _win.advances ? "
+                 "(void *)((uint8_t *)_src.data + (size_t)_win.byte_offset) : _src.data; "
+                 "_out.length = _win.length; _out; })");
 }
 
 static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
