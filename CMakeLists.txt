@@ -3380,6 +3380,28 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # Matched XSM/XTP pairs on disk for the plan command. The incremental
+    # cache is the only producer of target plan artifacts today and it frames
+    # its entries, so the inspection commands need an unframed pair written
+    # straight from the builders.
+    add_executable(plan_fixture_writer
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/plan_fixture_writer.c)
+    target_include_directories(plan_fixture_writer PRIVATE ${XRAY_COMMON_INCLUDES})
+    target_link_libraries(plan_fixture_writer PRIVATE xray_core)
+
+    add_test(
+        NAME plan_command_cli
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_plan_command_tests.py
+                --binary $<TARGET_FILE:xray>
+                --fixture-writer $<TARGET_FILE:plan_fixture_writer>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(plan_command_cli PROPERTIES
+        LABELS "cli;artifact;target-machine"
+        TIMEOUT 120
+    )
+
     # Spec 8.1.1 uncaught value-return error diagnostic. A content gate: the
     # dropped-`go` shape exits 0 on both backends, so the VM/AOT differential
     # agrees even when one of them prints nothing.
