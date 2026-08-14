@@ -6871,6 +6871,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->args[0] = cap;
             v->aux = (void *) "array_with_capacity";
             v->aux_int = xi_array_cfield_from_type(result_type);
+            v->array_intrinsic_kind = XI_ARRAY_INTRINSIC_WITH_CAPACITY;
+            v->array_element_storage = xi_array_intrinsic_storage_from_type(result_type);
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
             return v;
@@ -9226,6 +9228,8 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             v->args[1] = fill;
             v->aux = (void *) "array_filled_new";
             v->aux_int = xi_array_cfield_from_type(result_type);
+            v->array_intrinsic_kind = XI_ARRAY_INTRINSIC_FILLED_NEW;
+            v->array_element_storage = xi_array_intrinsic_storage_from_type(result_type);
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
             return v;

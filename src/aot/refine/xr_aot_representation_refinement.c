@@ -268,6 +268,10 @@ typedef struct VerifyAuthority {
     uint64_t work;
 } VerifyAuthority;
 
+static bool oracle_dynamic_array_intrinsic_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind);
+
 static bool verify_charge_work(VerifyAuthority *ctx, uint64_t amount) {
     if (!ctx || amount > XR_AOT_REP_VERIFY_MAX_WORK - ctx->work) {
         if (ctx)
@@ -827,6 +831,197 @@ static bool aot_stringbuilder_constructor_is_exact(
                (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
            type->canonical_key &&
            strcmp(type->canonical_key, expected_type_key) == 0;
+}
+
+static bool aot_array_intrinsic_storage_is_exact(
+    const XrSemanticTypeRecord *element, uint8_t semantic_storage,
+    uint8_t *target_storage) {
+    uint8_t expected = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!element || !target_storage || element->child_count != 0 ||
+        element->aggregate_extent != 0 || element->aggregate_align != 0 ||
+        element->flags != 0)
+        return false;
+    switch (element->kind) {
+        case XR_KIND_INT:
+            switch (element->scalar_rep) {
+                case XR_NATIVE_I8: expected = XR_TARGET_ARRAY_STORAGE_I8; break;
+                case XR_NATIVE_U8: expected = XR_TARGET_ARRAY_STORAGE_U8; break;
+                case XR_NATIVE_I16: expected = XR_TARGET_ARRAY_STORAGE_I16; break;
+                case XR_NATIVE_U16: expected = XR_TARGET_ARRAY_STORAGE_U16; break;
+                case XR_NATIVE_I32: expected = XR_TARGET_ARRAY_STORAGE_I32; break;
+                case XR_NATIVE_U32: expected = XR_TARGET_ARRAY_STORAGE_U32; break;
+                case XR_NATIVE_I64: expected = XR_TARGET_ARRAY_STORAGE_I64; break;
+                case XR_NATIVE_U64: expected = XR_TARGET_ARRAY_STORAGE_U64; break;
+                default: return false;
+            }
+            break;
+        case XR_KIND_FLOAT:
+            if (element->scalar_rep == XR_NATIVE_F32)
+                expected = XR_TARGET_ARRAY_STORAGE_F32;
+            else if (element->scalar_rep == XR_NATIVE_F64)
+                expected = XR_TARGET_ARRAY_STORAGE_F64;
+            else
+                return false;
+            break;
+        case XR_KIND_BOOL:
+            if (element->scalar_rep != XR_SCALAR_REP_NONE)
+                return false;
+            expected = XR_TARGET_ARRAY_STORAGE_BOOL;
+            break;
+        case XR_KIND_RUNE:
+            if (element->scalar_rep != XR_SCALAR_REP_NONE)
+                return false;
+            expected = XR_TARGET_ARRAY_STORAGE_RUNE;
+            break;
+        default:
+            return false;
+    }
+    static const uint8_t semantic_by_target[XR_TARGET_ARRAY_STORAGE_COUNT] = {
+        [XR_TARGET_ARRAY_STORAGE_NONE] = XR_ELEM_ANY,
+        [XR_TARGET_ARRAY_STORAGE_I8] = XR_ELEM_I8,
+        [XR_TARGET_ARRAY_STORAGE_U8] = XR_ELEM_U8,
+        [XR_TARGET_ARRAY_STORAGE_I16] = XR_ELEM_I16,
+        [XR_TARGET_ARRAY_STORAGE_U16] = XR_ELEM_U16,
+        [XR_TARGET_ARRAY_STORAGE_I32] = XR_ELEM_I32,
+        [XR_TARGET_ARRAY_STORAGE_U32] = XR_ELEM_U32,
+        [XR_TARGET_ARRAY_STORAGE_I64] = XR_ELEM_I64,
+        [XR_TARGET_ARRAY_STORAGE_U64] = XR_ELEM_U64,
+        [XR_TARGET_ARRAY_STORAGE_F32] = XR_ELEM_F32,
+        [XR_TARGET_ARRAY_STORAGE_F64] = XR_ELEM_F64,
+        [XR_TARGET_ARRAY_STORAGE_BOOL] = XR_ELEM_BOOL,
+        [XR_TARGET_ARRAY_STORAGE_RUNE] = XR_ELEM_RUNE,
+    };
+    if (semantic_storage != semantic_by_target[expected])
+        return false;
+    *target_storage = expected;
+    return true;
+}
+
+static bool aot_array_intrinsic_fill_type_is_exact(
+    const XrSemanticTypeRecord *type, uint8_t element_storage) {
+    if (!type || type->builtin_type != XR_TID_NULL || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->flags != 0)
+        return false;
+    if (element_storage == XR_TARGET_ARRAY_STORAGE_RUNE)
+        return type->kind == XR_KIND_RUNE &&
+               type->scalar_rep == XR_SCALAR_REP_NONE;
+    if (element_storage <= XR_TARGET_ARRAY_STORAGE_NONE ||
+        element_storage >= XR_TARGET_ARRAY_STORAGE_RUNE)
+        return false;
+    if (type->kind == XR_KIND_BOOL)
+        return type->scalar_rep == XR_SCALAR_REP_NONE;
+    if (type->kind != XR_KIND_INT && type->kind != XR_KIND_FLOAT)
+        return false;
+    switch (type->scalar_rep) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_F32:
+        case XR_NATIVE_F64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* Independent reconstruction for ARRAY_INTRINSIC.  Only frozen semantic and
+ * target rows participate; Xi selector spellings, result-type guesses and the
+ * legacy packed immediate are deliberately unavailable here. */
+static bool aot_array_intrinsic_is_exact(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    uint8_t *target_kind, uint8_t *target_storage) {
+    uint32_t operand_count = 0, child_count = 0;
+    const XrSemanticOperandRecord *operands =
+        semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
+    const uint32_t *children =
+        semantic ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
+    bool with_capacity = operation &&
+        operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY;
+    bool filled = operation &&
+        operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
+    uint16_t expected_operands = with_capacity ? 1u : 2u;
+    if (!semantic || !operation || (!with_capacity && !filled) || !operands ||
+        !children || operation->opcode != XI_CALL_BUILTIN ||
+        operation->operand_count != expected_operands ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_BUILTIN) ||
+        operation->flags != xi_generated_op_default_flags(XI_CALL_BUILTIN) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_BUILTIN) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        !xr_semantic_allocation_identity_is_canonical(operation))
+        return false;
+    const XrSemanticTypeRecord *array =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    if (!array || array->kind != XR_KIND_ARRAY ||
+        array->builtin_type != XR_TID_NULL || array->child_count != 1 ||
+        array->child_begin >= child_count ||
+        array->scalar_rep != XR_SCALAR_REP_NONE ||
+        array->aggregate_extent != 0 || array->aggregate_align != 0 ||
+        array->flags !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(semantic, children[array->child_begin]);
+    const XrSemanticOperandRecord *count = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *count_type =
+        xr_semantic_plan_type(semantic, count->type);
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!count_type || !semantic_exact_i64_type(count_type) ||
+        count->role != XR_SEM_OPERAND_ARGUMENT || count->parameter != 0 ||
+        count->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        count->ownership_action != XR_SEM_OPERAND_CONSUME ||
+        !aot_array_intrinsic_storage_is_exact(
+            element, operation->array_element_storage, &storage))
+        return false;
+    if (filled) {
+        const XrSemanticOperandRecord *fill = count + 1;
+        const XrSemanticTypeRecord *fill_type =
+            xr_semantic_plan_type(semantic, fill->type);
+        if (!aot_array_intrinsic_fill_type_is_exact(fill_type, storage) ||
+            fill->role != XR_SEM_OPERAND_ARGUMENT || fill->parameter != 1 ||
+            fill->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+            fill->ownership_action != XR_SEM_OPERAND_CONSUME)
+            return false;
+    }
+    if (target_kind)
+        *target_kind = with_capacity
+            ? XR_TARGET_ARRAY_INTRINSIC_WITH_CAPACITY
+            : XR_TARGET_ARRAY_INTRINSIC_FILLED_NEW;
+    if (target_storage)
+        *target_storage = storage;
+    return true;
+}
+
+static bool aot_pair_identity(const char *domain, XrStableId first,
+                              XrStableId second, uint32_t ordinal,
+                              XrStableId *out) {
+    char first_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char second_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[192];
+    XrFingerprint digest;
+    xr_stable_id_hex(first, first_hex);
+    xr_stable_id_hex(second, second_hex);
+    int written = snprintf(key, sizeof(key),
+                           "%s:first=%s:second=%s:ordinal=%u", domain,
+                           first_hex, second_hex, ordinal);
+    return out && written > 0 && (size_t) written < sizeof(key) &&
+           xr_stable_id_from_key(key, out, &digest);
 }
 
 static bool aot_stable_id_is_zero(XrStableId id) {
@@ -3814,6 +4009,8 @@ static bool oracle_length_read_is_exact(const VerifyAuthority *ctx,
            container->value < ctx->value_count &&
            (oracle_dynamic_array_allocation_storage(
                 ctx, container->value, &container_storage, &container_kind) ||
+            oracle_dynamic_array_intrinsic_storage(
+                ctx, container->value, &container_storage, &container_kind) ||
             oracle_dynamic_string_literal_storage(
                 ctx, container->value, &container_storage, &container_kind) ||
             oracle_dynamic_string_concat_result_storage(
@@ -4055,6 +4252,145 @@ static bool oracle_dynamic_stringbuilder_storage(
         slot->ownership != XR_TARGET_OWNERSHIP_OWNED ||
         layout->kind != XR_TARGET_LAYOUT_DYNAMIC)
         return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+static bool oracle_dynamic_array_intrinsic_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index < ctx->operation_count
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    uint8_t kind = XR_TARGET_ARRAY_INTRINSIC_NONE;
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!aot_array_intrinsic_is_exact(ctx->semantic, operation, &kind, &storage))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep = binding
+        ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep)
+        : NULL;
+    const XrTargetMachineRepRecord *memory_rep = binding
+        ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep)
+        : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(ctx->target_plan, &call_count);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (call)
+            return false;
+        call = &calls[i];
+    }
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; operation && i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    uint32_t operand_count = 0, argument_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(ctx->semantic, &operand_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(ctx->target_plan, &argument_count);
+    XrStableId expected_call;
+    uint32_t discriminator = ((uint32_t) kind << 8) | storage;
+    bool expected_call_valid =
+        aot_pair_identity("xray-target-array-intrinsic-v1", operation->id,
+                          operation->allocation_id, discriminator,
+                          &expected_call);
+    if (!operation || !binding || !register_rep || !memory_rep || !slot ||
+        !layout || !call || !operands || !arguments ||
+        !expected_call_valid ||
+        !xr_stable_id_equal(call->identity, expected_call) ||
+        call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->caller_function != operation->function ||
+        call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !aot_stable_id_is_zero(call->source_export_identity) ||
+        !aot_stable_id_is_zero(call->source_callee_identity) ||
+        call->result_value != semantic_value ||
+        call->result_slot != binding->slot ||
+        call->result_register_rep != binding->register_rep ||
+        call->result_memory_rep != binding->memory_rep ||
+        call->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->argument_count != operation->operand_count ||
+        call->argument_begin > argument_count ||
+        call->argument_count > argument_count - call->argument_begin ||
+        call->adapter_count != 0 || call->flags != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_ARRAY_INTRINSIC ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ARRAY_INTRINSIC ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_RETURN_OWNED ||
+        call->array_intrinsic_kind != kind ||
+        call->array_element_storage != storage ||
+        call->reserved8[0] != 0 || call->reserved8[1] != 0 ||
+        call->reserved8[2] != 0 ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC)
+        return false;
+    for (uint16_t ordinal = 0; ordinal < call->argument_count; ordinal++) {
+        uint32_t semantic_operand = operation->operand_begin + ordinal;
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        const XrSemanticTypeRecord *type =
+            xr_semantic_plan_type(ctx->semantic, operand->type);
+        const XrTargetValueRepRecord *caller =
+            xr_target_plan_value_rep(ctx->target_plan, operand->value);
+        const XrTargetCallArgumentRecord *argument =
+            &arguments[call->argument_begin + ordinal];
+        XrStableId expected_argument;
+        if (!type || !caller ||
+            !aot_pair_identity("xray-target-array-intrinsic-argument-v1",
+                               operation->id, type->id, ordinal,
+                               &expected_argument) ||
+            !xr_stable_id_equal(argument->identity, expected_argument) ||
+            argument->call != call->id ||
+            argument->semantic_operand != semantic_operand ||
+            argument->semantic_value != operand->value ||
+            argument->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
+            argument->caller_slot != caller->slot ||
+            argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+            argument->register_rep != caller->register_rep ||
+            argument->memory_rep != caller->memory_rep ||
+            argument->callee_register_rep != caller->register_rep ||
+            argument->callee_memory_rep != caller->memory_rep ||
+            argument->ordinal != ordinal ||
+            argument->mode != XR_TARGET_CALL_VALUE ||
+            argument->ownership != XR_TARGET_CALL_CONSUME ||
+            argument->transfer_mode != operand->transfer_mode ||
+            argument->flags != 0)
+            return false;
+    }
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
     return true;
@@ -4707,6 +5043,10 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
                                                        operation))
                 return oracle_dynamic_stringbuilder_storage(
                     ctx, semantic_value, out_storage, out_machine_kind);
+            if (aot_array_intrinsic_is_exact(ctx->semantic, operation, NULL,
+                                             NULL))
+                return oracle_dynamic_array_intrinsic_storage(
+                    ctx, semantic_value, out_storage, out_machine_kind);
             return false;
         case XI_GET_BUILTIN:
             if (!aot_json_namespace_global_is_exact(ctx->semantic, operation))
@@ -4901,6 +5241,16 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         return true;
     switch (operation->opcode) {
         case XI_CALL_BUILTIN:
+            if (aot_array_intrinsic_is_exact(ctx->semantic, operation, NULL,
+                                             NULL)) {
+                XrRep result_storage = XR_REP_TAGGED;
+                if (!oracle_dynamic_array_intrinsic_storage(
+                        ctx, operation->result_value, &result_storage,
+                        &ignored_kind))
+                    return false;
+                return oracle_machine_storage(ctx, source_value, out_storage,
+                                              &ignored_kind);
+            }
             *out_storage = XR_REP_TAGGED;
             return true;
         case XI_RETAIN:
@@ -4917,6 +5267,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 !oracle_dynamic_array_allocation_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(
+                    ctx, source_value, &literal_storage, &ignored_kind) &&
+                !oracle_dynamic_array_intrinsic_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_json_namespace_value_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
@@ -4959,6 +5311,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 !oracle_dynamic_string_concat_result_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_array_allocation_storage(
+                    ctx, source_value, &machine_storage, &ignored_kind) &&
+                !oracle_dynamic_array_intrinsic_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&

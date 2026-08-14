@@ -19,6 +19,7 @@
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/plan/target/xr_target_verify.h"
+#include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/runtime/value/xstruct_layout.h"
 #include "../../../src/runtime/value/xenum_layout.h"
@@ -140,6 +141,13 @@ static XrType stub_target_u8 = {
     .id = 117,
     .frozen = true,
     .scalar_rep = XR_NATIVE_U8,
+};
+static XrType stub_target_u8_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 120,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_target_u8},
 };
 static XrType stub_target_u8_slice = {
     .kind = XR_KIND_SLICE,
@@ -391,6 +399,56 @@ static XrSemanticPlan *build_stringbuilder_constructor_semantic(void) {
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_array_intrinsic_semantic(void) {
+    XiFunc *function = xi_func_new("target_array_intrinsics", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *capacity = xi_const_int(function, entry, 2, &stub_int);
+    XiValue *with_capacity =
+        xi_value_new(function, entry, XI_CALL_BUILTIN,
+                     &stub_target_u8_array, 1);
+    REQUIRE(capacity != NULL && with_capacity != NULL);
+    with_capacity->args[0] = capacity;
+    with_capacity->aux = (void *) "array_with_capacity";
+    with_capacity->array_intrinsic_kind = XI_ARRAY_INTRINSIC_WITH_CAPACITY;
+    with_capacity->array_element_storage = XR_ELEM_U8;
+    XiValue *release_capacity =
+        xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release_capacity != NULL);
+    release_capacity->args[0] = with_capacity;
+
+    XiValue *count = xi_const_int(function, entry, 3, &stub_int);
+    XiValue *fill = xi_const_int(function, entry, 1, &stub_int);
+    XiValue *filled =
+        xi_value_new(function, entry, XI_CALL_BUILTIN,
+                     &stub_target_u8_array, 2);
+    REQUIRE(count != NULL && fill != NULL && filled != NULL);
+    filled->args[0] = count;
+    filled->args[1] = fill;
+    filled->aux = (void *) "array_filled_new";
+    filled->array_intrinsic_kind = XI_ARRAY_INTRINSIC_FILLED_NEW;
+    filled->array_element_storage = XR_ELEM_U8;
+    XiValue *release_filled =
+        xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release_filled != NULL);
+    release_filled->args[0] = filled;
+
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &semantic, error,
+                                        sizeof(error));
+    if (!built)
+        fprintf(stderr, "Array intrinsic semantic failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
     xi_func_free(function);
     return semantic;
 }
@@ -1390,7 +1448,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "c335608adf6ff6390d00858d08f898e589f517858718a078054808c056bf8d9f") == 0);
+                   "42b83ca1ef2571f6de45d3cf50c550b9e9a435c06e677dd5a9513266a6e0971f") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2460,7 +2518,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "1b094695fe5363d407230637aefb5132d2a1b865bca47616884036952ca3b8c8") == 0);
+                   "4ebc3fb1a19c8b08bd18aa9c8a6c344160386ab3549ca66646131a0ab380d009") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
         XrTargetCallArgumentRecord fabricated_argument = {0};
@@ -2981,7 +3039,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "130beab8a06cbf481874496790b4ece986c2e63db27e5bcb40ad874a955a394b") == 0);
+                   "06b64e6e4ecc33ae66182af38faedfdfed037ba83c8997441761374da246175c") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -3211,7 +3269,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "53c69e63ac652ae7c1141ac0c27dabcd19bd01b37fdb4aeb9bf0a437ddebe2cd") == 0);
+                   "5fac5833e13c498cbabbc0cabf37a88ba2819ba64175bc642aaf526343390524") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");
@@ -3287,6 +3345,135 @@ static void test_stringbuilder_constructor_call_authority(void) {
     expect_verify_failure(plan, "XR_TARGET_1003");
     call->result_register_rep = saved_rep;
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
+static void test_array_intrinsic_call_authority(void) {
+    XrSemanticPlan *semantic = build_array_intrinsic_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error,
+                                      sizeof(error));
+    if (!built)
+        fprintf(stderr, "Array intrinsic TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL && plan->calls_count == 2 &&
+            plan->call_arguments_count == 3);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    XrTargetCallRecord *with_capacity = NULL;
+    XrTargetCallRecord *filled = NULL;
+    for (uint32_t i = 0; i < plan->calls_count; i++) {
+        XrTargetCallRecord *call = &plan->calls[i];
+        REQUIRE(call->calling_convention ==
+                    XR_TARGET_CALL_CONVENTION_ARRAY_INTRINSIC &&
+                call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_INTRINSIC &&
+                call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                call->result_mode == XR_TARGET_CALL_VALUE &&
+                call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+                call->adapter_count == 0 && call->flags == 0);
+        if (call->array_intrinsic_kind ==
+            XR_TARGET_ARRAY_INTRINSIC_WITH_CAPACITY)
+            with_capacity = call;
+        else if (call->array_intrinsic_kind ==
+                 XR_TARGET_ARRAY_INTRINSIC_FILLED_NEW)
+            filled = call;
+    }
+    REQUIRE(with_capacity != NULL && filled != NULL &&
+            with_capacity->array_element_storage ==
+                XR_TARGET_ARRAY_STORAGE_U8 &&
+            with_capacity->argument_count == 1 &&
+            filled->array_element_storage == XR_TARGET_ARRAY_STORAGE_U8 &&
+            filled->argument_count == 2);
+    for (uint32_t i = 0; i < plan->call_arguments_count; i++) {
+        XrTargetCallArgumentRecord *argument = &plan->call_arguments[i];
+        REQUIRE(argument->callee_parameter == XR_SEMANTIC_INDEX_NONE &&
+                argument->callee_slot == XR_SEMANTIC_INDEX_NONE &&
+                argument->mode == XR_TARGET_CALL_VALUE &&
+                argument->ownership == XR_TARGET_CALL_CONSUME &&
+                argument->flags == 0);
+    }
+
+    uint8_t saved_kind = with_capacity->array_intrinsic_kind;
+    with_capacity->array_intrinsic_kind =
+        XR_TARGET_ARRAY_INTRINSIC_FILLED_NEW;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    with_capacity->array_intrinsic_kind = saved_kind;
+
+    uint8_t saved_storage = with_capacity->array_element_storage;
+    with_capacity->array_element_storage = XR_TARGET_ARRAY_STORAGE_I64;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    with_capacity->array_element_storage = saved_storage;
+
+    XrTargetCallArgumentRecord *first =
+        &plan->call_arguments[with_capacity->argument_begin];
+    uint16_t saved_ordinal = first->ordinal;
+    first->ordinal = 1;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    first->ordinal = saved_ordinal;
+
+    uint8_t saved_ownership = first->ownership;
+    first->ownership = XR_TARGET_CALL_READ;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    first->ownership = saved_ownership;
+
+    XrStableId saved_identity = first->identity;
+    first->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    first->identity = saved_identity;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(
+        plan, xr_target_profile_fingerprint(profile), &emission, error,
+        sizeof(error)));
+    XrCValueEmissionView with_capacity_view = {0};
+    XrCValueEmissionView filled_view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+                emission, with_capacity->result_value, &with_capacity_view,
+                error, sizeof(error)) &&
+            xr_c_emission_plan_value_view(
+                emission, filled->result_value, &filled_view, error,
+                sizeof(error)));
+    const XrSemanticOperationRecord *with_capacity_operation =
+        xr_semantic_plan_operation(semantic,
+                                   with_capacity->semantic_operation);
+    const XrSemanticOperationRecord *filled_operation =
+        xr_semantic_plan_operation(semantic, filled->semantic_operation);
+    uint32_t semantic_operand_count = 0;
+    const XrSemanticOperandRecord *semantic_operands =
+        xr_semantic_plan_operands(semantic, &semantic_operand_count);
+    REQUIRE(with_capacity_operation && filled_operation && semantic_operands &&
+            with_capacity_operation->operand_begin < semantic_operand_count &&
+            filled_operation->operand_begin + 1u < semantic_operand_count &&
+            with_capacity_view.rep == XR_C_VALUE_REP_TAGGED &&
+            with_capacity_view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_ARRAY_WITH_CAPACITY &&
+            with_capacity_view.recipe_discriminant ==
+                XR_TARGET_ARRAY_STORAGE_U8 &&
+            with_capacity_view.recipe_operand_value ==
+                semantic_operands[with_capacity_operation->operand_begin].value &&
+            with_capacity_view.recipe_argument_value == UINT32_MAX &&
+            with_capacity_view.recipe_symbol &&
+            strcmp(with_capacity_view.recipe_symbol,
+                   "xrt_array_with_capacity_value") == 0 &&
+            filled_view.rep == XR_C_VALUE_REP_TAGGED &&
+            filled_view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_ARRAY_FILLED_NEW &&
+            filled_view.recipe_discriminant ==
+                XR_TARGET_ARRAY_STORAGE_U8 &&
+            filled_view.recipe_operand_value ==
+                semantic_operands[filled_operation->operand_begin].value &&
+            filled_view.recipe_argument_value ==
+                semantic_operands[filled_operation->operand_begin + 1u].value &&
+            filled_view.recipe_symbol &&
+            strcmp(filled_view.recipe_symbol,
+                   "xrt_array_new_filled_value") == 0);
+    xr_c_emission_plan_free(emission);
 
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
@@ -3825,8 +4012,14 @@ static void test_bool_and_nullable_scalar_boundary(void) {
     xr_target_profile_free(profile);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "array-intrinsic-authority") == 0) {
+        test_array_intrinsic_call_authority();
+        puts("Array intrinsic TargetPlan authority tests passed");
+        return 0;
+    }
     test_unit_enum_target_rep_mutations();
+    test_array_intrinsic_call_authority();
     test_stringbuilder_constructor_call_authority();
     test_stringbuilder_append_rune_call_authority();
     test_stringbuilder_to_string_call_authority();

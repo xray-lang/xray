@@ -45,6 +45,7 @@
 #include "../shared/xr_conversion.h"
 #include "../shared/xr_copy_core.h"
 #include "../shared/xr_param_mode.h"
+#include "../shared/xr_elem_type.h"
 #include "../runtime/value/xtransfer_mode.h"
 
 /* Forward declarations for types defined in other modules */
@@ -60,6 +61,17 @@ struct XrCExportPlan;
 struct XrLinkSymbolPlan;
 struct XrFreestandingEntryPlan;
 struct XrSemanticPlan;
+
+/* Exact identity for the two compiler-owned Array allocation intrinsics.  The
+ * kind and scalar storage are stamped by lowering before SemanticPlan
+ * construction; later consumers must not reconstruct either fact from aux,
+ * aux_int, a selector spelling, or the result type. */
+typedef enum XiArrayIntrinsicKind {
+    XI_ARRAY_INTRINSIC_NONE = 0,
+    XI_ARRAY_INTRINSIC_WITH_CAPACITY,
+    XI_ARRAY_INTRINSIC_FILLED_NEW,
+    XI_ARRAY_INTRINSIC_COUNT,
+} XiArrayIntrinsicKind;
 
 /* ========== IR Stage ========== */
 
@@ -1160,6 +1172,8 @@ typedef struct XiValue {
     XiSourceSpan source_span; /* exact source range; all zero when unavailable */
     uint32_t xg_callsite_id;  /* stable XgCallsiteId for evidence-backed calls (0 = none) */
     uint32_t xa_intrinsic_id; /* stable XaIntrinsicId for canonical semantic operations */
+    uint8_t array_intrinsic_kind; /* XiArrayIntrinsicKind, or NONE */
+    uint8_t array_element_storage; /* exact XrArrayElemType for an Array intrinsic */
     uint32_t xg_method_id;    /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
     uint32_t xg_json_codec_id;    /* stable XgJsonCodecId for evidence-backed Json codec calls */
@@ -1259,6 +1273,8 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->source_span = src->source_span;
     dst->xg_callsite_id = src->xg_callsite_id;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
+    dst->array_intrinsic_kind = src->array_intrinsic_kind;
+    dst->array_element_storage = src->array_element_storage;
     dst->xg_method_id = src->xg_method_id;
     dst->move_evidence_id = src->move_evidence_id;
     dst->move_source_root_id = src->move_source_root_id;

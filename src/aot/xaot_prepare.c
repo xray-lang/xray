@@ -737,11 +737,15 @@ static bool prepare_array_native_receiver_array_store_info(const XaotBundle *bun
 static bool array_builtin_is_fresh_storage(const XiValue *value) {
     const char *name;
 
-    if (!value || value->op != XI_CALL_BUILTIN || !value->aux)
+    if (!value || value->op != XI_CALL_BUILTIN)
+        return false;
+    if (value->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY ||
+        value->array_intrinsic_kind == XI_ARRAY_INTRINSIC_FILLED_NEW)
+        return true;
+    if (!value->aux)
         return false;
     name = (const char *) value->aux;
-    return strcmp(name, "array_new") == 0 || strcmp(name, "array_copy_new") == 0 ||
-           strcmp(name, "array_with_capacity") == 0 || strcmp(name, "array_filled_new") == 0;
+    return strcmp(name, "array_new") == 0 || strcmp(name, "array_copy_new") == 0;
 }
 
 static bool array_builtin_forwards_storage(const XiValue *value) {
@@ -1689,8 +1693,6 @@ static bool prepare_array_is_native_local_alloc(const XaotBundle *bundle, const 
         return false;
     const char *name = (const char *) target->aux;
     if (strcmp(name, "array_new") == 0)
-        return true;
-    if (strcmp(name, "array_with_capacity") == 0)
         return true;
     return strcmp(name, "array_copy_new") == 0;
 }

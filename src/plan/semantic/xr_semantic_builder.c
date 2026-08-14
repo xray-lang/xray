@@ -1466,7 +1466,6 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
         case XI_WEAK_STORE_FIELD:
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
-        case XI_CALL_BUILTIN:
         case XI_AS:
         case XI_ASSERT:
         case XI_ASSERT_EQ:
@@ -1474,6 +1473,10 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
         case XI_ASSERT_THROWS:
         case XI_GET_BUILTIN:
             return add_metadata(ctx, record, (const char *) value->aux);
+        case XI_CALL_BUILTIN:
+            return value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_NONE
+                       ? true
+                       : add_metadata(ctx, record, (const char *) value->aux);
         case XI_OBJECT_NEW: {
             int32_t count = xi_object_field_count(value);
             const char *const *names = (const char *const *) value->aux;
@@ -3398,7 +3401,9 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->source_end_line = value->source_span.end_line;
         record->source_end_column = value->source_span.end_column;
     }
-    record->semantic_immediate = value->aux_int;
+    record->semantic_immediate = value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_NONE
+                                     ? 0
+                                     : value->aux_int;
     record->evidence[0] = value->xg_callsite_id;
     record->evidence[1] = value->xa_intrinsic_id;
     record->evidence[2] = value->xg_method_id;
@@ -3481,6 +3486,48 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     if (xi_native_module_scalar_call_exact(ctx, function, value) &&
         semantic_native_module_scalar_call_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL;
+    bool array_fill_type_exact =
+        value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_FILLED_NEW ||
+        (value->nargs > 1 && value->args[1] && value->args[1]->type &&
+         !value->args[1]->type->is_nullable &&
+         (value->array_element_storage == XR_ELEM_RUNE
+              ? XR_TYPE_IS_RUNE(value->args[1]->type)
+              : (XR_TYPE_IS_INT(value->args[1]->type) ||
+                 XR_TYPE_IS_FLOAT(value->args[1]->type) ||
+                 XR_TYPE_IS_BOOL(value->args[1]->type))));
+    bool array_intrinsic_exact =
+        value->op == XI_CALL_BUILTIN &&
+        value->array_intrinsic_kind > XI_ARRAY_INTRINSIC_NONE &&
+        value->array_intrinsic_kind < XI_ARRAY_INTRINSIC_COUNT &&
+        value->array_element_storage > XR_ELEM_ANY &&
+        value->array_element_storage < XR_ELEM_RAWPTR &&
+        value->aux_kind == XI_AUX_KIND_NONE && value->type &&
+        XR_TYPE_IS_ARRAY(value->type) && value->type->container.element_type &&
+        value->nargs ==
+            (value->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY ? 1u : 2u) &&
+        value->args[0] && value->args[0]->type && XR_TYPE_IS_INT(value->args[0]->type) &&
+        array_fill_type_exact;
+    if (value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_NONE && !array_intrinsic_exact) {
+        if (ctx->error && ctx->error_size)
+            snprintf(ctx->error, ctx->error_size,
+                     "XR_SEM_0019: Array intrinsic authority is not exact "
+                     "kind=%u storage=%u immediate=%lld op=%u nargs=%u result-kind=%u arg0-kind=%u arg1-match=%u",
+                     value->array_intrinsic_kind, value->array_element_storage,
+                     (long long) value->aux_int, value->op, value->nargs,
+                     value->type ? value->type->kind : UINT16_MAX,
+                     value->nargs && value->args[0] && value->args[0]->type
+                         ? value->args[0]->type->kind
+                         : UINT16_MAX,
+                     array_fill_type_exact);
+        return false;
+    }
+    if (array_intrinsic_exact) {
+        record->intrinsic_kind =
+            value->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY
+                ? XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY
+                : XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
+        record->array_element_storage = value->array_element_storage;
+    }
     bool string_builder_candidate = xi_string_builder_constructor_candidate(value);
     bool string_builder_exact = xi_string_builder_constructor_exact(value);
     if (string_builder_candidate &&
@@ -3488,7 +3535,7 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         return fail(ctx, "XR_SEM_0019", "StringBuilder constructor authority is not exact");
     if ((record->effects & XI_EFFECT_ALLOCATES) != 0 ||
         xi_generated_op_escape_alloc(value->op) == XI_GEN_ESCAPE_ALLOC_HEAP ||
-        string_builder_exact) {
+        string_builder_exact || array_intrinsic_exact) {
         if (!append_operation_allocation_identity(ctx, record))
             return false;
     }

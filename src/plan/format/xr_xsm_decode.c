@@ -575,6 +575,7 @@ static void decode_operations(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->view_capability = xr_xsm_take_u8(reader);
         record->view_lifetime = xr_xsm_take_u8(reader);
         record->view_complete = xr_xsm_take_u8(reader);
+        record->array_element_storage = xr_xsm_take_u8(reader);
         xr_xsm_take_bytes(reader, record->reserved_view, sizeof(record->reserved_view));
     }
     for (uint32_t i = 0; i < plan->operand_count; i++) {

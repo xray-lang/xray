@@ -319,6 +319,8 @@ add_xray_unit_test(test_target_profile plan/test_target_profile.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_test(NAME test_target_array_intrinsic_authority
+    COMMAND $<TARGET_FILE:test_target_plan> array-intrinsic-authority)
 add_xray_unit_test(test_xtp_format plan/test_xtp_format.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_executable(test_runtime_target_plan_load_archive

@@ -57,6 +57,11 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_ADT_ENUM_STORAGE = UINT64_C(1) << 30,
 } XrTargetPlanFamily;
 
+/* MSVC fixes a C enum to a signed 32-bit carrier before considering this
+ * value, which would turn bit 31 into -1 when it participates in the required
+ * family closure. Keep the next family as an explicitly unsigned mask. */
+#define XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE (UINT64_C(1) << 31)
+
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
      * the family admits several basic blocks joined by unconditional jumps and
@@ -199,7 +204,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE |                   \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |             \
                  XR_TARGET_FAMILY_PANIC_CATCH_STORAGE |                             \
-                 XR_TARGET_FAMILY_ADT_ENUM_STORAGE))
+                 XR_TARGET_FAMILY_ADT_ENUM_STORAGE |                              \
+                 XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -325,6 +331,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_NATIVE_NAMESPACE_YIELDABLE,
     XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR,
     XR_TARGET_CALL_CONVENTION_ADT_ENUM_CONSTRUCTOR,
+    XR_TARGET_CALL_CONVENTION_ARRAY_INTRINSIC,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -365,7 +372,32 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE,
     XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR,
     XR_TARGET_CALL_TARGET_ADT_ENUM_CONSTRUCTOR,
+    XR_TARGET_CALL_TARGET_ARRAY_INTRINSIC,
 } XrTargetCallTargetKind;
+
+typedef enum XrTargetArrayIntrinsicKind {
+    XR_TARGET_ARRAY_INTRINSIC_NONE = 0,
+    XR_TARGET_ARRAY_INTRINSIC_WITH_CAPACITY,
+    XR_TARGET_ARRAY_INTRINSIC_FILLED_NEW,
+    XR_TARGET_ARRAY_INTRINSIC_COUNT,
+} XrTargetArrayIntrinsicKind;
+
+typedef enum XrTargetArrayElementStorage {
+    XR_TARGET_ARRAY_STORAGE_NONE = 0,
+    XR_TARGET_ARRAY_STORAGE_I8,
+    XR_TARGET_ARRAY_STORAGE_U8,
+    XR_TARGET_ARRAY_STORAGE_I16,
+    XR_TARGET_ARRAY_STORAGE_U16,
+    XR_TARGET_ARRAY_STORAGE_I32,
+    XR_TARGET_ARRAY_STORAGE_U32,
+    XR_TARGET_ARRAY_STORAGE_I64,
+    XR_TARGET_ARRAY_STORAGE_U64,
+    XR_TARGET_ARRAY_STORAGE_F32,
+    XR_TARGET_ARRAY_STORAGE_F64,
+    XR_TARGET_ARRAY_STORAGE_BOOL,
+    XR_TARGET_ARRAY_STORAGE_RUNE,
+    XR_TARGET_ARRAY_STORAGE_COUNT,
+} XrTargetArrayElementStorage;
 
 typedef enum XrTargetCallErrorMode {
     XR_TARGET_CALL_ERROR_MODE_INVALID = 0,
@@ -651,7 +683,9 @@ typedef struct XrTargetCallRecord {
     uint8_t result_mode;
     uint8_t result_ownership;
     uint8_t error_mode;
-    uint8_t reserved8;
+    uint8_t array_intrinsic_kind;
+    uint8_t array_element_storage;
+    uint8_t reserved8[3];
     XrFingerprint fingerprint;
 } XrTargetCallRecord;
 

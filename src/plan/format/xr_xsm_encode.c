@@ -251,6 +251,7 @@ static void encode_operations(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u8(writer, record->view_capability);
         xr_xsm_put_u8(writer, record->view_lifetime);
         xr_xsm_put_u8(writer, record->view_complete);
+        xr_xsm_put_u8(writer, record->array_element_storage);
         xr_xsm_put_bytes(writer, record->reserved_view, sizeof(record->reserved_view));
     }
     for (uint32_t i = 0; i < plan->operand_count; i++) {

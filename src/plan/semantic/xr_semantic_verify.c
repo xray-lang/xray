@@ -175,7 +175,7 @@ static bool semantic_source_enum_identity_exact(const XrSemanticTypeRecord *type
                type->enum_layout_id == 0 && type->enum_member_count == 0 &&
                type->enum_flags == 0 && type->reserved_enum == 0;
     const char *cursor = type->source_enum_key;
-    static const char prefix[] = "source-enum-v1:schema=23:owner=";
+    static const char prefix[] = "source-enum-v1:schema=24:owner=";
     if (!cursor || strncmp(cursor, prefix, sizeof(prefix) - 1u) != 0 ||
         !verify_id(cursor, type->source_enum_identity) ||
         type->enum_member_count == 0 || type->enum_layout_id == 0 ||
@@ -1462,7 +1462,7 @@ static bool verify_string_byte_slice_view(const XrSemanticPlan *plan,
                      operation->view_origin == XI_VIEW_ORIGIN_NONE &&
                      operation->view_capability == 0 && operation->view_lifetime == 0 &&
                      operation->view_complete == 0 && operation->reserved_view[0] == 0 &&
-                     operation->reserved_view[1] == 0 && operation->reserved_view[2] == 0;
+                     operation->reserved_view[1] == 0;
         return empty || report(error, error_size, "XR_SEM_0019",
                                "non-view operation carries string byte-slice authority");
     }
@@ -1489,8 +1489,8 @@ static bool verify_string_byte_slice_view(const XrSemanticPlan *plan,
                  operation->view_source_operand == 0 && operation->view_source_parameter == -1 &&
                  operation->view_origin == XI_VIEW_ORIGIN_RECEIVER &&
                  operation->view_capability == 1 && operation->view_lifetime == 1 &&
-                 operation->view_complete == 1 && operation->reserved_view[0] == 0 &&
-                 operation->reserved_view[1] == 0 && operation->reserved_view[2] == 0;
+                 operation->view_complete == 1 && operation->array_element_storage == 0 &&
+                 operation->reserved_view[0] == 0 && operation->reserved_view[1] == 0;
     if (!exact && error && error_size) {
         snprintf(error, error_size,
                  "XR_SEM_0019: string byte-slice view authority is not exact "
@@ -1693,6 +1693,122 @@ static bool semantic_type_is_exact_member_bool(const XrSemanticTypeRecord *type)
     return type && type->kind == XR_KIND_BOOL && type->builtin_type == XR_TID_NULL &&
            type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0;
+}
+
+static uint8_t semantic_array_element_storage(const XrSemanticTypeRecord *type) {
+    if (!type || type->child_count != 0 || type->flags != 0)
+        return XR_ELEM_ANY;
+    if (type->kind == XR_KIND_BOOL)
+        return XR_ELEM_BOOL;
+    if (type->kind == XR_KIND_RUNE)
+        return XR_ELEM_RUNE;
+    switch (type->scalar_rep) {
+        case XR_NATIVE_I8: return XR_ELEM_I8;
+        case XR_NATIVE_U8: return XR_ELEM_U8;
+        case XR_NATIVE_I16: return XR_ELEM_I16;
+        case XR_NATIVE_U16: return XR_ELEM_U16;
+        case XR_NATIVE_I32: return XR_ELEM_I32;
+        case XR_NATIVE_U32: return XR_ELEM_U32;
+        case XR_NATIVE_I64: return XR_ELEM_I64;
+        case XR_NATIVE_U64: return XR_ELEM_U64;
+        case XR_NATIVE_F32: return XR_ELEM_F32;
+        case XR_NATIVE_F64: return XR_ELEM_F64;
+        default: return XR_ELEM_ANY;
+    }
+}
+
+static bool semantic_array_fill_type_is_exact(
+    const XrSemanticTypeRecord *type, uint8_t element_storage) {
+    if (!type || type->builtin_type != XR_TID_NULL || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->flags != 0)
+        return false;
+    if (element_storage == XR_ELEM_RUNE)
+        return type->kind == XR_KIND_RUNE &&
+               type->scalar_rep == XR_SCALAR_REP_NONE;
+    if (element_storage <= XR_ELEM_ANY || element_storage >= XR_ELEM_RAWPTR)
+        return false;
+    return ((type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT) &&
+            semantic_array_element_storage(type) != XR_ELEM_ANY) ||
+           (type->kind == XR_KIND_BOOL &&
+            type->scalar_rep == XR_SCALAR_REP_NONE);
+}
+
+/* Independent frozen-row proof for the compiler-owned Array constructors.
+ * Neither a metadata spelling nor semantic_immediate participates: the
+ * intrinsic variant and scalar storage have dedicated schema fields. */
+static bool verify_array_intrinsic(const XrSemanticPlan *plan,
+                                   const XrSemanticOperationRecord *operation,
+                                   char *error, size_t error_size) {
+    bool candidate = operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY ||
+                     operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
+    if (!candidate)
+        return operation->array_element_storage == XR_ELEM_ANY ||
+               report(error, error_size, "XR_SEM_0019",
+                      "non-Array intrinsic carries element-storage authority");
+    uint16_t expected_operands =
+        operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY ? 1u : 2u;
+    const XrSemanticTypeRecord *array_type =
+        operation->result_type < plan->type_count ? &plan->types[operation->result_type] : NULL;
+    const XrSemanticOperandRecord *operands =
+        operation->operand_count == expected_operands &&
+                operation->operand_begin <= plan->operand_count &&
+                operation->operand_count <= plan->operand_count - operation->operand_begin
+            ? &plan->operands[operation->operand_begin]
+            : NULL;
+    uint32_t element_index =
+        array_type && array_type->child_count == 1 &&
+                array_type->child_begin < plan->type_child_count
+            ? plan->type_children[array_type->child_begin]
+            : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticTypeRecord *element =
+        element_index < plan->type_count ? &plan->types[element_index] : NULL;
+    const XrSemanticTypeRecord *count =
+        operands && operands[0].type < plan->type_count ? &plan->types[operands[0].type] : NULL;
+    bool exact = operation->opcode == XI_CALL_BUILTIN && operands &&
+                 semantic_type_is_exact_member_array(array_type) && element && count &&
+                 semantic_array_element_storage(element) == operation->array_element_storage &&
+                 operation->array_element_storage > XR_ELEM_ANY &&
+                 operation->array_element_storage < XR_ELEM_RAWPTR &&
+                 semantic_type_is_exact_member_i64(count) && operation->metadata_count == 0 &&
+                 operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                 operation->semantic_immediate == 0 &&
+                 operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                 operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
+                 operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                 operation->effects == xi_generated_op_effects(XI_CALL_BUILTIN) &&
+                 operation->flags == xi_generated_op_default_flags(XI_CALL_BUILTIN) &&
+                 operation->ownership_use == xi_generated_op_own_use(XI_CALL_BUILTIN) &&
+                 operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                 operation->result_alias_operand == -1 &&
+                 operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                 operation->return_parameter == -1 && operation->return_complete == 1 &&
+                 xr_semantic_allocation_identity_is_canonical(operation);
+    for (uint16_t i = 0; exact && i < expected_operands; i++) {
+        const XrSemanticOperandRecord *operand = &operands[i];
+        exact = operand->role == XR_SEM_OPERAND_ARGUMENT &&
+                operand->parameter == (int16_t) i &&
+                operand->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                operand->ownership_action == XR_SEM_OPERAND_CONSUME &&
+                (i == 0
+                     ? operand->type == operands[0].type
+                     : operand->type < plan->type_count &&
+                       semantic_array_fill_type_is_exact(
+                           &plan->types[operand->type],
+                           operation->array_element_storage));
+    }
+    if (!exact && error && error_size)
+        snprintf(error, error_size,
+                 "XR_SEM_0019: Array intrinsic authority is not exact "
+                 "kind=%u storage=%u operands=%u metadata=%u immediate=%lld "
+                 "ownership=%u return=%u/%u alias=%d flags=%u",
+                 operation->intrinsic_kind, operation->array_element_storage,
+                 operation->operand_count, operation->metadata_count,
+                 (long long) operation->semantic_immediate,
+                 operation->result_ownership, operation->return_provenance,
+                 operation->return_complete, operation->result_alias_operand,
+                 operation->flags);
+    return exact;
 }
 
 /* A unit, int, or bool result is a fresh value the call owns outright; a
@@ -2077,6 +2193,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_json_namespace_value(plan, operation, error, error_size))
             return false;
         if (!verify_array_member_scalar(plan, operation, error, error_size))
+            return false;
+        if (!verify_array_intrinsic(plan, operation, error, error_size))
             return false;
         if (!verify_native_module_scalar_call(plan, operation, error, error_size))
             return false;

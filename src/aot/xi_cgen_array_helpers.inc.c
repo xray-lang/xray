@@ -3033,10 +3033,13 @@ static bool cg_array_value_has_fresh_owned_origin(XiCgenCtx *ctx, const XiValue 
         return false;
     if (origin->op == XI_ARRAY_NEW)
         return true;
+    if (origin->op == XI_CALL_BUILTIN &&
+        (origin->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY ||
+         origin->array_intrinsic_kind == XI_ARRAY_INTRINSIC_FILLED_NEW))
+        return true;
     if (origin->op == XI_CALL_BUILTIN && origin->aux) {
         const char *name = (const char *) origin->aux;
-        return strcmp(name, "array_copy_new") == 0 || strcmp(name, "array_with_capacity") == 0 ||
-               strcmp(name, "array_filled_new") == 0;
+        return strcmp(name, "array_copy_new") == 0;
     }
     return false;
 }
@@ -3155,11 +3158,9 @@ static bool cg_array_fill_origin_starts_empty(const XiValue *origin) {
             return true;
         return cg_array_const_int_value(origin->args[0], 0);
     }
-    if (origin->op == XI_CALL_BUILTIN && origin->aux) {
-        const char *name = (const char *) origin->aux;
-        if (strcmp(name, "array_with_capacity") == 0)
-            return true;
-    }
+    if (origin->op == XI_CALL_BUILTIN &&
+        origin->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY)
+        return true;
     return false;
 }
 
@@ -3735,8 +3736,6 @@ static bool cg_array_is_native_local_alloc(const XiValue *value) {
         return false;
     const char *name = (const char *) v->aux;
     if (strcmp(name, "array_new") == 0)
-        return true;
-    if (strcmp(name, "array_with_capacity") == 0)
         return true;
     return strcmp(name, "array_copy_new") == 0;
 }

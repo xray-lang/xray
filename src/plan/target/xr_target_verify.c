@@ -722,6 +722,141 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *semantic,
            operation->result_value < function->value_begin + function->value_count;
 }
 
+static bool verify_array_intrinsic_storage(uint8_t semantic_storage, uint8_t *target_storage) {
+    if (!target_storage)
+        return false;
+    switch (semantic_storage) {
+        case XR_ELEM_I8: *target_storage = XR_TARGET_ARRAY_STORAGE_I8; return true;
+        case XR_ELEM_U8: *target_storage = XR_TARGET_ARRAY_STORAGE_U8; return true;
+        case XR_ELEM_I16: *target_storage = XR_TARGET_ARRAY_STORAGE_I16; return true;
+        case XR_ELEM_U16: *target_storage = XR_TARGET_ARRAY_STORAGE_U16; return true;
+        case XR_ELEM_I32: *target_storage = XR_TARGET_ARRAY_STORAGE_I32; return true;
+        case XR_ELEM_U32: *target_storage = XR_TARGET_ARRAY_STORAGE_U32; return true;
+        case XR_ELEM_I64: *target_storage = XR_TARGET_ARRAY_STORAGE_I64; return true;
+        case XR_ELEM_U64: *target_storage = XR_TARGET_ARRAY_STORAGE_U64; return true;
+        case XR_ELEM_F32: *target_storage = XR_TARGET_ARRAY_STORAGE_F32; return true;
+        case XR_ELEM_F64: *target_storage = XR_TARGET_ARRAY_STORAGE_F64; return true;
+        case XR_ELEM_BOOL: *target_storage = XR_TARGET_ARRAY_STORAGE_BOOL; return true;
+        case XR_ELEM_RUNE: *target_storage = XR_TARGET_ARRAY_STORAGE_RUNE; return true;
+        default: return false;
+    }
+}
+
+static bool verify_array_intrinsic_storage_type(
+    const XrSemanticTypeRecord *type, uint8_t *target_storage) {
+    if (!type || !target_storage || type->builtin_type != XR_TID_NULL ||
+        type->child_count != 0 || type->aggregate_extent != 0 ||
+        type->aggregate_align != 0 || type->flags != 0)
+        return false;
+    if (type->kind == XR_KIND_BOOL && type->scalar_rep == XR_SCALAR_REP_NONE) {
+        *target_storage = XR_TARGET_ARRAY_STORAGE_BOOL;
+        return true;
+    }
+    if (type->kind == XR_KIND_RUNE && type->scalar_rep == XR_SCALAR_REP_NONE) {
+        *target_storage = XR_TARGET_ARRAY_STORAGE_RUNE;
+        return true;
+    }
+    if (type->kind != XR_KIND_INT && type->kind != XR_KIND_FLOAT)
+        return false;
+    switch (type->scalar_rep) {
+        case XR_NATIVE_I8: *target_storage = XR_TARGET_ARRAY_STORAGE_I8; return true;
+        case XR_NATIVE_U8: *target_storage = XR_TARGET_ARRAY_STORAGE_U8; return true;
+        case XR_NATIVE_I16: *target_storage = XR_TARGET_ARRAY_STORAGE_I16; return true;
+        case XR_NATIVE_U16: *target_storage = XR_TARGET_ARRAY_STORAGE_U16; return true;
+        case XR_NATIVE_I32: *target_storage = XR_TARGET_ARRAY_STORAGE_I32; return true;
+        case XR_NATIVE_U32: *target_storage = XR_TARGET_ARRAY_STORAGE_U32; return true;
+        case XR_NATIVE_I64: *target_storage = XR_TARGET_ARRAY_STORAGE_I64; return true;
+        case XR_NATIVE_U64: *target_storage = XR_TARGET_ARRAY_STORAGE_U64; return true;
+        case XR_NATIVE_F32: *target_storage = XR_TARGET_ARRAY_STORAGE_F32; return true;
+        case XR_NATIVE_F64: *target_storage = XR_TARGET_ARRAY_STORAGE_F64; return true;
+        default: return false;
+    }
+}
+
+static bool verify_array_intrinsic_fill_type(
+    const XrSemanticTypeRecord *type, uint8_t element_storage) {
+    uint8_t ignored_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!type)
+        return false;
+    if (element_storage == XR_TARGET_ARRAY_STORAGE_RUNE)
+        return type->kind == XR_KIND_RUNE &&
+               verify_array_intrinsic_storage_type(type, &ignored_storage);
+    return element_storage > XR_TARGET_ARRAY_STORAGE_NONE &&
+           element_storage < XR_TARGET_ARRAY_STORAGE_RUNE &&
+           (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
+            type->kind == XR_KIND_BOOL) &&
+           verify_array_intrinsic_storage_type(type, &ignored_storage);
+}
+
+/* Verifier-side reconstruction from frozen SemanticPlan rows only. */
+static bool semantic_array_intrinsic_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    uint8_t *target_kind, uint8_t *target_storage) {
+    uint32_t operand_count = 0, child_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    bool with_capacity = operation &&
+        operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY;
+    bool filled = operation &&
+        operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
+    uint16_t expected = with_capacity ? 1u : 2u;
+    if (!semantic || !operation || (!with_capacity && !filled) || !operands || !children ||
+        operation->opcode != XI_CALL_BUILTIN || operation->operand_count != expected ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 0 || operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->semantic_immediate != 0 || operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_BUILTIN) ||
+        operation->flags != xi_generated_op_default_flags(XI_CALL_BUILTIN) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_BUILTIN) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        !xr_semantic_allocation_identity_is_canonical(operation))
+        return false;
+    const XrSemanticTypeRecord *array =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    if (!semantic_array_allocation_type_is_exact(array) || array->child_begin >= child_count)
+        return false;
+    uint32_t element = children[array->child_begin];
+    const XrSemanticTypeRecord *element_type =
+        xr_semantic_plan_type(semantic, element);
+    const XrSemanticOperandRecord *count = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *count_type = xr_semantic_plan_type(semantic, count->type);
+    uint16_t count_rep = XR_MACHINE_REP_COUNT;
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t semantic_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!count_type || semantic_type_expected_rep(count_type, &count_rep) != 1 ||
+        count_rep != XR_MACHINE_REP_I64 || count->role != XR_SEM_OPERAND_ARGUMENT ||
+        count->parameter != 0 || count->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        count->ownership_action != XR_SEM_OPERAND_CONSUME ||
+        !verify_array_intrinsic_storage(operation->array_element_storage,
+                                        &semantic_storage) ||
+        !verify_array_intrinsic_storage_type(element_type, &storage) ||
+        storage != semantic_storage)
+        return false;
+    if (filled) {
+        const XrSemanticOperandRecord *fill = count + 1;
+        const XrSemanticTypeRecord *fill_type =
+            xr_semantic_plan_type(semantic, fill->type);
+        if (!verify_array_intrinsic_fill_type(fill_type, storage) ||
+            fill->role != XR_SEM_OPERAND_ARGUMENT ||
+            fill->parameter != 1 || fill->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+            fill->ownership_action != XR_SEM_OPERAND_CONSUME)
+            return false;
+    }
+    if (target_kind)
+        *target_kind = with_capacity ? XR_TARGET_ARRAY_INTRINSIC_WITH_CAPACITY
+                                     : XR_TARGET_ARRAY_INTRINSIC_FILLED_NEW;
+    if (target_storage)
+        *target_storage = storage;
+    return true;
+}
+
 /* Rebuilt here from the frozen semantic rows, not read back from the builder.
  * `T?` is `T | null`, and the language surface requires the nullable primitives
  * to carry `null` in the tagged representation so a null renders as "null" and
@@ -2614,6 +2749,8 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
         if (semantic_heap_closure_is_exact(plan->semantic_plan, operation) ||
             semantic_panic_catch_is_exact(plan->semantic_plan, operation) ||
             semantic_array_allocation_is_exact(plan->semantic_plan, operation) ||
+            semantic_array_intrinsic_is_exact_verify(plan->semantic_plan, operation,
+                                                     NULL, NULL) ||
             xr_semantic_class_object_is_exact(plan->semantic_plan, operation) ||
             xr_semantic_class_instance_value_is_exact(plan->semantic_plan, operation, NULL) ||
             semantic_string_literal_is_exact(plan->semantic_plan, operation) ||
@@ -2715,6 +2852,9 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         operation->function == semantic_function;
     bool exact_array_allocation =
         semantic_array_allocation_is_exact(plan->semantic_plan, operation);
+    bool exact_array_intrinsic =
+        semantic_array_intrinsic_is_exact_verify(plan->semantic_plan, operation,
+                                                 NULL, NULL);
     bool exact_string_literal =
         semantic_string_literal_is_exact(plan->semantic_plan, operation);
     /* Recomputed from the plan through the shared judgement rather than read
@@ -2850,7 +2990,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         XR_VALUE_BINDING_FAIL(10);
     int eligibility = operation_result_void || exact_heap_closure ||
                               exact_panic_catch ||
-                              exact_array_allocation || exact_class_object ||
+                              exact_array_allocation || exact_array_intrinsic || exact_class_object ||
                               exact_class_instance || exact_class_receiver ||
                               exact_string_literal || exact_string_concat ||
                               exact_direct_string_result ||
@@ -2883,7 +3023,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                         : 0;
     int expected_layout = -1;
     if (exact_heap_closure || exact_panic_catch || exact_array_allocation ||
-        exact_class_object ||
+        exact_class_object || exact_array_intrinsic ||
         exact_class_instance || exact_class_receiver ||
         exact_string_literal || exact_string_concat ||
         exact_direct_string_result ||
@@ -4358,6 +4498,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             }
             expected_calls++;
         }
+        if (semantic_array_intrinsic_is_exact_verify(semantic, operation, NULL, NULL)) {
+            if (expected_calls == UINT32_MAX) {
+                valid = false;
+                break;
+            }
+            expected_calls++;
+        }
         if (semantic_string_byte_slice_view_is_exact(semantic, operation)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
@@ -4542,6 +4689,12 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         bool adt_enum_constructor =
             !semantic_target && xr_semantic_adt_enum_constructor_is_exact(
                                     semantic, operation, &enum_constructor_shape);
+        uint8_t array_intrinsic_kind = XR_TARGET_ARRAY_INTRINSIC_NONE;
+        uint8_t array_intrinsic_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        bool array_intrinsic =
+            !semantic_target && semantic_array_intrinsic_is_exact_verify(
+                                    semantic, operation, &array_intrinsic_kind,
+                                    &array_intrinsic_storage);
         uint16_t result_kind = XR_MACHINE_REP_COUNT;
         const XrSemanticTypeRecord *result_type = operation
                                                        ? xr_semantic_plan_type(
@@ -4563,7 +4716,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string ||
             direct_string_result || direct_adt_enum_result ||
             json_namespace_value || class_construction ||
-            adt_enum_constructor) {
+            adt_enum_constructor || array_intrinsic) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -4632,12 +4785,18 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                              stringbuilder_to_string ||
                              stringbuilder_append_string ||
                              json_namespace_value || class_construction ||
-                             adt_enum_constructor
+                             adt_enum_constructor || array_intrinsic
                          ? XR_TARGET_CALL_RETURN_OWNED
                      : string_byte_slice_view ? XR_TARGET_CALL_BORROW
                                               : XR_TARGET_CALL_NONE) &&
                 call->error_mode == XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL &&
-                call->reserved8 == 0;
+                (array_intrinsic
+                     ? call->array_intrinsic_kind == array_intrinsic_kind &&
+                           call->array_element_storage == array_intrinsic_storage
+                     : call->array_intrinsic_kind == XR_TARGET_ARRAY_INTRINSIC_NONE &&
+                           call->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE) &&
+                call->reserved8[0] == 0 && call->reserved8[1] == 0 &&
+                call->reserved8[2] == 0;
         if (!valid)
             break;
         if (direct) {
@@ -4942,6 +5101,62 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         argument->ordinal == ordinal &&
                         argument->mode == XR_TARGET_CALL_VALUE &&
                         argument->ownership == ownership &&
+                        argument->transfer_mode == operand->transfer_mode &&
+                        argument->flags == 0;
+                next_argument++;
+            }
+            if (!valid)
+                break;
+        } else if (array_intrinsic) {
+            uint32_t discriminator = ((uint32_t) array_intrinsic_kind << 8) |
+                                     array_intrinsic_storage;
+            valid = !suspends &&
+                    reconstruct_call_identity("xray-target-array-intrinsic-v1",
+                                              operation->id, operation->allocation_id,
+                                              discriminator, &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    call->argument_count == operation->operand_count && call->flags == 0 &&
+                    call->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_INTRINSIC &&
+                    call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_INTRINSIC &&
+                    call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && result &&
+                    result->slot < plan->slots_count &&
+                    plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                    plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
+            for (uint16_t ordinal = 0; valid && ordinal < call->argument_count; ordinal++) {
+                uint32_t semantic_operand = operation->operand_begin + ordinal;
+                const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+                const XrSemanticTypeRecord *operand_type =
+                    xr_semantic_plan_type(semantic, operand->type);
+                const XrTargetValueRepRecord *caller_value =
+                    xr_target_plan_value_rep(plan, operand->value);
+                const XrTargetCallArgumentRecord *argument =
+                    &plan->call_arguments[next_argument];
+                XrStableId argument_identity;
+                valid = operand_type && caller_value &&
+                        reconstruct_call_identity(
+                            "xray-target-array-intrinsic-argument-v1",
+                            operation->id, operand_type->id, ordinal,
+                            &argument_identity) &&
+                        xr_stable_id_equal(argument->identity, argument_identity) &&
+                        argument->call == i &&
+                        argument->semantic_operand == semantic_operand &&
+                        argument->semantic_value == operand->value &&
+                        argument->callee_parameter == XR_SEMANTIC_INDEX_NONE &&
+                        argument->caller_slot == caller_value->slot &&
+                        argument->callee_slot == XR_SEMANTIC_INDEX_NONE &&
+                        argument->register_rep == caller_value->register_rep &&
+                        argument->memory_rep == caller_value->memory_rep &&
+                        argument->callee_register_rep == caller_value->register_rep &&
+                        argument->callee_memory_rep == caller_value->memory_rep &&
+                        argument->ordinal == ordinal &&
+                        argument->mode == XR_TARGET_CALL_VALUE &&
+                        argument->ownership == XR_TARGET_CALL_CONSUME &&
                         argument->transfer_mode == operand->transfer_mode &&
                         argument->flags == 0;
                 next_argument++;
