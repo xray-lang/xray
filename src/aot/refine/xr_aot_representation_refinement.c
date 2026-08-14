@@ -4947,6 +4947,16 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             }
             return oracle_machine_storage(ctx, semantic_value, out_storage,
                                           out_machine_kind);
+        case XI_SELECT:
+            /* A select is the same merge a phi spells, flattened onto one
+             * block: representation selection binds its result from the two
+             * arms exactly as it binds a phi's, and force_phi_tagged does not
+             * reach it there, so the frozen scalar binding is the whole proof
+             * here too. A merge whose arms carry a reference has no scalar
+             * binding and stays without authority rather than falling back to
+             * a tagged guess. */
+            return oracle_machine_storage(ctx, semantic_value, out_storage,
+                                          out_machine_kind);
         case XI_BOX:
             *out_storage = XR_REP_TAGGED;
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -5207,6 +5217,21 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 *out_storage = XR_REP_TAGGED;
                 return true;
             }
+            return oracle_machine_storage(ctx, operation->result_value,
+                                          out_storage, &ignored_kind);
+        case XI_SELECT:
+            /* The condition is the bool the structure contract already pinned,
+             * and it keeps the native scalar storage its own definition named:
+             * the generated conditional reads it through the same truthiness
+             * adapter a branch on it would use, so no operand adapter is owed.
+             * The two arms are the incoming edges of the merge and must reach
+             * it in the merge's own storage, which is what a phi demands of
+             * its edges. */
+            if (operand_index == 0)
+                return oracle_machine_storage(ctx, source_value, out_storage,
+                                              &ignored_kind);
+            if (operand_index > 2)
+                return false;
             return oracle_machine_storage(ctx, operation->result_value,
                                           out_storage, &ignored_kind);
         case XI_CALL:

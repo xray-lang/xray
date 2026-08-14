@@ -1,7 +1,9 @@
 // anchor: known-two-armed-assignment-picks-one-arm
-// Reported divergence, minimal form: no loop, no call, one if/else whose arms
-// assign different values to the same variable. At the optimization level the
-// native backend uses, both calls answer with the else arm's value.
+// Minimal form: no loop, no call, one if/else whose arms assign different
+// values to the same variable. At the optimization level the native backend
+// uses, this diamond becomes a select, and the module representation authority
+// used to refuse the whole program because it carried no rule for that merge.
+// The refusal read as a build error rather than a wrong answer.
 //
 // The condition kind does not matter: a bool value and a comparison behave the
 // same. What matters is that the merge is read afterwards, so the diamond is a
