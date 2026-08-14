@@ -225,6 +225,15 @@ static bool xi_pass_policy_apply_entry(XiOptPolicy *policy, char *entry, char *e
             xi_pass_policy_set_err(err, err_size, "unknown pass '%s'", pass_name);
             return false;
         }
+        /* A required pass is structural: the driver runs it whatever the mask
+         * says. Accepting its name would hand back a policy that renders as
+         * withholding it while the pass keeps running, and the caller would
+         * read every later difference as that pass' doing. */
+        if (xi_pass_id_is_required(pass_id)) {
+            xi_pass_policy_set_err(err, err_size,
+                                   "pass '%s' is required and cannot be withheld", pass_name);
+            return false;
+        }
         disabled |= XI_OPT_DISABLE_BIT(pass_id);
     }
 

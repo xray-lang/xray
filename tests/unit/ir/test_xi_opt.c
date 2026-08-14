@@ -82,6 +82,17 @@ static int pred_index(const XiBlock *blk, const XiBlock *pred) {
     }                                                                                              \
     static void test_##name(void)
 
+/* assert() is compiled out under NDEBUG, which is how the release lane builds
+ * this binary. A case that has to hold in both lanes states it with this. */
+#define REQUIRE(cond)                                                                              \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("  FAIL: %s (line %d)\n", #cond, __LINE__);                                     \
+            tests_failed++;                                                                        \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
+
 /* ========== Constant Folding Tests ========== */
 
 TEST(const_fold_int_add) {
@@ -1585,6 +1596,80 @@ TEST(non_coroutine_plan_keeps_full_optimizer_pipeline) {
     xi_func_free(f);
 }
 
+TEST(the_none_level_runs_no_pass_and_reports_no_statistics) {
+    XiFunc *f = make_func("none_level", &stub_int);
+    XiValue *dead = xi_const_int(f, f->entry, 41, &stub_int);
+    XiValue *result = xi_const_int(f, f->entry, 42, &stub_int);
+    REQUIRE(dead && result);
+    xi_block_set_return(f->entry, result);
+
+    uint32_t values_before = f->entry->nvalues;
+    XiPipelineStats stats;
+    /* Poisoned on purpose: the driver reports statistics for a run in which
+     * nothing ran, so it has to clear the buffer before it returns. */
+    memset(&stats, 0xAB, sizeof(stats));
+
+    XiOptResult opt = xi_opt_run_pipeline_ex(f, XI_OPT_NONE, &stats, 0);
+    REQUIRE(opt.ok);
+    /* The dead constant survives. At the light level DCE removes it, which is
+     * what makes this an assertion about the level rather than about the
+     * function being unoptimizable. */
+    REQUIRE(f->entry->nvalues == values_before);
+    REQUIRE(!opt.change.values_changed);
+    REQUIRE(!opt.change.cfg_changed);
+    REQUIRE(stats.npass == 0);
+    REQUIRE(stats.total_rounds == 0);
+    REQUIRE(stats.total_ns == 0);
+
+    XiOptResult light = xi_opt_run_pipeline_ex(f, XI_OPT_LIGHT, &stats, 0);
+    REQUIRE(light.ok);
+    REQUIRE(f->entry->nvalues < values_before);
+    REQUIRE(stats.npass > 0);
+
+    xi_func_free(f);
+}
+
+static const XiPassStats *stats_for(const XiPipelineStats *stats, const char *name) {
+    for (uint32_t i = 0; i < stats->npass; i++) {
+        if (strcmp(stats->passes[i].name, name) == 0)
+            return &stats->passes[i];
+    }
+    return NULL;
+}
+
+TEST(statistics_say_which_passes_do_not_count_values) {
+    XiFunc *f = make_func("counts_declared", &stub_int);
+    XiValue *dead = xi_const_int(f, f->entry, 41, &stub_int);
+    XiValue *result = xi_const_int(f, f->entry, 42, &stub_int);
+    REQUIRE(dead && result);
+    xi_block_set_return(f->entry, result);
+
+    XiPipelineStats stats;
+    XiOptResult opt = xi_opt_run_pipeline_ex(f, XI_OPT_FULL, &stats, 0);
+    REQUIRE(opt.ok);
+
+    /* DCE counts what it removes, so its zero would be a measurement. */
+    const XiPassStats *dce = stats_for(&stats, "dce");
+    REQUIRE(dce && dce->invocations > 0);
+    REQUIRE(dce->counts_reported);
+
+    /* These rewrite the function without the counters moving. Reporting their
+     * zero as a count is what let a reader conclude they had not fired. */
+    static const char *const uncounted[] = {"constfold", "strength_reduce", "copy_prop",
+                                            "bce",       "licm",            "loop_split",
+                                            "inline",    "tail_call",       "ifconv"};
+    for (size_t i = 0; i < sizeof(uncounted) / sizeof(uncounted[0]); i++) {
+        const XiPassStats *ps = stats_for(&stats, uncounted[i]);
+        REQUIRE(ps && ps->invocations > 0);
+        REQUIRE(!ps->counts_reported);
+        /* The driver refuses a declaration that has gone stale, so a pass
+         * marked this way cannot be carrying real numbers. */
+        REQUIRE(ps->n_removed == 0 && ps->n_added == 0);
+    }
+
+    xi_func_free(f);
+}
+
 /* ========== Tuple Projection Peephole Tests ========== */
 
 /* TUPLE_GET(TUPLE_NEW(a, b), 0) collapses to COPY(a). */
@@ -2157,6 +2242,8 @@ int main(void) {
     run_select_rep_advances_empty_func_tree();
     run_full_pipeline_preserves_frozen_coroutine_plan();
     run_non_coroutine_plan_keeps_full_optimizer_pipeline();
+    run_the_none_level_runs_no_pass_and_reports_no_statistics();
+    run_statistics_say_which_passes_do_not_count_values();
 
     /* Tuple projection peephole */
     run_tuple_get_of_tuple_new_first();

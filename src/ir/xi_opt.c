@@ -4164,6 +4164,24 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
         .preserves_evidence = 0,                                                                   \
     }
 
+/* A rewrite pass that re-runs other passes and therefore has to be handed the
+ * withheld-pass mask. Everything else about it is a plain rewrite pass. */
+#define XI_MASKED_REWRITE_PASS(pass_name, pass_fn, level, pass_flags, required_evidence)           \
+    {                                                                                              \
+        .name = pass_name,                                                                         \
+        .fn_masked = pass_fn,                                                                      \
+        .min_level = level,                                                                        \
+        .flags = pass_flags,                                                                       \
+        .min_stage = XI_STAGE_RAW,                                                                 \
+        .max_stage = XI_STAGE_CORO_LOWERED,                                                        \
+        .requires_inv_mask = 0,                                                                    \
+        .produces_inv_mask = 0,                                                                    \
+        .requires_evidence = required_evidence,                                                    \
+        .produces_evidence = 0,                                                                    \
+        .invalidates_evidence = 0,                                                                 \
+        .preserves_evidence = 0,                                                                   \
+    }
+
 #define XI_ANALYSIS_PASS(pass_name, pass_fn, level, pass_flags, produced_evidence)                 \
     {                                                                                              \
         .name = pass_name,                                                                         \
@@ -4181,42 +4199,56 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
     }
 
 /* Pass table: ordered by recommended execution sequence.
- * The driver runs all passes whose min_level <= requested level. */
+ * The driver runs all passes whose min_level <= requested level.
+ *
+ * XI_PASS_NO_VALUE_COUNTS marks a pass that does not maintain the removed /
+ * added counters. Those passes rewrite the function without the counters
+ * moving, so a zero from them means "not measured" and not "did nothing";
+ * the statistics dump prints n/a rather than a zero a reader would take for
+ * evidence. The two analysis passes are not marked: they rewrite nothing at
+ * all, so zero is their true count. const_fixpoint is not marked either: it
+ * merges the records of the passes it runs, so its counters do move, and
+ * the two constituents that do not count are marked in their own right. */
 static const XiPassDesc xi_pass_table[] = {
     XI_ANALYSIS_PASS("tbaa", xi_tbaa_annotate, XI_OPT_LIGHT, XI_PASS_REQUIRED, XI_EVD_ALIAS),
-    XI_REWRITE_PASS("constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_CORO_PLAN_SAFE, 0),
+    XI_REWRITE_PASS("constfold", xi_opt_const_fold, XI_OPT_LIGHT,
+                    XI_PASS_CORO_PLAN_SAFE | XI_PASS_NO_VALUE_COUNTS, 0),
     XI_REWRITE_PASS("strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT,
-                    XI_PASS_CORO_PLAN_SAFE, 0),
-    XI_REWRITE_PASS("copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_CORO_PLAN_SAFE, 0),
+                    XI_PASS_CORO_PLAN_SAFE | XI_PASS_NO_VALUE_COUNTS, 0),
+    XI_REWRITE_PASS("copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT,
+                    XI_PASS_CORO_PLAN_SAFE | XI_PASS_NO_VALUE_COUNTS, 0),
     XI_REWRITE_PASS("mark_one_shot_await", xi_opt_mark_one_shot_await, XI_OPT_LIGHT, XI_PASS_NONE,
                     0),
     XI_REWRITE_PASS("phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, 0),
     XI_REWRITE_PASS("dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, 0),
     XI_REWRITE_PASS("sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, 0),
     XI_ANALYSIS_PASS("range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_EVD_RANGE),
-    XI_REWRITE_PASS("bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NONE, XI_EVD_RANGE),
+    XI_REWRITE_PASS("bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NO_VALUE_COUNTS, XI_EVD_RANGE),
     XI_REWRITE_PASS("gvn", xi_opt_gvn_pre, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_EVD_ALIAS),
     XI_REWRITE_PASS("loop_rotate", xi_opt_loop_rotate, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
-    XI_REWRITE_PASS("licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_EVD_ALIAS),
+    XI_REWRITE_PASS("licm", xi_opt_licm, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NO_VALUE_COUNTS, XI_EVD_ALIAS),
     XI_REWRITE_PASS("ivsr", xi_opt_ivsr, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
     XI_REWRITE_PASS("loop_peel", xi_opt_loop_peel, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
     XI_REWRITE_PASS("loop_unroll", xi_opt_loop_unroll, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
     XI_REWRITE_PASS("loop_split", xi_opt_loop_split, XI_OPT_FULL,
-                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP | XI_PASS_NO_VALUE_COUNTS, 0),
     XI_REWRITE_PASS("loop_inv_branch", xi_opt_loop_inv_branch, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
-    XI_REWRITE_PASS("inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
+    XI_REWRITE_PASS("inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NO_VALUE_COUNTS, 0),
+    XI_REWRITE_PASS("tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NO_VALUE_COUNTS, 0),
+    XI_REWRITE_PASS("ifconv", xi_opt_ifconv, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NO_VALUE_COUNTS, 0),
     XI_REWRITE_PASS("jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
     XI_REWRITE_PASS("block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_MASKED_REWRITE_PASS("const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, 0),
 };
 
 #undef XI_ANALYSIS_PASS
+#undef XI_MASKED_REWRITE_PASS
 #undef XI_REWRITE_PASS
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
@@ -4237,7 +4269,10 @@ static void validate_pass_table_once(void) {
         const XiPassDesc *d = &xi_pass_table[i];
         (void) d;
         XR_DCHECK(d->name != NULL, "pass table entry has NULL name");
-        XR_DCHECK(d->fn != NULL, "pass table entry has NULL fn");
+        /* Exactly one entry point. A pass with both would run twice under one
+         * name; a pass with neither would be silently skipped. */
+        XR_CHECK((d->fn != NULL) != (d->fn_masked != NULL),
+                 "pass table entry must publish exactly one entry point");
         XR_DCHECK(d->max_stage >= d->min_stage, "pass has an invalid stage window");
         XR_CHECK(xi_pass_name_by_id((int) i) != NULL,
                  "pass table is longer than the pass id list");
@@ -4444,6 +4479,18 @@ static bool pass_disabled_by_mask(const XiPassDesc *desc, size_t pass_index,
     return (disabled_passes & XI_OPT_DISABLE_BIT(pass_index)) != 0;
 }
 
+XR_FUNC bool xi_pass_withheld_by_mask(XiOptDisableMask disabled, int pass_id) {
+    if (pass_id < 0 || (size_t) pass_id >= XI_PASS_TABLE_SIZE)
+        return false;
+    return pass_disabled_by_mask(&xi_pass_table[pass_id], (size_t) pass_id, disabled);
+}
+
+XR_FUNC bool xi_pass_id_is_required(int pass_id) {
+    if (pass_id < 0 || (size_t) pass_id >= XI_PASS_TABLE_SIZE)
+        return false;
+    return (xi_pass_table[pass_id].flags & XI_PASS_REQUIRED) != 0;
+}
+
 static void stats_merge(XiPipelineStats *dst, const XiPipelineStats *src) {
     if (!dst || !src)
         return;
@@ -4456,6 +4503,8 @@ static void stats_merge(XiPipelineStats *dst, const XiPipelineStats *src) {
         dp->n_removed += sp->n_removed;
         dp->n_added += sp->n_added;
         dp->elapsed_ns += sp->elapsed_ns;
+        /* Same pass, same declaration; the slot may be freshly zeroed. */
+        dp->counts_reported = sp->counts_reported;
     }
     dst->total_rounds += src->total_rounds;
     dst->total_ns += src->total_ns;
@@ -4655,13 +4704,16 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
     XiAnalysisManager analysis_manager;
     xi_analysis_manager_init(&analysis_manager, f);
 
+    /* The caller reads `stats` whether or not any pass ran, so it is cleared
+     * before the level is consulted. The none level used to be unreachable
+     * and this buffer was left holding whatever the caller's stack held. */
+    if (stats)
+        memset(stats, 0, sizeof(*stats));
+
     if (level == XI_OPT_NONE) {
         result.change = xi_pass_no_change();
         return result;
     }
-
-    if (stats)
-        memset(stats, 0, sizeof(*stats));
 
     /* XRAY_XI_CHECK=1 enables per-pass verification to pinpoint
      * the exact pass that breaks an invariant. */
@@ -4806,7 +4858,11 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                          "pass '%s' could not open an Xi edit session", desc->name);
                 goto done;
             }
-            XiPassChange pc = desc->fn(f);
+            /* A composite pass gets the same mask the walk above applies, so
+             * a pass it re-runs internally is withheld exactly when the
+             * driver would have withheld it. */
+            XiPassChange pc =
+                desc->fn_masked ? desc->fn_masked(f, effective_disable) : desc->fn(f);
 
             XiPassOutcome pass_outcome;
             char edit_error[256] = {0};
@@ -4872,6 +4928,20 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 fprintf(stderr, "=============================================\n");
             }
 
+            /* A pass that declares it does not count must not return a count:
+             * the declaration is what the statistics dump prints instead of a
+             * number, so a pass that starts counting has to say so or the
+             * dump reports n/a over a real measurement. */
+            if ((desc->flags & XI_PASS_NO_VALUE_COUNTS) && (pc.n_removed || pc.n_added)) {
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' declares no value counts but reported %u removed and %u added",
+                         desc->name, pc.n_removed, pc.n_added);
+                goto done;
+            }
+
             /* Record per-pass stats */
             XiPassStats *ps = stats_slot(stats, desc->name);
             if (ps) {
@@ -4879,6 +4949,7 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 ps->n_removed += pc.n_removed;
                 ps->n_added += pc.n_added;
                 ps->elapsed_ns += dt;
+                ps->counts_reported = (desc->flags & XI_PASS_NO_VALUE_COUNTS) == 0;
             }
 
             round_chg = xi_pass_merge(round_chg, pc);
@@ -5002,14 +5073,31 @@ XR_FUNC void xi_pipeline_stats_dump(const XiPipelineStats *stats, const char *fu
             stats->total_rounds, (double) stats->total_ns / 1e6);
 
     uint32_t total_invocations = 0;
+    bool any_unreported = false;
     for (uint32_t i = 0; i < stats->npass; i++) {
         const XiPassStats *ps = &stats->passes[i];
+        char removed[16];
+        char added[16];
         if (ps->invocations == 0)
             continue;
-        fprintf(stderr, "  %-18s  %3u calls  %5u rem  %5u add  %7.3f ms\n", ps->name,
-                ps->invocations, ps->n_removed, ps->n_added, (double) ps->elapsed_ns / 1e6);
+        /* A pass that does not maintain the counters prints n/a. Printing its
+         * zero instead reads as "ran and changed nothing", which is a
+         * conclusion the number does not support. */
+        if (ps->counts_reported) {
+            snprintf(removed, sizeof(removed), "%5u", ps->n_removed);
+            snprintf(added, sizeof(added), "%5u", ps->n_added);
+        } else {
+            snprintf(removed, sizeof(removed), "%5s", "n/a");
+            snprintf(added, sizeof(added), "%5s", "n/a");
+            any_unreported = true;
+        }
+        fprintf(stderr, "  %-18s  %3u calls  %s rem  %s add  %7.3f ms\n", ps->name,
+                ps->invocations, removed, added, (double) ps->elapsed_ns / 1e6);
         total_invocations += ps->invocations;
     }
+    if (any_unreported)
+        fprintf(stderr,
+                "  n/a: the pass does not count values; it may have rewritten the function\n");
 
     /* Cache effectiveness — recomputes vs total pass invocations.
      * Without caching, every pass that needs dominators would force a

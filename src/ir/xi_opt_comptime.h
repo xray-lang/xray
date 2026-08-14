@@ -16,7 +16,11 @@
 #define XI_CONST_FIXPOINT_MAX_ROUNDS 8
 
 /* Run const-folding/copy-prop/SCCP/DCE pipeline to a fixed point.
- * This is an IR optimization pass, not the frontend `comptime` evaluator. */
-XR_FUNC XiPassChange xi_opt_const_fixpoint(XiFunc *f);
+ * This is an IR optimization pass, not the frontend `comptime` evaluator.
+ *
+ * `disabled` is the optimizer policy's withheld-pass mask, the same one the
+ * driver applies to the pass table. A constituent the mask withholds is
+ * dropped from the loop, so naming a pass in a spec withholds it here too. */
+XR_FUNC XiPassChange xi_opt_const_fixpoint(XiFunc *f, XiOptDisableMask disabled);
 
 #endif /* XI_OPT_COMPTIME_H */

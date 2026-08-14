@@ -15,7 +15,8 @@
  *     3. Gate passes by optimization level
  *
  *   Three optimization levels control which passes fire:
- *     XI_OPT_NONE  — verification only (check pipelines, AOT dry-run)
+ *     XI_OPT_NONE  — no pass runs; verification and the rest of the pipeline
+ *                    still do
  *     XI_OPT_LIGHT — cheap cleanup (VM default: constfold, copy_prop, DCE)
  *     XI_OPT_FULL  — all passes including SCCP, GVN, LICM (AOT)
  *
@@ -85,7 +86,10 @@ static inline XiPassChange xi_pass_merge(XiPassChange a, XiPassChange b) {
 /* ========== Optimization Levels ========== */
 
 typedef enum {
-    XI_OPT_NONE = 0,  /* no optimization (verify-only pipeline) */
+    /* No pass runs at all. The stage verifiers and the rest of the pipeline
+     * still run, so this is the setting a bisection starts from: whatever it
+     * answers, no optimization produced it. */
+    XI_OPT_NONE = 0,
     XI_OPT_LIGHT = 1, /* constfold + strength_reduce + copy_prop + phi_simp + DCE */
     XI_OPT_FULL = 2,  /* LIGHT + SCCP + GVN + LICM + GCM + inlining + if-conv */
 } XiOptLevel;
@@ -165,6 +169,26 @@ typedef uint32_t XiOptDisableMask;
 /* Pass function signature: mutates XiFunc in-place, returns change record */
 typedef XiPassChange (*XiPassFn)(XiFunc *f);
 
+/* Signature of a pass that runs other passes inside itself. XiPassFn cannot
+ * describe such a pass: the mask that withholds its constituents never
+ * reaches it, so every constituent would run whatever the caller asked for,
+ * and a measurement taken with one of them named would report the wrong
+ * pass' contribution. A composite pass publishes this entry point instead
+ * and receives the same mask the driver applies to the pass table. */
+typedef XiPassChange (*XiPassMaskedFn)(XiFunc *f, XiOptDisableMask disabled);
+
+/* True when `disabled` withholds the pass at `pass_id`. Required passes are
+ * structural and are never withheld. This is the single predicate that
+ * decides it, so a composite pass reaches exactly the same answer as the
+ * driver's walk over the pass table. Out-of-range ids are not withheld. */
+XR_FUNC bool xi_pass_withheld_by_mask(XiOptDisableMask disabled, int pass_id);
+
+/* True when the pass at `pass_id` carries XI_PASS_REQUIRED, so no mask can
+ * withhold it. The spec parser asks before accepting a pass name, because a
+ * spec that names a required pass is a request the compiler cannot honour.
+ * Out-of-range ids are not required. */
+XR_FUNC bool xi_pass_id_is_required(int pass_id);
+
 /* Flags describing per-pass properties */
 #define XI_PASS_NONE 0u
 #define XI_PASS_NEEDS_DOM (1u << 0)    /* requires dominator tree */
@@ -172,10 +196,23 @@ typedef XiPassChange (*XiPassFn)(XiFunc *f);
 #define XI_PASS_NEEDS_DEFUSE (1u << 2) /* requires def-use chains */
 #define XI_PASS_REQUIRED (1u << 3)     /* cannot be disabled by env / config */
 #define XI_PASS_CORO_PLAN_SAFE (1u << 4) /* preserves frozen coroutine CFG anchors */
+/* The pass does not maintain XiPassChange.n_removed / n_added. Statistics
+ * print "n/a" for it instead of a zero, because a zero from a pass that
+ * never counts is indistinguishable from a pass that changed nothing, and a
+ * reader has drawn the wrong conclusion from exactly that. A rewrite that
+ * moves values rather than adding or deleting them (LICM) or deletes edges
+ * rather than values (loop splitting) has no honest number to print here,
+ * so this flag states that rather than inventing one. The driver rejects a
+ * pass that carries the flag and returns a non-zero count, so the flag
+ * cannot quietly go stale when a pass starts counting. */
+#define XI_PASS_NO_VALUE_COUNTS (1u << 5)
 
 typedef struct XiPassDesc {
     const char *name;     /* human-readable name for logging */
     XiPassFn fn;          /* pass entry point */
+    /* Entry point for a pass that re-runs other passes. Exactly one of `fn`
+     * and `fn_masked` is set; the pass-table validator checks that. */
+    XiPassMaskedFn fn_masked;
     XiOptLevel min_level; /* minimum opt level to run this pass */
     uint32_t flags;       /* XI_PASS_* flags */
 
@@ -210,6 +247,10 @@ typedef struct XiPassStats {
     uint32_t n_removed;   /* total values eliminated */
     uint32_t n_added;     /* total values inserted */
     uint64_t elapsed_ns;  /* cumulative wall-clock nanoseconds */
+    /* False when the pass carries XI_PASS_NO_VALUE_COUNTS: n_removed and
+     * n_added are then not a measurement of it and say nothing about whether
+     * it rewrote anything. */
+    bool counts_reported;
 } XiPassStats;
 
 /* Aggregate statistics for the entire pipeline execution. */

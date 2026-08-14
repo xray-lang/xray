@@ -831,12 +831,15 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
 
     /* Optimization consumes CoroLowered and produces a verified Optimized program. */
     if (cfg->run_optimize) {
-        XiOptLevel level = cfg->opt_level;
-        if (level == XI_OPT_NONE)
-            level = XI_OPT_LIGHT;
-
+        /* The level is the configuration's, unaltered. This used to raise the
+         * none level to light before calling the driver, which the driver
+         * implements: "--xi-opt vm=none" ran seven passes and produced
+         * bytecode byte-identical to "vm=light". A level that names itself
+         * "no optimization" and then optimizes is worse than no level at
+         * all -- it is the one setting a bisection starts from. */
         XiPipelineStats stats;
-        XiOptResult opt = xi_opt_run_pipeline_ex_with_mask(ir, level, &stats, cfg->budget_ns,
+        XiOptResult opt = xi_opt_run_pipeline_ex_with_mask(ir, cfg->opt_level, &stats,
+                                                           cfg->budget_ns,
                                                            cfg->disabled_opt_passes);
         if (!opt.ok) {
             xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OPTIMIZE,

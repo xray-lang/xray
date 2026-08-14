@@ -114,6 +114,21 @@ TEST(refuses_every_unknown_token) {
     ASSERT(rejects("VM=FULL"));              /* names are exact */
 }
 
+TEST(refuses_to_withhold_a_required_pass) {
+    /* tbaa carries XI_PASS_REQUIRED, so the driver runs it whether or not its
+     * bit is set. Accepting the name would hand back a policy that renders as
+     * "tbaa withheld" while tbaa keeps running, and every difference measured
+     * against it would be credited to a pass that never stopped. */
+    ASSERT(xi_pass_id_by_name("tbaa") >= 0);
+    ASSERT(xi_pass_id_is_required(xi_pass_id_by_name("tbaa")));
+    ASSERT(rejects("vm=full-tbaa"));
+    ASSERT(rejects("aot=full-tbaa"));
+    /* The refusal is per pass name, not per spec: a good name alongside a
+     * required one still leaves the policy untouched. */
+    ASSERT(rejects("vm=full-dce-tbaa"));
+    ASSERT(!xi_pass_id_is_required(xi_pass_id_by_name("dce")));
+}
+
 TEST(a_rejected_spec_changes_nothing) {
     /* The interesting half of fail-closed: the first entry of a two-entry
      * spec must not survive when the second entry is rejected. */
@@ -188,6 +203,7 @@ int main(void) {
     run_withholds_named_passes_from_a_level();
     run_states_both_pipelines_in_one_spec();
     run_refuses_every_unknown_token();
+    run_refuses_to_withhold_a_required_pass();
     run_a_rejected_spec_changes_nothing();
     run_renders_back_to_a_spec_it_accepts();
     run_rendering_holds_every_pass_of_both_pipelines();

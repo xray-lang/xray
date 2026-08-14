@@ -38,6 +38,9 @@
  *
  *   Every token is checked. An unknown pipeline, level or pass name is an
  *   error that stops the session; nothing falls back to a default level.
+ *   Naming a required pass (XI_PASS_REQUIRED) is an error too: the driver
+ *   runs those whatever the mask says, so accepting the name would report a
+ *   configuration the compiler is not running.
  */
 
 #ifndef XI_PASS_POLICY_H
