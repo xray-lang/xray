@@ -991,15 +991,18 @@
       "production_callers": [
         "src/aot/xi_cgen.c",
         "src/aot/xrt.h",
+        "src/aot/xrt_arith.h",
         "src/aot/xrt_core_freestanding.h",
         "src/aot/xrt_method.h",
         "src/aot/xrt_value.h",
         "src/ir/xi_opt.c",
         "src/ir/xi_opt_sccp.c",
+        "src/runtime/object/xbigint.c",
         "src/runtime/object/xbigint.h",
         "src/runtime/value/xfloat_methods.h",
         "src/runtime/xstrbuf.c",
         "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_arith.inc.c",
         "stdlib/math/math.c"
       ],
       "profiles": [
@@ -1010,6 +1013,8 @@
       ],
       "representation": "native",
       "signatures": [
+        "xr_bigint_binary_dispatch",
+        "xr_bigint_limbs_from_i64",
         "xr_numeric_core_format_fixed",
         "xr_numeric_core_format_i64",
         "xr_numeric_core_format_i64_hex",

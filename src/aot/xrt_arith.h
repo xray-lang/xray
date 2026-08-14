@@ -519,11 +519,38 @@ static inline int xrt_is_tagged_number(XrValue v) {
     return v.tag == XR_TAG_I64 || v.tag == XR_TAG_F64;
 }
 
+/* Classify a tagged value for the shared BigInt binary judgement, then ask it.
+ * A pair the judgement has no rule for keeps a BigInt operand, which the
+ * number guard below then reports instead of projecting the pointer. */
+#define XRT_BIGINT_OPERAND(v)                                                                      \
+    ((v).tag == XR_TAG_BIGINT                                                                      \
+         ? XR_BIGINT_OPERAND_BIGINT                                                                \
+         : ((v).tag == XR_TAG_I64 ? XR_BIGINT_OPERAND_INT : XR_BIGINT_OPERAND_OTHER))
+#define XRT_BIGINT_EVALUATES(a, b)                                                                 \
+    (xr_bigint_binary_dispatch(XRT_BIGINT_OPERAND(a), XRT_BIGINT_OPERAND(b)) ==                    \
+     XR_BIGINT_BINARY_EVALUATE)
+
+/* Promote an int operand so a mixed pair evaluates in the BigInt domain. The
+ * limb encoding is the shared one, so the promoted operand is bit-identical to
+ * the one the VM allocator builds. */
+static inline XrValue xrt_bigint_promote(XrValue v) {
+    if (v.tag == XR_TAG_BIGINT)
+        return v;
+    XrBigIntI64Limbs encoded = xr_bigint_limbs_from_i64(v.i);
+    XrValue promoted;
+    xrt_bigint_view_t *b = xrt_bigint_new(2, &promoted);
+    b->limbs[0] = encoded.limbs[0];
+    b->limbs[1] = encoded.limbs[1];
+    b->len = encoded.len;
+    b->sign = encoded.sign;
+    return promoted;
+}
+
 static inline XrValue xrt_add(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_i64_add(a.i, b.i));
-    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
-        return xrt_bigint_addsub(a, b, 0);
+    if (XRT_BIGINT_EVALUATES(a, b))
+        return xrt_bigint_addsub(xrt_bigint_promote(a), xrt_bigint_promote(b), 0);
     /* `+` joins two strings; a string paired with anything else has no result. */
     if (XR_IS_STR(a) && XR_IS_STR(b))
         return xrt_str_concat_value(a, b); /* header lengths, no strlen */
@@ -538,8 +565,10 @@ static inline XrValue xrt_add(XrValue a, XrValue b) {
 static inline XrValue xrt_sub(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_i64_sub(a.i, b.i));
-    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
-        return xrt_bigint_addsub(a, b, 1);
+    if (XRT_BIGINT_EVALUATES(a, b))
+        return xrt_bigint_addsub(xrt_bigint_promote(a), xrt_bigint_promote(b), 1);
+    if (!xrt_is_tagged_number(a) || !xrt_is_tagged_number(b))
+        xrt_throw_exc(xr_box_str("E0404: subtraction requires numeric types"));
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return XR_FROM_FLOAT(fa - fb);
@@ -548,8 +577,8 @@ static inline XrValue xrt_sub(XrValue a, XrValue b) {
 static inline XrValue xrt_mul(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_i64_mul(a.i, b.i));
-    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
-        return xrt_bigint_mul_val(a, b);
+    if (XRT_BIGINT_EVALUATES(a, b))
+        return xrt_bigint_mul_val(xrt_bigint_promote(a), xrt_bigint_promote(b));
     if (!xrt_is_tagged_number(a) || !xrt_is_tagged_number(b))
         xrt_throw_exc(xr_box_str("E0404: multiplication requires numeric types"));
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
@@ -605,8 +634,10 @@ static inline int64_t xrt_uint_mod(int64_t a, int64_t b) {
 static inline XrValue xrt_div(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_int_div(a.i, b.i));
-    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
-        return xrt_bigint_div_val(a, b);
+    if (XRT_BIGINT_EVALUATES(a, b))
+        return xrt_bigint_div_val(xrt_bigint_promote(a), xrt_bigint_promote(b));
+    if (!xrt_is_tagged_number(a) || !xrt_is_tagged_number(b))
+        xrt_throw_exc(xr_box_str("E0404: division requires numeric types"));
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return XR_FROM_FLOAT(fa / fb);
@@ -615,8 +646,8 @@ static inline XrValue xrt_div(XrValue a, XrValue b) {
 static inline XrValue xrt_mod(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_int_mod(a.i, b.i));
-    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
-        return xrt_bigint_mod_val(a, b);
+    if (XRT_BIGINT_EVALUATES(a, b))
+        return xrt_bigint_mod_val(xrt_bigint_promote(a), xrt_bigint_promote(b));
     xrt_throw_exc(xr_box_str("E0404: modulo requires integer types"));
 }
 

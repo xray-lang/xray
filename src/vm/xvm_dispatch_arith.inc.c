@@ -37,6 +37,16 @@
                                XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO, XR_SEM_CONSUMER_VM, (kind),  \
                                XR_INT_DIV_MOD_PROOF_NONE, (lhs), (rhs))
 
+/* Classify a VM value for the shared BigInt binary judgement, then ask that
+ * judgement. A pair it has no rule for falls out of the BigInt lane and lands
+ * on the enclosing case's type error, so no operand is ever reinterpreted. */
+#define XVM_BIGINT_OPERAND(v)                                                                      \
+    (XR_IS_BIGINT(v) ? XR_BIGINT_OPERAND_BIGINT                                                    \
+                     : (XR_IS_INT(v) ? XR_BIGINT_OPERAND_INT : XR_BIGINT_OPERAND_OTHER))
+#define XVM_BIGINT_EVALUATES(vb, vc)                                                               \
+    (xr_bigint_binary_dispatch(XVM_BIGINT_OPERAND(vb), XVM_BIGINT_OPERAND(vc)) ==                  \
+     XR_BIGINT_BINARY_EVALUATE)
+
 #define XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn)                             \
     do {                                                                                           \
         if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
@@ -52,7 +62,7 @@
             XR_SET_FLOAT(R(a), _nb float_op _nc);                                                  \
             vmbreak;                                                                               \
         }                                                                                          \
-        if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {                                                \
+        if (XVM_BIGINT_EVALUATES(vb, vc)) {                                                        \
             R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, vc, bigint_fn);                            \
             vmbreak;                                                                               \
         }                                                                                          \
@@ -124,7 +134,7 @@
         int c = GETARG_C(i);                                                                       \
         XrValue vb = R(b);                                                                         \
         XrValue vc = R(c);                                                                         \
-        if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {                                                \
+        if (XVM_BIGINT_EVALUATES(vb, vc)) {                                                        \
             R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, bigint_fn);                            \
             if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {                                               \
                 VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");                          \
@@ -166,7 +176,7 @@
             R(a) = xr_int(remainder.value);                                                        \
             vmbreak;                                                                               \
         }                                                                                          \
-        if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {                                                \
+        if (XVM_BIGINT_EVALUATES(vb, vc)) {                                                        \
             R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, bigint_fn);                            \
             if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {                                               \
                 VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");                            \
@@ -231,7 +241,7 @@ vmcase(OP_ADDI) {
         XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) + (uint64_t) (int64_t) sc));
     } else if (XR_IS_FLOAT(vb)) {
         XR_SET_FLOAT(R(a), vb.f + (double) sc);
-    } else if (XR_IS_BIGINT(vb)) {
+    } else if (XVM_BIGINT_EVALUATES(vb, xr_int(sc))) {
         R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, xr_int(sc), xr_bigint_add);
     } else {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "addition requires numeric types");
@@ -247,9 +257,14 @@ vmcase(OP_ADDK) {
     XrValue kc = k[c];
 
     // BigInt + constant mixed
-    if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(kc)) {
+    XrBigIntBinaryDispatch bigint_lane =
+        xr_bigint_binary_dispatch(XVM_BIGINT_OPERAND(vb), XVM_BIGINT_OPERAND(kc));
+    if (bigint_lane == XR_BIGINT_BINARY_EVALUATE) {
         R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, kc, xr_bigint_add);
         vmbreak;
+    }
+    if (bigint_lane == XR_BIGINT_BINARY_INVALID) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "addition requires numeric types");
     }
 
     if (XR_IS_INT(vb) && XR_IS_INT(kc)) {
@@ -272,7 +287,7 @@ vmcase(OP_SUBI) {
         XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) - (uint64_t) (int64_t) sc));
     } else if (XR_IS_FLOAT(vb)) {
         XR_SET_FLOAT(R(a), vb.f - (double) sc);
-    } else if (XR_IS_BIGINT(vb)) {
+    } else if (XVM_BIGINT_EVALUATES(vb, xr_int(sc))) {
         R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, xr_int(sc), xr_bigint_sub);
     } else {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "subtraction requires numeric types");
@@ -288,9 +303,14 @@ vmcase(OP_SUBK) {
     XrValue kc = k[c];
 
     // BigInt - constant mixed
-    if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(kc)) {
+    XrBigIntBinaryDispatch bigint_lane =
+        xr_bigint_binary_dispatch(XVM_BIGINT_OPERAND(vb), XVM_BIGINT_OPERAND(kc));
+    if (bigint_lane == XR_BIGINT_BINARY_EVALUATE) {
         R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, kc, xr_bigint_sub);
         vmbreak;
+    }
+    if (bigint_lane == XR_BIGINT_BINARY_INVALID) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "subtraction requires numeric types");
     }
 
     if (XR_IS_INT(vb) && XR_IS_INT(kc)) {
@@ -318,7 +338,7 @@ vmcase(OP_MULI) {
         XR_SET_FLOAT(R(a), vb.f * (double) sc);
         vmbreak;
     }
-    if (XR_IS_BIGINT(vb)) {
+    if (XVM_BIGINT_EVALUATES(vb, xr_int(sc))) {
         R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, xr_int(sc), xr_bigint_mul);
         vmbreak;
     }
@@ -338,9 +358,14 @@ vmcase(OP_MULK) {
     XrValue vc = k[c];
 
     // BigInt * constant mixed
-    if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
+    XrBigIntBinaryDispatch bigint_lane =
+        xr_bigint_binary_dispatch(XVM_BIGINT_OPERAND(vb), XVM_BIGINT_OPERAND(vc));
+    if (bigint_lane == XR_BIGINT_BINARY_EVALUATE) {
         R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, vc, xr_bigint_mul);
         vmbreak;
+    }
+    if (bigint_lane == XR_BIGINT_BINARY_INVALID) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "multiplication requires numeric types");
     }
 
     // Fast path: integer multiplication (wrap on overflow)
@@ -370,12 +395,17 @@ vmcase(OP_DIVK) {
     XrValue vc = k[c];
 
     // BigInt / constant mixed
-    if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
+    XrBigIntBinaryDispatch bigint_lane =
+        xr_bigint_binary_dispatch(XVM_BIGINT_OPERAND(vb), XVM_BIGINT_OPERAND(vc));
+    if (bigint_lane == XR_BIGINT_BINARY_EVALUATE) {
         R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, xr_bigint_div);
         if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {
             VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
         }
         vmbreak;
+    }
+    if (bigint_lane == XR_BIGINT_BINARY_INVALID) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "division requires numeric types");
     }
 
     // int / int → int (type determines result)
