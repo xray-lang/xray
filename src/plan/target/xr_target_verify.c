@@ -2538,15 +2538,16 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
              exact_native_module_namespaces[operation->result_value] != 0))
             exact_types[operation->result_type] = 1;
     }
-    /* The constructor receiver is the one dynamic value in the plan that no
-     * operation result names: it is bound on entry rather than computed, so its
-     * type reaches this collector through the parameter table or not at all. */
+    /* A class instance crossing a parameter boundary is the one dynamic value in
+     * the plan that no operation result names: it is bound on entry rather than
+     * computed, so its type reaches this collector through the parameter table
+     * or not at all. */
     size_t parameter_count = xr_semantic_plan_parameter_count(plan->semantic_plan);
     for (uint32_t i = 0; i < (uint32_t) parameter_count; i++) {
         const XrSemanticParameterRecord *parameter =
             xr_semantic_plan_parameter(plan->semantic_plan, i);
         if (!parameter || parameter->type >= type_count ||
-            xr_semantic_class_constructor_receiver_source_class(plan->semantic_plan, i) ==
+            xr_semantic_class_instance_parameter_source_class(plan->semantic_plan, i) ==
                 XR_SEMANTIC_INDEX_NONE)
             continue;
         exact_types[parameter->type] = 1;
@@ -2666,18 +2667,19 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     bool exact_string_byte_parameter = semantic_u8_slice_parameter_is_exact(
         plan->semantic_plan, parameter) && parameter->type == semantic_type;
     /* Recomputed through the shared judgement for the same reason the class
-     * object and the instance are. The receiver is the one value in the family
+     * object and the instance are. A receiver is the one value in the family
      * whose declaration its type row cannot name, so the judgement reads it off
-     * the constructor's own identity; a builder row this verifier cannot
-     * re-derive from that identity stays unproven. */
+     * the member's own identity; a builder row this verifier cannot re-derive
+     * from that identity, or from the class an ordinary parameter was declared
+     * with, stays unproven. */
     uint32_t receiver_parameter =
         operation ? XR_SEMANTIC_INDEX_NONE
                   : xr_semantic_class_parameter_for_value(plan->semantic_plan, semantic_value);
     const XrSemanticParameterRecord *receiver_record =
         xr_semantic_plan_parameter(plan->semantic_plan, receiver_parameter);
     bool exact_class_receiver =
-        xr_semantic_class_constructor_receiver_source_class(plan->semantic_plan,
-                                                            receiver_parameter) !=
+        xr_semantic_class_instance_parameter_source_class(plan->semantic_plan,
+                                                          receiver_parameter) !=
             XR_SEMANTIC_INDEX_NONE &&
         receiver_record && receiver_record->type == semantic_type &&
         receiver_record->function == semantic_function;

@@ -157,38 +157,54 @@ static inline bool xr_semantic_class_anonymous_instance_type_is_exact(
            type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT);
 }
 
-/* The declaration whose instance a constructor receives, or NONE. Every other
- * value in this family keeps its declaration in its own type row; the receiver
+/* The declaration whose instance a declared receiver binds, or NONE. Every other
+ * value in this family keeps its declaration in its own type row; a receiver
  * cannot, because the frontend types `this` as a bare instance naming no
  * declaration at all, so the type table has no answer to give. The authority is
  * the function's identity instead: a function the plan records as the
- * constructor of one frozen declaration receives that declaration's instance,
- * and the receiver is the parameter its own parameter range starts with rather
- * than any parameter that merely claims ordinal zero. The row must still be the
- * anonymous instance shape, so a constructor whose receiver carries geometry or
- * already names a class stays outside this family. */
-static inline uint32_t xr_semantic_class_constructor_receiver_source_class(
-    const XrSemanticPlan *plan, uint32_t parameter_index) {
+ * `source_kind` member of one frozen declaration receives that declaration's
+ * instance, and the receiver is the parameter its own parameter range starts
+ * with rather than any parameter that merely claims ordinal zero. The row must
+ * still be the anonymous instance shape, so a member whose receiver carries
+ * geometry or already names a class stays outside this family.
+ *
+ * The two member kinds differ only in what the plan records on the parameter: a
+ * constructor receives the instance it is building and carries no borrow
+ * annotation, while an instance method receives a borrowed receiver and the
+ * plan states that borrow on the parameter itself. The annotation is admitted
+ * only where the member kind can carry it, and only when the ownership it
+ * claims is the ownership the plan recorded, so the flag can never widen the
+ * ownership fact it is supposed to restate. */
+static inline uint32_t xr_semantic_class_declared_receiver_source_class(
+    const XrSemanticPlan *plan, uint32_t parameter_index, uint8_t source_kind) {
     if (!plan || parameter_index == XR_SEMANTIC_INDEX_NONE ||
         parameter_index >= (uint32_t) xr_semantic_plan_parameter_count(plan))
         return XR_SEMANTIC_INDEX_NONE;
     const XrSemanticParameterRecord *parameter =
         xr_semantic_plan_parameter(plan, parameter_index);
+    uint8_t receiver_flags =
+        (uint8_t) (XR_SEM_PARAMETER_REQUIRED |
+                   (source_kind == XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD
+                        ? XR_SEM_PARAMETER_RECEIVER_BORROWED
+                        : 0));
     if (!parameter || parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->ordinal != 0 ||
         parameter->mode != XR_PARAM_READ || parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
+        (parameter->flags & ~receiver_flags) != 0 || parameter->reserved != 0 ||
         parameter->function >= (uint32_t) xr_semantic_plan_function_count(plan))
         return XR_SEMANTIC_INDEX_NONE;
     /* The receiver is bound by reference either way, but which of the two the
      * plan recorded is the plan's fact to state, not this judgement's to pick. */
     if (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED)
         return XR_SEMANTIC_INDEX_NONE;
+    if ((parameter->flags & XR_SEM_PARAMETER_RECEIVER_BORROWED) != 0 &&
+        parameter->ownership != XI_OWN_BORROWED)
+        return XR_SEMANTIC_INDEX_NONE;
     const XrSemanticFunctionRecord *function =
         xr_semantic_plan_function(plan, parameter->function);
     /* Parameter zero of the function is the one its range starts with. Trusting
      * the ordinal alone would let a parameter belonging to another function's
      * range answer for this one. */
-    if (!function || function->source_kind != XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR ||
+    if (!function || function->source_kind != source_kind ||
         function->parameter_count == 0 || function->parameter_begin != parameter_index ||
         !xr_semantic_class_declaration_is_frozen(plan, function->source_class))
         return XR_SEMANTIC_INDEX_NONE;
@@ -196,6 +212,74 @@ static inline uint32_t xr_semantic_class_constructor_receiver_source_class(
             xr_semantic_plan_type(plan, parameter->type)))
         return XR_SEMANTIC_INDEX_NONE;
     return function->source_class;
+}
+
+/* The declaration whose instance a constructor receives, or NONE. */
+static inline uint32_t xr_semantic_class_constructor_receiver_source_class(
+    const XrSemanticPlan *plan, uint32_t parameter_index) {
+    return xr_semantic_class_declared_receiver_source_class(
+        plan, parameter_index, XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR);
+}
+
+/* The declaration whose instance an instance method receives, or NONE. */
+static inline uint32_t xr_semantic_class_method_receiver_source_class(
+    const XrSemanticPlan *plan, uint32_t parameter_index) {
+    return xr_semantic_class_declared_receiver_source_class(
+        plan, parameter_index, XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD);
+}
+
+/* The declaration whose instance an ordinary parameter binds, or NONE. Unlike a
+ * receiver, such a parameter is written in the source with the class as its
+ * declared type, so its own type row names the declaration and the function's
+ * identity says nothing about it: the judgement is the row, plus the plan's own
+ * record that the binding is a plain shared read that takes no owning
+ * reference. An owned class parameter would move the allocation across the call
+ * boundary, and this family accounts for no such transfer, so only the borrow
+ * the plan recorded is admitted. The parameter must also sit inside its own
+ * function's range at the ordinal that range gives it, so a row belonging to
+ * another function can never answer for this one. */
+static inline uint32_t xr_semantic_class_argument_source_class(const XrSemanticPlan *plan,
+                                                               uint32_t parameter_index) {
+    if (!plan || parameter_index == XR_SEMANTIC_INDEX_NONE ||
+        parameter_index >= (uint32_t) xr_semantic_plan_parameter_count(plan))
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(plan, parameter_index);
+    if (!parameter || parameter->value == XR_SEMANTIC_INDEX_NONE ||
+        parameter->mode != XR_PARAM_READ || parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        parameter->ownership != XI_OWN_BORROWED ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
+        parameter->function >= (uint32_t) xr_semantic_plan_function_count(plan))
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(plan, parameter->function);
+    if (!function || function->parameter_count == 0 ||
+        parameter_index < function->parameter_begin ||
+        parameter_index - function->parameter_begin >= function->parameter_count ||
+        parameter->ordinal != parameter_index - function->parameter_begin)
+        return XR_SEMANTIC_INDEX_NONE;
+    return xr_semantic_class_instance_type_source_class(
+        plan, xr_semantic_plan_type(plan, parameter->type));
+}
+
+/* One judgement for every way a class instance crosses a parameter boundary:
+ * the receiver a constructor builds, the receiver an instance method borrows,
+ * and an ordinary parameter declared with the class as its type. All three bind
+ * the same outer tagged value for the same reason the construction result does,
+ * so the layers that only need to know "is this parameter a proved class
+ * instance" ask this one question instead of restating the three. The three are
+ * disjoint by construction: a receiver's row is the anonymous instance that
+ * names no declaration, and an ordinary parameter's row must name one. */
+static inline uint32_t xr_semantic_class_instance_parameter_source_class(
+    const XrSemanticPlan *plan, uint32_t parameter_index) {
+    uint32_t source_class =
+        xr_semantic_class_constructor_receiver_source_class(plan, parameter_index);
+    if (source_class != XR_SEMANTIC_INDEX_NONE)
+        return source_class;
+    source_class = xr_semantic_class_method_receiver_source_class(plan, parameter_index);
+    if (source_class != XR_SEMANTIC_INDEX_NONE)
+        return source_class;
+    return xr_semantic_class_argument_source_class(plan, parameter_index);
 }
 
 /* The one function the plan records as the constructor of `source_class`, or
@@ -241,15 +325,40 @@ static inline uint32_t xr_semantic_class_parameter_for_value(const XrSemanticPla
     return found;
 }
 
+/* The declaration whose instance a receiver operand names when the operand
+ * reads a parameter, or NONE when it reads anything else. Every field access
+ * inside a class member or inside a function that takes an instance reaches its
+ * object this way, so the read, the write and the storage authority all ask
+ * this one question rather than each restating which parameter shapes count.
+ * The operand must read the parameter as its own function's binding and with
+ * the very type row the parameter carries, so a row belonging to another
+ * function or to another type can never answer for this access. */
+static inline uint32_t xr_semantic_class_receiver_parameter_source_class(
+    const XrSemanticPlan *plan, uint32_t function, const XrSemanticOperandRecord *receiver) {
+    if (!plan || !receiver)
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t parameter_index = xr_semantic_class_parameter_for_value(plan, receiver->value);
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(plan, parameter_index);
+    uint32_t source_class =
+        xr_semantic_class_instance_parameter_source_class(plan, parameter_index);
+    if (source_class == XR_SEMANTIC_INDEX_NONE || !parameter ||
+        parameter->type != receiver->type || parameter->function != function)
+        return XR_SEMANTIC_INDEX_NONE;
+    return source_class;
+}
+
 /* The declaration whose instance a field store writes through, or NONE. The
  * store is the generated field write: a borrowed receiver, one consumed value
  * and one metadata name, with no allocation, constant, callee or view of its
  * own. Which field the name selects is the frontend's proof; what this
- * judgement adds is that the receiver is a constructor receiver this family
- * named, so the write lands in a proved allocation rather than in an open
- * object. The stored value's own storage is deliberately not this judgement's
- * question: a field whose type has no storage row must still be refused by the
- * caller that asks for it. */
+ * judgement adds is that the receiver is an instance this family named through
+ * a parameter, so the write lands in a proved allocation rather than in an open
+ * object. A store through a computed receiver stays outside the family: the
+ * write would then have to be accounted for against an allocation this
+ * judgement did not follow to its parameter. The stored value's own storage is
+ * deliberately not this judgement's question: a field whose type has no storage
+ * row must still be refused by the caller that asks for it. */
 static inline uint32_t xr_semantic_class_field_store_source_class(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
     XrStableId zero = {{0}};
@@ -287,17 +396,9 @@ static inline uint32_t xr_semantic_class_field_store_source_class(
         stored->parameter_mode != 0 || stored->access != 0 || stored->origin != 0 ||
         stored->lifetime != 0 || stored->escape != 0 || stored->flags != 0)
         return XR_SEMANTIC_INDEX_NONE;
-    uint32_t parameter_index = xr_semantic_class_parameter_for_value(plan, receiver->value);
-    const XrSemanticParameterRecord *parameter =
-        xr_semantic_plan_parameter(plan, parameter_index);
-    uint32_t source_class =
-        xr_semantic_class_constructor_receiver_source_class(plan, parameter_index);
-    /* The store must run inside the very constructor that receives the
-     * instance; a store reading another function's receiver names nothing. */
-    if (source_class == XR_SEMANTIC_INDEX_NONE || !parameter ||
-        parameter->type != receiver->type || parameter->function != operation->function)
-        return XR_SEMANTIC_INDEX_NONE;
-    return source_class;
+    /* The store must run inside the very function that binds the instance; a
+     * store reading another function's parameter names nothing. */
+    return xr_semantic_class_receiver_parameter_source_class(plan, operation->function, receiver);
 }
 
 /* The generated shape of a module-level shared load: a borrowed static read of
@@ -610,6 +711,14 @@ static inline uint32_t xr_semantic_class_field_read_source_class(
         receiver->parameter_mode != 0 || receiver->access != 0 || receiver->origin != 0 ||
         receiver->lifetime != 0 || receiver->escape != 0 || receiver->flags != 0)
         return XR_SEMANTIC_INDEX_NONE;
+    /* A receiver bound on entry is proved from the parameter table: the
+     * declaration is either the member's own identity or the row the parameter
+     * was declared with, and neither reaches this operand through a defining
+     * operation. */
+    if (xr_semantic_class_parameter_for_value(plan, receiver->value) !=
+        XR_SEMANTIC_INDEX_NONE)
+        return xr_semantic_class_receiver_parameter_source_class(plan, operation->function,
+                                                                 receiver);
     uint32_t source_class = xr_semantic_class_instance_type_source_class(
         plan, xr_semantic_plan_type(plan, receiver->type));
     const XrSemanticOperationRecord *definition =

@@ -3669,16 +3669,18 @@ static bool oracle_dynamic_source_class_instance_storage(
     return true;
 }
 
-/* The same proof for the instance a constructor receives. It re-proves the
+/* The same proof for a class instance that crosses a parameter boundary: the
+ * receiver a constructor builds, the receiver an instance method borrows, and an
+ * ordinary parameter declared with the class as its type. It re-proves the
  * TargetPlan row from the same shared judgement the plan builder and the plan
- * verifier use, so no layer can admit a receiver the others would refuse. The
- * receiver is bound on entry rather than computed, so the row it carries is a
+ * verifier use, so no layer can admit a binding the others would refuse. The
+ * value is bound on entry rather than computed, so the row it carries is a
  * parameter slot and its ownership is the parameter's own recorded ownership
  * rather than a property of the family. */
-static bool oracle_dynamic_source_class_receiver_storage(const VerifyAuthority *ctx,
-                                                         uint32_t semantic_value,
-                                                         XrRep *out_storage,
-                                                         uint16_t *out_machine_kind) {
+static bool oracle_dynamic_source_class_parameter_storage(const VerifyAuthority *ctx,
+                                                          uint32_t semantic_value,
+                                                          XrRep *out_storage,
+                                                          uint16_t *out_machine_kind) {
     if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
         return false;
     uint32_t parameter_index = ctx->parameter_by_value[semantic_value];
@@ -3687,7 +3689,7 @@ static bool oracle_dynamic_source_class_receiver_storage(const VerifyAuthority *
             ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
             : NULL;
     if (!parameter || parameter->value != semantic_value ||
-        xr_semantic_class_constructor_receiver_source_class(ctx->semantic, parameter_index) ==
+        xr_semantic_class_instance_parameter_source_class(ctx->semantic, parameter_index) ==
             XR_SEMANTIC_INDEX_NONE)
         return false;
     uint8_t ownership = parameter->ownership == XI_OWN_OWNED ? XR_TARGET_OWNERSHIP_OWNED
@@ -4803,10 +4805,11 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
                                        out_machine_kind))
         return true;
     if (ctx->parameter_by_value[semantic_value] != XR_SEMANTIC_INDEX_NONE) {
-        /* A constructor receiver is a tagged instance, which has no scalar
-         * machine storage to report; every other parameter keeps its own. */
-        if (oracle_dynamic_source_class_receiver_storage(ctx, semantic_value, out_storage,
-                                                         out_machine_kind))
+        /* A class instance bound on entry is a tagged instance, which has no
+         * scalar machine storage to report; every other parameter keeps its
+         * own. */
+        if (oracle_dynamic_source_class_parameter_storage(ctx, semantic_value, out_storage,
+                                                          out_machine_kind))
             return true;
         return oracle_machine_storage(ctx, semantic_value, out_storage,
                                       out_machine_kind);
@@ -5295,17 +5298,22 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                                           &ignored_kind);
         case XI_LOAD_FIELD:
             /* The receiver is the tagged instance the construction family
-             * proved; the read has no other operand. */
+             * proved, or the one a parameter bound on entry; the read has no
+             * other operand. Which of the two it is decides which oracle
+             * re-proves the row, and neither may answer for the other. */
             if (operand_index != 0 ||
                 xr_semantic_class_field_read_source_class(ctx->semantic, operation) ==
                     XR_SEMANTIC_INDEX_NONE)
                 return false;
+            if (ctx->parameter_by_value[source_value] != XR_SEMANTIC_INDEX_NONE)
+                return oracle_dynamic_source_class_parameter_storage(ctx, source_value,
+                                                                     out_storage, &ignored_kind);
             return oracle_dynamic_source_class_instance_storage(ctx, source_value, out_storage,
                                                                 &ignored_kind);
         case XI_STORE_FIELD:
-            /* The receiver is the tagged instance the constructor received; the
-             * stored value keeps its own native scalar storage. A field whose
-             * type has no storage row stays without authority rather than
+            /* The receiver is the tagged instance a parameter bound on entry;
+             * the stored value keeps its own native scalar storage. A field
+             * whose type has no storage row stays without authority rather than
              * falling back to a tagged guess, so a class that stores a field
              * this authority cannot represent is refused here. */
             if (operand_index > 1 ||
@@ -5313,8 +5321,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                     XR_SEMANTIC_INDEX_NONE)
                 return false;
             if (operand_index == 0)
-                return oracle_dynamic_source_class_receiver_storage(ctx, source_value, out_storage,
-                                                                    &ignored_kind);
+                return oracle_dynamic_source_class_parameter_storage(ctx, source_value, out_storage,
+                                                                     &ignored_kind);
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_BOX:
         case XI_ENUM_DESCRIPTOR_BOX:
@@ -5420,8 +5428,8 @@ static bool oracle_return_storage(const VerifyAuthority *ctx, uint32_t value,
            oracle_dynamic_string_literal_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_string_concat_result_storage(ctx, value, out_storage,
                                                        out_machine_kind) ||
-           oracle_dynamic_source_class_receiver_storage(ctx, value, out_storage,
-                                                        out_machine_kind) ||
+           oracle_dynamic_source_class_parameter_storage(ctx, value, out_storage,
+                                                         out_machine_kind) ||
            oracle_dynamic_direct_local_string_result_storage(ctx, value, out_storage,
                                                              out_machine_kind);
 }
