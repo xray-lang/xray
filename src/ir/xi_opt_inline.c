@@ -436,6 +436,16 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
         return NULL;
 
     xi_value_copy_metadata(cloned, src);
+    /* var_id names a source variable inside the callee's own numbering, and
+     * every consumer of it — register coalescing in the VM emitter, ARC's
+     * same-variable matching, closure binding — reads it as an identity claim
+     * scoped to one function.  Copying it into the caller makes an inlined
+     * value claim to be whichever caller variable happens to hold the same
+     * number, so a callee's first local coalesces onto the caller's receiver
+     * register and overwrites it.  A callee value has no source-variable
+     * identity in the caller, the same conclusion the call-plan place origins
+     * below already reach; it survives inlining as a temporary. */
+    cloned->var_id = XI_NO_VAR_ID;
     /* Tail position is scoped to the callee frame. Once that frame is
      * inlined, its former tail call must flow through the caller's
      * continuation, so carrying XI_FLAG_TAIL forward can make later method
