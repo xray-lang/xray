@@ -127,6 +127,17 @@ static bool inline_func_has_error_flow(const XiFunc *f, uint8_t depth) {
     return false;
 }
 
+/* Is `target` lexically nested directly inside `owner`? */
+static bool inline_func_is_child_of(const XiFunc *owner, const XiFunc *target) {
+    if (!owner || !target || !owner->children)
+        return false;
+    for (uint16_t i = 0; i < owner->nchildren; i++) {
+        if (owner->children[i] == target)
+            return true;
+    }
+    return false;
+}
+
 /* Analyze callee to build a detailed cost model. */
 static XiInlineCostModel analyze_callee(const XiFunc *callee) {
     XiInlineCostModel m = {0};
@@ -149,6 +160,9 @@ static XiInlineCostModel analyze_callee(const XiFunc *callee) {
             if (v->op == XI_FIXED_ARRAY_NEW ||
                 (v->op == XI_STACK_ALLOC && v->aux_int == XI_ARRAY_NEW))
                 m.has_stack_aggregate = true;
+            if (v->op == XI_CLOSURE_NEW && v->aux &&
+                inline_func_is_child_of(callee, (const XiFunc *) v->aux))
+                m.binds_nested_function = true;
             if (v->op == XI_ERR_CHECK && inline_err_check_is_dead(callee, v, 0))
                 continue;
             if (v->op == XI_THROW || v->op == XI_ERR_SET || v->op == XI_ERR_RETURN ||
@@ -310,6 +324,14 @@ XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallS
         return -1000; /* error flow and defers are call-boundary scoped */
     if (cost->has_stack_aggregate)
         return -1000; /* keep branch-local frame storage out of unrelated caller paths */
+    /* A closure over a nested function is bound to the frame that lexically
+     * encloses it.  Inlining relocates the binding into the caller while the
+     * nested function keeps the callee as its lexical parent and keeps its
+     * captures pointing at the callee's values, so the relocated binding no
+     * longer names a function the caller owns.  Nothing in this pass can
+     * re-establish that relation, so the call stays. */
+    if (cost->binds_nested_function)
+        return -1000;
 
     if (inline_is_leaf_straightline(cost)) {
         int score = (int) XI_INLINE_MAX_COST - (int) cost->value_count + 1;

@@ -37,6 +37,7 @@ typedef struct XiInlineCostModel {
     bool calls_self;          /* recursive (must never inline) */
     bool has_throw;           /* contains XI_THROW */
     bool has_stack_aggregate; /* owns frame-resident fixed-array storage */
+    bool binds_nested_function; /* builds a closure over one of its own children */
 } XiInlineCostModel;
 
 /* Call-site specific information (used to boost or penalize). */
