@@ -152,7 +152,272 @@
   "qualification": {
     "evidence": null,
     "evidence_sha256": null,
-    "reason": "No clean-HEAD evidence has yet passed every correctness, sanitizer, performance, variance, and residue lane governed by this policy.",
+    "measurement": {
+      "attribution": {
+        "environment_or_profile": {
+          "failing_tests": 3,
+          "families": [
+            {
+              "family": "ctest-timeout-under-host-contention",
+              "finding": "each script exits 0 on content and only exceeds its 30 second CTest budget while the host runs other work; the query surface scan alone spends about 31 seconds of user CPU, so that budget is marginal even on an idle host",
+              "reproduce": "python3 scripts/check_query_surface_residue.py --root .",
+              "tests": [
+                "legacy_product_residue_inventory",
+                "query_surface_residue",
+                "string_surface_residue"
+              ]
+            }
+          ]
+        },
+        "performance_or_size_budget": {
+          "failing_tests": 0,
+          "families": [],
+          "note": "No measured, architecture-approved budget revision was taken, and nothing was moved into this class to make a red result look green."
+        },
+        "real_defect": {
+          "failing_tests": 68,
+          "families": [
+            {
+              "family": "aot-refinement-representation",
+              "finding": "XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE while building the module representation authority, and the refinement verifier accepts a mutated view",
+              "reproduce": "ctest --test-dir build -R '^test_xaot_driver$' --output-on-failure",
+              "tests": [
+                "test_xaot_driver",
+                "test_xr_aot_refinement"
+              ]
+            },
+            {
+              "family": "compiler-session-busy",
+              "finding": "the compile session reports busy on a strictly serial run, which is not a scheduling artifact",
+              "reproduce": "ctest --test-dir build -R '^sys_thread_vm$' --output-on-failure -j1",
+              "tests": [
+                "byte_receiver_effect_audit",
+                "compile_error_tests",
+                "extern_layout_bytecode_cli_roundtrip",
+                "http_static_route_full_parse",
+                "parallel_plan_vm_scaling_gate",
+                "regression_cross_module_return_ownership_summary",
+                "sys_thread_vm"
+              ]
+            },
+            {
+              "family": "coroutine-lowering-fail-closed",
+              "finding": "the ownership stage refuses to publish CoroLowered on plain source runs, so the interpreter route fails before any backend comparison",
+              "reproduce": "ctest --test-dir build -R '^test_vm_parallel_isolate$' --output-on-failure",
+              "tests": [
+                "test_repl",
+                "test_vm_parallel_isolate"
+              ]
+            },
+            {
+              "family": "ownership-equivalence-class",
+              "finding": "XR_OWN_3002: an owner equivalence class carries no ownership-defining operation",
+              "reproduce": "ctest --test-dir build -R '^narrowing_conformance$' --output-on-failure",
+              "tests": [
+                "narrowing_conformance"
+              ]
+            },
+            {
+              "family": "runtime-unit-contract",
+              "finding": "runtime value, region, map, JSON and native-type unit expectations disagree with the shipped runtime behaviour",
+              "reproduce": "ctest --test-dir build -R '^test_xrt_static_map_set$' --output-on-failure",
+              "tests": [
+                "test_native_type_surface",
+                "test_region",
+                "test_xglobal_summary",
+                "test_xi_own",
+                "test_xrt_json_decode",
+                "test_xrt_static_map_set",
+                "test_xvalue"
+              ]
+            },
+            {
+              "family": "semantic-constant-kind",
+              "finding": "XR_SEM_0009: the semantic plan rejects constant kind 11, the big-integer literal",
+              "reproduce": "build/xray run tests/builtin_probes/bigint.xr",
+              "tests": [
+                "bigint_bytecode_cli_roundtrip",
+                "bigint_literal_build_form_parity",
+                "builtin_symbol_registry"
+              ]
+            },
+            {
+              "family": "semantic-operation-record",
+              "finding": "XR_SEM_0015 invalid operation record and XR_SEM_0019 missing aggregate declaration facts or incomplete debug span; the pipeline unit test faults instead of reporting",
+              "reproduce": "build/xray build --native tests/diff/cases/basic/closures.xr -o /tmp/closures",
+              "tests": [
+                "bytecode_build_multimodule",
+                "test_xi_compare",
+                "test_xi_pipeline",
+                "test_xi_stage",
+                "test_xi_verify_ext"
+              ]
+            },
+            {
+              "family": "target-plan-call-authority",
+              "finding": "XR_TARGET_1003: the target-plan builder has no exact authority for ordinary call-shaped operations (map, get, add, toString, Text) and reports incomplete direct-local signature or result storage, so every native route fails closed",
+              "reproduce": "build/xray build --native tests/diff/cases/basic/arrays.xr -o /tmp/arrays",
+              "tests": [
+                "aot_bundled_zig_smoke",
+                "aot_cross_smoke",
+                "aot_freestanding_allowlist",
+                "aot_freestanding_numeric_core_compile",
+                "aot_freestanding_provider_abi",
+                "aot_freestanding_qemu_smoke",
+                "aot_freestanding_riscv_qemu_smoke",
+                "aot_freestanding_static_fixed_array_mutation",
+                "aot_freestanding_thumb_qemu_smoke",
+                "aot_incremental_cache",
+                "aot_isolate_symbol_gate",
+                "aot_link_command_manifest",
+                "aot_manifest_sweep",
+                "aot_native_debug_smoke",
+                "aot_net_fd_reuse_close",
+                "aot_standalone_suite",
+                "backend_diff",
+                "backend_diff_deterministic",
+                "backend_diff_optimized",
+                "byte_array_aot_c90_hotpath",
+                "byte_u8_canonical_audit",
+                "concurrency_litmus",
+                "ffi_asan_smoke",
+                "ffi_c_export_smoke",
+                "ffi_diagnostics",
+                "global_evidence_cache_package_benchmark",
+                "install_public_surface",
+                "native_output_boundary",
+                "object_static_access_equivalence",
+                "raw_scalar_assembly_shape",
+                "stdlib_embedded_layout",
+                "task190_extern_backend_diff",
+                "task190_layout_backend_diff",
+                "task190_mem_backend_diff",
+                "test_compress_native_error_abi",
+                "test_crypto_native_error_abi",
+                "test_param_contract_aot",
+                "test_string_native_error_abi",
+                "test_xi_cgen"
+              ]
+            },
+            {
+              "family": "toolchain-classification",
+              "finding": "the toolchain model no longer classifies an explicit clang from its banner",
+              "reproduce": "ctest --test-dir build -R '^test_cli_toolchain$' --output-on-failure",
+              "tests": [
+                "test_cli_toolchain"
+              ]
+            },
+            {
+              "family": "xi-function-size-budget",
+              "finding": "new functions in the IR directory exceed the frozen 150-line limit",
+              "reproduce": "ctest --test-dir build -R '^check_xi_invariants$' --output-on-failure",
+              "tests": [
+                "check_xi_invariants"
+              ]
+            }
+          ]
+        },
+        "stale_expectation_or_manifest": {
+          "failing_tests": 12,
+          "families": [
+            {
+              "family": "generated-width-template-spelling",
+              "finding": "the gate looks for narrow and widen cases spelled inline while the generated width body emits them through a case macro",
+              "reproduce": "ctest --test-dir build -R '^check_xi_template_lowering$' --output-on-failure",
+              "tests": [
+                "check_xi_template_lowering"
+              ]
+            },
+            {
+              "family": "go-argument-const-root",
+              "finding": "the bytecode build fixtures still transfer a Channel into go without a const or proven-unique root, which the argument rule now rejects",
+              "reproduce": "ctest --test-dir build -R '^bytecode_build_scheduler$' --output-on-failure",
+              "tests": [
+                "bytecode_build_scheduler",
+                "bytecode_build_stdio"
+              ]
+            },
+            {
+              "family": "governance-self-test-drift",
+              "finding": "the header dependency and SDK closure self-tests raise instead of reporting, so the checker and its fixture disagree",
+              "reproduce": "ctest --test-dir build -R '^aot_sdk_closure_self_test$' --output-on-failure",
+              "tests": [
+                "aot_sdk_closure_self_test",
+                "runtime_header_dependency_lint_self_test"
+              ]
+            },
+            {
+              "family": "removed-surface-residue",
+              "finding": "the removed C interop surface and the subprocess text boundary gates report residue their own inventories no longer describe",
+              "reproduce": "ctest --test-dir build -R '^c_interop_surface_residue$' --output-on-failure",
+              "tests": [
+                "c_interop_surface_residue",
+                "subprocess_text_boundaries"
+              ]
+            },
+            {
+              "family": "semantic-owner-fingerprint",
+              "finding": "the test pins semantic owner registry fingerprint 9a0ca0b6 while the shipped registry is 1f7df9dc, because later owner registrations were never re-pinned",
+              "reproduce": "ctest --test-dir build -R '^test_semantic_plan$' --output-on-failure",
+              "tests": [
+                "test_semantic_plan"
+              ]
+            },
+            {
+              "family": "stdlib-link-expectation",
+              "finding": "the base64 and encoding link expectations no longer carry the stdlib_symbols anchors the binary stdlib baselines require",
+              "reproduce": "ctest --test-dir build -R '^binary_stdlib_kat_baseline$' --output-on-failure",
+              "tests": [
+                "binary_stdlib_kat_baseline",
+                "binary_stdlib_runtime_baseline"
+              ]
+            },
+            {
+              "family": "target-plan-call-digest",
+              "finding": "the test pins frozen target-plan call digest 55efb086 against the same moved registry",
+              "reproduce": "ctest --test-dir build -R '^test_target_plan$' --output-on-failure",
+              "tests": [
+                "test_target_plan"
+              ]
+            },
+            {
+              "family": "zero-cost-link-pattern",
+              "finding": "the zero-cost inventory expects a release call spelling the generator no longer emits",
+              "reproduce": "ctest --test-dir build -R '^zero_cost_plan_inventory$' --output-on-failure",
+              "tests": [
+                "zero_cost_plan_inventory"
+              ]
+            }
+          ]
+        }
+      },
+      "configuration": {
+        "build_type": "Release",
+        "configure": "cmake --preset default -DXRAY_STDLIB_VM_FASTPATHS=OFF",
+        "deviation": "XRAY_STDLIB_VM_FASTPATHS is off because the fastpath generator hits the same target-plan call authority gap the native route hits, so the governed default preset was not measured as configured.",
+        "generator": "Ninja",
+        "host": "macos-arm64"
+      },
+      "lanes": {
+        "architecture-contracts": "passed: contract_freeze, meta_ownership_inventory and target_machine_inventory all pass",
+        "asan-ubsan": "not measured: the lane rebuilds the whole tree in a separate sanitizer build directory and no such build was taken",
+        "differential-modes": "failed: backend_diff_optimized and backend_diff_deterministic both fail",
+        "non-sanitizer-suite": "failed",
+        "performance": "not measurable on this host: the runner pins one logical CPU and macOS exposes no process affinity control",
+        "startup-debt": "failed: aot_filetests and test_xrt_execution_arena pass; backend_diff, aot_manifest_sweep, aot_standalone_suite, aot_isolate_symbol_gate, compile_error_tests and http_static_route_full_parse fail",
+        "tsan": "not measured: the lane rebuilds the whole tree in a separate sanitizer build directory and no such build was taken"
+      },
+      "measured_on": "2026-08-14",
+      "source_commit": "0ddfb99be2fb28e0b55dfac901e16749050a1a1c",
+      "suite": {
+        "command": "ctest --test-dir build -LE sanitizer --output-on-failure -j8",
+        "failed": 83,
+        "reproduced_serially": 83,
+        "seconds": 648,
+        "total": 432
+      }
+    },
+    "reason": "Measured on 2026-08-14 at clean commit 0ddfb99be with the Ninja Release preset and XRAY_STDLIB_VM_FASTPATHS off: the non-sanitizer suite reports 83 of 432 tests failing and every one of them reproduces on a strictly serial rerun, so no governed lane except architecture-contracts can qualify. The dominant finding is XR_TARGET_1003, the target-plan builder having no exact authority for ordinary call-shaped operations, which fails every native route closed; the semantic-plan, ownership and coroutine-lowering fail-closed paths, a set of digests and link expectations left behind by recent owner registrations, and three residue scans that only exceed their CTest budget under host contention account for the rest. The two sanitizer lanes and the performance lanes were not measured at all, so their result is unknown rather than green.",
     "result": "failed"
   },
   "residue": {
