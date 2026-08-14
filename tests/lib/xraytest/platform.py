@@ -20,6 +20,18 @@ STATIC_LIB_PREFIX = "" if IS_WINDOWS else "lib"
 STATIC_LIB_SUFFIX = ".lib" if IS_WINDOWS else ".a"
 
 
+def configure_utf8_stdio() -> None:
+    """Make captured test reports byte-stable across host console locales.
+
+    Windows inherits the active console code page for Python text streams.
+    CTest captures bytes, so emitting UTF-8 directly is both portable and
+    deterministic; it also preserves diagnostics containing non-ASCII source
+    text instead of replacing or dropping them.
+    """
+    sys.stdout.reconfigure(encoding="utf-8", errors="strict")
+    sys.stderr.reconfigure(encoding="utf-8", errors="strict")
+
+
 def exe_name(stem: str) -> str:
     """Executable file name for a bare stem (`xray` -> `xray.exe` on Windows)."""
     return stem + EXE_SUFFIX if not stem.endswith(EXE_SUFFIX) else stem

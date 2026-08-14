@@ -50,6 +50,8 @@ def _bootstrap() -> None:
 _bootstrap()
 from xraytest import diagnostics, platform, proc  # noqa: E402
 
+platform.configure_utf8_stdio()
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
 
