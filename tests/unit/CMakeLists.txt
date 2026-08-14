@@ -411,7 +411,7 @@ check_c_source_compiles([=[
 #if defined(XR_SEMANTIC_PLAN_H) || defined(XI_H) || defined(XAOT_REP_H) || defined(XTYPE_H)
 #error "C emission headers exposed a forbidden compiler layer"
 #endif
-_Static_assert(XR_C_VALUE_REP_COUNT == 18, "value spelling schema changed");
+_Static_assert(XR_C_VALUE_REP_COUNT == 19, "value spelling schema changed");
 int main(void) {
     XrCValueEmissionView view = {0};
     return (int) view.semantic_value;
