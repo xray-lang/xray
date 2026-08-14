@@ -170,6 +170,7 @@ static bool coro_point_has_child(const XiCoroSuspendPoint *point) {
 
 static void coro_fill_edge(XiCoroEdge *edge, XiCoroEdgeKind kind,
                            const XiCoroSuspendPoint *point) {
+    memset(edge, 0, sizeof(*edge));
     edge->kind = (uint8_t) kind;
     edge->source_state_id = point->state_id;
     edge->roots = point->roots;
@@ -184,6 +185,18 @@ static void coro_fill_edge(XiCoroEdge *edge, XiCoroEdgeKind kind,
         edge->child = coro_point_child_value(point);
         edge->callee = point->resolved_callee;
         edge->indirect_child = point->op->op == XI_CALL && !point->resolved_callee;
+        return;
+    }
+    if (kind == XI_CORO_EDGE_ERROR && point->error_continuation) {
+        edge->target_state_id = point->state_id;
+        edge->target_block = point->error_continuation;
+        return;
+    }
+    if (kind == XI_CORO_EDGE_PANIC && point->active_handler_count > 0) {
+        XiValue *handler =
+            point->active_handlers[point->active_handler_count - 1u];
+        edge->target_state_id = point->state_id;
+        edge->target_block = handler ? (XiBlock *) handler->aux : NULL;
         return;
     }
     edge->terminal = true;
@@ -304,13 +317,6 @@ static bool coro_try_region_reaches_point(const XiFunc *f, const XiValue *try_op
             }
         }
     }
-    XiBlock *handler = (XiBlock *) try_op->aux;
-    uint32_t handler_bi = coro_block_index(f, handler);
-    if (handler && handler_bi != UINT32_MAX && !visited[handler_bi] && tail < f->nblocks) {
-        visited[handler_bi] = 1;
-        queue[tail++] = handler;
-    }
-
     bool found = false;
     while (head < tail && !found) {
         XiBlock *block = queue[head++];
@@ -342,29 +348,244 @@ static bool coro_try_region_reaches_point(const XiFunc *f, const XiValue *try_op
     return found;
 }
 
-static bool coro_has_unsupported_exception_region(const XiFunc *f,
-                                                  const XiCoroPlan *plan) {
-    for (uint32_t bi = 0; f && bi < f->nblocks; bi++) {
-        const XiBlock *block = f->blocks[bi];
-        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
-            const XiValue *value = block->values[vi];
-            if (!value || value->op != XI_TRY)
-                continue;
-            /* Hidden defer regions are represented by an explicit cleanup stack in
-             * the coroutine frame. Their handler remains a cold CFG target while
-             * suspend, panic, and cancellation preserve the active handler IDs in
-             * heap-owned frame state. Source try/catch and cleanup-local handlers
-             * still require exceptional-edge SSA reconstruction and must fail
-             * closed when they span a suspension point. */
-            if (value->aux_int == XI_TRY_AUX_STATIC_CLEANUP)
-                continue;
-            for (uint32_t pi = 0; pi < plan->nstates; pi++) {
-                if (coro_try_region_reaches_point(f, value, plan->points[pi].op))
-                    return true;
+static bool coro_block_has_catch_for_try(const XiBlock *handler,
+                                         const XiValue *try_op) {
+    if (!handler || !try_op)
+        return false;
+    uint32_t matches = 0;
+    for (uint32_t i = 0; i < handler->nvalues; i++) {
+        const XiValue *value = handler->values[i];
+        if (value && value->op == XI_CATCH && value->aux == try_op)
+            matches++;
+    }
+    return matches == 1;
+}
+
+static bool coro_panic_handler_is_supported(const XiFunc *f,
+                                            const XiValue *try_op) {
+    if (!f || !try_op || try_op->op != XI_TRY || !try_op->block ||
+        !try_op->aux ||
+        (try_op->aux_int != -1 &&
+         try_op->aux_int != XI_TRY_AUX_STATIC_CLEANUP))
+        return false;
+    XiBlock *handler = (XiBlock *) try_op->aux;
+    return coro_block_index(f, try_op->block) != UINT32_MAX &&
+           coro_block_index(f, handler) != UINT32_MAX &&
+           coro_block_has_catch_for_try(handler, try_op);
+}
+
+static bool coro_error_region_is_structural(const XiFunc *f,
+                                            const XiErrorRegion *region,
+                                            const XiValue *marker) {
+    if (!f || !region || !marker || marker->op != XI_ERR_CATCH ||
+        marker->error_region != region || region->catch_value != marker ||
+        marker->block != region->catch_block ||
+        !region->registration_block || !region->body_block ||
+        !region->catch_block || !region->merge_block ||
+        region->registration_block->succs[0] != region->body_block)
+        return false;
+    if (coro_block_index(f, region->registration_block) == UINT32_MAX ||
+        coro_block_index(f, region->body_block) == UINT32_MAX ||
+        coro_block_index(f, region->catch_block) == UINT32_MAX ||
+        coro_block_index(f, region->merge_block) == UINT32_MAX)
+        return false;
+    const XiErrorRegion *ancestor = region;
+    for (uint32_t depth = 0; ancestor; depth++, ancestor = ancestor->parent) {
+        if (depth >= XI_CORO_MAX_EXCEPTION_DEPTH ||
+            ancestor->parent == ancestor || !ancestor->catch_value ||
+            ancestor->catch_value->op != XI_ERR_CATCH ||
+            ancestor->catch_value->error_region != ancestor ||
+            ancestor->catch_value->block != ancestor->catch_block ||
+            !ancestor->registration_block || !ancestor->body_block ||
+            !ancestor->catch_block || !ancestor->merge_block ||
+            ancestor->registration_block->succs[0] != ancestor->body_block ||
+            coro_block_index(f, ancestor->registration_block) == UINT32_MAX ||
+            coro_block_index(f, ancestor->body_block) == UINT32_MAX ||
+            coro_block_index(f, ancestor->catch_block) == UINT32_MAX ||
+            coro_block_index(f, ancestor->merge_block) == UINT32_MAX)
+            return false;
+    }
+    return true;
+}
+
+static bool coro_error_region_reaches_point(const XiFunc *f,
+                                            const XiErrorRegion *region,
+                                            const XiValue *point) {
+    if (!f || !region || !point || !point->block)
+        return false;
+    uint8_t *visited = (uint8_t *) xr_calloc(f->nblocks, sizeof(uint8_t));
+    XiBlock **queue = (XiBlock **) xr_calloc(f->nblocks, sizeof(XiBlock *));
+    if (!visited || !queue) {
+        xr_free(visited);
+        xr_free(queue);
+        return false;
+    }
+    uint32_t body_index = coro_block_index(f, region->body_block);
+    if (body_index == UINT32_MAX) {
+        xr_free(visited);
+        xr_free(queue);
+        return false;
+    }
+    uint32_t head = 0, tail = 0;
+    visited[body_index] = 1;
+    queue[tail++] = region->body_block;
+    bool found = false;
+    while (head < tail && !found) {
+        XiBlock *block = queue[head++];
+        if (block == region->catch_block || block == region->merge_block)
+            continue;
+        for (uint32_t i = 0; i < block->nvalues; i++) {
+            if (block->values[i] == point) {
+                found = true;
+                break;
+            }
+        }
+        for (uint32_t s = 0; s < 2 && !found; s++) {
+            XiBlock *successor = block->succs[s];
+            uint32_t index = coro_block_index(f, successor);
+            if (successor && index != UINT32_MAX && !visited[index] &&
+                tail < f->nblocks) {
+                visited[index] = 1;
+                queue[tail++] = successor;
             }
         }
     }
+    xr_free(visited);
+    xr_free(queue);
+    return found;
+}
+
+static bool coro_error_region_is_ancestor(const XiErrorRegion *ancestor,
+                                          const XiErrorRegion *region) {
+    for (uint32_t depth = 0;
+         region && depth < XI_CORO_MAX_EXCEPTION_DEPTH;
+         depth++, region = region->parent) {
+        if (region == ancestor)
+            return true;
+    }
     return false;
+}
+
+static bool coro_point_error_region(const XiFunc *f, const XiValue *point,
+                                    XiErrorRegion **out_region) {
+    XiErrorRegion *selected = NULL;
+    for (uint32_t bi = 0; f && bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            XiValue *marker = block->values[vi];
+            if (!marker || marker->op != XI_ERR_CATCH || !marker->error_region)
+                continue;
+            XiErrorRegion *candidate = marker->error_region;
+            if (!coro_error_region_is_structural(f, candidate, marker))
+                return false;
+            if (!coro_error_region_reaches_point(f, candidate, point))
+                continue;
+            if (!selected || coro_error_region_is_ancestor(selected, candidate)) {
+                selected = candidate;
+            } else if (!coro_error_region_is_ancestor(candidate, selected)) {
+                return false;
+            }
+        }
+    }
+    *out_region = selected;
+    return true;
+}
+
+static bool coro_point_active_handler_count(const XiFunc *f,
+                                            const XiValue *point,
+                                            uint16_t *out_count) {
+    uint32_t count = 0;
+    for (uint32_t bi = 0; f && bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            const XiValue *try_op = block->values[vi];
+            if (!try_op || try_op->op != XI_TRY ||
+                !coro_try_region_reaches_point(f, try_op, point))
+                continue;
+            if (!coro_panic_handler_is_supported(f, try_op) ||
+                count == UINT16_MAX)
+                return false;
+            count++;
+        }
+    }
+    *out_count = (uint16_t) count;
+    return true;
+}
+
+static bool coro_fill_point_active_handlers(const XiFunc *f,
+                                            XiCoroSuspendPoint *point) {
+    uint16_t count = 0;
+    for (uint32_t bi = 0; f && bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            XiValue *try_op = block->values[vi];
+            if (!try_op || try_op->op != XI_TRY ||
+                !coro_try_region_reaches_point(f, try_op, point->op))
+                continue;
+            uint16_t insert = count;
+            while (insert > 0 &&
+                   point->active_handlers[insert - 1]->id > try_op->id) {
+                point->active_handlers[insert] =
+                    point->active_handlers[insert - 1];
+                insert--;
+            }
+            point->active_handlers[insert] = try_op;
+            count++;
+        }
+    }
+    for (uint16_t i = 1; i < point->active_handler_count; i++) {
+        if (!coro_try_region_reaches_point(
+                f, point->active_handlers[i - 1], point->active_handlers[i]))
+            return false;
+    }
+    return count == point->active_handler_count;
+}
+
+static bool coro_exception_continuations_supported(const XiFunc *f,
+                                                   const XiCoroPlan *plan) {
+    for (uint32_t i = 0; f && plan && i < plan->nstates; i++) {
+        uint16_t handler_count = 0;
+        XiErrorRegion *error_region = NULL;
+        if (!coro_point_active_handler_count(f, plan->points[i].op,
+                                             &handler_count) ||
+            !coro_point_error_region(f, plan->points[i].op, &error_region))
+            return false;
+    }
+    return f && plan;
+}
+
+static bool coro_materialize_exception_continuations(XiFunc *f,
+                                                     XiCoroPlan *plan) {
+    uint64_t total_handlers = 0;
+    for (uint32_t i = 0; i < plan->nstates; i++) {
+        XiCoroSuspendPoint *point = &plan->points[i];
+        if (!coro_point_active_handler_count(f, point->op,
+                                             &point->active_handler_count) ||
+            !coro_point_error_region(f, point->op, &point->error_region))
+            return false;
+        point->error_continuation = point->error_region
+                                        ? point->error_region->catch_block
+                                        : NULL;
+        total_handlers += point->active_handler_count;
+        if (total_handlers > XI_CORO_MAX_FRAME_ACTIONS)
+            return false;
+    }
+    plan->active_handlers = (XiValue **) coro_alloc(
+        f, plan, (uint32_t) total_handlers, (uint32_t) sizeof(XiValue *));
+    if (total_handlers > 0 && !plan->active_handlers)
+        return false;
+    plan->active_handler_count = (uint32_t) total_handlers;
+    uint32_t cursor = 0;
+    for (uint32_t i = 0; i < plan->nstates; i++) {
+        XiCoroSuspendPoint *point = &plan->points[i];
+        point->active_handlers = point->active_handler_count > 0
+                                     ? &plan->active_handlers[cursor]
+                                     : NULL;
+        if (!coro_fill_point_active_handlers(f, point))
+            return false;
+        cursor += point->active_handler_count;
+    }
+    return cursor == plan->active_handler_count;
 }
 
 static uint32_t coro_point_capabilities(const XiCoroSuspendPoint *point) {
@@ -473,14 +694,28 @@ static void coro_add_action(XiCoroPlan *plan, uint32_t *cursor, XiCoroFrameActio
     action->kind = (uint8_t) kind;
     action->edge_kind = (uint8_t) edge_kind;
     action->state_id = point->state_id;
-    action->slot_index = value ? coro_slot_index(plan, value) : UINT32_MAX;
+    bool continuation_identity =
+        kind == XI_CORO_FRAME_STORE_ERROR_CONTINUATION ||
+        kind == XI_CORO_FRAME_STORE_PANIC_HANDLER;
+    action->slot_index = value && !continuation_identity
+                             ? coro_slot_index(plan, value)
+                             : UINT32_MAX;
     action->value = (XiValue *) value;
-    action->target = point->continuation;
+    action->target = kind == XI_CORO_FRAME_STORE_ERROR_CONTINUATION
+                         ? point->error_continuation
+                         : kind == XI_CORO_FRAME_STORE_PANIC_HANDLER
+                               ? (value ? (XiBlock *) value->aux : NULL)
+                               : point->continuation;
+}
+
+static uint64_t coro_action_capacity(const XiCoroPlan *plan) {
+    return (uint64_t) plan->nstates *
+               ((uint64_t) plan->slot_capacity * 8u + 3u) +
+           plan->active_handler_count;
 }
 
 static bool coro_allocate_actions(XiFunc *f, XiCoroPlan *plan) {
-    uint64_t capacity =
-        (uint64_t) plan->nstates * ((uint64_t) plan->slot_capacity * 8u + 2u);
+    uint64_t capacity = coro_action_capacity(plan);
     if (capacity > XI_CORO_MAX_FRAME_ACTIONS)
         return false;
     plan->frame_actions = (XiCoroFrameAction *) coro_alloc(
@@ -492,8 +727,7 @@ static bool coro_allocate_actions(XiFunc *f, XiCoroPlan *plan) {
 }
 
 static bool coro_ensure_action_capacity(XiFunc *f, XiCoroPlan *plan) {
-    uint64_t capacity =
-        (uint64_t) plan->nstates * ((uint64_t) plan->slot_capacity * 8u + 2u);
+    uint64_t capacity = coro_action_capacity(plan);
     if (capacity > XI_CORO_MAX_FRAME_ACTIONS)
         return false;
     if (capacity <= plan->frame_action_capacity)
@@ -515,6 +749,14 @@ static void coro_finalize_actions(XiCoroPlan *plan) {
         for (uint32_t j = 0; j < point->nlive; j++)
             coro_add_action(plan, &cursor, XI_CORO_FRAME_SPILL, point, point->live[j],
                             XI_CORO_EDGE_RESUME);
+        if (point->error_region)
+            coro_add_action(plan, &cursor,
+                            XI_CORO_FRAME_STORE_ERROR_CONTINUATION, point,
+                            point->error_region->catch_value, XI_CORO_EDGE_ERROR);
+        for (uint16_t j = 0; j < point->active_handler_count; j++)
+            coro_add_action(plan, &cursor, XI_CORO_FRAME_STORE_PANIC_HANDLER,
+                            point, point->active_handlers[j],
+                            XI_CORO_EDGE_PANIC);
         coro_add_action(plan, &cursor, XI_CORO_FRAME_STORE_STATE, point, NULL,
                         XI_CORO_EDGE_RESUME);
         coro_add_action(plan, &cursor, XI_CORO_FRAME_SCHED_EXIT, point, NULL,
@@ -580,6 +822,7 @@ static uint64_t coro_plan_fingerprint(const XiCoroPlan *plan) {
     uint64_t hash = CORO_FNV_OFFSET;
     hash = coro_hash_u32(hash, plan->nstates);
     hash = coro_hash_u32(hash, plan->nslots);
+    hash = coro_hash_u32(hash, plan->active_handler_count);
     hash = coro_hash_u32(hash, coro_block_id(plan->entry_block));
     for (uint32_t i = 0; i < plan->nslots; i++) {
         const XiCoroSlot *slot = &plan->slots[i];
@@ -613,6 +856,16 @@ static uint64_t coro_plan_fingerprint(const XiCoroPlan *plan) {
         hash = coro_hash_u32(hash, coro_func_id(point->resolved_callee));
         hash = coro_hash_u32(hash, coro_value_id(point->result_slot));
         hash = coro_hash_u32(hash, coro_value_id(point->error_slot));
+        hash = coro_hash_u32(
+            hash, coro_value_id(point->error_region
+                                    ? point->error_region->catch_value
+                                    : NULL));
+        hash = coro_hash_u32(hash,
+                             coro_block_id(point->error_continuation));
+        hash = coro_hash_u32(hash, point->active_handler_count);
+        for (uint16_t j = 0; j < point->active_handler_count; j++)
+            hash = coro_hash_u32(
+                hash, coro_value_id(point->active_handlers[j]));
         hash = coro_hash_u32(hash, point->generation);
         hash = coro_hash_u32(hash, point->capability_mask);
         hash = coro_hash_u32(hash, point->store_state_id);
@@ -652,14 +905,12 @@ static bool coro_rewrite_func(XiFunc *f, XiCoroPlan *plan,
     if (plan->analyzed_ir_revision != f->ir_revision ||
         plan->analyzed_cfg_revision != f->cfg_version || !plan->analysis_complete)
         return false;
-    /* XI_TRY uses implicit handler predecessor edges.  Splitting a suspend in
-     * such a region is not semantics-preserving until the logical plan carries
-     * the active handler/defer stack, so reject the whole function before any
-     * CFG mutation. */
-    if (coro_has_unsupported_exception_region(f, plan))
+    if (!coro_exception_continuations_supported(f, plan))
         return false;
     for (uint32_t i = 0; i < plan->nstates; i++)
         coro_resolve_point_contract(&plan->points[i], resolver, f);
+    if (!coro_materialize_exception_continuations(f, plan))
+        return false;
     if (!coro_materialize_edges(f, plan))
         return false;
     if (!coro_allocate_dispatch(f, plan))
@@ -837,9 +1088,9 @@ XR_FUNC bool xi_coro_plan_rebase(XiFunc *f) {
 }
 
 /* Partition a function tree into target-neutral logical state machines.  The
- * current function is analyzed and checked for unsupported exception regions
- * before children are committed, so an ordinary semantic rejection cannot
- * leave a rewritten child under an unlowered parent. */
+ * current function's exceptional continuations are validated before children
+ * are committed, so an ordinary semantic rejection cannot leave a rewritten
+ * child under an unlowered parent. */
 static bool coro_lower_func(XiFunc *f, const XiCoroResolver *resolver) {
     if (!f)
         return false;
@@ -851,7 +1102,7 @@ static bool coro_lower_func(XiFunc *f, const XiCoroResolver *resolver) {
     XiCoroPlan *plan = xi_coro_analyze(f, resolver);
     if (!plan)
         return false;
-    if (coro_has_unsupported_exception_region(f, plan)) {
+    if (!coro_exception_continuations_supported(f, plan)) {
         if (!prior_plan)
             f->coro_plan = NULL;
         return false;

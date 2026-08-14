@@ -8,6 +8,7 @@
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_backend.h"
 #include "../../../src/ir/xi_coro_analyze.h"
+#include "../../../src/ir/xi_coro_exception_verify.h"
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -31,6 +32,7 @@ static XrType stub_u64 = {
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 9, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 10, .frozen = true};
 static XrType stub_error = {.kind = XR_KIND_ERROR, .id = 12, .frozen = true};
+static XrType stub_unknown = {.kind = XR_KIND_UNKNOWN, .id = 17, .frozen = true};
 static XrType stub_usize = {
     .kind = XR_KIND_INT, .id = 14, .frozen = true, .scalar_rep = XR_NATIVE_USIZE};
 static XrType stub_pointer = {
@@ -1845,7 +1847,7 @@ TEST(coro_lower_mutation_rejects_invalid_child_edge) {
     xi_func_free(f);
 }
 
-TEST(coro_lower_rejects_exception_region_before_cfg_mutation) {
+TEST(coro_lower_rejects_malformed_exception_region_before_cfg_mutation) {
     XiFunc *f = make_func("coro_try_region");
     ASSERT(f != NULL);
     XiValue *try_op = xi_value_new(f, f->entry, XI_TRY, &stub_unit, 0);
@@ -1859,6 +1861,238 @@ TEST(coro_lower_rejects_exception_region_before_cfg_mutation) {
     ASSERT(!xi_coro_lower(f, NULL));
     ASSERT(f->nblocks == blocks);
     ASSERT(f->coro_plan == NULL);
+    xi_func_free(f);
+}
+
+static XiFunc *make_lowered_source_panic_coro(void) {
+    XiFunc *f = make_func("coro_source_panic_region");
+    if (!f)
+        return NULL;
+    XiBlock *body = xi_block_new(f);
+    XiBlock *handler = xi_block_new(f);
+    if (!body || !handler) {
+        xi_func_free(f);
+        return NULL;
+    }
+    body->sealed = true;
+    handler->sealed = true;
+
+    XiValue *try_op = xi_value_new(f, f->entry, XI_TRY, &stub_unit, 0);
+    if (!try_op) {
+        xi_func_free(f);
+        return NULL;
+    }
+    try_op->aux = handler;
+    try_op->aux_int = -1;
+    try_op->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_add_pred(handler, f->entry);
+    xi_block_set_jump(f->entry, body);
+
+    XiValue *yield = xi_value_new(f, body, XI_YIELD, &stub_unit, 0);
+    XiValue *end_try = xi_value_new(f, body, XI_END_TRY, &stub_unit, 0);
+    XiValue *result = xi_const_int(f, body, 1, &stub_int);
+    if (!yield || !end_try || !result) {
+        xi_func_free(f);
+        return NULL;
+    }
+    end_try->aux = try_op;
+    end_try->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(body, result);
+
+    XiValue *caught = xi_value_new(f, handler, XI_CATCH, &stub_unit, 0);
+    XiValue *handler_yield = xi_value_new(f, handler, XI_YIELD, &stub_unit, 0);
+    XiValue *handler_result = xi_const_int(f, handler, 2, &stub_int);
+    if (!caught || !handler_yield || !handler_result) {
+        xi_func_free(f);
+        return NULL;
+    }
+    caught->aux = try_op;
+    caught->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(handler, handler_result);
+
+    mark_coro_lower_input(f);
+    if (!xi_coro_lower(f, NULL)) {
+        xi_func_free(f);
+        return NULL;
+    }
+    return f;
+}
+
+static XiFunc *make_lowered_error_continuation_coro(void) {
+    XiFunc *f = make_func("coro_error_continuation_region");
+    if (!f)
+        return NULL;
+    XiBlock *body = xi_block_new(f);
+    XiBlock *catch_block = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+    if (!body || !catch_block || !merge) {
+        xi_func_free(f);
+        return NULL;
+    }
+    body->sealed = true;
+    catch_block->sealed = true;
+    merge->sealed = true;
+    xi_block_set_jump(f->entry, body);
+
+    XiValue *yield = xi_value_new(f, body, XI_YIELD, &stub_unit, 0);
+    XiValue *condition = xi_const_bool(f, body, true, &stub_bool);
+    if (!yield || !condition) {
+        xi_func_free(f);
+        return NULL;
+    }
+    xi_block_set_if(body, condition, catch_block, merge);
+
+    XiErrorRegion *region = (XiErrorRegion *) xi_func_arena_alloc(
+        f, (uint32_t) sizeof(XiErrorRegion));
+    if (!region) {
+        xi_func_free(f);
+        return NULL;
+    }
+    memset(region, 0, sizeof(*region));
+    XiValue *caught = xi_value_new(f, catch_block, XI_ERR_CATCH, &stub_unknown, 0);
+    if (!caught) {
+        xi_func_free(f);
+        return NULL;
+    }
+    caught->flags |= XI_FLAG_SIDE_EFFECT;
+    caught->error_region = region;
+    xi_block_set_jump(catch_block, merge);
+
+    XiValue *result = xi_const_int(f, merge, 3, &stub_int);
+    if (!result) {
+        xi_func_free(f);
+        return NULL;
+    }
+    xi_block_set_return(merge, result);
+    region->registration_block = f->entry;
+    region->body_block = body;
+    region->catch_block = catch_block;
+    region->merge_block = merge;
+    region->catch_value = caught;
+
+    mark_coro_lower_input(f);
+    if (!xi_coro_lower(f, NULL)) {
+        xi_func_free(f);
+        return NULL;
+    }
+    return f;
+}
+
+static bool coro_exception_verify_error_prefix(const XiFunc *f,
+                                               const char *prefix) {
+    char error[256] = {0};
+    return !xi_coro_exception_verify(f, f ? f->coro_plan : NULL, error,
+                                     sizeof(error)) &&
+           strncmp(error, prefix, strlen(prefix)) == 0;
+}
+
+TEST(coro_lower_freezes_source_panic_handler_across_suspend) {
+    XiFunc *f = make_lowered_source_panic_coro();
+    ASSERT(f != NULL);
+    XiCoroPlan *plan = f->coro_plan;
+    XiCoroSuspendPoint *point = &plan->points[0];
+    ASSERT(plan->nstates == 2);
+    ASSERT(plan->active_handler_count == 1);
+    ASSERT(point->active_handler_count == 1);
+    ASSERT(point->active_handlers == plan->active_handlers);
+    ASSERT(point->active_handlers[0]->op == XI_TRY);
+    const XiCoroEdge *panic =
+        xi_coro_point_find_edge(point, XI_CORO_EDGE_PANIC);
+    const XiCoroEdge *cancel =
+        xi_coro_point_find_edge(point, XI_CORO_EDGE_CANCEL);
+    ASSERT(panic != NULL && !panic->terminal);
+    ASSERT(panic->target_block == (XiBlock *) point->active_handlers[0]->aux);
+    ASSERT(panic->ndrops == 0);
+    ASSERT(cancel != NULL && cancel->terminal);
+    ASSERT(cancel->target_block == NULL);
+    ASSERT(cancel->drops == point->drops && cancel->ndrops == point->ndrops);
+    XiCoroSuspendPoint *handler_point = &plan->points[1];
+    ASSERT(handler_point->active_handler_count == 0);
+    const XiCoroEdge *handler_panic =
+        xi_coro_point_find_edge(handler_point, XI_CORO_EDGE_PANIC);
+    ASSERT(handler_panic != NULL && handler_panic->terminal);
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(coro_exception_verifier_rejects_handler_identity_mutation) {
+    XiFunc *f = make_lowered_source_panic_coro();
+    ASSERT(f != NULL);
+    XiValue *registration = f->coro_plan->points[0].active_handlers[0];
+    f->coro_plan->points[0].active_handlers[0] = NULL;
+    ASSERT(coro_exception_verify_error_prefix(f, "XR_CORO_4003"));
+    f->coro_plan->points[0].active_handlers[0] = registration;
+    f->coro_plan->active_handlers = NULL;
+    ASSERT(coro_exception_verify_error_prefix(f, "XR_CORO_4003"));
+    xi_func_free(f);
+}
+
+TEST(coro_exception_verifier_rejects_panic_edge_mutation) {
+    XiFunc *f = make_lowered_source_panic_coro();
+    ASSERT(f != NULL);
+    XiCoroEdge *panic = (XiCoroEdge *) xi_coro_point_find_edge(
+        &f->coro_plan->points[0], XI_CORO_EDGE_PANIC);
+    ASSERT(panic != NULL);
+    panic->target_block = f->entry;
+    ASSERT(coro_exception_verify_error_prefix(f, "XR_CORO_4003"));
+    xi_func_free(f);
+}
+
+TEST(coro_exception_verifier_rejects_cancel_to_handler_mutation) {
+    XiFunc *f = make_lowered_source_panic_coro();
+    ASSERT(f != NULL);
+    XiCoroSuspendPoint *point = &f->coro_plan->points[0];
+    XiCoroEdge *cancel = (XiCoroEdge *) xi_coro_point_find_edge(
+        point, XI_CORO_EDGE_CANCEL);
+    ASSERT(cancel != NULL);
+    cancel->terminal = false;
+    cancel->target_state_id = point->state_id;
+    cancel->target_block = (XiBlock *) point->active_handlers[0]->aux;
+    cancel->drops = NULL;
+    cancel->ndrops = 0;
+    ASSERT(coro_exception_verify_error_prefix(f, "XR_CORO_4003"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_freezes_error_continuation_across_suspend) {
+    XiFunc *f = make_lowered_error_continuation_coro();
+    ASSERT(f != NULL);
+    XiCoroSuspendPoint *point = &f->coro_plan->points[0];
+    ASSERT(point->error_region != NULL);
+    ASSERT(point->error_continuation == point->error_region->catch_block);
+    const XiCoroEdge *error =
+        xi_coro_point_find_edge(point, XI_CORO_EDGE_ERROR);
+    ASSERT(error != NULL && !error->terminal);
+    ASSERT(error->target_block == point->error_continuation);
+    ASSERT(error->ndrops == 0);
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(coro_exception_verifier_rejects_error_continuation_mutation) {
+    XiFunc *f = make_lowered_error_continuation_coro();
+    ASSERT(f != NULL);
+    f->coro_plan->points[0].error_continuation = f->entry;
+    ASSERT(coro_exception_verify_error_prefix(f, "XR_CORO_4003"));
+    xi_func_free(f);
+}
+
+TEST(coro_verifier_rejects_continuation_action_mutation) {
+    XiFunc *f = make_lowered_error_continuation_coro();
+    ASSERT(f != NULL);
+    XiCoroSuspendPoint *point = &f->coro_plan->points[0];
+    bool mutated = false;
+    for (uint32_t i = point->action_begin;
+         i < point->action_begin + point->action_count; i++) {
+        XiCoroFrameAction *action = &f->coro_plan->frame_actions[i];
+        if (action->kind == XI_CORO_FRAME_STORE_ERROR_CONTINUATION) {
+            action->target = f->entry;
+            mutated = true;
+            break;
+        }
+    }
+    ASSERT(mutated);
+    ASSERT(verify_error_prefix(f, "XR_CORO_4001"));
     xi_func_free(f);
 }
 
@@ -2416,7 +2650,14 @@ int main(void) {
     run_coro_lower_mutation_rejects_invalid_dispatch_target();
     run_coro_lower_mutation_rejects_stale_revision();
     run_coro_lower_mutation_rejects_invalid_child_edge();
-    run_coro_lower_rejects_exception_region_before_cfg_mutation();
+    run_coro_lower_rejects_malformed_exception_region_before_cfg_mutation();
+    run_coro_lower_freezes_source_panic_handler_across_suspend();
+    run_coro_exception_verifier_rejects_handler_identity_mutation();
+    run_coro_exception_verifier_rejects_panic_edge_mutation();
+    run_coro_exception_verifier_rejects_cancel_to_handler_mutation();
+    run_coro_lower_freezes_error_continuation_across_suspend();
+    run_coro_exception_verifier_rejects_error_continuation_mutation();
+    run_coro_verifier_rejects_continuation_action_mutation();
     run_coro_lower_accepts_frame_backed_static_cleanup_region();
     run_coro_lower_accepts_open_callable_as_state_obligation();
     run_coro_lower_rejects_raw_stage_before_analysis();

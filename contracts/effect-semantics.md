@@ -158,6 +158,19 @@ execution target, provider spelling, frame layout, or result materialization;
 TargetPlan therefore continues to reject the call until a separate target
 family consumes it. Unknown builtins, user shadows, super calls, wrong arity,
 ordinary methods, and missing states remain fail closed.
+The Xi coroutine plan retains source exceptional-continuation authority at
+every suspension point. An ordinary error catch is identified by its
+arena-owned lexical error-region record and exact `XI_ERR_CATCH` value; a panic
+catch is identified by the ordered, properly nested `XI_TRY` registrations and
+their unique `XI_CATCH` blocks. The plan records the innermost error
+continuation, the complete outer-to-inner panic-handler stack, and the
+precomputed root/drop sets. Normal resume preserves the state continuation,
+error and panic route only to their recorded non-terminal continuations, and
+cancel/drop remain terminal cleanup edges. An independent verifier rebuilds
+the regions from CFG and registration identity and rejects stale, missing,
+extra, reordered, non-nested, or mutated edge/action rows. Cleanup-local panic
+handlers remain unavailable across suspension. Opcode names, selector text,
+types, and backend rediscovery grant no fallback authority.
 Schema 20 additionally freezes each source class with its stable module entity,
 normalized module path, module-local source ordinal, name, method count, and
 final/runtime/generic flags. Source functions freeze that class identity,
@@ -374,13 +387,13 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 6d9bcf717d746d
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 9a8737a2d4c8e3deecfbca07c4f07d44c687c6d634c6b0c1d9add61ed30cf366
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 02940d35a66fa77ad3e67a9a7b11322f48c87a7af6a2829760ad514f65985b50
 anchor-sha256: src/runtime/value/xtype.h e0f9c44c615d8a91f501d3952b1804c793abe68e3eba39744c9a000ae00f10cf
-anchor-sha256: src/ir/xi.h 5fb8179ca2860735de92b1c3e0a458386708ea66878f450605dafa6f22e83b7e
+anchor-sha256: src/ir/xi.h 035eb486bea27943f7ca09567889bbe89979da798758041f56754b73f73913be
 anchor-sha256: src/ir/xi_lower.c 61467b38f2e1a3fecac8bfe361e438711af2618c6c3b6e646bc939828161d647
 anchor-sha256: src/app/cli/xcmd_verify.c 5fd6d66c6bc2c4be29cb121963eea94682cb48ea20f42aacdeb52fb2a2285b9b
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
 anchor-sha256: tests/unit/analyzer/test_analyzer.c 34bbb2512ed40c85db6fe91bf6da083abc457792e3e3b76ab56611dce7ccb1ca
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1
-anchor-sha256: tests/unit/ir/test_xi_lower.c fbcb2ea7d98487c81c049b936716158b2090ec5f0ef02e29a374867867e77fc7
+anchor-sha256: tests/unit/ir/test_xi_lower.c daf8bf49f0747a8ca4a8222b70a5faf515132232f90c5c57ae7bf01feb1b244b
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 4c74a794312a006324974d456bece12e1073d3ab3e3e044c49705c19eaf23f8a
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef875074bfbe67aa4c0ffcb9c6cda031741
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28

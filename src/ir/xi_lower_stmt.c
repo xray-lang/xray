@@ -2750,6 +2750,7 @@ XR_FUNC void xi_lower_reprop_error(XiLower *l, XiValue *val, AstNode *node) {
     if (l->try_depth > 0) {
         XiValue *set = xi_value_new(l->func, l->cur_block, XI_ERR_SET, l->type_unit, 1);
         if (set) {
+            set->error_region = l->active_error_region;
             set->args[0] = val;
             set->flags |= XI_FLAG_SIDE_EFFECT;
             set->line = (uint32_t) node->line;
@@ -2842,9 +2843,12 @@ static void lower_catch_bind_clause(XiLower *l, XrCatchClause *cc, XiValue *valu
  * then the error catch clauses run (single or is-T chain).  All control
  * flow is the value-return error channel — no handler stack. */
 static void lower_error_catch_clauses(XiLower *l, XrCatchClause **errc, int errn, AstNode *node,
-                                      XiBlock *normal_target) {
+                                      XiBlock *normal_target, XiErrorRegion *region) {
     XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_ERR_CATCH, l->type_any, 0);
     if (catch_op) {
+        catch_op->error_region = region;
+        if (region)
+            region->catch_value = catch_op;
         catch_op->flags |= XI_FLAG_SIDE_EFFECT;
         catch_op->line = (errn > 0 && errc[0]->var_line > 0) ? (uint32_t) errc[0]->var_line
                                                              : (uint32_t) node->line;
@@ -2942,6 +2946,23 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
     XiBlock *merge = xi_block_new(l->func);
     XiBlock *normal_target = merge;
 
+    XiErrorRegion *error_region = NULL;
+    XiErrorRegion *parent_error_region = l->active_error_region;
+    if (has_err) {
+        error_region = (XiErrorRegion *) xi_func_arena_alloc(
+            l->func, (uint32_t) sizeof(XiErrorRegion));
+        if (!error_region) {
+            l->had_error = true;
+            return;
+        }
+        memset(error_region, 0, sizeof(*error_region));
+        error_region->registration_block = l->cur_block;
+        error_region->body_block = try_blk;
+        error_region->catch_block = catch_blk;
+        error_region->merge_block = merge;
+        error_region->parent = parent_error_region;
+    }
+
     /* Panic handler: register OP_TRY pointing at panic_blk.  This is the
      * VM's mechanism for synchronous runtime faults (the only thing that
      * uses the handler stack now). */
@@ -2967,12 +2988,15 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
         l->catch_targets[l->try_depth] = catch_blk;
         l->catch_cleanup_depths[l->try_depth] = l->cleanup_scope_depth;
         l->try_depth++;
+        l->active_error_region = error_region;
     }
     l->cur_block = try_blk;
     l->dead_after_throw = false;
     xi_lower_stmt(l, tc->try_body);
-    if (has_err)
+    if (has_err) {
         l->try_depth--;
+        l->active_error_region = parent_error_region;
+    }
 
     XiBlock *try_exit_blk = l->cur_block;
 
@@ -3011,7 +3035,8 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
             }
         }
 
-        lower_error_catch_clauses(l, errc, errn, node, normal_target);
+        lower_error_catch_clauses(l, errc, errn, node, normal_target,
+                                  error_region);
 
         if (l->cur_block)
             xi_block_set_jump(l->cur_block, merge);

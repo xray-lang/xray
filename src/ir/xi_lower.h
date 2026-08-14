@@ -247,6 +247,7 @@ typedef struct XiLower {
 #define XI_MAX_TRY_NESTING 32
     struct XiBlock *catch_targets[XI_MAX_TRY_NESTING];
     int catch_cleanup_depths[XI_MAX_TRY_NESTING];
+    XiErrorRegion *active_error_region;
 
     /* True when cur_block's last instruction is XI_ERR_RETURN but the
      * block is kept alive for SSA predecessor edges (try_depth > 0).

@@ -1038,8 +1038,10 @@ TEST(match_expr) {
 }
 
 TEST(try_catch) {
-    XiFunc *f = lower_source("var result = 0\n"
+    XiFunc *f = lower_source("enum LowerCatchErr { Raised }\n"
+                             "var result = 0\n"
                              "try {\n"
+                             "    if (result == 0) { throw LowerCatchErr.Raised }\n"
                              "    result = 42\n"
                              "} catch (e) {\n"
                              "    result = -1\n"
@@ -1051,15 +1053,30 @@ TEST(try_catch) {
     /* New error model: catch block uses XI_ERR_CATCH to read the
      * error channel.  No XI_TRY/XI_CATCH (those are for panic). */
     int found_err_catch = 0;
+    XiErrorRegion *error_region = NULL;
+    XiValue *error_set = NULL;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (v->op == XI_ERR_CATCH)
+            if (v->op == XI_ERR_CATCH) {
                 found_err_catch = 1;
+                error_region = v->error_region;
+                assert(error_region != NULL);
+                assert(error_region->catch_value == v);
+                assert(error_region->catch_block == blk);
+            }
+            if (v->op == XI_ERR_SET)
+                error_set = v;
         }
     }
     assert(found_err_catch && "should have XI_ERR_CATCH op");
+    assert(error_region->registration_block != NULL);
+    assert(error_region->body_block != NULL);
+    assert(error_region->merge_block != NULL);
+    assert(error_region->registration_block->succs[0] == error_region->body_block);
+    assert(error_set != NULL);
+    assert(error_set->error_region == error_region);
     xi_func_free(f);
 }
 

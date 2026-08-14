@@ -10591,6 +10591,7 @@ static XiValue *lower_null_guard_or_throw(XiLower *l, XiValue *val, struct XrTyp
     if (l->try_depth > 0) {
         XiValue *set = xi_value_new(l->func, l->cur_block, XI_ERR_SET, l->type_unit, 1);
         if (set) {
+            set->error_region = l->active_error_region;
             set->args[0] = exc;
             set->flags |= XI_FLAG_SIDE_EFFECT;
             set->line = (uint32_t) line;

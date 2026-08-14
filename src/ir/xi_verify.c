@@ -16,6 +16,7 @@
 #include "xi_effect.h"
 #include "xi_backend.h"
 #include "xi_coro_analyze.h"
+#include "xi_coro_exception_verify.h"
 #include "xi_coro_lower.h"
 #include "xi_ops_gen.h"
 #include "xi_verify_gen.h"
@@ -2590,6 +2591,25 @@ static void verify_coro_point_edges(VerifyCtx *ctx, const XiFunc *f,
                      point->state_id);
                 return;
             }
+        } else if (i == XI_CORO_EDGE_ERROR && point->error_continuation) {
+            if (edge->terminal || edge->target_state_id != point->state_id ||
+                edge->target_block != point->error_continuation ||
+                edge->drops != NULL || edge->ndrops != 0) {
+                verr(ctx, "XR_CORO_4003 func '%s': state %u error edge is invalid",
+                     f->name, point->state_id);
+                return;
+            }
+        } else if (i == XI_CORO_EDGE_PANIC &&
+                   point->active_handler_count > 0) {
+            const XiValue *handler = point->active_handlers[
+                point->active_handler_count - 1u];
+            if (edge->terminal || edge->target_state_id != point->state_id ||
+                edge->target_block != (handler ? (XiBlock *) handler->aux : NULL) ||
+                edge->drops != NULL || edge->ndrops != 0) {
+                verr(ctx, "XR_CORO_4003 func '%s': state %u panic edge is invalid",
+                     f->name, point->state_id);
+                return;
+            }
         } else if (!edge->terminal || edge->target_state_id != XI_CORO_STATE_TERMINAL ||
                    edge->target_block || edge->drops != point->drops ||
                    edge->ndrops != point->ndrops) {
@@ -2642,6 +2662,7 @@ static uint64_t coro_verify_fingerprint(const XiCoroPlan *plan) {
     uint64_t hash = CORO_VERIFY_FNV_OFFSET;
     hash = coro_verify_hash_u32(hash, plan->nstates);
     hash = coro_verify_hash_u32(hash, plan->nslots);
+    hash = coro_verify_hash_u32(hash, plan->active_handler_count);
     hash = coro_verify_hash_u32(hash, coro_verify_block_id(plan->entry_block));
     for (uint32_t i = 0; i < plan->nslots; i++) {
         const XiCoroSlot *slot = &plan->slots[i];
@@ -2678,6 +2699,13 @@ static uint64_t coro_verify_fingerprint(const XiCoroPlan *plan) {
         CORO_HASH_FIELD(coro_verify_func_id(point->resolved_callee));
         CORO_HASH_FIELD(coro_verify_value_id(point->result_slot));
         CORO_HASH_FIELD(coro_verify_value_id(point->error_slot));
+        CORO_HASH_FIELD(coro_verify_value_id(
+            point->error_region ? point->error_region->catch_value : NULL));
+        CORO_HASH_FIELD(coro_verify_block_id(point->error_continuation));
+        CORO_HASH_FIELD(point->active_handler_count);
+        for (uint16_t j = 0; j < point->active_handler_count; j++)
+            CORO_HASH_FIELD(
+                coro_verify_value_id(point->active_handlers[j]));
         CORO_HASH_FIELD(point->generation);
         CORO_HASH_FIELD(point->capability_mask);
         CORO_HASH_FIELD(point->store_state_id);
@@ -2737,11 +2765,21 @@ static bool coro_verify_action(VerifyCtx *ctx, const XiFunc *f, const XiCoroPlan
         return false;
     }
     const XiCoroFrameAction *action = &plan->frame_actions[cursor];
-    const XiCoroSlot *slot = value ? xi_coro_plan_find_slot(plan, value) : NULL;
+    bool continuation_identity =
+        kind == XI_CORO_FRAME_STORE_ERROR_CONTINUATION ||
+        kind == XI_CORO_FRAME_STORE_PANIC_HANDLER;
+    const XiCoroSlot *slot = value && !continuation_identity
+                                 ? xi_coro_plan_find_slot(plan, value)
+                                 : NULL;
     uint32_t slot_index = slot ? (uint32_t) (slot - plan->slots) : UINT32_MAX;
+    XiBlock *target = kind == XI_CORO_FRAME_STORE_ERROR_CONTINUATION
+                          ? point->error_continuation
+                          : kind == XI_CORO_FRAME_STORE_PANIC_HANDLER
+                                ? (value ? (XiBlock *) value->aux : NULL)
+                                : point->continuation;
     if (action->kind != (uint8_t) kind || action->edge_kind != (uint8_t) edge_kind ||
         action->state_id != point->state_id || action->slot_index != slot_index ||
-        action->value != value || action->target != point->continuation) {
+        action->value != value || action->target != target) {
         verr(ctx, "XR_CORO_4001 func '%s': state %u action %u is inconsistent", f->name,
              point->state_id, cursor);
         return false;
@@ -2773,6 +2811,18 @@ static void verify_coro_actions(VerifyCtx *ctx, const XiFunc *f, const XiCoroPla
         for (uint32_t j = 0; j < point->nlive; j++, cursor++) {
             if (!coro_verify_action(ctx, f, plan, point, cursor, XI_CORO_FRAME_SPILL,
                                     point->live[j], XI_CORO_EDGE_RESUME))
+                return;
+        }
+        if (point->error_region &&
+            !coro_verify_action(ctx, f, plan, point, cursor++,
+                                XI_CORO_FRAME_STORE_ERROR_CONTINUATION,
+                                point->error_region->catch_value,
+                                XI_CORO_EDGE_ERROR))
+            return;
+        for (uint16_t j = 0; j < point->active_handler_count; j++, cursor++) {
+            if (!coro_verify_action(ctx, f, plan, point, cursor,
+                                    XI_CORO_FRAME_STORE_PANIC_HANDLER,
+                                    point->active_handlers[j], XI_CORO_EDGE_PANIC))
                 return;
         }
         if (!coro_verify_action(ctx, f, plan, point, cursor++, XI_CORO_FRAME_STORE_STATE, NULL,
@@ -2878,6 +2928,12 @@ static void verify_coro_rewrite(VerifyCtx *ctx, const XiFunc *f, const XiCoroPla
              plan->spill_count, spill_count);
     if (!ctx->failed)
         verify_coro_actions(ctx, f, plan);
+    if (!ctx->failed) {
+        char exception_error[256];
+        if (!xi_coro_exception_verify(f, plan, exception_error,
+                                      sizeof(exception_error)))
+            verr(ctx, "%s", exception_error);
+    }
     if (!ctx->failed && plan->fingerprint != coro_verify_fingerprint(plan))
         verr(ctx, "XR_CORO_4000 func '%s': coroutine fingerprint is stale", f->name);
 }

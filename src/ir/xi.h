@@ -1099,6 +1099,19 @@ typedef struct XiClosureMeta {
     bool is_direct_callable;    /* can be called without closure alloc */
 } XiClosureMeta;
 
+/* Immutable source error-region identity retained after AST lowering.  Error
+ * catches use ordinary CFG edges rather than the panic handler stack, so this
+ * record preserves the lexical continuation boundary that would otherwise be
+ * erased once the lowerer's try stack is released. */
+typedef struct XiErrorRegion {
+    struct XiBlock *registration_block;
+    struct XiBlock *body_block;
+    struct XiBlock *catch_block;
+    struct XiBlock *merge_block;
+    struct XiValue *catch_value;
+    struct XiErrorRegion *parent;
+} XiErrorRegion;
+
 /* ========== Core Structures ========== */
 
 /*
@@ -1132,6 +1145,7 @@ typedef struct XiValue {
     XrConversionWitness conversion; /* immutable numeric/dynamic conversion evidence */
     XiCallPlan *call_plan;          /* verified read/ref/move call contract */
     XiViewEvidence view_evidence;   /* Slice origin/range lifetime proof */
+    XiErrorRegion *error_region;    /* exact source error region, or NULL */
     /* Instantiated result provenance for calls whose body is outside this Xi
      * unit.  Local direct calls may refine it from the XiFunc fixpoint. */
     XiReturnOwnership call_return_ownership;
@@ -1238,6 +1252,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->aux = src->aux;
     dst->conversion = src->conversion;
     dst->view_evidence = src->view_evidence;
+    dst->error_region = src->error_region;
     dst->call_return_ownership = src->call_return_ownership;
     dst->result_alias_operand = src->result_alias_operand;
     dst->line = src->line;

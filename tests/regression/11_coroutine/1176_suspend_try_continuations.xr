@@ -1,0 +1,75 @@
+enum SuspendError { Raised }
+
+fn normal_after_suspend() -> int {
+    var value = 0
+    try {
+        Coro.yield()
+        value = 41
+    } catch (e) {
+        value = -1
+    }
+    return value
+}
+
+fn error_after_suspend() -> int {
+    var value = 0
+    try {
+        Coro.yield()
+        throw SuspendError.Raised
+    } catch (e) {
+        value = 42
+    }
+    return value
+}
+
+fn panic_after_suspend() -> int {
+    var value = 0
+    try {
+        Coro.yield()
+        var zero = value
+        value = 1 / zero
+    } catch panic (p) {
+        value = 43
+    }
+    return value
+}
+
+fn blocked_inside_panic_handler(ready: Channel<int>, blocked: Channel<int>) -> int {
+    ready.send(1)
+    try {
+        match (blocked.recv()) {
+            Recv.Value(value) -> { return value }
+            _ -> { return -1 }
+        }
+    } catch panic (p) {
+        return 99
+    }
+}
+
+@test
+fn test_suspend_try_continuations() {
+    assert_eq(normal_after_suspend(), 41)
+    assert_eq(error_after_suspend(), 42)
+    assert_eq(panic_after_suspend(), 43)
+
+    const ready = Channel<int>(1)
+    const blocked = Channel<int>(0)
+    var task = go blocked_inside_panic_handler(ready, blocked)
+    match (ready.recv()) {
+        Recv.Value(value) -> { assert_eq(value, 1) }
+        _ -> { assert(false, "worker must reach the blocking receive") }
+    }
+    task.cancel()
+    match (task.awaitResult()) {
+        TaskResult.Cancelled -> {}
+        TaskResult.Success(value) -> {
+            assert(false, "cancel must not enter the panic handler: " + string(value))
+        }
+        _ -> { assert(false, "cancelled task must report cancellation") }
+    }
+    ready.close()
+    blocked.close()
+    print("coro try continuations ok")
+}
+
+test_suspend_try_continuations()

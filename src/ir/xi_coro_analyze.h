@@ -54,6 +54,7 @@ typedef enum {
 #define XI_CORO_MAX_SLOTS 65536u
 #define XI_CORO_MAX_FRAME_ACTIONS 262144u
 #define XI_CORO_MAX_PLAN_BYTES (64u * 1024u * 1024u)
+#define XI_CORO_MAX_EXCEPTION_DEPTH 32u
 
 #define XI_CORO_CAP_SCHEDULER (1u << 0)
 #define XI_CORO_CAP_CHANNEL (1u << 1)
@@ -94,6 +95,8 @@ typedef struct XiCoroEdge {
 
 typedef enum {
     XI_CORO_FRAME_SPILL,
+    XI_CORO_FRAME_STORE_ERROR_CONTINUATION,
+    XI_CORO_FRAME_STORE_PANIC_HANDLER,
     XI_CORO_FRAME_STORE_STATE,
     XI_CORO_FRAME_SCHED_EXIT,
     XI_CORO_FRAME_RELOAD,
@@ -108,7 +111,7 @@ typedef enum {
  * action set or state ordering. */
 typedef struct XiCoroFrameAction {
     uint8_t kind; /* XiCoroFrameActionKind */
-    uint8_t edge_kind; /* XiCoroEdgeKind for DROP, zero otherwise */
+    uint8_t edge_kind; /* XiCoroEdgeKind governing this action */
     uint8_t _pad[2];
     uint32_t state_id;
     uint32_t slot_index;
@@ -134,6 +137,10 @@ typedef struct XiCoroSuspendPoint {
     const XiFunc *resolved_callee;
     XiValue *result_slot;
     XiValue *error_slot;
+    XiErrorRegion *error_region;
+    XiBlock *error_continuation;
+    XiValue **active_handlers; /* outermost to innermost XI_TRY identities */
+    uint16_t active_handler_count;
     uint32_t generation;
     uint32_t capability_mask;
     uint32_t store_state_id;
@@ -197,6 +204,8 @@ typedef struct XiCoroPlan {
     XiCoroDispatchEntry *dispatch;
     uint32_t ndispatch;
     uint32_t edge_count;
+    uint32_t active_handler_count;
+    XiValue **active_handlers;
     uint32_t spill_count;
     XiBlock *entry_block;
     uint64_t fingerprint;

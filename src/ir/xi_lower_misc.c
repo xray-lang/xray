@@ -740,6 +740,7 @@ XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool pr
         XiValue *check = xi_value_new(l->func, l->cur_block, XI_ERR_CHECK, l->type_bool, 0);
         if (!check)
             return;
+        check->error_region = l->active_error_region;
         check->flags |= XI_FLAG_SIDE_EFFECT;
         check->line = node ? (uint32_t) node->line : 0;
 
