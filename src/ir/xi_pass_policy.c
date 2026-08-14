@@ -108,34 +108,33 @@ static bool xi_opt_pipeline_by_name(const char *name, XiOptPipelineId *out) {
 
 /* Passes withheld from the native backend at the full level.
  *
- * loop_split answers programs incorrectly and the native backend runs it on
- * every build, so the wrong answers reach a shipped artifact. Over the 52
- * differential cases under tests/diff/cases/semantics/optimizer the full level
- * answers 8 wrongly; withholding loop_split answers none wrongly, fixes 9
- * cases outright and regresses none. Withholding licm instead leaves one wrong
- * answer, so loop_split is the pass that has to go.
+ * loop_split was withheld here because it answered programs incorrectly: it
+ * decided an early exit was dead by evaluating its condition at the induction
+ * variable's first value, which says nothing about later iterations. That is
+ * repaired at the source. The pass now requires the interval the loop header
+ * establishes to imply the exit is never taken, and over the 52 differential
+ * cases under tests/diff/cases/semantics/optimizer enabling it changes no
+ * answer at all: not on the VM at the full level and not on the native
+ * backend. It is released.
  *
- * The VM at the full level is the sharper probe, because a case the backend
- * refuses to build cannot disagree with anything. There the same corpus gives
- * 24 wrong answers against 52 correct at the light level, and withholding one
- * pass at a time attributes 13 to ifconv and 9 each to loop_split and licm
- * over the same guarded loop exits.
+ * The proof it now demands is strong enough that real loop bounds rarely
+ * satisfy it, so the pass currently rewrites nothing. That makes it correct
+ * and worthless rather than correct and useful, which is a question about
+ * whether to keep the pass, not about whether to withhold it.
  *
  * ifconv is deliberately NOT withheld. Its defect reaches the native backend
- * as a refusal, not as a wrong answer: withholding loop_split alone already
- * leaves zero wrong answers, and the 14 further cases that only build with
- * ifconv also withheld are cases the backend rejects outright. A loud refusal
- * is the acceptable failure, and switching a pass off would still be the wrong
- * repair -- the defect is being fixed in if-conversion itself.
+ * as a refusal, not as a wrong answer, and a loud refusal is the acceptable
+ * failure; switching a pass off would still be the wrong repair -- the defect
+ * is being fixed in if-conversion itself.
  *
  * ivsr is withheld for an older and separate reason carried over unchanged:
  * its rewrite is not honoured through representation selection.
  *
- * This set is containment, not a repair. Take a pass out of it once the corpus
- * above passes with that pass enabled: 52/52 on the VM at the full level, and
- * no new wrong answer or refusal on the native backend. This is the only place
- * a pass is withheld. */
-#define XI_PASS_AOT_WITHHELD_PASSES (XI_OPT_DISABLE_IVSR | XI_OPT_DISABLE_LOOP_SPLIT)
+ * This set is containment, not a repair. Take a pass out of it once enabling
+ * that pass introduces no wrong answer and no new refusal over the corpus
+ * above, on the VM at the full level and on the native backend. This is the
+ * only place a pass is withheld. */
+#define XI_PASS_AOT_WITHHELD_PASSES (XI_OPT_DISABLE_IVSR)
 
 XR_FUNC XiOptPolicy xi_pass_policy_builtin_default(void) {
     XiOptPolicy policy;
