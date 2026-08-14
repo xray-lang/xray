@@ -1026,12 +1026,6 @@ static void verify_effect_flags(VerifyCtx *ctx, const XiFunc *f) {
             uint8_t required = xi_op_default_effects(v->op);
             uint8_t missing = required & ~v->flags;
             if (missing) {
-                if (v->op == XI_GET_BUILTIN) {
-                    fprintf(stderr,
-                            "[xi_diag] verify GET_BUILTIN v%u flags=0x%02x ptr=%p aux_int=%lld "
-                            "aux=%p\n",
-                            v->id, v->flags, (void *) v, (long long) v->aux_int, v->aux);
-                }
                 verr(ctx,
                      "func '%s': v%u %s in b%u missing required "
                      "effect flags: has=0x%02x need=0x%02x missing=0x%02x",
@@ -1743,30 +1737,6 @@ static void verify_backend(VerifyCtx *ctx, const XiFunc *f) {
 }
 
 /* ========== Stage-Specific Verifiers ========== */
-
-/* RAW: basic SSA structure after lowering. All generic checks in
- * xi_verify() are sufficient; no additional stage-specific checks. */
-static void verify_raw(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed)
-        return;
-    (void) f;
-    /* RAW is the baseline stage. All structural checks are already
-     * covered by the generic verify_*() helpers above. */
-}
-
-/* CANONICAL: evaluation order is deterministic; syntax sugar expanded.
- * No compound-assignment or increment/decrement ops should remain
- * as high-level ops. */
-static void verify_canonical(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed)
-        return;
-    if (f->stage < XI_STAGE_CANONICAL)
-        return;
-    /* Currently no sugar ops exist in the Xi IR (expansion happens
-     * in the AST canonicalizer before lowering). This verifier is
-     * a structural placeholder: concrete checks will be added when
-     * new high-level ops that require canonical lowering are introduced. */
-}
 
 static bool closed_is_cell_reference(const XiFunc *f, const XiValue *v) {
     if (!v)
@@ -3141,12 +3111,9 @@ XR_FUNC bool xi_verify_stage(const XiFunc *f, XiStage stage, char *errbuf, int e
     errbuf[0] = '\0';
 
     /* Stage-specific checks run cumulatively: each stage includes
-     * all checks from preceding stages (fall-through). */
-    if (stage >= XI_STAGE_RAW)
-        verify_raw(&ctx, f);
-    if (!ctx.failed && stage >= XI_STAGE_CANONICAL)
-        verify_canonical(&ctx, f);
-    if (!ctx.failed && stage >= XI_STAGE_CLOSED)
+     * all checks from preceding stages (fall-through). The RAW and
+     * CANONICAL stages add nothing beyond the generic checks above. */
+    if (stage >= XI_STAGE_CLOSED)
         verify_closed(&ctx, f);
     if (!ctx.failed && stage >= XI_STAGE_OWNED)
         verify_owned(&ctx, f);

@@ -1,0 +1,36 @@
+// 1420_view_return_through_user_copy.xr
+// A function that returns a Slice view obtained from a user-declared `copy`
+// keeps the view provenance of its own parameter.
+//
+// `copy` is an ordinary builtin, not a reserved word, so a program may declare
+// its own function of that name at any arity -- the standard library itself
+// does, in stdlib/net/net.xr, where `export fn copy` takes three parameters.
+// The parameter-escape summary shortcuts calls to `copy` because the builtin
+// hands back a fresh owner that roots at no parameter. That shortcut once
+// matched on the callee name alone: any `copy(...)` call had its result
+// treated as rooted at no parameter, which erased the view-return provenance
+// of the enclosing function. `viewOf` below then looked like it returned a
+// view borrowed from a local, and the whole file was rejected with errors
+// about returning and passing a Slice view. Renaming the callee compiled the
+// identical program, which is the shape 1421 pins.
+//
+// The shortcut now applies only at the builtin's own arity, so a two-argument
+// `copy` is summarised like any other function.
+
+fn copy(s: Slice<int>, extra: int) -> Slice<int> {
+    return s
+}
+
+fn viewOf(v: Slice<int>) -> Slice<int> {
+    return copy(v, 1)
+}
+
+@test
+fn test_view_return_provenance_survives_user_copy() {
+    var owner = [1, 2, 3, 4]
+    var view: Slice<int> = owner[1:3]
+    var out: Slice<int> = viewOf(view)
+    assert_eq(out[0], 2)
+    assert_eq(out[1], 3)
+    assert_eq(len(out), 2)
+}

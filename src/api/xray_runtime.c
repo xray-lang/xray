@@ -15,6 +15,7 @@
 
 #include "../../include/runtime.h"
 #include "../base/xchecks.h"
+#include "../shared/xr_int_arith_core.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,57 +56,102 @@ static XrValue xrt_str_concat(const char *sa, const char *sb) {
 
 /* ========== Mixed-type Arithmetic ========== */
 
-XrValue xrt_add(XrValue a, XrValue b) {
-    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return xrt_box_int(a.i + b.i);
-    if (a.tag == XR_TAG_STR || b.tag == XR_TAG_STR) {
-        char ba[64], bb[64];
-        return xrt_str_concat(xrt_to_cstr(a, ba, sizeof(ba)), xrt_to_cstr(b, bb, sizeof(bb)));
-    }
-    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
-    return xrt_box_float(fa + fb);
+/* This library is linked into an embedder's process, where there is no Xray
+ * frame to unwind and therefore no error channel: where the AOT value profile
+ * in src/aot/xrt_arith.h raises E0404 / E0420 / E0421 through xrt_throw_exc,
+ * the closest behaviour available here is the one the rest of this file
+ * already uses for an operation it cannot honour -- report and abort, rather
+ * than return a value computed from bits that do not mean what the arithmetic
+ * would read them as. */
+static void xrt_arith_fault(const char *diagnostic) {
+    fprintf(stderr, "%s\n", diagnostic);
+    abort();
 }
 
-// Self-contained arithmetic (no delegation to xrt_ops.c)
+/* Only I64 and F64 carry a number. Every other tag -- including a heap
+ * pointer and a string -- has a payload whose bits are not a double, so it
+ * must never reach the float lane. */
+static bool xrt_is_tagged_number(XrValue v) {
+    return v.tag == XR_TAG_I64 || v.tag == XR_TAG_F64;
+}
+
+static double xrt_tagged_number(XrValue v) {
+    return v.tag == XR_TAG_I64 ? (double) v.i : v.f;
+}
+
+static const char *xrt_str_payload(XrValue v) {
+    return v.ptr ? (const char *) v.ptr : "";
+}
+
+/* Integer wrap, division and modulo come from the shared owners in
+ * src/shared/xr_int_arith_core.h, the same kernels the VM and the AOT value
+ * profiles consume, so every tier agrees on INT64_MAX + 1, INT64_MIN / -1 and
+ * a zero divisor. This value model has no BigInt tag, so an operand that the
+ * language would promote arrives as a heap pointer and is rejected by the
+ * numeric guard instead of being read as a double. */
+#define XRT_API_INT_DIV_MOD(kind, lhs, rhs)                                                        \
+    XR_INT_DIV_MOD_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                              \
+                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO, XR_SEM_CONSUMER_AOT_HOSTED,  \
+                               (kind), XR_INT_DIV_MOD_PROOF_NONE, (lhs), (rhs))
+
+XrValue xrt_add(XrValue a, XrValue b) {
+    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
+        return xrt_box_int(xr_i64_add_wrap(a.i, b.i));
+    /* `+` joins two strings; a string paired with anything else has no result. */
+    if (a.tag == XR_TAG_STR && b.tag == XR_TAG_STR)
+        return xrt_str_concat(xrt_str_payload(a), xrt_str_payload(b));
+    if (!xrt_is_tagged_number(a) || !xrt_is_tagged_number(b))
+        xrt_arith_fault(
+            "E0404: operator '+' requires both operands to be numeric or both string");
+    return xrt_box_float(xrt_tagged_number(a) + xrt_tagged_number(b));
+}
+
 XrValue xrt_sub(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return xrt_box_int(a.i - b.i);
-    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
-    return xrt_box_float(fa - fb);
+        return xrt_box_int(xr_i64_sub_wrap(a.i, b.i));
+    if (!xrt_is_tagged_number(a) || !xrt_is_tagged_number(b))
+        xrt_arith_fault("E0404: subtraction requires numeric types");
+    return xrt_box_float(xrt_tagged_number(a) - xrt_tagged_number(b));
 }
 
 XrValue xrt_mul(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return xrt_box_int(a.i * b.i);
-    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
-    return xrt_box_float(fa * fb);
+        return xrt_box_int(xr_i64_mul_wrap(a.i, b.i));
+    if (!xrt_is_tagged_number(a) || !xrt_is_tagged_number(b))
+        xrt_arith_fault("E0404: multiplication requires numeric types");
+    return xrt_box_float(xrt_tagged_number(a) * xrt_tagged_number(b));
 }
 
 XrValue xrt_div(XrValue a, XrValue b) {
-    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return b.i ? xrt_box_int(a.i / b.i) : xrt_box_int(0);
-    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
-    if (fb == 0.0)
-        return xrt_box_float(0.0);
-    return xrt_box_float(fa / fb);
+    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64) {
+        XrIntDivModResult quotient = XRT_API_INT_DIV_MOD(XR_INT_DIV_MOD_DIV, a.i, b.i);
+        if (quotient.divisor_is_zero)
+            xrt_arith_fault("E0420: division by zero");
+        return xrt_box_int(quotient.value);
+    }
+    if (!xrt_is_tagged_number(a) || !xrt_is_tagged_number(b))
+        xrt_arith_fault("E0404: division requires numeric types");
+    return xrt_box_float(xrt_tagged_number(a) / xrt_tagged_number(b));
 }
 
 XrValue xrt_mod(XrValue a, XrValue b) {
-    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return b.i ? xrt_box_int(a.i % b.i) : xrt_box_int(0);
-    return xrt_box_int(0);
+    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64) {
+        XrIntDivModResult remainder = XRT_API_INT_DIV_MOD(XR_INT_DIV_MOD_MOD, a.i, b.i);
+        if (remainder.divisor_is_zero)
+            xrt_arith_fault("E0421: modulo by zero");
+        return xrt_box_int(remainder.value);
+    }
+    xrt_arith_fault("E0404: modulo requires integer types");
+    return XR_NULL_VAL;
 }
 
 XrValue xrt_neg(XrValue a) {
     if (a.tag == XR_TAG_I64)
-        return xrt_box_int(-a.i);
+        return xrt_box_int(xr_i64_neg_wrap(a.i));
     if (a.tag == XR_TAG_F64)
         return xrt_box_float(-a.f);
-    return xrt_box_int(0);
+    xrt_arith_fault("E0404: operand must be numeric");
+    return XR_NULL_VAL;
 }
 
 /* ========== Mixed-type Comparison ========== */

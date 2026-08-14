@@ -694,8 +694,12 @@ static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNod
                 break;
             case AST_CALL_EXPR: {
                 CallExprNode *call = &expr->as.call_expr;
-                if (call->callee && call->callee->type == AST_VARIABLE &&
-                    call->callee->as.variable.name &&
+                /* The builtin copy(x) yields a fresh owner, so its result roots
+                 * at no parameter. Only the one-argument form is that builtin:
+                 * copy is not a reserved word, and a user-declared copy of any
+                 * other arity may well return one of its arguments. */
+                if (call->arg_count == 1 && call->callee &&
+                    call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
                     strcmp(call->callee->as.variable.name, "copy") == 0)
                     return -1;
                 XaSymbolLinks *callee = xa_summary_function_links(summary, call->callee);
@@ -843,7 +847,12 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
     if (!summary || !expr || expr->type != AST_CALL_EXPR)
         return;
     CallExprNode *call = &expr->as.call_expr;
-    if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
+    /* The builtin copy(x) hands back a fresh owner, so nothing the caller
+     * passed can escape through it. Any other arity is a user-declared
+     * function that happens to be named copy and must be summarised
+     * normally. */
+    if (call->arg_count == 1 && call->callee && call->callee->type == AST_VARIABLE &&
+        call->callee->as.variable.name &&
         strcmp(call->callee->as.variable.name, "copy") == 0)
         return;
     XaSymbolLinks *fn_links = xa_summary_function_links(summary, call->callee);

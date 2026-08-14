@@ -1,0 +1,26 @@
+// 1421_view_return_through_renamed_callee.xr
+// The control shape for 1420: the same program with the pass-through callee
+// named anything other than `copy`.
+//
+// Both files must behave identically. A program's acceptance cannot depend on
+// the name a user gave one of its own functions, so if 1420 ever fails while
+// this one passes, the copy-builtin shortcut has stopped checking arity and is
+// matching a user-declared `copy` again.
+
+fn passThrough(s: Slice<int>, extra: int) -> Slice<int> {
+    return s
+}
+
+fn viewOf(v: Slice<int>) -> Slice<int> {
+    return passThrough(v, 1)
+}
+
+@test
+fn test_view_return_provenance_survives_named_callee() {
+    var owner = [1, 2, 3, 4]
+    var view: Slice<int> = owner[1:3]
+    var out: Slice<int> = viewOf(view)
+    assert_eq(out[0], 2)
+    assert_eq(out[1], 3)
+    assert_eq(len(out), 2)
+}

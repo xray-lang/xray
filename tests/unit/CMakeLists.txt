@@ -447,7 +447,6 @@ add_xray_unit_test(test_xi_loop_split ir/test_xi_loop_split.c)
 add_xray_unit_test(test_xi_loop_inv_branch ir/test_xi_loop_inv_branch.c)
 add_xray_unit_test(test_xi_vec_scalar ir/test_xi_vec_scalar.c)
 add_xray_unit_test(test_xi_comptime ir/test_xi_comptime.c)
-add_xray_unit_test(test_xi_lto aot/test_xi_lto.c)
 add_xray_unit_test(test_xaot_driver
     aot/test_xaot_driver.c
     ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_model.c

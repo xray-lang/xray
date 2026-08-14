@@ -416,7 +416,7 @@ static void test_missing_and_partial_module_plans_fail_before_prepare(void) {
     REQUIRE(fixture.bundle.nvalue_plans == 0);
     REQUIRE(fixture.bundle.error_msg != NULL);
     REQUIRE(strstr(fixture.bundle.error_msg, "TargetPlan") != NULL);
-    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY, error, sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     REQUIRE(strstr(error, "TargetPlan") != NULL);
 
     REQUIRE(xaot_bundle_set_target_plan(&fixture.bundle, 0,
@@ -454,7 +454,7 @@ static void test_multi_module_prepare_has_no_scalar_legacy_rows(void) {
         REQUIRE(xaot_value_plan_is_exact_enum_ordinal_family(
             &fixture.bundle, enum_plan));
     }
-    REQUIRE(xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY, error, sizeof(error)));
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
 
     XaotValuePlan *enum_value = xaot_bundle_find_value_plan_mut(
         &fixture.bundle, fixture.modules[0].enum_ordinal);
@@ -463,8 +463,7 @@ static void test_multi_module_prepare_has_no_scalar_legacy_rows(void) {
     enum_value->rep.flags = XAOT_VALUE_FLAG_ENUM | XAOT_VALUE_FLAG_STRUCT;
     REQUIRE(!xaot_value_plan_is_exact_enum_ordinal_family(&fixture.bundle,
                                                         enum_value));
-    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                                error, sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     enum_value->rep.flags = saved_flags;
 
     uint16_t saved_payload = fixture.bundle.enum_plans[0].max_payload;
@@ -478,8 +477,7 @@ static void test_multi_module_prepare_has_no_scalar_legacy_rows(void) {
     REQUIRE(!xaot_value_plan_is_exact_enum_ordinal_family(&fixture.bundle,
                                                         enum_value));
     fixture.bundle.nenum_plans = saved_enum_plan_count;
-    REQUIRE(xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                               error, sizeof(error)));
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     cutover_bundle_free(&fixture);
 }
 
@@ -685,8 +683,7 @@ static void test_corrupt_bound_plan_and_scalar_residue_fail_closed(void) {
         &residue.bundle, residue.modules[0].integer);
     REQUIRE(forged != NULL);
     forged->rep.flags = XAOT_VALUE_FLAG_ENUM;
-    REQUIRE(!xaot_verify_bundle(&residue.bundle, XAOT_VERIFY_AOT_READY, error,
-                                sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&residue.bundle, error, sizeof(error)));
     REQUIRE(strstr(error, "scalar") != NULL);
     REQUIRE(strstr(error, "legacy") != NULL);
     cutover_bundle_free(&residue);
@@ -726,8 +723,7 @@ static void test_exact_rep_adapter_family_and_mutations(void) {
     REQUIRE(scalar_plan != NULL);
     REQUIRE(xaot_value_plan_is_exact_rep_adapter(&fixture.bundle,
                                                  scalar_plan));
-    REQUIRE(xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                               error, sizeof(error)));
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     char *adapter_dump = xaot_bundle_dump_plan(&fixture.bundle);
     REQUIRE(adapter_dump != NULL);
     REQUIRE(strstr(adapter_dump, "backend_adapters=1") != NULL);
@@ -740,8 +736,7 @@ static void test_exact_rep_adapter_family_and_mutations(void) {
     scalar_plan->rep.c_type = "forged_scalar_t";
     REQUIRE(!xaot_value_plan_is_exact_rep_adapter(&fixture.bundle,
                                                   scalar_plan));
-    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                                error, sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     REQUIRE(xaot_bundle_dump_plan(&fixture.bundle) == NULL);
     scalar_plan->rep.c_type = saved_c_type;
     uint32_t saved_flags = scalar_plan->rep.flags;
@@ -831,8 +826,7 @@ static void test_exact_rep_adapter_family_and_mutations(void) {
     REQUIRE(xaot_value_plan_is_exact_rep_adapter(
         &unbox.bundle,
         xaot_bundle_find_value_plan(&unbox.bundle, scalar_unbox)));
-    REQUIRE(xaot_verify_bundle(&unbox.bundle, XAOT_VERIFY_AOT_READY,
-                               error, sizeof(error)));
+    REQUIRE(xaot_verify_bundle(&unbox.bundle, error, sizeof(error)));
     cutover_bundle_free(&unbox);
 
     CutoverBundle string_adapter;
@@ -881,16 +875,14 @@ static void test_transfer_value_authority_is_exact_and_independent(void) {
     REQUIRE(transfer->site == fixture.send);
     REQUIRE(transfer->value == fixture.adapter);
     REQUIRE(transfer->action == XR_TRANSFER_INLINE_COPY);
-    REQUIRE(xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                               error, sizeof(error)));
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
 
     REQUIRE(fixture.bundle.nvalue_plans < fixture.bundle.value_plan_cap);
     uint32_t target_legacy_index = fixture.bundle.nvalue_plans++;
     fixture.bundle.value_plans[target_legacy_index] = *adapter_row;
     fixture.bundle.value_plans[target_legacy_index].func = fixture.function;
     fixture.bundle.value_plans[target_legacy_index].value = fixture.send;
-    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                                error, sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     fixture.bundle.nvalue_plans--;
 
     uint32_t adapter_index = UINT32_MAX;
@@ -906,8 +898,7 @@ static void test_transfer_value_authority_is_exact_and_independent(void) {
     uint32_t duplicate_index = fixture.bundle.nvalue_plans++;
     fixture.bundle.value_plans[duplicate_index] =
         fixture.bundle.value_plans[adapter_index];
-    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                                error, sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     REQUIRE(strstr(error, "duplicate legacy") != NULL);
     fixture.bundle.nvalue_plans--;
 
@@ -915,37 +906,31 @@ static void test_transfer_value_authority_is_exact_and_independent(void) {
     const XiValue *saved_value = transfer->value;
     transfer->site = saved_value;
     transfer->value = saved_site;
-    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                                error, sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     transfer->site = saved_site;
     transfer->value = saved_value;
 
     transfer->value = fixture.payload;
-    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                                error, sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     REQUIRE(strstr(error, "value does not re-derive") != NULL);
     transfer->value = saved_value;
 
     uint8_t saved_action = transfer->action;
     transfer->action = XR_TRANSFER_CONST_SHARE;
-    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                                error, sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     REQUIRE(strstr(error, "action does not re-derive") != NULL);
     transfer->action = saved_action;
 
     uint8_t saved_origin = fixture.adapter->backend_origin;
     fixture.adapter->backend_origin = XI_BACKEND_VALUE_NONE;
-    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                                error, sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     fixture.adapter->backend_origin = saved_origin;
 
     uint32_t saved_count = fixture.bundle.nvalue_plans;
     fixture.bundle.nvalue_plans = adapter_index;
-    REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                                error, sizeof(error)));
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     fixture.bundle.nvalue_plans = saved_count;
-    REQUIRE(xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
-                               error, sizeof(error)));
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     transfer_authority_fixture_free(&fixture);
 }
 

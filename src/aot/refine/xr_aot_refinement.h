@@ -22,7 +22,6 @@
 #include <stdint.h>
 
 #define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(4)
-#define XR_AOT_REFINEMENT_BACKEND_ABI_VERSION UINT32_C(2)
 #define XR_AOT_REFINEMENT_MAX_RECORDS UINT32_C(1048576)
 
 typedef enum XrAotInvariant {
@@ -82,9 +81,6 @@ typedef enum XrAotRefinementIssue {
     XR_AOT_REFINEMENT_RESOURCE_BUDGET,
     XR_AOT_REFINEMENT_PLAN_FINGERPRINT,
     XR_AOT_REFINEMENT_PLAN_STATE,
-    XR_AOT_REFINEMENT_BACKEND_ABI,
-    XR_AOT_REFINEMENT_BACKEND_INCOMPLETE_COVERAGE,
-    XR_AOT_REFINEMENT_BACKEND_FAILURE,
     /* Direct-call refusals. Each names the exact obligation the validator
      * could not discharge from the verified baseline, so an unproved binding
      * is distinguishable from a checker-detected inconsistency. */
@@ -276,47 +272,12 @@ typedef struct XrAotRefinementPlanView {
     bool verified;
 } XrAotRefinementPlanView;
 
-typedef struct XrAotBackendStats {
-    uint32_t visited;
-    uint32_t applied;
-    uint32_t refused;
-} XrAotBackendStats;
-
-typedef struct XrAotBackendInterface {
-    uint32_t abi_version;
-    uint32_t supported_transforms;
-    bool (*begin)(void *context, const XrAotBaselineRef *baseline,
-                  uint32_t record_count);
-    bool (*visit)(void *context, uint32_t index,
-                  const XrAotTransformationRecord *record);
-    /* finish is called once after all visits and must release backend state
-     * even when it reports failure. abort releases state after a failed visit. */
-    bool (*finish)(void *context);
-    void (*abort)(void *context);
-} XrAotBackendInterface;
-
-typedef struct XrAotNullBackend {
-    XrAotBackendStats stats;
-    uint32_t expected_records;
-} XrAotNullBackend;
-
-typedef struct XrAotTestBackend {
-    char *buffer;
-    size_t capacity;
-    size_t length;
-    uint32_t expected_records;
-    uint32_t visited;
-} XrAotTestBackend;
-
 XR_FUNC const char *xr_aot_refinement_issue_name(uint32_t issue);
 XR_FUNC bool xr_aot_refinement_baseline_from_target_plan(
     const XrTargetPlan *target_plan, XrAotBaselineRef *out_baseline,
     XrAotRefinementDiagnostic *diag);
 XR_FUNC XrAotInvariantState xr_aot_refinement_initial_state(
     const XrAotBaselineRef *baseline);
-XR_FUNC bool xr_aot_refinement_state_after_invalidation(
-    const XrAotInvariantState *input, XrAotInvariantMask invalidates,
-    XrAotInvariantState *output, XrAotRefinementDiagnostic *diag);
 XR_FUNC XrAotPassProtocol xr_aot_refinement_direct_call_protocol(
     uint32_t pass_id);
 XR_FUNC XrAotPassProtocol xr_aot_refinement_representation_protocol(
@@ -342,9 +303,6 @@ XR_FUNC bool xr_aot_refinement_try_representation_adapter(
 XR_FUNC bool xr_aot_refinement_direct_call_authority_build(
     const XrTargetPlan *target_plan, uint32_t pass_id,
     XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag);
-/* Applied direct-call bindings in a verified refinement plan. */
-XR_FUNC uint32_t xr_aot_refinement_direct_call_applied_count(
-    const XrAotRefinementPlanView *view);
 XR_FUNC bool xr_aot_refinement_builder_freeze(
     XrAotRefinementBuilder *builder, const XrTargetPlan *target_plan,
     XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag);
@@ -354,12 +312,5 @@ XR_FUNC XrAotRefinementPlanView xr_aot_refinement_plan_view(
 XR_FUNC bool xr_aot_refinement_verify(const XrAotRefinementPlanView *view,
                                       const XrTargetPlan *target_plan,
                                       XrAotRefinementDiagnostic *diag);
-XR_FUNC bool xr_aot_backend_run(const XrAotRefinementPlanView *view,
-                                const XrTargetPlan *target_plan,
-                                const XrAotBackendInterface *backend,
-                                void *context, XrAotBackendStats *out_stats,
-                                XrAotRefinementDiagnostic *diag);
-XR_FUNC const XrAotBackendInterface *xr_aot_null_backend_interface(void);
-XR_FUNC const XrAotBackendInterface *xr_aot_test_backend_interface(void);
 
 #endif  // XR_AOT_REFINEMENT_H
