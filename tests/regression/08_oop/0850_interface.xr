@@ -98,7 +98,7 @@ class Person implements Printable {
         this.age = age
     }
 
-    toString() -> string {        return this.name + " (" + this.age + ")"
+    toString() -> string {        return this.name + " (" + this.age.toString() + ")"
     }
 
     greet() -> string {        return "Hello, " + this.name

@@ -1,49 +1,40 @@
 /*
-** 字符串重复语法测试
+** 字符串重复测试
 ** 作者：xingleixu@gmail.com
-** 
-** 测试 "str" * n 和 n * "str" 语法
+**
+** 测试 s.repeat(n)。`"str" * n` 不是合法写法：`*` 只作用于数值。
 */
-
-// 基本测试：字符串 * 整数
 
 @test
 fn test_string_repeat() {
-    var line = "=" * 50
+    var line = "=".repeat(50)
     assert_eq(len(line), 50)
 
-    var stars = "*" * 10
+    var stars = "*".repeat(10)
     assert_eq(stars, "**********")
 
-    // 整数 * 字符串（交换顺序）
-    var dashes = 5 * "-"
-    assert_eq(dashes, "-----")
-
     // 边界情况
-    var empty = "x" * 0
+    var empty = "x".repeat(0)
     assert_eq(empty, "")
 
-    var single = "abc" * 1
+    var single = "abc".repeat(1)
     assert_eq(single, "abc")
 
     // 多字符重复
-    var pattern = "ab" * 3
+    var pattern = "ab".repeat(3)
     assert_eq(pattern, "ababab")
 
     // 中文字符重复
-    var chinese = "好" * 3
+    var chinese = "好".repeat(3)
     assert_eq(chinese, "好好好")
 
     // 变量方式
     var s: string = "-"
     var n: int = 5
-    var result = s * n
+    var result = s.repeat(n)
     assert_eq(result, "-----")
 
     // 表达式中使用
-    var header = "+" + "-" * 20 + "+"
+    var header = "+" + "-".repeat(20) + "+"
     assert_eq(len(header), 22)
-
-    // 打印分隔线
 }
-

@@ -157,8 +157,8 @@ fn encodeImpl(s: string, form: bool) -> string {
             out = out + byteString(b)
         } else {
             out = out + "%"
-            out = out + rune(int(alphabet[(b >> 4) & 15]))!
-            out = out + rune(int(alphabet[b & 15]))!
+            out = out + rune(int(alphabet[(b >> 4) & 15]))!.toString()
+            out = out + rune(int(alphabet[b & 15]))!.toString()
         }
     }
     return out

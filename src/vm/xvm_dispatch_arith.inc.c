@@ -68,39 +68,26 @@
         XrValue vc = R(c);                                                                         \
         XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn);                            \
         VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
-        if (XR_IS_STRING(vb) || XR_IS_STRING(vc)) {                                                \
-            if (XR_IS_STRING(vb) && XR_IS_STRING(vc)) {                                            \
-                const char *db = xr_value_str_data(&vb);                                           \
-                uint32_t lb = xr_value_str_len(&vb);                                               \
-                const char *dc = xr_value_str_data(&vc);                                           \
-                uint32_t lc = xr_value_str_len(&vc);                                               \
-                size_t total_len = lb + lc;                                                        \
-                if (total_len < XR_SHORT_STRING_THRESHOLD) {                                       \
-                    char stack_buf[XR_SHORT_STRING_THRESHOLD];                                     \
-                    memcpy(stack_buf, db, lb);                                                     \
-                    memcpy(stack_buf + lb, dc, lc);                                                \
-                    R(a) = xr_string_value(xr_string_intern(isolate, stack_buf, total_len, 0));    \
-                    vmbreak;                                                                       \
-                }                                                                                  \
-                XrStrBuf *sb = xr_strbuf_tmp(isolate);                                             \
-                xr_strbuf_append_cstr(sb, db, lb);                                                 \
-                xr_strbuf_append_cstr(sb, dc, lc);                                                 \
-                R(a) = xr_string_value(xr_strbuf_to_string(sb));                                   \
-                vmbreak;                                                                           \
-            }                                                                                      \
-            XrString *str_b = xr_value_to_string(isolate, vb);                                     \
-            XrString *str_c = xr_value_to_string(isolate, vc);                                     \
-            size_t total_len = str_b->length + str_c->length;                                      \
+        /* `+` joins two strings. A pair where only one side is a string has no                    \
+         * result: the analyzer rejects it whenever both static types are known,                  \
+         * and a dynamically-typed operand that reaches here must fail rather                     \
+         * than silently stringify the other side. */                                             \
+        if (XR_IS_STRING(vb) && XR_IS_STRING(vc)) {                                                \
+            const char *db = xr_value_str_data(&vb);                                               \
+            uint32_t lb = xr_value_str_len(&vb);                                                   \
+            const char *dc = xr_value_str_data(&vc);                                               \
+            uint32_t lc = xr_value_str_len(&vc);                                                   \
+            size_t total_len = lb + lc;                                                            \
             if (total_len < XR_SHORT_STRING_THRESHOLD) {                                           \
                 char stack_buf[XR_SHORT_STRING_THRESHOLD];                                         \
-                memcpy(stack_buf, str_b->data, str_b->length);                                     \
-                memcpy(stack_buf + str_b->length, str_c->data, str_c->length);                     \
+                memcpy(stack_buf, db, lb);                                                         \
+                memcpy(stack_buf + lb, dc, lc);                                                    \
                 R(a) = xr_string_value(xr_string_intern(isolate, stack_buf, total_len, 0));        \
                 vmbreak;                                                                           \
             }                                                                                      \
             XrStrBuf *sb = xr_strbuf_tmp(isolate);                                                 \
-            xr_strbuf_append_str(sb, str_b);                                                       \
-            xr_strbuf_append_str(sb, str_c);                                                       \
+            xr_strbuf_append_cstr(sb, db, lb);                                                     \
+            xr_strbuf_append_cstr(sb, dc, lc);                                                     \
             R(a) = xr_string_value(xr_strbuf_to_string(sb));                                       \
             vmbreak;                                                                               \
         }                                                                                          \
@@ -122,32 +109,13 @@
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
     }
 
+/* `*` has no string form — repetition is s.repeat(n) — so the multiply
+ * template is the plain numeric one. It keeps its own name only because
+ * xi.mul selects the template by name. */
 #define XVM_TEMPLATE_ARITH_MUL_CASE(op, int_op, float_op, bigint_fn, op_flag, op_symbol, op_name,  \
                                     error_msg)                                                     \
-    vmcase(op) {                                                                                   \
-        int a = GETARG_A(i);                                                                       \
-        int b = GETARG_B(i);                                                                       \
-        int c = GETARG_C(i);                                                                       \
-        XrValue vb = R(b);                                                                         \
-        XrValue vc = R(c);                                                                         \
-        XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn);                            \
-        if (XR_IS_STRING(vb) && XR_IS_INT(vc)) {                                                   \
-            XrString *str = xr_value_to_string(isolate, vb);                                       \
-            xr_Integer count = XR_TO_INT(vc);                                                      \
-            XrString *result = xr_string_repeat(isolate, str, count);                              \
-            R(a) = result ? xr_string_value(result) : xr_null();                                   \
-            vmbreak;                                                                               \
-        }                                                                                          \
-        if (XR_IS_INT(vb) && XR_IS_STRING(vc)) {                                                   \
-            xr_Integer count = XR_TO_INT(vb);                                                      \
-            XrString *str = xr_value_to_string(isolate, vc);                                       \
-            XrString *result = xr_string_repeat(isolate, str, count);                              \
-            R(a) = result ? xr_string_value(result) : xr_null();                                   \
-            vmbreak;                                                                               \
-        }                                                                                          \
-        VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
-    }
+    XVM_TEMPLATE_ARITH_NUMERIC_CASE(op, int_op, float_op, bigint_fn, op_flag, op_symbol, op_name,  \
+                                    error_msg)
 
 #define XVM_TEMPLATE_ARITH_DIV_CASE(op, bigint_fn, op_flag, op_symbol, op_name, error_msg)         \
     vmcase(op) {                                                                                   \
@@ -354,13 +322,6 @@ vmcase(OP_MULI) {
         R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, xr_int(sc), xr_bigint_mul);
         vmbreak;
     }
-    /* String repeat: "str" * N */
-    if (XR_IS_STRING(vb)) {
-        XrString *str = xr_value_to_string(isolate, vb);
-        XrString *result = xr_string_repeat(isolate, str, (xr_Integer) sc);
-        R(a) = result ? xr_string_value(result) : xr_null();
-        vmbreak;
-    }
     // Operator overload: convert immediate to XrValue
     {
         XrValue vc = xr_int(sc);
@@ -394,19 +355,6 @@ vmcase(OP_MULK) {
             XR_SET_FLOAT(R(a), nb * nc);
             vmbreak;
         }
-    }
-    /* String repeat: "str" * K or K * "str" */
-    if (XR_IS_STRING(vb) && XR_IS_INT(vc)) {
-        XrString *str = xr_value_to_string(isolate, vb);
-        XrString *result = xr_string_repeat(isolate, str, XR_TO_INT(vc));
-        R(a) = result ? xr_string_value(result) : xr_null();
-        vmbreak;
-    }
-    if (XR_IS_INT(vb) && XR_IS_STRING(vc)) {
-        XrString *str = xr_value_to_string(isolate, vc);
-        XrString *result = xr_string_repeat(isolate, str, XR_TO_INT(vb));
-        R(a) = result ? xr_string_value(result) : xr_null();
-        vmbreak;
     }
     // Operator overload
     VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, XR_OP_MUL_FLAG, SYMBOL_OP_MUL, "*");

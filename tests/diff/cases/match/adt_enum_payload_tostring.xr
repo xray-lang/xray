@@ -20,20 +20,20 @@ print("x=" + e.toString())
 // string() conversion takes the same runtime path as toString().
 print(string(e))
 
-// Interpolation and bare concatenation lower to the parts-based concat,
-// which formats enum operands itself rather than via toString().
+// Interpolation lowers to the parts-based concat, which formats enum
+// operands itself rather than via toString().
 print("i=${e}")
-print("c=" + e)
+print("c=${e}")
 
 // A zero-payload variant of a payload-carrying enum keeps the bare
 // "Enum.Member" form (no parentheses) on both backends.
 print(E.B.toString())
-print("b=" + E.B)
+print("b=${E.B}")
 
 // Multiple payloads: nested string payloads render quoted, matching print.
 var p = P.Pair(3, "hi")
 print(p.toString())
-print("p=" + p)
+print("p=${p}")
 
 // Enum payload nested inside another enum renders recursively.
 var w = W.Wrap(E.A(9))
@@ -52,4 +52,4 @@ print(describe(p))
 // any formatting scratch buffer must survive untruncated.
 var long = P.Pair(42, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 print("L=" + long.toString())
-print("M=" + long)
+print("M=${long}")

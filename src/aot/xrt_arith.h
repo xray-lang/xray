@@ -13,7 +13,7 @@
 
 #include "xrt_value.h"
 #include "../runtime/value/xtype_names.h" /* XrTypeId + scalar-rep mapping */
-#include "xrt_arc.h"                      // xrt_str_concat used by xrt_add
+#include "xrt_arc.h"                      // xrt_str_concat_value used by xrt_add
 #include "xrt_range.h"
 #include "xrt_coll.h"  // forward-declares xrt_throw_exc (div/mod by zero); the
                        // definition is provided by xrt_exception.h in the full
@@ -511,17 +511,25 @@ static inline XrValue xrt_bigint_shift_val(XrValue av, int64_t count, XrShiftKin
     return rv;
 }
 
+/* Only these two tags carry a number. Every other tag stores a pointer or a
+ * small payload in .i, so projecting one onto the double lane would read that
+ * storage as an IEEE double and produce a value out of thin air. Operands that
+ * are not both numbers have no arithmetic result and must be reported. */
+static inline int xrt_is_tagged_number(XrValue v) {
+    return v.tag == XR_TAG_I64 || v.tag == XR_TAG_F64;
+}
+
 static inline XrValue xrt_add(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_i64_add(a.i, b.i));
     if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
         return xrt_bigint_addsub(a, b, 0);
+    /* `+` joins two strings; a string paired with anything else has no result. */
     if (XR_IS_STR(a) && XR_IS_STR(b))
         return xrt_str_concat_value(a, b); /* header lengths, no strlen */
-    if (XR_IS_STR(a) || XR_IS_STR(b)) {
-        char ba[64], bb[64];
-        return xrt_str_concat(xr_to_cstr(a, ba, sizeof(ba)), xr_to_cstr(b, bb, sizeof(bb)));
-    }
+    if (!xrt_is_tagged_number(a) || !xrt_is_tagged_number(b))
+        xrt_throw_exc(xr_box_str(
+            "E0404: operator '+' requires both operands to be numeric or both string"));
     double fa = a.tag == XR_TAG_I64 ? (double) a.i : a.f;
     double fb = b.tag == XR_TAG_I64 ? (double) b.i : b.f;
     return XR_FROM_FLOAT(fa + fb);
@@ -542,6 +550,8 @@ static inline XrValue xrt_mul(XrValue a, XrValue b) {
         return XR_FROM_INT(xrt_i64_mul(a.i, b.i));
     if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
         return xrt_bigint_mul_val(a, b);
+    if (!xrt_is_tagged_number(a) || !xrt_is_tagged_number(b))
+        xrt_throw_exc(xr_box_str("E0404: multiplication requires numeric types"));
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return XR_FROM_FLOAT(fa * fb);

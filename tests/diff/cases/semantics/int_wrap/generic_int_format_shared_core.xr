@@ -3,8 +3,8 @@ var max: int = 9223372036854775807
 
 print(min)
 print(max)
-print("left=" + min)
-print(max + "=right")
+print("left=" + min.toString())
+print(max.toString() + "=right")
 
 var ints = Array<int>(3, 0)
 ints[0] = min
