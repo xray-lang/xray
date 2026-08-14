@@ -1284,6 +1284,7 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     src/plan/target/xr_target_profile.c
     src/plan/target/xr_target_verify.c
     src/aot/emit_c/xr_c_emission_plan.c
+    src/aot/xr_target_aggregate_c_projection.c
     src/runtime/abi/xr_runtime_contract.c
     src/runtime/abi/xr_runtime_descriptor.c
     src/runtime/abi/xr_runtime_object_header.c
