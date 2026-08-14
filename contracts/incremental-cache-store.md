@@ -76,10 +76,22 @@ invalidation, compiler-session ownership, or any compatibility reader.
     A verified immutable cache object published before the request remains
     available to later operations; cancellation never deletes another
     operation's content-addressed entry.
+11. An XSM cache request derives its key from one module summary, and that
+    summary is derived only from authorities their owners already verified: the
+    module's verified SemanticPlan identity, its ordered dependency and
+    exported-declaration identities, the exact TargetProfile, the compiler
+    build identity, and the build configuration selectors. A candidate is
+    accepted only when it decodes to a verified SemanticPlan whose fingerprint
+    equals the plan the requesting operation already produced, so a hit is
+    evidence of unchanged content and never a substitute for a stage. The
+    native build consults the store only after every module owns a verified
+    plan; a hit skips re-encoding and re-publication alone, while a miss, a
+    rejected candidate, or an unavailable store publishes the freshly encoded
+    artifact and continues unchanged.
 
 Changing the root-lock coverage, rejected-snapshot identity, quota reservation
-order, atomic publication sequence, directory/link boundary, lock cleanup, or
-mandatory verification is a contract change.
+order, atomic publication sequence, directory/link boundary, lock cleanup,
+XSM summary derivation, or mandatory verification is a contract change.
 
 ## Digest anchors
 
@@ -89,14 +101,20 @@ anchor-sha256: src/incremental/xr_cache_store.h f34e4f86ba65f44cbc29356488f32cbc
 anchor-sha256: src/incremental/xr_cache_store.c bb726097541fb71d58d463f106bc7f103c21295ffee344425221b67a094d305b
 anchor-sha256: src/incremental/xr_target_plan_tasks.h b8898e83f64a5f3526199de7e2cdc1de081ccaf677007c2adf65b641b92aff5a
 anchor-sha256: src/incremental/xr_target_plan_tasks.c 97cb9d24a31e852506ace288f2b3c72fd7828a7cc1a1adb161f7a6a3c85377cc
+anchor-sha256: src/incremental/xr_module_summary_build.h 3ce01510e546f6c32bdfa2abf5432f36de55499007e4e46881f482016ecc3000
+anchor-sha256: src/incremental/xr_module_summary_build.c 2c117922f4e35c7354460803a140164b1fa36ce1e15a60cacaf621c8500857f1
+anchor-sha256: src/aot/xaot_module_summary.h 99c801267d15b615778f0520455e1d6c7ecd7bc577b3589665e6ef70a886f2bd
+anchor-sha256: src/aot/xaot_module_summary.c 0362caff153734a0c3dc696bb29b1d54b035794428d90233d844150cfb46140e
 anchor-sha256: src/aot/xaot_driver.h 6788cdeaa4983f58696ca3d1d20a36e0b42485167fa0e1544eea00ee69504c8d
-anchor-sha256: src/aot/xaot_driver.c 127edef9f7aff15be9247586e2c6340453ca7d89bf3342de46621b6fed70ca10
+anchor-sha256: src/aot/xaot_driver.c 5d22aaf175968f06c73a4585b4887b5e7d88f5ae4cee841049cb99d3eb3914bc
 anchor-sha256: src/os/os_fs.h b1a95259a4952a1e33e1d2c109fd0955f5b00bff4db81e6a21abede9ec07fe84
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
-anchor-sha256: tests/unit/CMakeLists.txt 3bcac534077997d0b093daa90f0ba0be7a47d0f849da1be59e5e5b626dea37dc
+anchor-sha256: tests/unit/CMakeLists.txt ccafcaac62297366d7266a2838ca4f622c9bd43e3db8192212b22a99cd36e2fe
 anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c 8a7a0f35523e2f7b846a84e22f42521d43c2e70d0eb4342d4a3d13c58dfc1fb4
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
 anchor-sha256: tests/unit/incremental/test_target_plan_tasks.c 4ea47fb617bb4bed33d98ada661ef0e171d720815dac8a2c4f66c340ce133188
+anchor-sha256: tests/unit/incremental/test_module_summary_build.c 5b476febd044ceeb01c3463ba69590746154e23aa309ccb25c79383c6303d83c
+anchor-sha256: tests/aot/run_module_summary_determinism.py 7da3996037ef52aa3ab75d961f34348ca06051438b6ce70f26ce5966d5b1e545
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 3d00bf877ccb2a2acf955a270e3277e669aa5c6ad125224bef6b301aa6706e62
 anchor-sha256: tests/unit/os/test_fs_atomic.c f8f6ee065dcb3c4b75ae24edb4e96d95253c540f5a40252cf79a10aa140ddb5f

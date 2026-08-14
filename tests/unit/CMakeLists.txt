@@ -420,6 +420,7 @@ add_xray_unit_test(test_target_plan_tasks
                    incremental/test_target_plan_tasks.c
                    ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_dependency_graph incremental/test_dependency_graph.c)
+add_xray_unit_test(test_module_summary_build incremental/test_module_summary_build.c)
 add_xray_unit_test(test_compiler_session_generation
                    toolchain/test_compiler_session_generation.c)
 add_xray_unit_test(test_fs_atomic os/test_fs_atomic.c)
