@@ -41,9 +41,8 @@ typedef struct XaotValueRep {
 
 enum {
     XAOT_VALUE_FLAG_ENUM = 1u << 0,
-    XAOT_VALUE_FLAG_ENUM_AGGREGATE = 1u << 1,
-    XAOT_VALUE_FLAG_STRUCT = 1u << 2,
-    XAOT_VALUE_FLAG_SLICE = 1u << 3,
+    XAOT_VALUE_FLAG_STRUCT = 1u << 1,
+    XAOT_VALUE_FLAG_SLICE = 1u << 2,
     /* c_type points at heap storage rather than a process-lifetime literal or
      * another bundle-owned immutable name.  Borrowing preserves DYNAMIC so a
      * longer-lived consumer knows that it must make an independent copy. */

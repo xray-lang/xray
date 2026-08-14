@@ -439,7 +439,7 @@ static XaotValueRep compact_adt_value_rep_for_type(const XaotBundle *bundle, con
     rep.rep = XAOT_REP_TAGGED;
     rep.type = type;
     rep.c_type = plan && plan->c_type ? plan->c_type : "XrAotEnumAggregate";
-    rep.flags = XAOT_VALUE_FLAG_ENUM | XAOT_VALUE_FLAG_ENUM_AGGREGATE;
+    rep.flags = XAOT_VALUE_FLAG_ENUM;
     return rep;
 }
 
@@ -695,12 +695,8 @@ XR_FUNC const char *xaot_abi_kind_name(XaotAbiKind kind) {
             return "native";
         case XAOT_ABI_TAGGED:
             return "tagged";
-        case XAOT_ABI_ADAPTER:
-            return "adapter";
         case XAOT_ABI_CORO:
             return "coro";
-        case XAOT_ABI_RUNTIME_HELPER:
-            return "runtime-helper";
         default:
             return "?";
     }

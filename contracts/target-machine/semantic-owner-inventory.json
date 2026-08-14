@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 272,
+  "operation_count": 273,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -1073,6 +1073,34 @@
         "vm",
         "aot",
         "hosted"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/string-parse",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_string_parse_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/string-parse",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_string_parse_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.string-parse",
+      "ownership": "native",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
       ]
     },
     {
@@ -7024,5 +7052,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "a71ccf9358040eb959111c1b810ce27797519e127f2268da3f28101cbd41e049"
+  "source_tree_fingerprint": "75a8f94286de83ebf3cde3cba88b3639ec9c4c2f8b2e3e74354302d04eb644e7"
 }

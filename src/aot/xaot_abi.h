@@ -23,9 +23,7 @@ typedef struct XaotBundle XaotBundle;
 typedef enum XaotAbiKind {
     XAOT_ABI_NATIVE = 0,
     XAOT_ABI_TAGGED,
-    XAOT_ABI_ADAPTER,
     XAOT_ABI_CORO,
-    XAOT_ABI_RUNTIME_HELPER,
 } XaotAbiKind;
 
 typedef enum XaotArgClass {
@@ -33,9 +31,7 @@ typedef enum XaotArgClass {
     XAOT_ARG_SCALAR,
     XAOT_ARG_PTR,
     XAOT_ARG_AGG_BY_VALUE,
-    XAOT_ARG_AGG_BY_REF,
     XAOT_ARG_TAGGED,
-    XAOT_ARG_AOT_CTX,
 } XaotArgClass;
 
 typedef struct XaotAbiSlot {
@@ -43,7 +39,6 @@ typedef struct XaotAbiSlot {
     XaotValueRep rep;
     XaotValueRep pointee_rep;
     const char *c_type;
-    const char *c_name;
     uint32_t flags;
 } XaotAbiSlot;
 
@@ -57,8 +52,6 @@ typedef struct XaotFuncAbi {
     XaotAbiSlot *params;
     uint16_t nparams;
     XaotBoundaryReason boundary_reason;
-    const char *c_symbol;
-    const char *boxed_symbol;
 } XaotFuncAbi;
 
 XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, const XiFunc *func,

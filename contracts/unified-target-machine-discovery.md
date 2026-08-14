@@ -38,8 +38,8 @@ LF bytes on every host.  Their policy and contract digests therefore identify
 the exact executed input instead of the caller's `core.autocrlf` preference.
 
 anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 8a386e236ed47873162da8798f39a3ff0f45de6c45e4afe8ab87da04efe97898
-anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 11287fa3f9cfef5c99c329e9b91a9ca8a97b762c21ac9eaaf921581ed298456e
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json d325bd1f1143377eca94103e988c831cdd3cd501b9d20d75e8645dccf595738c
+anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 77457dd0c55f26c5c5418b8d7b293208ec305c8ce391e265966ed121994affd8
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json f628a09554dcb39bdd27dffbbf6c294a095f1fea5000b8b8d849f030d12163de
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 577aa49d6502b2b1cf3a88191851bbbc82775fe2e53f51ec7ea83ca58281a548
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
