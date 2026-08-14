@@ -26,7 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(19)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(20)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -1666,9 +1666,22 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
         hash_u64(&ctx, value->recipe_discriminant);
         hash_u64(&ctx, value->recipe_argument_count);
         hash_u64(&ctx, value->recipe_reserved);
+        hash_u64(&ctx, value->backing_value);
+        hash_u64(&ctx, value->backing_element_count);
+        hash_u64(&ctx, value->address_projection);
+        hash_u64(&ctx, value->backing_native_type);
+        hash_u64(&ctx, value->projection_reserved);
         size_t c_type_length = strlen(value->c_type);
         hash_u64(&ctx, c_type_length);
         xr_sha256_update(&ctx, (const uint8_t *) value->c_type, c_type_length);
+        size_t backing_c_type_length = value->backing_c_type
+                                           ? strlen(value->backing_c_type)
+                                           : 0;
+        hash_u64(&ctx, backing_c_type_length);
+        if (backing_c_type_length)
+            xr_sha256_update(&ctx,
+                             (const uint8_t *) value->backing_c_type,
+                             backing_c_type_length);
         if (value->literal_byte_length)
             xr_sha256_update(&ctx, (const uint8_t *) value->literal_bytes,
                              value->literal_byte_length);
@@ -1785,10 +1798,28 @@ static bool verify_value(const XrCValueEmissionView *value) {
         case XR_MACHINE_REP_AGGREGATE:
             expected_rep = XR_C_VALUE_REP_AGGREGATE;
             expected_c_type = value->c_type;
-            if (!expected_c_type ||
-                strncmp(expected_c_type, "xrt_struct_abi_", 15) != 0 ||
-                strlen(expected_c_type) != 31)
+            if (!expected_c_type)
                 return false;
+            if (value->address_projection ==
+                XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE) {
+                if (strncmp(expected_c_type, "xrt_struct_abi_", 15) != 0 ||
+                    strlen(expected_c_type) != 31 ||
+                    value->backing_value != 0 ||
+                    value->backing_element_count != 0 ||
+                    value->backing_native_type != 0 ||
+                    value->backing_c_type != NULL)
+                    return false;
+            } else if (value->address_projection ==
+                       XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING) {
+                if (strcmp(expected_c_type, "XrValue") != 0 ||
+                    value->backing_value != value->semantic_value ||
+                    value->backing_element_count == 0 ||
+                    value->backing_native_type == 0 ||
+                    !value->backing_c_type || !value->backing_c_type[0])
+                    return false;
+            } else {
+                return false;
+            }
             break;
         case XR_MACHINE_REP_RAW_PTR:
             expected_rep = XR_C_VALUE_REP_RAW_PTR;
@@ -1802,6 +1833,12 @@ static bool verify_value(const XrCValueEmissionView *value) {
             break;
         default: return false;
     }
+    if (value->projection_reserved != 0 ||
+        (value->target_register_kind != XR_MACHINE_REP_AGGREGATE &&
+         (value->address_projection != XR_C_ADDRESS_PROJECTION_NONE ||
+          value->backing_value != 0 || value->backing_element_count != 0 ||
+          value->backing_native_type != 0 || value->backing_c_type != NULL)))
+        return false;
     bool recipe_valid = value->materialization ==
                                 XR_C_VALUE_MATERIALIZATION_NONE
                             ? value->literal_byte_length == 0 &&
@@ -2170,10 +2207,12 @@ bool xr_c_emission_plan_verify(
                                           memory_rep->kind, &expected_memory,
                                           &memory_c_type);
         XrCAggregateProjection aggregate = {0};
+        bool aggregate_supported = false;
         if (register_rep && memory_rep &&
             register_rep->kind == XR_MACHINE_REP_AGGREGATE &&
             memory_rep->kind == XR_MACHINE_REP_AGGREGATE &&
             xr_c_aggregate_projection(target_plan, binding, &aggregate)) {
+            aggregate_supported = true;
             expected_register = expected_memory = XR_C_VALUE_REP_AGGREGATE;
             register_c_type = memory_c_type = aggregate.c_type;
             register_supported = memory_supported = true;
@@ -2205,7 +2244,18 @@ bool xr_c_emission_plan_verify(
             row->memory_size != memory_rep->memory_size ||
             row->memory_align != memory_rep->memory_align ||
             row->rep != (uint8_t) expected_register || !row->c_type ||
-            strcmp(row->c_type, register_c_type) != 0)
+            strcmp(row->c_type, register_c_type) != 0 ||
+            (aggregate_supported &&
+             (row->address_projection != aggregate.kind ||
+              row->backing_value != aggregate.backing_value ||
+              row->backing_element_count != aggregate.element_count ||
+              row->backing_native_type != aggregate.element_native_type ||
+              ((aggregate.element_c_type[0] == '\0') !=
+               (row->backing_c_type == NULL)) ||
+              (aggregate.element_c_type[0] != '\0' &&
+               strcmp(row->backing_c_type, aggregate.element_c_type) != 0))) ||
+            (!aggregate_supported &&
+             row->address_projection != XR_C_ADDRESS_PROJECTION_NONE))
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "C emission row disagrees with TargetPlan authority");
         const char *expected_literal =
@@ -2645,7 +2695,17 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         value->recipe_operand_value = UINT32_MAX;
         value->recipe_argument_value = UINT32_MAX;
         value->c_type = aggregate_supported ? xr_strdup(c_type) : c_type;
-        if (!value->c_type) {
+        if (aggregate_supported) {
+            value->address_projection = aggregate.kind;
+            value->backing_value = aggregate.backing_value;
+            value->backing_element_count = aggregate.element_count;
+            value->backing_native_type = aggregate.element_native_type;
+            value->backing_c_type = aggregate.element_c_type[0]
+                                        ? xr_strdup(aggregate.element_c_type)
+                                        : NULL;
+        }
+        if (!value->c_type ||
+            (aggregate.element_c_type[0] && !value->backing_c_type)) {
             xr_c_emission_plan_free(plan);
             return emission_error(error, error_size, "XR_EXEC_5003",
                                   "aggregate C type allocation failed");
@@ -2955,6 +3015,8 @@ void xr_c_emission_plan_free(XrCEmissionPlan *plan) {
     for (uint32_t i = 0; i < plan->value_count; i++)
         if (plan->values[i].rep == XR_C_VALUE_REP_AGGREGATE)
             xr_free((void *) plan->values[i].c_type);
+    for (uint32_t i = 0; i < plan->value_count; i++)
+        xr_free((void *) plan->values[i].backing_c_type);
     for (uint32_t i = 0; i < plan->value_count; i++)
         xr_free((void *) plan->values[i].recipe_symbol);
     for (uint32_t i = 0; i < plan->value_count; i++) {

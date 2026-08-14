@@ -319,9 +319,17 @@ static bool cg_type_has_no_aot_arc_header(const XrType *type) {
     return type && type->kind == XR_KIND_FIXED_ARRAY;
 }
 
-static bool cg_ownership_op_is_noop(bool freestanding_profile, const XiValue *v) {
+static bool cg_fixed_array_backing_ownership_is_exact(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value);
+
+static bool cg_ownership_op_is_noop(XiCgenCtx *ctx, const XiFunc *function,
+                                    bool freestanding_profile,
+                                    const XiValue *v) {
     if (!v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
         return false;
+    if (v->args[0] && v->args[0]->op == XI_FIXED_ARRAY_NEW)
+        return cg_fixed_array_backing_ownership_is_exact(ctx, function,
+                                                         v->args[0]);
     const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
     if (freestanding_profile && arg && arg->type)
         return !xr_type_is_builtin_named_class(arg->type, "Buffer");
@@ -2743,8 +2751,17 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
         left->recipe_discriminant != right->recipe_discriminant ||
         left->recipe_argument_count != right->recipe_argument_count ||
         left->recipe_reserved != right->recipe_reserved ||
+        left->backing_value != right->backing_value ||
+        left->backing_element_count != right->backing_element_count ||
+        left->address_projection != right->address_projection ||
+        left->backing_native_type != right->backing_native_type ||
+        left->projection_reserved != right->projection_reserved ||
         left->reserved != right->reserved || !left->c_type || !right->c_type ||
         strcmp(left->c_type, right->c_type) != 0 ||
+        ((!left->backing_c_type && right->backing_c_type) ||
+         (left->backing_c_type && !right->backing_c_type)) ||
+        (left->backing_c_type &&
+         strcmp(left->backing_c_type, right->backing_c_type) != 0) ||
         ((!left->recipe_symbol && right->recipe_symbol) ||
          (left->recipe_symbol && !right->recipe_symbol)) ||
         (left->recipe_symbol &&
@@ -3386,6 +3403,12 @@ static const char *cg_byte_array_append_adapter_name(XiCgenCtx *ctx);
 static const char *cg_byte_array_repeat_adapter_name(XiCgenCtx *ctx);
 
 #include "xi_cgen_array_helpers.inc.c"
+
+static bool cg_fixed_array_backing_ownership_is_exact(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value) {
+    CgFixedArrayLaneInfo info = {0};
+    return cg_fixed_array_lane_info_from_emission(ctx, function, value, &info);
+}
 
 static void cg_emit_static_scalar_const_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
                                              int64_t slot) {
@@ -6789,7 +6812,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         cg_value_is_elided_static_struct_const_ref(ctx, f, v) ||
         cg_value_is_elided_layout_struct_type_load(f, v))
         return false;
-    if (cg_ownership_op_is_noop(ctx && ctx->freestanding_profile, v) ||
+    if (cg_ownership_op_is_noop(ctx, f, ctx && ctx->freestanding_profile, v) ||
         cg_shared_static_function_ownership_is_noop(ctx, f, v))
         return false;
     if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
@@ -8476,10 +8499,11 @@ static bool cg_fixed_array_wrapper_has_no_release_use(XiCgenCtx *ctx, const XiFu
                 if (a == 0 &&
                     (user->op == XI_INDEX_GET || user->op == XI_INDEX_SET ||
                      user->op == XI_LOCAL_ADDR) &&
-                    cg_fixed_array_lane_info_from_value(arg, &fixed))
+                    cg_fixed_array_lane_info_for_lowering(ctx, f, arg, &fixed))
                     continue;
                 if (a == 0 && (user->op == XI_RETAIN || user->op == XI_RELEASE) &&
-                    cg_fixed_array_lane_info_from_value(arg, &fixed) && fixed.rep != XR_REP_TAGGED)
+                    cg_fixed_array_lane_info_for_lowering(ctx, f, arg, &fixed) &&
+                    fixed.rep != XR_REP_TAGGED)
                     continue;
                 return false;
             }
@@ -9003,9 +9027,14 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     }
 
     if (v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST) {
-        uint8_t native = 0;
-        uint32_t count = 0;
-        if (!xicgen_fixed_array_new_info(v, &native, &count)) {
+        CgFixedArrayLaneInfo fixed = {0};
+        bool have_fixed = v->op == XI_FIXED_ARRAY_NEW
+                              ? cg_fixed_array_lane_info_from_emission(ctx, f, v,
+                                                                       &fixed)
+                              : cg_fixed_array_lane_info_from_value(v, &fixed);
+        uint8_t native = fixed.native_type;
+        uint32_t count = fixed.count;
+        if (!have_fixed) {
             ctx->error = true;
             fprintf(out, "    XrValue ");
             emit_vref(out, v);
@@ -9148,7 +9177,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
          cg_value_is_borrowed_array_slot_alias(ctx, f, v->args[0]) ||
          xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v->args[0])))
         return;
-    if (cg_ownership_op_is_noop(ctx && ctx->freestanding_profile, v) ||
+    if (cg_ownership_op_is_noop(ctx, f, ctx && ctx->freestanding_profile, v) ||
         cg_shared_static_function_ownership_is_noop(ctx, f, v))
         return;
     if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
@@ -10637,11 +10666,16 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                     continue;
                 bool debug_only_fixed_wrapper = false;
                 if (v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST) {
-                    uint8_t native = 0;
-                    uint32_t count = 0;
-                    if (xicgen_fixed_array_new_info(v, &native, &count)) {
-                        fprintf(out, "    %s _fa%u[%u];\n", cg_struct_native_c_type(native), v->id,
-                                (unsigned) (count > 0 ? count : 1));
+                    CgFixedArrayLaneInfo fixed = {0};
+                    bool have_fixed = v->op == XI_FIXED_ARRAY_NEW
+                                          ? cg_fixed_array_lane_info_from_emission(
+                                                ctx, f, v, &fixed)
+                                          : cg_fixed_array_lane_info_from_value(v,
+                                                                                &fixed);
+                    if (have_fixed) {
+                        fprintf(out, "    %s _fa%u[%u];\n", fixed.ctype,
+                                v->id,
+                                (unsigned) (fixed.count > 0 ? fixed.count : 1));
                     }
                     debug_only_fixed_wrapper = cg_fixed_array_wrapper_has_no_release_use(ctx, f, v);
                 } else {

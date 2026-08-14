@@ -12390,16 +12390,18 @@ static bool xicgen_fixed_array_stack_copy_info(const XiValue *v, uint8_t *native
 
 static void xicgen_fixed_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {
-    (void) ctx;
-    (void) f;
     (void) prefix;
-    uint8_t native = 0;
-    uint32_t count = 0;
-    if (!xicgen_fixed_array_new_info(v, &native, &count)) {
+    CgFixedArrayLaneInfo fixed = {0};
+    bool have_fixed = v && v->op == XI_FIXED_ARRAY_NEW
+                          ? cg_fixed_array_lane_info_from_emission(ctx, f, v,
+                                                                   &fixed)
+                          : cg_fixed_array_lane_info_from_value(v, &fixed);
+    if (!have_fixed) {
         emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "xr_array_ref(_fa%u, %u, %u)", v->id, (unsigned) native, (unsigned) count);
+    fprintf(out, "xr_array_ref(_fa%u, %u, %u)", v->id,
+            (unsigned) fixed.native_type, (unsigned) fixed.count);
 }
 
 static void xicgen_fixed_bytes_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -15300,7 +15302,7 @@ static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         emit_conversion_prefix(out, v->type, XR_REP_RAWPTR, cg_value_plan_storage_rep(ctx, v));
     fprintf(out, "(void *)%s(", owner_adapter);
     CgFixedArrayLaneInfo fixed;
-    if (cg_fixed_array_lane_info_from_value(v->args[0], &fixed)) {
+    if (cg_fixed_array_lane_info_for_lowering(ctx, f, v->args[0], &fixed)) {
         fprintf(out, "(void *)(");
         emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &fixed);
         fprintf(out, ")");
@@ -15428,7 +15430,7 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     }
     CgFixedArrayLaneInfo fixed;
-    if (cg_fixed_array_lane_info_from_value(v->args[0], &fixed)) {
+    if (cg_fixed_array_lane_info_for_lowering(ctx, f, v->args[0], &fixed)) {
         fprintf(out, "(%s)(", result_c_type);
         emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &fixed);
         fprintf(out, ")");

@@ -92,6 +92,53 @@ static bool cg_fixed_array_lane_info_from_value(const XiValue *value, CgFixedArr
     return true;
 }
 
+/* A frozen fixed-array producer is not identified by its live Xi type.  Its
+ * exact TargetPlan aggregate row owns the backing-place projection and the
+ * immutable CEmission row carries the only C lane spelling accepted here.
+ * Backend-only/static families remain outside this migrated producer family. */
+static bool cg_fixed_array_lane_info_from_emission(XiCgenCtx *ctx,
+                                                   const XiFunc *function,
+                                                   const XiValue *value,
+                                                   CgFixedArrayLaneInfo *out) {
+    XrCValueEmissionView view = {0};
+    if (!ctx || !function || !value || !out ||
+        cg_value_emission_view(ctx, function, value, &view) !=
+            CG_VALUE_EMISSION_FOUND ||
+        view.rep != XR_C_VALUE_REP_AGGREGATE ||
+        view.target_register_kind != XR_MACHINE_REP_AGGREGATE ||
+        view.target_memory_kind != XR_MACHINE_REP_AGGREGATE ||
+        view.address_projection !=
+            XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING ||
+        view.backing_value != view.semantic_value ||
+        view.backing_element_count == 0 ||
+        view.backing_element_count > XR_ARRAY_REF_MAX_COUNT ||
+        view.backing_native_type == 0 || !view.c_type ||
+        strcmp(view.c_type, "XrValue") != 0 || !view.backing_c_type ||
+        strcmp(view.backing_c_type,
+               cg_struct_native_c_type(view.backing_native_type)) != 0)
+        return false;
+    XrRep rep = cg_struct_native_rep(view.backing_native_type);
+    if (rep == XR_REP_TAGGED || rep == XR_REP_VOID)
+        return false;
+    *out = (CgFixedArrayLaneInfo) {
+        .stack_origin = value,
+        .ctype = view.backing_c_type,
+        .rep = rep,
+        .native_type = view.backing_native_type,
+        .count = view.backing_element_count,
+    };
+    return true;
+}
+
+static bool cg_fixed_array_lane_info_for_lowering(XiCgenCtx *ctx,
+                                                  const XiFunc *function,
+                                                  const XiValue *value,
+                                                  CgFixedArrayLaneInfo *out) {
+    if (value && value->op == XI_FIXED_ARRAY_NEW)
+        return cg_fixed_array_lane_info_from_emission(ctx, function, value, out);
+    return cg_fixed_array_lane_info_from_value(value, out);
+}
+
 static bool cg_ct_static_fixed_array_value_supported(const XrCtValue *value,
                                                      const CgFixedArrayLaneInfo *info) {
     if (!value)
@@ -2319,10 +2366,10 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     if (!v || v->op != XI_INDEX_GET || v->nargs < 2)
         return false;
 
-    (void) f;
     int64_t static_slot = -1;
     const XiModule *static_module = NULL;
-    bool have_info = cg_fixed_array_lane_info_from_value(v->args[0], &info);
+    bool have_info =
+        cg_fixed_array_lane_info_for_lowering(ctx, f, v->args[0], &info);
     bool static_slot_read = false;
     if (have_info) {
         static_slot_read =
@@ -2819,7 +2866,7 @@ static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
                                             const XiValue *v) {
     CgFixedArrayLaneInfo info;
     if (!v || v->op != XI_INDEX_SET || v->nargs < 3 ||
-        !cg_fixed_array_lane_info_from_value(v->args[0], &info))
+        !cg_fixed_array_lane_info_for_lowering(ctx, f, v->args[0], &info))
         return false;
 
     if (emit_static_fixed_array_index_set_expr(ctx, out, v, &info, false))
@@ -2865,7 +2912,7 @@ static bool emit_fixed_array_index_set_stmt(XiCgenCtx *ctx, FILE *out, const XiF
                                             const char *prefix, const XiValue *v) {
     CgFixedArrayLaneInfo info;
     if (!ctx || !out || !v || v->op != XI_INDEX_SET || v->nargs < 3 ||
-        !cg_fixed_array_lane_info_from_value(v->args[0], &info))
+        !cg_fixed_array_lane_info_for_lowering(ctx, f, v->args[0], &info))
         return false;
     if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
         return false;

@@ -278,6 +278,25 @@ static XrType borrowed_byte_slice = {
     .container = {.element_type = &scalar_byte},
 };
 
+static XrType scalar_u32 = {
+    .kind = XR_KIND_INT,
+    .id = 12,
+    .frozen = true,
+    .scalar_rep = XR_NATIVE_U32,
+};
+
+static XrType fixed_u32x4 = {
+    .kind = XR_KIND_FIXED_ARRAY,
+    .id = 13,
+    .frozen = true,
+    .is_value_type = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .fixed_array = {
+        .element_type = &scalar_u32,
+        .length = 4,
+    },
+};
+
 static XrType *task_unit_arguments[] = {&scalar_unit};
 
 static XrType task_unit = {
@@ -2823,6 +2842,101 @@ static void test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed(
     xi_func_free(function);
 }
 
+static void test_fixed_array_backing_projection_is_exact_and_fail_closed(void) {
+    XiFunc *function = xi_func_new("fixed_array_backing_projection", &scalar_u32);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *array = xi_value_new(function, entry, XI_FIXED_ARRAY_NEW,
+                                  &fixed_u32x4, 0);
+    XiValue *index = xi_const_int(function, entry, 0, &scalar_int);
+    XiValue *stored = xi_value_new(function, entry, XI_CONST, &scalar_u32, 0);
+    XiValue *set = xi_value_new(function, entry, XI_INDEX_SET, &scalar_unit, 3);
+    XiValue *read = xi_value_new(function, entry, XI_INDEX_GET, &scalar_u32, 2);
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
+    REQUIRE(array && index && stored && set && read && release);
+    array->aux_int = XR_NATIVE_U32;
+    stored->aux_int = 7;
+    set->args[0] = array;
+    set->args[1] = index;
+    set->args[2] = stored;
+    read->args[0] = array;
+    read->args[1] = index;
+    release->args[0] = array;
+    xi_block_set_return(entry, read);
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    char error[512] = {0};
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, array, &semantic_function, &semantic_value, error,
+        sizeof(error)));
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target, semantic_value);
+    const XrTargetMachineRepRecord *register_rep = binding
+        ? xr_target_plan_machine_rep(target, binding->register_rep)
+        : NULL;
+    const XrTargetMachineRepRecord *memory_rep = binding
+        ? xr_target_plan_machine_rep(target, binding->memory_rep)
+        : NULL;
+    REQUIRE(binding && register_rep && memory_rep &&
+            register_rep->kind == XR_MACHINE_REP_AGGREGATE &&
+            memory_rep->kind == XR_MACHINE_REP_AGGREGATE &&
+            register_rep->detail == memory_rep->detail);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &refinement, &diag));
+    REQUIRE(refinement != NULL &&
+            xr_aot_refinement_plan_view(refinement).record_count == 0);
+    xr_aot_refinement_plan_free(refinement);
+
+    XrCEmissionPlan *emission = NULL;
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, semantic_value, &view,
+                                          error, sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_AGGREGATE &&
+            view.address_projection ==
+                XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING &&
+            view.backing_value == semantic_value &&
+            view.backing_element_count == 4 &&
+            view.backing_native_type == XR_NATIVE_U32 &&
+            strcmp(view.c_type, "XrValue") == 0 &&
+            strcmp(view.backing_c_type, "uint32_t") == 0);
+
+    XrCValueEmissionView *row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == semantic_value) {
+            REQUIRE(row == NULL);
+            row = &emission->values[i];
+        }
+    REQUIRE(row != NULL);
+    uint8_t saved_native = row->backing_native_type;
+    row->backing_native_type = XR_NATIVE_U64;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    row->backing_native_type = saved_native;
+    uint8_t saved_projection = row->address_projection;
+    row->address_projection = XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    row->address_projection = saved_projection;
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                      error, sizeof(error)));
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_enum_descriptor_adapter_refuses_without_layout_family(void) {
     RepresentationFixture fixture = representation_fixture_create();
     XrAotRefinementDiagnostic diag = {0};
@@ -2879,6 +2993,7 @@ int main(void) {
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();
     test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed();
+    test_fixed_array_backing_projection_is_exact_and_fail_closed();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     printf("TargetPlan-native AOT refinement tests passed\n");
     return 0;

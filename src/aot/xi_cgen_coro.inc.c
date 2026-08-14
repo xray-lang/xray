@@ -5457,7 +5457,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
-    if (cg_ownership_op_is_noop(ctx && ctx->freestanding_profile, v) ||
+    if (cg_ownership_op_is_noop(ctx, f, ctx && ctx->freestanding_profile, v) ||
         cg_shared_static_function_ownership_is_noop(ctx, f, v))
         return;
 

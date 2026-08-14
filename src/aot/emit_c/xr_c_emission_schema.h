@@ -68,6 +68,12 @@ typedef enum XrCRecipeArgumentKind {
     XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD = 2,
 } XrCRecipeArgumentKind;
 
+typedef enum XrCAddressProjection {
+    XR_C_ADDRESS_PROJECTION_NONE = 0,
+    XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE = 1,
+    XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING = 2,
+} XrCAddressProjection;
+
 typedef struct XrCRecipeArgumentView {
     uint32_t semantic_value;
     uint8_t kind;
@@ -93,7 +99,13 @@ typedef struct XrCValueEmissionView {
     uint32_t recipe_discriminant;
     uint16_t recipe_argument_count;
     uint16_t recipe_reserved;
+    uint32_t backing_value;
+    uint32_t backing_element_count;
+    uint8_t address_projection;
+    uint8_t backing_native_type;
+    uint16_t projection_reserved;
     const char *c_type;
+    const char *backing_c_type;
     const char *literal_bytes;
     const char *recipe_symbol;
     const char *recipe_type_name;

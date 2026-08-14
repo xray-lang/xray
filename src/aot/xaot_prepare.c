@@ -125,15 +125,24 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
         if (!xr_c_aggregate_projection(target_plan, binding, &projection))
             return false;
         memset(out, 0, sizeof(*out));
-        out->kind = XAOT_VALUE_AGGREGATE;
+        out->kind = projection.kind ==
+                            XR_C_AGGREGATE_PROJECTION_NAMED_STRUCT
+                        ? XAOT_VALUE_AGGREGATE
+                        : projection.kind ==
+                                  XR_C_AGGREGATE_PROJECTION_FIXED_ARRAY_BACKING
+                              ? XAOT_VALUE_TAGGED
+                              : XAOT_VALUE_VOID;
+        if (out->kind == XAOT_VALUE_VOID)
+            return false;
         out->rep = XAOT_REP_TAGGED;
         out->type = value->type;
         out->c_type = xr_strdup(projection.c_type);
         if (!out->c_type)
             return false;
-        out->flags = XAOT_VALUE_FLAG_STRUCT |
-                     XAOT_VALUE_FLAG_DYNAMIC_C_TYPE |
+        out->flags = XAOT_VALUE_FLAG_DYNAMIC_C_TYPE |
                      XAOT_VALUE_FLAG_OWNED_C_TYPE;
+        if (projection.kind == XR_C_AGGREGATE_PROJECTION_NAMED_STRUCT)
+            out->flags |= XAOT_VALUE_FLAG_STRUCT;
         return true;
     }
     switch ((XrMachineRepKind) machine->kind) {

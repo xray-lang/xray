@@ -13,10 +13,22 @@
 
 #include "../plan/target/xr_target_plan.h"
 
+typedef enum XrCAggregateProjectionKind {
+    XR_C_AGGREGATE_PROJECTION_INVALID = 0,
+    XR_C_AGGREGATE_PROJECTION_NAMED_STRUCT = 1,
+    XR_C_AGGREGATE_PROJECTION_FIXED_ARRAY_BACKING = 2,
+} XrCAggregateProjectionKind;
+
 typedef struct XrCAggregateProjection {
     uint32_t layout;
+    uint32_t backing_value;
+    uint32_t element_count;
     uint64_t abi_key;
+    uint8_t kind;
+    uint8_t element_native_type;
+    uint16_t reserved;
     char c_type[40];
+    char element_c_type[16];
 } XrCAggregateProjection;
 
 XR_FUNC bool xr_c_aggregate_projection(

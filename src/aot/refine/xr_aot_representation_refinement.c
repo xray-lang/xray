@@ -2894,6 +2894,210 @@ static bool oracle_named_value_aggregate_storage(const VerifyAuthority *ctx,
     return true;
 }
 
+static bool fixed_array_machine_native_type(uint16_t machine_kind,
+                                            uint8_t *out_native) {
+    if (!out_native)
+        return false;
+    switch ((XrMachineRepKind) machine_kind) {
+        case XR_MACHINE_REP_I1: *out_native = XR_NATIVE_BOOL; return true;
+        case XR_MACHINE_REP_I8: *out_native = XR_NATIVE_I8; return true;
+        case XR_MACHINE_REP_U8: *out_native = XR_NATIVE_U8; return true;
+        case XR_MACHINE_REP_I16: *out_native = XR_NATIVE_I16; return true;
+        case XR_MACHINE_REP_U16: *out_native = XR_NATIVE_U16; return true;
+        case XR_MACHINE_REP_I32: *out_native = XR_NATIVE_I32; return true;
+        case XR_MACHINE_REP_U32: *out_native = XR_NATIVE_U32; return true;
+        case XR_MACHINE_REP_I64: *out_native = XR_NATIVE_I64; return true;
+        case XR_MACHINE_REP_U64: *out_native = XR_NATIVE_U64; return true;
+        case XR_MACHINE_REP_ISIZE: *out_native = XR_NATIVE_ISIZE; return true;
+        case XR_MACHINE_REP_USIZE: *out_native = XR_NATIVE_USIZE; return true;
+        case XR_MACHINE_REP_F32: *out_native = XR_NATIVE_F32; return true;
+        case XR_MACHINE_REP_F64: *out_native = XR_NATIVE_F64; return true;
+        default: return false;
+    }
+}
+
+/* Fixed arrays are value aggregates, but their C identity is the address of
+ * the producer's native lane backing, not a named-struct object.  Rebuild that
+ * family from the frozen Semantic/Target records so refinement never obtains
+ * authority from a live Xi type or from the named-aggregate oracle. */
+static bool oracle_fixed_array_backing_storage(const VerifyAuthority *ctx,
+                                               uint32_t semantic_value,
+                                               XrRep *out_storage,
+                                               uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index < ctx->operation_count
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    const XrSemanticTypeRecord *type = operation
+        ? xr_semantic_plan_type(ctx->semantic, operation->result_type)
+        : NULL;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep = binding
+        ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep)
+        : NULL;
+    const XrTargetMachineRepRecord *memory_rep = binding
+        ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep)
+        : NULL;
+    uint32_t layout_count = 0, field_count = 0, slot_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetFieldRecord *fields =
+        xr_target_plan_fields(ctx->target_plan, &field_count);
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetLayoutRecord *layout =
+        register_rep && layouts && register_rep->detail < layout_count
+            ? &layouts[register_rep->detail]
+            : NULL;
+    const XrTargetSlotRecord *slot =
+        binding && slots && binding->slot < slot_count
+            ? &slots[binding->slot]
+            : NULL;
+    if (!operation || !type || !binding || !register_rep || !memory_rep ||
+        !layout || !slot || operation->opcode != XI_FIXED_ARRAY_NEW ||
+        operation->result_value != semantic_value ||
+        type->kind != XR_KIND_FIXED_ARRAY || type->child_count != 1 ||
+        type->aggregate_extent == 0 || type->aggregate_extent > UINT16_MAX ||
+        type->scalar_rep != XR_SCALAR_REP_NONE ||
+        (type->flags & XR_SEM_TYPE_NULLABLE) != 0 ||
+        operation->operand_count != 0 || operation->metadata_count != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->effects != xi_generated_op_effects(XI_FIXED_ARRAY_NEW) ||
+        operation->flags != xi_generated_op_default_flags(XI_FIXED_ARRAY_NEW) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_FIXED_ARRAY_NEW) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_complete != 1 ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
+        register_rep->kind != XR_MACHINE_REP_AGGREGATE ||
+        memory_rep->kind != XR_MACHINE_REP_AGGREGATE ||
+        register_rep->detail != memory_rep->detail ||
+        register_rep->root_kind != XR_TARGET_ROOT_NONE ||
+        memory_rep->root_kind != XR_TARGET_ROOT_NONE ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        layout->id != register_rep->detail ||
+        layout->semantic_type != operation->result_type ||
+        layout->kind != XR_TARGET_LAYOUT_AGGREGATE ||
+        layout->field_count != type->aggregate_extent || !fields ||
+        layout->field_begin > field_count ||
+        layout->field_count > field_count - layout->field_begin ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_NONE ||
+        slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+        return false;
+    uint16_t lane_kind = XR_MACHINE_REP_COUNT;
+    uint8_t lane_native = 0;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrTargetFieldRecord *field =
+            &fields[layout->field_begin + i];
+        const XrTargetMachineRepRecord *field_rep =
+            xr_target_plan_machine_rep(ctx->target_plan, field->memory_rep);
+        uint8_t field_native = 0;
+        if (!field_rep ||
+            !fixed_array_machine_native_type(field_rep->kind, &field_native) ||
+            field->layout != layout->id || field->semantic_field != i ||
+            field->semantic_name != XR_SEMANTIC_INDEX_NONE ||
+            field->root_kind != XR_TARGET_ROOT_NONE || field->flags != 0 ||
+            field->reserved != 0 ||
+            (i && (field_rep->kind != lane_kind ||
+                   field_native != lane_native)))
+            return false;
+        if (!i) {
+            lane_kind = field_rep->kind;
+            lane_native = field_native;
+        }
+    }
+    if (operation->semantic_immediate != lane_native)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_AGGREGATE;
+    return true;
+}
+
+static bool oracle_fixed_array_element_access_is_exact(
+    const VerifyAuthority *ctx, uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0, child_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    const uint32_t *children =
+        ctx ? xr_semantic_plan_type_children(ctx->semantic, &child_count) : NULL;
+    uint16_t expected = operation && operation->opcode == XI_INDEX_GET
+                            ? 2u
+                            : operation && operation->opcode == XI_INDEX_SET ? 3u : 0u;
+    if (!operation || !operands || !children || !expected ||
+        operation->operand_count != expected ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->effects != xi_generated_op_effects(operation->opcode) ||
+        operation->flags != xi_generated_op_default_flags(operation->opcode) ||
+        operation->ownership_use != xi_generated_op_own_use(operation->opcode) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(operation->opcode) ||
+        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
+        operation->allocation_key != NULL ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1)
+        return false;
+    const XrSemanticOperandRecord *receiver =
+        &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *index = receiver + 1;
+    XrRep storage = XR_REP_TAGGED;
+    uint16_t kind = XR_MACHINE_REP_COUNT;
+    if (receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
+        receiver->flags != 0 ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        index->role != XR_SEM_OPERAND_VALUE || index->parameter != -1 ||
+        index->flags != 0 ||
+        !semantic_exact_i64_type(
+            xr_semantic_plan_type(ctx->semantic, index->type)) ||
+        receiver->value >= ctx->value_count ||
+        !oracle_fixed_array_backing_storage(ctx, receiver->value, &storage,
+                                            &kind) ||
+        storage != XR_REP_TAGGED || kind != XR_MACHINE_REP_AGGREGATE)
+        return false;
+    uint32_t allocation_index = ctx->operation_by_value[receiver->value];
+    const XrSemanticOperationRecord *allocation =
+        allocation_index < ctx->operation_count
+            ? xr_semantic_plan_operation(ctx->semantic, allocation_index)
+            : NULL;
+    const XrSemanticTypeRecord *receiver_type =
+        xr_semantic_plan_type(ctx->semantic, receiver->type);
+    if (!allocation || receiver->type != allocation->result_type ||
+        !receiver_type || receiver_type->kind != XR_KIND_FIXED_ARRAY ||
+        receiver_type->child_count != 1 ||
+        receiver_type->child_begin >= child_count)
+        return false;
+    uint32_t element_type = children[receiver_type->child_begin];
+    if (operation->opcode == XI_INDEX_GET)
+        return operation->result_type == element_type;
+    const XrSemanticOperandRecord *element = index + 1;
+    return element->role == XR_SEM_OPERAND_VALUE && element->parameter == -1 &&
+           element->flags == 0 && element->type == element_type &&
+           element->ownership_action == XR_SEM_OPERAND_CONSUME;
+}
+
 static bool oracle_aggregate_field_access_is_exact(
     const VerifyAuthority *ctx, uint32_t operation_index) {
     const XrSemanticOperationRecord *operation =
@@ -5389,6 +5593,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
     if (oracle_nullable_scalar_storage(ctx, semantic_value, out_storage,
                                        out_machine_kind))
         return true;
+    if (oracle_fixed_array_backing_storage(ctx, semantic_value, out_storage,
+                                           out_machine_kind))
+        return true;
     if (oracle_named_value_aggregate_storage(ctx, semantic_value, out_storage,
                                              out_machine_kind))
         return true;
@@ -5521,7 +5728,8 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             /* Array allocations and borrowed byte views are disjoint frozen
              * storage families; both name the same scalar result only after
              * their receiver identity has been independently re-proved. */
-            if (!oracle_array_element_access_is_exact(ctx, operation_index) &&
+            if (!oracle_fixed_array_element_access_is_exact(ctx, operation_index) &&
+                !oracle_array_element_access_is_exact(ctx, operation_index) &&
                 !oracle_u8_slice_element_read_is_exact(ctx, operation_index))
                 return false;
             return oracle_machine_storage(ctx, semantic_value, out_storage,
@@ -5754,6 +5962,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 !oracle_dynamic_source_class_object_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_source_class_instance_storage(
+                    ctx, source_value, &literal_storage, &ignored_kind) &&
+                !oracle_fixed_array_backing_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_named_value_aggregate_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
@@ -6077,6 +6287,14 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                     return false;
                 if (operand_index == 0)
                     return oracle_u8_slice_parameter_storage(
+                        ctx, source_value, out_storage, &ignored_kind);
+                return oracle_machine_storage(ctx, source_value, out_storage,
+                                              &ignored_kind);
+            }
+            if (oracle_fixed_array_element_access_is_exact(ctx,
+                                                           operation_index)) {
+                if (operand_index == 0)
+                    return oracle_fixed_array_backing_storage(
                         ctx, source_value, out_storage, &ignored_kind);
                 return oracle_machine_storage(ctx, source_value, out_storage,
                                               &ignored_kind);
