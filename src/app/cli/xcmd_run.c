@@ -445,6 +445,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     // Graph export symbols point at analyzer-owned semantic symbols.
     XrModuleGraph *active_graph = NULL;
     XaAnalyzer *active_graph_analyzer = NULL;
+    XrCompilerSessionOperationScope graph_operation = {0};
 
     /* Pre-flight: build module graph, detect cycles, analyze cross-module types */
     {
@@ -520,6 +521,19 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                             active_graph_analyzer = analyzer;
                         }
 
+                        /* Module preload compiles every dependency through the same
+                         * compiler session. Own one outer transaction before publishing
+                         * the graph so those nested compiler entries borrow it instead
+                         * of treating the graph itself as an unrelated busy session. */
+                        if (!xr_compiler_session_operation_begin(session, &graph_operation)) {
+                            xa_analyzer_set_graph(analyzer, NULL);
+                            xa_analyzer_free(analyzer);
+                            xr_module_graph_free(graph);
+                            xr_project_free(project);
+                            xray_vm_multicore_destroy(iso);
+                            xray_vm_delete(iso);
+                            return XR_CLI_EXIT_FAIL;
+                        }
                         xr_compiler_session_set_module_graph(session, graph);
                         active_graph = graph;
 
@@ -536,6 +550,8 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                             active_graph_analyzer = NULL;
                             xr_module_graph_free(active_graph);
                             active_graph = NULL;
+                            (void) xr_compiler_session_operation_fail(
+                                &graph_operation, XR_COMPILER_SESSION_OPERATION_FATAL);
                             xr_project_free(project);
                             xray_vm_multicore_destroy(iso);
                             xray_vm_delete(iso);
@@ -568,6 +584,10 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     }
     if (active_graph)
         xr_module_graph_free(active_graph);
+
+    if (graph_operation.active &&
+        !xr_compiler_session_operation_succeed(&graph_operation) && result == 0)
+        result = -1;
 
     xr_compiler_session_set_native_package_plan(session, NULL);
     xr_project_free(project);

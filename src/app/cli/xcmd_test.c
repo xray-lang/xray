@@ -377,7 +377,15 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
     XrModuleGraph *active_graph = NULL;
     XaAnalyzer *active_graph_analyzer = NULL;
+    XrCompilerSessionOperationScope compile_operation = {0};
     char graph_error[256] = "";
+    if (!xr_compiler_session_operation_begin(session, &compile_operation)) {
+        result->has_error = true;
+        snprintf(result->error_msg, sizeof(result->error_msg),
+                 "compiler session is busy");
+        result->errors = 1;
+        goto cleanup_graph;
+    }
     if (prepare_test_module_graph(X, session, filepath, &active_graph, &active_graph_analyzer,
                                   graph_error, sizeof(graph_error)) != 0) {
         result->has_error = true;
@@ -409,6 +417,14 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "compile failed");
         result->errors = 1;
+        goto cleanup_ast;
+    }
+    if (!xr_compiler_session_operation_succeed(&compile_operation)) {
+        result->has_error = true;
+        snprintf(result->error_msg, sizeof(result->error_msg),
+                 "compiler transaction failed");
+        result->errors = 1;
+        xr_free_code(X, proto);
         goto cleanup_ast;
     }
 
@@ -531,6 +547,9 @@ cleanup_ast:
 cleanup_source:
     xr_free(source);
 cleanup_graph:
+    if (compile_operation.active)
+        (void) xr_compiler_session_operation_fail(
+            &compile_operation, XR_COMPILER_SESSION_OPERATION_FATAL);
     xr_compiler_session_set_module_graph(session, NULL);
     if (active_graph_analyzer) {
         xa_analyzer_set_graph(active_graph_analyzer, NULL);

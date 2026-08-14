@@ -225,7 +225,7 @@ roots, or general module activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt 56f190e18c4cbeee67a16e945af17446b5f69ff5f5cd605376ebe01e553c23dd
+anchor-sha256: CMakeLists.txt e8be0e492364324fd38dce803afaa52225355bb3753edaee2567ddc96674c43b
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
@@ -250,7 +250,7 @@ anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad3
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
 anchor-sha256: src/runtime/xr_target_plan_load.c 5a244ecda8ae44db051cae61b0ea80d738ce7056b2ee77354dad8f8e4c22ef07
-anchor-sha256: src/app/cli/xcmd_run.c 4cb6ef9cc81616f1bbe12b8b61ca036056eeae4470b2e0329cefa9c7db81db10
+anchor-sha256: src/app/cli/xcmd_run.c f998be9c0b0eda9930fec1ada371f7e27ece22404677f26b2ad27a605cf263b8
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 577aa49d6502b2b1cf3a88191851bbbc82775fe2e53f51ec7ea83ca58281a548
 anchor-sha256: scripts/check_legacy_product_residue.py d160f8b9ab1d16da893bcc30a7ed90d583dda9e478dd11f67c9ce299629f8d2f
 anchor-sha256: tests/unit/plan/test_target_plan.c 6459ccfcc71ce9c7d0168e56b527cca93f1b65780ec33834947daaa62baabed9

@@ -1,0 +1,3 @@
+export fn sourceSessionIncrement(value: int) -> int {
+    return value + 1
+}

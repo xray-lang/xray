@@ -2075,6 +2075,33 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # Source module preloading publishes the graph before compiling dependencies.
+    # The run command must own the outer compiler transaction so each dependency
+    # borrows that transaction instead of rejecting the published graph as busy.
+    add_test(
+        NAME source_multimodule_session
+        COMMAND $<TARGET_FILE:xray> run
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/target-machine/source_run/main.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(source_multimodule_session PROPERTIES
+        LABELS "vm;module;compiler-session;regression"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME source_multimodule_test_session
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/source_multimodule_session.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(source_multimodule_test_session PROPERTIES
+        LABELS "vm;module;compiler-session;test;regression"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
     add_test(
         NAME bytecode_build_stdio
         COMMAND ${XRAY_PYTHON}
