@@ -406,6 +406,16 @@ static int count_target_ops(const XiFunc *f, uint16_t op, const XiValue *target)
     return count;
 }
 
+static int count_block_target_ops(const XiBlock *block, uint16_t op, const XiValue *target) {
+    int count = 0;
+    for (uint32_t i = 0; block && i < block->nvalues; i++) {
+        XiValue *value = block->values[i];
+        if (value && value->op == op && value->nargs >= 1 && value->args[0] == target)
+            count++;
+    }
+    return count;
+}
+
 static void test_arc_no_escape_still_released_without_stack_rewrite(void) {
     /* A NO_ESCAPE heap allocation is still a HEAP allocation until something
      * actually rewrites it. escape + ARC alone (the VM's pipeline: see
@@ -1752,6 +1762,137 @@ static void test_arc_rethrow_moves_caught_owner_once(void) {
     xi_func_free(f);
 }
 
+static XiValue *make_user_try(XiFunc *f, XiBlock *registration, XiBlock *body,
+                              XiBlock *handler) {
+    XiValue *try_op = xi_value_new(f, registration, XI_TRY, &t_unit, 0);
+    try_op->aux = handler;
+    try_op->aux_int = -1;
+    try_op->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_jump(registration, body);
+    xi_block_add_pred(handler, registration);
+    return try_op;
+}
+
+static void append_end_try(XiFunc *f, XiBlock *block, XiValue *try_op) {
+    XiValue *end_try = xi_value_new(f, block, XI_END_TRY, &t_unit, 0);
+    end_try->aux = try_op;
+    end_try->flags = XI_FLAG_SIDE_EFFECT;
+}
+
+static void test_arc_user_try_materializes_panic_cleanup(void) {
+    XiFunc *f = make_func("arc_user_try_cleanup", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *body = xi_block_new(f);
+    XiBlock *handler = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+
+    XiValue *arr = xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *try_op = make_user_try(f, entry, body, handler);
+    XiValue *index = xi_const_int(f, body, 0, &t_int);
+    XiValue *get = xi_value_new(f, body, XI_INDEX_GET, &t_int, 2);
+    get->args[0] = arr;
+    get->args[1] = index;
+    append_end_try(f, body, try_op);
+    xi_block_set_jump(body, merge);
+    (void) xi_value_new(f, handler, XI_CATCH, &t_any, 0);
+    append_end_try(f, handler, try_op);
+    xi_block_set_jump(handler, merge);
+    xi_block_set_return(merge, xi_const_int(f, merge, 0, &t_int));
+    body->sealed = true;
+    handler->sealed = true;
+    merge->sealed = true;
+
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_target_ops(f, XI_RELEASE, arr), 2,
+              "try owner must have one normal and one panic-path release");
+    ASSERT_EQ(count_block_target_ops(body, XI_RELEASE, arr), 1,
+              "normal try exit must execute its owner release");
+    ASSERT_EQ(count_block_target_ops(handler, XI_RELEASE, arr), 1,
+              "panic handler must execute its owner release");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "normal and panic try dispositions must remain balanced");
+    xi_func_free(f);
+}
+
+static void test_arc_user_try_does_not_release_unavailable_owner(void) {
+    XiFunc *f = make_func("arc_user_try_unavailable_owner", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *body = xi_block_new(f);
+    XiBlock *handler = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+
+    XiValue *try_op = make_user_try(f, entry, body, handler);
+    XiValue *arr = xi_value_new(f, body, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *index = xi_const_int(f, body, 0, &t_int);
+    XiValue *get = xi_value_new(f, body, XI_INDEX_GET, &t_int, 2);
+    get->args[0] = arr;
+    get->args[1] = index;
+    append_end_try(f, body, try_op);
+    xi_block_set_jump(body, merge);
+    (void) xi_value_new(f, handler, XI_CATCH, &t_any, 0);
+    append_end_try(f, handler, try_op);
+    xi_block_set_jump(handler, merge);
+    xi_block_set_return(merge, xi_const_int(f, merge, 0, &t_int));
+    body->sealed = true;
+    handler->sealed = true;
+    merge->sealed = true;
+
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_target_ops(f, XI_RELEASE, arr), 1,
+              "owner created after TRY must keep only its executable normal release");
+    ASSERT_EQ(count_block_target_ops(handler, XI_RELEASE, arr), 0,
+              "panic handler must not release an owner unavailable at registration");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "unavailable owner must stay outside the handler balance");
+    xi_func_free(f);
+}
+
+static void test_arc_user_try_handler_use_releases_once(void) {
+    XiFunc *f = make_func("arc_user_try_handler_use", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *body = xi_block_new(f);
+    XiBlock *handler = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+
+    XiValue *arr = xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *try_op = make_user_try(f, entry, body, handler);
+    XiValue *normal_index = xi_const_int(f, body, 0, &t_int);
+    XiValue *normal_get = xi_value_new(f, body, XI_INDEX_GET, &t_int, 2);
+    normal_get->args[0] = arr;
+    normal_get->args[1] = normal_index;
+    append_end_try(f, body, try_op);
+    xi_block_set_jump(body, merge);
+    (void) xi_value_new(f, handler, XI_CATCH, &t_any, 0);
+    XiValue *handler_index = xi_const_int(f, handler, 1, &t_int);
+    XiValue *handler_get = xi_value_new(f, handler, XI_INDEX_GET, &t_int, 2);
+    handler_get->args[0] = arr;
+    handler_get->args[1] = handler_index;
+    append_end_try(f, handler, try_op);
+    xi_block_set_jump(handler, merge);
+    xi_block_set_return(merge, xi_const_int(f, merge, 0, &t_int));
+    body->sealed = true;
+    handler->sealed = true;
+    merge->sealed = true;
+
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_target_ops(f, XI_RELEASE, arr), 2,
+              "handler borrow must not duplicate the panic-path owner release");
+    ASSERT_EQ(count_block_target_ops(handler, XI_RELEASE, arr), 1,
+              "handler must release the borrowed owner exactly once");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "handler borrow and both try dispositions must balance");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1805,6 +1946,9 @@ int main(void) {
     test_stack_alloc_direct_closure_in_resumable_function_stays_heap();
     test_stack_alloc_escaping_stays();
     test_arc_rethrow_moves_caught_owner_once();
+    test_arc_user_try_materializes_panic_cleanup();
+    test_arc_user_try_does_not_release_unavailable_owner();
+    test_arc_user_try_handler_use_releases_once();
 
     printf("\n=== test_xi_escape: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;

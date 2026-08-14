@@ -1365,6 +1365,68 @@ typedef struct {
     uint32_t last_use;         /* index in blk->values of the last use */
 } ArcLive;
 
+static bool arc_target_available_at_try(const XiValue *target, const XiValue *try_op) {
+    if (!target || !try_op || !target->block || !try_op->block)
+        return false;
+    if (target->block != try_op->block)
+        return xi_dominates(target->block, try_op->block);
+    if (target->op == XI_PARAM || target->op == XI_PHI)
+        return true;
+    for (uint32_t i = 0; i < try_op->block->nvalues; i++) {
+        XiValue *value = try_op->block->values[i];
+        if (value == target)
+            return true;
+        if (value == try_op)
+            return false;
+    }
+    return false;
+}
+
+/* A source-level panic handler is an executable successor of XI_TRY even
+ * though it is intentionally absent from the ordinary two-way CFG.  When an
+ * owner available at registration is used in the protected body, keep that
+ * owner live through every matching XI_END_TRY.  Death-frontier placement then
+ * emits a physical RELEASE on both the normal exit and the panic handler; it
+ * also prevents a normal-path death drop from running while the handler can
+ * still unwind to the same owner.  Static-cleanup TRY regions already carry
+ * their explicit cleanup frontier and must not be duplicated here. */
+static void arc_seed_user_try_cleanup_uses(XiFunc *f, XiValue *target, ArcLive *live) {
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *registration = f->blocks[b];
+        if (!registration)
+            continue;
+        for (uint32_t i = 0; i < registration->nvalues; i++) {
+            XiValue *try_op = registration->values[i];
+            if (!try_op || try_op->op != XI_TRY || !try_op->aux ||
+                try_op->aux_int == XI_TRY_AUX_STATIC_CLEANUP ||
+                !arc_target_available_at_try(target, try_op))
+                continue;
+            XiBlock *body_entry = registration->succs[0];
+            bool protected_use = false;
+            for (uint32_t u = 0; body_entry && u < f->nblocks && !protected_use; u++) {
+                XiBlock *candidate = f->blocks[u];
+                if (candidate && live[u].has_use && xi_dominates(body_entry, candidate))
+                    protected_use = true;
+            }
+            if (!protected_use)
+                continue;
+            for (uint32_t e = 0; e < f->nblocks; e++) {
+                XiBlock *exit = f->blocks[e];
+                if (!exit)
+                    continue;
+                for (uint32_t v = 0; v < exit->nvalues; v++) {
+                    XiValue *end_try = exit->values[v];
+                    if (!end_try || end_try->op != XI_END_TRY || end_try->aux != try_op)
+                        continue;
+                    live[e].has_use = 1;
+                    if (!live[e].use_at_end && live[e].last_use < v)
+                        live[e].last_use = v;
+                }
+            }
+        }
+    }
+}
+
 /* Insert a XI_RELEASE(target) as the first instruction of `blk`. Needed for
  * edge deaths, where the release must run before anything else in the dead
  * successor. */
@@ -1832,6 +1894,7 @@ static bool arc_compute_liveness(XiFunc *f, XiValue *target, ArcLive **out_live,
         return false;
     }
     arc_seed_uses(f, tracked, ntracked, live, pos_by_id);
+    arc_seed_user_try_cleanup_uses(f, target, live);
     xr_free(tracked);
 
     /* Backward liveness to fixpoint. The def block's live_in is forced

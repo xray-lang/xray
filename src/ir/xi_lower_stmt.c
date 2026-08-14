@@ -2946,6 +2946,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
      * VM's mechanism for synchronous runtime faults (the only thing that
      * uses the handler stack now). */
     XiValue *try_op = NULL;
+    XiBlock *try_registration = l->cur_block;
     if (has_panic) {
         try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
         if (try_op) {
@@ -3019,9 +3020,12 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
     /* ---- Panic catch block (unwind channel) ---- */
     if (has_panic) {
         /* panic_blk is reached only via the implicit unwind edge (OP_TRY
-         * handler), invisible to the SSA builder.  Add try entry as pred. */
+         * handler), invisible to the SSA builder.  The synthetic predecessor
+         * must be the block that executes XI_TRY: the unwind observes the
+         * ownership state at handler registration, not the normal try body's
+         * exit state. */
         if (panic_blk->npreds == 0)
-            xi_block_add_pred(panic_blk, try_blk);
+            xi_block_add_pred(panic_blk, try_registration);
         xi_lower_braun_seal(l, panic_blk);
         l->cur_block = panic_blk;
         l->dead_after_throw = false;

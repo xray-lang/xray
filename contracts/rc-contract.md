@@ -18,6 +18,10 @@ For every RC-managed value, including registered identity aliases:
   dies on its outgoing edges, after the terminator read. A distinct PHI owner
   transfer retains the PHI owner and drops the predecessor owner on that exact
   edge; a self-PHI loop edge carries the same owner and must not drop it.
+  A source-level panic handler observes the ownership state at its `XI_TRY`
+  registration point. An owner used in the protected body stays live through
+  every matching `XI_END_TRY`, with a physical release on both the normal exit
+  and the executable panic-handler path.
 - C2a: every reference-capable function return publishes a complete ownership
   summary. `OWNED` is a fresh +1 result and may be consumed or dropped by the
   caller; `BORROWED_PARAM(n)` aliases parameter `n`; `BORROWED_STATIC` has
@@ -104,7 +108,7 @@ this one. A contract names what it proves; this line names what it does not.
 ## Digest anchors
 
 anchor-sha256: src/ir/xi_arc_verify.c 487702a09a76c317c7215c09402101721f04f9d1b0b7f7cc279bcec6d0c90289
-anchor-sha256: src/ir/xi_arc.c bbbc7670593859af3b1bfc211da749a08f7ab6a5bfb7257b2a2a84ab2a735108
+anchor-sha256: src/ir/xi_arc.c 9b338ffd822acb98906fc0b56960d07750d7c687de39b1e6cac2cf42a3bedff4
 anchor-sha256: src/ir/xi_lower_expr.c 27b03538d14186820ba556bef45cb50a2e269dd06feb773d4ef223635e2b73d8
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c cab925b4dcc27b2b6c633f23241e45f29d18db5870fa4e820579776144c34bf4
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3

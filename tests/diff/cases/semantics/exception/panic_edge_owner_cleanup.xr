@@ -1,0 +1,26 @@
+// anchor: panic-edge-owner-cleanup
+// diff-backends: vm, embed
+// An owner used inside a protected body must have executable dispositions on
+// both the normal path and the implicit panic-handler edge. The handler also
+// reads the owner to pin its entry state to the XI_TRY registration point.
+fn normal_path() {
+    var arr = [1, 2, 3]
+    try {
+        print(arr[0])
+    } catch panic (p) {
+        print("unexpected")
+    }
+}
+
+fn panic_path() {
+    var arr = [1, 2, 3]
+    try {
+        print(arr[9])
+    } catch panic (p) {
+        print(arr[1])
+        print("caught")
+    }
+}
+
+normal_path()
+panic_path()
