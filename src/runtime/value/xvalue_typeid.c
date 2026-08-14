@@ -176,57 +176,19 @@ bool xr_value_is_type_id(XrValue v, XrTypeId tid) {
     return xr_value_typeid(v) == tid;
 }
 
+/* Only the reverse lookup (xr_type_from_name) needs the names in array form.
+ * Both this and the forward mapping expand xr_type_names.def, so the array and
+ * xr_type_name_from_tid cannot disagree about what an id is called. */
 XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {
-    [XR_TID_NULL] = TYPE_NAME_NULL,
-    [XR_TID_BOOL] = TYPE_NAME_BOOL,
-    [XR_TID_I8] = TYPE_NAME_I8,
-    [XR_TID_U8] = TYPE_NAME_U8,
-    [XR_TID_I16] = TYPE_NAME_I16,
-    [XR_TID_U16] = TYPE_NAME_U16,
-    [XR_TID_I32] = TYPE_NAME_I32,
-    [XR_TID_U32] = TYPE_NAME_U32,
-    [XR_TID_INT] = TYPE_NAME_INT,
-    [XR_TID_U64] = TYPE_NAME_U64,
-    [XR_TID_F32] = TYPE_NAME_F32,
-    [XR_TID_FLOAT] = TYPE_NAME_FLOAT,
-    [XR_TID_STRING] = TYPE_NAME_STRING,
-    [XR_TID_RUNE] = TYPE_NAME_RUNE,
-    [XR_TID_FUNCTION] = TYPE_NAME_FUNCTION,
-    [XR_TID_ARRAY] = TYPE_NAME_ARRAY,
-    [XR_TID_SET] = TYPE_NAME_SET,
-    [XR_TID_MAP] = TYPE_NAME_MAP,
-    [XR_TID_INSTANCE] = TYPE_NAME_INSTANCE,
-    [XR_TID_OBJECT] = TYPE_NAME_OBJECT,
-    [XR_TID_BIGINT] = TYPE_NAME_BIGINT,
-    [XR_TID_STRINGBUILDER] = TYPE_NAME_STRINGBUILDER,
-    [XR_TID_CHANNEL] = TYPE_NAME_CHANNEL,
-    [XR_TID_REGEX] = TYPE_NAME_REGEX,
-    [XR_TID_DATETIME] = TYPE_NAME_DATETIME,
-    [XR_TID_PANIC_INFO] = TYPE_NAME_PANIC_INFO,
-    [XR_TID_ENUM_VALUE] = TYPE_NAME_ENUM_VALUE,
-    [XR_TID_ENUM_TYPE] = TYPE_NAME_ENUM_TYPE,
-    [XR_TID_BOUND_METHOD] = TYPE_NAME_FUNCTION,
-    [XR_TID_ITERATOR] = TYPE_NAME_ITERATOR,
-    [XR_TID_MODULE] = TYPE_NAME_MODULE,
-    [XR_TID_COROUTINE] = TYPE_NAME_COROUTINE,
-    [XR_TID_RANGE] = TYPE_NAME_RANGE,
-    [XR_TID_TASK] = TYPE_NAME_TASK,
-    [XR_TID_NETCONN] = TYPE_NAME_NETCONN,
-    [XR_TID_NETLISTENER] = TYPE_NAME_NETLISTENER,
-    [XR_TID_ATOMIC] = TYPE_NAME_ATOMIC,
-    [XR_TID_WORKQUEUE] = TYPE_NAME_WORKQUEUE,
-    [XR_TID_RESULTGROUP] = TYPE_NAME_RESULTGROUP,
-    [XR_TID_COUNTDOWNLATCH] = TYPE_NAME_COUNTDOWNLATCH,
-    [XR_TID_SEMAPHORE] = TYPE_NAME_SEMAPHORE,
-    [XR_TID_EVENTCOUNT] = TYPE_NAME_EVENTCOUNT,
-    [XR_TID_THREAD] = TYPE_NAME_THREAD,
-    [XR_TID_BUFFER] = TYPE_NAME_BUFFER,
+#define XR_TYPE_NAME(suffix, id, display) [XR_TID_##suffix] = display,
+#include "../../shared/xr_type_names.def"
+#undef XR_TYPE_NAME
 };
 
 const char *xr_typeid_name(XrTypeId tid) {
-    if (tid >= 0 && tid < XR_TID_COUNT && typeid_names[tid])
-        return typeid_names[tid];
-    return TYPE_NAME_UNKNOWN;
+    if (tid < 0 || tid >= XR_TID_COUNT)
+        return TYPE_NAME_UNKNOWN;
+    return xr_type_name_from_tid(tid);
 }
 
 uint8_t xr_type_to_tid(const XrType *type) {

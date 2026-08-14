@@ -462,6 +462,8 @@ add_xray_unit_test(test_xrt_dense_enum aot/test_xrt_dense_enum.c)
 add_xray_unit_test(test_xrt_json_decode aot/test_xrt_json_decode.c)
 add_xray_unit_test(test_xrt_static_map_set aot/test_xrt_static_map_set.c)
 add_xray_unit_test(test_xrt_exception_tls aot/test_xrt_exception_tls.c)
+add_xray_unit_test(test_type_names_parity aot/test_type_names_parity.c)
+set_tests_properties(test_type_names_parity PROPERTIES LABELS "aot;vm;shared-core")
 add_xray_unit_test(test_xrt_method_truthy aot/test_xrt_method_truthy.c)
 add_executable(test_xrt_type_identity_freestanding aot/test_xrt_type_identity_freestanding.c)
 target_compile_definitions(test_xrt_type_identity_freestanding PRIVATE
