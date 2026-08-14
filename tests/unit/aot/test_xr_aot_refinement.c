@@ -900,27 +900,35 @@ static void direct_local_go_callee_storage_fixture_free(
     memset(fixture, 0, sizeof(*fixture));
 }
 
+static bool fingerprint_is_zero_bytes(const XrFingerprint *fingerprint) {
+    static const XrFingerprint zero = {{0}};
+    return xr_fingerprint_equal(*fingerprint, zero);
+}
+
+/* An exported namespace callee is a real call row that the direct-call
+ * validator must decline: the callee lives behind a dependency export, so this
+ * plan cannot prove it is the one that will be called. */
 static XrAotRefinementPlan *build_refused_plan(
-    const RefinementFixture *fixture, XrAotRefinementDiagnostic *diag) {
+    const XrTargetPlan *target_plan, XrAotRefinementDiagnostic *diag) {
     XrAotRefinementBuilder *builder =
-        xr_aot_refinement_builder_create(fixture->target_plan, diag);
+        xr_aot_refinement_builder_create(target_plan, diag);
     REQUIRE(builder != NULL);
     XrAotPassProtocol protocol = xr_aot_refinement_direct_call_protocol(27901);
     XrAotDirectCallRequest request = {.target_call_index = 0};
     uint32_t decision = 0;
     REQUIRE(xr_aot_refinement_try_direct_call(
-        builder, &protocol, fixture->target_plan, &request, &decision, diag));
+        builder, &protocol, target_plan, &request, &decision, diag));
     REQUIRE(decision == XR_AOT_REFINEMENT_REFUSED);
-    REQUIRE(diag->issue == XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE);
+    REQUIRE(diag->issue == XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED);
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_refinement_builder_freeze(
-        builder, fixture->target_plan, &plan, diag));
+    REQUIRE(xr_aot_refinement_builder_freeze(builder, target_plan, &plan, diag));
     xr_aot_refinement_builder_free(builder);
     return plan;
 }
 
-static void test_scalar_direct_call_refuses_without_baseline_change(void) {
-    RefinementFixture fixture = fixture_create();
+static void test_open_target_direct_call_refuses_without_baseline_change(void) {
+    SourceNamespaceStorageFixture fixture =
+        source_namespace_storage_fixture_create(false);
     XrFingerprint semantic_before =
         xr_target_plan_semantic_fingerprint(fixture.target_plan);
     XrFingerprint target_before =
@@ -928,7 +936,7 @@ static void test_scalar_direct_call_refuses_without_baseline_change(void) {
     XrFingerprint profile_before =
         xr_target_profile_fingerprint(fixture.target_profile);
     XrAotRefinementDiagnostic diag = {0};
-    XrAotRefinementPlan *plan = build_refused_plan(&fixture, &diag);
+    XrAotRefinementPlan *plan = build_refused_plan(fixture.target_plan, &diag);
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified);
     REQUIRE(view.record_count == 1);
@@ -941,13 +949,18 @@ static void test_scalar_direct_call_refuses_without_baseline_change(void) {
                                  profile_before));
     REQUIRE(view.records[0].decision == XR_AOT_REFINEMENT_REFUSED);
     REQUIRE(view.records[0].diagnostic_issue ==
-            XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE);
+            XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED);
     REQUIRE(view.records[0].direct_call.target_call_index == 0);
+    /* A refusal keeps no derived facts beyond the row it names. */
+    REQUIRE(view.records[0].direct_call_binding.callee_function == 0);
+    REQUIRE(view.records[0].direct_call_binding.target_call_index == 0);
     REQUIRE(memcmp(&view.records[0].input_state,
                    &view.records[0].output_state,
                    sizeof(view.records[0].input_state)) == 0);
+    /* A fully completed baseline does publish call-shape evidence; the
+     * refusal above is a proof failure, not a missing-evidence failure. */
     REQUIRE((view.initial_state.available &
-             XR_AOT_INV_BIT(XR_AOT_INV_CALL_TARGET)) == 0);
+             XR_AOT_INV_BIT(XR_AOT_INV_CALL_TARGET)) != 0);
     REQUIRE(xr_aot_refinement_verify(&view, fixture.target_plan, &diag));
     REQUIRE(xr_fingerprint_equal(target_before,
                                  xr_target_plan_fingerprint(fixture.target_plan)));
@@ -955,13 +968,172 @@ static void test_scalar_direct_call_refuses_without_baseline_change(void) {
                                  xr_target_profile_fingerprint(fixture.target_profile)));
 
     xr_aot_refinement_plan_free(plan);
+    source_namespace_storage_fixture_free(&fixture);
+}
+
+/* The whole-plan authority is the production entry point. A closed local
+ * callee must be proved, and the derived record must match the baseline. */
+static void test_direct_call_authority_applies_closed_local_binding(void) {
+    DirectLocalCalleeStorageFixture fixture =
+        direct_local_callee_storage_fixture_create(false);
+    XrFingerprint target_before =
+        xr_target_plan_fingerprint(fixture.target_plan);
+    uint32_t call_count = 0;
+    (void) xr_target_plan_calls(fixture.target_plan, &call_count);
+    REQUIRE(call_count == 1);
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_refinement_direct_call_authority_build(
+        fixture.target_plan, 27902, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified);
+    /* Coverage is total: one record per call row, no silent omission. */
+    REQUIRE(view.record_count == call_count);
+    REQUIRE(xr_aot_refinement_direct_call_applied_count(&view) == 1);
+    const XrAotDirectCallRecord *binding = &view.records[0].direct_call_binding;
+    REQUIRE(view.records[0].decision == XR_AOT_REFINEMENT_APPLIED);
+    REQUIRE(view.records[0].diagnostic_issue == XR_AOT_REFINEMENT_OK);
+    REQUIRE(binding->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL);
+    REQUIRE(binding->semantic_target_kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL);
+    REQUIRE(binding->argument_count == binding->parameter_count);
+    REQUIRE(binding->environment_required == 0);
+    REQUIRE(binding->generation_required == 0);
+    REQUIRE(!fingerprint_is_zero_bytes(&binding->fingerprint));
+    /* Proving a binding must not disturb the baseline it was proved against. */
+    REQUIRE(xr_fingerprint_equal(target_before,
+                                 xr_target_plan_fingerprint(fixture.target_plan)));
+    REQUIRE(xr_aot_refinement_verify(&view, fixture.target_plan, &diag));
+
+    xr_aot_refinement_plan_free(plan);
+    direct_local_callee_storage_fixture_free(&fixture);
+}
+
+/* Every field the validator derives must be re-derived by the independent
+ * verifier. Each mutation below rewrites one proven fact in an APPLIED record
+ * and must be rejected; otherwise the record is decoration, not a proof. */
+static void test_direct_call_binding_mutations_fail_closed(void) {
+    DirectLocalCalleeStorageFixture fixture =
+        direct_local_callee_storage_fixture_create(false);
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_refinement_direct_call_authority_build(
+        fixture.target_plan, 27902, &plan, &diag));
+    XrAotRefinementPlanView original = xr_aot_refinement_plan_view(plan);
+    REQUIRE(original.record_count == 1);
+    REQUIRE(original.records[0].decision == XR_AOT_REFINEMENT_APPLIED);
+    XrAotTransformationRecord mutated_record = original.records[0];
+    XrAotRefinementPlanView mutated = original;
+    mutated.records = &mutated_record;
+    REQUIRE(xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+
+#define REQUIRE_BINDING_MUTATION_REJECTED(field_mutation, expected_issue)      \
+    do {                                                                      \
+        mutated_record = original.records[0];                                 \
+        field_mutation;                                                       \
+        REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,       \
+                                          &diag));                            \
+        REQUIRE(diag.issue == (uint32_t) (expected_issue));                    \
+    } while (0)
+
+    /* Callee rebinding: the single most dangerous direct-call defect. */
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.callee_function++,
+        XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY);
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.callee_identity.bytes[0] ^= 1u,
+        XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY);
+    /* Argument-count and argument-map drift. */
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.argument_count++,
+        XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING);
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.parameter_count++,
+        XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING);
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.argument_map_fingerprint.bytes[0] ^=
+            1u,
+        XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING);
+    /* Error, environment and generation edges. */
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.error_slot = 0,
+        XR_AOT_REFINEMENT_DIRECT_CALL_ERROR_MAPPING);
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.environment_required = 1,
+        XR_AOT_REFINEMENT_DIRECT_CALL_ENVIRONMENT_MAPPING);
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.generation_required = 1,
+        XR_AOT_REFINEMENT_DIRECT_CALL_GENERATION_MAPPING);
+    /* Result mapping and call classification. */
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.result_ownership =
+            XR_TARGET_CALL_MOVE,
+        XR_AOT_REFINEMENT_DIRECT_CALL_RESULT_MAPPING);
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.target_kind =
+            XR_TARGET_CALL_TARGET_SOURCE_EXPORT,
+        XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY);
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.call_flags |=
+            XR_TARGET_CALL_GENERATION,
+        XR_AOT_REFINEMENT_DIRECT_CALL_EFFECT_MAPPING);
+    /* Downgrading a proven binding to a refusal, or forging the record
+     * fingerprint, must both be caught. */
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.decision = XR_AOT_REFINEMENT_REFUSED,
+        XR_AOT_REFINEMENT_PLAN_STATE);
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.diagnostic_issue =
+            XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED,
+        XR_AOT_REFINEMENT_PLAN_STATE);
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.fingerprint.bytes[0] ^= 1u,
+        XR_AOT_REFINEMENT_RECORD_FINGERPRINT);
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.fingerprint.bytes[0] ^= 1u,
+        XR_AOT_REFINEMENT_RECORD_FINGERPRINT);
+    /* The request key and the derived record must name the same call row. */
+    REQUIRE_BINDING_MUTATION_REJECTED(
+        mutated_record.direct_call_binding.target_call_index = 7,
+        XR_AOT_REFINEMENT_PLAN_STATE);
+
+#undef REQUIRE_BINDING_MUTATION_REJECTED
+
+    xr_aot_refinement_plan_free(plan);
+    direct_local_callee_storage_fixture_free(&fixture);
+}
+
+/* Naming a call row that does not exist is a caller fault, not a refusal:
+ * the protocol must fail rather than record an unprovable binding. */
+static void test_direct_call_out_of_range_request_fails_closed(void) {
+    RefinementFixture fixture = fixture_create();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementBuilder *builder =
+        xr_aot_refinement_builder_create(fixture.target_plan, &diag);
+    REQUIRE(builder != NULL);
+    XrAotPassProtocol protocol = xr_aot_refinement_direct_call_protocol(27901);
+    XrAotDirectCallRequest request = {.target_call_index = 0};
+    uint32_t decision = 0;
+    REQUIRE(!xr_aot_refinement_try_direct_call(
+        builder, &protocol, fixture.target_plan, &request, &decision, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_INVALID_ARGUMENT);
+    xr_aot_refinement_builder_free(builder);
+
+    /* A callless plan still yields a verified, empty authority. */
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_refinement_direct_call_authority_build(
+        fixture.target_plan, 27902, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count == 0);
+    REQUIRE(xr_aot_refinement_direct_call_applied_count(&view) == 0);
+    xr_aot_refinement_plan_free(plan);
     fixture_free(&fixture);
 }
 
 static void test_stale_state_and_baseline_mutations_fail_closed(void) {
-    RefinementFixture fixture = fixture_create();
+    SourceNamespaceStorageFixture fixture =
+        source_namespace_storage_fixture_create(false);
     XrAotRefinementDiagnostic diag = {0};
-    XrAotRefinementPlan *plan = build_refused_plan(&fixture, &diag);
+    XrAotRefinementPlan *plan = build_refused_plan(fixture.target_plan, &diag);
     XrAotRefinementPlanView original = xr_aot_refinement_plan_view(plan);
     XrAotRefinementPlanView mutated_view = original;
     XrAotTransformationRecord mutated_record = original.records[0];
@@ -998,13 +1170,17 @@ static void test_stale_state_and_baseline_mutations_fail_closed(void) {
     REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_BASELINE_FINGERPRINT);
 
+    /* Any family bit outside the required set must invalidate the baseline;
+     * pick the first bit above the required mask so this stays correct as
+     * families are added. */
     mutated_view = original;
-    mutated_view.baseline.completed_family_mask |= UINT64_C(1) << 17;
+    mutated_view.baseline.completed_family_mask |=
+        (uint64_t) (XR_TARGET_REQUIRED_FAMILIES + 1u);
     REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_BASELINE_FINGERPRINT);
 
     xr_aot_refinement_plan_free(plan);
-    fixture_free(&fixture);
+    source_namespace_storage_fixture_free(&fixture);
 }
 
 static void test_machine_readable_invalidation_is_functional(void) {
@@ -1032,9 +1208,10 @@ static void test_machine_readable_invalidation_is_functional(void) {
 }
 
 static void test_null_and_test_backends_cover_refusal(void) {
-    RefinementFixture fixture = fixture_create();
+    SourceNamespaceStorageFixture fixture =
+        source_namespace_storage_fixture_create(false);
     XrAotRefinementDiagnostic diag = {0};
-    XrAotRefinementPlan *plan = build_refused_plan(&fixture, &diag);
+    XrAotRefinementPlan *plan = build_refused_plan(fixture.target_plan, &diag);
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     XrAotBackendStats stats = {0};
     XrAotNullBackend null_backend = {0};
@@ -1052,10 +1229,13 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(xr_aot_backend_run(&view, fixture.target_plan,
                                xr_aot_test_backend_interface(), &test_backend,
                                &stats, &diag));
-    REQUIRE(strstr(emission, "families=000000000001ffff") != NULL);
+    char expected_families[64];
+    snprintf(expected_families, sizeof(expected_families), "families=%016llx",
+             (unsigned long long) XR_TARGET_REQUIRED_FAMILIES);
+    REQUIRE(strstr(emission, expected_families) != NULL);
     REQUIRE(strstr(emission, "transform=direct-call decision=refused") != NULL);
     REQUIRE(strstr(emission,
-                   "issue=XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE") != NULL);
+                   "issue=XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED") != NULL);
     REQUIRE(strstr(emission, "end records=1") != NULL);
 
     FailingBackend failing = {0};
@@ -1081,7 +1261,7 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_BACKEND_INCOMPLETE_COVERAGE);
 
     xr_aot_refinement_plan_free(plan);
-    fixture_free(&fixture);
+    source_namespace_storage_fixture_free(&fixture);
 }
 
 static XrAotRefinementPlan *build_representation_plan(
@@ -2995,7 +3175,10 @@ static void test_channel_receive_refinement_authority_is_exact(void) {
 }
 
 int main(void) {
-    test_scalar_direct_call_refuses_without_baseline_change();
+    test_open_target_direct_call_refuses_without_baseline_change();
+    test_direct_call_authority_applies_closed_local_binding();
+    test_direct_call_binding_mutations_fail_closed();
+    test_direct_call_out_of_range_request_fails_closed();
     test_stale_state_and_baseline_mutations_fail_closed();
     test_machine_readable_invalidation_is_functional();
     test_null_and_test_backends_cover_refusal();

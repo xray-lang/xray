@@ -21,7 +21,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(3)
+#define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(4)
 #define XR_AOT_REFINEMENT_BACKEND_ABI_VERSION UINT32_C(2)
 #define XR_AOT_REFINEMENT_MAX_RECORDS UINT32_C(1048576)
 
@@ -69,7 +69,6 @@ typedef enum XrAotRefinementIssue {
     XR_AOT_REFINEMENT_PASS_PROTOCOL,
     XR_AOT_REFINEMENT_STALE_EVIDENCE,
     XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE,
-    XR_AOT_REFINEMENT_DIRECT_CALL_SCHEMA_UNAVAILABLE,
     XR_AOT_REFINEMENT_SOURCE_IDENTITY,
     XR_AOT_REFINEMENT_USE_SITE,
     XR_AOT_REFINEMENT_SOURCE_TYPE,
@@ -86,6 +85,17 @@ typedef enum XrAotRefinementIssue {
     XR_AOT_REFINEMENT_BACKEND_ABI,
     XR_AOT_REFINEMENT_BACKEND_INCOMPLETE_COVERAGE,
     XR_AOT_REFINEMENT_BACKEND_FAILURE,
+    /* Direct-call refusals. Each names the exact obligation the validator
+     * could not discharge from the verified baseline, so an unproved binding
+     * is distinguishable from a checker-detected inconsistency. */
+    XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED,
+    XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY,
+    XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING,
+    XR_AOT_REFINEMENT_DIRECT_CALL_RESULT_MAPPING,
+    XR_AOT_REFINEMENT_DIRECT_CALL_ERROR_MAPPING,
+    XR_AOT_REFINEMENT_DIRECT_CALL_ENVIRONMENT_MAPPING,
+    XR_AOT_REFINEMENT_DIRECT_CALL_GENERATION_MAPPING,
+    XR_AOT_REFINEMENT_DIRECT_CALL_EFFECT_MAPPING,
 } XrAotRefinementIssue;
 
 typedef struct XrAotRefinementDiagnostic {
@@ -120,10 +130,48 @@ typedef struct XrAotPassProtocol {
     XrAotInvariantMask preserves;
 } XrAotPassProtocol;
 
-/* The request names a future TargetPlan call row; it does not manufacture one. */
+/* The request names an existing TargetPlan call row; it does not manufacture
+ * one and it carries no conclusion about that row. Every fact consumed by a
+ * backend lives in the derived XrAotDirectCallRecord below, which the
+ * validator recomputes from the verified baseline on its own. */
 typedef struct XrAotDirectCallRequest {
     uint32_t target_call_index;
 } XrAotDirectCallRequest;
+
+/* A statically bound direct call, re-derived from the verified TargetPlan and
+ * its SemanticPlan rather than copied from whatever proposed the binding.
+ * A record is only APPLIED when the callee identity is closed and the
+ * parameter, return, error, ownership, environment and generation mappings
+ * are each discharged against the callee's semantic contract. */
+typedef struct XrAotDirectCallRecord {
+    uint32_t target_call_index;
+    uint32_t caller_function;
+    uint32_t callee_function;
+    uint32_t semantic_call_target;
+    uint32_t semantic_operation;
+    uint32_t argument_begin;
+    uint32_t result_value;
+    uint32_t result_slot;
+    uint32_t error_slot;
+    uint16_t argument_count;
+    uint16_t parameter_count;
+    uint16_t call_flags;
+    uint16_t result_register_rep;
+    uint16_t result_memory_rep;
+    uint16_t native_abi;
+    uint8_t target_kind;
+    uint8_t calling_convention;
+    uint8_t result_mode;
+    uint8_t result_ownership;
+    uint8_t error_mode;
+    uint8_t semantic_target_kind;
+    uint8_t environment_required;
+    uint8_t generation_required;
+    XrStableId callee_identity;
+    XrStableId operation_id;
+    XrFingerprint argument_map_fingerprint;
+    XrFingerprint fingerprint;
+} XrAotDirectCallRecord;
 
 typedef enum XrAotRepresentationAdapterKind {
     XR_AOT_REP_ADAPTER_BOX = 1,
@@ -206,6 +254,7 @@ typedef struct XrAotTransformationRecord {
     XrAotInvariantState input_state;
     XrAotInvariantState output_state;
     XrAotDirectCallRequest direct_call;
+    XrAotDirectCallRecord direct_call_binding;
     XrAotRepresentationAdapterRecord representation_adapter;
     uint16_t decision;
     uint16_t transform_kind;
@@ -285,6 +334,17 @@ XR_FUNC bool xr_aot_refinement_try_representation_adapter(
     const XrAotRepresentationAdapterRequest *request,
     uint32_t *out_decision,
     XrAotRefinementDiagnostic *diag);
+/* Production entry point: record one direct-call transformation per call row
+ * of the verified TargetPlan, then freeze and independently verify the plan.
+ * Rows whose binding cannot be proved are recorded as refusals with a stable
+ * diagnostic, which keeps the baseline TargetPlan lowering legal; only a
+ * checker-detected inconsistency makes this fail. */
+XR_FUNC bool xr_aot_refinement_direct_call_authority_build(
+    const XrTargetPlan *target_plan, uint32_t pass_id,
+    XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag);
+/* Applied direct-call bindings in a verified refinement plan. */
+XR_FUNC uint32_t xr_aot_refinement_direct_call_applied_count(
+    const XrAotRefinementPlanView *view);
 XR_FUNC bool xr_aot_refinement_builder_freeze(
     XrAotRefinementBuilder *builder, const XrTargetPlan *target_plan,
     XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag);

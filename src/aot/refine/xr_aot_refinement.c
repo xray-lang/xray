@@ -12,6 +12,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include "../../plan/target/xr_target_verify.h"
+#include "../../shared/xr_param_mode.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -506,6 +507,335 @@ static uint32_t derive_representation_record(
     return XR_AOT_REFINEMENT_OK;
 }
 
+/* Compare a recorded binding against the independently derived one and name
+ * the obligation that disagrees, so a mismatch points at the field group that
+ * drifted instead of at the record as a whole. */
+static uint32_t direct_call_record_mismatch(
+    const XrAotDirectCallRecord *actual,
+    const XrAotDirectCallRecord *derived) {
+    if (actual->target_call_index != derived->target_call_index ||
+        actual->caller_function != derived->caller_function ||
+        actual->callee_function != derived->callee_function ||
+        actual->semantic_call_target != derived->semantic_call_target ||
+        actual->semantic_operation != derived->semantic_operation ||
+        actual->target_kind != derived->target_kind ||
+        actual->calling_convention != derived->calling_convention ||
+        actual->semantic_target_kind != derived->semantic_target_kind ||
+        !xr_stable_id_equal(actual->callee_identity, derived->callee_identity) ||
+        !xr_stable_id_equal(actual->operation_id, derived->operation_id))
+        return XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY;
+    if (actual->argument_begin != derived->argument_begin ||
+        actual->argument_count != derived->argument_count ||
+        actual->parameter_count != derived->parameter_count ||
+        !xr_fingerprint_equal(actual->argument_map_fingerprint,
+                              derived->argument_map_fingerprint))
+        return XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING;
+    if (actual->result_value != derived->result_value ||
+        actual->result_slot != derived->result_slot ||
+        actual->result_mode != derived->result_mode ||
+        actual->result_ownership != derived->result_ownership ||
+        actual->result_register_rep != derived->result_register_rep ||
+        actual->result_memory_rep != derived->result_memory_rep ||
+        actual->native_abi != derived->native_abi)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_RESULT_MAPPING;
+    if (actual->error_slot != derived->error_slot ||
+        actual->error_mode != derived->error_mode)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_ERROR_MAPPING;
+    if (actual->environment_required != derived->environment_required)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_ENVIRONMENT_MAPPING;
+    if (actual->generation_required != derived->generation_required)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_GENERATION_MAPPING;
+    if (actual->call_flags != derived->call_flags)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_EFFECT_MAPPING;
+    if (!xr_fingerprint_equal(actual->fingerprint, derived->fingerprint))
+        return XR_AOT_REFINEMENT_RECORD_FINGERPRINT;
+    /* Any residue the groups above do not name still fails closed. */
+    return memcmp(actual, derived, sizeof(*actual)) == 0
+               ? XR_AOT_REFINEMENT_OK
+               : XR_AOT_REFINEMENT_PLAN_STATE;
+}
+
+static void direct_call_record_fingerprint(const XrAotBaselineRef *baseline,
+                                           XrAotDirectCallRecord *record) {
+    static const uint8_t domain[] = "xray-aot-direct-call-record-v1\0";
+    XrSHA256Context ctx;
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
+    xr_sha256_update(&ctx, baseline->target_plan_fingerprint.bytes,
+                     sizeof(baseline->target_plan_fingerprint.bytes));
+    xr_sha256_update(&ctx, baseline->semantic_fingerprint.bytes,
+                     sizeof(baseline->semantic_fingerprint.bytes));
+    hash_u32(&ctx, record->target_call_index);
+    hash_u32(&ctx, record->caller_function);
+    hash_u32(&ctx, record->callee_function);
+    hash_u32(&ctx, record->semantic_call_target);
+    hash_u32(&ctx, record->semantic_operation);
+    hash_u32(&ctx, record->argument_begin);
+    hash_u32(&ctx, record->result_value);
+    hash_u32(&ctx, record->result_slot);
+    hash_u32(&ctx, record->error_slot);
+    hash_u32(&ctx, record->argument_count);
+    hash_u32(&ctx, record->parameter_count);
+    hash_u32(&ctx, record->call_flags);
+    hash_u32(&ctx, record->result_register_rep);
+    hash_u32(&ctx, record->result_memory_rep);
+    hash_u32(&ctx, record->native_abi);
+    hash_u32(&ctx, record->target_kind);
+    hash_u32(&ctx, record->calling_convention);
+    hash_u32(&ctx, record->result_mode);
+    hash_u32(&ctx, record->result_ownership);
+    hash_u32(&ctx, record->error_mode);
+    hash_u32(&ctx, record->semantic_target_kind);
+    hash_u32(&ctx, record->environment_required);
+    hash_u32(&ctx, record->generation_required);
+    xr_sha256_update(&ctx, record->callee_identity.bytes,
+                     sizeof(record->callee_identity.bytes));
+    xr_sha256_update(&ctx, record->operation_id.bytes,
+                     sizeof(record->operation_id.bytes));
+    xr_sha256_update(&ctx, record->argument_map_fingerprint.bytes,
+                     sizeof(record->argument_map_fingerprint.bytes));
+    xr_sha256_final(&ctx, record->fingerprint.bytes);
+}
+
+/* Independently re-derive the argument mapping and hash it, so a later
+ * comparison covers every argument row rather than the count alone. */
+static uint32_t direct_call_argument_map(
+    const XrTargetPlan *target_plan, const XrSemanticPlan *semantic,
+    const XrTargetCallRecord *call,
+    const XrSemanticFunctionRecord *callee,
+    XrFingerprint *out_fingerprint, uint32_t *out_argument) {
+    uint32_t argument_total = 0;
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(target_plan, &argument_total);
+    *out_argument = 0;
+    if (!arguments && argument_total != 0)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    if ((uint64_t) call->argument_begin + call->argument_count >
+        (uint64_t) argument_total)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    /* A direct binding is only complete when every declared parameter is
+     * supplied exactly once, in ordinal order. Fewer, extra or reordered
+     * argument rows leave the callee frame unproven. */
+    if (call->argument_count != callee->parameter_count)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING;
+    size_t parameter_total = xr_semantic_plan_parameter_count(semantic);
+    if ((uint64_t) callee->parameter_begin + callee->parameter_count >
+        (uint64_t) parameter_total)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    static const uint8_t domain[] = "xray-aot-direct-call-argument-map-v1\0";
+    XrSHA256Context ctx;
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
+    hash_u32(&ctx, call->argument_count);
+    for (uint16_t i = 0; i < call->argument_count; i++) {
+        uint32_t argument_index = call->argument_begin + i;
+        const XrTargetCallArgumentRecord *argument = &arguments[argument_index];
+        uint32_t parameter_index = callee->parameter_begin + i;
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(semantic, parameter_index);
+        *out_argument = argument_index;
+        if (!parameter)
+            return XR_AOT_REFINEMENT_PLAN_STATE;
+        /* The row must name this call and bind the parameter that shares its
+         * ordinal; anything else is an unproven permutation of the frame. */
+        if (argument->call != call->id || argument->ordinal != i ||
+            argument->callee_parameter != parameter_index ||
+            parameter->function != call->callee_function ||
+            parameter->ordinal != i)
+            return XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING;
+        /* Transfer mode must match the callee's declared contract: a mismatch
+         * is a lost or duplicated obligation at the callee boundary. The
+         * ownership action must be one of the two a by-value read-mode
+         * parameter can carry, and both sides must already own proven
+         * storage. */
+        if (argument->transfer_mode != parameter->transfer_mode ||
+            parameter->mode != XR_PARAM_READ ||
+            argument->mode != XR_TARGET_CALL_VALUE ||
+            (argument->ownership != XR_TARGET_CALL_READ &&
+             argument->ownership != XR_TARGET_CALL_CONSUME) ||
+            argument->caller_slot == XR_SEMANTIC_INDEX_NONE ||
+            argument->callee_slot == XR_SEMANTIC_INDEX_NONE)
+            return XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING;
+        hash_u32(&ctx, argument_index);
+        hash_u32(&ctx, parameter_index);
+        hash_u32(&ctx, argument->semantic_operand);
+        hash_u32(&ctx, argument->semantic_value);
+        hash_u32(&ctx, argument->caller_slot);
+        hash_u32(&ctx, argument->callee_slot);
+        hash_u32(&ctx, argument->register_rep);
+        hash_u32(&ctx, argument->memory_rep);
+        hash_u32(&ctx, argument->ownership);
+        hash_u32(&ctx, argument->transfer_mode);
+        hash_u32(&ctx, argument->flags);
+        hash_u32(&ctx, parameter->type);
+        hash_u32(&ctx, parameter->mode);
+        xr_sha256_update(&ctx, parameter->id.bytes, sizeof(parameter->id.bytes));
+    }
+    *out_argument = 0;
+    xr_sha256_final(&ctx, out_fingerprint->bytes);
+    return XR_AOT_REFINEMENT_OK;
+}
+
+/* Recompute a direct-call binding from the verified baseline alone.
+ *
+ * The return value separates the two outcomes the protocol must never blur:
+ * a DIRECT_CALL_* issue is a refusal (the binding is not provable, so the
+ * baseline lowering stands), while INVALID_ARGUMENT or PLAN_STATE report a
+ * baseline the verifier should already have rejected and therefore fail. */
+static uint32_t derive_direct_call_record(const XrAotBaselineRef *baseline,
+                                          const XrTargetPlan *target_plan,
+                                          const XrAotDirectCallRequest *request,
+                                          XrAotDirectCallRecord *out_record,
+                                          uint32_t *out_argument) {
+    memset(out_record, 0, sizeof(*out_record));
+    *out_argument = 0;
+    uint32_t call_total = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_total);
+    if (!calls || request->target_call_index >= call_total)
+        return XR_AOT_REFINEMENT_INVALID_ARGUMENT;
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    if (!semantic)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    const XrTargetCallRecord *call = &calls[request->target_call_index];
+    out_record->target_call_index = request->target_call_index;
+    out_record->caller_function = call->caller_function;
+    out_record->callee_function = call->callee_function;
+    out_record->semantic_call_target = call->semantic_call_target;
+    out_record->semantic_operation = call->semantic_operation;
+    out_record->argument_begin = call->argument_begin;
+    out_record->argument_count = call->argument_count;
+    out_record->result_value = call->result_value;
+    out_record->result_slot = call->result_slot;
+    out_record->error_slot = call->error_slot;
+    out_record->call_flags = call->flags;
+    out_record->result_register_rep = call->result_register_rep;
+    out_record->result_memory_rep = call->result_memory_rep;
+    out_record->native_abi = call->native_abi;
+    out_record->target_kind = call->target_kind;
+    out_record->calling_convention = call->calling_convention;
+    out_record->result_mode = call->result_mode;
+    out_record->result_ownership = call->result_ownership;
+    out_record->error_mode = call->error_mode;
+
+    /* Closed-target evidence, decided from the call row alone and before any
+     * table walk. Export, builtin-member and runtime-receiver rows keep their
+     * planned dispatch and legitimately leave the callee, dependency and
+     * export fields unset, so they must be refused here rather than tripping
+     * the structural checks that follow. */
+    if (call->id != request->target_call_index ||
+        call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED;
+
+    /* From here the row claims a closed local callee, so every index it names
+     * must resolve; a dangling one is a baseline the verifier should already
+     * have rejected. */
+    size_t call_target_total = xr_semantic_plan_call_target_count(semantic);
+    if (call->semantic_call_target >= (uint32_t) call_target_total)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    const XrSemanticCallTargetRecord *semantic_target =
+        xr_semantic_plan_call_target(semantic, call->semantic_call_target);
+    if (!semantic_target)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    out_record->semantic_target_kind = semantic_target->kind;
+    /* The semantic layer must agree that the callee is closed: an open or
+     * indirect target would need devirtualization evidence this baseline does
+     * not carry. */
+    if (semantic_target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+        semantic_target->dependency != XR_SEMANTIC_INDEX_NONE ||
+        semantic_target->source_export != XR_SEMANTIC_INDEX_NONE)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED;
+
+    size_t function_total = xr_semantic_plan_function_count(semantic);
+    if (call->callee_function >= (uint32_t) function_total ||
+        call->caller_function >= (uint32_t) function_total)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(semantic, call->callee_function);
+    if (!callee)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    /* The target row must bind the same callee the semantic layer proved.
+     * A local target identifies its callee by index, and only the export-style
+     * targets also carry a callee stable id; when that id is present it has to
+     * agree, and the derived record below re-anchors the identity either way. */
+    static const XrStableId unset_callee = {{0}};
+    if (semantic_target->function != call->callee_function ||
+        (!xr_stable_id_equal(semantic_target->callee_function, unset_callee) &&
+         !xr_stable_id_equal(semantic_target->callee_function, callee->id)))
+        return XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY;
+    out_record->callee_identity = callee->id;
+    out_record->parameter_count = callee->parameter_count;
+
+    size_t operation_total = xr_semantic_plan_operation_count(semantic);
+    if (call->semantic_operation >= (uint32_t) operation_total)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, call->semantic_operation);
+    if (!operation)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    out_record->operation_id = operation->id;
+    if (operation->function != call->caller_function ||
+        semantic_target->operation != call->semantic_operation)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY;
+
+    uint32_t issue = direct_call_argument_map(target_plan, semantic, call,
+                                              callee,
+                                              &out_record->argument_map_fingerprint,
+                                              out_argument);
+    if (issue != XR_AOT_REFINEMENT_OK)
+        return issue;
+
+    /* Return mapping: the call must land the operation's own result value, by
+     * value, with an ownership action a direct return can produce. A caller
+     * storage indirection carries a separate materialization obligation that
+     * this binding does not discharge. */
+    if (call->result_value != operation->result_value ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        (call->result_ownership != XR_TARGET_CALL_NONE &&
+         call->result_ownership != XR_TARGET_CALL_RETURN_OWNED))
+        return XR_AOT_REFINEMENT_DIRECT_CALL_RESULT_MAPPING;
+
+    /* Effect mapping: a call that can suspend resumes into caller storage, so
+     * a non-void suspending result must already name the slot it resumes
+     * into. Re-derived here rather than taken from the planner's word. */
+    bool call_suspends = (call->flags & XR_TARGET_CALL_SUSPEND) != 0;
+    bool result_is_void = call->result_value == XR_SEMANTIC_INDEX_NONE;
+    if (call_suspends && !result_is_void &&
+        call->result_slot == XR_SEMANTIC_INDEX_NONE)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_EFFECT_MAPPING;
+
+    /* Error mapping: this binding proves only calls with no error edge. An
+     * error edge would need a landing slot plus the caller's cleanup mapping,
+     * and neither is discharged here, so such a row is refused rather than
+     * bound. */
+    if ((call->flags & XR_TARGET_CALL_ERROR) != 0 ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_ERROR_MAPPING;
+
+    /* Environment mapping: a capturing callee needs its environment threaded
+     * through the call, which is a separate proof. Only a capture-free callee
+     * with no environment edge is bound here. */
+    bool callee_captures = callee->capture_count != 0;
+    if (callee_captures || (call->flags & XR_TARGET_CALL_ENVIRONMENT) != 0)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_ENVIRONMENT_MAPPING;
+    out_record->environment_required = 0u;
+
+    /* Generation mapping: a generation barrier exists to re-resolve a callee
+     * that may be replaced. A closed local callee is fixed for this plan, so
+     * a barrier on it would contradict the closed-target proof. */
+    if ((call->flags & XR_TARGET_CALL_GENERATION) != 0)
+        return XR_AOT_REFINEMENT_DIRECT_CALL_GENERATION_MAPPING;
+    out_record->generation_required = 0u;
+
+    direct_call_record_fingerprint(baseline, out_record);
+    return XR_AOT_REFINEMENT_OK;
+}
+
 static bool append_record(XrAotRefinementBuilder *builder,
                           const XrAotTransformationRecord *record,
                           XrAotRefinementDiagnostic *diag) {
@@ -592,11 +922,14 @@ static void transformation_record_fingerprint(
     hash_u32(&ctx, record->decision);
     hash_u32(&ctx, record->transform_kind);
     hash_u32(&ctx, record->diagnostic_issue);
-    if (record->transform_kind == XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER)
+    if (record->transform_kind == XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER) {
         xr_sha256_update(&ctx, record->representation_adapter.fingerprint.bytes,
                          sizeof(record->representation_adapter.fingerprint.bytes));
-    else
+    } else {
         hash_u32(&ctx, record->direct_call.target_call_index);
+        xr_sha256_update(&ctx, record->direct_call_binding.fingerprint.bytes,
+                         sizeof(record->direct_call_binding.fingerprint.bytes));
+    }
     xr_sha256_final(&ctx, record->fingerprint.bytes);
 }
 
@@ -639,8 +972,6 @@ const char *xr_aot_refinement_issue_name(uint32_t issue) {
             return "XR_AOT_REFINEMENT_STALE_EVIDENCE";
         case XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE:
             return "XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE";
-        case XR_AOT_REFINEMENT_DIRECT_CALL_SCHEMA_UNAVAILABLE:
-            return "XR_AOT_REFINEMENT_DIRECT_CALL_SCHEMA_UNAVAILABLE";
         case XR_AOT_REFINEMENT_SOURCE_IDENTITY:
             return "XR_AOT_REFINEMENT_SOURCE_IDENTITY";
         case XR_AOT_REFINEMENT_USE_SITE:
@@ -673,6 +1004,22 @@ const char *xr_aot_refinement_issue_name(uint32_t issue) {
             return "XR_AOT_REFINEMENT_BACKEND_INCOMPLETE_COVERAGE";
         case XR_AOT_REFINEMENT_BACKEND_FAILURE:
             return "XR_AOT_REFINEMENT_BACKEND_FAILURE";
+        case XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED:
+            return "XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED";
+        case XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY:
+            return "XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY";
+        case XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING:
+            return "XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING";
+        case XR_AOT_REFINEMENT_DIRECT_CALL_RESULT_MAPPING:
+            return "XR_AOT_REFINEMENT_DIRECT_CALL_RESULT_MAPPING";
+        case XR_AOT_REFINEMENT_DIRECT_CALL_ERROR_MAPPING:
+            return "XR_AOT_REFINEMENT_DIRECT_CALL_ERROR_MAPPING";
+        case XR_AOT_REFINEMENT_DIRECT_CALL_ENVIRONMENT_MAPPING:
+            return "XR_AOT_REFINEMENT_DIRECT_CALL_ENVIRONMENT_MAPPING";
+        case XR_AOT_REFINEMENT_DIRECT_CALL_GENERATION_MAPPING:
+            return "XR_AOT_REFINEMENT_DIRECT_CALL_GENERATION_MAPPING";
+        case XR_AOT_REFINEMENT_DIRECT_CALL_EFFECT_MAPPING:
+            return "XR_AOT_REFINEMENT_DIRECT_CALL_EFFECT_MAPPING";
         default:
             return "XR_AOT_REFINEMENT_UNKNOWN";
     }
@@ -713,11 +1060,28 @@ XrAotInvariantState xr_aot_refinement_initial_state(
     XrAotInvariantState state = {0};
     for (uint32_t i = 0; i < XR_AOT_INV_COUNT; i++)
         state.generation[i] = 1;
-    if (baseline_valid(baseline) &&
-        (baseline->completed_family_mask & XR_TARGET_FAMILY_SCALAR) != 0) {
+    if (!baseline_valid(baseline))
+        return state;
+    if ((baseline->completed_family_mask & XR_TARGET_FAMILY_SCALAR) != 0) {
         state.available = XR_AOT_INV_BIT(XR_AOT_INV_CFG) |
                           XR_AOT_INV_BIT(XR_AOT_INV_VALUES) |
                           XR_AOT_INV_BIT(XR_AOT_INV_TYPES);
+    }
+    /* Call-shape evidence is published only for a baseline that completed
+     * every required family. Such a plan had its call, argument, slot, root,
+     * cleanup and capability tables verified as one unit, and those tables are
+     * exactly what a call-shape refinement reads. A partial family mask keeps
+     * the whole set withheld, so every consumer refuses instead of assuming. */
+    if ((baseline->completed_family_mask & XR_TARGET_REQUIRED_FAMILIES) ==
+        XR_TARGET_REQUIRED_FAMILIES) {
+        state.available |= XR_AOT_INV_BIT(XR_AOT_INV_CALL_TARGET) |
+                           XR_AOT_INV_BIT(XR_AOT_INV_CALL_ABI) |
+                           XR_AOT_INV_BIT(XR_AOT_INV_EFFECT) |
+                           XR_AOT_INV_BIT(XR_AOT_INV_OWNERSHIP) |
+                           XR_AOT_INV_BIT(XR_AOT_INV_LIFETIME) |
+                           XR_AOT_INV_BIT(XR_AOT_INV_ERROR) |
+                           XR_AOT_INV_BIT(XR_AOT_INV_ENVIRONMENT) |
+                           XR_AOT_INV_BIT(XR_AOT_INV_GENERATION);
     }
     return state;
 }
@@ -825,6 +1189,7 @@ bool xr_aot_refinement_try_direct_call(
     if (out_decision)
         *out_decision = 0;
     if (!builder || builder->frozen || !protocol_valid(protocol) ||
+        protocol->transform_kind != XR_AOT_TRANSFORM_DIRECT_CALL ||
         !target_plan || !request || !out_decision)
         return fail_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT,
                          builder ? builder->record_count : 0,
@@ -838,25 +1203,65 @@ bool xr_aot_refinement_try_direct_call(
         return fail_diag(diag, XR_AOT_REFINEMENT_BASELINE_FINGERPRINT,
                          builder->record_count, protocol->pass_id,
                          request->target_call_index);
-    /* Schema v1 deliberately does not snapshot an XrTargetCallRecord.  The
-     * call family must first define its closed-target and mapping contract;
-     * until then this typed row request remains a refusal-only audit record. */
-    uint32_t issue = XR_AOT_REFINEMENT_DIRECT_CALL_SCHEMA_UNAVAILABLE;
+    /* Evidence gate first: a pass may not read call-shape facts the current
+     * state no longer publishes, whatever the row itself looks like. */
     if ((builder->current_state.available & protocol->requires) !=
-        protocol->requires)
-        issue = XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE;
+        protocol->requires) {
+        XrAotTransformationRecord stale = {
+            .protocol = *protocol,
+            .input_state = builder->current_state,
+            .output_state = builder->current_state,
+            .direct_call = *request,
+            .decision = XR_AOT_REFINEMENT_REFUSED,
+            .transform_kind = XR_AOT_TRANSFORM_DIRECT_CALL,
+            .diagnostic_issue = XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE,
+        };
+        if (!append_record(builder, &stale, diag))
+            return false;
+        *out_decision = XR_AOT_REFINEMENT_REFUSED;
+        write_diag(diag, XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE,
+                   builder->record_count - 1u, protocol->pass_id,
+                   request->target_call_index);
+        return true;
+    }
+    XrAotDirectCallRecord binding = {0};
+    uint32_t argument_index = 0;
+    uint32_t issue = derive_direct_call_record(&builder->baseline, target_plan,
+                                               request, &binding,
+                                               &argument_index);
+    /* A structural fault means the verified baseline disagrees with itself,
+     * which the checker must surface as a failure rather than a refusal. */
+    if (issue == XR_AOT_REFINEMENT_INVALID_ARGUMENT ||
+        issue == XR_AOT_REFINEMENT_PLAN_STATE) {
+        fail_diag(diag, issue, builder->record_count, protocol->pass_id,
+                  request->target_call_index);
+        if (diag)
+            diag->semantic_operation = argument_index;
+        return false;
+    }
+    uint32_t decision = issue == XR_AOT_REFINEMENT_OK
+                            ? XR_AOT_REFINEMENT_APPLIED
+                            : XR_AOT_REFINEMENT_REFUSED;
+    /* A refusal keeps no derived binding: nothing downstream may read facts
+     * from a transformation that was not proved. */
+    if (decision != XR_AOT_REFINEMENT_APPLIED) {
+        uint32_t call_index = request->target_call_index;
+        memset(&binding, 0, sizeof(binding));
+        binding.target_call_index = call_index;
+    }
     XrAotTransformationRecord record = {
         .protocol = *protocol,
         .input_state = builder->current_state,
         .output_state = builder->current_state,
         .direct_call = *request,
-        .decision = XR_AOT_REFINEMENT_REFUSED,
+        .direct_call_binding = binding,
+        .decision = (uint16_t) decision,
         .transform_kind = XR_AOT_TRANSFORM_DIRECT_CALL,
         .diagnostic_issue = issue,
     };
     if (!append_record(builder, &record, diag))
         return false;
-    *out_decision = XR_AOT_REFINEMENT_REFUSED;
+    *out_decision = decision;
     write_diag(diag, issue, builder->record_count - 1u, protocol->pass_id,
                request->target_call_index);
     return true;
@@ -949,6 +1354,7 @@ static bool verify_view(const XrAotRefinementPlanView *view,
     if (!state_equal(&expected, &view->initial_state))
         return fail_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, 0, 0, 0);
     static const XrAotDirectCallRequest empty_direct_call = {0};
+    static const XrAotDirectCallRecord empty_binding = {0};
     static const XrAotRepresentationAdapterRecord empty_adapter = {0};
     for (uint32_t i = 0; i < view->record_count; i++) {
         const XrAotTransformationRecord *record = &view->records[i];
@@ -957,13 +1363,19 @@ static bool verify_view(const XrAotRefinementPlanView *view,
             return fail_diag(diag, XR_AOT_REFINEMENT_PASS_PROTOCOL, i,
                              record->protocol.pass_id,
                              record->direct_call.target_call_index);
+        /* Each transform kind owns exactly one payload; the other must stay
+         * zeroed so no consumer can read a field this kind never proved. */
         if ((record->transform_kind == XR_AOT_TRANSFORM_DIRECT_CALL &&
-             memcmp(&record->representation_adapter, &empty_adapter,
-                    sizeof(empty_adapter)) != 0) ||
+             (memcmp(&record->representation_adapter, &empty_adapter,
+                     sizeof(empty_adapter)) != 0 ||
+              record->direct_call_binding.target_call_index !=
+                  record->direct_call.target_call_index)) ||
             (record->transform_kind ==
                  XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER &&
              (memcmp(&record->direct_call, &empty_direct_call,
                      sizeof(empty_direct_call)) != 0 ||
+              memcmp(&record->direct_call_binding, &empty_binding,
+                     sizeof(empty_binding)) != 0 ||
               record->representation_adapter.reserved != 0)))
             return fail_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, i,
                              record->protocol.pass_id, 0);
@@ -989,15 +1401,54 @@ static bool verify_view(const XrAotRefinementPlanView *view,
                              record->protocol.pass_id,
                              record->direct_call.target_call_index);
         if (record->transform_kind == XR_AOT_TRANSFORM_DIRECT_CALL) {
-            uint32_t issue = XR_AOT_REFINEMENT_DIRECT_CALL_SCHEMA_UNAVAILABLE;
-            if ((expected.available & record->protocol.requires) !=
-                record->protocol.requires)
-                issue = XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE;
-            if (record->decision != XR_AOT_REFINEMENT_REFUSED ||
-                record->diagnostic_issue != issue ||
-                !state_equal(&record->output_state, &record->input_state))
+            /* Recording a proven binding edits nothing, so the state must be
+             * carried through unchanged; the protocol's invalidation mask
+             * applies to a consumer that goes on to apply the binding. */
+            if (!state_equal(&record->output_state, &record->input_state))
                 return fail_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, i,
                                  record->protocol.pass_id,
+                                 record->direct_call.target_call_index);
+            uint32_t issue;
+            XrAotDirectCallRecord derived = {0};
+            uint32_t argument_index = 0;
+            if ((expected.available & record->protocol.requires) !=
+                record->protocol.requires) {
+                issue = XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE;
+            } else {
+                /* Re-derive the binding from the baseline instead of trusting
+                 * the recorded one. A record survives only if this
+                 * independent pass reaches the same verdict and the same
+                 * facts. */
+                issue = derive_direct_call_record(&view->baseline, target_plan,
+                                                  &record->direct_call,
+                                                  &derived, &argument_index);
+                if (issue == XR_AOT_REFINEMENT_INVALID_ARGUMENT ||
+                    issue == XR_AOT_REFINEMENT_PLAN_STATE) {
+                    fail_diag(diag, issue, i, record->protocol.pass_id,
+                              record->direct_call.target_call_index);
+                    if (diag)
+                        diag->semantic_operation = argument_index;
+                    return false;
+                }
+            }
+            uint32_t expected_decision = issue == XR_AOT_REFINEMENT_OK
+                                             ? XR_AOT_REFINEMENT_APPLIED
+                                             : XR_AOT_REFINEMENT_REFUSED;
+            if (expected_decision != XR_AOT_REFINEMENT_APPLIED) {
+                uint32_t call_index = record->direct_call.target_call_index;
+                memset(&derived, 0, sizeof(derived));
+                derived.target_call_index = call_index;
+            }
+            if (record->decision != expected_decision ||
+                record->diagnostic_issue != issue)
+                return fail_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, i,
+                                 record->protocol.pass_id,
+                                 record->direct_call.target_call_index);
+            uint32_t mismatch =
+                direct_call_record_mismatch(&record->direct_call_binding,
+                                            &derived);
+            if (mismatch != XR_AOT_REFINEMENT_OK)
+                return fail_diag(diag, mismatch, i, record->protocol.pass_id,
                                  record->direct_call.target_call_index);
             XrAotTransformationRecord fingerprint_record = *record;
             memset(&fingerprint_record.fingerprint, 0,
@@ -1201,6 +1652,57 @@ XrAotRefinementPlanView xr_aot_refinement_plan_view(
     return plan ? plan->view : empty;
 }
 
+uint32_t xr_aot_refinement_direct_call_applied_count(
+    const XrAotRefinementPlanView *view) {
+    if (!view || !view->frozen || !view->verified || !view->records)
+        return 0;
+    uint32_t applied = 0;
+    for (uint32_t i = 0; i < view->record_count; i++) {
+        if (view->records[i].transform_kind == XR_AOT_TRANSFORM_DIRECT_CALL &&
+            view->records[i].decision == XR_AOT_REFINEMENT_APPLIED)
+            applied++;
+    }
+    return applied;
+}
+
+bool xr_aot_refinement_direct_call_authority_build(
+    const XrTargetPlan *target_plan, uint32_t pass_id,
+    XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag) {
+    clear_diag(diag);
+    if (!target_plan || pass_id == 0 || !out_plan)
+        return fail_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT, 0, pass_id, 0);
+    *out_plan = NULL;
+    uint32_t call_count = 0;
+    if (!xr_target_plan_calls(target_plan, &call_count) && call_count != 0)
+        return fail_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, 0, pass_id, 0);
+    if (call_count > XR_AOT_REFINEMENT_MAX_RECORDS)
+        return fail_diag(diag, XR_AOT_REFINEMENT_RESOURCE_BUDGET, 0, pass_id, 0);
+    XrAotRefinementBuilder *builder =
+        xr_aot_refinement_builder_create(target_plan, diag);
+    if (!builder)
+        return false;
+    XrAotPassProtocol protocol = xr_aot_refinement_direct_call_protocol(pass_id);
+    /* Every call row is visited, so coverage is total: a row that cannot be
+     * proved becomes an explicit refusal rather than an absent record. */
+    for (uint32_t i = 0; i < call_count; i++) {
+        XrAotDirectCallRequest request = {.target_call_index = i};
+        uint32_t decision = 0;
+        if (!xr_aot_refinement_try_direct_call(builder, &protocol, target_plan,
+                                               &request, &decision, diag)) {
+            xr_aot_refinement_builder_free(builder);
+            return false;
+        }
+    }
+    XrAotRefinementPlan *plan = NULL;
+    if (!xr_aot_refinement_builder_freeze(builder, target_plan, &plan, diag)) {
+        xr_aot_refinement_builder_free(builder);
+        return false;
+    }
+    xr_aot_refinement_builder_free(builder);
+    *out_plan = plan;
+    return true;
+}
+
 bool xr_aot_refinement_verify(const XrAotRefinementPlanView *view,
                               const XrTargetPlan *target_plan,
                               XrAotRefinementDiagnostic *diag) {
@@ -1365,11 +1867,17 @@ static bool test_visit(void *context, uint32_t index,
             (unsigned) adapter->layout,
             xr_aot_refinement_issue_name(record->diagnostic_issue));
     }
+    const XrAotDirectCallRecord *binding = &record->direct_call_binding;
     return test_append(
         backend,
-        "record=%u pass=%u transform=direct-call decision=refused target-call=%u issue=%s\n",
+        "record=%u pass=%u transform=direct-call decision=%s target-call=%u "
+        "callee=%u args=%u/%u issue=%s\n",
         (unsigned) index, (unsigned) record->protocol.pass_id,
+        record->decision == XR_AOT_REFINEMENT_APPLIED ? "applied" : "refused",
         (unsigned) record->direct_call.target_call_index,
+        (unsigned) binding->callee_function,
+        (unsigned) binding->argument_count,
+        (unsigned) binding->parameter_count,
         xr_aot_refinement_issue_name(record->diagnostic_issue));
 }
 
