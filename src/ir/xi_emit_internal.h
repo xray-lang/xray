@@ -244,6 +244,7 @@ XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid);
 
 /* ========== Functions from xi_emit_reg.c ========== */
 XR_FUNC void compute_last_use(EmitCtx *ctx);
+XR_FUNC void check_var_interference(EmitCtx *ctx);
 XR_FUNC void alloc_registers(EmitCtx *ctx);
 
 /* ========== Functions from xi_emit_cf.c ========== */

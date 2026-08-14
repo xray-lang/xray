@@ -439,25 +439,15 @@ XR_FUNC XiLiveness *xi_compute_liveness(XiFunc *f) {
             /* Compute new live_in: start from live_out */
             memcpy(new_in, out, set_words * sizeof(uint64_t));
 
-            /* Walk instructions backward: remove defs, add uses */
-            for (int i = (int) blk->nvalues - 1; i >= 0; i--) {
-                XiValue *v = blk->values[i];
-
-                /* Remove def */
-                bitset_clear(new_in, v->id);
-
-                /* Add uses */
-                for (uint16_t a = 0; a < v->nargs; a++) {
-                    if (v->args[a])
-                        bitset_set(new_in, v->args[a]->id);
-                }
-            }
-
-            /* Add uses from block control */
+            /* Seed the reads that happen at the block exit before the backward
+             * walk, so a definition inside this block kills them.  The block
+             * control is read by the terminator and successor phi operands are
+             * read on the outgoing edge; adding either after the walk would
+             * mark a value defined here as live at this block's own entry, and
+             * that bit then propagates backward through every predecessor. */
             if (blk->control)
                 bitset_set(new_in, blk->control->id);
 
-            /* Add uses from phi nodes of successors (this block's contribution) */
             for (int s = 0; s < 2; s++) {
                 XiBlock *succ = blk->succs[s];
                 if (!succ)
@@ -472,6 +462,20 @@ XR_FUNC XiLiveness *xi_compute_liveness(XiFunc *f) {
                             break;
                         }
                     }
+                }
+            }
+
+            /* Walk instructions backward: remove defs, add uses */
+            for (int i = (int) blk->nvalues - 1; i >= 0; i--) {
+                XiValue *v = blk->values[i];
+
+                /* Remove def */
+                bitset_clear(new_in, v->id);
+
+                /* Add uses */
+                for (uint16_t a = 0; a < v->nargs; a++) {
+                    if (v->args[a])
+                        bitset_set(new_in, v->args[a]->id);
                 }
             }
 
