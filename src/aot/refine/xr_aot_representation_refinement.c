@@ -4872,6 +4872,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_direct_local_string_result_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
+                !oracle_dynamic_array_allocation_storage(
+                    ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_channel_storage(
