@@ -1284,23 +1284,27 @@ static inline int xrt_value_is_type_id(XrValue v, int64_t tid) {
 
 /* typename(x) — return the debug/logging type name as a string value. */
 static inline XrValue xrt_typename(XrValue v) {
-    XRT_STR_LIT_DEF(xs_int, "int");
-    XRT_STR_LIT_DEF(xs_float, "float");
-    XRT_STR_LIT_DEF(xs_bool, "bool");
-    XRT_STR_LIT_DEF(xs_rune, "char");
-    XRT_STR_LIT_DEF(xs_null, "null");
-    XRT_STR_LIT_DEF(xs_string, "string");
-    XRT_STR_LIT_DEF(xs_array, "Array");
-    XRT_STR_LIT_DEF(xs_set, "Set");
-    XRT_STR_LIT_DEF(xs_map, "Map");
-    XRT_STR_LIT_DEF(xs_function, "function");
-    XRT_STR_LIT_DEF(xs_strbuf, "StringBuilder");
+    /* Spelled through the shared TYPE_NAME_* vocabulary rather than repeated as
+     * literals: this table is keyed by tag instead of type id, so it is the one
+     * name source the type-id table cannot pin. Renaming rune once left "char"
+     * behind here for exactly that reason. */
+    XRT_STR_LIT_DEF(xs_int, TYPE_NAME_INT);
+    XRT_STR_LIT_DEF(xs_float, TYPE_NAME_FLOAT);
+    XRT_STR_LIT_DEF(xs_bool, TYPE_NAME_BOOL);
+    XRT_STR_LIT_DEF(xs_rune, TYPE_NAME_RUNE);
+    XRT_STR_LIT_DEF(xs_null, TYPE_NAME_NULL);
+    XRT_STR_LIT_DEF(xs_string, TYPE_NAME_STRING);
+    XRT_STR_LIT_DEF(xs_array, TYPE_NAME_ARRAY);
+    XRT_STR_LIT_DEF(xs_set, TYPE_NAME_SET);
+    XRT_STR_LIT_DEF(xs_map, TYPE_NAME_MAP);
+    XRT_STR_LIT_DEF(xs_function, TYPE_NAME_FUNCTION);
+    XRT_STR_LIT_DEF(xs_strbuf, TYPE_NAME_STRINGBUILDER);
     XRT_STR_LIT_DEF(xs_tuple, "tuple");
-    XRT_STR_LIT_DEF(xs_range, "Range");
-    XRT_STR_LIT_DEF(xs_bigint, "BigInt");
-    XRT_STR_LIT_DEF(xs_net_conn, "NetConn");
-    XRT_STR_LIT_DEF(xs_net_listener, "NetListener");
-    XRT_STR_LIT_DEF(xs_object, "object");
+    XRT_STR_LIT_DEF(xs_range, TYPE_NAME_RANGE);
+    XRT_STR_LIT_DEF(xs_bigint, TYPE_NAME_BIGINT);
+    XRT_STR_LIT_DEF(xs_net_conn, TYPE_NAME_NETCONN);
+    XRT_STR_LIT_DEF(xs_net_listener, TYPE_NAME_NETLISTENER);
+    XRT_STR_LIT_DEF(xs_object, TYPE_NAME_OBJECT);
     switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
             return xr_str_lit(&xs_int);
