@@ -587,21 +587,86 @@ static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk
     }
 }
 
-/* Check 7: unique value IDs within function */
+/* Check 7a: var_id names a source variable of this function.
+ *
+ * var_id is an index, not a label: the VM emitter reads var_reg[var_id] to
+ * decide which register a value is pinned to, closure conversion binds local
+ * cells by it, ARC matches same-variable stores through it, and copy
+ * propagation refuses to cross definitions that share it.  A var_id past
+ * source_var_count therefore reads a neighbouring variable's storage or runs
+ * off the end of the per-variable arrays.
+ *
+ * The lowerer already asserts this on the IR it produces, but that assertion
+ * is compiled out of release builds and only ever sees the pre-optimization
+ * shape.  It could not be promoted to a verifier check while inlining cloned
+ * callee values with the callee's own numbering intact, because the verifier
+ * also runs after inlining; now that a cloned value carries no source-variable
+ * identity in the caller, the bound holds at every stage and every pass
+ * boundary, which is where the consumers above actually read it. */
+static void verify_var_ids(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed)
+        return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *v = blk->values[i];
+            if (!v || !xi_var_id_is_valid(v->var_id))
+                continue;
+            if (v->var_id >= f->source_var_count) {
+                verr(ctx,
+                     "func '%s': v%u %s in b%u has var_id %u but the function "
+                     "declares %u source variables",
+                     f->name, v->id, xi_op_name(v->op), blk->id, (unsigned) v->var_id,
+                     f->source_var_count);
+                return;
+            }
+        }
+
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (!xi_var_id_is_valid(phi->value.var_id))
+                continue;
+            if (phi->value.var_id >= f->source_var_count) {
+                verr(ctx,
+                     "func '%s': phi v%u in b%u has var_id %u but the function "
+                     "declares %u source variables",
+                     f->name, phi->value.id, blk->id, (unsigned) phi->value.var_id,
+                     f->source_var_count);
+                return;
+            }
+        }
+    }
+}
+
+/* Check 7: unique value IDs within function.
+ *
+ * The bitset is sized from next_value_id and heap-allocated.  It used to be a
+ * fixed 1250-byte stack array with the check disabling itself above 10000 ids,
+ * which made the invariant depend on a number the function does not control:
+ * next_value_id is a monotone counter that every value ever created advances,
+ * including every value DCE has since deleted, so the trigger tracks a
+ * function's total churn through the pipeline rather than its size.  A value
+ * id is an index into reg_map in the emitter and into the liveness bitsets, so
+ * a duplicate is a wrong answer, not a slow one; it must not stop being
+ * checked because a function was rewritten often enough. */
 static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
 
-    /* Use a simple O(n) scan; for typical function sizes this is fine. */
     uint32_t max_id = f->next_value_id;
+    if (max_id == 0)
+        return;
 
-    /* Track seen IDs with a bitmap if small enough, else skip. */
-    if (max_id > 10000)
-        return; /* skip for very large functions */
-
-    /* Stack-allocate a bitset. Max ~1.2 KB for 10000 IDs. */
-    uint8_t seen[1250];
-    memset(seen, 0, sizeof(seen));
+    size_t nbytes = ((size_t) max_id + 7u) / 8u;
+    uint8_t *seen = (uint8_t *) xr_malloc(nbytes);
+    if (!seen) {
+        verr(ctx, "func '%s': cannot allocate value id map for %u ids", f->name, max_id);
+        return;
+    }
+    memset(seen, 0, nbytes);
 
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
@@ -610,17 +675,17 @@ static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
             uint32_t vid = blk->values[i]->id;
             if (vid >= max_id) {
                 verr(ctx, "func '%s': value v%u >= next_value_id %u", f->name, vid, max_id);
+                xr_free(seen);
                 return;
             }
             uint32_t byte = vid / 8;
             uint8_t bit = (uint8_t) (1 << (vid & 7));
-            if (byte < sizeof(seen)) {
-                if (seen[byte] & bit) {
-                    verr(ctx, "func '%s': duplicate value ID v%u", f->name, vid);
-                    return;
-                }
-                seen[byte] |= bit;
+            if (seen[byte] & bit) {
+                verr(ctx, "func '%s': duplicate value ID v%u", f->name, vid);
+                xr_free(seen);
+                return;
             }
+            seen[byte] |= bit;
         }
 
         /* Also check phi IDs */
@@ -628,19 +693,21 @@ static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
             uint32_t vid = phi->value.id;
             if (vid >= max_id) {
                 verr(ctx, "func '%s': phi v%u >= next_value_id %u", f->name, vid, max_id);
+                xr_free(seen);
                 return;
             }
             uint32_t byte = vid / 8;
             uint8_t bit = (uint8_t) (1 << (vid & 7));
-            if (byte < sizeof(seen)) {
-                if (seen[byte] & bit) {
-                    verr(ctx, "func '%s': duplicate phi ID v%u", f->name, vid);
-                    return;
-                }
-                seen[byte] |= bit;
+            if (seen[byte] & bit) {
+                verr(ctx, "func '%s': duplicate phi ID v%u", f->name, vid);
+                xr_free(seen);
+                return;
             }
+            seen[byte] |= bit;
         }
     }
+
+    xr_free(seen);
 }
 
 /* ========== Check 8: SSA Dominance ========== */
@@ -1592,10 +1659,36 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
 
 /* ========== Check 14: Tail Call Safety ========== */
 
-/* XI_FLAG_TAIL may only appear on call ops.
- * XI_CALL with tail flag must either be a self-call (aux_int & 0xFF == 1)
- * or the callee must be typed as a function.  Class constructors etc.
- * are not safe tail-call targets because OP_TAILCALL only handles closures. */
+/* True when the value's callee slot holds a value typed as a function.
+ * Both tail forms load args[0] as the thing to enter, so this is the whole
+ * question for either of them. */
+static bool verify_tail_callee_is_function(const XiValue *v) {
+    return v->nargs >= 1 && v->args[0] && v->args[0]->type &&
+           v->args[0]->type->kind == XR_KIND_FUNCTION;
+}
+
+static uint32_t verify_tail_callee_kind(const XiValue *v) {
+    return v->nargs >= 1 && v->args[0] && v->args[0]->type ? v->args[0]->type->kind : 0;
+}
+
+/* Tail calls reach the emitters in two shapes, and both must be checked
+ * through the spelling they actually carry.
+ *
+ * XI_FLAG_TAIL may only appear on call ops.  A flagged XI_CALL must either be
+ * a self-call (its callee slot holds the placeholder constant the self
+ * encoding uses, and only the self-aware emission reads the frame's own
+ * closure) or its callee must be typed as a function.  Class constructors etc.
+ * are not safe tail-call targets because OP_TAILCALL only handles closures.
+ *
+ * XI_TAIL_CALL is the promoted form: xi_opt_tail_call moves the tail semantics
+ * into the opcode and clears the flag, so a flag-keyed scan stops seeing the
+ * call at exactly the point the general tail path takes it over.  From there
+ * xi_emit_tail_call reads args[0] as the callee register unconditionally, so
+ * the promoted form needs the callee contract stated against its opcode: a
+ * function-typed callee, and never the self placeholder, which promotion
+ * refuses precisely because that slot holds a constant nobody may enter.
+ * XI_CALL and XI_TAIL_CALL are both variadic, so verify_op_arity skips them
+ * and this is the only place the callee slot is required to exist at all. */
 static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -1606,7 +1699,45 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
             continue;
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v || !(v->flags & XI_FLAG_TAIL))
+            if (!v)
+                continue;
+
+            if (v->op == XI_TAIL_CALL) {
+                /* The flag is absorbed into the opcode; carrying both means
+                 * two owners of the same fact. */
+                if (v->flags & XI_FLAG_TAIL) {
+                    verr(ctx,
+                         "func '%s': XI_TAIL_CALL v%u in b%u still carries "
+                         "XI_FLAG_TAIL",
+                         f->name, v->id, blk->id);
+                    return;
+                }
+                if (v->nargs < 1 || !v->args[0]) {
+                    verr(ctx, "func '%s': XI_TAIL_CALL v%u in b%u has no callee operand", f->name,
+                         v->id, blk->id);
+                    return;
+                }
+                /* The self flag survives in aux_int even though the opcode is
+                 * no longer XI_CALL, so ask the immediate directly. */
+                if ((v->aux_int & XI_CALL_FLAGS_MASK) == XI_CALL_FLAG_SELF) {
+                    verr(ctx,
+                         "func '%s': XI_TAIL_CALL v%u in b%u targets its own "
+                         "activation, whose callee slot is a placeholder the "
+                         "general tail path would enter",
+                         f->name, v->id, blk->id);
+                    return;
+                }
+                if (!verify_tail_callee_is_function(v)) {
+                    verr(ctx,
+                         "func '%s': XI_TAIL_CALL v%u in b%u has a callee that "
+                         "is not a function (kind=%u)",
+                         f->name, v->id, blk->id, verify_tail_callee_kind(v));
+                    return;
+                }
+                continue;
+            }
+
+            if (!(v->flags & XI_FLAG_TAIL))
                 continue;
 
             /* Only call ops may carry tail flag */
@@ -1621,15 +1752,12 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
             /* XI_CALL: must be self-call or callee typed as function */
             if (v->op == XI_CALL) {
                 bool is_self = xi_call_targets_own_frame(v->op, v->aux_int);
-                bool callee_is_func = v->nargs >= 1 && v->args[0] && v->args[0]->type &&
-                                      v->args[0]->type->kind == XR_KIND_FUNCTION;
-                if (!is_self && !callee_is_func) {
+                if (!is_self && !verify_tail_callee_is_function(v)) {
                     verr(ctx,
                          "func '%s': XI_CALL v%u in b%u has XI_FLAG_TAIL "
                          "but callee is not a function (kind=%u) and "
                          "not a self-call",
-                         f->name, v->id, blk->id,
-                         v->args[0] && v->args[0]->type ? v->args[0]->type->kind : 0);
+                         f->name, v->id, blk->id, verify_tail_callee_kind(v));
                     return;
                 }
             }
@@ -3015,6 +3143,11 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
 
         /* CFG edges */
         verify_cfg_edges(&ctx, f, blk);
+    }
+
+    /* Source variable identity domain */
+    if (!ctx.failed) {
+        verify_var_ids(&ctx, f);
     }
 
     /* Unique IDs */

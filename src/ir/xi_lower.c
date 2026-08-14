@@ -1510,10 +1510,10 @@ XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name) {
  * XI_NO_VAR_ID or a real index < var_count. Register
  * coalescing in xi_emit (reg_of) keys on var_id, so a stray one silently pins
  * an unrelated value onto a live local's register — the exact failure that made
- * a temporary && / || / ternary phi clobber variable #0. This lives here, NOT
- * in xi_verify: inlining clones callee values keeping their own var_ids (which
- * are out of the caller's range), and xi_verify also runs post-inline, so the
- * bound only holds on the pre-inline IR available at lowering time. */
+ * a temporary && / || / ternary phi clobber variable #0. This names the lowerer
+ * against its own live var_count while it is still building the table; the
+ * verifier states the same bound against the finished XiFunc at every stage,
+ * which is where the bound has to hold for the passes that come after. */
 static void xi_lower_assert_var_ids(const XiLower *l, const XiFunc *f) {
     if (!f)
         return;
