@@ -179,6 +179,12 @@ typedef XiPassChange (*XiPassMaskedFn)(XiFunc *f, XiOptDisableMask disabled);
  * driver's walk over the pass table. Out-of-range ids are not withheld. */
 XR_FUNC bool xi_pass_withheld_by_mask(XiOptDisableMask disabled, int pass_id);
 
+/* True when the pass at `pass_id` carries XI_PASS_REQUIRED, so no mask can
+ * withhold it. The spec parser asks before accepting a pass name, because a
+ * spec that names a required pass is a request the compiler cannot honour.
+ * Out-of-range ids are not required. */
+XR_FUNC bool xi_pass_id_is_required(int pass_id);
+
 /* Flags describing per-pass properties */
 #define XI_PASS_NONE 0u
 #define XI_PASS_NEEDS_DOM (1u << 0)    /* requires dominator tree */

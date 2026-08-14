@@ -4472,6 +4472,12 @@ XR_FUNC bool xi_pass_withheld_by_mask(XiOptDisableMask disabled, int pass_id) {
     return pass_disabled_by_mask(&xi_pass_table[pass_id], (size_t) pass_id, disabled);
 }
 
+XR_FUNC bool xi_pass_id_is_required(int pass_id) {
+    if (pass_id < 0 || (size_t) pass_id >= XI_PASS_TABLE_SIZE)
+        return false;
+    return (xi_pass_table[pass_id].flags & XI_PASS_REQUIRED) != 0;
+}
+
 static void stats_merge(XiPipelineStats *dst, const XiPipelineStats *src) {
     if (!dst || !src)
         return;
