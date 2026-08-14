@@ -68,25 +68,6 @@ static bool derived_iv_eligible(const XiDerivedIV *div) {
     return true;
 }
 
-/* The loop must have a unique preheader and a single back-edge so the
- * generated phi has unambiguous slots. */
-static bool loop_shape_eligible(const XiLoop *L) {
-    if (!L || !L->header || !L->preheader || !L->latch)
-        return false;
-    /* MVP: header must have exactly two predecessors so j_phi is a
-     * 2-arg phi — preheader and latch.  Multi-latch loops are skipped. */
-    if (L->header->npreds != 2)
-        return false;
-    bool has_pre = false, has_latch = false;
-    for (uint16_t p = 0; p < L->header->npreds; p++) {
-        if (L->header->preds[p] == L->preheader)
-            has_pre = true;
-        else if (L->header->preds[p] == L->latch)
-            has_latch = true;
-    }
-    return has_pre && has_latch;
-}
-
 /* ========== Rewrite ========== */
 
 /* Build `j_start = i_start * c (+ k)` at the tail of the preheader.
@@ -198,7 +179,7 @@ XR_FUNC XiPassChange xi_opt_ivsr(XiFunc *f) {
      * loops because XiLoopInfo segregates them per-loop. */
     for (uint32_t li = 0; li < loops->nloop; li++) {
         XiLoop *L = loops->all_loops[li];
-        if (!loop_shape_eligible(L))
+        if (!xi_loop_shape_is_simple(L))
             continue;
 
         for (uint32_t di = 0; di < L->nderived_ivs; di++) {

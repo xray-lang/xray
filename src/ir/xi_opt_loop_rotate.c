@@ -113,23 +113,18 @@ static bool header_defs_are_guardable(const XiLoop *loop, const RotateMap *start
 }
 
 static bool loop_shape_eligible(const XiLoop *loop) {
-    if (!loop || !loop->header || !loop->preheader || !loop->latch)
+    if (!xi_loop_header_shape_is_simple(loop))
         return false;
     XiBlock *header = loop->header;
     XiBlock *body = header->succs[0];
     XiBlock *exit_blk = header->succs[1];
-    if (header->kind != XI_BLOCK_IF || !header->control || !body || !exit_blk || body == exit_blk)
-        return false;
-    if (body == header || exit_blk == header || header->npreds != 2)
+    if (!body || !exit_blk || body == exit_blk || body == header || exit_blk == header)
         return false;
     if (!xi_loop_contains_block(loop, body) || xi_loop_contains_block(loop, exit_blk))
         return false;
     if (!xi_loop_contains_block(loop, loop->latch) || xi_loop_contains_block(loop, loop->preheader))
         return false;
-    if (body->npreds != 1 || body->preds[0] != header || body->phis != NULL)
-        return false;
-    return xi_cfg_pred_index(header, loop->preheader) < header->npreds &&
-           xi_cfg_pred_index(header, loop->latch) < header->npreds;
+    return body->npreds == 1 && body->preds[0] == header && body->phis == NULL;
 }
 
 static bool build_start_map(XiFunc *f, XiBlock *header, XiBlock *preheader, RotateMap *start_map) {
