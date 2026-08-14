@@ -101,6 +101,42 @@ static inline bool xr_stdlib_metadata_link_dependency_module_known(const char *n
     return false;
 }
 
+/* The frozen definition registry is the only authority over which native
+ * stdlib member a namespace callsite may dispatch to without a backend lookup.
+ * A member qualifies when the registry names exactly one entry for the module
+ * and the selector, the declared arity matches the callsite, every argument
+ * crosses the boundary as one plain tagged value, the member returns a single
+ * value through the generated direct shim, and no conditional compilation,
+ * result enum, or runtime capability qualifies the row.
+ *
+ * The `builtin` AOT form is refused on purpose and is not a module exclusion:
+ * the native backend rewrites those callsites into a different operation after
+ * the SemanticPlan is already frozen, so no frozen row can describe the shape
+ * the backend actually emits. A `yieldable` binding is refused because it
+ * suspends, which is a coroutine-state fact this row does not state. */
+static inline const XrStdlibDefEntry *
+xr_stdlib_metadata_exact_native_direct_member(const char *module, const char *name,
+                                              uint16_t argument_count) {
+    const XrStdlibDefEntry *entry = xr_stdlib_metadata_unique_func(module, name);
+    if (!entry || entry->argc != argument_count || !entry->aot_direct || !entry->aot ||
+        !entry->aot_kind || !entry->ret || !entry->vm || !entry->vm_binding ||
+        !entry->arg_spec || !entry->aot_enum || !entry->vm_ifdef || !entry->define ||
+        !entry->signature)
+        return NULL;
+    if (entry->aot[0] == '\0' || entry->vm[0] == '\0' ||
+        strcmp(entry->aot_kind, "method") != 0 || strcmp(entry->ret, "value") != 0 ||
+        strcmp(entry->vm_binding, "normal") != 0 || entry->aot_enum[0] != '\0' ||
+        entry->vm_ifdef[0] != '\0' || entry->define[0] != '\0' ||
+        entry->runtime_capabilities != 0u)
+        return NULL;
+    uint32_t spec = 0;
+    for (; entry->arg_spec[spec] != '\0'; spec++) {
+        if (entry->arg_spec[spec] != 'v')
+            return NULL;
+    }
+    return spec == (uint32_t) argument_count ? entry : NULL;
+}
+
 static inline bool xr_stdlib_metadata_func_is_yieldable(const char *module, const char *name) {
     const XrStdlibDefEntry *entry = xr_stdlib_metadata_unique_func(module, name);
     return entry && entry->signature && entry->vm && entry->vm_binding &&

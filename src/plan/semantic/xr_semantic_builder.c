@@ -2885,6 +2885,183 @@ static bool semantic_array_push_scalar_exact(const XrSemanticBuildContext *ctx,
            record->return_complete == 0;
 }
 
+/* One plain machine scalar with no reference, no null encoding and no
+ * aggregate extent. Every other result and argument shape stays refused,
+ * because a reference-capable value would leave an ownership obligation this
+ * row does not state. */
+static bool semantic_native_module_scalar_type_exact(const XrSemanticTypeRecord *type) {
+    return type && (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
+                    type->kind == XR_KIND_BOOL) &&
+           type->builtin_type == XR_TID_NULL && type->scalar_rep != XR_SCALAR_REP_NONE &&
+           type->flags == 0 && type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE;
+}
+
+/* The module-init import reference of a native stdlib namespace. No source
+ * declaration can produce this record: the frozen import classification is
+ * resolved against the native registry rather than against a compiled module,
+ * and the frozen metadata pair names the module path with an empty member, so
+ * a member import and a source-module namespace both stay outside. */
+static bool semantic_native_module_namespace_import_exact(const XrSemanticPlan *plan,
+                                                          const XrSemanticOperationRecord *record,
+                                                          const char **out_module_path) {
+    uint32_t metadata_count = 0;
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    const XrSemanticTypeRecord *type =
+        record ? xr_semantic_plan_type(plan, record->result_type) : NULL;
+    XrStableId zero = {{0}};
+    if (!record || !type || !metadata || record->opcode != XI_IMPORT_REF ||
+        record->function != 0 || record->operand_count != 0 || record->metadata_count != 2 ||
+        record->metadata_begin + 1u >= metadata_count ||
+        record->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
+        record->semantic_immediate < -1 || record->semantic_immediate > UINT16_MAX ||
+        record->allocation_key || !xr_stable_id_equal(record->allocation_id, zero) ||
+        record->constant != XR_SEMANTIC_INDEX_NONE ||
+        record->callable_function != XR_SEMANTIC_INDEX_NONE || record->auxiliary_kind != 0 ||
+        record->effects != xi_generated_op_effects(XI_IMPORT_REF) ||
+        record->flags != xi_generated_op_default_flags(XI_IMPORT_REF) ||
+        record->ownership_use != xi_generated_op_own_use(XI_IMPORT_REF) ||
+        record->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        record->result_alias_operand != -1 ||
+        record->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        record->return_parameter != -1 || record->return_complete != 1 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    const char *module_path = metadata[record->metadata_begin];
+    const char *member = metadata[record->metadata_begin + 1u];
+    if (!module_path || !member || member[0] != '\0' ||
+        !xr_stdlib_metadata_module_known(module_path))
+        return false;
+    if (out_module_path)
+        *out_module_path = module_path;
+    return true;
+}
+
+/* Frozen-row reconstruction of a namespace receiver: the load reads a module
+ * shared slot, exactly one module-init store publishes that slot, and the
+ * stored value is the module-init import reference above. */
+static const char *semantic_native_module_namespace_path(const XrSemanticPlan *plan,
+                                                         uint32_t receiver_value) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
+    const XrSemanticOperationRecord *load = NULL;
+    XrStableId zero = {{0}};
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->result_value != receiver_value)
+            continue;
+        if (load)
+            return NULL;
+        load = candidate;
+    }
+    const XrSemanticTypeRecord *load_type =
+        load ? xr_semantic_plan_type(plan, load->result_type) : NULL;
+    if (!load || !load_type || load->opcode != XI_GET_SHARED || load->operand_count != 0 ||
+        load->metadata_count != 0 || load->semantic_immediate < 0 ||
+        load->semantic_immediate > UINT16_MAX || load->allocation_key ||
+        !xr_stable_id_equal(load->allocation_id, zero) ||
+        load->constant != XR_SEMANTIC_INDEX_NONE ||
+        load->callable_function != XR_SEMANTIC_INDEX_NONE || load->auxiliary_kind != 0 ||
+        load->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        load->effects != xi_generated_op_effects(XI_GET_SHARED) ||
+        load->flags != xi_generated_op_default_flags(XI_GET_SHARED) ||
+        load->ownership_use != xi_generated_op_own_use(XI_GET_SHARED) ||
+        load->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        load->result_alias_operand != -1 ||
+        load->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        load->return_parameter != -1 || load->return_complete != 1 ||
+        load_type->scalar_rep != XR_SCALAR_REP_NONE || load_type->child_count != 0 ||
+        load_type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return NULL;
+    const XrSemanticOperationRecord *store = NULL;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->opcode != XI_SET_SHARED || candidate->function != 0 ||
+            candidate->semantic_immediate != load->semantic_immediate)
+            continue;
+        if (store)
+            return NULL;
+        store = candidate;
+    }
+    if (!store || store->operand_count != 1 || store->operand_begin >= operand_count)
+        return NULL;
+    const XrSemanticOperandRecord *stored = &operands[store->operand_begin];
+    if (stored->role != XR_SEM_OPERAND_VALUE || stored->parameter != -1 ||
+        stored->ownership_action != XR_SEM_OPERAND_CONSUME || stored->flags != 0 ||
+        stored->type != load->result_type)
+        return NULL;
+    const XrSemanticOperationRecord *import = NULL;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->result_value != stored->value)
+            continue;
+        if (import)
+            return NULL;
+        import = candidate;
+    }
+    const char *module_path = NULL;
+    return import && import->result_type == load->result_type &&
+                   semantic_native_module_namespace_import_exact(plan, import, &module_path)
+               ? module_path
+               : NULL;
+}
+
+/* A native stdlib module namespace is not a value a program can construct: the
+ * receiver is the module-init import reference published into a shared slot,
+ * and the frozen definition registry names exactly one implementation for that
+ * module path plus the selector.  A user module resolves to a different import
+ * classification, and a local function sharing the selector is a plain call
+ * through a callee operand rather than a method call on that namespace, so
+ * neither reaches this authority. */
+static bool xi_native_module_scalar_call_exact(const XrSemanticBuildContext *ctx,
+                                               const XiFunc *caller, const XiValue *value) {
+    if (!ctx || !caller || !value || value->op != XI_CALL_METHOD || value->nargs == 0 ||
+        !value->aux || value->aux_kind != XI_AUX_KIND_NONE || value->aux_int <= 0 ||
+        (value->aux_int & 1) != 0 || (value->flags & XI_FLAG_MAY_SUSPEND) != 0)
+        return false;
+    const XiImportRef *ref = resolve_native_namespace_import_receiver(ctx, caller, value->args[0]);
+    return ref && ref->module_path &&
+           xr_stdlib_metadata_exact_native_direct_member(
+               ref->module_path, (const char *) value->aux, (uint16_t) (value->nargs - 1u)) != NULL;
+}
+
+static bool semantic_native_module_scalar_call_exact(const XrSemanticBuildContext *ctx,
+                                                     const XrSemanticOperationRecord *record) {
+    if (!ctx || !record || record->operand_count == 0 ||
+        record->operand_begin > ctx->plan->operand_count ||
+        record->operand_count > ctx->plan->operand_count - record->operand_begin ||
+        record->metadata_count != 1 || record->metadata_begin >= ctx->plan->metadata_count ||
+        record->result_alias_operand != -1 ||
+        record->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
+        record->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        !semantic_native_module_scalar_type_exact(
+            record->result_type < ctx->plan->type_count ? &ctx->plan->types[record->result_type]
+                                                        : NULL))
+        return false;
+    const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
+    if (receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW)
+        return false;
+    for (uint16_t i = 1; i < record->operand_count; i++) {
+        const XrSemanticOperandRecord *argument = receiver + i;
+        if (argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) (i - 1) ||
+            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+            !semantic_native_module_scalar_type_exact(
+                argument->type < ctx->plan->type_count ? &ctx->plan->types[argument->type] : NULL))
+            return false;
+    }
+    const char *module_path =
+        semantic_native_module_namespace_path(ctx->plan, receiver->value);
+    return module_path &&
+           xr_stdlib_metadata_exact_native_direct_member(
+               module_path, ctx->plan->metadata[record->metadata_begin],
+               (uint16_t) (record->operand_count - 1u)) != NULL;
+}
+
 /* `JSON` is a compiler-owned class namespace: its receiver is the reserved
  * XI_GET_BUILTIN global, and no source declaration can produce that type
  * record because a user class always carries its own class reference.  The
@@ -3122,6 +3299,9 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->intrinsic_kind = XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE;
     if (xi_array_push_scalar_exact(value) && semantic_array_push_scalar_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_PUSH_SCALAR;
+    if (xi_native_module_scalar_call_exact(ctx, function, value) &&
+        semantic_native_module_scalar_call_exact(ctx, record))
+        record->intrinsic_kind = XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL;
     bool string_builder_candidate = xi_string_builder_constructor_candidate(value);
     bool string_builder_exact = xi_string_builder_constructor_exact(value);
     if (string_builder_candidate &&

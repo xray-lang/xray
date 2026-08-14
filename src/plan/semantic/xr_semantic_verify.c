@@ -1732,6 +1732,162 @@ static bool verify_array_push_scalar(const XrSemanticPlan *plan,
                            "Array.push scalar authority is not exact");
 }
 
+/* Recomputed from the frozen rows alone.  A native stdlib namespace receiver
+ * cannot be spelled by a declaration: the module-init import record classifies
+ * its resolution against the native registry rather than against a compiled
+ * module, and its frozen metadata pair names the module path with an empty
+ * member.  The registry then names exactly one implementation for that path
+ * plus the selector, which is what turns the callsite into an exact target
+ * instead of an open method dispatch. */
+static bool semantic_native_module_scalar_type(const XrSemanticTypeRecord *type) {
+    return type && (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
+                    type->kind == XR_KIND_BOOL) &&
+           type->builtin_type == XR_TID_NULL && type->scalar_rep != XR_SCALAR_REP_NONE &&
+           type->flags == 0 && type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE;
+}
+
+static bool semantic_native_module_import_row(const XrSemanticPlan *plan,
+                                              const XrSemanticOperationRecord *record,
+                                              const char **out_module_path) {
+    const XrSemanticTypeRecord *type =
+        record && record->result_type < plan->type_count ? &plan->types[record->result_type] : NULL;
+    XrStableId zero = {{0}};
+    if (!record || !type || record->opcode != XI_IMPORT_REF || record->function != 0 ||
+        record->operand_count != 0 || record->metadata_count != 2 ||
+        record->metadata_begin + 1u >= plan->metadata_count ||
+        record->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
+        record->semantic_immediate < -1 || record->semantic_immediate > UINT16_MAX ||
+        record->allocation_key || !xr_stable_id_equal(record->allocation_id, zero) ||
+        record->constant != XR_SEMANTIC_INDEX_NONE ||
+        record->callable_function != XR_SEMANTIC_INDEX_NONE || record->auxiliary_kind != 0 ||
+        record->effects != xi_generated_op_effects(XI_IMPORT_REF) ||
+        record->flags != xi_generated_op_default_flags(XI_IMPORT_REF) ||
+        record->ownership_use != xi_generated_op_own_use(XI_IMPORT_REF) ||
+        record->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        record->result_alias_operand != -1 ||
+        record->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        record->return_parameter != -1 || record->return_complete != 1 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    const char *module_path = plan->metadata[record->metadata_begin];
+    const char *member = plan->metadata[record->metadata_begin + 1u];
+    if (!module_path || !member || member[0] != '\0' ||
+        !xr_stdlib_metadata_module_known(module_path))
+        return false;
+    if (out_module_path)
+        *out_module_path = module_path;
+    return true;
+}
+
+static const char *semantic_native_module_receiver_path(const XrSemanticPlan *plan,
+                                                        uint32_t receiver_value) {
+    const XrSemanticOperationRecord *load = NULL;
+    XrStableId zero = {{0}};
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        if (plan->operations[i].result_value != receiver_value)
+            continue;
+        if (load)
+            return NULL;
+        load = &plan->operations[i];
+    }
+    const XrSemanticTypeRecord *load_type =
+        load && load->result_type < plan->type_count ? &plan->types[load->result_type] : NULL;
+    if (!load || !load_type || load->opcode != XI_GET_SHARED || load->operand_count != 0 ||
+        load->metadata_count != 0 || load->semantic_immediate < 0 ||
+        load->semantic_immediate > UINT16_MAX || load->allocation_key ||
+        !xr_stable_id_equal(load->allocation_id, zero) ||
+        load->constant != XR_SEMANTIC_INDEX_NONE ||
+        load->callable_function != XR_SEMANTIC_INDEX_NONE || load->auxiliary_kind != 0 ||
+        load->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        load->effects != xi_generated_op_effects(XI_GET_SHARED) ||
+        load->flags != xi_generated_op_default_flags(XI_GET_SHARED) ||
+        load->ownership_use != xi_generated_op_own_use(XI_GET_SHARED) ||
+        load->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        load->result_alias_operand != -1 ||
+        load->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        load->return_parameter != -1 || load->return_complete != 1 ||
+        load_type->scalar_rep != XR_SCALAR_REP_NONE || load_type->child_count != 0 ||
+        load_type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return NULL;
+    const XrSemanticOperationRecord *store = NULL;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        if (plan->operations[i].opcode != XI_SET_SHARED || plan->operations[i].function != 0 ||
+            plan->operations[i].semantic_immediate != load->semantic_immediate)
+            continue;
+        if (store)
+            return NULL;
+        store = &plan->operations[i];
+    }
+    if (!store || store->operand_count != 1 || store->operand_begin >= plan->operand_count)
+        return NULL;
+    const XrSemanticOperandRecord *stored = &plan->operands[store->operand_begin];
+    if (stored->role != XR_SEM_OPERAND_VALUE || stored->parameter != -1 ||
+        stored->ownership_action != XR_SEM_OPERAND_CONSUME || stored->flags != 0 ||
+        stored->type != load->result_type)
+        return NULL;
+    const XrSemanticOperationRecord *import = NULL;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        if (plan->operations[i].result_value != stored->value)
+            continue;
+        if (import)
+            return NULL;
+        import = &plan->operations[i];
+    }
+    const char *module_path = NULL;
+    return import && import->result_type == load->result_type &&
+                   semantic_native_module_import_row(plan, import, &module_path)
+               ? module_path
+               : NULL;
+}
+
+static bool verify_native_module_scalar_call(const XrSemanticPlan *plan,
+                                             const XrSemanticOperationRecord *operation,
+                                             char *error, size_t error_size) {
+    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL)
+        return true;
+    const XrSemanticOperandRecord *receiver =
+        operation->operand_count > 0 && operation->operand_begin < plan->operand_count &&
+                operation->operand_count <= plan->operand_count - operation->operand_begin
+            ? &plan->operands[operation->operand_begin]
+            : NULL;
+    const char *selector =
+        operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
+            ? plan->metadata[operation->metadata_begin]
+            : NULL;
+    bool exact = operation->opcode == XI_CALL_METHOD && operation->semantic_immediate > 0 &&
+                 (operation->semantic_immediate & 1) == 0 && selector && receiver &&
+                 (operation->flags & XI_FLAG_MAY_SUSPEND) == 0 &&
+                 operation->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
+                 semantic_native_module_scalar_type(
+                     operation->result_type < plan->type_count
+                         ? &plan->types[operation->result_type]
+                         : NULL) &&
+                 operation->result_alias_operand == -1 &&
+                 operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+                 receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+                 receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 receiver->ownership_action == XR_SEM_OPERAND_BORROW;
+    for (uint16_t i = 1; exact && i < operation->operand_count; i++) {
+        const XrSemanticOperandRecord *argument = receiver + i;
+        exact = argument->role == XR_SEM_OPERAND_ARGUMENT &&
+                argument->parameter == (int16_t) (i - 1) &&
+                argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                semantic_native_module_scalar_type(
+                    argument->type < plan->type_count ? &plan->types[argument->type] : NULL);
+    }
+    if (exact) {
+        const char *module_path = semantic_native_module_receiver_path(plan, receiver->value);
+        exact = module_path && xr_stdlib_metadata_exact_native_direct_member(
+                                   module_path, selector,
+                                   (uint16_t) (operation->operand_count - 1u)) != NULL;
+    }
+    return exact || report(error, error_size, "XR_SEM_0019",
+                           "native module scalar call authority is not exact");
+}
+
 static bool verify_string_builder_append_string(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     char *error, size_t error_size) {
@@ -1884,6 +2040,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_json_namespace_value(plan, operation, error, error_size))
             return false;
         if (!verify_array_push_scalar(plan, operation, error, error_size))
+            return false;
+        if (!verify_native_module_scalar_call(plan, operation, error, error_size))
             return false;
         uint32_t existing_definition = definitions[operation->result_value];
         if (existing_definition != XR_SEMANTIC_INDEX_NONE) {

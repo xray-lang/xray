@@ -25,6 +25,7 @@
 #include "../semantic/xr_semantic_graph.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../../runtime/value/xtype.h"
+#include "../../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1142,6 +1143,264 @@ static bool semantic_array_push_scalar_is_exact(const XrSemanticPlan *plan,
     if (argument_value)
         *argument_value = argument->value;
     return true;
+}
+
+static bool stable_id_is_zero(XrStableId id);
+
+static bool semantic_native_module_scalar_type_is_exact(const XrSemanticTypeRecord *type) {
+    return type && (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
+                    type->kind == XR_KIND_BOOL) &&
+           type->builtin_type == XR_TID_NULL && type->scalar_rep != XR_SCALAR_REP_NONE &&
+           type->flags == 0 && type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE;
+}
+
+/* The module-init import reference of a native stdlib namespace. Its frozen
+ * import classification is resolved against the native definition registry
+ * rather than against a compiled module, and its metadata pair names the
+ * module path with an empty member, so a member import and a source-module
+ * namespace both stay outside this authority. */
+static bool semantic_native_module_import_is_exact(const XrSemanticPlan *plan,
+                                                   const XrSemanticOperationRecord *record,
+                                                   const char **out_module_path) {
+    uint32_t metadata_count = 0;
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    const XrSemanticTypeRecord *type =
+        record ? xr_semantic_plan_type(plan, record->result_type) : NULL;
+    if (!record || !type || !metadata || record->opcode != XI_IMPORT_REF ||
+        record->function != 0 || record->operand_count != 0 || record->metadata_count != 2 ||
+        record->metadata_begin + 1u >= metadata_count ||
+        record->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
+        record->semantic_immediate < -1 || record->semantic_immediate > UINT16_MAX ||
+        record->allocation_key || !stable_id_is_zero(record->allocation_id) ||
+        record->constant != XR_SEMANTIC_INDEX_NONE ||
+        record->callable_function != XR_SEMANTIC_INDEX_NONE || record->auxiliary_kind != 0 ||
+        record->effects != xi_generated_op_effects(XI_IMPORT_REF) ||
+        record->flags != xi_generated_op_default_flags(XI_IMPORT_REF) ||
+        record->ownership_use != xi_generated_op_own_use(XI_IMPORT_REF) ||
+        record->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        record->result_alias_operand != -1 ||
+        record->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        record->return_parameter != -1 || record->return_complete != 1 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    const char *module_path = metadata[record->metadata_begin];
+    const char *member = metadata[record->metadata_begin + 1u];
+    if (!module_path || !member || member[0] != '\0' ||
+        !xr_stdlib_metadata_module_known(module_path))
+        return false;
+    if (out_module_path)
+        *out_module_path = module_path;
+    return true;
+}
+
+/* The shared-slot read that republishes the namespace inside a function. */
+static bool semantic_native_module_load_is_exact(const XrSemanticPlan *plan,
+                                                 const XrSemanticOperationRecord *record) {
+    const XrSemanticTypeRecord *type =
+        record ? xr_semantic_plan_type(plan, record->result_type) : NULL;
+    return record && type && record->opcode == XI_GET_SHARED && record->operand_count == 0 &&
+           record->metadata_count == 0 && record->semantic_immediate >= 0 &&
+           record->semantic_immediate <= UINT16_MAX && !record->allocation_key &&
+           stable_id_is_zero(record->allocation_id) &&
+           record->constant == XR_SEMANTIC_INDEX_NONE &&
+           record->callable_function == XR_SEMANTIC_INDEX_NONE &&
+           record->auxiliary_kind == 0 &&
+           record->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+           record->effects == xi_generated_op_effects(XI_GET_SHARED) &&
+           record->flags == xi_generated_op_default_flags(XI_GET_SHARED) &&
+           record->ownership_use == xi_generated_op_own_use(XI_GET_SHARED) &&
+           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+           record->result_alias_operand == -1 &&
+           record->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
+           record->return_parameter == -1 && record->return_complete == 1 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT);
+}
+
+/* Rebuilt from the frozen rows: the load reads a module shared slot, exactly
+ * one module-init store publishes that slot, and the stored value is the
+ * module-init import reference above. The returned module path is the frozen
+ * metadata string, never a backend guess. */
+static const char *semantic_native_module_namespace_path(const XrSemanticPlan *plan,
+                                                         uint32_t receiver_value) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
+    const XrSemanticOperationRecord *load = NULL;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->result_value != receiver_value)
+            continue;
+        if (load)
+            return NULL;
+        load = candidate;
+    }
+    if (!semantic_native_module_load_is_exact(plan, load))
+        return NULL;
+    const XrSemanticOperationRecord *store = NULL;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->opcode != XI_SET_SHARED || candidate->function != 0 ||
+            candidate->semantic_immediate != load->semantic_immediate)
+            continue;
+        if (store)
+            return NULL;
+        store = candidate;
+    }
+    if (!store || store->operand_count != 1 || store->operand_begin >= operand_count)
+        return NULL;
+    const XrSemanticOperandRecord *stored = &operands[store->operand_begin];
+    if (stored->role != XR_SEM_OPERAND_VALUE || stored->parameter != -1 ||
+        stored->ownership_action != XR_SEM_OPERAND_CONSUME || stored->flags != 0 ||
+        stored->type != load->result_type)
+        return NULL;
+    const XrSemanticOperationRecord *import = NULL;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->result_value != stored->value)
+            continue;
+        if (import)
+            return NULL;
+        import = candidate;
+    }
+    const char *module_path = NULL;
+    return import && import->result_type == load->result_type &&
+                   semantic_native_module_import_is_exact(plan, import, &module_path)
+               ? module_path
+               : NULL;
+}
+
+/* A native stdlib namespace member call with a plain scalar contract. The
+ * frozen definition registry names one implementation for the module path plus
+ * the selector, the receiver is a namespace handle rather than a value, and
+ * every argument and the result cross the boundary as one plain scalar, so the
+ * row states no ownership obligation of its own. */
+static bool semantic_native_module_scalar_call_shape_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    const char **out_selector, uint32_t *out_receiver_value, uint32_t *argument_count) {
+    uint32_t operands_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operands_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!plan || !operation ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL ||
+        operation->opcode != XI_CALL_METHOD || operation->semantic_immediate <= 0 ||
+        (operation->semantic_immediate & 1) != 0 || operation->operand_count == 0 ||
+        operation->operand_begin >= operands_count ||
+        operation->operand_count > operands_count - operation->operand_begin ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        !metadata || (operation->flags & XI_FLAG_MAY_SUSPEND) != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        operation->result_alias_operand != -1 ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
+        !semantic_native_module_scalar_type_is_exact(
+            xr_semantic_plan_type(plan, operation->result_type)))
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, operation->function);
+    if (!function || receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        receiver->value < function->value_begin ||
+        receiver->value >= function->value_begin + function->value_count ||
+        operation->result_value < function->value_begin ||
+        operation->result_value >= function->value_begin + function->value_count)
+        return false;
+    for (uint16_t i = 1; i < operation->operand_count; i++) {
+        const XrSemanticOperandRecord *argument = receiver + i;
+        if (argument->role != XR_SEM_OPERAND_ARGUMENT ||
+            argument->parameter != (int16_t) (i - 1) ||
+            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+            !semantic_native_module_scalar_type_is_exact(
+                xr_semantic_plan_type(plan, argument->type)))
+            return false;
+    }
+    if (out_selector)
+        *out_selector = metadata[operation->metadata_begin];
+    if (out_receiver_value)
+        *out_receiver_value = receiver->value;
+    if (argument_count)
+        *argument_count = (uint32_t) (operation->operand_count - 1u);
+    return true;
+}
+
+static bool semantic_native_module_scalar_call_is_exact(const XrSemanticPlan *plan,
+                                                        const XrSemanticOperationRecord *operation,
+                                                        uint32_t *argument_count) {
+    const char *selector = NULL;
+    uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t arity = 0;
+    if (!semantic_native_module_scalar_call_shape_is_exact(plan, operation, &selector,
+                                                           &receiver_value, &arity))
+        return false;
+    const char *module_path = semantic_native_module_namespace_path(plan, receiver_value);
+    if (!module_path || !xr_stdlib_metadata_exact_native_direct_member(module_path, selector,
+                                                                       (uint16_t) arity))
+        return false;
+    if (argument_count)
+        *argument_count = arity;
+    return true;
+}
+
+/* A native stdlib namespace value is one of the two rows above, and it is
+ * admitted only when a proven member call consumes it: the namespace handle is
+ * a borrowed compiler-owned reference with no other statable use. */
+static bool semantic_native_module_namespace_value_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
+    if (!operation)
+        return false;
+    if (operation->opcode == XI_IMPORT_REF) {
+        if (!semantic_native_module_import_is_exact(plan, operation, NULL))
+            return false;
+    } else if (operation->opcode == XI_GET_SHARED) {
+        if (!semantic_native_module_load_is_exact(plan, operation) ||
+            !semantic_native_module_namespace_path(plan, operation->result_value))
+            return false;
+    } else {
+        return false;
+    }
+    /* Prove the whole namespace lifetime from the rows: every use is a
+     * reference-count edge, the module-init store, or the receiver of a member
+     * call this plan already proved exact. Anything else, including a call this
+     * authority refused, leaves the value without storage. */
+    bool consumed = false;
+    const char *module_path = NULL;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *use = xr_semantic_plan_operation(plan, i);
+        if (!use || use->operand_begin > operand_count ||
+            use->operand_count > operand_count - use->operand_begin)
+            return false;
+        for (uint16_t a = 0; a < use->operand_count; a++) {
+            const XrSemanticOperandRecord *operand = &operands[use->operand_begin + a];
+            if (operand->value != operation->result_value)
+                continue;
+            if ((use->opcode == XI_RETAIN || use->opcode == XI_RELEASE ||
+                 use->opcode == XI_SET_SHARED) &&
+                a == 0)
+                continue;
+            const char *selector = NULL;
+            uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
+            uint32_t arity = 0;
+            if (use->opcode != XI_CALL_METHOD || a != 0 ||
+                !semantic_native_module_scalar_call_shape_is_exact(plan, use, &selector,
+                                                                    &receiver_value, &arity) ||
+                receiver_value != operation->result_value)
+                return false;
+            if (!module_path)
+                module_path = semantic_native_module_namespace_path(plan, operation->result_value);
+            if (!module_path || !xr_stdlib_metadata_exact_native_direct_member(
+                                    module_path, selector, (uint16_t) arity))
+                return false;
+            consumed = true;
+        }
+    }
+    return operation->opcode == XI_IMPORT_REF || consumed;
 }
 
 /* A freshly allocated `Array<T>` carries exactly one storage fact this plan can
@@ -3101,6 +3360,108 @@ static bool builder_add_closure_storage(XrTargetPlanBuilder *builder,
  * fact here exactly as it is for a heap closure: Semantic ownership and the
  * existing AOT array lifetime path still own the allocation, the roots, and the
  * cleanup, so this family adds no root or cleanup row. */
+/* The namespace handle is a borrowed compiler-owned reference: it is loaded
+ * from a module shared slot and never adapted to a native representation, so
+ * its storage stays the borrowed tagged value in its own temporary slot. */
+static bool note_native_module_namespace_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticPlan *plan = builder->semantic_plan;
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(plan, semantic_operation);
+    if (!operation || operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >= xr_semantic_plan_function_count(plan) ||
+        analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "native module namespace storage authority is incomplete");
+    XrTargetMachineRepRecord rep;
+    if (!make_borrowed_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile),
+                                         &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize native module namespace storage");
+    XrStableId slot_identity;
+    if (!make_slot_identity(plan, operation->function, XR_TARGET_SLOT_TEMPORARY, operation->id,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "native module namespace slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_BORROWED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[operation->result_type] &&
+         !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep,
+                               error, error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->used_types[operation->result_type] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    analysis->type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+static bool builder_add_native_module_namespace_storage(XrTargetPlanBuilder *builder, char *error,
+                                                        size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    /* A value another family already bound is not this family's to claim. The
+     * layout intent stays unseeded: a void reference-count result carrying the
+     * namespace type marks no layout of its own, and the layout appender is
+     * idempotent and refuses a conflicting geometry on its own. */
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values)
+            analysis.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation) {
+            valid = fail(error, error_size, "XR_TARGET_1001", "semantic operation is missing");
+            break;
+        }
+        if ((operation->opcode != XI_IMPORT_REF && operation->opcode != XI_GET_SHARED) ||
+            !semantic_native_module_namespace_value_is_exact(builder->semantic_plan, operation))
+            continue;
+        valid = note_native_module_namespace_storage_value(builder, &analysis, i, error,
+                                                            error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE;
+    return true;
+}
+
 static bool note_array_allocation_storage_value(
     XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
     uint32_t semantic_operation, char *error, size_t error_size) {
@@ -4935,6 +5296,45 @@ static bool collect_array_push_scalar_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
+/* The native stdlib namespace member owns no callee function index: the frozen
+ * definition registry names its implementation, and the receiver is a namespace
+ * handle rather than a source argument, so the row carries no argument intent
+ * and folds the proven arity into its identity. The result claims no ownership
+ * because a plain scalar leaves nothing to release. */
+static bool collect_native_module_scalar_call_intent(XrTargetPlanBuilder *builder,
+                                                     uint32_t operation_index,
+                                                     const XrSemanticOperationRecord *operation,
+                                                     char *error, size_t error_size) {
+    uint32_t arity = 0;
+    if (!semantic_native_module_scalar_call_is_exact(builder->semantic_plan, operation, &arity) ||
+        !call_type_is_exact_scalar(builder->semantic_plan, operation->result_type))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native module scalar dispatch authority is incomplete");
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR,
+        .target_kind = XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR,
+    };
+    if (!result_type || !stable_identity_from_pair("xray-target-native-module-scalar-v1",
+                                                   operation->id, result_type->id, arity,
+                                                   &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native module scalar call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
                                              uint32_t target_index,
                                              const XrSemanticCallTargetRecord *target,
@@ -5277,6 +5677,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                                                              error_size);
         } else if (semantic_array_push_scalar_is_exact(plan, operation, NULL)) {
             valid = collect_array_push_scalar_call_intent(builder, i, operation, error, error_size);
+        } else if (semantic_native_module_scalar_call_is_exact(plan, operation, NULL)) {
+            valid = collect_native_module_scalar_call_intent(builder, i, operation, error,
+                                                             error_size);
         } else if (semantic_operation_is_call_shaped(plan, operation)) {
             uint32_t metadata_count = 0;
             uint32_t operand_count = 0;
@@ -6879,6 +7282,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_channel_allocation_storage(builder, error, error_size) ||
         !builder_add_channel_receive_storage(builder, error, error_size) ||
         !builder_add_source_namespace_storage(builder, error, error_size) ||
+        !builder_add_native_module_namespace_storage(builder, error, error_size) ||
         !builder_add_aggregates(builder, error, error_size) ||
         !builder_add_calls_and_adapters(builder, error, error_size) ||
         !builder_add_coroutine_state_calls(builder, error, error_size)) {
