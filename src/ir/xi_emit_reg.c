@@ -381,6 +381,171 @@ XR_FUNC void check_var_interference(EmitCtx *ctx) {
     xr_free(defs);
 }
 
+/* ========== Ownership Live-Range Splitting ========== */
+
+/*
+ * Overlapping live ranges on a coalesced register are not a defect by
+ * themselves — the comment above explains why the register models a storage
+ * cell — but one consumer cannot tolerate them.  XI_RELEASE names an ownership
+ * obligation that the ARC pass paired with a specific acquire of a specific
+ * SSA value.  Running it against whatever the cell holds later drops a
+ * reference the function never took and leaks the one it did, so the VM aborts
+ * on the next access to the over-released object.  Reading the cell's current
+ * content is never the intent of a release, whereas it is exactly the intent
+ * of every mechanism that relies on the shared register: `defer` late binding
+ * evaluates its receiver when the deferred body runs, a catch block entered by
+ * OP_THROW reads the cell because the throw skipped phi resolution, and a
+ * place reload re-materializes a `ref` after the callee may have written
+ * through it.  All three are value reads; none is a release.  So the reading
+ * opcode separates the two populations with no new IR fact.
+ *
+ * That separation is sound only where the variable is in SSA form.  Once a
+ * local's address is taken, OP_PLACE_STORE replaces its content without
+ * producing a new SSA name, and the IR keeps naming the variable by an earlier
+ * value because no other name exists; a scope-exit release of such a variable
+ * is an obligation on the cell, and the shared register is what makes that
+ * name resolve to the cell.  collect_addressed_vars() marks those variables
+ * and they are left alone.
+ *
+ * For the rest, the fix is a live-range split: copy the variable's content to
+ * a private register just before the definition that overwrites it, and let
+ * only the release read that copy.  The copy is emitted in the same block as
+ * the release, so it dominates every path to it and cannot be reached with an
+ * undefined register.  Nothing else observes it, so late binding, catch-path
+ * reads and place reloads keep seeing the shared register unchanged.
+ */
+
+static void mark_var_addressed(EmitCtx *ctx, const XiValue *v) {
+    if (v && xi_emit_var_id_in_state(ctx, v->var_id))
+        ctx->var_addressed[v->var_id] = true;
+}
+
+/* Mark every source variable that participates in address-of or place traffic,
+ * from both directions: the operand whose address is taken, and the values
+ * that carry the variable across a place load or store. */
+XR_FUNC void collect_addressed_vars(EmitCtx *ctx, XiFunc *f) {
+    XR_DCHECK(ctx != NULL && f != NULL, "collect_addressed_vars: NULL input");
+    if (!ctx->var_addressed || ctx->var_state_count == 0)
+        return;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || (v->op != XI_LOCAL_ADDR && v->op != XI_PLACE_LOAD && v->op != XI_PLACE_STORE))
+                continue;
+            mark_var_addressed(ctx, v);
+            for (uint16_t a = 0; a < v->nargs; a++)
+                mark_var_addressed(ctx, v->args[a]);
+        }
+    }
+}
+
+XR_FUNC XiEmitReg owner_save_reg_of(const EmitCtx *ctx, const XiValue *v) {
+    if (!ctx || !v)
+        return NO_REG;
+    for (uint32_t i = 0; i < ctx->nowner_saves; i++) {
+        if (ctx->owner_saves[i].value_id == v->id)
+            return ctx->owner_saves[i].reg;
+    }
+    return NO_REG;
+}
+
+/* Return the saved registers to the free pool.  Called once the block that
+ * emitted them is done: no release outside that block reads them. */
+XR_FUNC void discard_owner_saves(EmitCtx *ctx) {
+    for (uint32_t i = 0; i < ctx->nowner_saves; i++)
+        free_reg(ctx, ctx->owner_saves[i].reg);
+    ctx->nowner_saves = 0;
+}
+
+static bool owner_saves_record(EmitCtx *ctx, uint32_t value_id, XiEmitReg reg) {
+    if (ctx->nowner_saves == ctx->owner_save_cap) {
+        uint32_t new_cap = ctx->owner_save_cap ? ctx->owner_save_cap * 2u : 4u;
+        void *tmp = xr_realloc(ctx->owner_saves, (size_t) new_cap * sizeof(ctx->owner_saves[0]));
+        if (!tmp)
+            return false;
+        ctx->owner_saves = tmp;
+        ctx->owner_save_cap = new_cap;
+    }
+    ctx->owner_saves[ctx->nowner_saves].value_id = value_id;
+    ctx->owner_saves[ctx->nowner_saves].reg = reg;
+    ctx->nowner_saves++;
+    return true;
+}
+
+static void report_owner_split(const XiFunc *f, const XiBlock *blk, XiVarId var_id,
+                               const XiValue *owned, const XiValue *clobber, XiEmitReg save_reg) {
+    const char *var_name = var_source_name(f, var_id);
+    fprintf(stderr,
+            "[xi_emit] ownership live-range split in function '%s': source variable '%s' "
+            "(var_id %u) is copied to register %u before the definition of value #%u (%s, "
+            "line %u) in block b%u, so the release of value #%u (%s, line %u) still names "
+            "its own object\n",
+            f->name ? f->name : "<anonymous>", var_name ? var_name : "<unnamed>",
+            (unsigned) var_id, (unsigned) save_reg, clobber->id, xi_op_name(clobber->op),
+            (unsigned) clobber->line, blk->id, owned->id, xi_op_name(owned->op),
+            (unsigned) owned->line);
+}
+
+/* Called just before blk->values[index] is emitted, while the shared register
+ * still holds the variable's previous content. */
+XR_FUNC void split_owner_live_range(EmitCtx *ctx, XiBlock *blk, uint32_t index) {
+    XR_DCHECK(ctx != NULL && blk != NULL, "split_owner_live_range: NULL input");
+    if (ctx->status != XI_EMIT_OK || index >= blk->nvalues)
+        return;
+
+    XiValue *def = blk->values[index];
+    if (!def || !xi_emit_var_id_in_state(ctx, def->var_id))
+        return;
+    /* A void-result op annotated with a variable does not write the shared
+     * register, so nothing it follows becomes stale. */
+    if (xi_generated_op_result_kind(def->op) == XI_GEN_RESULT_VOID)
+        return;
+    XiVarId var_id = def->var_id;
+    if (ctx->var_addressed && ctx->var_addressed[var_id])
+        return;
+    XiEmitReg var_reg = ctx->var_reg[var_id];
+    if (var_reg == NO_REG)
+        return;
+
+    for (uint32_t k = index + 1; k < blk->nvalues; k++) {
+        const XiValue *use = blk->values[k];
+        if (!use || use->op != XI_RELEASE || use->nargs < 1)
+            continue;
+        const XiValue *owned = use->args[0];
+        /* A release of the value being defined here is not a stale read: its
+         * live range starts where this definition does. */
+        if (!owned || owned == def || owned->var_id != var_id)
+            continue;
+        /* Only a value that reads the shared register is superseded.  A
+         * definition that landed in its own register still holds the object
+         * it named and needs no copy. */
+        if (owned->id >= ctx->reg_map_size || ctx->reg_map[owned->id] != var_reg)
+            continue;
+        /* An earlier definition in this block already saved it; that copy is
+         * the pre-clobber content and must not be overwritten. */
+        if (owner_save_reg_of(ctx, owned) != NO_REG)
+            continue;
+
+        if (ctx->next_reg >= MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
+        XiEmitReg save = (XiEmitReg) ctx->next_reg++;
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+        if (!owner_saves_record(ctx, owned->id, save)) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, save, var_reg, 0));
+        if (var_interference_reporting_enabled())
+            report_owner_split(ctx->func, blk, var_id, owned, def, save);
+    }
+}
+
 /* ========== Register Allocation ========== */
 
 /* Params get R[0..nparams-1], phis pre-assigned, last-use computed. */

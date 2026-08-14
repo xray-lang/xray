@@ -178,6 +178,25 @@ typedef struct {
      * so catch-block modifications must write to the same register that
      * post-try-catch code reads from. */
     XiEmitReg *var_reg; /* [var_state_count], var_id -> pinned register (NO_REG = unassigned) */
+
+    /* Source variables whose content can change without a definition that
+     * carries their var_id: the address of the local was taken, or it is read
+     * and written through a place.  Their shared register is what makes the
+     * IR's stand-in names resolve to the variable's current content, so their
+     * live ranges must never be split. */
+    bool *var_addressed; /* [var_state_count] */
+
+    /* Ownership live-range splits active inside the block being emitted.
+     * Each entry is a copy of a coalesced variable's content taken just before
+     * a later definition of the same variable overwrote the shared register.
+     * Only ownership-release lowering reads them; every other consumer keeps
+     * the shared register and therefore the variable's current content. */
+    struct {
+        uint32_t value_id;
+        XiEmitReg reg;
+    } *owner_saves;
+    uint32_t nowner_saves;
+    uint32_t owner_save_cap;
 } EmitCtx;
 
 /* VM class instances are allocated before their constructor body runs.  Every
@@ -245,7 +264,11 @@ XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid);
 /* ========== Functions from xi_emit_reg.c ========== */
 XR_FUNC void compute_last_use(EmitCtx *ctx);
 XR_FUNC void check_var_interference(EmitCtx *ctx);
+XR_FUNC void collect_addressed_vars(EmitCtx *ctx, XiFunc *f);
 XR_FUNC void alloc_registers(EmitCtx *ctx);
+XR_FUNC void split_owner_live_range(EmitCtx *ctx, XiBlock *blk, uint32_t index);
+XR_FUNC void discard_owner_saves(EmitCtx *ctx);
+XR_FUNC XiEmitReg owner_save_reg_of(const EmitCtx *ctx, const XiValue *v);
 
 /* ========== Functions from xi_emit_cf.c ========== */
 XR_FUNC void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ);
