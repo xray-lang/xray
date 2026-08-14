@@ -51,6 +51,12 @@ REQUIRED = {
     "xr_module_generation_snapshot",
     "xr_module_generation_unload",
     "xr_module_generation_verify",
+    "xr_runtime_create",
+    "xr_runtime_destroy",
+    "xr_module_load_target_plan",
+    "xr_module_find_export",
+    "xr_export_call",
+    "xr_module_unload",
     "xr_target_plan_free",
     "xr_target_plan_verify",
     "xr_target_profile_verify",
@@ -121,17 +127,28 @@ def compile_header(cc: Path, prefix: Path, work: Path) -> None:
     source.write_text(
         "#include <xray_target_plan_load.h>\n"
         "#include <xray_runtime_generation.h>\n"
+        "#include <xray_runtime_api.h>\n"
         "static XrRuntimeArtifactAuthority *authority;\n"
         "static XrRuntimeArtifactAuthorityIdentity identity;\n"
         "static XrTargetPlan *plan;\n"
         "static XrRuntimeGenerationAuthority *generation_authority;\n"
         "static XrLoadedModuleGeneration *generation;\n"
         "static int64_t scalar_result;\n"
+        "static XrRuntime *runtime;\n"
+        "static XrModule *module;\n"
+        "static const XrExport *module_export;\n"
+        "static XrExportValue call_result;\n"
         "int main(void) { return !xr_runtime_artifact_authority_load_available() || "
         "xr_runtime_artifact_authority_load_xsm(0, 0, &authority, 0, 0) || "
         "!xr_runtime_generation_activation_available() || "
         "authority != 0 || plan != 0 || generation_authority != 0 || generation != 0 || "
         "scalar_result != 0 || identity.schema_version != 0 || "
+        "runtime != 0 || module != 0 || module_export != 0 || call_result.kind != 0 || "
+        "xr_runtime_create(0, &runtime, 0, 0) || "
+        "xr_module_load_target_plan(runtime, 0, 0, 0, 0, &module, 0, 0) || "
+        "xr_module_find_export(module, \"absent\", &module_export, 0, 0) || "
+        "xr_export_call(module_export, 0, 0, &call_result, 0, 0) || "
+        "xr_module_unload(&module, 0, 0) || xr_runtime_destroy(&runtime, 0, 0) || "
         "xr_module_generation_execute_sole_scalar_i64(generation, &scalar_result, 0, 0); }\n",
         encoding="utf-8",
     )

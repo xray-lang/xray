@@ -72,6 +72,33 @@ product activation path.
    matching XTP, so its archive gate owns the XSM/XTP-to-sole-scalar success
    route. It still has no general resolver, export publication, calls, roots,
    source/CLI entry, or product end-to-end claim.
+9. The artifact runtime facade adds no execution, verification, or naming
+   authority. A runtime owns exactly one generation authority and refuses to be
+   destroyed while it holds a loaded module. A module load requires both exact
+   artifact images: the semantic image is the authority the target image must
+   bind, neither is inferred from the other, and success means the generation
+   reached ACTIVE under the same PREPARE gate above. A load that cannot reach
+   ACTIVE unwinds through rollback, retirement, and unload, releases both
+   artifacts, and returns no handle, so no module ever denotes a generation that
+   cannot run. Unload drives DRAINING, RETIRED, and UNLOADED through the same
+   gates, so an in-flight pin refuses it rather than being torn out.
+10. Export names are a semantic-artifact fact. The TargetPlan carries dense
+    numeric tables and no spelling, so lookup reads the verified source export
+    table the plan retains and matches an exact name in it. It never resolves an
+    unpublished internal function name, and it independently requires a healthy
+    ACTIVE generation, a plan-bounded function index, and the exact installed
+    scalar i64 execution family. A resolved handle is a module-owned loan that
+    the module invalidates at unload; the caller never frees it.
+11. Publishing a source export requires source-namespace shared storage, and
+    clause 5 admits only a sole scalar i64 function with no storage authority,
+    so the two are mutually exclusive at this boundary: a module this runtime
+    can load publishes no export, and a module that publishes one cannot load.
+    Lookup and call are therefore written against the real verified tables and
+    fail closed for that structural reason rather than being stubbed. Calling
+    binds the generation's exact plan fingerprint, holds an `INFLIGHT_CALL` pin
+    for the whole call, releases it on every path, and refuses any argument
+    count or value kind the verified rows do not declare. There is no name
+    guess, no implicit entry, and no result reported that was not executed.
 
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation_internal.h 427d2d23bfa8991dd8d20463169fb9bb23d7486a38d5274cb5d84b089a14a96a
@@ -85,5 +112,8 @@ anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 42b13fdd86da1191714c9f5d2c4981bd8f40a338c9e0a5aa7d0276843f2fc867
-anchor-sha256: tests/install/run_install_public_surface_tests.py 031ddc106e70ab5c0936793dc84985dbb22176c2989e19bcf7ed28dc625c8b60
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 0ab2232c6731a2366bbd270f838d2a9fd33c1480bfe4d75de8c9ededbadfda51
+anchor-sha256: tests/install/run_install_public_surface_tests.py 1bbef0d66f5d0d78dbe41848497b678c02c88fc9663f296d9863571fe20eb38e
+anchor-sha256: include/xray_runtime_api.h d9e9f189616f11ca1ed4ffc489fa5ee020a16970e9bc65d3f0218d822347e010
+anchor-sha256: src/runtime/xr_runtime_api.c 8695699c4b87403a19e01a11e85545f3f180934589f8cc5f3b633ac60d9b7da9
+anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c 225e5777c21a94fcbff21619eef26956c7fad284370c7cbb7091eacebf9817c8
