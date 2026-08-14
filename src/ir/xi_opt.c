@@ -30,11 +30,6 @@
 #include "xi_opt_loop_unroll.h"
 #include "xi_opt_loop_split.h"
 #include "xi_opt_loop_inv_branch.h"
-#include "xi_block_layout.h"
-#include "xi_opt_slp.h"
-#include "xi_opt_loop_vec.h"
-#include "xi_opt_reduction.h"
-#include "xi_opt_call_specialize.h"
 #include "xi_opt_comptime.h"
 #include "xi_cfg_edit.h"
 #include "xi_range.h"
@@ -54,7 +49,6 @@
 #include "xi_verify.h"
 #include "xi_arc_verify.h"
 #include "xi_coro_lower.h"
-#include "xi_opt_devirt.h"
 #include "../base/xdefs.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xchecks.h"
@@ -4208,16 +4202,10 @@ static const XiPassDesc xi_pass_table[] = {
     XI_REWRITE_PASS("loop_inv_branch", xi_opt_loop_inv_branch, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
     XI_REWRITE_PASS("inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("devirt", xi_opt_devirt, XI_OPT_FULL, XI_PASS_NONE, 0),
     XI_REWRITE_PASS("tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, 0),
     XI_REWRITE_PASS("ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
     XI_REWRITE_PASS("jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
     XI_REWRITE_PASS("block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("block_layout", xi_opt_block_layout, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
-    XI_REWRITE_PASS("slp", xi_opt_slp, XI_OPT_FULL, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("loop_vec", xi_opt_loop_vec, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, 0),
-    XI_REWRITE_PASS("reduction", xi_opt_reduction, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, 0),
-    XI_REWRITE_PASS("call_specialize", xi_opt_call_specialize, XI_OPT_FULL, XI_PASS_NONE, 0),
     XI_REWRITE_PASS("const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, 0),
 };
 
