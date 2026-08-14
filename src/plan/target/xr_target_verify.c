@@ -1043,19 +1043,6 @@ static bool semantic_string_literal_is_exact(
            (type->flags & required) == required;
 }
 
-/* Rebuilt independently of the builder: an owned String is the one non-scalar
- * result a direct-local call may name. The shape proof stays on the frozen
- * type row and the ownership proof on the callee's return provenance. */
-static bool semantic_owned_string_type_is_exact(const XrSemanticTypeRecord *type) {
-    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
-                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT;
-    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
-    return type && type->kind == XR_KIND_STRING && type->child_count == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE && type->aggregate_extent == 0 &&
-           type->aggregate_align == 0 && (type->flags & forbidden) == 0 &&
-           (type->flags & required) == required;
-}
-
 static const XrSemanticFunctionRecord *semantic_direct_local_callee_for_operation(
     const XrSemanticPlan *semantic, uint32_t operation_index) {
     size_t target_count = xr_semantic_plan_call_target_count(semantic);
@@ -1087,7 +1074,7 @@ static bool semantic_direct_local_string_result_is_exact(
         operation->result_alias_operand != -1 ||
         operation->return_parameter != -1 || operation->return_complete != 1 ||
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
-        !semantic_owned_string_type_is_exact(
+        !xr_semantic_owned_string_type_is_exact(
             xr_semantic_plan_type(semantic, operation->result_type)))
         return false;
     const XrSemanticFunctionRecord *callee =
