@@ -311,7 +311,7 @@ the compiler core does not download a provider.
 
 ## Digest anchors
 
-anchor-sha256: src/aot/xaot_link.c a268bec7948a3a9cecf081d63d51545e3fe41af0b6ab32a9a38b21b031127da0
+anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de082761402165a3c36919
 anchor-sha256: src/aot/xaot_prepare.c 354a1922121a6ce0478295dd42dec3a55e66ee7ca066aed62669878c7cf2fe3a
 anchor-sha256: src/aot/xaot_verify.c 0521be397426d1577b5b908c7080bf6a643bc2810e1e8841d4783a1140d02ac1
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 4e63b69f6828aefd149170dc7815da693d3ef88d7cefb182c807acacbbaa3dec
@@ -324,7 +324,7 @@ anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1
 anchor-sha256: src/aot/xrt_core_freestanding.h 4637d9be259b16363f74d330ad0bc3d016c71f588d418e71ed9a57cffcf6ecfb
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: include/xray_hosted_fragment_abi.h bcf50466f8320c265a49c6776f669912b83ac4ac3d04f397d4f6c527f1ead02c
-anchor-sha256: src/app/cli/xcmd_build.c 29d14812d1b2c8bac57a3a9ca061b1a66719a88ac8dd4f621b9e549d8cd73c12
+anchor-sha256: src/app/cli/xcmd_build.c c9c43f88c847ae805466e784a78b56b933cca446a18238956fac29118c48e423
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 8d1cb7212b432a7cefe7e3e3d202509c75dd84190e084c3e7d2a88af62ca4eb1
 anchor-sha256: src/ir/xi.h 5fb8179ca2860735de92b1c3e0a458386708ea66878f450605dafa6f22e83b7e

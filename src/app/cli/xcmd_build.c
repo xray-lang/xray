@@ -1571,6 +1571,11 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
      * always-on regardless). Accepted both here and as a global flag. */
     if (xr_cli_opt_bool(&inv->options, "verify-arc"))
         xi_arc_verify_set_per_pass(true);
+    /* Settled before anything compiles: the optimizer policy is fixed for the
+     * whole session, so every module of this build -- including a body inlined
+     * across a module boundary -- is optimized under one configuration. */
+    if (!xr_cli_apply_xi_opt(inv, "build"))
+        return XR_CLI_EXIT_USAGE;
     bool verbose = xr_cli_opt_bool(&inv->options, "verbose") || (inv->ctx && inv->ctx->verbose);
     bool opt_fast = build_opt_level_is_fast(opt_level);
     XrProject *project = NULL;

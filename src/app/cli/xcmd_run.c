@@ -354,6 +354,11 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     RunOptions opts = {0};
     fill_run_options(&opts, inv);
 
+    /* Settled before anything compiles: the optimizer policy is fixed for the
+     * whole session, so it has to be in force before the first pipeline. */
+    if (!xr_cli_apply_xi_opt(inv, "run"))
+        return XR_CLI_EXIT_USAGE;
+
     /* Need a script file */
     if (inv->positional_count < 1) {
         xr_cli_error("run", "no input file specified");

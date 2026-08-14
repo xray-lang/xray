@@ -12,6 +12,7 @@
 #define XAOT_LINK_H
 
 #include "../base/xdefs.h"
+#include "../ir/xi_pass_policy.h"
 #include "xaot_class_layout.h"
 
 typedef enum XaotSimdMode {
@@ -147,6 +148,15 @@ typedef struct XaotLinkManifest {
     /* Escape hatch only. Non-empty raw flags require an exact provider name;
      * they are never inferred or translated for another provider. */
     char raw_flag_provider[32];
+
+    /* Provenance, not identity. The Xi optimizer policy this session compiled
+     * under, in --xi-opt spec syntax. It records which middle-end passes ran
+     * so a reader of the artifact can tell; it deliberately stays out of the
+     * object cache key and out of every plan fingerprint, because a plan is
+     * derived from the optimized graph and is already addressed by its own
+     * content. Two policies that produce the same plan must keep the same
+     * identity, or content addressing would stop paying for itself. */
+    char xi_opt_policy[XI_PASS_POLICY_TEXT_MAX];
 } XaotLinkManifest;
 
 XR_FUNC bool xaot_target_init(XaotTarget *target, const char *name);
