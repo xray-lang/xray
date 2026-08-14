@@ -91,9 +91,6 @@ typedef enum {
 
 /* ========== Pipeline Configuration ========== */
 
-/* Default optimizer time budget: 5 ms in nanoseconds. */
-#define XI_BUDGET_OPT_NS (5ULL * 1000 * 1000)
-
 typedef struct XiPipelineConfig {
     XiPipelineMode mode;     /* selects default pass sequence (can be overridden) */
     bool run_optimize;       /* run optimization passes (default: true) */
@@ -117,8 +114,9 @@ typedef struct XiPipelineConfig {
                               * canonical AST, then run lowering with this disabled. */
     bool dump_ir_before;     /* dump IR to stderr before optimization */
     bool dump_ir_after;      /* dump IR to stderr after optimization */
-    uint64_t budget_ns;      /* optimization time budget in nanoseconds
-                              * (0 = unlimited; default XI_BUDGET_OPT_NS) */
+    uint64_t budget_ns;      /* optimization time budget in nanoseconds (0 = unlimited).
+                              * Both production pipelines leave this at 0: a wall-clock
+                              * cut makes the emitted artifact depend on machine load. */
     bool repl_mode;          /* REPL incremental compilation: top-level bindings
                               * are lowered to XI_GET/SET_GLOBAL (name-keyed dict)
                               * instead of XI_GET/SET_SHARED (slot-indexed array).
