@@ -61,10 +61,15 @@ TEST(pass_names_round_trip_through_ids) {
     ASSERT(xi_pass_id_by_name(NULL) == -1);
 }
 
-TEST(builtin_default_runs_the_vm_light_and_the_aot_full) {
+TEST(builtin_default_uses_one_shared_light_preplan_set) {
     XiOptPolicy policy = xi_pass_policy_builtin_default();
     ASSERT(policy.pipelines[XI_OPT_PIPELINE_VM].level == XI_OPT_LIGHT);
-    ASSERT(policy.pipelines[XI_OPT_PIPELINE_AOT].level == XI_OPT_FULL);
+    ASSERT(policy.pipelines[XI_OPT_PIPELINE_AOT].level == XI_OPT_LIGHT);
+    ASSERT(policy.pipelines[XI_OPT_PIPELINE_VM].disabled == XI_OPT_DISABLE_NONE);
+    ASSERT(policy.pipelines[XI_OPT_PIPELINE_AOT].disabled == XI_OPT_DISABLE_NONE);
+    ASSERT(memcmp(&policy.pipelines[XI_OPT_PIPELINE_VM],
+                  &policy.pipelines[XI_OPT_PIPELINE_AOT],
+                  sizeof(policy.pipelines[XI_OPT_PIPELINE_VM])) == 0);
     ASSERT(xi_pass_policy_is_builtin_default(&policy));
 }
 
@@ -75,7 +80,7 @@ TEST(names_a_level_for_one_pipeline) {
     ASSERT(xi_pass_policy_apply_spec(&policy, "vm=full", err, sizeof(err)));
     ASSERT(policy.pipelines[XI_OPT_PIPELINE_VM].level == XI_OPT_FULL);
     /* The other pipeline is untouched: one entry states one pipeline. */
-    ASSERT(policy.pipelines[XI_OPT_PIPELINE_AOT].level == XI_OPT_FULL);
+    ASSERT(policy.pipelines[XI_OPT_PIPELINE_AOT].level == XI_OPT_LIGHT);
     ASSERT(policy.pipelines[XI_OPT_PIPELINE_AOT].disabled == aot_before);
 }
 
@@ -198,7 +203,7 @@ int main(void) {
     printf("=== Xi Optimizer Policy Tests ===\n\n");
 
     run_pass_names_round_trip_through_ids();
-    run_builtin_default_runs_the_vm_light_and_the_aot_full();
+    run_builtin_default_uses_one_shared_light_preplan_set();
     run_names_a_level_for_one_pipeline();
     run_withholds_named_passes_from_a_level();
     run_states_both_pipelines_in_one_spec();

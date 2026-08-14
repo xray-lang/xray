@@ -106,46 +106,15 @@ static bool xi_opt_pipeline_by_name(const char *name, XiOptPipelineId *out) {
 
 /* ========== Built-in default ========== */
 
-/* Passes withheld from the native backend at the full level.
- *
- * loop_split was withheld here because it answered programs incorrectly: it
- * decided an early exit was dead by evaluating its condition at the induction
- * variable's first value, which says nothing about later iterations. That is
- * repaired at the source. The pass now requires the interval the loop header
- * establishes to imply the exit is never taken, and over the 52 differential
- * cases under tests/diff/cases/semantics/optimizer enabling it changes no
- * answer at all: not on the VM at the full level and not on the native
- * backend. It is released.
- *
- * The proof it now demands is strong enough that real loop bounds rarely
- * satisfy it, so the pass currently rewrites nothing. That makes it correct
- * and worthless rather than correct and useful, which is a question about
- * whether to keep the pass, not about whether to withhold it.
- *
- * ifconv is deliberately NOT withheld. Its defect reaches the native backend
- * as a refusal, not as a wrong answer, and a loud refusal is the acceptable
- * failure; switching a pass off would still be the wrong repair -- the defect
- * is being fixed in if-conversion itself.
- *
- * ivsr is withheld for an older and separate reason carried over unchanged:
- * its rewrite is not honoured through representation selection.
- *
- * This set is containment, not a repair. Take a pass out of it once enabling
- * that pass introduces no wrong answer and no new refusal over the corpus
- * above, on the VM at the full level and on the native backend. This is the
- * only place a pass is withheld. */
-#define XI_PASS_AOT_WITHHELD_PASSES (XI_OPT_DISABLE_IVSR)
-
 XR_FUNC XiOptPolicy xi_pass_policy_builtin_default(void) {
     XiOptPolicy policy;
     memset(&policy, 0, sizeof(policy));
-    /* The VM stays at the light level. Every pass above it that is known to
-     * be defective is defective on both pipelines, and the VM is the lane
-     * that runs a program without a native toolchain. */
+    /* Pre-plan optimization is shared because SemanticPlan is derived from
+     * its output. A deeper native-only set would make the two executors plan
+     * different programs before either target plan exists. */
     policy.pipelines[XI_OPT_PIPELINE_VM].level = XI_OPT_LIGHT;
     policy.pipelines[XI_OPT_PIPELINE_VM].disabled = XI_OPT_DISABLE_NONE;
-    policy.pipelines[XI_OPT_PIPELINE_AOT].level = XI_OPT_FULL;
-    policy.pipelines[XI_OPT_PIPELINE_AOT].disabled = XI_PASS_AOT_WITHHELD_PASSES;
+    policy.pipelines[XI_OPT_PIPELINE_AOT] = policy.pipelines[XI_OPT_PIPELINE_VM];
     return policy;
 }
 

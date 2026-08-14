@@ -561,9 +561,9 @@ static bool xi_pipeline_push_source_file(struct XaAnalyzer *analyzer, const XiPi
  * pass sequence wherever the machine happened to be busy, so the same compiler
  * on the same source could emit different artifacts between two runs, and the
  * VM and the native backend could enter representation selection from programs
- * that were optimized to different depths for no stated reason. The two
- * pipelines still choose their own optimization level; that choice is a stated
- * property of each configuration rather than an accident of timing.
+ * that were optimized to different depths for no stated reason. The built-in
+ * policy therefore gives both pipelines the same pre-plan pass set; explicit
+ * diagnostic policy can still isolate a pass in one executor.
  *
  * The level and the withheld pass set come from the session optimizer policy
  * (xi_pass_policy.h), not from the command line's -O. -O selects flags for the

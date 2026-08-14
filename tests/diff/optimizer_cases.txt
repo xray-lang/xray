@@ -1,22 +1,17 @@
 # Cases that must run through the Xi middle end to mean anything.
 #
-# What -O actually selects. The Xi optimization level is fixed per pipeline, not
-# taken from the command line: xi_pipeline_default_config() pins the VM at
-# XI_OPT_LIGHT and xi_pipeline_aot_config() pins the native backend at
-# XI_OPT_FULL. The -O flag reaches only the host C compiler and the link
-# manifest, so `xray build --native -O 0` already runs SCCP, GVN-PRE, LICM,
-# loop splitting, inlining and if-conversion. Confirm it with XRAY_XI_STATS=1
-# on any -O0 native build.
+# What -O actually selects. The Xi optimization level is session policy, not
+# the host optimization flag: the built-in policy gives both VM and native
+# compilation the same XI_OPT_LIGHT pre-plan pass set. The -O flag reaches only
+# the host C compiler and the link manifest. Use --xi-opt explicitly when a
+# case must exercise a deeper Xi pass set.
 #
-# Two consequences. The ordinary differential lane is the level comparison: it
-# runs the light VM against the full native backend on every case under
-# tests/diff/cases/. And backend_diff_optimized adds no middle-end coverage on
-# top of it -- XRAY_AOT_TEST_OPT=2 changes the host compiler's flag and nothing
-# in Xi. What this manifest still buys is a second host optimization level over
-# programs whose answers depend on the middle end.
+# Consequently, XRAY_AOT_TEST_OPT=2 still changes only the host compiler's flag.
+# This manifest names programs whose answers depend on the middle end; a lane
+# that intends to exercise deeper Xi passes must also provide XRAY_XI_OPT.
 #
-# Nothing runs the VM at XI_OPT_FULL, so a middle-end defect that the native
-# backend cannot reach (it rejects the program earlier) has no lane at all.
+# A VM-only full-policy lane remains useful when the native backend rejects a
+# program before reaching the middle-end behavior under test.
 tests/diff/cases/semantics/optimizer/tbaa_raw_pointer_store_kills_array_load.xr
 tests/diff/cases/semantics/evaluation_order/e1_e3_binary_operand_order.xr
 tests/diff/cases/semantics/evaluation_order/e2_call_argument_order.xr

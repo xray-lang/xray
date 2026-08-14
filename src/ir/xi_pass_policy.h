@@ -14,10 +14,11 @@
  *   a module boundary was optimized under the same rules as its new host.
  *   A per-module knob could not state which rules the inlined body followed.
  *
- *   A policy carries one entry per pipeline. The VM and the native backend
- *   run different pass sets by design, so each is addressed separately:
- *   the VM defaults to the light level, the native backend to the full
- *   level minus the passes named in the built-in default below.
+ *   A policy carries one entry per pipeline so diagnostics can isolate a
+ *   pass in one executor. The supported built-in configuration gives both
+ *   pipelines the same light pre-plan pass set. Backend-only optimization
+ *   belongs after the shared plan is frozen and cannot be smuggled into the
+ *   native pipeline by selecting a deeper pre-plan level.
  *
  *   This is a diagnostic and containment mechanism. It exists so a defective
  *   pass can be named and switched off with the reason recorded, and so a

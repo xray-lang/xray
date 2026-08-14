@@ -625,8 +625,8 @@ def main(argv: list[str]) -> int:
     print(f"CacheState: {cache_state}")
     print(f"AOT opt:  -O{aot_opt}")
     # -O reaches only the host C compiler. Which Xi passes ran is the line
-    # below, and "per-pipeline default" means the two lanes ran different sets.
-    print(f"Xi opt:   {xi_opt if xi_opt else 'per-pipeline default (lanes differ)'}")
+    # below. The built-in default is one shared light pre-plan set for both lanes.
+    print(f"Xi opt:   {xi_opt if xi_opt else 'shared light pre-plan default'}")
     print(f"Cache:    {aot_cache}")
     print(f"BinCache: {aot_bin_cache}")
     if "embed" in backends:
