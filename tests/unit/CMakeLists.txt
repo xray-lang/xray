@@ -502,6 +502,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
     add_test(NAME test_xr_atomic_cxx COMMAND $<TARGET_FILE:test_xr_atomic_cxx>)
     set_tests_properties(test_xr_atomic_cxx PROPERTIES LABELS "aot;cgen;cxx;task-243")
 endif()
+add_xray_unit_test(test_xi_pass_policy ir/test_xi_pass_policy.c)
 add_xray_unit_test(test_xi_licm ir/test_xi_licm.c)
 add_xray_unit_test(test_xi_ifconv ir/test_xi_ifconv.c)
 add_xray_unit_test(test_xi_sccp ir/test_xi_sccp.c)

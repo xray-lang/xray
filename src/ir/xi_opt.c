@@ -12,6 +12,7 @@
  */
 
 #include "xi_opt.h"
+#include "xi_pass_policy.h"
 #include "xi_opt_gvn_pre.h"
 #include "xi_tbaa.h"
 #include "xi_effect.h"
@@ -4220,19 +4221,13 @@ static const XiPassDesc xi_pass_table[] = {
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
 
-/* Pass names in XI_OPT_PASS_LIST order.  The disable mask addresses passes by
- * table index, so this list and the table must stay in lockstep. */
-static const char *const xi_opt_pass_id_names[] = {
-#define XI_OPT_PASS_NAME_ENTRY(upper, lower) lower,
-    XI_OPT_PASS_LIST(XI_OPT_PASS_NAME_ENTRY)
-#undef XI_OPT_PASS_NAME_ENTRY
-};
+/* Pass names in XI_OPT_PASS_LIST order live in xi_pass_policy.c, which is also
+ * what parses a pass name out of a spec.  The disable mask addresses passes by
+ * table index, so that list and this table must stay in lockstep; the validator
+ * below compares them name by name at startup. */
 
 XR_STATIC_ASSERT(XI_OPT_PASS_ID_COUNT <= 32,
                  "XiOptDisableMask is 32 bits wide; the pass list outgrew it");
-XR_STATIC_ASSERT(sizeof(xi_opt_pass_id_names) / sizeof(xi_opt_pass_id_names[0]) ==
-                     (size_t) XI_OPT_PASS_ID_COUNT,
-                 "pass id list and pass name list disagree");
 
 /* Validate pass table invariants at startup. */
 static void validate_pass_table_once(void) {
@@ -4244,7 +4239,9 @@ static void validate_pass_table_once(void) {
         XR_DCHECK(d->name != NULL, "pass table entry has NULL name");
         XR_DCHECK(d->fn != NULL, "pass table entry has NULL fn");
         XR_DCHECK(d->max_stage >= d->min_stage, "pass has an invalid stage window");
-        XR_CHECK(strcmp(d->name, xi_opt_pass_id_names[i]) == 0,
+        XR_CHECK(xi_pass_name_by_id((int) i) != NULL,
+                 "pass table is longer than the pass id list");
+        XR_CHECK(strcmp(d->name, xi_pass_name_by_id((int) i)) == 0,
                  "pass table order diverged from the pass id list");
     }
 
@@ -4340,14 +4337,15 @@ typedef struct XiPassRuntimeConfig {
 
 static XiPassRuntimeConfig xi_pass_cfg[XI_PASS_TABLE_SIZE];
 
-/* Passes switched off through XRAY_XI_PASS.  Merged into the caller's mask so
- * the environment and a pipeline configuration reach the driver by one path. */
-static XiOptDisableMask xi_pass_env_disable_mask = XI_OPT_DISABLE_NONE;
 static xr_once_t xi_pass_cfg_once = XR_ONCE_INITIALIZER;
 
+/* XRAY_XI_PASS selects per-pass IR dumps and nothing else.  Which passes run
+ * is stated once, by the session optimizer policy, and recorded from there as
+ * build provenance; a second way to switch a pass off would make that record a
+ * lie, so this parser accepts no such setting.  Use --xi-opt (or XRAY_XI_OPT)
+ * to withhold a pass. */
 static void init_xi_pass_config(void) {
     memset(xi_pass_cfg, 0, sizeof(xi_pass_cfg));
-    xi_pass_env_disable_mask = XI_OPT_DISABLE_NONE;
     const char *env = getenv("XRAY_XI_PASS");
     if (!env || !env[0])
         return;
@@ -4356,38 +4354,24 @@ static void init_xi_pass_config(void) {
      * heap buffer rather than truncated into a fixed one. */
     size_t len = strlen(env);
     char *buf = (char *) xr_malloc(len + 1);
-    if (!buf) {
-        fprintf(stderr, "[xi_pass] error: out of memory parsing XRAY_XI_PASS\n");
-        return;
-    }
+    XR_CHECK(buf != NULL, "out of memory parsing XRAY_XI_PASS");
     memcpy(buf, env, len + 1);
 
     char *save = NULL;
     char *tok = strtok_r(buf, ",", &save);
     while (tok) {
         char *colon = strchr(tok, ':');
-        if (colon) {
-            *colon = '\0';
-            const char *pname = tok;
-            const char *kv = colon + 1;
-            int idx = pass_index_by_name(pname);
-            if (idx >= 0) {
-                if (strcmp(kv, "enable=0") == 0)
-                    xi_pass_env_disable_mask |= XI_OPT_DISABLE_BIT(idx);
-                else if (strcmp(kv, "dump=1") == 0)
-                    xi_pass_cfg[idx].dump = true;
-                else
-                    fprintf(stderr,
-                            "[xi_pass] warning: unknown setting '%s' for pass '%s' "
-                            "in XRAY_XI_PASS\n",
-                            kv, pname);
-            } else {
-                fprintf(stderr,
-                        "[xi_pass] warning: unknown pass '%s' "
-                        "in XRAY_XI_PASS\n",
-                        pname);
-            }
-        }
+        XR_CHECK_FMT(colon != NULL, "XRAY_XI_PASS entry '%s' is not pass:dump=1", tok);
+        *colon = '\0';
+        const char *pname = tok;
+        const char *kv = colon + 1;
+        int idx = pass_index_by_name(pname);
+        XR_CHECK_FMT(idx >= 0, "XRAY_XI_PASS names an unknown pass '%s'", pname);
+        XR_CHECK_FMT(strcmp(kv, "dump=1") == 0,
+                     "XRAY_XI_PASS setting '%s' for pass '%s' is not dump=1 "
+                     "(use --xi-opt to withhold a pass)",
+                     kv, pname);
+        xi_pass_cfg[idx].dump = true;
         tok = strtok_r(NULL, ",", &save);
     }
     xr_free(buf);
@@ -4695,14 +4679,15 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
      * and side-effect ordering. */
     xr_once_call(&xi_shuffle_once, init_xi_shuffle_config);
 
-    /* XRAY_XI_PASS=pass:key=value[,pass:key=value,...]
-     * Per-pass control flags:
-     *   enable=0  — skip this pass entirely
-     *   dump=1    — dump IR after this pass (all funcs)
-     * Examples: "dce:enable=0", "gvn:dump=1,licm:enable=0" */
+    /* XRAY_XI_PASS=pass:dump=1[,pass:dump=1,...]
+     * Dumps the IR after the named pass, for every function.
+     * Examples: "gvn:dump=1", "gvn:dump=1,licm:dump=1"
+     * Which passes run is not settable here; that is --xi-opt. */
     xr_once_call(&xi_pass_cfg_once, init_xi_pass_config);
 
-    const XiOptDisableMask effective_disable = disabled_passes | xi_pass_env_disable_mask;
+    /* One mask, from the caller's pipeline configuration, which the pipeline
+     * took from the session optimizer policy.  There is no second source. */
+    const XiOptDisableMask effective_disable = disabled_passes;
 
     uint64_t pipeline_start = xr_time_monotonic_ns();
     XiPassChange total = xi_pass_no_change();

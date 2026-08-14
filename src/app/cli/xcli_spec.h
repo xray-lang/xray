@@ -55,6 +55,14 @@ typedef struct {
 /* Sentinel: end of option spec array */
 // clang-format off
 #define XR_CLI_OPT_END {NULL, 0, XR_CLI_VALUE_NONE, false, false, NULL, NULL}
+
+/* Session optimizer policy, shared by every command that drives a Xi
+ * pipeline. Containment and bisection knob, not an optimization strategy:
+ * the built-in default is the supported configuration and -O never reached
+ * Xi at all. Spelt the same way on every command that carries it. */
+#define XR_CLI_XI_OPT_SPEC                                                                         \
+    {"xi-opt", 0, XR_CLI_VALUE_STRING, false, false, "SPEC",                                       \
+     "Xi optimizer policy for this session: vm|aot=none|light|full[-pass...]"}
 // clang-format on
 
 /* ========== Option Query Model ========== */
@@ -119,6 +127,15 @@ XR_FUNC int xr_cli_opt_int(const XrCliOptionMap *map, const char *name, int defa
 
 /* Get boolean flag value (false if not provided). */
 XR_FUNC bool xr_cli_opt_bool(const XrCliOptionMap *map, const char *name);
+
+/* ========== Session Optimizer Policy ========== */
+
+/* Apply this invocation's --xi-opt option to the session optimizer policy.
+ * Absent option: the session keeps the built-in default. Malformed spec, or a
+ * session whose pipelines are already configured: prints the reason under
+ * `cmd` and returns false, and the caller must abort the command. Nothing
+ * falls back to an optimization level the invocation did not name. */
+XR_FUNC bool xr_cli_apply_xi_opt(const XrCliInvocation *inv, const char *cmd);
 
 /* ========== Command Registry ========== */
 

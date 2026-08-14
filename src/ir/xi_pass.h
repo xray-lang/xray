@@ -127,8 +127,9 @@ typedef enum {
 } XiOptPassId;
 
 /* One bit per pass.  The driver consults the bit at the pass' table index, so
- * a mask is a complete description of which optimizations are switched off,
- * whether it came from a pipeline configuration or from XRAY_XI_PASS. */
+ * a mask is a complete description of which optimizations are switched off.
+ * A mask reaches the driver only through a pipeline configuration, which takes
+ * it from the session optimizer policy; nothing else can withhold a pass. */
 typedef uint32_t XiOptDisableMask;
 
 #define XI_OPT_DISABLE_NONE 0u

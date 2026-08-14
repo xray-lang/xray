@@ -19,6 +19,7 @@
 #include "xi_verify.h"
 #include "xi_opt.h"
 #include "xi_pass.h"
+#include "xi_pass_policy.h"
 #include "xi_emit.h"
 #include "xi_backend_lower.h"
 #include "xi_escape.h"
@@ -562,14 +563,22 @@ static bool xi_pipeline_push_source_file(struct XaAnalyzer *analyzer, const XiPi
  * VM and the native backend could enter representation selection from programs
  * that were optimized to different depths for no stated reason. The two
  * pipelines still choose their own optimization level; that choice is a stated
- * property of each configuration rather than an accident of timing. */
+ * property of each configuration rather than an accident of timing.
+ *
+ * The level and the withheld pass set come from the session optimizer policy
+ * (xi_pass_policy.h), not from the command line's -O. -O selects flags for the
+ * host C compiler and the link manifest and never reached Xi. Reading the
+ * policy here seals it, so every module a session compiles is optimized under
+ * the same rules. */
 
 XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     XiPipelineConfig cfg;
+    XiOptPipelinePolicy policy = xi_pass_session_pipeline_policy(XI_OPT_PIPELINE_VM);
     memset(&cfg, 0, sizeof(cfg));
     cfg.mode = XI_PIPE_VM;
     cfg.run_optimize = true;
-    cfg.opt_level = XI_OPT_LIGHT;
+    cfg.opt_level = policy.level;
+    cfg.disabled_opt_passes = policy.disabled;
     cfg.run_select_rep = false;
     /* The VM runs escape analysis + precise dup/drop insertion (xi_arc) but
      * NOT stack_alloc_rewrite (no XI_STACK_ALLOC handler in the VM emitter)
@@ -586,10 +595,11 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
 
 XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     XiPipelineConfig cfg;
+    XiOptPipelinePolicy policy = xi_pass_session_pipeline_policy(XI_OPT_PIPELINE_AOT);
     memset(&cfg, 0, sizeof(cfg));
     cfg.mode = XI_PIPE_AOT;
     cfg.run_optimize = true;
-    cfg.opt_level = XI_OPT_FULL;
+    cfg.opt_level = policy.level;
     cfg.run_select_rep = true;
     cfg.run_backend_lower = true;
     cfg.run_escape = true;
@@ -599,7 +609,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
     cfg.rep_policy = xi_rep_policy_native_boundary();
-    cfg.disabled_opt_passes = XI_OPT_DISABLE_IVSR;
+    cfg.disabled_opt_passes = policy.disabled;
     return cfg;
 }
 
