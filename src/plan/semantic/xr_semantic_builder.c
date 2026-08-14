@@ -9,6 +9,7 @@
  */
 
 #include "xr_semantic_builder.h"
+#include "xr_semantic_class_shape.h"
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_verify.h"
 #include "../ownership/xr_ownership_obligation.h"
@@ -2562,6 +2563,50 @@ static bool append_source_export_call_target(XrSemanticBuildContext *ctx, const 
     return true;
 }
 
+/* Names the construction of a declared class. The call carries no callee
+ * function, no argument and no selector, so nothing in the operation names what
+ * it builds; the shared class-shape judgement proves it from the instance type
+ * the call returns and from the class object its callee operand loads, and both
+ * must name the same declaration. The row therefore names the declaration and
+ * nothing else: no callee identity, no dependency, no export. */
+static bool append_source_class_constructor_call_target(XrSemanticBuildContext *ctx,
+                                                        uint32_t operation) {
+    const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
+    uint32_t source_class = xr_semantic_class_construction_source_class(ctx->plan, call);
+    if (source_class == XR_SEMANTIC_INDEX_NONE)
+        return true;
+    if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
+        !reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,
+                       ctx->plan->call_target_count + 1, sizeof(*ctx->plan->call_targets),
+                       XR_SEMANTIC_MAX_CALL_TARGETS))
+        return fail(ctx, "XR_EXEC_5003", "semantic call-target budget exhausted");
+    XrSemanticCallTargetRecord *record = &ctx->plan->call_targets[ctx->plan->call_target_count++];
+    memset(record, 0, sizeof(*record));
+    record->operation = operation;
+    record->function = XR_SEMANTIC_INDEX_NONE;
+    record->dependency = XR_SEMANTIC_INDEX_NONE;
+    record->source_export = XR_SEMANTIC_INDEX_NONE;
+    record->callable_type = call->result_type;
+    record->kind = XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
+    XrTextBuilder key = {0};
+    bool valid =
+        text_append_format(&key,
+                           "call-target-v9:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
+        text_append_stable_id(&key, call->id) && text_append(&key, ":source-class=") &&
+        text_append_stable_id(&key, ctx->plan->source_classes[source_class].id) &&
+        text_append(&key, ":type=") &&
+        text_append_stable_id(&key, ctx->plan->types[record->callable_type].id) &&
+        text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    if (valid)
+        record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+    text_dispose(&key);
+    XrFingerprint digest;
+    if (!valid || !record->canonical_key ||
+        !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+        return fail(ctx, "XR_SEM_0019", "source class construction identity is incomplete");
+    return true;
+}
+
 static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value,
                                uint32_t operation) {
     if (!value || operation >= ctx->plan->operation_count || value->nargs == 0)
@@ -2606,7 +2651,7 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
         indirect_callee->op != XI_GET_SHARED && indirect_callee->op != XI_CLOSURE_NEW &&
         !(indirect_callee->op == XI_STACK_ALLOC && indirect_callee->aux_int == XI_CLOSURE_NEW);
     if (function < 0 && !native_yieldable && !indirect_callable)
-        return true;
+        return append_source_class_constructor_call_target(ctx, operation);
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
         !reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,
                        ctx->plan->call_target_count + 1, sizeof(*ctx->plan->call_targets),

@@ -9,6 +9,7 @@
  */
 
 #include "xr_semantic_verify.h"
+#include "xr_semantic_class_shape.h"
 #include "xr_semantic_graph.h"
 #include "xr_semantic_ops.h"
 #include "xr_semantic_plan_internal.h"
@@ -2670,9 +2671,14 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                           "call-target table is not in operation order");
         }
         bool source_export = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
+        /* Re-derived from the frozen plan through the shared class-shape
+         * judgement, never read back from the row being checked. */
+        uint32_t class_construction =
+            xr_semantic_class_construction_source_class(plan, source_call);
         if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable ||
              indirect_type != XR_SEMANTIC_INDEX_NONE || native_namespace || builtin_instance ||
-             source_instance_function != XR_SEMANTIC_INDEX_NONE) &&
+             source_instance_function != XR_SEMANTIC_INDEX_NONE ||
+             class_construction != XR_SEMANTIC_INDEX_NONE) &&
             !target) {
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
@@ -2758,8 +2764,20 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             plan->operands[source_call->operand_begin].role == XR_SEM_OPERAND_RECEIVER &&
             plan->types[target->callable_type].source_class == XR_SEMANTIC_INDEX_NONE &&
             !stable_id_zero(plan->types[target->callable_type].source_class_identity);
+        bool class_construction_shape =
+            class_construction != XR_SEMANTIC_INDEX_NONE && !source_namespace &&
+            !native_namespace && !builtin_instance && direct_function == XR_SEMANTIC_INDEX_NONE &&
+            !native_yieldable && indirect_type == XR_SEMANTIC_INDEX_NONE &&
+            source_instance_function == XR_SEMANTIC_INDEX_NONE &&
+            target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+            target->function == XR_SEMANTIC_INDEX_NONE &&
+            target->dependency == XR_SEMANTIC_INDEX_NONE &&
+            target->source_export == XR_SEMANTIC_INDEX_NONE &&
+            stable_id_zero(target->export_identity) && stable_id_zero(target->callee_function) &&
+            target->callable_type == source_call->result_type;
         if ((!direct && !native && !source_shape && !indirect && !native_namespace_shape &&
-             !builtin_instance_shape && !source_instance_shape && !open_source_instance_shape) ||
+             !builtin_instance_shape && !source_instance_shape && !open_source_instance_shape &&
+             !class_construction_shape) ||
             target->reserved[0] != 0 || target->reserved[1] != 0 || target->reserved[2] != 0) {
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
@@ -2815,6 +2833,16 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                               "type=%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, builtin_instance, selector,
                               type_id, (unsigned) target->kind);
+        } else if (class_construction_shape) {
+            char class_id[XR_STABLE_ID_BYTES * 2 + 1];
+            char type_id[XR_STABLE_ID_BYTES * 2 + 1];
+            xr_stable_id_hex(plan->source_classes[class_construction].id, class_id);
+            xr_stable_id_hex(plan->types[target->callable_type].id, type_id);
+            length = snprintf(expected_key, sizeof(expected_key),
+                              "call-target-v9:schema=%u:operation=%s:source-class=%s:type=%s:"
+                              "kind=%u",
+                              XR_SEMANTIC_SCHEMA_VERSION, operation_id, class_id, type_id,
+                              (unsigned) target->kind);
         } else if (source_instance_shape) {
             const char *selector = plan->metadata[plan->operations[operation].metadata_begin];
             char class_id[XR_STABLE_ID_BYTES * 2 + 1];
