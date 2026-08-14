@@ -286,6 +286,14 @@ static XiValue *find_general_tail_call(const XiBlock *blk) {
     if (ret_val->op != XI_CALL)
         return NULL;
 
+    /* A call on its own activation is not a general tail call: its callee slot
+     * holds the placeholder constant the self encoding uses, and only the
+     * self-aware emission reads the frame's own closure instead.  Promoting it
+     * would hand that placeholder to the general tail path as if it were the
+     * callee. */
+    if (xi_call_targets_own_frame(ret_val->op, ret_val->aux_int))
+        return NULL;
+
     /* Must be the last value in the block. */
     if (blk->nvalues == 0 || blk->values[blk->nvalues - 1] != ret_val)
         return NULL;
