@@ -992,7 +992,7 @@ static XrSemanticPlan *build_source_export_call_target_plan(XrSemanticPlan **dep
     caller_root->nchildren = caller_root->children_cap = 1;
     caller->parent_func = caller_root;
     XiImportRef import_ref = {
-        .module_path = "stdlib/net/net.xr",
+        .module_path = "net",
         .member_name = NULL,
         .resolved_mod_index = 0,
         .resolved_shared_slot = -1,
@@ -2824,6 +2824,13 @@ static void test_source_export_call_target_authority(void) {
     REQUIRE(plan != NULL && dependency != NULL);
     REQUIRE(xr_semantic_plan_is_verified(plan));
     REQUIRE(plan->dependency_count == 1 && dependency->source_export_count == 1);
+    REQUIRE(strcmp(plan->dependencies[0].module_path, "stdlib/net/net.xr") == 0);
+    const XrSemanticOperationRecord *source_import = NULL;
+    for (uint32_t operation = 0; operation < plan->operation_count; operation++)
+        if (plan->operations[operation].opcode == XI_IMPORT_REF)
+            source_import = &plan->operations[operation];
+    REQUIRE(source_import != NULL && source_import->metadata_count == 2 &&
+            strcmp(plan->metadata[source_import->metadata_begin], "stdlib/net/net.xr") == 0);
     REQUIRE(plan->call_target_count == 1);
     XrSemanticCallTargetRecord *target = &plan->call_targets[0];
     REQUIRE(target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT);

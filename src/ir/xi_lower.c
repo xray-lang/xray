@@ -892,6 +892,7 @@ static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t 
                                              uint32_t source_span_id) {
     const XgGlobalEvidence *ev;
     XgFuncId match = XG_NO_ID;
+    XgFuncId lexical_parent_func_id = XG_NO_ID;
     XgClassId owner_class_id = XG_NO_ID;
     bool owner_class_known = false;
     if (!l || !l->global_evidence || (kind != XG_BODY_MODULE_INIT && source_node_id == 0))
@@ -899,8 +900,9 @@ static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t 
     ev = l->global_evidence;
     if (kind == XG_BODY_FUNCTION && l->parent && l->parent->func &&
         l->parent->func->xg_body_func_id != XG_NO_ID) {
+        lexical_parent_func_id = l->parent->func->xg_body_func_id;
         for (uint32_t i = 0; i < ev->nbodies; i++) {
-            if (ev->bodies[i].func_id == l->parent->func->xg_body_func_id) {
+            if (ev->bodies[i].func_id == lexical_parent_func_id) {
                 owner_class_id = ev->bodies[i].owner_class_id;
                 owner_class_known = true;
                 break;
@@ -921,8 +923,29 @@ static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t 
             return XG_NO_ID;
         match = body->func_id;
     }
-    if (match != XG_NO_ID || kind != XG_BODY_FUNCTION || !owner_class_known || source_span_id == 0)
+    if (match != XG_NO_ID || kind != XG_BODY_FUNCTION || source_span_id == 0)
         return match;
+    if (lexical_parent_func_id != XG_NO_ID) {
+        /* Nested function bodies carry the producer's already-frozen lexical
+         * parent identity. The AST clone need not reproduce the producer's
+         * opaque child node id: parent plus exact source span selects one body,
+         * and same-line ambiguity remains a fail-closed miss. */
+        for (uint32_t i = 0; i < ev->nbodies; i++) {
+            const XgBodySummary *body = &ev->bodies[i];
+            if (body->func_id == XG_NO_ID || body->kind != kind ||
+                body->lexical_parent_func_id != lexical_parent_func_id ||
+                !xi_lower_evidence_module_matches(l, body->module_id) ||
+                body->source_span_id != source_span_id ||
+                (owner_class_known && body->owner_class_id != owner_class_id))
+                continue;
+            if (match != XG_NO_ID)
+                return XG_NO_ID;
+            match = body->func_id;
+        }
+        return match;
+    }
+    if (!owner_class_known)
+        return XG_NO_ID;
     /* Monomorphized AST clones preserve the origin source coordinate while
      * global evidence assigns the clone a distinct semantic node id.  Select
      * the child body through its already-bound owner class and source span. */

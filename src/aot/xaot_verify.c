@@ -3593,7 +3593,8 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         }
         switch ((XgBodyKind) body->kind) {
             case XG_BODY_MODULE_INIT:
-                if (body->source_node_id != 0 || body->owner_decl_id != XG_NO_ID ||
+                if (body->lexical_parent_func_id != XG_NO_ID ||
+                    body->source_node_id != 0 || body->owner_decl_id != XG_NO_ID ||
                     body->owner_class_id != XG_NO_ID || body->owner_method_id != XG_NO_ID ||
                     body->signature_key != 0)
                     return set_error(errbuf, errbuf_len,
@@ -3604,7 +3605,21 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                     body->source_span_id == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence function body identity is stale");
+                if (body->lexical_parent_func_id != XG_NO_ID) {
+                    const XgBodySummary *parent = verify_find_evidence_body_by_func(
+                        ev, body->lexical_parent_func_id);
+                    if (!parent || parent == body ||
+                        parent->module_id != body->module_id ||
+                        body->owner_decl_id != XG_NO_ID)
+                        return set_error(
+                            errbuf, errbuf_len,
+                            "AOT global evidence lexical parent does not re-derive");
+                }
                 if (body->owner_decl_id != XG_NO_ID) {
+                    if (body->lexical_parent_func_id != XG_NO_ID)
+                        return set_error(
+                            errbuf, errbuf_len,
+                            "AOT global evidence declared function has lexical parent");
                     if (body->owner_class_id != XG_NO_ID)
                         return set_error(errbuf, errbuf_len,
                                          "AOT global evidence function body identity is stale");
@@ -3628,7 +3643,8 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 }
                 break;
             case XG_BODY_METHOD:
-                if (body->source_node_id == 0 || body->owner_decl_id == XG_NO_ID ||
+                if (body->lexical_parent_func_id != XG_NO_ID ||
+                    body->source_node_id == 0 || body->owner_decl_id == XG_NO_ID ||
                     body->owner_class_id == XG_NO_ID || body->owner_method_id == XG_NO_ID ||
                     body->source_span_id == 0)
                     return set_error(errbuf, errbuf_len,

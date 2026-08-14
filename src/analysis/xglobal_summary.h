@@ -62,8 +62,9 @@ enum {
      * Use a fresh version so caches from either parent lineage are invalidated.
      * 41: bodies and methods publish return ownership.
      * 43: constructions of a class without a declared constructor carry their
-     * own callsite kind instead of the open closure kind. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 43,
+     * own callsite kind instead of the open closure kind.
+     * 44: nested bodies publish their frozen lexical-parent body identity. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 44,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -816,6 +817,7 @@ typedef struct XgInterfaceObjectUseSummary {
 
 typedef struct XgBodySummary {
     XgFuncId func_id;
+    XgFuncId lexical_parent_func_id;
     XgModuleId module_id;
     uint32_t source_node_id;
     XgDeclId owner_decl_id;

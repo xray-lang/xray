@@ -9948,6 +9948,7 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
 
     memset(&row, 0, sizeof(row));
     row.func_id = pending->func_id;
+    row.lexical_parent_func_id = pending->lexical_parent_func_id;
     row.module_id = pending->module_id;
     row.source_node_id = pending->source_node_id;
     row.owner_decl_id = pending->owner_decl_id;

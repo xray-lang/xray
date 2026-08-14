@@ -847,7 +847,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=43 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=44 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -964,7 +964,7 @@ TEST(global_evidence_cache_payload_preserves_source_node_identity) {
 
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
     ASSERT_NOT_NULL(payload);
-    ASSERT_NOT_NULL(strstr(payload, "body id=1 module=1 node=1002"));
+    ASSERT_NOT_NULL(strstr(payload, "body id=1 parent=0 module=1 node=1002"));
     ASSERT_NOT_NULL(strstr(payload, "callsite id=1 owner=1 node=1003"));
     ASSERT_TRUE(xg_evidence_cache_payload_materialize(payload, &materialized));
     ASSERT_EQ_UINT(materialized.bodies[0].source_node_id, 1002);
@@ -1221,15 +1221,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=43 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=43 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=43 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=43 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=44 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=44 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=44 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=44 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=43 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=43 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=43 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=43 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=44 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=44 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=44 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=44 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -1242,7 +1242,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
     ASSERT_NOT_NULL(strstr(dump, "interface-extends 0 child=123 parent=124"));
     ASSERT_NOT_NULL(strstr(dump, "interface-method 0 id=7 owner=123 name=700"));
-    ASSERT_NOT_NULL(strstr(dump, "body 0 func=4 module=1 node=702 decl=2"));
+    ASSERT_NOT_NULL(strstr(dump, "body 0 func=4 parent=0 module=1 node=702 decl=2"));
     ASSERT_NOT_NULL(strstr(dump, "name=88 sig=66"));
     ASSERT_NOT_NULL(strstr(dump, "kind=function"));
     ASSERT_NOT_NULL(strstr(dump, "effect=0x1[error]"));
@@ -6068,6 +6068,31 @@ TEST(global_evidence_verifier_rejects_stale_body_identity_rows) {
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence function body identity is stale"));
     xaot_bundle_free(&missing_body_source_bundle);
     xg_global_evidence_free(&missing_body_source_ev);
+
+    XgGlobalEvidence stale_parent_ev;
+    XgBuildKey stale_parent_key = key;
+    XgBodySummary stale_parent_body = bodies[0];
+    stale_parent_key.source_hash = 0x645;
+    stale_parent_body.func_id = 10;
+    stale_parent_body.lexical_parent_func_id = 999;
+    stale_parent_body.owner_decl_id = XG_NO_ID;
+    stale_parent_body.name_id = xg_name_id("<anonymous>");
+    stale_parent_body.signature_key = 0;
+    xg_global_evidence_init(&stale_parent_ev, stale_parent_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&stale_parent_ev, &stale_parent_body));
+
+    XaotBundle stale_parent_bundle;
+    memset(&stale_parent_bundle, 0, sizeof(stale_parent_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_parent_bundle, &stale_parent_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    stale_parent_bundle.modules = modules;
+    stale_parent_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_parent_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&stale_parent_bundle, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence lexical parent does not re-derive"));
+    xaot_bundle_free(&stale_parent_bundle);
+    xg_global_evidence_free(&stale_parent_ev);
 
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decls[0]));
@@ -11489,6 +11514,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_closure_capture) {
     ASSERT_NOT_NULL(outer);
     ASSERT_NOT_NULL(closure);
     ASSERT_TRUE(outer->func_id != closure->func_id);
+    ASSERT_EQ_UINT(closure->lexical_parent_func_id, outer->func_id);
     ASSERT_EQ_UINT(ev.nobject_shapes, 1);
     ASSERT_EQ_UINT(ev.nobject_fields, 2);
     ASSERT_EQ_UINT(ev.nobject_accesses, 1);
@@ -13347,6 +13373,84 @@ TEST(entry_plan_uses_only_reachable_effects_and_provider_contract) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(entry_plan_defers_open_function_value_reachability_until_callable_convergence) {
+    XgBuildKey key = {.source_hash = 0x197a,
+                      .compiler_semver_hash = 2,
+                      .profile_hash = 3,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    XgBodySummary entry = {.func_id = 1,
+                           .module_id = 1,
+                           .kind = XG_BODY_MODULE_INIT,
+                           .effect_bits = XG_BODY_MAY_CALL,
+                           .callsite_start = 1,
+                           .callsite_count = 1,
+                           .body_hash = 0x197a};
+    XgBodySummary handler = {.func_id = 2,
+                             .module_id = 1,
+                             .kind = XG_BODY_FUNCTION,
+                             .effect_bits = XG_BODY_MAY_SUSPEND,
+                             .capability_bits = XG_CAP_TIMER,
+                             .body_hash = 0x197b};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 1,
+                              .kind = XG_CALL_CLOSURE};
+    XiFunc init_func;
+    XiFunc handler_func;
+    XiFunc *children[1];
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    XrEntryPlan refined;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &entry));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &handler));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    memset(&init_func, 0, sizeof(init_func));
+    memset(&handler_func, 0, sizeof(handler_func));
+    init_func.name = "init";
+    init_func.xg_body_func_id = entry.func_id;
+    handler_func.name = "handler";
+    handler_func.xg_body_func_id = handler.func_id;
+    children[0] = &handler_func;
+    init_func.children = children;
+    init_func.nchildren = 1;
+    memset(&module, 0, sizeof(module));
+    module.path = "entry_open_callable.xr";
+    module.name = "entry_open_callable";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(bundle.has_entry_plan);
+    ASSERT_EQ_UINT(bundle.entry_plan.unproven_reason, XR_ENTRY_OPEN_REACHABILITY);
+    ASSERT_EQ_UINT(bundle.entry_plan.evidence, 0);
+    /* The provisional plan must not pretend that the handler's capability is
+     * reachable.  The initial capability table remains conservative until
+     * prepare replaces it from exact callable reachability. */
+    ASSERT_TRUE((bundle.entry_plan.required_capability_bits & XG_CAP_TIMER) == 0);
+    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_TIMER));
+
+    XaotFuncPlan *init_plan = xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0);
+    XaotFuncPlan *handler_plan = xaot_bundle_add_func_plan(&bundle, &handler_func, 0, 1);
+    ASSERT_NOT_NULL(init_plan);
+    ASSERT_NOT_NULL(handler_plan);
+    init_plan->reachable = 1;
+    handler_plan->reachable = 1;
+    bundle.has_callable_reachability = true;
+    ASSERT_TRUE(xaot_entry_plan_derive(&bundle, &ev, XG_BUILD_NATIVE_RELEASE, &refined));
+    ASSERT_EQ_UINT(refined.unproven_reason, XR_ENTRY_PROVEN);
+    ASSERT_EQ_UINT(refined.reachable_body_count, 2);
+    ASSERT_TRUE((refined.required_capability_bits & XG_CAP_TIMER) != 0);
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(entry_plan_elides_unreachable_coroutine_capabilities) {
     XgBuildKey key = {.source_hash = 0x195,
                       .compiler_semver_hash = 2,
@@ -13976,6 +14080,7 @@ RUN_TEST(global_evidence_generic_code_size_policy_shares_large_body);
 RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 RUN_TEST(entry_plan_uses_only_reachable_effects_and_provider_contract);
+RUN_TEST(entry_plan_defers_open_function_value_reachability_until_callable_convergence);
 RUN_TEST(entry_plan_elides_unreachable_coroutine_capabilities);
 RUN_TEST(parallel_intrinsic_scan_uses_prepared_reachability);
 RUN_TEST(entry_plan_includes_imported_module_initializer_capabilities);

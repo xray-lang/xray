@@ -159,11 +159,16 @@ static CgBuiltinInitPlan cg_builtin_init_plan_for_func(const XiFunc *func) {
     return plan;
 }
 
+static bool cg_entry_plan_is_final(const XaotBundle *bundle) {
+    return bundle && bundle->has_entry_plan &&
+           bundle->entry_plan.unproven_reason == XR_ENTRY_PROVEN;
+}
+
 static uint32_t cg_runtime_caps_from_entry_plan(XiCgenCtx *ctx) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     uint32_t required;
     uint32_t caps = XR_AOT_CAP_NONE;
-    if (!bundle || !bundle->has_entry_plan) {
+    if (!cg_entry_plan_is_final(bundle)) {
         ctx->error = true;
         return caps;
     }
@@ -207,7 +212,7 @@ static uint32_t cg_runtime_caps_from_entry_plan(XiCgenCtx *ctx) {
 
 static int cg_scheduler_workers_from_entry_plan(XiCgenCtx *ctx) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    if (!bundle || !bundle->has_entry_plan) {
+    if (!cg_entry_plan_is_final(bundle)) {
         ctx->error = true;
         return 0;
     }
@@ -216,7 +221,7 @@ static int cg_scheduler_workers_from_entry_plan(XiCgenCtx *ctx) {
 
 static bool cg_entry_uses_resumable_frame(XiCgenCtx *ctx) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    if (!bundle || !bundle->has_entry_plan) {
+    if (!cg_entry_plan_is_final(bundle)) {
         ctx->error = true;
         return false;
     }
@@ -235,7 +240,7 @@ static bool cg_entry_init_uses_resumable_frame(XiCgenCtx *ctx, XiModule **module
 
 static bool cg_entry_uses_root_descriptor(XiCgenCtx *ctx) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    if (!bundle || !bundle->has_entry_plan) {
+    if (!cg_entry_plan_is_final(bundle)) {
         ctx->error = true;
         return false;
     }
@@ -249,7 +254,7 @@ static bool cg_can_report_uncaught_error(const XiCgenCtx *ctx) {
     if (!ctx || ctx->freestanding_profile || ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
         return false;
     bundle = cg_ctx_aot_bundle(ctx);
-    if (!bundle || !bundle->has_entry_plan)
+    if (!cg_entry_plan_is_final(bundle))
         return true;
     return (bundle->entry_plan.reachable_effect_bits &
             (XR_EFFECT_MAY_ERROR | XR_EFFECT_MAY_PANIC)) != 0;

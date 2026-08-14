@@ -228,6 +228,7 @@ static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stac
 static uint32_t source_class_for_type(const XrSemanticBuildContext *ctx, const XrType *type);
 static bool source_class_identity_for_type(const XrSemanticBuildContext *ctx, const XrType *type,
                                            XrStableId *out);
+static uint8_t classify_import_resolution(const XiImportRef *ref);
 
 static uint32_t frozen_builtin_type(const XrType *type) {
     if (xr_type_is_builtin_named_class(type, "StringBuilder"))
@@ -1486,11 +1487,20 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
         }
         case XI_IMPORT_REF: {
             const XiImportRef *import_ref = (const XiImportRef *) value->aux;
-            return !import_ref ||
-                   (add_metadata(ctx, record,
-                                 import_ref->module_path ? import_ref->module_path : "") &&
-                    add_metadata(ctx, record,
-                                 import_ref->member_name ? import_ref->member_name : ""));
+            if (!import_ref)
+                return true;
+            const char *module_path = import_ref->module_path ? import_ref->module_path : "";
+            if (classify_import_resolution(import_ref) ==
+                    XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE &&
+                import_ref->resolved_module && import_ref->resolved_module->path) {
+                module_path = copy_canonical_source_file(ctx, import_ref->resolved_module->path);
+                if (!module_path)
+                    return fail(ctx, "XR_SEM_0019",
+                                "source import module path identity is incomplete");
+            }
+            return add_metadata(ctx, record, module_path) &&
+                   add_metadata(ctx, record,
+                                import_ref->member_name ? import_ref->member_name : "");
         }
         case XI_SET_SHARED: {
             const XiFunc *owner = value->block ? value->block->func : NULL;
@@ -2090,13 +2100,16 @@ static const uint8_t *plan_suspendability(XrSemanticBuildContext *ctx, const XrS
 }
 
 static bool append_dependency(XrSemanticBuildContext *ctx, const XiModule *module,
-                              const char *reference_path, uint32_t *dependency_out) {
-    if (!module || !reference_path || !reference_path[0] || !module->init ||
+                              uint32_t *dependency_out) {
+    if (!module || !module->path || !module->path[0] || !module->init ||
         !module->init->semantic_plan || !xr_semantic_plan_is_verified(module->init->semantic_plan))
         return false;
     const XrSemanticPlan *dependency_plan = module->init->semantic_plan;
     const XrSemanticEntityRecord *module_entity = plan_module_entity(dependency_plan);
     if (!module_entity)
+        return false;
+    const char *module_path = copy_canonical_source_file(ctx, module->path);
+    if (!module_path)
         return false;
     XrFingerprint fingerprint = xr_semantic_plan_fingerprint(dependency_plan);
     for (uint32_t i = 0; i < ctx->plan->dependency_count; i++) {
@@ -2105,7 +2118,7 @@ static bool append_dependency(XrSemanticBuildContext *ctx, const XiModule *modul
             continue;
         if (!xr_fingerprint_equal(record->semantic_fingerprint, fingerprint))
             return false;
-        if (strcmp(record->module_path, reference_path) != 0)
+        if (strcmp(record->module_path, module_path) != 0)
             return false;
         *dependency_out = i;
         return true;
@@ -2120,7 +2133,7 @@ static bool append_dependency(XrSemanticBuildContext *ctx, const XiModule *modul
     uint32_t index = ctx->plan->dependency_count++;
     XrSemanticDependencyRecord *record = &ctx->plan->dependencies[index];
     memset(record, 0, sizeof(*record));
-    record->module_path = xr_semantic_plan_copy_string(ctx->plan, reference_path);
+    record->module_path = module_path;
     record->module = module_entity->id;
     record->semantic_fingerprint = fingerprint;
     XrTextBuilder key = {0};
@@ -2166,7 +2179,7 @@ static bool append_source_namespace_dependency(XrSemanticBuildContext *ctx,
     uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
     if (ref->resolved_func || ref->resolved_shared_slot != -1 ||
         ref->resolved_export_slot != -1 ||
-        !append_dependency(ctx, ref->resolved_module, ref->module_path, &dependency))
+        !append_dependency(ctx, ref->resolved_module, &dependency))
         return fail(ctx, "XR_SEM_0019",
                     "source namespace dependency identity is incomplete");
     return true;
@@ -2496,7 +2509,7 @@ static bool append_source_instance_method_open_call_target(XrSemanticBuildContex
     if (!match_method || !match_module || !match_class)
         return true;
     uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
-    if (!append_dependency(ctx, match_module, match_class->module_path, &dependency))
+    if (!append_dependency(ctx, match_module, &dependency))
         return fail(ctx, "XR_SEM_0019", "open source method dependency is incomplete");
     if (!reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,
                        ctx->plan->call_target_count + 1, sizeof(*ctx->plan->call_targets),
@@ -2555,7 +2568,7 @@ static bool append_source_export_call_target(XrSemanticBuildContext *ctx, const 
         strcmp(ctx->plan->metadata[call->metadata_begin], exported->name) != 0)
         return true;
     uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
-    if (!append_dependency(ctx, ref->resolved_module, ref->module_path, &dependency))
+    if (!append_dependency(ctx, ref->resolved_module, &dependency))
         return fail(ctx, "XR_SEM_0019", "source-export dependency is incomplete");
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
         !reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,

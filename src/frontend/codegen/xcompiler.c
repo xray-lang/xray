@@ -15,8 +15,13 @@
 
 #include "xcompiler.h"
 #include "xcompiler_context.h"
+#include "../../analysis/xglobal_producer.h"
 #include "../../base/xchecks.h"
+#include "../../base/xfileio.h"
+#include "../../base/xmalloc.h"
 #include "../../ir/xi_pipeline.h"
+#include "../../module/xmodule_graph.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../analyzer/xanalyzer_mono.h"
 #include "../analyzer/xanalyzer_escape.h"
 #include "../xdiag_fmt.h"
@@ -26,6 +31,36 @@
 #include "../../runtime/xisolate_api.h"
 #include <stdio.h>
 #include <string.h>
+
+static uint32_t compiler_graph_module_id(const XrModuleGraph *graph, const AstNode *ast,
+                                         const char *source_file) {
+    uint32_t match = XG_NO_ID;
+    char *source_path = source_file ? xr_realpath(source_file) : NULL;
+    if (!graph || !ast || !graph->topo_order || !source_path) {
+        xr_free(source_path);
+        return XG_NO_ID;
+    }
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int index = graph->topo_order[ti];
+        const XrModuleSpec *spec = &graph->specs[index];
+        /* The graph owns the exact analyzed AST used to produce its evidence.
+         * Imports may reparse that module before bytecode generation, so the
+         * canonical graph source path is the durable identity in that case. */
+        char *spec_path = spec->source_path ? xr_realpath(spec->source_path) : NULL;
+        bool same_module = spec->ast == ast ||
+                           (spec_path && strcmp(spec_path, source_path) == 0);
+        xr_free(spec_path);
+        if (!same_module)
+            continue;
+        if (match != XG_NO_ID) {
+            xr_free(source_path);
+            return XG_NO_ID;
+        }
+        match = (uint32_t) (ti + 1);
+    }
+    xr_free(source_path);
+    return match;
+}
 
 /* Print and mark every unreported analyzer diagnostic; return the error count.
  * Called after each analysis stage that can produce user-visible errors --
@@ -171,6 +206,9 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
     /* Xi IR pipeline: single compilation path (no legacy fallback) */
     {
         XiPipelineConfig pipe_cfg = xi_pipeline_default_config();
+        XgGlobalEvidence global_evidence;
+        bool global_evidence_initialized = false;
+        memset(&global_evidence, 0, sizeof(global_evidence));
         /* REPL mode: top-level bindings go through XrGlobalDict
          * (name-keyed) instead of the slot-indexed shared array. */
         pipe_cfg.repl_mode = ctx->repl_mode;
@@ -178,8 +216,30 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
         pipe_cfg.module_graph = ctx->module_graph;
         pipe_cfg.graph_modules = ctx->graph_modules;
         pipe_cfg.graph_module_count = ctx->graph_module_count;
+        const XrModuleGraph *evidence_graph =
+            ctx->module_graph ? ctx->module_graph
+                              : xr_compiler_session_module_graph(ctx->compiler_session);
+        if (evidence_graph) {
+            uint32_t module_id =
+                compiler_graph_module_id(evidence_graph, ast, ctx->source_file);
+            if (module_id == XG_NO_ID ||
+                !xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+                    &global_evidence, evidence_graph, XG_BUILD_DEV, 0, NULL, 0,
+                    ctx->analyzer)) {
+                xg_global_evidence_free(&global_evidence);
+                fprintf(stderr,
+                        "[xcompiler] global evidence graph identity failed for '%s'\n",
+                        ctx->source_file ? ctx->source_file : "<unknown>");
+                return NULL;
+            }
+            global_evidence_initialized = true;
+            pipe_cfg.global_evidence = &global_evidence;
+            pipe_cfg.global_evidence_module_id = module_id;
+        }
         XiPipelineResult pipe_res =
             xi_pipeline_compile_program(ast, ctx->analyzer, ctx->X, &pipe_cfg);
+        if (global_evidence_initialized)
+            xg_global_evidence_free(&global_evidence);
         if (pipe_res.status == XI_PIPE_OK && pipe_res.proto != NULL) {
             XrProto *proto = pipe_res.proto;
             xi_pipeline_result_free(&pipe_res);

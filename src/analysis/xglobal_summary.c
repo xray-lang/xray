@@ -309,6 +309,7 @@ static uint64_t hash_body_summary(uint64_t hash, const XgBodySummary *row) {
     if (!row)
         return hash_u32(hash, 0);
     hash = hash_u32(hash, row->func_id);
+    hash = hash_u32(hash, row->lexical_parent_func_id);
     hash = hash_u32(hash, row->module_id);
     hash = hash_u32(hash, row->source_node_id);
     hash = hash_u32(hash, row->owner_decl_id);
@@ -3697,11 +3698,12 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
         const XgBodySummary *b = &evidence->bodies[i];
         fprintf(
             out,
-            "body id=%u module=%u node=%u decl=%u class=%u method=%u name=%u sig=%u span=%u "
+            "body id=%u parent=%u module=%u node=%u decl=%u class=%u method=%u name=%u sig=%u span=%u "
             "kind=%u flags=0x%x hash=%016" PRIx64 " effect=0x%x alloc_state=%u alloc_complete=%u "
             "alloc_reason=0x%x alloc_fp=%016" PRIx64 " escape=0x%x caps=0x%x "
             "param_storage=%u params=%u+%u calls=%u+%u metadata=0x%x static=0x%x\n",
-            b->func_id, b->module_id, b->source_node_id, b->owner_decl_id, b->owner_class_id,
+            b->func_id, b->lexical_parent_func_id, b->module_id, b->source_node_id,
+            b->owner_decl_id, b->owner_class_id,
             b->owner_method_id, b->name_id, b->signature_key, b->source_span_id, (unsigned) b->kind,
             b->flags, b->body_hash, b->effect_bits, (unsigned) b->allocation_state,
             (unsigned) b->allocation_complete, b->allocation_reason_bits, b->allocation_fingerprint,
@@ -4435,21 +4437,23 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
-                   "body id=%" SCNu32 " module=%" SCNu32 " node=%" SCNu32 " decl=%" SCNu32
+                   "body id=%" SCNu32 " parent=%" SCNu32 " module=%" SCNu32
+                   " node=%" SCNu32 " decl=%" SCNu32
                    " class=%" SCNu32 " method=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
                    " span=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32 " hash=%" SCNx64
                    " effect=0x%" SCNx32 " alloc_state=%" SCNu32 " alloc_complete=%" SCNu32
                    " alloc_reason=0x%" SCNx32 " alloc_fp=%" SCNx64 " escape=0x%" SCNx32
                    " caps=0x%" SCNx32 " param_storage=%" SCNu32 " params=%" SCNu32 "+%" SCNu32
                    " calls=%" SCNu32 "+%" SCNu32 " metadata=0x%" SCNx32 " static=0x%" SCNx32 " %c",
-                   &row.func_id, &row.module_id, &row.source_node_id, &row.owner_decl_id,
+                   &row.func_id, &row.lexical_parent_func_id, &row.module_id,
+                   &row.source_node_id, &row.owner_decl_id,
                    &row.owner_class_id, &row.owner_method_id, &row.name_id, &row.signature_key,
                    &row.source_span_id, &kind, &row.flags, &row.body_hash, &row.effect_bits,
                    &allocation_state, &allocation_complete, &row.allocation_reason_bits,
                    &row.allocation_fingerprint, &row.escape_bits, &row.capability_bits,
                    &row.param_storage_key, &row.param_storage_start, &row.param_storage_count,
                    &row.callsite_start, &row.callsite_count, &row.metadata_use_bits,
-                   &row.static_data_use_bits, &trailing) != 26)
+                   &row.static_data_use_bits, &trailing) != 27)
             return false;
         row.kind = (uint8_t) kind;
         row.allocation_state = (uint8_t) allocation_state;
@@ -5288,6 +5292,7 @@ static void collect_import_offsets(const XgGlobalEvidence *target,
     for (uint32_t i = 0; i < target->nbodies; i++) {
         const XgBodySummary *row = &target->bodies[i];
         offsets->func_id = max_u32(offsets->func_id, row->func_id);
+        offsets->func_id = max_u32(offsets->func_id, row->lexical_parent_func_id);
         offsets->decl_id = max_u32(offsets->decl_id, row->owner_decl_id);
         offsets->class_id = max_u32(offsets->class_id, row->owner_class_id);
         offsets->method_id = max_u32(offsets->method_id, row->owner_method_id);
@@ -5868,6 +5873,7 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
     for (uint32_t i = 0; i < package.nbodies; i++) {
         XgBodySummary row = package.bodies[i];
         REMAP_ID(row.func_id, offsets.func_id);
+        REMAP_ID(row.lexical_parent_func_id, offsets.func_id);
         REMAP_MODULE(row.module_id);
         REMAP_ID(row.owner_decl_id, offsets.decl_id);
         REMAP_ID(row.owner_class_id, offsets.class_id);
@@ -6365,9 +6371,10 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
         const XgBodySummary *b = &evidence->bodies[i];
         fprintf(out,
-                "body %u func=%u module=%u node=%u decl=%u class=%u method=%u name=%u sig=%u "
+                "body %u func=%u parent=%u module=%u node=%u decl=%u class=%u method=%u name=%u sig=%u "
                 "span=%u kind=%s flags=0x%x hash=%016" PRIx64 " effect=0x%x",
-                i, b->func_id, b->module_id, b->source_node_id, b->owner_decl_id, b->owner_class_id,
+                i, b->func_id, b->lexical_parent_func_id, b->module_id, b->source_node_id,
+                b->owner_decl_id, b->owner_class_id,
                 b->owner_method_id, b->name_id, b->signature_key, b->source_span_id,
                 xg_body_kind_name(b->kind), b->flags, b->body_hash, b->effect_bits);
         dump_named_bitset(out, b->effect_bits, effects, effect_count, xg_body_effect_name);

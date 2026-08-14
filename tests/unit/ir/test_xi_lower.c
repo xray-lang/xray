@@ -2022,6 +2022,78 @@ TEST(strong_source_node_identity_binds_same_line_calls_and_same_name_bodies) {
 #undef REQUIRE_STRONG_IDENTITY
 }
 
+TEST(nested_body_identity_binds_method_calls_through_frozen_parent) {
+#define REQUIRE_NESTED_IDENTITY(cond, msg)                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "nested_body_identity: %s\n", msg);                                  \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *root = lower_source_with_global_evidence(
+        "class Counter {\n"
+        "    value: int\n"
+        "    constructor(value: int) { this.value = value }\n"
+        "    read() -> int { return this.value }\n"
+        "}\n"
+        "fn exerciseNestedBody() -> int {\n"
+        "    const counter = Counter(7)\n"
+        "    const read = fn() -> int {\n"
+        "        return counter.read()\n"
+        "    }\n"
+        "    return read()\n"
+        "}\n"
+        "print(exerciseNestedBody())\n",
+        &ev);
+    REQUIRE_NESTED_IDENTITY(root != NULL, "source should lower with global evidence");
+
+    const XgBodySummary *outer = NULL;
+    const XgBodySummary *nested = NULL;
+    const uint32_t outer_name_id = xg_name_id("exerciseNestedBody");
+    const uint32_t nested_name_id = xg_name_id("<anonymous>");
+    for (uint32_t i = 0; i < ev.nbodies; i++) {
+        const XgBodySummary *body = &ev.bodies[i];
+        if (body->kind == XG_BODY_FUNCTION &&
+            global_evidence_body_declared_name_id(&ev, body) == outer_name_id)
+            outer = body;
+    }
+    REQUIRE_NESTED_IDENTITY(outer != NULL, "outer body evidence should exist");
+    for (uint32_t i = 0; i < ev.nbodies; i++) {
+        const XgBodySummary *body = &ev.bodies[i];
+        if (body->kind == XG_BODY_FUNCTION && body->name_id == nested_name_id &&
+            body->lexical_parent_func_id == outer->func_id) {
+            REQUIRE_NESTED_IDENTITY(nested == NULL,
+                                    "parent identity should select one nested body");
+            nested = body;
+        }
+    }
+    REQUIRE_NESTED_IDENTITY(nested != NULL && nested->source_span_id != 0,
+                            "nested body should publish parent and source identities");
+
+    XiFunc *nested_func = func_tree_find_xg_body(root, nested->func_id);
+    REQUIRE_NESTED_IDENTITY(nested_func != NULL,
+                            "nested Xi body should bind through frozen parent identity");
+    XiValue *calls[1] = {0};
+    REQUIRE_NESTED_IDENTITY(func_collect_method_calls(nested_func, calls, 1) == 1,
+                            "nested body should contain one method call");
+    const XgCallsiteSummary *callsite =
+        xg_global_evidence_find_callsite(&ev, calls[0]->xg_callsite_id);
+    REQUIRE_NESTED_IDENTITY(callsite != NULL,
+                            "nested method call should carry its frozen callsite id");
+    REQUIRE_NESTED_IDENTITY(callsite->owner_func_id == nested->func_id,
+                            "callsite owner should be the bound nested body");
+    REQUIRE_NESTED_IDENTITY(calls[0]->xg_method_id == callsite->method_id,
+                            "method identity should come from the exact callsite row");
+
+    xi_func_free(root);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_NESTED_IDENTITY
+}
+
 TEST(nested_function) {
     XiFunc *f = lower_source("fn add(a: int, b: int) -> int {\n"
                              "    return a + b\n"
@@ -3181,6 +3253,7 @@ int main(void) {
     run_map_key_access_alias_shape_lowers_with_global_evidence_id();
     run_map_set_method_key_access_lowers_with_global_evidence_id();
     run_strong_source_node_identity_binds_same_line_calls_and_same_name_bodies();
+    run_nested_body_identity_binds_method_calls_through_frozen_parent();
     run_nested_function();
     run_function_expr();
     run_multiple_functions();

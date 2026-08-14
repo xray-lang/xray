@@ -3817,7 +3817,14 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         return false;
     }
     bundle->has_entry_plan = true;
-    if (bundle->entry_plan.unproven_reason != XR_ENTRY_PROVEN) {
+    /* Source evidence cannot close a call through a stored function value.
+     * Keep that one state as an explicitly provisional pre-plan: callable
+     * analysis later rebuilds reachability from the prepared Xi value flow and
+     * xaot_prepare_bundle refuses to continue unless the refreshed plan is
+     * proven.  Every other unproven reason is already final at this boundary
+     * (provider ABI/capabilities/hooks), so it still fails immediately. */
+    if (bundle->entry_plan.unproven_reason != XR_ENTRY_PROVEN &&
+        bundle->entry_plan.unproven_reason != XR_ENTRY_OPEN_REACHABILITY) {
         bundle->error_msg = "entry runtime requirements are not provided by the target";
         return false;
     }
