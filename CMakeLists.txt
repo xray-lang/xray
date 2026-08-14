@@ -2976,6 +2976,22 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    # Module summaries: identical sources must publish one identical dependency
+    # graph identity cold, warm, and under --rebuild, and an edit must move it.
+    add_test(
+        NAME aot_module_summary_determinism
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_module_summary_determinism.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_module_summary_determinism PROPERTIES
+        LABELS "aot;cache;incremental;smoke"
+        SKIP_RETURN_CODE 77
+        COST 90
+        TIMEOUT 240
+    )
+
     add_test(
         NAME global_evidence_cache_package_benchmark
         COMMAND ${CMAKE_COMMAND} -E env

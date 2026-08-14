@@ -13,6 +13,14 @@ workspace generation only after successful publication. Rejected graph or
 invalidation transactions leave the prior graph, history, and generations
 unchanged.
 
+The native build publishes that graph once per build, after every module owns a
+verified SemanticPlan and before target planning. Its nodes are module
+summaries derived from verified authorities alone, and its edges carry the
+conservative observation relation, because facet-precise relations would need
+facet-granular plan digests that the semantic layer does not publish. A summary
+that cannot be derived exactly fails the build instead of publishing a partial
+graph.
+
 Parser and lowering state is scoped to an explicit incremental operation.
 Every non-REPL source/AST compiler entry opens or borrows a generation-bound
 operation scope. The outermost caller alone commits success; a nested failure

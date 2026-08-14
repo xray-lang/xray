@@ -48,6 +48,7 @@
 #include "xaot_bundle.h"
 #include "xaot_boundary.h"
 #include "xaot_link.h"
+#include "xaot_module_summary.h"
 #include "xaot_prepare.h"
 #include "xaot_verify.h"
 #include "../analysis/xglobal_producer.h"
@@ -2429,6 +2430,10 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         ir_funcs[ti]->module = NULL;
     }
     xa_analyzer_set_graph(shared_analyzer, NULL);
+
+    if (!xaot_publish_module_summaries(session, graph, modules, nmodules, options,
+                                       evidence_cache_verbose))
+        goto fail_free_ir;
 
     /* Xi values and AOT plans retain pointers into the analyzer-owned type
      * pool. Keep that pool alive through import resolution, prepare, verify,
