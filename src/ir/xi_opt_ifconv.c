@@ -115,11 +115,25 @@ static void ifconv_replace_uses(XiFunc *f, XiValue *old_val, XiValue *new_val) {
     }
 }
 
-/* Append a value (already allocated) to a block's values array. */
+/* Append a value (already allocated) to a block's values array.
+ *
+ * A value carrying a var_id is a write to that source variable's storage, not
+ * just an SSA definition: the VM emitter coalesces every version of a variable
+ * into one register.  While the two arms sat on exclusive paths, at most one of
+ * those writes ran, so sharing the location was sound.  Flattening the diamond
+ * puts both writes in one straight line, and the second one overwrites the
+ * first before either is read.  A merge over two such writes then reads one
+ * location twice and answers with whichever arm was appended last, whatever the
+ * condition said.
+ *
+ * The hoisted values stop being the variable's reaching definition here.  The
+ * select that replaces the phi becomes it, and it takes the phi's var_id below,
+ * so the variable keeps exactly one write and one storage identity. */
 static bool ifconv_append_value(XiBlock *blk, XiValue *v) {
     if (!xi_block_ensure_value_capacity(blk, blk->nvalues + 1))
         return false;
     v->block = blk;
+    v->var_id = XI_NO_VAR_ID;
     blk->values[blk->nvalues++] = v;
     return true;
 }
@@ -202,6 +216,9 @@ XR_FUNC XiPassChange xi_opt_ifconv(XiFunc *f) {
                 sel->args[0] = cond;
                 sel->args[1] = true_val;
                 sel->args[2] = false_val;
+                /* The select inherits the merge's source variable: it is now
+                 * the single write that reaches every later read of it. */
+                sel->var_id = phi->value.var_id;
 
                 /* Replace all uses of the phi with the select. */
                 ifconv_replace_uses(f, &phi->value, sel);
