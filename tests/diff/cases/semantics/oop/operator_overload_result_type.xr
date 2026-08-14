@@ -1,0 +1,56 @@
+// anchor: operator-overload-result-type
+// The result of an overloaded arithmetic operator has the operator method's
+// declared return type, not `unknown`. That is what lets the value flow into a
+// typed parameter, a declared local, or another method call without a cast.
+// While the operator was resolved at run time the front end had no return type
+// to publish, so every one of these positions was rejected by the analyzer.
+
+class Money {
+    cents: int
+
+    constructor(cents: int) {
+        this.cents = cents
+    }
+
+    operator+(other: Money) -> Money {
+        return Money(this.cents + other.cents)
+    }
+
+    operator*(factor: int) -> Money {
+        return Money(this.cents * factor)
+    }
+
+    describe() -> string {
+        return "Money(" + this.cents + ")"
+    }
+}
+
+// The operator result is passed to a parameter declared as the class type.
+fn total(value: Money) -> int {
+    return value.cents
+}
+
+fn main() {
+    var a = Money(120)
+    var b = Money(30)
+
+    // Declared local annotated with the class type.
+    var sum: Money = a + b
+    print(sum.cents)
+
+    // Operator result as a typed call argument.
+    print(total(a + b))
+
+    // Method call directly on an operator result.
+    print((a + b).describe())
+
+    // Operator result as the receiver of another operator.
+    print(total((a + b) * 2))
+
+    // Operator result returned through a typed binding chain.
+    var doubled: Money = a * 2
+    var again: Money = doubled + b
+    print(again.cents)
+}
+
+main()
