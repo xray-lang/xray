@@ -13,7 +13,9 @@ fn mutate_through_capture(i: int) -> int {
     return read()
 }
 
-var rounds = len(process.args) > 0 ? (int(process.args[0]) ?? 2000000) : 2000000
+// The harness always passes a decimal count, and int(s) now throws on anything
+// else (spec 13.2) instead of yielding a null to fall back from.
+var rounds = len(process.args) > 0 ? int(process.args[0]) : 2000000
 var before = runtime.liveObjects()
 var checksum = 0
 var i = 0

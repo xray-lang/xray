@@ -15,6 +15,11 @@
 #define XR_ERROR_CORE_MODULO_BY_ZERO_MSG "modulo by zero"
 #define XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG "modulo requires integer types"
 #define XR_ERROR_CORE_NUMERIC_CONVERSION_RANGE_MSG "numeric conversion is out of range"
+/* Spec 13.2 -- int(s) / float(s) throw when the string is not a whole decimal
+ * number. Shared verbatim by the VM, hosted AOT and freestanding AOT so the
+ * same input reports the same text on every profile. */
+#define XR_ERROR_CORE_INT_PARSE_MSG "int(string) expects a decimal integer"
+#define XR_ERROR_CORE_FLOAT_PARSE_MSG "float(string) expects a decimal number"
 #define XR_ERROR_CORE_BYTE_ARRAY_CONSTRUCTOR_EXPECTS_MSG                                           \
     "Array<byte>(length, fill) expects integers"
 #define XR_ERROR_CORE_BYTE_ARRAY_CONSTRUCTOR_FILL_EXPECTS_MSG                                      \

@@ -58,6 +58,8 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_enum_metadata_core.h"
 #include "../shared/xr_int_arith_core.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
 #include "../shared/xr_numeric_conversion_core.h"
+/* libc-free int(s)/float(s) decimal grammar, shared with the VM/hosted AOT */
+#include "../shared/xr_string_parse_core.h"
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
 #include "../shared/xr_range_core.h"
 #include "../shared/xr_numeric_core.h"
@@ -1040,6 +1042,9 @@ static inline XRT_COLD XRT_NORETURN void xrt_freestanding_trap(const char *messa
 #ifndef XR_ERR_OUT_OF_MEMORY
 #define XR_ERR_OUT_OF_MEMORY 441
 #endif
+#ifndef XR_ERR_INVALID_ARG_TYPE
+#define XR_ERR_INVALID_ARG_TYPE 451
+#endif
 
 static inline XRT_COLD XRT_NORETURN void xrt_throw_error(int code, const char *message) {
     (void) code;
@@ -1762,12 +1767,29 @@ static inline XrValue xrt_to_int(XrValue v) {
         return XR_FROM_INT((int64_t) v.f);
     if (XR_IS_BOOL(v) || XR_IS_RUNE(v))
         return XR_FROM_INT(v.i);
+    if (XR_IS_STR(v)) {
+        /* Spec 13.2, same strict decimal grammar and same message as the VM
+         * and the hosted runtime; this profile reports it through the panic
+         * hook because it has no unwinder to longjmp to. */
+        XrStringParseIntResult parsed =
+            xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
+        if (!parsed.ok)
+            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_INT_PARSE_MSG);
+        return XR_FROM_INT(parsed.value);
+    }
     return XR_FROM_INT(0);
 }
 
 static inline XrValue xrt_to_float(XrValue v) {
     if (XR_IS_FLOAT(v))
         return v;
+    if (XR_IS_STR(v)) {
+        XrStringParseFloatResult parsed =
+            xr_string_parse_float64(xr_str_data(v), (size_t) xr_str_len(v));
+        if (!parsed.ok)
+            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_FLOAT_PARSE_MSG);
+        return XR_FROM_FLOAT(parsed.value);
+    }
     return XR_FROM_FLOAT(xrt_math_number(v));
 }
 

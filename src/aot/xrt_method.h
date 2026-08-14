@@ -184,9 +184,14 @@ static XrValue xrt_to_int(XrValue val) {
     if (XR_IS_FLOAT(val))
         return XR_FROM_INT((int64_t) XR_TO_FLOAT(val));
     if (XR_IS_STR(val)) {
-        XrStringCoreParseIntResult parsed =
-            xr_string_core_parse_int64(xr_str_data(val), (size_t) xr_str_len(val));
-        return parsed.ok ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
+        /* Spec 13.2: a string that is not a whole decimal integer throws. The
+         * declared return type is non-null int, so there is no null to hand
+         * back here. */
+        XrStringParseIntResult parsed =
+            xr_string_parse_int64(xr_str_data(val), (size_t) xr_str_len(val));
+        if (!parsed.ok)
+            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_INT_PARSE_MSG);
+        return XR_FROM_INT(parsed.value);
     }
     if (XR_IS_BOOL(val))
         return XR_FROM_INT(val.i != 0 ? 1 : 0);
@@ -199,9 +204,13 @@ static XrValue xrt_to_float(XrValue val) {
     if (XR_IS_INT(val))
         return XR_FROM_FLOAT((double) XR_TO_INT(val));
     if (XR_IS_STR(val)) {
-        XrStringCoreParseFloatResult parsed =
-            xr_string_core_parse_float64(xr_str_data(val), (size_t) xr_str_len(val));
-        return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
+        /* Spec 13.2: see xrt_to_int -- a non-numeric string throws rather than
+         * producing a null the declared float return type forbids. */
+        XrStringParseFloatResult parsed =
+            xr_string_parse_float64(xr_str_data(val), (size_t) xr_str_len(val));
+        if (!parsed.ok)
+            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_FLOAT_PARSE_MSG);
+        return XR_FROM_FLOAT(parsed.value);
     }
     if (XR_IS_BOOL(val))
         return XR_FROM_FLOAT(val.i != 0 ? 1.0 : 0.0);

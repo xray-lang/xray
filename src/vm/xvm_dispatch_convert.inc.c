@@ -252,9 +252,14 @@ vmcase(OP_TOINT) {
         /* int(char) yields the Unicode codepoint. */
         R(a) = xr_int((xr_Integer) XR_TO_RUNE(val));
     } else if (XR_IS_STRING(val)) {
+        /* Spec 13.2: a string that is not a whole decimal integer throws. The
+         * declared return type is non-null int, so there is no null to hand
+         * back here. */
         XrString *str = XR_TO_STRING(val);
-        XrStringCoreParseIntResult parsed = xr_string_core_parse_int64(str->data, str->length);
-        R(a) = parsed.ok ? xr_int((xr_Integer) parsed.value) : xr_null();
+        XrStringParseIntResult parsed = xr_string_parse_int64(str->data, str->length);
+        if (!parsed.ok)
+            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_INT_PARSE_MSG);
+        R(a) = xr_int((xr_Integer) parsed.value);
     } else if (XR_IS_BOOL(val)) {
         R(a) = xr_int(XR_TO_BOOL(val) ? 1 : 0);
     } else {
@@ -289,9 +294,13 @@ vmcase(OP_TOFLOAT) {
     } else if (XR_IS_INT(val)) {
         R(a) = xr_float((xr_Number) XR_TO_INT(val));
     } else if (XR_IS_STRING(val)) {
+        /* Spec 13.2: see OP_TOINT -- a non-numeric string throws rather than
+         * producing a null the declared float return type forbids. */
         XrString *str = XR_TO_STRING(val);
-        XrStringCoreParseFloatResult parsed = xr_string_core_parse_float64(str->data, str->length);
-        R(a) = parsed.ok ? xr_float(parsed.value) : xr_null();
+        XrStringParseFloatResult parsed = xr_string_parse_float64(str->data, str->length);
+        if (!parsed.ok)
+            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_FLOAT_PARSE_MSG);
+        R(a) = xr_float(parsed.value);
     } else if (XR_IS_BOOL(val)) {
         R(a) = xr_float(XR_TO_BOOL(val) ? 1.0 : 0.0);
     } else {

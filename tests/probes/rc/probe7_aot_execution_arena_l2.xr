@@ -44,8 +44,10 @@ fn run_one_execution(count: int) -> int {
     return await task
 }
 
-var rounds = len(process.args) > 0 ? (int(process.args[0]) ?? 2000) : 2000
-var cycles_per_round = len(process.args) > 1 ? (int(process.args[1]) ?? 32) : 32
+// The harness always passes decimal counts, and int(s) now throws on anything
+// else (spec 13.2) instead of yielding a null to fall back from.
+var rounds = len(process.args) > 0 ? int(process.args[0]) : 2000
+var cycles_per_round = len(process.args) > 1 ? int(process.args[1]) : 32
 var objects_before = runtime.liveObjects()
 var bytes_before = runtime.liveBytes()
 var total = 0
