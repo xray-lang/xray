@@ -148,6 +148,20 @@ static XrType stub_iterator_rune = {
         .type_arg_count = 1,
     },
 };
+static XrType stub_raw_pointer = {
+    .kind = XR_KIND_POINTER,
+    .id = 121,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+static XrType stub_raw_pointer_function = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 122,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function = {.return_type = &stub_raw_pointer,
+                 .throw_effect = XR_FN_EFFECT_NO_THROW},
+};
 static XrType stub_target_u8 = {
     .kind = XR_KIND_INT,
     .id = 117,
@@ -2147,9 +2161,11 @@ static void test_builder_materializes_struct_and_named_aggregates(void) {
     xr_semantic_plan_free(semantic);
 }
 
-static XrSemanticPlan *build_direct_local_scalar_calls(uint16_t call_opcode) {
-    XiFunc *root = xi_func_new("target_direct_call_root", &stub_int);
-    XiFunc *child = xi_func_new("target_direct_call_child", &stub_int);
+static XrSemanticPlan *build_direct_local_scalar_calls(uint16_t call_opcode,
+                                                       XrType *value_type,
+                                                       XrType *callable_type) {
+    XiFunc *root = xi_func_new("target_direct_call_root", value_type);
+    XiFunc *child = xi_func_new("target_direct_call_child", value_type);
     REQUIRE(root != NULL && child != NULL);
     XiBlock *root_entry = xi_block_new(root);
     XiBlock *child_entry = xi_block_new(child);
@@ -2157,7 +2173,7 @@ static XrSemanticPlan *build_direct_local_scalar_calls(uint16_t call_opcode) {
     child->nparams = child->min_params = 1;
     child->params = (XiValue **) xr_calloc(1, sizeof(*child->params));
     REQUIRE(child->params != NULL);
-    child->params[0] = xi_param(child, child_entry, 0, &stub_int);
+    child->params[0] = xi_param(child, child_entry, 0, value_type);
     REQUIRE(child->params[0] != NULL);
     xi_block_set_return(child_entry, child->params[0]);
 
@@ -2169,20 +2185,20 @@ static XrSemanticPlan *build_direct_local_scalar_calls(uint16_t call_opcode) {
 
     XiValue *closure = xi_value_new(root, root_entry,
                                     call_opcode == XI_TAIL_CALL ? XI_CLOSURE_NEW : XI_STACK_ALLOC,
-                                    &stub_function, 0);
+                                    callable_type, 0);
     REQUIRE(closure != NULL);
     if (call_opcode != XI_TAIL_CALL)
         closure->aux_int = XI_CLOSURE_NEW;
     closure->aux = child;
-    XiValue *alias = xi_value_new(root, root_entry, XI_COPY, &stub_function, 1);
+    XiValue *alias = xi_value_new(root, root_entry, XI_COPY, callable_type, 1);
     REQUIRE(alias != NULL);
     alias->args[0] = closure;
     alias->aux_int = XI_COPY_KIND_IDENTITY;
-    XiValue *argument = xi_const_int(root, root_entry, 41, &stub_int);
+    XiValue *argument = xi_const_int(root, root_entry, 41, value_type);
     REQUIRE(argument != NULL);
-    XiValue *first = xi_value_new(root, root_entry, call_opcode, &stub_int, 2);
+    XiValue *first = xi_value_new(root, root_entry, call_opcode, value_type, 2);
     XiValue *second =
-        call_opcode == XI_CALL ? xi_value_new(root, root_entry, call_opcode, &stub_int, 2) : NULL;
+        call_opcode == XI_CALL ? xi_value_new(root, root_entry, call_opcode, value_type, 2) : NULL;
     REQUIRE(first != NULL && (call_opcode != XI_CALL || second != NULL));
     first->args[0] = alias;
     first->args[1] = argument;
@@ -3081,7 +3097,8 @@ static void test_source_export_call_authority(void) {
 }
 
 static void test_direct_local_call_adapter_family(void) {
-    XrSemanticPlan *semantic = build_direct_local_scalar_calls(XI_CALL);
+    XrSemanticPlan *semantic =
+        build_direct_local_scalar_calls(XI_CALL, &stub_int, &stub_function);
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *first = NULL;
     XrTargetPlan *second = NULL;
@@ -3147,6 +3164,65 @@ static void test_direct_local_call_adapter_family(void) {
 
     xr_target_plan_free(second);
     xr_target_plan_free(first);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_direct_local_raw_pointer_call_authority(void) {
+    XrSemanticPlan *semantic = build_direct_local_scalar_calls(
+        XI_CALL, &stub_raw_pointer, &stub_raw_pointer_function);
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    REQUIRE(plan != NULL && plan->calls_count == 2 &&
+            plan->call_arguments_count == 2);
+
+    uint32_t pointer_type = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < semantic->type_count; i++)
+        if (semantic->types[i].kind == XR_KIND_POINTER) {
+            REQUIRE(pointer_type == XR_SEMANTIC_INDEX_NONE);
+            pointer_type = i;
+        }
+    REQUIRE(pointer_type != XR_SEMANTIC_INDEX_NONE);
+
+    uint32_t raw_rep = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->machine_reps_count; i++)
+        if (plan->machine_reps[i].kind == XR_MACHINE_REP_RAW_PTR) {
+            REQUIRE(raw_rep == XR_SEMANTIC_INDEX_NONE);
+            raw_rep = i;
+        }
+    REQUIRE(raw_rep != XR_SEMANTIC_INDEX_NONE &&
+            plan->machine_reps[raw_rep].ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+            plan->machine_reps[raw_rep].null_encoding == XR_TARGET_NULL_ZERO);
+    uint32_t raw_pointer_values = 0;
+    for (uint32_t i = 0; i < plan->value_reps_count; i++)
+        if (plan->value_reps[i].register_rep == raw_rep) {
+            REQUIRE(plan->value_reps[i].memory_rep == raw_rep);
+            raw_pointer_values++;
+        }
+    REQUIRE(raw_pointer_values >= 3);
+    for (uint32_t i = 0; i < plan->call_arguments_count; i++)
+        REQUIRE(plan->call_arguments[i].register_rep == raw_rep &&
+                plan->call_arguments[i].memory_rep == raw_rep);
+
+    plan->machine_reps[raw_rep].ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->machine_reps[raw_rep].ownership = XR_TARGET_OWNERSHIP_TRIVIAL;
+    plan->machine_reps[raw_rep].null_encoding = XR_TARGET_NULL_NOT_NULLABLE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->machine_reps[raw_rep].null_encoding = XR_TARGET_NULL_ZERO;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    XrSemanticTypeRecord *mutated_type = &semantic->types[pointer_type];
+    mutated_type->flags = XR_SEM_TYPE_REFERENCE_CAPABLE;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    XrTargetPlan *failed = NULL;
+    error[0] = '\0';
+    REQUIRE(!xr_target_plan_build(semantic, profile, &failed, error, sizeof(error)));
+    REQUIRE(failed == NULL && error[0] != '\0');
+
+    xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
 }
@@ -4173,6 +4249,7 @@ int main(int argc, char **argv) {
         puts("Array intrinsic TargetPlan authority tests passed");
         return 0;
     }
+    test_direct_local_raw_pointer_call_authority();
     test_unit_enum_target_rep_mutations();
     test_array_intrinsic_call_authority();
     test_stringbuilder_constructor_call_authority();

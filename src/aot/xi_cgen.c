@@ -2713,6 +2713,9 @@ static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx,
         case XR_C_VALUE_REP_AGGREGATE:
             *out = XAOT_REP_TAGGED;
             return true;
+        case XR_C_VALUE_REP_RAW_PTR:
+            *out = XAOT_REP_RAWPTR;
+            return true;
         case XR_C_VALUE_REP_VOID:
             *out = XAOT_REP_VOID;
             return true;
@@ -2813,6 +2816,9 @@ static bool cg_value_emission_storage_rep(XiCgenCtx *ctx,
             /* XrRep has no aggregate carrier. The immutable C spelling and
              * Target layout distinguish this value from tagged storage. */
             *out = XR_REP_TAGGED;
+            return true;
+        case XR_C_VALUE_REP_RAW_PTR:
+            *out = XR_REP_RAWPTR;
             return true;
         case XR_C_VALUE_REP_COUNT: break;
     }

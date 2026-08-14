@@ -26,7 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(18)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(19)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -63,7 +63,71 @@ static bool emission_error(char *error, size_t error_size, const char *code,
     return false;
 }
 
-static bool machine_kind_to_c_rep(uint16_t kind, XrCValueRep *out, const char **c_type) {
+static const XrSemanticTypeRecord *emission_semantic_value_type(
+    const XrTargetPlan *target_plan, uint32_t semantic_value) {
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticTypeRecord *match = NULL;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (!operation || operation->result_value != semantic_value)
+            continue;
+        const XrSemanticTypeRecord *type =
+            xr_semantic_plan_type(semantic, operation->result_type);
+        if (!type || (match && match != type))
+            return NULL;
+        match = type;
+    }
+    uint32_t parameter_count =
+        (uint32_t) xr_semantic_plan_parameter_count(semantic);
+    for (uint32_t i = 0; i < parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(semantic, i);
+        if (!parameter || parameter->value != semantic_value)
+            continue;
+        const XrSemanticTypeRecord *type =
+            xr_semantic_plan_type(semantic, parameter->type);
+        if (!type || (match && match != type))
+            return NULL;
+        match = type;
+    }
+    return match;
+}
+
+static const char *emission_raw_pointer_c_type(
+    const XrTargetPlan *target_plan, uint32_t semantic_value) {
+    const XrSemanticTypeRecord *type =
+        emission_semantic_value_type(target_plan, semantic_value);
+    unsigned kind = 0, semantic_type = 0, builtin_type = 0;
+    unsigned nullable = 0, is_const = 0, is_value = 0, is_literal = 0;
+    unsigned cycle_candidate = 0, pointer_mutable = 0, scalar_rep = 0;
+    size_t alias_length = 0;
+    int consumed = 0;
+    if (!type || !type->canonical_key || type->kind != XR_KIND_POINTER ||
+        type->flags != 0 || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE ||
+        sscanf(type->canonical_key,
+               "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:%n",
+               &kind, &semantic_type, &builtin_type, &nullable, &is_const,
+               &is_value, &is_literal, &cycle_candidate, &pointer_mutable,
+               &scalar_rep, &alias_length, &consumed) != 11 ||
+        consumed <= 0 || (size_t) consumed != strlen(type->canonical_key) ||
+        kind != XR_KIND_POINTER || semantic_type != 0 ||
+        builtin_type != XR_TID_NULL || nullable != 0 || is_const != 0 ||
+        is_value != 0 || is_literal != 0 || cycle_candidate != 0 ||
+        pointer_mutable > 1 || scalar_rep != XR_SCALAR_REP_NONE ||
+        alias_length != 0)
+        return NULL;
+    return pointer_mutable ? "void *" : "const void *";
+}
+
+static bool machine_kind_to_c_rep(const XrTargetPlan *target_plan,
+                                  uint32_t semantic_value, uint16_t kind,
+                                  XrCValueRep *out, const char **c_type) {
     if (!out || !c_type)
         return false;
     switch (kind) {
@@ -136,6 +200,11 @@ static bool machine_kind_to_c_rep(uint16_t kind, XrCValueRep *out, const char **
             *out = XR_C_VALUE_REP_VIEW;
             *c_type = "xr_span_t";
             return true;
+        case XR_MACHINE_REP_RAW_PTR:
+            *out = XR_C_VALUE_REP_RAW_PTR;
+            *c_type = emission_raw_pointer_c_type(target_plan,
+                                                   semantic_value);
+            return *c_type != NULL;
         default: return false;
     }
 }
@@ -660,9 +729,11 @@ static bool adt_enum_payload_has_exact_projection(
     const char *register_c_type = NULL;
     const char *memory_c_type = NULL;
     return binding && register_rep && memory_rep &&
-           machine_kind_to_c_rep(register_rep->kind, &register_c_rep,
+           machine_kind_to_c_rep(target_plan, semantic_value,
+                                 register_rep->kind, &register_c_rep,
                                  &register_c_type) &&
-           machine_kind_to_c_rep(memory_rep->kind, &memory_c_rep,
+           machine_kind_to_c_rep(target_plan, semantic_value,
+                                 memory_rep->kind, &memory_c_rep,
                                  &memory_c_type) &&
            register_rep->kind == memory_rep->kind &&
            register_c_rep == memory_c_rep &&
@@ -1652,6 +1723,14 @@ static bool verify_value(const XrCValueEmissionView *value) {
                 strlen(expected_c_type) != 31)
                 return false;
             break;
+        case XR_MACHINE_REP_RAW_PTR:
+            expected_rep = XR_C_VALUE_REP_RAW_PTR;
+            if (!value->c_type ||
+                (strcmp(value->c_type, "const void *") != 0 &&
+                 strcmp(value->c_type, "void *") != 0))
+                return false;
+            expected_c_type = value->c_type;
+            break;
         default: return false;
     }
     bool recipe_valid = value->materialization ==
@@ -1877,7 +1956,8 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
     return xr_fingerprint_equal(actual, plan->fingerprint);
 }
 
-static bool verify_target_kind_projection(uint16_t kind,
+static bool verify_target_kind_projection(const XrTargetPlan *target_plan,
+                                          uint32_t semantic_value, uint16_t kind,
                                           XrCValueRep *out_rep,
                                           const char **out_c_type) {
     if (!out_rep || !out_c_type)
@@ -1952,6 +2032,11 @@ static bool verify_target_kind_projection(uint16_t kind,
             *out_rep = XR_C_VALUE_REP_VIEW;
             *out_c_type = "xr_span_t";
             return true;
+        case XR_MACHINE_REP_RAW_PTR:
+            *out_rep = XR_C_VALUE_REP_RAW_PTR;
+            *out_c_type = emission_raw_pointer_c_type(target_plan,
+                                                       semantic_value);
+            return *out_c_type != NULL;
         default: return false;
     }
 }
@@ -2004,11 +2089,13 @@ bool xr_c_emission_plan_verify(
         const char *register_c_type = NULL;
         const char *memory_c_type = NULL;
         bool register_supported = register_rep &&
-            verify_target_kind_projection(register_rep->kind,
+            verify_target_kind_projection(target_plan, binding->semantic_value,
+                                          register_rep->kind,
                                           &expected_register,
                                           &register_c_type);
         bool memory_supported = memory_rep &&
-            verify_target_kind_projection(memory_rep->kind, &expected_memory,
+            verify_target_kind_projection(target_plan, binding->semantic_value,
+                                          memory_rep->kind, &expected_memory,
                                           &memory_c_type);
         XrCAggregateProjection aggregate = {0};
         if (register_rep && memory_rep &&
@@ -2347,10 +2434,12 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         const char *register_c_type = NULL;
         const char *memory_c_type = NULL;
         bool register_is_value =
-            register_rep && machine_kind_to_c_rep(register_rep->kind, &register_c_rep,
+            register_rep && machine_kind_to_c_rep(target_plan, binding->semantic_value,
+                                                   register_rep->kind, &register_c_rep,
                                                    &register_c_type);
         bool memory_is_value =
-            memory_rep && machine_kind_to_c_rep(memory_rep->kind, &memory_c_rep,
+            memory_rep && machine_kind_to_c_rep(target_plan, binding->semantic_value,
+                                                 memory_rep->kind, &memory_c_rep,
                                                  &memory_c_type);
         XrCAggregateProjection aggregate = {0};
         if (register_rep && memory_rep &&
@@ -2468,7 +2557,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         }
         if (!register_rep || !memory_rep || register_rep->kind != memory_rep->kind ||
             (!aggregate_supported &&
-             !machine_kind_to_c_rep(register_rep->kind, &c_rep, &c_type)))
+             !machine_kind_to_c_rep(target_plan, binding->semantic_value,
+                                    register_rep->kind, &c_rep, &c_type)))
             continue;
         XrCValueEmissionView *value = &plan->values[value_index++];
         value->semantic_value = binding->semantic_value;

@@ -11,6 +11,13 @@ jumps, or two-way branches, and whose operations are entirely in the supported
 family. Every other function emits zero rows; no partial group or fallback is
 allowed.
 
+The scalar representation boundary separately recognizes an exact unaliased
+SemanticPlan `Ptr` or `MutPtr` as TargetPlan `RAW_PTR`: its size and alignment
+come from the frozen target profile, while ownership is trivial, roots are
+absent, and zero is null. Production construction and independent verification
+both derive these facts from the frozen SemanticPlan type identity. No mutable
+Xi type, value name, or legacy plan is an authority for this representation.
+
 The only supported execution family is a closed signed `i64` program consisting
 of constants, parameter bindings, copies, wrapping addition, wrapping
 subtraction, wrapping multiplication, bitwise and, or, exclusive or, wrapping
@@ -200,7 +207,7 @@ dependency/module identity, unique shared slot, complete use sets, and receiver
 binding. They grant no imported module object body, allocation,
 root, cleanup, member lookup, dependency activation, argument ABI, or
 cross-module frame.
-The C emission projection schema 18 mechanically spells all verified dynamic
+The C emission projection schema 19 mechanically spells all verified dynamic
 families as exact `TAGGED`/`XrValue` rows. For an exact String literal it also
 owns the immutable literal bytes and the explicit String-view materialization
 recipe. For exact `XI_CHAN_NEW` it owns the helper spelling and capacity
@@ -297,10 +304,10 @@ Evidence:
 
 anchor-sha256: src/plan/target/xr_target_plan.h dd9ce3996f1109c8d4372911d53d273cbf3699764f20f51fe2ac2101c73c8565
 anchor-sha256: src/plan/target/xr_target_plan.c b13c7fd708c6702c5c4014fab5dfa413bcacdc2d8673cfa472cbc274b08e6c4f
-anchor-sha256: src/plan/target/xr_target_builder.c 1b11b58e05c21edff4447c669de5ff902390d8cc5b6b755e2833b2c067e37c0b
+anchor-sha256: src/plan/target/xr_target_builder.c e8898dc1d25338895dd06b5f8a8928f808d017469243577780edefddad5375ba
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 6099812f9cee4af8b01c5ffb422c9e359cbd95ec7ebc61c927bc051bc2bf904b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 687ab0df5479e46e51e200e54ea8b935579e6319598fd9830009f935eb057b77
-anchor-sha256: src/plan/target/xr_target_verify.c bad658d68e1cead10551969f128ec1d79d19c38f7d3af34e15ec0441eccc593c
+anchor-sha256: src/plan/target/xr_target_verify.c d4902582468104978fe06aec2fdce0d6d3d65694b08318a88026bf329de0960d
 anchor-sha256: src/plan/format/xr_xtp_schema.h 80f19a514b874f76c396717289054612cdf291b860e97ac148b649243c6399d1
 anchor-sha256: src/plan/format/xr_xtp_rows.c 868dde2fe9a991b4bada65a0055722a961fb66bce2d550abc10c7c3918f41ca7
 anchor-sha256: src/plan/format/xr_xtp_encode.c 2f6f1fa32e35fd1681ab07bc8a3808d133f33f27e43139224d3f9e253447bd74

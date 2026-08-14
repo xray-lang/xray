@@ -40,6 +40,11 @@ roots, or general module activation.
    storage, Channel-receive storage, direct-local-GO-callee storage,
    direct-local-GO-task-result storage, panic-catch storage,
    SOURCE-namespace storage, and ADT-enum storage. The
+   scalar family admits an unaliased SemanticPlan `Ptr` or `MutPtr` only as an
+   exact TargetPlan `RAW_PTR` with target-profile pointer layout and a trivial,
+   non-root, null-zero lifecycle. The independent verifier re-parses the frozen
+   type identity and rejects incomplete or mutated representation facts; no Xi
+   type, name, or legacy plan can authorize it. The
    closure-storage family covers
    only an exact no-capture heap closure's outer `XrValue` slot as
    dynamic/owned/tagged storage. It does not authorize the closure object body,
@@ -269,8 +274,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h 5a9f4bc54135f39ee703e872f1926
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
 anchor-sha256: src/plan/target/xr_target_plan.h dd9ce3996f1109c8d4372911d53d273cbf3699764f20f51fe2ac2101c73c8565
 anchor-sha256: src/plan/target/xr_target_plan.c b13c7fd708c6702c5c4014fab5dfa413bcacdc2d8673cfa472cbc274b08e6c4f
-anchor-sha256: src/plan/target/xr_target_builder.c 1b11b58e05c21edff4447c669de5ff902390d8cc5b6b755e2833b2c067e37c0b
-anchor-sha256: src/plan/target/xr_target_verify.c bad658d68e1cead10551969f128ec1d79d19c38f7d3af34e15ec0441eccc593c
+anchor-sha256: src/plan/target/xr_target_builder.c e8898dc1d25338895dd06b5f8a8928f808d017469243577780edefddad5375ba
+anchor-sha256: src/plan/target/xr_target_verify.c d4902582468104978fe06aec2fdce0d6d3d65694b08318a88026bf329de0960d
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
@@ -279,7 +284,7 @@ anchor-sha256: src/runtime/xr_target_plan_load.c f405d17bc64b93c2582026a9860dbe4
 anchor-sha256: src/app/cli/xcmd_run.c daf2fcff233493c568bf4d3269c8abf84ad1262344d3312fd4384c06d68dd770
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 577aa49d6502b2b1cf3a88191851bbbc82775fe2e53f51ec7ea83ca58281a548
 anchor-sha256: scripts/check_legacy_product_residue.py d160f8b9ab1d16da893bcc30a7ed90d583dda9e478dd11f67c9ce299629f8d2f
-anchor-sha256: tests/unit/plan/test_target_plan.c 0e6185dce15ed70ef3f0071ada2c59e4d6638cf5263753f09d90acbdc5bcd3b2
+anchor-sha256: tests/unit/plan/test_target_plan.c 96267de5aa4a7a3687758d96a66b294884edec8c73f424fa433006e75f7e9402
 anchor-sha256: tests/unit/plan/test_xtp_format.c b23546102bcf4bf6d09d4a3a8c7d88fbe5a3552ff5a4d449b427e271655af657
 anchor-sha256: tests/unit/CMakeLists.txt d8bedb9c848e0d7a75cd63035487e9e65e3dedf4e28f78225b83a7a6f3c4b440
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20

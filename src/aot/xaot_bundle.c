@@ -5350,16 +5350,21 @@ static bool rep_adapter_exact_target_scalar_output(
         case XR_MACHINE_REP_F32: rep = XAOT_REP_F32; break;
         case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
         case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
+        case XR_MACHINE_REP_RAW_PTR: rep = XAOT_REP_RAWPTR; break;
         default: return false;
     }
     const XaotRepInfo *info = xaot_rep_info(rep);
-    XaotValueKind kind = rep == XAOT_REP_VOID ? XAOT_VALUE_VOID
-                                              : XAOT_VALUE_SCALAR;
+    XaotValueKind kind = rep == XAOT_REP_VOID     ? XAOT_VALUE_VOID
+                         : rep == XAOT_REP_RAWPTR ? XAOT_VALUE_PTR
+                                                  : XAOT_VALUE_SCALAR;
     uint32_t flags = machine->kind == XR_MACHINE_REP_ENUM_ORDINAL
                          ? XAOT_VALUE_FLAG_ENUM
                          : 0u;
+    const char *c_type = machine->kind == XR_MACHINE_REP_RAW_PTR
+                             ? xaot_raw_pointer_c_type(type)
+                             : info ? info->c_type : NULL;
     return info && rep_adapter_fields_are_exact(actual, kind, rep, type,
-                                                info->c_type, flags);
+                                                c_type, flags);
 }
 
 XR_FUNC bool xaot_value_plan_is_exact_rep_adapter(

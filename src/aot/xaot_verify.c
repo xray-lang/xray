@@ -123,6 +123,7 @@ static bool verify_target_machine_value_rep(const XrTargetPlan *target_plan,
         case XR_MACHINE_REP_F32: rep = XAOT_REP_F32; break;
         case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
         case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
+        case XR_MACHINE_REP_RAW_PTR: rep = XAOT_REP_RAWPTR; break;
         case XR_MACHINE_REP_DYN_VALUE: rep = XAOT_REP_TAGGED; break;
         case XR_MACHINE_REP_VIEW: rep = XAOT_REP_SLICE; break;
         default: return false;
@@ -134,10 +135,15 @@ static bool verify_target_machine_value_rep(const XrTargetPlan *target_plan,
     out->kind = rep == XAOT_REP_VOID    ? XAOT_VALUE_VOID
                 : rep == XAOT_REP_TAGGED ? XAOT_VALUE_TAGGED
                 : rep == XAOT_REP_SLICE  ? XAOT_VALUE_AGGREGATE
+                : rep == XAOT_REP_RAWPTR ? XAOT_VALUE_PTR
                                           : XAOT_VALUE_SCALAR;
     out->rep = rep;
     out->type = value->type;
-    out->c_type = info->c_type;
+    out->c_type = machine->kind == XR_MACHINE_REP_RAW_PTR
+                      ? xaot_raw_pointer_c_type(value->type)
+                      : info->c_type;
+    if (!out->c_type)
+        return false;
     if (machine->kind == XR_MACHINE_REP_ENUM_ORDINAL)
         out->flags = XAOT_VALUE_FLAG_ENUM;
     return true;

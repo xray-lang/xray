@@ -476,6 +476,11 @@ static bool rep_kind_contract_is_exact(const XrTargetPlan *plan,
             return rep->root_kind == XR_TARGET_ROOT_OBJECT && rep->lane_count == 0 &&
                    rep->signedness == XR_TARGET_SIGN_NONE;
         case XR_MACHINE_REP_RAW_PTR:
+            return rep->detail == 0 && rep->lane_count == 0 &&
+                   rep->root_kind == XR_TARGET_ROOT_NONE &&
+                   rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+                   rep->null_encoding == XR_TARGET_NULL_ZERO &&
+                   rep->signedness == XR_TARGET_SIGN_NONE;
         case XR_MACHINE_REP_CODE_REF:
             return rep->detail == 0 && rep->lane_count == 0 &&
                    rep->root_kind == XR_TARGET_ROOT_NONE &&
@@ -606,6 +611,39 @@ static bool machine_rep_allows_conversion(const XrTargetPlan *plan, uint16_t fro
                                                &plan->machine_reps[to]);
 }
 
+/* Independent reconstruction of the raw-pointer SemanticPlan identity.  Keep
+ * this separate from the builder so a malformed key or lifecycle row cannot
+ * pass because construction and verification shared one classifier. */
+static bool semantic_raw_pointer_type_is_exact(const XrSemanticTypeRecord *type) {
+    unsigned kind = 0, semantic_type = 0, builtin_type = 0;
+    unsigned nullable = 0, is_const = 0, is_value = 0, is_literal = 0;
+    unsigned cycle_candidate = 0, pointer_mutable = 0, scalar_rep = 0;
+    size_t alias_length = 0;
+    int consumed = 0;
+    XrStableId zero = {{0}};
+    return type && type->canonical_key &&
+           sscanf(type->canonical_key,
+                  "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:%n",
+                  &kind, &semantic_type, &builtin_type, &nullable, &is_const,
+                  &is_value, &is_literal, &cycle_candidate, &pointer_mutable,
+                  &scalar_rep, &alias_length, &consumed) == 11 &&
+           consumed > 0 && (size_t) consumed == strlen(type->canonical_key) &&
+           kind == XR_KIND_POINTER && semantic_type == 0 &&
+           builtin_type == XR_TID_NULL && nullable == 0 && is_const == 0 &&
+           is_value == 0 && is_literal == 0 && cycle_candidate == 0 &&
+           pointer_mutable <= 1 && scalar_rep == XR_SCALAR_REP_NONE &&
+           alias_length == 0 && type->kind == XR_KIND_POINTER &&
+           type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) &&
+           type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->enum_layout_id == 0 &&
+           type->enum_member_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags == 0 && type->enum_flags == 0 && type->reserved_enum == 0 &&
+           !type->source_enum_key &&
+           xr_stable_id_equal(type->source_enum_identity, zero);
+}
+
 static int semantic_type_expected_rep(const XrSemanticTypeRecord *type, uint16_t *out_kind) {
     if ((type->flags & XR_SEM_TYPE_NULLABLE) != 0)
         return 0;
@@ -650,6 +688,11 @@ static int semantic_type_expected_rep(const XrSemanticTypeRecord *type, uint16_t
             if (type->scalar_rep != XR_SCALAR_REP_NONE)
                 return -1;
             *out_kind = XR_MACHINE_REP_VOID;
+            return 1;
+        case XR_KIND_POINTER:
+            if (!semantic_raw_pointer_type_is_exact(type))
+                return -1;
+            *out_kind = XR_MACHINE_REP_RAW_PTR;
             return 1;
         default:
             return 0;

@@ -46,6 +46,41 @@ typedef enum XrTargetScalarEligibility {
     XR_TARGET_SCALAR_VALUE = 1,
 } XrTargetScalarEligibility;
 
+/* A plain raw-pointer type has one target representation regardless of its
+ * pointee or mutability: an address-width, non-owning machine pointer.  The
+ * canonical key remains the authority for the Ptr/MutPtr distinction, while
+ * this judgement admits only the exact unaliased pointer header emitted by
+ * SemanticPlan.  No Xi type is consulted after the plan is frozen. */
+static bool semantic_raw_pointer_type_is_exact(const XrSemanticTypeRecord *type) {
+    unsigned kind = 0, semantic_type = 0, builtin_type = 0;
+    unsigned nullable = 0, is_const = 0, is_value = 0, is_literal = 0;
+    unsigned cycle_candidate = 0, pointer_mutable = 0, scalar_rep = 0;
+    size_t alias_length = 0;
+    int consumed = 0;
+    XrStableId zero = {{0}};
+    return type && type->canonical_key &&
+           sscanf(type->canonical_key,
+                  "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:%n",
+                  &kind, &semantic_type, &builtin_type, &nullable, &is_const,
+                  &is_value, &is_literal, &cycle_candidate, &pointer_mutable,
+                  &scalar_rep, &alias_length, &consumed) == 11 &&
+           consumed > 0 && (size_t) consumed == strlen(type->canonical_key) &&
+           kind == XR_KIND_POINTER && semantic_type == 0 &&
+           builtin_type == XR_TID_NULL && nullable == 0 && is_const == 0 &&
+           is_value == 0 && is_literal == 0 && cycle_candidate == 0 &&
+           pointer_mutable <= 1 && scalar_rep == XR_SCALAR_REP_NONE &&
+           alias_length == 0 && type->kind == XR_KIND_POINTER &&
+           type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) &&
+           type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->enum_layout_id == 0 &&
+           type->enum_member_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags == 0 && type->enum_flags == 0 && type->reserved_enum == 0 &&
+           !type->source_enum_key &&
+           xr_stable_id_equal(type->source_enum_identity, zero);
+}
+
 typedef struct XrTargetRepIntent {
     XrTargetMachineRepRecord record;
 } XrTargetRepIntent;
@@ -343,6 +378,11 @@ static XrTargetScalarEligibility classify_scalar_type(const XrSemanticTypeRecord
                 return XR_TARGET_SCALAR_INVALID;
             *out_kind = XR_MACHINE_REP_VOID;
             return XR_TARGET_SCALAR_VALUE;
+        case XR_KIND_POINTER:
+            if (!semantic_raw_pointer_type_is_exact(type))
+                return XR_TARGET_SCALAR_INVALID;
+            *out_kind = XR_MACHINE_REP_RAW_PTR;
+            return XR_TARGET_SCALAR_VALUE;
         default:
             return XR_TARGET_SCALAR_NOT_APPLICABLE;
     }
@@ -452,6 +492,9 @@ static bool rep_layout_for_kind(const XrTargetMachineFacts *profile, uint16_t ki
         case XR_MACHINE_REP_F64:
             *out = profile->data_layout.f64;
             break;
+        case XR_MACHINE_REP_RAW_PTR:
+            *out = profile->data_layout.pointer;
+            break;
         default:
             return false;
     }
@@ -478,6 +521,8 @@ static bool make_machine_rep(const XrTargetMachineFacts *profile, uint16_t kind,
     out->memory_align = (uint16_t) layout.align;
     out->signedness = signedness;
     out->ownership = XR_TARGET_OWNERSHIP_TRIVIAL;
+    if (kind == XR_MACHINE_REP_RAW_PTR)
+        out->null_encoding = XR_TARGET_NULL_ZERO;
     return true;
 }
 
