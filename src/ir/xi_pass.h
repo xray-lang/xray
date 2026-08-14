@@ -196,6 +196,16 @@ XR_FUNC bool xi_pass_id_is_required(int pass_id);
 #define XI_PASS_NEEDS_DEFUSE (1u << 2) /* requires def-use chains */
 #define XI_PASS_REQUIRED (1u << 3)     /* cannot be disabled by env / config */
 #define XI_PASS_CORO_PLAN_SAFE (1u << 4) /* preserves frozen coroutine CFG anchors */
+/* The pass does not maintain XiPassChange.n_removed / n_added. Statistics
+ * print "n/a" for it instead of a zero, because a zero from a pass that
+ * never counts is indistinguishable from a pass that changed nothing, and a
+ * reader has drawn the wrong conclusion from exactly that. A rewrite that
+ * moves values rather than adding or deleting them (LICM) or deletes edges
+ * rather than values (loop splitting) has no honest number to print here,
+ * so this flag states that rather than inventing one. The driver rejects a
+ * pass that carries the flag and returns a non-zero count, so the flag
+ * cannot quietly go stale when a pass starts counting. */
+#define XI_PASS_NO_VALUE_COUNTS (1u << 5)
 
 typedef struct XiPassDesc {
     const char *name;     /* human-readable name for logging */
@@ -237,6 +247,10 @@ typedef struct XiPassStats {
     uint32_t n_removed;   /* total values eliminated */
     uint32_t n_added;     /* total values inserted */
     uint64_t elapsed_ns;  /* cumulative wall-clock nanoseconds */
+    /* False when the pass carries XI_PASS_NO_VALUE_COUNTS: n_removed and
+     * n_added are then not a measurement of it and say nothing about whether
+     * it rewrote anything. */
+    bool counts_reported;
 } XiPassStats;
 
 /* Aggregate statistics for the entire pipeline execution. */

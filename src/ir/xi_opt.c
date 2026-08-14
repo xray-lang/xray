@@ -4199,36 +4199,49 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
     }
 
 /* Pass table: ordered by recommended execution sequence.
- * The driver runs all passes whose min_level <= requested level. */
+ * The driver runs all passes whose min_level <= requested level.
+ *
+ * XI_PASS_NO_VALUE_COUNTS marks a pass that does not maintain the removed /
+ * added counters. Those passes rewrite the function without the counters
+ * moving, so a zero from them means "not measured" and not "did nothing";
+ * the statistics dump prints n/a rather than a zero a reader would take for
+ * evidence. The two analysis passes are not marked: they rewrite nothing at
+ * all, so zero is their true count. const_fixpoint is not marked either: it
+ * merges the records of the passes it runs, so its counters do move, and
+ * the two constituents that do not count are marked in their own right. */
 static const XiPassDesc xi_pass_table[] = {
     XI_ANALYSIS_PASS("tbaa", xi_tbaa_annotate, XI_OPT_LIGHT, XI_PASS_REQUIRED, XI_EVD_ALIAS),
-    XI_REWRITE_PASS("constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_CORO_PLAN_SAFE, 0),
+    XI_REWRITE_PASS("constfold", xi_opt_const_fold, XI_OPT_LIGHT,
+                    XI_PASS_CORO_PLAN_SAFE | XI_PASS_NO_VALUE_COUNTS, 0),
     XI_REWRITE_PASS("strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT,
-                    XI_PASS_CORO_PLAN_SAFE, 0),
-    XI_REWRITE_PASS("copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_CORO_PLAN_SAFE, 0),
+                    XI_PASS_CORO_PLAN_SAFE | XI_PASS_NO_VALUE_COUNTS, 0),
+    XI_REWRITE_PASS("copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT,
+                    XI_PASS_CORO_PLAN_SAFE | XI_PASS_NO_VALUE_COUNTS, 0),
     XI_REWRITE_PASS("mark_one_shot_await", xi_opt_mark_one_shot_await, XI_OPT_LIGHT, XI_PASS_NONE,
                     0),
     XI_REWRITE_PASS("phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, 0),
     XI_REWRITE_PASS("dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, 0),
     XI_REWRITE_PASS("sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, 0),
     XI_ANALYSIS_PASS("range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_EVD_RANGE),
-    XI_REWRITE_PASS("bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NONE, XI_EVD_RANGE),
+    XI_REWRITE_PASS("bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NO_VALUE_COUNTS, XI_EVD_RANGE),
     XI_REWRITE_PASS("gvn", xi_opt_gvn_pre, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_EVD_ALIAS),
     XI_REWRITE_PASS("loop_rotate", xi_opt_loop_rotate, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
-    XI_REWRITE_PASS("licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_EVD_ALIAS),
+    XI_REWRITE_PASS("licm", xi_opt_licm, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NO_VALUE_COUNTS, XI_EVD_ALIAS),
     XI_REWRITE_PASS("ivsr", xi_opt_ivsr, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
     XI_REWRITE_PASS("loop_peel", xi_opt_loop_peel, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
     XI_REWRITE_PASS("loop_unroll", xi_opt_loop_unroll, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
     XI_REWRITE_PASS("loop_split", xi_opt_loop_split, XI_OPT_FULL,
-                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP | XI_PASS_NO_VALUE_COUNTS, 0),
     XI_REWRITE_PASS("loop_inv_branch", xi_opt_loop_inv_branch, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
-    XI_REWRITE_PASS("inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
+    XI_REWRITE_PASS("inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NO_VALUE_COUNTS, 0),
+    XI_REWRITE_PASS("tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NO_VALUE_COUNTS, 0),
+    XI_REWRITE_PASS("ifconv", xi_opt_ifconv, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NO_VALUE_COUNTS, 0),
     XI_REWRITE_PASS("jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
     XI_REWRITE_PASS("block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, 0),
     XI_MASKED_REWRITE_PASS("const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, 0),
@@ -4490,6 +4503,8 @@ static void stats_merge(XiPipelineStats *dst, const XiPipelineStats *src) {
         dp->n_removed += sp->n_removed;
         dp->n_added += sp->n_added;
         dp->elapsed_ns += sp->elapsed_ns;
+        /* Same pass, same declaration; the slot may be freshly zeroed. */
+        dp->counts_reported = sp->counts_reported;
     }
     dst->total_rounds += src->total_rounds;
     dst->total_ns += src->total_ns;
@@ -4913,6 +4928,20 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 fprintf(stderr, "=============================================\n");
             }
 
+            /* A pass that declares it does not count must not return a count:
+             * the declaration is what the statistics dump prints instead of a
+             * number, so a pass that starts counting has to say so or the
+             * dump reports n/a over a real measurement. */
+            if ((desc->flags & XI_PASS_NO_VALUE_COUNTS) && (pc.n_removed || pc.n_added)) {
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' declares no value counts but reported %u removed and %u added",
+                         desc->name, pc.n_removed, pc.n_added);
+                goto done;
+            }
+
             /* Record per-pass stats */
             XiPassStats *ps = stats_slot(stats, desc->name);
             if (ps) {
@@ -4920,6 +4949,7 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 ps->n_removed += pc.n_removed;
                 ps->n_added += pc.n_added;
                 ps->elapsed_ns += dt;
+                ps->counts_reported = (desc->flags & XI_PASS_NO_VALUE_COUNTS) == 0;
             }
 
             round_chg = xi_pass_merge(round_chg, pc);
@@ -5043,14 +5073,31 @@ XR_FUNC void xi_pipeline_stats_dump(const XiPipelineStats *stats, const char *fu
             stats->total_rounds, (double) stats->total_ns / 1e6);
 
     uint32_t total_invocations = 0;
+    bool any_unreported = false;
     for (uint32_t i = 0; i < stats->npass; i++) {
         const XiPassStats *ps = &stats->passes[i];
+        char removed[16];
+        char added[16];
         if (ps->invocations == 0)
             continue;
-        fprintf(stderr, "  %-18s  %3u calls  %5u rem  %5u add  %7.3f ms\n", ps->name,
-                ps->invocations, ps->n_removed, ps->n_added, (double) ps->elapsed_ns / 1e6);
+        /* A pass that does not maintain the counters prints n/a. Printing its
+         * zero instead reads as "ran and changed nothing", which is a
+         * conclusion the number does not support. */
+        if (ps->counts_reported) {
+            snprintf(removed, sizeof(removed), "%5u", ps->n_removed);
+            snprintf(added, sizeof(added), "%5u", ps->n_added);
+        } else {
+            snprintf(removed, sizeof(removed), "%5s", "n/a");
+            snprintf(added, sizeof(added), "%5s", "n/a");
+            any_unreported = true;
+        }
+        fprintf(stderr, "  %-18s  %3u calls  %s rem  %s add  %7.3f ms\n", ps->name,
+                ps->invocations, removed, added, (double) ps->elapsed_ns / 1e6);
         total_invocations += ps->invocations;
     }
+    if (any_unreported)
+        fprintf(stderr,
+                "  n/a: the pass does not count values; it may have rewritten the function\n");
 
     /* Cache effectiveness — recomputes vs total pass invocations.
      * Without caching, every pass that needs dominators would force a
