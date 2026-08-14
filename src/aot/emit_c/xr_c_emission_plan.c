@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(13)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(14)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -170,6 +170,115 @@ static const XrSemanticOperationRecord *binding_operation(
     return operation < xr_semantic_plan_operation_count(semantic)
                ? xr_semantic_plan_operation(semantic, operation)
                : NULL;
+}
+
+static bool exact_panic_catch_recipe(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding) {
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(semantic, operation->result_type)
+                  : NULL;
+    XrStableId zero = {{0}};
+    if (!semantic || !operation || !binding || operation->opcode != XI_CATCH ||
+        operation->result_value != binding->semantic_value ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->function >= xr_semantic_plan_function_count(semantic) ||
+        operation->operand_count != 0 || operation->metadata_count != 0 ||
+        operation->allocation_key != NULL ||
+        !xr_stable_id_equal(operation->allocation_id, zero) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CATCH) ||
+        operation->flags != xi_generated_op_default_flags(XI_CATCH) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CATCH) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->transfer_mode != XR_TRANSFER_SHARE ||
+        operation->parameter_mode != XR_PARAM_READ ||
+        operation->parameter_ownership != XI_OWN_NONE ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_complete != 1 ||
+        operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_source_operand != -1 ||
+        operation->view_source_parameter != -1 ||
+        operation->view_origin != XI_VIEW_ORIGIN_NONE ||
+        operation->view_capability != 0 || operation->view_lifetime != 0 ||
+        operation->view_complete != 0)
+        return false;
+    for (uint32_t i = 0; i < 8; i++)
+        if (operation->evidence[i] !=
+            (i == 7 ? XR_SEMANTIC_INDEX_NONE : 0u))
+            return false;
+    if (!type || type->kind != XR_KIND_UNKNOWN ||
+        type->builtin_type != XR_TID_NULL ||
+        type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        type->source_enum_key != NULL ||
+        !xr_stable_id_equal(type->source_enum_identity, zero) ||
+        !xr_stable_id_equal(type->source_class_identity, zero) ||
+        type->child_count != 0 || type->aggregate_extent != 0 ||
+        type->aggregate_align != 0 || type->enum_layout_id != 0 ||
+        type->enum_member_count != 0 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE ||
+        type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                        XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        type->enum_flags != 0 || type->reserved_enum != 0)
+        return false;
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    uint32_t operation_index = slot ? slot->semantic_operation
+                                    : XR_SEMANTIC_INDEX_NONE;
+    return register_rep && memory_rep && slot && layout &&
+           operation_index < xr_semantic_plan_operation_count(semantic) &&
+           xr_semantic_plan_operation(semantic, operation_index) == operation &&
+           register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+           memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+           register_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+           memory_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+           register_rep->ownership == XR_TARGET_OWNERSHIP_OWNED &&
+           memory_rep->ownership == XR_TARGET_OWNERSHIP_OWNED &&
+           register_rep->null_encoding == XR_TARGET_NULL_TAGGED &&
+           memory_rep->null_encoding == XR_TARGET_NULL_TAGGED &&
+           register_rep->memory_size == memory_rep->memory_size &&
+           register_rep->memory_align == memory_rep->memory_align &&
+           layout->kind == XR_TARGET_LAYOUT_DYNAMIC &&
+           layout->field_count == 0 && layout->root_field_count == 0 &&
+           layout->fixed_prefix_size == memory_rep->memory_size &&
+           layout->align == memory_rep->memory_align &&
+           slot->semantic_value == binding->semantic_value &&
+           slot->function == operation->function &&
+           slot->role == XR_TARGET_SLOT_TEMPORARY &&
+           slot->register_rep == binding->register_rep &&
+           slot->memory_rep == binding->memory_rep &&
+           slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+           slot->ownership == XR_TARGET_OWNERSHIP_OWNED;
 }
 
 static bool exact_string_concat_recipe(
@@ -1174,6 +1283,15 @@ static bool verify_value(const XrCValueEmissionView *value) {
         recipe_valid = recipe_valid && value->recipe_argument_count == 0 &&
                        value->recipe_arguments == NULL;
     }
+    if (value->materialization == XR_C_VALUE_MATERIALIZATION_PANIC_CATCH)
+        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value == UINT32_MAX &&
+                       value->recipe_argument_value == UINT32_MAX &&
+                       value->recipe_argument_count == 0 &&
+                       value->recipe_arguments == NULL &&
+                       value->recipe_symbol == NULL;
     return expected_rep == (XrCValueRep) value->rep && value->c_type &&
            value->reserved == 0 && value->recipe_reserved == 0 && recipe_valid &&
            strcmp(value->c_type, expected_c_type) == 0 &&
@@ -1405,7 +1523,11 @@ bool xr_c_emission_plan_verify(
         bool expected_string_concat = exact_string_concat_recipe(
             target_plan, binding, &expected_concat_arguments,
             &expected_concat_argument_count);
-        uint8_t expected_recipe = expected_literal
+        bool expected_panic_catch =
+            exact_panic_catch_recipe(target_plan, binding);
+        uint8_t expected_recipe = expected_panic_catch
+                                      ? XR_C_VALUE_MATERIALIZATION_PANIC_CATCH
+                                      : expected_literal
                                       ? XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW
                                       : expected_channel
                                             ? XR_C_VALUE_MATERIALIZATION_CHANNEL_NEW
@@ -1547,7 +1669,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE |
         XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE |
         XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE |
-        XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE;
+        XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |
+        XR_TARGET_FAMILY_PANIC_CATCH_STORAGE;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",
@@ -1678,7 +1801,10 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         uint16_t concat_argument_count = 0;
         bool string_concat = exact_string_concat_recipe(
             target_plan, binding, &concat_arguments, &concat_argument_count);
-        if (string_concat) {
+        bool panic_catch = exact_panic_catch_recipe(target_plan, binding);
+        if (panic_catch) {
+            value->materialization = XR_C_VALUE_MATERIALIZATION_PANIC_CATCH;
+        } else if (string_concat) {
             size_t symbol_length = sizeof(XR_C_STRING_CONCAT_SYMBOL);
             char *owned = (char *) xr_malloc(symbol_length);
             if (!owned) {

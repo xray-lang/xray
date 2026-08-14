@@ -977,6 +977,63 @@ static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
                callee->return_type;
 }
 
+static bool semantic_panic_catch_is_exact(
+    const XrSemanticPlan *semantic,
+    const XrSemanticOperationRecord *operation) {
+    XrStableId zero = {{0}};
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(semantic, operation->result_type)
+                  : NULL;
+    if (!semantic || !operation || operation->opcode != XI_CATCH ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->function >= xr_semantic_plan_function_count(semantic) ||
+        operation->operand_count != 0 || operation->metadata_count != 0 ||
+        operation->allocation_key != NULL ||
+        !xr_stable_id_equal(operation->allocation_id, zero) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CATCH) ||
+        operation->flags != xi_generated_op_default_flags(XI_CATCH) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CATCH) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->transfer_mode != XR_TRANSFER_SHARE ||
+        operation->parameter_mode != XR_PARAM_READ ||
+        operation->parameter_ownership != XI_OWN_NONE ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_complete != 1 ||
+        operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_source_operand != -1 ||
+        operation->view_source_parameter != -1 ||
+        operation->view_origin != XI_VIEW_ORIGIN_NONE ||
+        operation->view_capability != 0 || operation->view_lifetime != 0 ||
+        operation->view_complete != 0)
+        return false;
+    for (uint32_t i = 0; i < 8; i++)
+        if (operation->evidence[i] !=
+            (i == 7 ? XR_SEMANTIC_INDEX_NONE : 0u))
+            return false;
+    return type && type->kind == XR_KIND_UNKNOWN &&
+           type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           type->source_enum_key == NULL &&
+           xr_stable_id_equal(type->source_enum_identity, zero) &&
+           xr_stable_id_equal(type->source_class_identity, zero) &&
+           type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->enum_layout_id == 0 &&
+           type->enum_member_count == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                           XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->enum_flags == 0 && type->reserved_enum == 0;
+}
+
 static bool semantic_string_literal_is_exact(
     const XrSemanticPlan *semantic,
     const XrSemanticOperationRecord *operation) {
@@ -2524,6 +2581,7 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
                           "dynamic-type verification input is invalid");
         }
         if (semantic_heap_closure_is_exact(plan->semantic_plan, operation) ||
+            semantic_panic_catch_is_exact(plan->semantic_plan, operation) ||
             semantic_array_allocation_is_exact(plan->semantic_plan, operation) ||
             xr_semantic_class_object_is_exact(plan->semantic_plan, operation) ||
             xr_semantic_class_instance_value_is_exact(plan->semantic_plan, operation, NULL) ||
@@ -2615,6 +2673,11 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         XR_VALUE_BINDING_FAIL(1);
     bool exact_heap_closure =
         semantic_heap_closure_is_exact(plan->semantic_plan, operation);
+    bool exact_panic_catch =
+        semantic_panic_catch_is_exact(plan->semantic_plan, operation) &&
+        operation->result_value == semantic_value &&
+        operation->result_type == semantic_type &&
+        operation->function == semantic_function;
     bool exact_array_allocation =
         semantic_array_allocation_is_exact(plan->semantic_plan, operation);
     bool exact_string_literal =
@@ -2733,6 +2796,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     if (scalar_channel_receive && !exact_channel_receive)
         XR_VALUE_BINDING_FAIL(10);
     int eligibility = operation_result_void || exact_heap_closure ||
+                              exact_panic_catch ||
                               exact_array_allocation || exact_class_object ||
                               exact_class_instance || exact_class_receiver ||
                               exact_string_literal || exact_string_concat ||
@@ -2765,7 +2829,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                                                          aggregate_stack, 0)
                         : 0;
     int expected_layout = -1;
-    if (exact_heap_closure || exact_array_allocation || exact_class_object ||
+    if (exact_heap_closure || exact_panic_catch || exact_array_allocation ||
         exact_class_instance || exact_class_receiver ||
         exact_string_literal || exact_string_concat ||
         exact_direct_string_result ||

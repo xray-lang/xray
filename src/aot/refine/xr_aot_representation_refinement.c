@@ -450,6 +450,63 @@ static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
                callee->return_type;
 }
 
+static bool semantic_panic_catch_is_exact(
+    const XrSemanticPlan *semantic,
+    const XrSemanticOperationRecord *operation) {
+    XrStableId zero = {{0}};
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(semantic, operation->result_type)
+                  : NULL;
+    if (!semantic || !operation || operation->opcode != XI_CATCH ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->function >= xr_semantic_plan_function_count(semantic) ||
+        operation->operand_count != 0 || operation->metadata_count != 0 ||
+        operation->allocation_key != NULL ||
+        !xr_stable_id_equal(operation->allocation_id, zero) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CATCH) ||
+        operation->flags != xi_generated_op_default_flags(XI_CATCH) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CATCH) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->transfer_mode != XR_TRANSFER_SHARE ||
+        operation->parameter_mode != XR_PARAM_READ ||
+        operation->parameter_ownership != XI_OWN_NONE ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_complete != 1 ||
+        operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_source_operand != -1 ||
+        operation->view_source_parameter != -1 ||
+        operation->view_origin != XI_VIEW_ORIGIN_NONE ||
+        operation->view_capability != 0 || operation->view_lifetime != 0 ||
+        operation->view_complete != 0)
+        return false;
+    for (uint32_t i = 0; i < 8; i++)
+        if (operation->evidence[i] !=
+            (i == 7 ? XR_SEMANTIC_INDEX_NONE : 0u))
+            return false;
+    return type && type->kind == XR_KIND_UNKNOWN &&
+           type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           type->source_enum_key == NULL &&
+           xr_stable_id_equal(type->source_enum_identity, zero) &&
+           xr_stable_id_equal(type->source_class_identity, zero) &&
+           type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->enum_layout_id == 0 &&
+           type->enum_member_count == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                           XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->enum_flags == 0 && type->reserved_enum == 0;
+}
+
 static bool semantic_string_literal_is_exact(
     const XrSemanticPlan *semantic,
     const XrSemanticOperationRecord *operation) {
@@ -2489,6 +2546,76 @@ static bool oracle_dynamic_closure_storage(const VerifyAuthority *ctx,
     return true;
 }
 
+static bool oracle_dynamic_panic_catch_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !semantic_panic_catch_is_exact(ctx->semantic, operation))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        binding->semantic_value != semantic_value ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static bool oracle_dynamic_string_literal_storage(
     const VerifyAuthority *ctx, uint32_t semantic_value,
     XrRep *out_storage, uint16_t *out_machine_kind) {
@@ -4240,6 +4367,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             out_machine_kind);
     }
     switch (operation->opcode) {
+        case XI_CATCH:
+            return oracle_dynamic_panic_catch_storage(
+                ctx, semantic_value, out_storage, out_machine_kind);
         case XI_CLOSURE_NEW:
             return oracle_dynamic_closure_storage(ctx, semantic_value,
                                                   out_storage,
@@ -4464,6 +4594,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             XrRep literal_storage = XR_REP_TAGGED;
             if (!oracle_dynamic_string_literal_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
+                !oracle_dynamic_panic_catch_storage(
+                    ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_direct_local_string_result_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_string_concat_result_storage(
@@ -4498,6 +4630,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 !oracle_dynamic_closure_storage(ctx, source_value,
                                                 &machine_storage,
                                                 &ignored_kind) &&
+                !oracle_dynamic_panic_catch_storage(
+                    ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_string_literal_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_direct_local_string_result_storage(
@@ -4874,6 +5008,8 @@ static bool oracle_return_storage(const VerifyAuthority *ctx, uint32_t value,
                                              out_machine_kind) ||
            oracle_nullable_scalar_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_closure_storage(ctx, value, out_storage, out_machine_kind) ||
+           oracle_dynamic_panic_catch_storage(ctx, value, out_storage,
+                                              out_machine_kind) ||
            oracle_dynamic_string_literal_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_string_concat_result_storage(ctx, value, out_storage,
                                                        out_machine_kind) ||

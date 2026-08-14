@@ -852,6 +852,62 @@ static bool semantic_heap_closure_is_exact(const XrSemanticPlan *plan,
                callee->return_type;
 }
 
+static bool semantic_panic_catch_is_exact(
+    const XrSemanticPlan *plan,
+    const XrSemanticOperationRecord *operation) {
+    XrStableId zero = {{0}};
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (!plan || !operation || operation->opcode != XI_CATCH ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->function >= xr_semantic_plan_function_count(plan) ||
+        operation->operand_count != 0 || operation->metadata_count != 0 ||
+        operation->allocation_key != NULL ||
+        !xr_stable_id_equal(operation->allocation_id, zero) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CATCH) ||
+        operation->flags != xi_generated_op_default_flags(XI_CATCH) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CATCH) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->transfer_mode != XR_TRANSFER_SHARE ||
+        operation->parameter_mode != XR_PARAM_READ ||
+        operation->parameter_ownership != XI_OWN_NONE ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_complete != 1 ||
+        operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_source_operand != -1 ||
+        operation->view_source_parameter != -1 ||
+        operation->view_origin != XI_VIEW_ORIGIN_NONE ||
+        operation->view_capability != 0 || operation->view_lifetime != 0 ||
+        operation->view_complete != 0)
+        return false;
+    for (uint32_t i = 0; i < 8; i++)
+        if (operation->evidence[i] !=
+            (i == 7 ? XR_SEMANTIC_INDEX_NONE : 0u))
+            return false;
+    return type && type->kind == XR_KIND_UNKNOWN &&
+           type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           type->source_enum_key == NULL &&
+           xr_stable_id_equal(type->source_enum_identity, zero) &&
+           xr_stable_id_equal(type->source_class_identity, zero) &&
+           type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->enum_layout_id == 0 &&
+           type->enum_member_count == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                           XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->enum_flags == 0 && type->reserved_enum == 0;
+}
+
 static bool semantic_string_literal_is_exact(
     const XrSemanticPlan *plan,
     const XrSemanticOperationRecord *operation) {
@@ -4304,6 +4360,101 @@ static bool builder_add_string_concat_result_storage(XrTargetPlanBuilder *builde
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE;
+    return true;
+}
+
+static bool builder_add_panic_catch_storage(XrTargetPlanBuilder *builder,
+                                            char *error,
+                                            size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_PANIC_CATCH_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis,
+                                              error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values)
+            analysis.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "semantic operation is missing");
+            break;
+        }
+        if (!semantic_panic_catch_is_exact(builder->semantic_plan, operation))
+            continue;
+        if (operation->result_value >= analysis.total_values ||
+            operation->result_type >= analysis.type_count ||
+            analysis.defined_values[operation->result_value] ||
+            (analysis.type_rep_kinds[operation->result_type] !=
+                 XR_MACHINE_REP_COUNT &&
+             analysis.type_rep_kinds[operation->result_type] !=
+                 XR_MACHINE_REP_DYN_VALUE)) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "panic-catch storage identity is ambiguous");
+            break;
+        }
+        XrTargetMachineRepRecord rep;
+        XrStableId slot_identity;
+        valid = make_dynamic_value_rep(
+                    xr_target_profile_machine_facts(builder->profile), &rep) &&
+                append_rep_intent(builder, &rep, error, error_size) &&
+                make_slot_identity(builder->semantic_plan, operation->function,
+                                   XR_TARGET_SLOT_TEMPORARY, operation->id,
+                                   XR_SEMANTIC_INDEX_NONE, &slot_identity);
+        if (!valid)
+            break;
+        XrTargetSlotIntent slot = {
+            .identity = slot_identity,
+            .function = operation->function,
+            .semantic_value = operation->result_value,
+            .semantic_operation = i,
+            .logical_slot = XR_SEMANTIC_INDEX_NONE,
+            .register_rep = rep,
+            .memory_rep = rep,
+            .role = XR_TARGET_SLOT_TEMPORARY,
+            .root_kind = XR_TARGET_ROOT_DYNAMIC,
+            .ownership = XR_TARGET_OWNERSHIP_OWNED,
+            .debug_variable = XR_SEMANTIC_INDEX_NONE,
+        };
+        XrTargetValueIntent value = {
+            .semantic_value = operation->result_value,
+            .semantic_function = operation->function,
+            .semantic_type = operation->result_type,
+            .register_rep = rep,
+            .memory_rep = rep,
+            .slot_identity = slot_identity,
+            .has_slot = true,
+        };
+        valid = append_slot_intent(builder, &slot, error, error_size) &&
+                (analysis.used_types[operation->result_type] ||
+                 append_layout_intent(builder, operation->result_type,
+                                      XR_TARGET_LAYOUT_DYNAMIC, 0, &rep,
+                                      error, error_size)) &&
+                append_value_intent(builder, &value, error, error_size);
+        if (valid) {
+            analysis.defined_values[operation->result_value] = 1;
+            analysis.used_types[operation->result_type] = 1;
+            analysis.value_types[operation->result_value] =
+                operation->result_type;
+            analysis.value_functions[operation->result_value] =
+                operation->function;
+            analysis.type_rep_kinds[operation->result_type] =
+                XR_MACHINE_REP_DYN_VALUE;
+        }
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_PANIC_CATCH_STORAGE;
     return true;
 }
 
@@ -8530,6 +8681,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_source_class_method_receiver_storage(builder, error, error_size) ||
         !builder_add_source_class_argument_storage(builder, error, error_size) ||
         !builder_add_string_concat_result_storage(builder, error, error_size) ||
+        !builder_add_panic_catch_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
         !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_append_rune_storage(builder, error, error_size) ||

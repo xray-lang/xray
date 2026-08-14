@@ -68,9 +68,16 @@ static bool xicgen_stmt_end_try(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
 static bool xicgen_stmt_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) prefix;
+    XrCValueEmissionView authority = {0};
+    if (!cg_panic_catch_emission_authority(ctx, f, v, &authority)) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: panic catch lacks immutable emission authority\n");
+        return false;
+    }
     fprintf(out, "    ");
     if (!ctx->pre_decl_all) {
-        fprintf(out, "%s ", ctype_str(cg_rep(v)));
+        fprintf(out, "%s ", authority.c_type);
         emit_vref(out, v);
         fprintf(out, " = ");
     } else {

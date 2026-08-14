@@ -2601,6 +2601,24 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     return CG_VALUE_EMISSION_FOUND;
 }
 
+static bool cg_panic_catch_emission_authority(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    XrCValueEmissionView *out) {
+    return out &&
+           cg_value_emission_view(ctx, function, value, out) ==
+               CG_VALUE_EMISSION_FOUND &&
+           out->rep == XR_C_VALUE_REP_TAGGED &&
+           out->target_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+           out->target_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
+           out->materialization == XR_C_VALUE_MATERIALIZATION_PANIC_CATCH &&
+           out->c_type && strcmp(out->c_type, "XrValue") == 0 &&
+           out->literal_byte_length == 0 && out->literal_bytes == NULL &&
+           out->recipe_operand_value == UINT32_MAX &&
+           out->recipe_argument_value == UINT32_MAX &&
+           out->recipe_argument_count == 0 && out->recipe_arguments == NULL &&
+           out->recipe_symbol == NULL;
+}
+
 /* Resolve an uncovered operand's frozen semantic identity without treating
  * the absence of a C projection row as authority. Recipe consumers use this
  * only to compare the operand with a verifier-checked recipe operand. */

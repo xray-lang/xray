@@ -24,6 +24,7 @@
 #include "../../../src/aot/refine/xr_aot_scalar_value.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/base/xmalloc.h"
@@ -123,6 +124,12 @@ static XrType byte_slice_type = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .frozen = true,
     .container = {.element_type = &byte_type},
+};
+static XrType dynamic_any = {
+    .kind = XR_KIND_UNKNOWN,
+    .id = 10,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .frozen = true,
 };
 
 static XrTargetProfile *build_profile(bool ilp32, bool freestanding_runtime) {
@@ -843,6 +850,98 @@ static void test_dynamic_closure_c_emission_is_exact_and_mutation_safe(void) {
     xi_func_free(root);
 }
 
+static void test_panic_catch_c_emission_recipe_is_exact(void) {
+    XiFunc *function = xi_func_new("panic_catch_c_emission", &scalar_unit);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *caught = xi_value_new(function, entry, XI_CATCH, &dynamic_any, 0);
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
+    REQUIRE(caught != NULL && release != NULL);
+    release->args[0] = caught;
+    xi_block_set_return(entry, NULL);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(function, error, sizeof(error)));
+    XrTargetProfile *profile = build_exact_profile();
+    XrTargetPlan *target = build_target_plan(function->semantic_plan, profile);
+    REQUIRE((xr_target_plan_completed_family_mask(target) &
+             XR_TARGET_FAMILY_PANIC_CATCH_STORAGE) != 0);
+    XrFingerprint profile_fingerprint =
+        xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, caught, &semantic_function, &semantic_value, error,
+        sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, semantic_value, &view,
+                                           error, sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_TAGGED &&
+            view.materialization == XR_C_VALUE_MATERIALIZATION_PANIC_CATCH &&
+            view.target_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+            view.target_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
+            strcmp(view.c_type, "XrValue") == 0 &&
+            view.literal_byte_length == 0 && view.literal_bytes == NULL &&
+            view.recipe_operand_value == UINT32_MAX &&
+            view.recipe_argument_value == UINT32_MAX &&
+            view.recipe_argument_count == 0 &&
+            view.recipe_arguments == NULL && view.recipe_symbol == NULL);
+
+    XrTargetValueRepRecord *binding = NULL;
+    for (uint32_t i = 0; i < target->value_reps_count; i++)
+        if (target->value_reps[i].semantic_value == semantic_value)
+            binding = &target->value_reps[i];
+    REQUIRE(binding != NULL && binding->slot < target->slots_count);
+    uint64_t saved_families = target->completed_family_mask;
+    target->completed_family_mask &= ~XR_TARGET_FAMILY_PANIC_CATCH_STORAGE;
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
+    target->completed_family_mask = saved_families;
+    XrTargetMachineRepRecord *register_rep =
+        &target->machine_reps[binding->register_rep];
+    uint8_t saved_ownership = register_rep->ownership;
+    register_rep->ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
+    register_rep->ownership = saved_ownership;
+    XrTargetSlotRecord *slot = &target->slots[binding->slot];
+    uint32_t saved_operation = slot->semantic_operation;
+    slot->semantic_operation = saved_operation + 1u;
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
+    slot->semantic_operation = saved_operation;
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
+
+    XrCValueEmissionView *row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == semantic_value)
+            row = &emission->values[i];
+    REQUIRE(row != NULL);
+    uint8_t saved_recipe = row->materialization;
+    row->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    row->materialization = saved_recipe;
+    uint32_t saved_operand = row->recipe_operand_value;
+    row->recipe_operand_value = semantic_value;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    row->recipe_operand_value = saved_operand;
+    REQUIRE(xr_c_emission_plan_verify(emission, target,
+                                       profile_fingerprint, error,
+                                       sizeof(error)));
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_string_concat_c_emission_recipe_is_exact(void) {
     XiFunc *function = xi_func_new("string_concat_recipe", &scalar_string);
     REQUIRE(function != NULL);
@@ -1272,6 +1371,7 @@ int main(void) {
     test_aggregate_bindings_are_excluded_from_scalar_projection();
     test_profile_mismatch_fails_before_projection();
     test_dynamic_closure_c_emission_is_exact_and_mutation_safe();
+    test_panic_catch_c_emission_recipe_is_exact();
     test_string_concat_c_emission_recipe_is_exact();
     test_channel_new_c_emission_recipe_is_exact();
     test_stringbuilder_new_c_emission_recipe_is_exact();

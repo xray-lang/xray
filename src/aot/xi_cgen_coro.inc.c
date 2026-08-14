@@ -5363,6 +5363,14 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_CATCH && cg_coro_hidden_cleanup_try(v)) {
+        XrCValueEmissionView authority = {0};
+        if (!cg_panic_catch_emission_authority(ctx, f, v, &authority)) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: coroutine panic catch lacks immutable emission authority\n");
+            emit_codegen_abort_aot_result(out);
+            return;
+        }
         fprintf(out, "    XrValue _cleanup_catch_%u = f->cleanup_exception;\n", v->id);
         fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
         if (cg_coro_value_has_storage(f, v)) {
@@ -5389,6 +5397,15 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (v->op == XI_CATCH && v->aux) {
         const XiValue *try_op = (const XiValue *) v->aux;
         if (try_op->op == XI_TRY && try_op->aux_int == XI_TRY_AUX_CLEANUP_LOCAL_HANDLER) {
+            XrCValueEmissionView authority = {0};
+            if (!cg_panic_catch_emission_authority(ctx, f, v,
+                                                   &authority)) {
+                ctx->error = true;
+                fprintf(stderr,
+                        "[xi_cgen] ERROR: coroutine panic catch lacks immutable emission authority\n");
+                emit_codegen_abort_aot_result(out);
+                return;
+            }
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = _ef%u.exception;\n", try_op->id);
