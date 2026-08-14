@@ -90,10 +90,90 @@ typedef enum {
     XI_OPT_FULL = 2,  /* LIGHT + SCCP + GVN + LICM + GCM + inlining + if-conv */
 } XiOptLevel;
 
+/* Ordered identity list for every optimization pass.  The order MUST match
+ * xi_pass_table in xi_opt.c; the table validator compares the two name by
+ * name at startup so a bit can never silently address the wrong pass. */
+#define XI_OPT_PASS_LIST(X)                                                                        \
+    X(TBAA, "tbaa")                                                                                \
+    X(CONSTFOLD, "constfold")                                                                      \
+    X(STRENGTH_REDUCE, "strength_reduce")                                                          \
+    X(COPY_PROP, "copy_prop")                                                                      \
+    X(MARK_ONE_SHOT_AWAIT, "mark_one_shot_await")                                                  \
+    X(PHI_SIMPLIFY, "phi_simplify")                                                                \
+    X(DCE, "dce")                                                                                  \
+    X(SCCP, "sccp")                                                                                \
+    X(RANGE, "range")                                                                              \
+    X(BCE, "bce")                                                                                  \
+    X(GVN, "gvn")                                                                                  \
+    X(LOOP_ROTATE, "loop_rotate")                                                                  \
+    X(LICM, "licm")                                                                                \
+    X(IVSR, "ivsr")                                                                                \
+    X(LOOP_PEEL, "loop_peel")                                                                      \
+    X(LOOP_UNROLL, "loop_unroll")                                                                  \
+    X(LOOP_SPLIT, "loop_split")                                                                    \
+    X(LOOP_INV_BRANCH, "loop_inv_branch")                                                          \
+    X(INLINE, "inline")                                                                            \
+    X(DEVIRT, "devirt")                                                                            \
+    X(TAIL_CALL, "tail_call")                                                                      \
+    X(IFCONV, "ifconv")                                                                            \
+    X(JUMP_THREAD, "jump_thread")                                                                  \
+    X(BLOCK_SIMPLIFY, "block_simplify")                                                            \
+    X(BLOCK_LAYOUT, "block_layout")                                                                \
+    X(SLP, "slp")                                                                                  \
+    X(LOOP_VEC, "loop_vec")                                                                        \
+    X(REDUCTION, "reduction")                                                                      \
+    X(CALL_SPECIALIZE, "call_specialize")                                                          \
+    X(CONST_FIXPOINT, "const_fixpoint")
+
+typedef enum {
+#define XI_OPT_PASS_ID_ENTRY(upper, lower) XI_OPT_PASS_##upper,
+    XI_OPT_PASS_LIST(XI_OPT_PASS_ID_ENTRY)
+#undef XI_OPT_PASS_ID_ENTRY
+        XI_OPT_PASS_ID_COUNT
+} XiOptPassId;
+
+/* One bit per pass.  The driver consults the bit at the pass' table index, so
+ * a mask is a complete description of which optimizations are switched off,
+ * whether it came from a pipeline configuration or from XRAY_XI_PASS. */
 typedef uint32_t XiOptDisableMask;
 
 #define XI_OPT_DISABLE_NONE 0u
-#define XI_OPT_DISABLE_IVSR (1u << 0)
+#define XI_OPT_DISABLE_BIT(pass_id) ((XiOptDisableMask) 1u << (unsigned) (pass_id))
+#define XI_OPT_DISABLE_ALL                                                                         \
+    ((XiOptDisableMask) ((XI_OPT_PASS_ID_COUNT >= 32)                                              \
+                             ? 0xFFFFFFFFu                                                         \
+                             : ((1u << (unsigned) XI_OPT_PASS_ID_COUNT) - 1u)))
+
+#define XI_OPT_DISABLE_TBAA XI_OPT_DISABLE_BIT(XI_OPT_PASS_TBAA)
+#define XI_OPT_DISABLE_CONSTFOLD XI_OPT_DISABLE_BIT(XI_OPT_PASS_CONSTFOLD)
+#define XI_OPT_DISABLE_STRENGTH_REDUCE XI_OPT_DISABLE_BIT(XI_OPT_PASS_STRENGTH_REDUCE)
+#define XI_OPT_DISABLE_COPY_PROP XI_OPT_DISABLE_BIT(XI_OPT_PASS_COPY_PROP)
+#define XI_OPT_DISABLE_MARK_ONE_SHOT_AWAIT XI_OPT_DISABLE_BIT(XI_OPT_PASS_MARK_ONE_SHOT_AWAIT)
+#define XI_OPT_DISABLE_PHI_SIMPLIFY XI_OPT_DISABLE_BIT(XI_OPT_PASS_PHI_SIMPLIFY)
+#define XI_OPT_DISABLE_DCE XI_OPT_DISABLE_BIT(XI_OPT_PASS_DCE)
+#define XI_OPT_DISABLE_SCCP XI_OPT_DISABLE_BIT(XI_OPT_PASS_SCCP)
+#define XI_OPT_DISABLE_RANGE XI_OPT_DISABLE_BIT(XI_OPT_PASS_RANGE)
+#define XI_OPT_DISABLE_BCE XI_OPT_DISABLE_BIT(XI_OPT_PASS_BCE)
+#define XI_OPT_DISABLE_GVN XI_OPT_DISABLE_BIT(XI_OPT_PASS_GVN)
+#define XI_OPT_DISABLE_LOOP_ROTATE XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_ROTATE)
+#define XI_OPT_DISABLE_LICM XI_OPT_DISABLE_BIT(XI_OPT_PASS_LICM)
+#define XI_OPT_DISABLE_IVSR XI_OPT_DISABLE_BIT(XI_OPT_PASS_IVSR)
+#define XI_OPT_DISABLE_LOOP_PEEL XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_PEEL)
+#define XI_OPT_DISABLE_LOOP_UNROLL XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_UNROLL)
+#define XI_OPT_DISABLE_LOOP_SPLIT XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_SPLIT)
+#define XI_OPT_DISABLE_LOOP_INV_BRANCH XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_INV_BRANCH)
+#define XI_OPT_DISABLE_INLINE XI_OPT_DISABLE_BIT(XI_OPT_PASS_INLINE)
+#define XI_OPT_DISABLE_DEVIRT XI_OPT_DISABLE_BIT(XI_OPT_PASS_DEVIRT)
+#define XI_OPT_DISABLE_TAIL_CALL XI_OPT_DISABLE_BIT(XI_OPT_PASS_TAIL_CALL)
+#define XI_OPT_DISABLE_IFCONV XI_OPT_DISABLE_BIT(XI_OPT_PASS_IFCONV)
+#define XI_OPT_DISABLE_JUMP_THREAD XI_OPT_DISABLE_BIT(XI_OPT_PASS_JUMP_THREAD)
+#define XI_OPT_DISABLE_BLOCK_SIMPLIFY XI_OPT_DISABLE_BIT(XI_OPT_PASS_BLOCK_SIMPLIFY)
+#define XI_OPT_DISABLE_BLOCK_LAYOUT XI_OPT_DISABLE_BIT(XI_OPT_PASS_BLOCK_LAYOUT)
+#define XI_OPT_DISABLE_SLP XI_OPT_DISABLE_BIT(XI_OPT_PASS_SLP)
+#define XI_OPT_DISABLE_LOOP_VEC XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_VEC)
+#define XI_OPT_DISABLE_REDUCTION XI_OPT_DISABLE_BIT(XI_OPT_PASS_REDUCTION)
+#define XI_OPT_DISABLE_CALL_SPECIALIZE XI_OPT_DISABLE_BIT(XI_OPT_PASS_CALL_SPECIALIZE)
+#define XI_OPT_DISABLE_CONST_FIXPOINT XI_OPT_DISABLE_BIT(XI_OPT_PASS_CONST_FIXPOINT)
 
 /* ========== Pass Descriptor ========== */
 
