@@ -610,6 +610,9 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR;
         bool native_module_scalar =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR;
+        bool native_namespace_yieldable =
+            plan->calls[i].target_kind ==
+            XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         /* The construction is one of the rows that names a SemanticPlan call
          * target rather than a sealed builtin, so its target index must index
          * that table. */
@@ -619,10 +622,11 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
              !stringbuilder_constructor && !string_byte_slice_view &&
              !stringbuilder_append_rune && !stringbuilder_to_string && !stringbuilder_append_string &&
              !json_namespace_value && !array_member_scalar && !native_module_scalar &&
-             !source_class_constructor) ||
+             !native_namespace_yieldable && !source_class_constructor) ||
             plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
-            ((direct_local || source_export || source_class_constructor) &&
+            ((direct_local || source_export || native_namespace_yieldable ||
+              source_class_constructor) &&
              plan->calls[i].semantic_call_target >=
                  xr_semantic_plan_call_target_count(plan->semantic_plan)) ||
             ((channel_close || stringbuilder_constructor || string_byte_slice_view ||

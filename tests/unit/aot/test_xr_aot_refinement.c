@@ -163,6 +163,7 @@ typedef struct DirectLocalGoCalleeStorageFixture {
     XiBlock *entry;
     XiValue *load;
     XiValue *go;
+    XiValue *await;
     XrTargetProfile *target_profile;
     XrTargetPlan *target_plan;
 } DirectLocalGoCalleeStorageFixture;
@@ -264,6 +265,20 @@ static XrType borrowed_byte_slice = {
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &scalar_byte},
+};
+
+static XrType *task_unit_arguments[] = {&scalar_unit};
+
+static XrType task_unit = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 11,
+    .frozen = true,
+    .instance = {
+        .class_name = "Task",
+        .type_args = task_unit_arguments,
+        .type_arg_count = 1,
+    },
+    .scalar_rep = XR_SCALAR_REP_NONE,
 };
 
 static XrSemanticPlan *build_semantic_plan(void) {
@@ -846,8 +861,10 @@ direct_local_go_callee_storage_fixture_create(bool extra_use,
     fixture.load = xi_value_new(fixture.function, fixture.entry,
                                 XI_GET_SHARED, &opaque_callable, 0);
     fixture.go = xi_value_new(fixture.function, fixture.entry,
-                              XI_GO, &scalar_unit, 1);
-    REQUIRE(closure && store && fixture.load && fixture.go);
+                              XI_GO, &task_unit, 1);
+    fixture.await = xi_value_new(fixture.function, fixture.entry,
+                                 XI_AWAIT, &scalar_unit, 1);
+    REQUIRE(closure && store && fixture.load && fixture.go && fixture.await);
     closure->aux = fixture.child;
     store->aux_int = 0;
     store->args[0] = closure;
@@ -865,7 +882,8 @@ direct_local_go_callee_storage_fixture_create(bool extra_use,
     }
     fixture.load->aux_int = 0;
     fixture.go->args[0] = fixture.load;
-    fixture.go->flags |= XI_FLAG_FIRE_AND_FORGET;
+    fixture.await->args[0] = fixture.go;
+    fixture.await->aux_int = XI_AWAIT_AUX_CONSUME_TASK;
     if (extra_use) {
         XiValue *unexpected = xi_value_new(
             fixture.function, fixture.entry, XI_PRINT, &scalar_unit, 1);
@@ -1758,6 +1776,8 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
         direct_local_go_callee_storage_fixture_create(false, false);
     REQUIRE((fixture.target_plan->completed_family_mask &
              XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE) != 0);
+    REQUIRE((fixture.target_plan->completed_family_mask &
+             XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE) != 0);
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     char error[512] = {0};
@@ -1774,6 +1794,30 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
             machine->kind == XR_MACHINE_REP_DYN_VALUE &&
             machine->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
             machine->root_kind == XR_TARGET_ROOT_DYNAMIC);
+    uint32_t task_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t task_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_operation_count(fixture.function->semantic_plan);
+         i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(fixture.function->semantic_plan, i);
+        if (operation && operation->opcode == XI_GO) {
+            REQUIRE(task_value == XR_SEMANTIC_INDEX_NONE);
+            task_function = operation->function;
+            task_value = operation->result_value;
+        }
+    }
+    REQUIRE(task_value != XR_SEMANTIC_INDEX_NONE);
+    const XrTargetValueRepRecord *task_binding =
+        xr_target_plan_value_rep(fixture.target_plan, task_value);
+    const XrTargetMachineRepRecord *task_machine =
+        task_binding ? xr_target_plan_machine_rep(
+                           fixture.target_plan, task_binding->register_rep)
+                     : NULL;
+    REQUIRE(task_binding && task_machine && task_function == semantic_function &&
+            task_machine->kind == XR_MACHINE_REP_DYN_VALUE &&
+            task_machine->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            task_machine->root_kind == XR_TARGET_ROOT_DYNAMIC);
 
     XrCEmissionPlan *emission = NULL;
     REQUIRE(xr_c_emission_plan_build(
@@ -1783,6 +1827,11 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
     XrCValueEmissionView value = {0};
     REQUIRE(xr_c_emission_plan_value_view(
         emission, semantic_value, &value, error, sizeof(error)));
+    REQUIRE(value.rep == XR_C_VALUE_REP_TAGGED &&
+            value.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
+            strcmp(value.c_type, "XrValue") == 0);
+    REQUIRE(xr_c_emission_plan_value_view(
+        emission, task_value, &value, error, sizeof(error)));
     REQUIRE(value.rep == XR_C_VALUE_REP_TAGGED &&
             value.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
             strcmp(value.c_type, "XrValue") == 0);
@@ -1797,7 +1846,9 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
     REQUIRE(view.frozen && view.verified && view.record_count == 0);
     xi_opt_refresh_representations_with_policy(fixture.function, &policy);
     REQUIRE(fixture.load->rep == XR_REP_TAGGED &&
-            fixture.go->args[0] == fixture.load);
+            fixture.go->args[0] == fixture.load &&
+            fixture.go->rep == XR_REP_TAGGED &&
+            fixture.await->args[0] == fixture.go);
     REQUIRE(xr_aot_representation_materialization_verify(
         &view, fixture.function, fixture.target_plan, &policy, &diag));
 
@@ -1828,6 +1879,15 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
     fixture.target_plan->completed_family_mask = families;
     fixture.target_plan->fingerprint = fingerprint;
 
+    fixture.target_plan->completed_family_mask &=
+        ~XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE;
+    xr_target_plan_compute_fingerprint(fixture.target_plan,
+                                       &fixture.target_plan->fingerprint);
+    REQUIRE(!xr_target_plan_verify(fixture.target_plan, error,
+                                   sizeof(error)));
+    fixture.target_plan->completed_family_mask = families;
+    fixture.target_plan->fingerprint = fingerprint;
+
     uint32_t machine_rep_index = binding->register_rep;
     uint16_t ownership =
         fixture.target_plan->machine_reps[machine_rep_index].ownership;
@@ -1838,6 +1898,19 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
     REQUIRE(!xr_target_plan_verify(fixture.target_plan, error,
                                    sizeof(error)));
     fixture.target_plan->machine_reps[machine_rep_index].ownership = ownership;
+    fixture.target_plan->fingerprint = fingerprint;
+
+    uint32_t task_machine_rep_index = task_binding->register_rep;
+    uint16_t task_ownership =
+        fixture.target_plan->machine_reps[task_machine_rep_index].ownership;
+    fixture.target_plan->machine_reps[task_machine_rep_index].ownership =
+        XR_TARGET_OWNERSHIP_OWNED;
+    xr_target_plan_compute_fingerprint(fixture.target_plan,
+                                       &fixture.target_plan->fingerprint);
+    REQUIRE(!xr_target_plan_verify(fixture.target_plan, error,
+                                   sizeof(error)));
+    fixture.target_plan->machine_reps[task_machine_rep_index].ownership =
+        task_ownership;
     fixture.target_plan->fingerprint = fingerprint;
 
     xr_aot_refinement_plan_free(plan);

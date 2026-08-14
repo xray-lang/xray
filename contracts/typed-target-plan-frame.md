@@ -47,6 +47,11 @@ initializer and used exclusively as operand zero of exact `XI_GO` sites for
 one canonical local child. It grants no GO result/task object, callable body,
 allocation, root map, cleanup, argument storage, or execution path and remains
 outside the trivial frame allocator.
+The direct-local-GO-task-result-storage family owns the complementary outer
+carrier: the exact `Task<T>` returned by that proved GO. It is a borrowed
+dynamic/tagged temporary because the executor owns the task object. It grants
+no object body, allocation, root slot, cleanup, scheduling, await result, or
+coroutine execution path and remains outside the trivial frame allocator.
 The Channel-allocation-storage family describes the dynamic outer `XrValue`
 returned by an exact frozen `XI_CHAN_NEW` as owned, and its exact identity-copy
 aliases as borrowed. It does not describe the Channel object body, allocation
@@ -136,7 +141,7 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h b6264500610c9072d3897ff9937552cd7c67a2f483f45ff127551c89cb09ff88
+anchor-sha256: src/plan/target/xr_target_plan.h 7e639ca207eb080f33aaeb0b292ed3d28c7b84e71bd70ddda4ebb447305ed39d
 anchor-sha256: src/vm/xr_typed_frame.h b51b7f45110ccd0f05a1b6595a4a960eec1606d2bae6dbd21e95633fed2b0151
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816

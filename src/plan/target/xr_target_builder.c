@@ -27,6 +27,7 @@
 #include "../semantic/xr_semantic_allocation_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
+#include "../semantic/xr_semantic_task_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_semantic_array_member_shape.h"
@@ -4756,6 +4757,135 @@ static bool builder_add_direct_local_go_callee_storage(
     return true;
 }
 
+/* A Task<T> returned by a proved direct-local GO is a borrowed handle owned by
+ * the runtime executor. The target plan binds only its tagged carrier and its
+ * temporary slot; it must never manufacture an ARC cleanup for the executor's
+ * task object. */
+static bool builder_add_direct_local_go_task_result_storage(
+    XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+    if (!builder_begin_family(
+            builder, XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE,
+            error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis values = {0};
+    XrDirectLocalGoCalleeStorageAnalysis callees = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &values,
+                                              error, error_size) &&
+                 index_value_operations(builder->semantic_plan, &values,
+                                        error, error_size) &&
+                 direct_local_go_callee_storage_analysis_init(
+                     builder->semantic_plan, &values, &callees, error,
+                     error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < values.total_values)
+            values.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(builder->semantic_plan, &operand_count);
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation || operation->operand_begin > operand_count ||
+            operation->operand_count > operand_count - operation->operand_begin) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "direct-local GO task storage input is invalid");
+            break;
+        }
+        if (operation->opcode != XI_GO || operation->operand_count == 0)
+            continue;
+        uint32_t callee_value = operands[operation->operand_begin].value;
+        uint32_t callee_operation =
+            callee_value < values.total_values
+                ? values.value_operations[callee_value]
+                : XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *callee =
+            callee_operation == XR_SEMANTIC_INDEX_NONE
+                ? NULL
+                : xr_semantic_plan_operation(builder->semantic_plan,
+                                             callee_operation);
+        bool callee_exact =
+            callee && direct_local_go_callee_storage_value_is_exact(
+                          builder->semantic_plan, &callees, callee);
+        uint32_t proved_callee = XR_SEMANTIC_INDEX_NONE;
+        if (!callee_exact)
+            continue;
+        if (!xr_semantic_direct_local_go_task_result_is_exact(
+                builder->semantic_plan, operation, true, &proved_callee) ||
+            proved_callee != callee_value ||
+            operation->result_value >= values.total_values ||
+            operation->result_type >= values.type_count ||
+            operation->function >=
+                xr_semantic_plan_function_count(builder->semantic_plan) ||
+            values.defined_values[operation->result_value] ||
+            (values.type_rep_kinds[operation->result_type] !=
+                 XR_MACHINE_REP_COUNT &&
+             values.type_rep_kinds[operation->result_type] !=
+                 XR_MACHINE_REP_DYN_VALUE)) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "direct-local GO task result authority is incomplete");
+            break;
+        }
+        XrTargetMachineRepRecord rep;
+        XrStableId slot_identity;
+        valid = make_borrowed_dynamic_value_rep(
+                    xr_target_profile_machine_facts(builder->profile), &rep) &&
+                append_rep_intent(builder, &rep, error, error_size) &&
+                make_slot_identity(builder->semantic_plan, operation->function,
+                                   XR_TARGET_SLOT_TEMPORARY, operation->id,
+                                   XR_SEMANTIC_INDEX_NONE, &slot_identity);
+        if (!valid)
+            break;
+        XrTargetSlotIntent slot = {
+            .identity = slot_identity,
+            .function = operation->function,
+            .semantic_value = operation->result_value,
+            .semantic_operation = i,
+            .logical_slot = XR_SEMANTIC_INDEX_NONE,
+            .register_rep = rep,
+            .memory_rep = rep,
+            .role = XR_TARGET_SLOT_TEMPORARY,
+            .root_kind = XR_TARGET_ROOT_DYNAMIC,
+            .ownership = XR_TARGET_OWNERSHIP_BORROWED,
+            .debug_variable = XR_SEMANTIC_INDEX_NONE,
+        };
+        XrTargetValueIntent value = {
+            .semantic_value = operation->result_value,
+            .semantic_function = operation->function,
+            .semantic_type = operation->result_type,
+            .register_rep = rep,
+            .memory_rep = rep,
+            .slot_identity = slot_identity,
+            .has_slot = true,
+        };
+        valid = append_slot_intent(builder, &slot, error, error_size) &&
+                (values.used_types[operation->result_type] ||
+                 append_layout_intent(builder, operation->result_type,
+                                      XR_TARGET_LAYOUT_DYNAMIC, 0, &rep,
+                                      error, error_size)) &&
+                append_value_intent(builder, &value, error, error_size);
+        if (valid) {
+            values.defined_values[operation->result_value] = 1;
+            values.used_types[operation->result_type] = 1;
+            values.value_types[operation->result_value] = operation->result_type;
+            values.value_functions[operation->result_value] = operation->function;
+            values.type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+        }
+    }
+    direct_local_go_callee_storage_analysis_dispose(&callees);
+    value_storage_analysis_dispose(&values);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |=
+        XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE;
+    return true;
+}
+
 static bool builder_add_channel_allocation_storage(
     XrTargetPlanBuilder *builder, char *error, size_t error_size) {
     if (!builder_begin_family(
@@ -6358,6 +6488,54 @@ static bool collect_source_export_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
+/* A verified native-namespace yieldable target already names the exact
+ * registry member and call operation in SemanticPlan. TargetPlan owns only
+ * the target-neutral suspension ABI here: no source dependency, callee index,
+ * or backend symbol is invented. Scalar/unit results are the first closed
+ * storage domain; reference-returning yieldables remain fail-closed. */
+static bool collect_native_namespace_yieldable_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t target_index,
+    const XrSemanticCallTargetRecord *target, bool suspends, char *error,
+    size_t error_size) {
+    const XrSemanticPlan *plan = builder ? builder->semantic_plan : NULL;
+    const XrSemanticOperationRecord *operation =
+        target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+    if (!target || !operation ||
+        target->kind != XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE ||
+        target->function != XR_SEMANTIC_INDEX_NONE ||
+        target->dependency != XR_SEMANTIC_INDEX_NONE ||
+        target->source_export != XR_SEMANTIC_INDEX_NONE ||
+        target->callable_type != XR_SEMANTIC_INDEX_NONE ||
+        operation->opcode != XI_CALL_METHOD || operation->operand_count < 1 ||
+        !suspends ||
+        !call_type_is_exact_scalar(plan, operation->result_type))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native namespace yieldable call authority is incomplete");
+    XrTargetCallIntent call = {
+        .semantic_call_target = target_index,
+        .semantic_operation = target->operation,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention =
+            XR_TARGET_CALL_CONVENTION_NATIVE_NAMESPACE_YIELDABLE,
+        .target_kind = XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE,
+        .suspends = true,
+    };
+    if (!stable_identity_from_pair(
+            "xray-target-native-namespace-yieldable-v1", target->id,
+            operation->id, operation->operand_count - 1u, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native namespace yieldable call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *error,
                                            size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_CALL_ADAPTER, error, error_size))
@@ -6448,13 +6626,18 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 : NULL;
         bool direct = target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
+        bool native_namespace =
+            target && target->kind ==
+                          XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         bool class_construction =
             target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
-        if (!target || !operation || (!direct && !source && !class_construction) ||
+        if (!target || !operation ||
+            (!direct && !source && !native_namespace && !class_construction) ||
             (direct && target->function >= function_count) ||
             (direct && operation->opcode != XI_CALL &&
              operation->opcode != XI_TAIL_CALL) ||
             (source && operation->opcode != XI_CALL_METHOD) ||
+            (native_namespace && operation->opcode != XI_CALL_METHOD) ||
             (class_construction && operation->opcode != XI_CALL) ||
             target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE) {
             /* A SemanticPlan call-target kind this family does not yet consume
@@ -6527,6 +6710,12 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                        target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR) {
                 valid = collect_source_class_constructor_call_intent(builder, target_index,
                                                                      target, error, error_size);
+            } else if (target &&
+                       target->kind ==
+                           XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE) {
+                valid = collect_native_namespace_yieldable_call_intent(
+                    builder, target_index, target, state_by_operation[i] != 0,
+                    error, error_size);
             } else {
                 valid = target && collect_source_export_call_intent(
                                       builder, target_index, target,
@@ -7990,9 +8179,14 @@ static bool materialize_coroutine_state_calls(
                 direct_call < materialized->call_count &&
                 materialized->calls[direct_call].target_kind ==
                     XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
+            bool native_namespace_call =
+                direct_call < materialized->call_count &&
+                materialized->calls[direct_call].target_kind ==
+                    XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
             if (direct_call >= materialized->call_count ||
-                (source_call ? operation->opcode != XI_CALL_METHOD
-                             : operation->opcode != XI_CALL) ||
+                ((source_call || native_namespace_call)
+                     ? operation->opcode != XI_CALL_METHOD
+                     : operation->opcode != XI_CALL) ||
                 (materialized->calls[direct_call].flags &
                  XR_TARGET_CALL_SUSPEND) == 0 ||
                 materialized->calls[direct_call].result_slot != result_slot ||
@@ -8246,6 +8440,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_direct_local_string_result_storage(builder, error, error_size) ||
         !builder_add_direct_local_callee_storage(builder, error, error_size) ||
         !builder_add_direct_local_go_callee_storage(builder, error, error_size) ||
+        !builder_add_direct_local_go_task_result_storage(builder, error, error_size) ||
         !builder_add_channel_allocation_storage(builder, error, error_size) ||
         !builder_add_channel_receive_storage(builder, error, error_size) ||
         !builder_add_source_namespace_storage(builder, error, error_size) ||

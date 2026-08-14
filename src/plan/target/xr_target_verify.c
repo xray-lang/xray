@@ -26,6 +26,7 @@
 #include "../semantic/xr_semantic_allocation_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
+#include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
@@ -2397,6 +2398,9 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
     size_t type_count = xr_semantic_plan_type_count(plan->semantic_plan);
     size_t operation_count =
         xr_semantic_plan_operation_count(plan->semantic_plan);
+    uint32_t semantic_operand_count = 0;
+    const XrSemanticOperandRecord *semantic_operands =
+        xr_semantic_plan_operands(plan->semantic_plan, &semantic_operand_count);
     if (!out || type_count > UINT32_MAX || operation_count > UINT32_MAX)
         return report(error, error_size, "XR_EXEC_5003",
                       "dynamic-type verification budget is exhausted");
@@ -2444,6 +2448,13 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
              exact_direct_callees[operation->result_value] != 0) ||
             (exact_go_callees &&
              exact_go_callees[operation->result_value] != 0) ||
+            (operation->opcode == XI_GO && operation->operand_count != 0 &&
+             semantic_operands &&
+             operation->operand_begin < semantic_operand_count &&
+             exact_go_callees &&
+             exact_go_callees[semantic_operands[operation->operand_begin].value] != 0 &&
+             xr_semantic_direct_local_go_task_result_is_exact(
+                 plan->semantic_plan, operation, true, NULL)) ||
             (exact_channel_values &&
              exact_channel_values[operation->result_value] != 0) ||
             (exact_source_namespaces &&
@@ -2562,6 +2573,19 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         exact_direct_callees && exact_direct_callees[semantic_value] != 0;
     bool exact_go_callee =
         exact_go_callees && exact_go_callees[semantic_value] != 0;
+    uint32_t semantic_operand_count = 0;
+    const XrSemanticOperandRecord *semantic_operands =
+        xr_semantic_plan_operands(plan->semantic_plan, &semantic_operand_count);
+    uint32_t go_task_callee = XR_SEMANTIC_INDEX_NONE;
+    bool exact_go_task =
+        operation && operation->opcode == XI_GO && operation->operand_count != 0 &&
+        operation->operand_begin < semantic_operand_count &&
+        semantic_operands &&
+        (go_task_callee = semantic_operands[operation->operand_begin].value) !=
+            XR_SEMANTIC_INDEX_NONE &&
+        exact_go_callees && exact_go_callees[go_task_callee] != 0 &&
+        xr_semantic_direct_local_go_task_result_is_exact(
+            plan->semantic_plan, operation, true, NULL);
     bool exact_channel =
         exact_channel_values && exact_channel_values[semantic_value] != 0;
     bool exact_channel_receive = exact_channel_receives &&
@@ -2621,6 +2645,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                               exact_stringbuilder_append_string ||
                               exact_json_namespace_value || exact_array_member_result ||
                               exact_direct_callee || exact_go_callee ||
+                              exact_go_task ||
                               exact_channel || exact_source_namespace ||
                               exact_native_module_namespace || exact_string_byte_view ||
                               exact_string_byte_parameter || exact_unit_enum ||
@@ -2654,6 +2679,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         exact_array_member_result ||
         exact_direct_callee ||
         exact_go_callee ||
+        exact_go_task ||
         exact_channel || exact_source_namespace || exact_native_module_namespace ||
         exact_nullable_scalar) {
         expected_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -2708,7 +2734,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         /* A nullable scalar carrier holds the null tag or a plain machine
          * scalar, so it claims no allocation, root map, or cleanup. */
         uint8_t expected_ownership =
-            (exact_direct_callee || exact_go_callee || exact_source_namespace ||
+            (exact_direct_callee || exact_go_callee || exact_go_task || exact_source_namespace ||
              exact_native_module_namespace || exact_nullable_scalar ||
              exact_class_instance_borrowed || exact_class_receiver_borrowed ||
              (exact_channel && operation && operation->opcode == XI_COPY))
@@ -4061,13 +4087,18 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 : NULL;
         bool direct = target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
+        bool native_namespace =
+            target && target->kind ==
+                          XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         bool class_construction =
             target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
-        if (!target || !operation || (!direct && !source && !class_construction) ||
+        if (!target || !operation ||
+            (!direct && !source && !native_namespace && !class_construction) ||
             (direct && target->function >= semantic_functions) ||
             (direct && operation->opcode != XI_CALL &&
              operation->opcode != XI_TAIL_CALL) ||
             (source && operation->opcode != XI_CALL_METHOD) ||
+            (native_namespace && operation->opcode != XI_CALL_METHOD) ||
             (class_construction && operation->opcode != XI_CALL)) {
             valid = false;
             break;
@@ -4119,6 +4150,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             xr_semantic_plan_operation(semantic, call->semantic_operation);
         bool direct = target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
+        bool native_namespace =
+            target && target->kind ==
+                          XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         /* Re-derived from the plan, never read back from the row: a target row
          * that claims a construction the shared judgement cannot re-prove is
          * rejected together with the intent that names it. */
@@ -4222,7 +4256,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         bool expected_suspend =
             operation && ((operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 ||
                           operation->opcode == XI_GO ||
-                          source ||
+                          source || native_namespace ||
                           (operation->opcode == XI_CALL && target &&
                            target->function < semantic_functions &&
                            suspendable[target->function] != 0));
@@ -4436,6 +4470,32 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     call->calling_convention ==
                         XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
                     call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
+            if (!valid)
+                break;
+        } else if (native_namespace) {
+            valid = target && suspends && expected_suspend &&
+                    operation->opcode == XI_CALL_METHOD &&
+                    operation->operand_count >= 1 &&
+                    target->function == XR_SEMANTIC_INDEX_NONE &&
+                    target->dependency == XR_SEMANTIC_INDEX_NONE &&
+                    target->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    target->callable_type == XR_SEMANTIC_INDEX_NONE &&
+                    reconstruct_call_identity(
+                        "xray-target-native-namespace-yieldable-v1",
+                        target->id, operation->id,
+                        operation->operand_count - 1u, &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    call->argument_count == 0 &&
+                    call->flags == XR_TARGET_CALL_SUSPEND &&
+                    call->calling_convention ==
+                        XR_TARGET_CALL_CONVENTION_NATIVE_NAMESPACE_YIELDABLE &&
+                    call->target_kind ==
+                        XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
             if (!valid)
                 break;
         } else if (class_construction) {
@@ -4998,12 +5058,16 @@ static bool verify_coroutines(const XrTargetPlan *plan, char *error, size_t erro
         }
         state_by_operation[entity->subject] = state_index;
         uint32_t expected_call = call_by_operation[entity->subject];
+        bool expected_method_call =
+            expected_call < plan->calls_count &&
+            (plan->calls[expected_call].target_kind ==
+                 XR_TARGET_CALL_TARGET_SOURCE_EXPORT ||
+             plan->calls[expected_call].target_kind ==
+                 XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE);
         if (expected_call != XR_SEMANTIC_INDEX_NONE &&
             (expected_call >= plan->calls_count ||
-             (plan->calls[expected_call].target_kind ==
-                      XR_TARGET_CALL_TARGET_SOURCE_EXPORT
-                  ? operation->opcode != XI_CALL_METHOD
-                  : operation->opcode != XI_CALL) ||
+             (expected_method_call ? operation->opcode != XI_CALL_METHOD
+                                   : operation->opcode != XI_CALL) ||
              plan->calls[expected_call].flags != XR_TARGET_CALL_SUSPEND)) {
             valid = false;
             break;

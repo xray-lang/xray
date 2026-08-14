@@ -153,6 +153,12 @@ closure initializer, shared-slot dominance, unique canonical local child and
 signature, and that every use is operand zero of `XI_GO` for that same child.
 It grants no GO task-result, child-task object, closure allocation/body, root,
 cleanup, argument storage, or coroutine execution authority.
+The direct-local-GO-task-result-storage row binds that separate result to a
+borrowed dynamic/tagged temporary only after the shared Task nominal judgement
+and the independently reconstructed GO callee identity both succeed. `AWAIT`
+consumes the same tagged carrier without a representation adapter. The runtime
+executor still owns the task object, so the row grants no allocation, root
+slot, ARC cleanup, scheduling, child body, or executable coroutine authority.
 The Channel-allocation-storage family binds an exact frozen `XI_CHAN_NEW`
 result to owned dynamic outer `XrValue` storage and exact identity-copy aliases
 to borrowed dynamic outer storage. Independent builder, Target verifier, and
@@ -186,7 +192,7 @@ dependency/module identity, unique shared slot, complete use sets, and receiver
 binding. They grant no imported module object body, allocation,
 root, cleanup, member lookup, dependency activation, argument ABI, or
 cross-module frame.
-The C emission projection schema 11 mechanically spells all verified dynamic
+The C emission projection schema 13 mechanically spells all verified dynamic
 families as exact `TAGGED`/`XrValue` rows. For an exact String literal it also
 owns the immutable literal bytes and the explicit String-view materialization
 recipe. For exact `XI_CHAN_NEW` it owns the helper spelling and capacity
@@ -276,12 +282,12 @@ Evidence:
   program fault, separate from the authority failures an unsupported plan
   gives.
 
-anchor-sha256: src/plan/target/xr_target_plan.h b6264500610c9072d3897ff9937552cd7c67a2f483f45ff127551c89cb09ff88
-anchor-sha256: src/plan/target/xr_target_plan.c f1655cd0444d528918f85ff62b5af3da3744d8fdddd92b497261e9d8f687b204
-anchor-sha256: src/plan/target/xr_target_builder.c f362c04694d953471d7346584932bcc5e2437ea650a68c2a830d1ccb40235d33
+anchor-sha256: src/plan/target/xr_target_plan.h 7e639ca207eb080f33aaeb0b292ed3d28c7b84e71bd70ddda4ebb447305ed39d
+anchor-sha256: src/plan/target/xr_target_plan.c bfce16b89e2d90c78f2343790eec1d439d7cda2192a209d8bbbb7a1afa259356
+anchor-sha256: src/plan/target/xr_target_builder.c 61e7e44a7c969d54c9adc70832e3e535b2d1bd737f91ab9c32bf9de0745ea367
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 6099812f9cee4af8b01c5ffb422c9e359cbd95ec7ebc61c927bc051bc2bf904b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 687ab0df5479e46e51e200e54ea8b935579e6319598fd9830009f935eb057b77
-anchor-sha256: src/plan/target/xr_target_verify.c 520cde352879b718fba2f0a49609ba028f2753188170b6058916b1a22cb79700
+anchor-sha256: src/plan/target/xr_target_verify.c 50fceaa59ae94e0958729a68f47ed73602f9e04fe0f4077a85c3f8b433c37b18
 anchor-sha256: src/plan/format/xr_xtp_schema.h 04840cf64073530619483953264b801358984d6559d7928b0b733b265ef2c668
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 2f6f1fa32e35fd1681ab07bc8a3808d133f33f27e43139224d3f9e253447bd74

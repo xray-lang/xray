@@ -20,6 +20,7 @@
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
 #include "../../plan/semantic/xr_semantic_class_shape.h"
 #include "../../plan/semantic/xr_semantic_string_shape.h"
+#include "../../plan/semantic/xr_semantic_task_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../stdlib/xstdlib_metadata.h"
@@ -3858,6 +3859,84 @@ static bool oracle_dynamic_channel_storage(
     return true;
 }
 
+static bool oracle_dynamic_direct_local_go_task_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind || !ctx->exact_go_callee_value)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index == XR_SEMANTIC_INDEX_NONE
+            ? NULL
+            : xr_semantic_plan_operation(ctx->semantic, operation_index);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(ctx->semantic, &operand_count);
+    uint32_t callee_value = XR_SEMANTIC_INDEX_NONE;
+    if (!operation || !operands || operation->opcode != XI_GO ||
+        operation->result_value != semantic_value ||
+        operation->operand_count == 0 || operation->operand_begin >= operand_count)
+        return false;
+    callee_value = operands[operation->operand_begin].value;
+    if (callee_value >= ctx->value_count ||
+        !ctx->exact_go_callee_value[callee_value] ||
+        !xr_semantic_direct_local_go_task_result_is_exact(
+            ctx->semantic, operation, true, NULL))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static bool oracle_direct_local_callee_use(
     const VerifyAuthority *ctx, uint32_t operation_index,
     uint16_t operand_index, uint32_t source_value) {
@@ -4132,6 +4211,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             *out_storage = XR_REP_TAGGED;
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
             return true;
+        case XI_GO:
+            return oracle_dynamic_direct_local_go_task_storage(
+                ctx, semantic_value, out_storage, out_machine_kind);
         case XI_GET_SHARED: {
             if (ctx->exact_direct_callee_value &&
                 ctx->exact_direct_callee_value[semantic_value])
@@ -4300,7 +4382,9 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                   oracle_source_namespace_storage(
                       ctx, source_value, &literal_storage, &ignored_kind)) &&
                 !oracle_native_module_namespace_storage(ctx, source_value, &literal_storage,
-                                                        &ignored_kind))
+                                                        &ignored_kind) &&
+                !oracle_dynamic_direct_local_go_task_storage(
+                    ctx, source_value, &literal_storage, &ignored_kind))
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
@@ -4391,6 +4475,14 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             }
             return oracle_machine_storage(ctx, source_value, out_storage,
                                           &ignored_kind);
+        case XI_AWAIT:
+            if (!xr_semantic_await_task_operand_is_exact(
+                    ctx->semantic, operation, operand_index, source_value) ||
+                !oracle_dynamic_direct_local_go_task_storage(
+                    ctx, source_value, out_storage, &ignored_kind))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
         case XI_CHAN_NEW:
             if (operand_index != 0 || !ctx->exact_channel_allocation_value ||
                 !ctx->exact_channel_allocation_value[operation->result_value])

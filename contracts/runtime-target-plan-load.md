@@ -37,7 +37,8 @@ roots, or general module activation.
 4. The required TargetPlan family mask is exactly scalar, aggregate,
    direct-local call, closure storage, minimal coroutine state-call,
    String-literal storage, direct-local-callee storage, Channel-allocation
-   storage, Channel-receive storage, direct-local-GO-callee storage, and
+   storage, Channel-receive storage, direct-local-GO-callee storage,
+   direct-local-GO-task-result storage, and
    SOURCE-namespace storage. The
    closure-storage family covers
    only an exact no-capture heap closure's outer `XrValue` slot as
@@ -66,6 +67,18 @@ roots, or general module activation.
    signature, slot, ownership/provenance, and complete use set. It grants no
    GO task-result, child-task object, callable body, allocation, root map,
    root slot, cleanup, argument storage, or coroutine execution authority.
+   Direct-local-GO-task-result storage separately binds the exact `Task<T>`
+   result of that proved GO to a borrowed dynamic/tagged temporary. The
+   runtime executor owns the task object; builder, independent Target verifier,
+   and AOT representation refinement all re-prove the Task nominal identity,
+   the exact callee operand, the GO result, and the `AWAIT` carrier use. This
+   family grants no task body, allocation, root slot, ARC cleanup, scheduling,
+   or general coroutine execution authority.
+   A native-namespace yieldable call row is likewise derived only from the
+   frozen `NATIVE_NAMESPACE_YIELDABLE` SemanticPlan target. It carries the
+   suspension convention and result slot but no backend symbol, source
+   dependency, callee function, or argument ABI; missing registry-backed
+   identity remains unavailable rather than falling back to selector text.
    Channel-allocation storage covers the owned dynamic outer `XrValue` result
    of an exact frozen `XI_CHAN_NEW` and borrowed dynamic identity-copy aliases.
    It independently binds canonical allocation key/id, exact Channel/capacity
@@ -241,10 +254,10 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h 5ea9aa4ff63d88b62db
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 6487ae39149a4ea28fab04bdf2ccbf88c0bccaded75cf20376b38c8447dbdd1c
 anchor-sha256: src/plan/target/xr_target_profile.h ca2efb60bc630cc5cfd8ed1c0a5b9442d0bcdb16edac1a7463d7be4a6e7384d2
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h b6264500610c9072d3897ff9937552cd7c67a2f483f45ff127551c89cb09ff88
-anchor-sha256: src/plan/target/xr_target_plan.c f1655cd0444d528918f85ff62b5af3da3744d8fdddd92b497261e9d8f687b204
-anchor-sha256: src/plan/target/xr_target_builder.c f362c04694d953471d7346584932bcc5e2437ea650a68c2a830d1ccb40235d33
-anchor-sha256: src/plan/target/xr_target_verify.c 520cde352879b718fba2f0a49609ba028f2753188170b6058916b1a22cb79700
+anchor-sha256: src/plan/target/xr_target_plan.h 7e639ca207eb080f33aaeb0b292ed3d28c7b84e71bd70ddda4ebb447305ed39d
+anchor-sha256: src/plan/target/xr_target_plan.c bfce16b89e2d90c78f2343790eec1d439d7cda2192a209d8bbbb7a1afa259356
+anchor-sha256: src/plan/target/xr_target_builder.c 61e7e44a7c969d54c9adc70832e3e535b2d1bd737f91ab9c32bf9de0745ea367
+anchor-sha256: src/plan/target/xr_target_verify.c 50fceaa59ae94e0958729a68f47ed73602f9e04fe0f4077a85c3f8b433c37b18
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
