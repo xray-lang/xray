@@ -129,6 +129,8 @@ def main() -> int:
                     "Core installs opaque TargetPlan load header")
         gate.record((core / "include/xray/xray_runtime_generation.h").is_file(),
                     "Core installs module generation authority header")
+        gate.record((core / "include/xray/xray_runtime_api.h").is_file(),
+                    "Core installs the artifact runtime facade header")
         gate.record(not (core / "include/xray/xray.h").exists(), "Core excludes SDK headers")
         gate.record(
             not (core / f"lib/xray/aot/{host_target}/{static_prefix}xray_aot_core{static_suffix}").exists(),
@@ -200,6 +202,7 @@ def main() -> int:
             (full / "include/xray/runtime.h", "installed runtime API header"),
             (full / "include/xray/xray_target_plan_load.h", "installed TargetPlan load header"),
             (full / "include/xray/xray_runtime_generation.h", "installed generation authority header"),
+            (full / "include/xray/xray_runtime_api.h", "installed artifact runtime facade header"),
             (full / "lib/xray/stdlib/path/path.xr", "installed stdlib source"),
             (full / "share/xray/install/install-marker.json", "installed payload marker"),
             (full / "share/xray/install/payload-manifest.json", "installed payload manifest"),

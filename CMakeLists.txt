@@ -1383,6 +1383,7 @@ set(XRAY_VM_RUNTIME_SOURCES
     ${XRAY_VM_TARGET_PLAN_LOAD_SOURCES}
     src/runtime/xr_module_generation.c
     src/runtime/xr_module_generation_verify.c
+    src/runtime/xr_runtime_api.c
     src/runtime/xr_runtime_artifact_authority.c
     src/runtime/xr_runtime_artifact_verify.c
     src/runtime/xr_target_plan_load.c
@@ -4413,6 +4414,7 @@ install(FILES
     ${CMAKE_SOURCE_DIR}/include/xray_export.h
     ${CMAKE_SOURCE_DIR}/include/xray_target_plan_load.h
     ${CMAKE_SOURCE_DIR}/include/xray_runtime_generation.h
+    ${CMAKE_SOURCE_DIR}/include/xray_runtime_api.h
     DESTINATION include/xray
     COMPONENT XrayCore
 )

@@ -1,0 +1,444 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xr_runtime_api.c - Verified artifact runtime facade
+ *
+ * KEY CONCEPT:
+ *   This file adds no execution authority. It composes the verified artifact
+ *   authority, the TargetPlan load boundary, and the generation lifecycle into
+ *   one product surface, and every fact it cannot re-derive from those owners
+ *   is refused rather than assumed.
+ */
+
+#include "../../include/xray_runtime_api.h"
+#include "../../include/xray_target_plan_load.h"
+#include "../base/xmalloc.h"
+#include "../os/os_thread.h"
+#include "../plan/semantic/xr_semantic_plan.h"
+#include "../plan/target/xr_target_plan.h"
+#include "../vm/xr_typed_dispatch.h"
+#include "xr_module_generation_internal.h"
+#include <stdio.h>
+#include <string.h>
+
+/*
+ * A module may publish many exports, so a resolved handle is cached per target
+ * function index. That keeps repeated lookups from growing the module and
+ * makes every loan the module hands out stable for the module's whole life.
+ */
+struct XrExport {
+    const XrModule *module;
+    uint32_t function;
+    uint32_t parameter_count;
+    bool resolved;
+};
+
+struct XrModule {
+    XrRuntime *runtime;
+    XrRuntimeArtifactAuthority *artifact_authority;
+    XrTargetPlan *plan;
+    XrLoadedModuleGeneration *generation;
+    XrExport *exports;
+    uint32_t function_count;
+};
+
+struct XrRuntime {
+    xr_mutex_t gate;
+    XrRuntimeGenerationAuthority *authority;
+    uint32_t loaded_modules;
+};
+
+static bool fail(char *diagnostic, size_t diagnostic_size, const char *code,
+                 const char *detail) {
+    if (diagnostic && diagnostic_size)
+        snprintf(diagnostic, diagnostic_size, "%s: %s", code, detail);
+    return false;
+}
+
+XRAY_API bool xr_runtime_create(const XrRuntimeGenerationBudget *budget,
+                                XrRuntime **runtime, char *diagnostic,
+                                size_t diagnostic_size) {
+    if (runtime)
+        *runtime = NULL;
+    if (!runtime || !budget)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "runtime creation requires a complete hard budget");
+    XrRuntime *created = (XrRuntime *) xr_calloc(1, sizeof(*created));
+    if (!created)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "runtime allocation failed");
+    /* The generation authority owns budget validation, so an incomplete or
+     * zero budget is refused by the same checker the lifecycle uses rather
+     * than by a second copy of the rule here. */
+    if (!xr_runtime_generation_authority_create(budget, &created->authority,
+                                                diagnostic, diagnostic_size)) {
+        xr_free(created);
+        return false;
+    }
+    xr_mutex_init(&created->gate);
+    *runtime = created;
+    return true;
+}
+
+XRAY_API bool xr_runtime_destroy(XrRuntime **runtime, char *diagnostic,
+                                 size_t diagnostic_size) {
+    if (!runtime || !*runtime)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "runtime is missing");
+    XrRuntime *owned = *runtime;
+    xr_mutex_lock(&owned->gate);
+    bool empty = owned->loaded_modules == 0;
+    xr_mutex_unlock(&owned->gate);
+    if (!empty)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
+                    "runtime still owns loaded modules");
+    if (!xr_runtime_generation_authority_destroy(&owned->authority, diagnostic,
+                                                 diagnostic_size))
+        return false;
+    xr_mutex_destroy(&owned->gate);
+    memset(owned, 0, sizeof(*owned));
+    xr_free(owned);
+    *runtime = NULL;
+    return true;
+}
+
+/* Unwinds a partially loaded module through the lifecycle's own failure
+ * branch. A generation that never activated rolls back to RETIRED with zero
+ * pins, which is the only state unload accepts, so no artifact is abandoned in
+ * a live state and no diagnostic from the original failure is overwritten. */
+static void discard_partial_module(XrLoadedModuleGeneration *generation,
+                                   XrTargetPlan *plan,
+                                   XrRuntimeArtifactAuthority *authority) {
+    char nested[512] = {0};
+    if (generation) {
+        xr_module_generation_rollback(generation, nested, sizeof(nested));
+        xr_module_generation_retire(generation, nested, sizeof(nested));
+        xr_module_generation_unload(&generation, nested, sizeof(nested));
+    }
+    xr_target_plan_free(plan);
+    xr_runtime_artifact_authority_free(authority);
+}
+
+XRAY_API bool xr_module_load_target_plan(
+    XrRuntime *runtime, const uint8_t *semantic_artifact_bytes,
+    size_t semantic_artifact_size, const uint8_t *target_artifact_bytes,
+    size_t target_artifact_size, XrModule **module, char *diagnostic,
+    size_t diagnostic_size) {
+    if (module)
+        *module = NULL;
+    if (!runtime || !module || !semantic_artifact_bytes ||
+        !semantic_artifact_size || !target_artifact_bytes ||
+        !target_artifact_size)
+        return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
+                    "module load requires a runtime and both artifact images");
+
+    XrRuntimeArtifactAuthority *artifact_authority = NULL;
+    if (!xr_runtime_artifact_authority_load_xsm(
+            semantic_artifact_bytes, semantic_artifact_size,
+            &artifact_authority, diagnostic, diagnostic_size))
+        return false;
+    /* The load boundary already verified this authority. Re-deriving it here
+     * costs one pass and makes the facade independent of that ordering. */
+    if (!xr_runtime_artifact_authority_verify(artifact_authority, diagnostic,
+                                              diagnostic_size)) {
+        xr_runtime_artifact_authority_free(artifact_authority);
+        return false;
+    }
+
+    XrTargetPlan *plan = NULL;
+    if (!xr_runtime_target_plan_load(target_artifact_bytes,
+                                     target_artifact_size, artifact_authority,
+                                     &plan, diagnostic, diagnostic_size)) {
+        xr_runtime_artifact_authority_free(artifact_authority);
+        return false;
+    }
+
+    XrLoadedModuleGeneration *generation = NULL;
+    if (!xr_module_generation_load_verified_target_plan(
+            runtime->authority, plan, &generation, diagnostic,
+            diagnostic_size)) {
+        discard_partial_module(NULL, plan, artifact_authority);
+        return false;
+    }
+    /* A plan the installed executor does not own is rejected here, not at call
+     * time, so a module handle never denotes a generation that cannot run. */
+    if (!xr_module_generation_prepare(generation, diagnostic,
+                                      diagnostic_size) ||
+        !xr_module_generation_activate(generation, diagnostic,
+                                       diagnostic_size)) {
+        discard_partial_module(generation, plan, artifact_authority);
+        return false;
+    }
+
+    uint32_t function_count = 0;
+    const XrTargetFunctionRecord *functions =
+        xr_target_plan_functions(plan, &function_count);
+    XrModule *created = (XrModule *) xr_calloc(1, sizeof(*created));
+    XrExport *exports =
+        function_count ? (XrExport *) xr_calloc(function_count,
+                                                sizeof(*exports))
+                       : NULL;
+    if (!functions || !function_count || !created || !exports) {
+        xr_free(exports);
+        xr_free(created);
+        discard_partial_module(generation, plan, artifact_authority);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "module allocation failed or the plan declares no function");
+    }
+    created->runtime = runtime;
+    created->artifact_authority = artifact_authority;
+    created->plan = plan;
+    created->generation = generation;
+    created->exports = exports;
+    created->function_count = function_count;
+
+    xr_mutex_lock(&runtime->gate);
+    runtime->loaded_modules++;
+    xr_mutex_unlock(&runtime->gate);
+    *module = created;
+    return true;
+}
+
+/* The verified source export table is sorted by name and its names are unique,
+ * both re-derived by the semantic verifier, so an exact match is the only
+ * match and a bounded scan finds it. */
+static const XrSemanticSourceExportRecord *lookup_source_export(
+    const XrSemanticPlan *semantic, const char *export_name) {
+    size_t count = xr_semantic_plan_source_export_count(semantic);
+    for (size_t i = 0; i < count; i++) {
+        const XrSemanticSourceExportRecord *record =
+            xr_semantic_plan_source_export(semantic, (uint32_t) i);
+        if (!record || !record->name)
+            return NULL;
+        int order = strcmp(record->name, export_name);
+        if (order == 0)
+            return record;
+        if (order > 0)
+            return NULL;
+    }
+    return NULL;
+}
+
+static uint32_t declared_parameter_count(const XrTargetPlan *plan,
+                                         uint32_t function) {
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_function_instructions(plan, function,
+                                             &instruction_count);
+    if (!instructions)
+        return UINT32_MAX;
+    uint32_t parameters = 0;
+    for (uint32_t i = 0; i < instruction_count; i++)
+        parameters +=
+            instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64;
+    return parameters;
+}
+
+XRAY_API bool xr_module_find_export(const XrModule *module,
+                                    const char *export_name,
+                                    const XrExport **export_handle,
+                                    char *diagnostic, size_t diagnostic_size) {
+    if (export_handle)
+        *export_handle = NULL;
+    if (!module || !export_handle || !export_name || !export_name[0])
+        return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
+                    "export lookup requires a loaded module and a nonempty name");
+
+    /* Names are a semantic-artifact fact. The TargetPlan carries dense numeric
+     * tables and no spelling at all, so resolution reads the semantic plan the
+     * verified TargetPlan retains and never a name reconstructed at runtime. */
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(module->plan);
+    if (!semantic)
+        return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
+                    "module plan does not retain its verified semantic authority");
+    const XrSemanticSourceExportRecord *record =
+        lookup_source_export(semantic, export_name);
+    if (!record)
+        return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
+                    "module publishes no export under that exact name");
+    /* Target function ids are dense and identical to their semantic function
+     * index; the target verifier proves that equality, so this is a checked
+     * bound rather than an assumed correspondence. */
+    if (record->function >= module->function_count)
+        return fail(diagnostic, diagnostic_size, "XR_TARGET_1002",
+                    "exported function index is outside the verified plan");
+
+    XrModuleGenerationSnapshot snapshot;
+    if (!xr_module_generation_snapshot(module->generation, &snapshot) ||
+        snapshot.state != XR_MODULE_GENERATION_ACTIVE || snapshot.poisoned ||
+        snapshot.rollback_requested)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "export resolution requires a healthy active generation");
+    if (xr_target_plan_function_execution_family_mask(
+            module->plan, record->function) !=
+        XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                    "exported function is outside the installed scalar i64 execution family");
+    uint32_t parameters = declared_parameter_count(module->plan,
+                                                   record->function);
+    if (parameters > XR_TARGET_INSTRUCTION_MAX_PARAMETERS)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                    "exported function has no verified scalar i64 signature");
+
+    /* The cache is module state, so it is published under the same runtime
+     * gate that guards module accounting. Concurrent lookups of one name then
+     * agree on one handle instead of racing to write the same slot. */
+    XrExport *slot = &module->exports[record->function];
+    xr_mutex_lock(&module->runtime->gate);
+    slot->module = module;
+    slot->function = record->function;
+    slot->parameter_count = parameters;
+    slot->resolved = true;
+    xr_mutex_unlock(&module->runtime->gate);
+    *export_handle = slot;
+    return true;
+}
+
+static bool fail_typed_dispatch(XrTypedDispatchStatus status, char *diagnostic,
+                                size_t diagnostic_size) {
+    switch (status) {
+        case XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                        "export plan identity changed");
+        case XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                        "exported function has no installed execution authority");
+        case XR_TYPED_DISPATCH_FRAME_ERROR:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5001",
+                        "export frame rejected a slot representation");
+        case XR_TYPED_DISPATCH_ARGUMENT_MISMATCH:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                        "export argument vector does not match the verified signature");
+        /* Program faults, not authority failures: the export was callable and
+         * every executed row was verified. They keep their own code so an
+         * operator cannot read them as a verification problem. */
+        case XR_TYPED_DISPATCH_DIVIDE_BY_ZERO:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
+                        "exported function divided by zero");
+        case XR_TYPED_DISPATCH_MODULO_BY_ZERO:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
+                        "exported function took a modulo by zero");
+        case XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
+                        "exported function exceeded the executor step budget");
+        case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
+        case XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED:
+        case XR_TYPED_DISPATCH_PROGRAM_INVALID:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5000",
+                        "verified export execution failed");
+        case XR_TYPED_DISPATCH_OK:
+            return true;
+    }
+    return fail(diagnostic, diagnostic_size, "XR_EXEC_5000",
+                "export dispatcher returned an unknown status");
+}
+
+XRAY_API bool xr_export_call(const XrExport *export_handle,
+                             const XrExportValue *arguments,
+                             uint32_t argument_count, XrExportValue *result,
+                             char *diagnostic, size_t diagnostic_size) {
+    if (result)
+        memset(result, 0, sizeof(*result));
+    if (!export_handle || !export_handle->resolved || !export_handle->module ||
+        !result || (argument_count && !arguments))
+        return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
+                    "export call requires a resolved handle and a result cell");
+    const XrModule *module = export_handle->module;
+    if (argument_count > XR_TARGET_INSTRUCTION_MAX_PARAMETERS ||
+        argument_count != export_handle->parameter_count)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                    "export argument count does not match the verified signature");
+
+    /* Values carry their kind so a caller built against a widened executor
+     * cannot have an unowned payload silently read as an i64. */
+    int64_t scalars[XR_TARGET_INSTRUCTION_MAX_PARAMETERS];
+    for (uint32_t i = 0; i < argument_count; i++) {
+        if (arguments[i].kind != XR_EXPORT_VALUE_I64 ||
+            arguments[i].reserved != 0)
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5001",
+                        "export argument kind is outside the installed scalar i64 family");
+        scalars[i] = arguments[i].i64;
+    }
+
+    /* The pin is what keeps the module from unloading mid-call, so it is taken
+     * before execution and released on every path out. */
+    if (!xr_module_generation_pin_acquire(module->generation,
+                                          XR_MODULE_GENERATION_INFLIGHT_CALL,
+                                          diagnostic, diagnostic_size))
+        return false;
+    XrModuleGenerationSnapshot snapshot;
+    bool callable =
+        xr_module_generation_snapshot(module->generation, &snapshot) &&
+        !snapshot.poisoned && !snapshot.rollback_requested &&
+        xr_target_plan_function_execution_family_mask(
+            module->plan, export_handle->function) ==
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED;
+    XrFingerprint required_fingerprint = {{0}};
+    if (callable)
+        memcpy(required_fingerprint.bytes, snapshot.identity.target_plan_fingerprint,
+               sizeof(required_fingerprint.bytes));
+    int64_t executed = 0;
+    XrTypedDispatchStatus status =
+        callable ? xr_typed_dispatch_execute_i64(
+                       module->plan, &required_fingerprint,
+                       export_handle->function,
+                       argument_count ? scalars : NULL, argument_count,
+                       &executed)
+                 : XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+    if (!xr_module_generation_pin_release(module->generation,
+                                          XR_MODULE_GENERATION_INFLIGHT_CALL,
+                                          diagnostic, diagnostic_size))
+        return false;
+    if (!callable)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                    "export lost its installed scalar i64 execution authority");
+    if (status != XR_TYPED_DISPATCH_OK)
+        return fail_typed_dispatch(status, diagnostic, diagnostic_size);
+    result->kind = XR_EXPORT_VALUE_I64;
+    result->i64 = executed;
+    return true;
+}
+
+XRAY_API bool xr_module_unload(XrModule **module, char *diagnostic,
+                               size_t diagnostic_size) {
+    if (!module || !*module || !(*module)->runtime)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "module is missing");
+    XrModule *owned = *module;
+    /* Retirement is the lifecycle's own gate: it refuses while any pin
+     * remains, so an in-flight call keeps this from succeeding rather than
+     * being torn out from under. Draining is entered only from ACTIVE, and a
+     * previous unload that a pin refused already left this generation
+     * draining, so that earlier attempt must not strand the module. */
+    XrModuleGenerationSnapshot snapshot;
+    if (!xr_module_generation_snapshot(owned->generation, &snapshot))
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "module generation state is unreadable");
+    if (snapshot.state == XR_MODULE_GENERATION_ACTIVE &&
+        !xr_module_generation_begin_drain(owned->generation, diagnostic,
+                                          diagnostic_size))
+        return false;
+    if (!xr_module_generation_retire(owned->generation, diagnostic,
+                                     diagnostic_size) ||
+        !xr_module_generation_unload(&owned->generation, diagnostic,
+                                     diagnostic_size))
+        return false;
+    xr_target_plan_free(owned->plan);
+    xr_runtime_artifact_authority_free(owned->artifact_authority);
+
+    XrRuntime *runtime = owned->runtime;
+    xr_mutex_lock(&runtime->gate);
+    if (runtime->loaded_modules)
+        runtime->loaded_modules--;
+    xr_mutex_unlock(&runtime->gate);
+
+    xr_free(owned->exports);
+    memset(owned, 0, sizeof(*owned));
+    xr_free(owned);
+    *module = NULL;
+    return true;
+}
