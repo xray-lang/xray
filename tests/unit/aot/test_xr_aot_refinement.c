@@ -2937,6 +2937,96 @@ static void test_fixed_array_backing_projection_is_exact_and_fail_closed(void) {
     xi_func_free(function);
 }
 
+static void test_scalar_addressable_alias_recipe_is_exact_and_fail_closed(void) {
+    XiFunc *function =
+        xi_func_new("scalar_addressable_alias_recipe", &scalar_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    function->nparams = 1;
+    function->min_params = 1;
+    function->params =
+        (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    XiValue *source = xi_param(function, entry, 0, &scalar_int);
+    XiValue *alias =
+        xi_value_new(function, entry, XI_UNBOX, &scalar_int, 1);
+    XiValue *place =
+        xi_value_new(function, entry, XI_LOCAL_ADDR, &scalar_int, 1);
+    XiValue *load =
+        xi_value_new(function, entry, XI_PLACE_LOAD, &scalar_int, 1);
+    REQUIRE(source && alias && place && load);
+    function->params[0] = source;
+    alias->args[0] = source;
+    place->args[0] = alias;
+    load->args[0] = place;
+    xi_block_set_return(entry, load);
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    char error[512] = {0};
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t alias_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, source, &semantic_function, &source_value, error,
+        sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, alias, &semantic_function, &alias_value, error,
+        sizeof(error)));
+
+    const XrTargetValueRepRecord *source_binding =
+        xr_target_plan_value_rep(target, source_value);
+    const XrTargetValueRepRecord *alias_binding =
+        xr_target_plan_value_rep(target, alias_value);
+    REQUIRE(source_binding && alias_binding &&
+            source_binding->register_rep == alias_binding->register_rep &&
+            source_binding->memory_rep == alias_binding->memory_rep);
+
+    XrFingerprint profile_fingerprint =
+        xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, alias_value, &view,
+                                          error, sizeof(error)));
+    REQUIRE(view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS &&
+            view.recipe_operand_value == source_value &&
+            view.recipe_argument_value == UINT32_MAX &&
+            view.recipe_symbol == NULL &&
+            view.rep == XR_C_VALUE_REP_I64);
+
+    XrCValueEmissionView *row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == alias_value) {
+            REQUIRE(row == NULL);
+            row = &emission->values[i];
+        }
+    REQUIRE(row != NULL);
+    uint32_t saved_source = row->recipe_operand_value;
+    row->recipe_operand_value = alias_value;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    row->recipe_operand_value = saved_source;
+    uint8_t saved_recipe = row->materialization;
+    row->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    row->materialization = saved_recipe;
+    REQUIRE(xr_c_emission_plan_verify(emission, target,
+                                      profile_fingerprint, error,
+                                      sizeof(error)));
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_enum_descriptor_adapter_refuses_without_layout_family(void) {
     RepresentationFixture fixture = representation_fixture_create();
     XrAotRefinementDiagnostic diag = {0};
@@ -2994,6 +3084,7 @@ int main(void) {
     test_representation_record_mutations_fail_closed();
     test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed();
     test_fixed_array_backing_projection_is_exact_and_fail_closed();
+    test_scalar_addressable_alias_recipe_is_exact_and_fail_closed();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     printf("TargetPlan-native AOT refinement tests passed\n");
     return 0;

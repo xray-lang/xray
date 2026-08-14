@@ -12610,6 +12610,16 @@ static void xicgen_unbox(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         emit_codegen_abort_expr(out);
         return;
     }
+    const XiValue *recipe_source = NULL;
+    if (!cg_scalar_addressable_alias_recipe_source(ctx, f, v,
+                                                   &recipe_source)) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (recipe_source) {
+        emit_vref(out, recipe_source);
+        return;
+    }
     XrRep from_rep = xicgen_value_c_storage_rep(ctx, f, v->args[0]);
     XrRep to_rep = xicgen_value_c_storage_rep(ctx, f, v);
     const char *conv_suffix = emit_conversion_prefix(out, v->type, from_rep, to_rep);

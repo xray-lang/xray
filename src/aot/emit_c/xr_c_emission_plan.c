@@ -27,7 +27,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(21)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(22)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -317,6 +317,111 @@ static const XrSemanticOperationRecord *binding_operation(
     return operation < xr_semantic_plan_operation_count(semantic)
                ? xr_semantic_plan_operation(semantic, operation)
                : NULL;
+}
+
+static bool c_rep_is_addressable_scalar(uint16_t kind) {
+    switch ((XrMachineRepKind) kind) {
+        case XR_MACHINE_REP_I1:
+        case XR_MACHINE_REP_I8:
+        case XR_MACHINE_REP_U8:
+        case XR_MACHINE_REP_I16:
+        case XR_MACHINE_REP_U16:
+        case XR_MACHINE_REP_I32:
+        case XR_MACHINE_REP_U32:
+        case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_U64:
+        case XR_MACHINE_REP_ISIZE:
+        case XR_MACHINE_REP_USIZE:
+        case XR_MACHINE_REP_F32:
+        case XR_MACHINE_REP_F64:
+        case XR_MACHINE_REP_RUNE:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
+            return true;
+        case XR_MACHINE_REP_VOID:
+        case XR_MACHINE_REP_OBJECT_REF:
+        case XR_MACHINE_REP_RAW_PTR:
+        case XR_MACHINE_REP_CODE_REF:
+        case XR_MACHINE_REP_DYN_VALUE:
+        case XR_MACHINE_REP_AGGREGATE:
+        case XR_MACHINE_REP_VECTOR:
+        case XR_MACHINE_REP_VIEW:
+        case XR_MACHINE_REP_COUNT:
+            return false;
+    }
+    return false;
+}
+
+/* A scalar UNBOX that is representation-identical to its frozen source may
+ * normally share that source's immutable C local.  An ordinary LOCAL_ADDR use
+ * instead creates an exact storage obligation: the alias remains a distinct C
+ * object, initialized directly from the same frozen scalar value.  This recipe
+ * is derived only from SemanticPlan operation/value identities and TargetPlan
+ * machine rows.  Raw/direct projections, aggregates, views, pointers, code and
+ * vectors are deliberately outside this family. */
+static bool exact_scalar_addressable_alias_recipe(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding, uint32_t *out_source_value) {
+    if (out_source_value)
+        *out_source_value = UINT32_MAX;
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *alias =
+        binding_operation(target_plan, binding);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
+    if (!semantic || !binding || !alias || !operands || !out_source_value ||
+        alias->opcode != XI_UNBOX ||
+        alias->result_value != binding->semantic_value ||
+        alias->result_value == XR_SEMANTIC_INDEX_NONE ||
+        alias->function >= xr_semantic_plan_function_count(semantic) ||
+        alias->operand_count != 1 || alias->metadata_count != 0 ||
+        alias->operand_begin >= operand_count ||
+        alias->auxiliary_kind != XI_AUX_KIND_NONE ||
+        alias->semantic_immediate != 0 ||
+        alias->effects != xi_generated_op_effects(XI_UNBOX) ||
+        alias->flags != xi_generated_op_default_flags(XI_UNBOX))
+        return false;
+
+    uint32_t source_value = operands[alias->operand_begin].value;
+    const XrTargetValueRepRecord *source =
+        xr_target_plan_value_rep(target_plan, source_value);
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    if (!source || !register_rep || !memory_rep ||
+        source_value == alias->result_value ||
+        binding->register_rep != source->register_rep ||
+        binding->memory_rep != source->memory_rep ||
+        register_rep->kind != memory_rep->kind ||
+        !c_rep_is_addressable_scalar(register_rep->kind))
+        return false;
+
+    bool address_taken = false;
+    size_t operation_count = xr_semantic_plan_operation_count(semantic);
+    if (operation_count > UINT32_MAX)
+        return false;
+    for (uint32_t i = 0; i < (uint32_t) operation_count; i++) {
+        const XrSemanticOperationRecord *use =
+            xr_semantic_plan_operation(semantic, i);
+        if (!use || use->opcode != XI_LOCAL_ADDR ||
+            use->function != alias->function || use->operand_count != 1 ||
+            use->metadata_count != 0 || use->operand_begin >= operand_count ||
+            use->auxiliary_kind != XI_AUX_KIND_NONE ||
+            use->semantic_immediate != 0 ||
+            use->effects != xi_generated_op_effects(XI_LOCAL_ADDR) ||
+            use->flags != xi_generated_op_default_flags(XI_LOCAL_ADDR))
+            continue;
+        if (operands[use->operand_begin].value == alias->result_value) {
+            address_taken = true;
+            break;
+        }
+    }
+    if (!address_taken)
+        return false;
+    *out_source_value = source_value;
+    return true;
 }
 
 static bool exact_panic_catch_recipe(
@@ -2050,6 +2155,24 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_argument_count == 0 &&
                        value->recipe_arguments == NULL &&
                        value->recipe_symbol == NULL;
+    if (value->materialization ==
+        XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS)
+        recipe_valid = c_rep_is_addressable_scalar(
+                           value->target_register_kind) &&
+                       value->target_register_kind ==
+                           value->target_memory_kind &&
+                       value->rep != XR_C_VALUE_REP_VOID &&
+                       value->rep != XR_C_VALUE_REP_TAGGED &&
+                       value->rep != XR_C_VALUE_REP_VIEW &&
+                       value->rep != XR_C_VALUE_REP_AGGREGATE &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_operand_value != value->semantic_value &&
+                       value->recipe_argument_value == UINT32_MAX &&
+                       value->recipe_argument_count == 0 &&
+                       value->recipe_arguments == NULL &&
+                       value->recipe_symbol == NULL;
     bool array_recipe =
         value->materialization ==
             XR_C_VALUE_MATERIALIZATION_ARRAY_WITH_CAPACITY ||
@@ -2376,7 +2499,12 @@ bool xr_c_emission_plan_verify(
             target_plan, binding, &expected_array_recipe,
             &expected_array_storage, &expected_array_count,
             &expected_array_fill, &expected_array_symbol);
-        uint8_t expected_recipe = expected_adt_enum
+        uint32_t expected_scalar_source = UINT32_MAX;
+        bool expected_scalar_alias = exact_scalar_addressable_alias_recipe(
+            target_plan, binding, &expected_scalar_source);
+        uint8_t expected_recipe = expected_scalar_alias
+                                      ? XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS
+                                      : expected_adt_enum
                                       ? XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR
                                       : expected_panic_catch
                                       ? XR_C_VALUE_MATERIALIZATION_PANIC_CATCH
@@ -2405,7 +2533,9 @@ bool xr_c_emission_plan_verify(
                                                                                 : expected_string_concat
                                                                                       ? XR_C_VALUE_MATERIALIZATION_STRING_CONCAT
                                                                                       : XR_C_VALUE_MATERIALIZATION_NONE;
-        uint32_t expected_operand = expected_adt_enum
+        uint32_t expected_operand = expected_scalar_alias
+                                        ? expected_scalar_source
+                                        : expected_adt_enum
                                         ? expected_enum.receiver_value
                                         : expected_channel
                                         ? expected_capacity
@@ -2799,7 +2929,14 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         bool array_intrinsic = exact_array_intrinsic_recipe(
             target_plan, binding, &array_recipe, &array_storage, &array_count,
             &array_fill, &array_symbol);
-        if (array_intrinsic) {
+        uint32_t scalar_alias_source = UINT32_MAX;
+        bool scalar_addressable_alias = exact_scalar_addressable_alias_recipe(
+            target_plan, binding, &scalar_alias_source);
+        if (scalar_addressable_alias) {
+            value->materialization =
+                XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS;
+            value->recipe_operand_value = scalar_alias_source;
+        } else if (array_intrinsic) {
             value->recipe_symbol = xr_strdup(array_symbol);
             if (!value->recipe_symbol) {
                 xr_c_emission_plan_free(plan);

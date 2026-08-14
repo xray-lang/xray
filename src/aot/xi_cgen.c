@@ -2664,6 +2664,88 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function,
            semantic_function == function->semantic_plan_function_index;
 }
 
+/* Resolve a C-emission recipe operand back to the unique frozen Xi member.
+ * The lookup is numeric SemanticPlan identity only: no mutable type, spelling,
+ * opcode, arity, or backend representation participates. */
+static const XiValue *cg_frozen_value_for_semantic_id(
+    XiCgenCtx *ctx, const XiFunc *function, uint32_t semantic_value) {
+    if (!ctx || !function || !function->semantic_plan ||
+        function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
+        return NULL;
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(function->semantic_plan,
+                                  function->semantic_plan_function_index);
+    if (!semantic_function || semantic_value < semantic_function->value_begin ||
+        semantic_value - semantic_function->value_begin >=
+            semantic_function->value_count)
+        return NULL;
+    uint32_t local_value = semantic_value - semantic_function->value_begin;
+    const XiValue *match = NULL;
+    for (uint32_t bi = 0; bi < function->nblocks; bi++) {
+        const XiBlock *block = function->blocks[bi];
+        if (!block)
+            continue;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            if (phi->value.id != local_value)
+                continue;
+            if (match && match != &phi->value)
+                return NULL;
+            match = &phi->value;
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->id != local_value)
+                continue;
+            if (match && match != value)
+                return NULL;
+            match = value;
+        }
+    }
+    uint32_t actual = XR_SEMANTIC_INDEX_NONE;
+    return match && cg_value_semantic_id(ctx, function, match, &actual) &&
+                   actual == semantic_value
+               ? match
+               : NULL;
+}
+
+static bool cg_scalar_addressable_alias_recipe_source(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    const XiValue **out_source) {
+    if (out_source)
+        *out_source = NULL;
+    if (!ctx || !function || !value || !out_source)
+        return false;
+    XrCValueEmissionView alias = {0};
+    CgValueEmissionStatus status =
+        cg_value_emission_view(ctx, function, value, &alias);
+    if (status == CG_VALUE_EMISSION_BACKEND_ONLY)
+        return true;
+    if (status != CG_VALUE_EMISSION_FOUND)
+        return false;
+    if (alias.materialization !=
+        XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS)
+        return true;
+    const XiValue *source = cg_frozen_value_for_semantic_id(
+        ctx, function, alias.recipe_operand_value);
+    XrCValueEmissionView source_emission = {0};
+    if (!source || cg_value_emission_view(ctx, function, source,
+                                          &source_emission) !=
+                       CG_VALUE_EMISSION_FOUND ||
+        alias.target_register_rep != source_emission.target_register_rep ||
+        alias.target_memory_rep != source_emission.target_memory_rep ||
+        alias.target_register_kind != source_emission.target_register_kind ||
+        alias.target_memory_kind != source_emission.target_memory_kind ||
+        alias.rep != source_emission.rep || !alias.c_type ||
+        !source_emission.c_type ||
+        strcmp(alias.c_type, source_emission.c_type) != 0) {
+        (void) cg_value_emission_fail(
+            ctx, "scalar addressable alias recipe source is not exact");
+        return false;
+    }
+    *out_source = source;
+    return true;
+}
+
 static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx,
                                         const XrCValueEmissionView *view,
                                         XaotRep *out) {
@@ -10321,32 +10403,6 @@ static bool cg_phis_interfere(const XiLiveness *l, const XiPhi *a, const XiPhi *
     return false;
 }
 
-static bool cg_c_value_alias_is_address_taken(const XiFunc *f, const XiValue *alias) {
-    if (!f || !alias)
-        return true;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *user = blk->values[vi];
-            if (!user || user->op != XI_LOCAL_ADDR || user->nargs < 1)
-                continue;
-            if (user->args[0] == alias) {
-                /* A fixed-array place is emitted as the address of its native
-                 * `_faN` lane storage, not as `&vN`.  Its tagged XrValue alias
-                 * therefore remains an immutable representation boundary and
-                 * can share the backing value's C local. */
-                CgFixedArrayLaneInfo fixed;
-                if (cg_fixed_array_lane_info_from_value(alias, &fixed))
-                    continue;
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 static bool cg_value_traces_to_explicit_vector(const XiValue *value) {
     const XiValue *cur = value;
     for (uint8_t depth = 0; cur && depth < 16; depth++) {
@@ -10391,7 +10447,7 @@ static bool cg_value_traces_to_explicit_vector(const XiValue *value) {
  * Native C SSA locals can therefore share the source local when:
  *   - both AOT plans have the exact same value representation and C type;
  *   - the source is not a mutable phi/cell;
- *   - no ref call takes the alias's address.
+ *   - its immutable C-emission row carries no distinct materialization recipe.
  *
  * Debug source variables still synchronize at the alias statement.  Only the
  * redundant C declaration/assignment disappears.
@@ -10481,7 +10537,7 @@ static bool cg_rep_identical_alias_can_share_c_local(XiCgenCtx *ctx, const XiFun
     const char *source_ctype = local_ctype_str_ctx(ctx, f, source);
     if (!alias_ctype || !source_ctype || strcmp(alias_ctype, source_ctype) != 0)
         return false;
-    return !cg_c_value_alias_is_address_taken(f, alias);
+    return true;
 }
 
 /* Build the per-function C-value coalescing map. Phis that share the exact

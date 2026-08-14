@@ -143,7 +143,7 @@ The view binds the frozen Semantic intrinsic and source root to the exact
 String method or slice construction authority. Schema 18 adds a sealed
 `Iterator<rune>.hasNext` bool recipe whose receiver is the exact prior
 `String.runes` result and whose fixed runtime helper preserves pending-error
-polling. C emission schema 21 adds the separate native-rune `next` recipe, but
+polling. C emission schema 22 adds the separate native-rune `next` recipe, but
 only when the receiver has that same unique frozen `String.runes` producer; it
 grants no general Iterator dispatch. Schema 16 added a sealed
 `StringBuilder()` constructor call whose
@@ -217,7 +217,7 @@ ownership, transfer, and machine representation. An exact `ref` row alone
 authorizes the C projection's additional pointer level. These rows grant no
 imported module object body, allocation, root, cleanup, guessed member lookup,
 dependency activation, unrelated argument ABI, or cross-module frame.
-The C emission projection schema 21 mechanically spells all verified dynamic
+The C emission projection schema 22 mechanically spells all verified dynamic
 families as exact `TAGGED`/`XrValue` rows. For an exact String literal it also
 owns the immutable literal bytes and the explicit String-view materialization
 recipe. For exact `XI_CHAN_NEW` it owns the helper spelling and capacity
