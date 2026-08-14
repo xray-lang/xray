@@ -641,21 +641,32 @@ static void verify_var_ids(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
-/* Check 7: unique value IDs within function */
+/* Check 7: unique value IDs within function.
+ *
+ * The bitset is sized from next_value_id and heap-allocated.  It used to be a
+ * fixed 1250-byte stack array with the check disabling itself above 10000 ids,
+ * which made the invariant depend on a number the function does not control:
+ * next_value_id is a monotone counter that every value ever created advances,
+ * including every value DCE has since deleted, so the trigger tracks a
+ * function's total churn through the pipeline rather than its size.  A value
+ * id is an index into reg_map in the emitter and into the liveness bitsets, so
+ * a duplicate is a wrong answer, not a slow one; it must not stop being
+ * checked because a function was rewritten often enough. */
 static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
 
-    /* Use a simple O(n) scan; for typical function sizes this is fine. */
     uint32_t max_id = f->next_value_id;
+    if (max_id == 0)
+        return;
 
-    /* Track seen IDs with a bitmap if small enough, else skip. */
-    if (max_id > 10000)
-        return; /* skip for very large functions */
-
-    /* Stack-allocate a bitset. Max ~1.2 KB for 10000 IDs. */
-    uint8_t seen[1250];
-    memset(seen, 0, sizeof(seen));
+    size_t nbytes = ((size_t) max_id + 7u) / 8u;
+    uint8_t *seen = (uint8_t *) xr_malloc(nbytes);
+    if (!seen) {
+        verr(ctx, "func '%s': cannot allocate value id map for %u ids", f->name, max_id);
+        return;
+    }
+    memset(seen, 0, nbytes);
 
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
@@ -664,17 +675,17 @@ static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
             uint32_t vid = blk->values[i]->id;
             if (vid >= max_id) {
                 verr(ctx, "func '%s': value v%u >= next_value_id %u", f->name, vid, max_id);
+                xr_free(seen);
                 return;
             }
             uint32_t byte = vid / 8;
             uint8_t bit = (uint8_t) (1 << (vid & 7));
-            if (byte < sizeof(seen)) {
-                if (seen[byte] & bit) {
-                    verr(ctx, "func '%s': duplicate value ID v%u", f->name, vid);
-                    return;
-                }
-                seen[byte] |= bit;
+            if (seen[byte] & bit) {
+                verr(ctx, "func '%s': duplicate value ID v%u", f->name, vid);
+                xr_free(seen);
+                return;
             }
+            seen[byte] |= bit;
         }
 
         /* Also check phi IDs */
@@ -682,19 +693,21 @@ static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
             uint32_t vid = phi->value.id;
             if (vid >= max_id) {
                 verr(ctx, "func '%s': phi v%u >= next_value_id %u", f->name, vid, max_id);
+                xr_free(seen);
                 return;
             }
             uint32_t byte = vid / 8;
             uint8_t bit = (uint8_t) (1 << (vid & 7));
-            if (byte < sizeof(seen)) {
-                if (seen[byte] & bit) {
-                    verr(ctx, "func '%s': duplicate phi ID v%u", f->name, vid);
-                    return;
-                }
-                seen[byte] |= bit;
+            if (seen[byte] & bit) {
+                verr(ctx, "func '%s': duplicate phi ID v%u", f->name, vid);
+                xr_free(seen);
+                return;
             }
+            seen[byte] |= bit;
         }
     }
+
+    xr_free(seen);
 }
 
 /* ========== Check 8: SSA Dominance ========== */
