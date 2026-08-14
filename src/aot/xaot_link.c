@@ -672,6 +672,15 @@ XR_FUNC bool xaot_link_manifest_init(XaotLinkManifest *manifest, const XaotTarge
     manifest->compile.unwind_tables = true;
     manifest->link.standard_libraries = true;
 
+    /* Provenance only, and read without sealing: recording which passes ran
+     * must not be what fixes the policy for the session. */
+    if (!xi_pass_policy_render(xi_pass_session_policy(), manifest->xi_opt_policy,
+                               sizeof(manifest->xi_opt_policy))) {
+        xaot_target_free(&manifest->target);
+        memset(manifest, 0, sizeof(*manifest));
+        return false;
+    }
+
     return true;
 }
 
@@ -807,6 +816,11 @@ XR_FUNC char *xaot_link_manifest_dump_json(const XaotLinkManifest *manifest) {
          xaot_json_write_string_array(out, "defines", manifest->defines, manifest->n_defines, true);
     ok = ok && xaot_json_write_raw(out, "  \"raw_flag_provider\": ");
     ok = ok && xaot_json_write_string(out, manifest->raw_flag_provider);
+    ok = ok && xaot_json_write_raw(out, ",\n");
+    /* Which Xi passes produced the code this manifest links. Provenance for a
+     * reader of the artifact; it is not part of any identity. */
+    ok = ok && xaot_json_write_raw(out, "  \"xi_opt_policy\": ");
+    ok = ok && xaot_json_write_string(out, manifest->xi_opt_policy);
     ok = ok && xaot_json_write_raw(out, ",\n");
     ok = ok && xaot_json_write_string_array(out, "provider_cc_flags", manifest->cc_flags,
                                             manifest->n_cc_flags, true);

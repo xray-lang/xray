@@ -181,6 +181,17 @@ class RunnerConfig:
     aot_cache: Path
     aot_bin_cache: Path
     diff_stderr: bool
+    # Optimizer policy handed to both lanes, or "" for each pipeline's default.
+    #
+    # The two lanes do not run the same passes by default: the VM pipeline is
+    # pinned to the light level and the native backend to the full level, so an
+    # ordinary run of this net compares two differently optimized programs and a
+    # divergence cannot say which side is wrong. Setting XRAY_DIFF_XI_OPT puts
+    # both lanes under one named policy, which is the only way this net asserts
+    # that the two sides were configured alike -- the same string reaches
+    # `xray run` and `xray build`, and a spec either applies to both or is
+    # refused by both, because the compiler rejects a malformed one.
+    xi_opt: str
     # Per-subprocess wall-clock ceiling. The shell net had none, so one
     # deadlocked case hung the whole lane until the outer 900s ctest timeout.
     # A generous default turns that into a single red case; the whole child
@@ -219,14 +230,13 @@ def build_aot_binary(
             pass
         env = os.environ.copy()
         env.setdefault("XRAY_AOT_FAST_TEST_BUILD", "1")
-        result = proc.run(
-            [
-                config.xray, "build", "--native", "-O", config.aot_opt,
-                "--cache-dir", config.aot_cache, case, "-o", tmp,
-            ],
-            env=env,
-            timeout=config.case_timeout,
-        )
+        cmd = [
+            config.xray, "build", "--native", "-O", config.aot_opt,
+            "--cache-dir", config.aot_cache, case, "-o", tmp,
+        ]
+        if config.xi_opt:
+            cmd[2:2] = ["--xi-opt", config.xi_opt]
+        result = proc.run(cmd, env=env, timeout=config.case_timeout)
         # build stdout+stderr merged into one log, matching the shell runner's
         # STDOUT=STDERR capture used for failure excerpts.
         buildlog = result.stdout + result.stderr
@@ -249,6 +259,8 @@ def run_backend(
 ) -> BackendResult:
     if kind == "vm":
         cmd = [config.xray, "run", case]
+        if config.xi_opt:
+            cmd[2:2] = ["--xi-opt", config.xi_opt]
         if args:
             cmd.extend(["--", *args])
         r = proc.run(cmd, stdin=stdin_bytes, timeout=config.case_timeout)
@@ -471,11 +483,15 @@ def main(argv: list[str]) -> int:
     requested_jobs = os.environ.get("XRAY_DIFF_JOBS", os.environ.get("XRAY_TEST_JOBS", "auto"))
     jobs, auto_jobs = configure_jobs(requested_jobs)
     aot_opt = os.environ.get("XRAY_AOT_TEST_OPT", "0")
+    xi_opt = os.environ.get("XRAY_DIFF_XI_OPT", "").strip()
+    # The policy names which passes ran, so it belongs in the cache path: a
+    # binary built under one policy must never be reused to answer for another.
+    cache_tag = f"O{aot_opt}" if not xi_opt else f"O{aot_opt}-{safe_name(xi_opt)}"
     aot_cache = Path(
-        os.environ.get("XRAY_DIFF_CACHE_DIR", str(diff_stable_cache_dir("aot-objects", xray) / f"O{aot_opt}"))
+        os.environ.get("XRAY_DIFF_CACHE_DIR", str(diff_stable_cache_dir("aot-objects", xray) / cache_tag))
     )
     aot_bin_cache = Path(
-        os.environ.get("XRAY_DIFF_BIN_CACHE_DIR", str(diff_stable_cache_dir("backend-diff-bin", xray) / f"O{aot_opt}"))
+        os.environ.get("XRAY_DIFF_BIN_CACHE_DIR", str(diff_stable_cache_dir("backend-diff-bin", xray) / cache_tag))
     )
     diff_stderr = os.environ.get("XRAY_DIFF_STDERR", "0") == "1"
     shard_total_raw = os.environ.get("XRAY_DIFF_SHARD_TOTAL", "1")
@@ -497,7 +513,7 @@ def main(argv: list[str]) -> int:
     config = RunnerConfig(
         xray=xray, backends=backends, jobs=jobs, aot_opt=aot_opt,
         aot_cache=aot_cache, aot_bin_cache=aot_bin_cache, diff_stderr=diff_stderr,
-        case_timeout=case_timeout,
+        case_timeout=case_timeout, xi_opt=xi_opt,
     )
 
     if single_case:
@@ -551,6 +567,9 @@ def main(argv: list[str]) -> int:
     print(f"Jobs:     {jobs}")
     print(f"CacheState: {cache_state}")
     print(f"AOT opt:  -O{aot_opt}")
+    # -O reaches only the host C compiler. Which Xi passes ran is the line
+    # below, and "per-pipeline default" means the two lanes ran different sets.
+    print(f"Xi opt:   {xi_opt if xi_opt else 'per-pipeline default (lanes differ)'}")
     print(f"Cache:    {aot_cache}")
     print(f"BinCache: {aot_bin_cache}")
     print("RunCache: disabled")
