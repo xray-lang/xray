@@ -139,10 +139,6 @@ typedef uint32_t XiOptDisableMask;
 
 #define XI_OPT_DISABLE_NONE 0u
 #define XI_OPT_DISABLE_BIT(pass_id) ((XiOptDisableMask) 1u << (unsigned) (pass_id))
-#define XI_OPT_DISABLE_ALL                                                                         \
-    ((XiOptDisableMask) ((XI_OPT_PASS_ID_COUNT >= 32)                                              \
-                             ? 0xFFFFFFFFu                                                         \
-                             : ((1u << (unsigned) XI_OPT_PASS_ID_COUNT) - 1u)))
 
 #define XI_OPT_DISABLE_TBAA XI_OPT_DISABLE_BIT(XI_OPT_PASS_TBAA)
 #define XI_OPT_DISABLE_CONSTFOLD XI_OPT_DISABLE_BIT(XI_OPT_PASS_CONSTFOLD)
