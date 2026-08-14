@@ -102,7 +102,11 @@ int xr_fs_mkdir(const char *path, unsigned int mode) {
     }
     if (errno == EEXIST) {
         struct stat st;
-        if (lstat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
+        /* Resolve the final component here. A symbolic link that points at a
+           directory still names a directory, and absolute paths on macOS
+           routinely traverse /tmp and /var, which are links into /private:
+           refusing them would make every absolute cache root unusable. */
+        if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
             return 0;
         }
     }

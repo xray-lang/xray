@@ -125,8 +125,14 @@ int xr_fs_mkdir(const char *path, unsigned int mode) {
     if (CreateDirectoryA(path, NULL)) {
         return 0;
     }
-    if (GetLastError() == ERROR_ALREADY_EXISTS && xr_fs_is_dir(path)) {
-        return 0;
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        /* Resolve the final component here. A directory junction or symbolic
+           link still names a directory, so the reparse-point bit alone must
+           not turn an existing directory into a hard failure. */
+        DWORD attributes = GetFileAttributesA(path);
+        if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            return 0;
+        }
     }
     return -1;
 }
