@@ -439,7 +439,7 @@ static XaotValueRep compact_adt_value_rep_for_type(const XaotBundle *bundle, con
     rep.rep = XAOT_REP_TAGGED;
     rep.type = type;
     rep.c_type = plan && plan->c_type ? plan->c_type : "XrAotEnumAggregate";
-    rep.flags = XAOT_VALUE_FLAG_ENUM | XAOT_VALUE_FLAG_ENUM_AGGREGATE;
+    rep.flags = XAOT_VALUE_FLAG_ENUM;
     return rep;
 }
 

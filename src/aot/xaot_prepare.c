@@ -4547,7 +4547,7 @@ static bool prepare_compact_adt_value_rep_for_type(const XaotBundle *bundle, con
     out_rep->rep = XAOT_REP_TAGGED;
     out_rep->type = type;
     out_rep->c_type = plan && plan->c_type ? plan->c_type : "XrAotEnumAggregate";
-    out_rep->flags = XAOT_VALUE_FLAG_ENUM | XAOT_VALUE_FLAG_ENUM_AGGREGATE;
+    out_rep->flags = XAOT_VALUE_FLAG_ENUM;
     return true;
 }
 
