@@ -662,8 +662,8 @@ static uint32_t verify_enum_xg_metadata_bits(uint32_t descriptor_bits) {
     return bits;
 }
 
-static bool verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan *plan, char *errbuf,
-                             size_t errbuf_len) {
+XR_FUNC bool xaot_verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan *plan,
+                                   char *errbuf, size_t errbuf_len) {
     const XiEnumData *ed;
     uint16_t expected_max_payload;
 
@@ -6491,7 +6491,8 @@ static bool verify_class_layout_rederives(const XgGlobalEvidence *ev, const Xaot
     return true;
 }
 
-static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
+XR_FUNC bool xaot_verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf,
+                                              size_t errbuf_len) {
     const XgGlobalEvidence *ev;
     uint32_t capability_count = 0;
     const uint32_t *capabilities = xg_capability_catalog(&capability_count);
@@ -7268,6 +7269,15 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (bundle->nlink_dependency_plans != expected_link_dependency_plans)
         return set_error(errbuf, errbuf_len, "AOT link dependency plan count mismatches evidence");
 
+    for (uint32_t fi = 0; fi < bundle->nfunc_attr_plans; fi++) {
+        if (!verify_func_attr_plan(bundle, &bundle->func_attr_plans[fi], errbuf, errbuf_len))
+            return false;
+    }
+    for (uint32_t fi = 0; fi < bundle->nbounds_plans; fi++) {
+        if (!verify_bounds_plan(bundle, &bundle->bounds_plans[fi], errbuf, errbuf_len))
+            return false;
+    }
+
     return true;
 }
 
@@ -7898,7 +7908,7 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, char *errbuf, size_t e
         return false;
     if (bundle->nfunc_plans == 0)
         return set_error(errbuf, errbuf_len, "AOT bundle has no function plans");
-    if (!verify_global_evidence_plan(bundle, errbuf, errbuf_len))
+    if (!xaot_verify_global_evidence_plan(bundle, errbuf, errbuf_len))
         return false;
     if (!xaot_callable_plans_verify(bundle, errbuf, errbuf_len))
         return false;
@@ -7946,7 +7956,7 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, char *errbuf, size_t e
             return false;
     }
     for (fi = 0; fi < bundle->nenum_plans; fi++) {
-        if (!verify_enum_plan(bundle, &bundle->enum_plans[fi], errbuf, errbuf_len))
+        if (!xaot_verify_enum_plan(bundle, &bundle->enum_plans[fi], errbuf, errbuf_len))
             return false;
     }
     for (fi = 0; fi < bundle->narray_storage_plans; fi++) {
@@ -7961,14 +7971,6 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, char *errbuf, size_t e
     for (fi = 0; fi < bundle->narray_class_field_alloc_plans; fi++) {
         if (!verify_array_class_field_alloc_plan(bundle, &bundle->array_class_field_alloc_plans[fi],
                                                  errbuf, errbuf_len))
-            return false;
-    }
-    for (fi = 0; fi < bundle->nfunc_attr_plans; fi++) {
-        if (!verify_func_attr_plan(bundle, &bundle->func_attr_plans[fi], errbuf, errbuf_len))
-            return false;
-    }
-    for (fi = 0; fi < bundle->nbounds_plans; fi++) {
-        if (!verify_bounds_plan(bundle, &bundle->bounds_plans[fi], errbuf, errbuf_len))
             return false;
     }
     for (fi = 0; fi < bundle->nspan_access_plans; fi++) {

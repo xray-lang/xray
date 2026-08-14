@@ -8611,3 +8611,23 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     xr_free(function_order);
     return buf;
 }
+
+XR_FUNC char *xaot_bundle_dump_global_evidence_plan(const XaotBundle *bundle) {
+    XaotBundle projection;
+
+    if (!bundle)
+        return NULL;
+    projection = *bundle;
+    projection.modules = NULL;
+    projection.nmodules = 0;
+    projection.entry_module = 0;
+    projection.target_plans = NULL;
+    projection.representation_refinements = NULL;
+    projection.func_plans = NULL;
+    projection.nfunc_plans = 0;
+    projection.func_plan_cap = 0;
+    projection.value_plans = NULL;
+    projection.nvalue_plans = 0;
+    projection.value_plan_cap = 0;
+    return xaot_bundle_dump_plan(&projection);
+}

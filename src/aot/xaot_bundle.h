@@ -2004,5 +2004,6 @@ xaot_bundle_find_boundary_step_ex(const XaotBundle *bundle, XaotBoundaryStepKind
                                   const XiFunc *func, const XiValue *value, const XiValue *input,
                                   const XiFunc *target_func, uint16_t arg_index);
 XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle);
+XR_FUNC char *xaot_bundle_dump_global_evidence_plan(const XaotBundle *bundle);
 
 #endif  // XAOT_BUNDLE_H

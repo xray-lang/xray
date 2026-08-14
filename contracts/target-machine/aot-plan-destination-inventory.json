@@ -478,6 +478,7 @@
         "src/aot/xaot_bundle.h",
         "src/aot/xaot_prepare.c",
         "src/aot/xaot_verify.c",
+        "src/aot/xaot_verify.h",
         "src/aot/xi_cgen.c",
         "src/aot/xi_cgen_abi_helpers.inc.c",
         "src/aot/xi_cgen_coro.inc.c",
@@ -1118,5 +1119,5 @@
     }
   ],
   "schema": 1,
-  "source_tree_fingerprint": "3c90a7f52dbde7c7b42b7896c61c1c1bdb6f62fc2f78b30908492442785074a7"
+  "source_tree_fingerprint": "f6de64a101cdd7caa048115f0dc1d739b8ecaffe9e220da4df001eece13e1663"
 }
