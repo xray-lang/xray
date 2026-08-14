@@ -2457,6 +2457,61 @@ TEST(cgen_iterator_rune_has_next_consumes_immutable_emission_recipe) {
     xi_func_free(ir);
 }
 
+TEST(cgen_iterator_rune_next_consumes_immutable_emission_recipe) {
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 970,
+                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType string_type = {.kind = XR_KIND_STRING, .id = 971,
+                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType rune_type = {.kind = XR_KIND_RUNE, .id = 972,
+                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType *iterator_args[] = {&rune_type};
+    XrType iterator_type = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 973,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+        .instance = {.class_name = "Iterator", .type_args = iterator_args,
+                     .type_arg_count = 1},
+    };
+    XiFunc *ir = xi_func_new("iterator_rune_next_recipe", &unit_type);
+    XiBlock *entry = ir ? xi_block_new(ir) : NULL;
+    TEST_REQUIRE(entry != NULL, "Iterator<rune>.next recipe fixture allocated");
+    entry->sealed = true;
+    XiValue *source = xi_const_str(ir, entry, "0123456789abcdef", &string_type);
+    XiValue *runes = xi_value_new(ir, entry, XI_CALL_METHOD, &iterator_type, 1);
+    XiValue *next = xi_value_new(ir, entry, XI_CALL_METHOD, &rune_type, 1);
+    XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
+    XiValue *release = xi_value_new(ir, entry, XI_RELEASE, &unit_type, 1);
+    TEST_REQUIRE(source && runes && next && print && release,
+                 "Iterator<rune>.next recipe values allocated");
+    runes->args[0] = source;
+    runes->aux = (void *) "runes";
+    runes->aux_int = 470;
+    next->args[0] = runes;
+    next->aux = (void *) "next";
+    next->aux_int = 114;
+    next->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+    next->call_return_ownership.param_index = -1;
+    next->call_return_ownership.complete = true;
+    print->args[0] = next;
+    release->args[0] = runes;
+    xi_block_set_return(entry, NULL);
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "iterator_rune_next_recipe",
+                                        &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "sealed Iterator<rune>.next recipe should generate");
+    TEST_REQUIRE(count_between(code, code + strlen(code),
+                               "xrt_iterator_rune_next(") == 1,
+                 "CGen must consume the exact next recipe once");
+    TEST_REQUIRE(!contains(code, "XRT_SYM_NEXT"),
+                 "CGen must not select Iterator.next by symbol id");
+    TEST_REQUIRE(contains(code, "xrt_has_pending_error("),
+                 "Iterator.next must preserve the pending-error poll");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_span_passed_only_to_direct_call_omits_data_cache) {
     const char *src = "fn viewLength(view: Slice<byte>) -> int { return len(view) }\n"
                       "fn slicedLength(bytes: Array<byte>) -> int {\n"
@@ -13480,6 +13535,7 @@ int main(void) {
     run_cgen_string_literal_runes_receiver_emits_immediate_without_local();
     run_cgen_string_runes_consumes_immutable_emission_recipe();
     run_cgen_iterator_rune_has_next_consumes_immutable_emission_recipe();
+    run_cgen_iterator_rune_next_consumes_immutable_emission_recipe();
     run_cgen_span_passed_only_to_direct_call_omits_data_cache();
     run_cgen_unused_shared_load_is_debug_only_when_source_bound();
     run_cgen_consumed_shared_load_stays_release_materialized();

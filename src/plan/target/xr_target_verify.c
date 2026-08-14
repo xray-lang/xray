@@ -30,6 +30,7 @@
 #include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_string_runes_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
+#include "../semantic/xr_semantic_iterator_rune_next_shape.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../../base/xmalloc.h"
@@ -2908,6 +2909,7 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
                                                             operation, NULL) ||
             xr_semantic_string_runes_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_iterator_rune_has_next_is_exact(plan->semantic_plan, operation, NULL) ||
+            xr_semantic_iterator_rune_next_is_exact(plan->semantic_plan, operation, NULL) ||
             operation_is_exact_json_namespace_value(plan->semantic_plan, operation, NULL) ||
             (exact_direct_callees &&
              exact_direct_callees[operation->result_value] != 0) ||
@@ -4676,6 +4678,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             }
             expected_calls++;
         }
+        if (xr_semantic_iterator_rune_next_is_exact(semantic, operation, NULL)) {
+            if (expected_calls == UINT32_MAX) {
+                valid = false;
+                break;
+            }
+            expected_calls++;
+        }
         if (operation_is_exact_stringbuilder_to_string(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) { valid = false; break; }
             expected_calls++;
@@ -4844,6 +4853,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         bool iterator_rune_has_next = !semantic_target &&
             xr_semantic_iterator_rune_has_next_is_exact(
                 semantic, operation, &iterator_rune_has_next_receiver);
+        uint32_t iterator_rune_next_receiver = XR_SEMANTIC_INDEX_NONE;
+        bool iterator_rune_next = !semantic_target &&
+            xr_semantic_iterator_rune_next_is_exact(
+                semantic, operation, &iterator_rune_next_receiver);
         uint32_t to_string_receiver = XR_SEMANTIC_INDEX_NONE;
         bool stringbuilder_to_string = !semantic_target &&
             operation_is_exact_stringbuilder_to_string(semantic, operation, &to_string_receiver);
@@ -5571,6 +5584,31 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_HAS_NEXT &&
                     call->target_kind ==
                         XR_TARGET_CALL_TARGET_ITERATOR_RUNE_HAS_NEXT &&
+                    call->result_ownership == XR_TARGET_CALL_NONE && result &&
+                    result->slot < plan->slots_count &&
+                    plan->slots[result->slot].root_kind == XR_TARGET_ROOT_NONE &&
+                    plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+            if (!valid)
+                break;
+        } else if (iterator_rune_next) {
+            valid = result_type && result_kind == XR_MACHINE_REP_RUNE &&
+                    !suspends &&
+                    reconstruct_call_identity(
+                        "xray-target-iterator-rune-next-v1", operation->id,
+                        result_type->id, iterator_rune_next_receiver,
+                        &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    call->argument_count == 0 && call->flags == 0 &&
+                    call->calling_convention ==
+                        XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_NEXT &&
+                    call->target_kind ==
+                        XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NEXT &&
                     call->result_ownership == XR_TARGET_CALL_NONE && result &&
                     result->slot < plan->slots_count &&
                     plan->slots[result->slot].root_kind == XR_TARGET_ROOT_NONE &&

@@ -106,7 +106,7 @@ materialization. AOT prepare runs only after every required BOX or UNBOX is
 present at its recorded source and use, and rejects a missing, extra, reordered,
 or stale adapter before ABI planning. This adds no public value representation,
 layout, or calling-convention change.
-The C emission projection schema 20 preserves the exact materialization recipe
+The C emission projection schema 21 preserves the exact materialization recipe
 and immutable byte payload for every verified String literal row. CGen
 mechanically consumes that row and cannot recover literal bytes, a dynamic
 tag, field spelling, or ownership from mutable Xi values. Missing, extra,
@@ -133,23 +133,23 @@ callee's first lexical shared-slot owner and requires that owner's unique child
 and slot pointer to match, so root-owned sibling helpers are accepted without
 name or type guessing. The row grants no closure body, allocation, root, or
 cleanup authority.
-For an exact scalar `XI_CHAN_TRY_RECV`, schema 20 preserves the receiver semantic
+For an exact scalar `XI_CHAN_TRY_RECV`, schema 21 preserves the receiver semantic
 value and exact scalar unbox helper spelling. Sync and coroutine CGen consume
 that recipe mechanically; they cannot infer it from Xi type/representation or
 fall back to a legacy adapter. This grants no Channel object layout, receive
 scheduling, ownership transfer, aggregate/tuple payload, root, or cleanup
-authority. For the exact String byte-slice intrinsic, schema 20 preserves the
+authority. For the exact String byte-slice intrinsic, schema 21 preserves the
 borrowed `xr_span_t` view, its source semantic value, and the fixed
 `xrt_span_from_string_bytes` recipe. CGen has no selector-, alias-, or
 type-derived fallback; this grants no generic String method or Slice ABI.
-For an exact payload-bearing source enum constructor, schema 20 owns the
+For an exact payload-bearing source enum constructor, schema 21 owns the
 immutable enum layout ID, discriminant, declaration/member spellings,
 namespace receiver identity, and ordered payload semantic identities. Target
 call rows authorize the constructor and tagged result; CGen only consumes the
 verified recipe and cannot infer its type, selector, arity, or representation
 from Xi. Direct-local enum arguments may bind distinct owned/borrowed physical
 representation rows, but their caller and callee ABI remains exactly tagged.
-For exact `Array.withCapacity` and `Array.filled` constructors, schema 20 owns
+For exact `Array.withCapacity` and `Array.filled` constructors, schema 21 owns
 the constructor kind, element storage, owned dynamic result, fixed runtime
 symbol, and ordered capacity/count/fill semantic identities. The Target call
 and argument rows bind those facts before refinement, and CGen consumes only
@@ -157,20 +157,28 @@ the verified recipe; selector text, Xi type, packed immediates, and mutable
 operand metadata grant no fallback authority. This does not authorize any
 other Array intrinsic, direct-local container ABI, span representation, root
 map, or cleanup behavior.
-For exact `String.runes()`, schema 20 owns the borrowed String receiver, owned
+For exact `String.runes()`, schema 21 owns the borrowed String receiver, owned
 `Iterator<rune>` dynamic result, exact Target call identity, fixed
 `xrt_string_runes` symbol, slot, layout, and extent. Refinement independently
 rebuilds the same frozen SemanticPlan and TargetPlan facts, while CGen consumes
 only the immutable recipe. Selector text, live Xi types, arity, and mutable
 operand metadata grant no fallback authority; this does not authorize other
 Iterator members or a general method ABI.
-For exact `Iterator<rune>.hasNext()`, schema 20 owns the scalar boolean result,
+For exact `Iterator<rune>.hasNext()`, schema 21 owns the scalar boolean result,
 the immutable `xrt_iterator_rune_has_next` recipe, and the receiver identity
 already proven by the exact prior `String.runes()` authority. Refinement
 independently reconstructs the SemanticPlan and TargetPlan call facts before
 CGen mechanically consumes the recipe. Selector text, live Xi types, arity,
 and mutable operands grant no fallback authority; this does not authorize
 `next`, `nth`, another Iterator specialization, or a general iterator ABI.
+For exact `Iterator<rune>.next()`, schema 21 separately owns the trivial native
+rune result and immutable `xrt_iterator_rune_next` recipe. The shared semantic
+judgement first proves that its receiver is the unique same-function result of
+an exact frozen `String.runes()` operation; TargetPlan, refinement, and
+CEmission independently rebuild that chain. CGen consumes only the projected
+operand identity and helper spelling and preserves the pending-error poll. No
+selector, live type, arity, `nth`, other Iterator specialization, or generic
+method path can substitute for that authority.
 An AOT cross-execution transfer row binds its site and payload to exactly one
 representation authority. A TargetPlan value binding and a legacy value row
 are mutually exclusive; the only accepted legacy rows are the independently
@@ -393,24 +401,25 @@ anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de0
 anchor-sha256: src/aot/xaot_prepare.c a518451751ea86b4aa7bf23cd568745a2b156258f88d0c48985a9dc32521844f
 anchor-sha256: src/aot/xaot_bundle.c 81c1abe09b224312abece4db6eead5be3bfa48bb50e39a75c1d7dbf03fbde21c
 anchor-sha256: src/aot/xaot_verify.c f0012f689493caba9ca93f2dadeb527e56ea4cd35b8d96b68ba563c68ba31033
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 83f47717fcedb4562008eba5fe916b31b201ceb0df7f3da0f0d27a90dd0772c3
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c d24ed5a1f0ce08d2e1777e748a211082c540e70529a2875736c5c145459f929f
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 70df8d4d8c285f3a3997b16b13d42e9cf195c2a6711f01d11d039f2e7a4f4573
-anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 5c80cd82d23ebd2315750c84a9d1b18899e8b210cbbfdc71b2c28be869012986
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c ddc1b7645b321c24099926080967f0879f658c03bf70bce5d7321aabdd465aab
+anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 15e57d0c697879ebfcc97c17ad8e6ab11af1471950a43b723d951f22c8c130b5
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c d5a901dfbaf49b4186f6281a03400b1332ba84e4df55a05b3304c8ca9fa8a035
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h 1f1ad5d586e66259ba51249f3829ed83cdeac5a0d5d23e5d7152dc9d5c009b29
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c b323399b0e904047af88cd4224b5281a043dcf75774e0b5a4bf7399712edbc9b
 anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h c73cff6cc95acdd375a3ede48b49ae7313500d3e3824725757b299f48d687243
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h bbcaf57e24a92de079a0cefa2bdf5c753327b3c737d656cb57fbe2b6a648616c
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d19001054ed1aa8334872e2998949bb515a8a2cf46fc2d682a681c82d6529f9d
+anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h d2dff7451f5eb731348efec9541a2b8cbbfbc879e049d163ed46479352a62a1e
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 4e63b69f6828aefd149170dc7815da693d3ef88d7cefb182c807acacbbaa3dec
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c f0110919fa8e0b939577fa1ce860249510c887a428bd16b561f4a00b883b1974
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 8477013e62505b7872ac1b12790c00361f8f373e684a25df765dddf296251f5d
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 0d7889792680ab9682a461b3383d5c111ff5ffb66638be054434418d5346ab2f
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 375af2e4b45271d06e6ce6ed798be2e6f9f8786c25e68d38ea3f4ca6f41160c6
-anchor-sha256: src/aot/xi_cgen.c b5816d347deab346d42eca4aa2bae35c328a1fedb6ddb51ef186a45752f3a3ed
+anchor-sha256: src/aot/xi_cgen.c 86cc8e86ee4c455abe79459b54cf29941bf38781675906002c658d9f524e1094
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
 anchor-sha256: src/aot/xrt_core_freestanding.h 4637d9be259b16363f74d330ad0bc3d016c71f588d418e71ed9a57cffcf6ecfb
-anchor-sha256: src/aot/xrt_method.h 2ba3e62176145cad46b5d6ccf4bc4ceef777467fd48b54dfd8396d82e7e486b3
+anchor-sha256: src/aot/xrt_method.h d14c181542fa3b68a61d0caa9fb4db5ba7cb1abb953f2393970bc7b9dc8fc353
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: include/xray_hosted_fragment_abi.h bcf50466f8320c265a49c6776f669912b83ac4ac3d04f397d4f6c527f1ead02c
 anchor-sha256: src/app/cli/xcmd_build.c 900651a20c01bf90053bf8af7c1241e2e5c9104bb8814433d6afdc2133f031b9

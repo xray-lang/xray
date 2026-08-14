@@ -850,6 +850,10 @@ static inline uint8_t xrt_iterator_rune_has_next(XrValue receiver) {
     return (uint8_t) XR_TO_BOOL(xrt_method_0(receiver, XRT_SYM_HAS_NEXT));
 }
 
+static inline uint32_t xrt_iterator_rune_next(XrValue receiver) {
+    return XR_TO_RUNE(xrt_method_0(receiver, XRT_SYM_NEXT));
+}
+
 static inline XrValue xrt_len_value(XrValue recv) {
     XrValue result = xrt_method_0(recv, XRT_SYM_LENGTH);
     if (!XR_IS_NULL(result))
