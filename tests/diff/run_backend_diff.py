@@ -1,9 +1,23 @@
 #!/usr/bin/env python3
-"""VM/AOT differential runner: the same .xr through both backends, byte for byte.
+"""Differential runner: the same .xr through several execution forms, byte for byte.
 
-This is the strongest correctness asset in the repo. A divergence between VM and
-AOT output is a bug in one of the two backends, so the net gates every case
+This is the strongest correctness asset in the repo. A divergence between two
+forms of the same program is a bug in one of them, so the net gates every case
 except a written baseline of known divergences.
+
+Three forms are available, selected with XRAY_DIFF_BACKENDS:
+
+  vm     `xray run` -- compile in-process, execute on the VM.
+  aot    `xray build --native` -- the Xi IR native pipeline, then run the binary.
+  embed  `xray build` (no --native) -- the default build: bytecode is serialized
+         through the constant pool into a C byte array, linked against the
+         runtime, and deserialized by the VM inside the produced binary.
+
+`embed` shares the VM with `vm` and differs from it only by a constant-pool
+serialize/deserialize round trip, so a vm/embed divergence localizes to that
+round trip or to the embedded entry path. That form used to have no differential
+gate at all, and two defects reached the tree through the gap: a dropped BigInt
+literal tag, and host-heap pointers written into the container.
 
 Observable contract = stdout + exit code, compared byte for byte (normalized
 stderr only when a lane enables that channel). Backend build logs are not
@@ -44,6 +58,13 @@ from xraytest import cache, platform, proc, progress, ratchet, scheduler  # noqa
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
 CASE_DIR = SCRIPT_DIR / "cases"
+
+# Every form this runner knows, in the order a lane evaluates them. The first
+# enabled one is the reference the others are compared against.
+BACKEND_ORDER = ("vm", "aot", "embed")
+
+# Forms that produce a standalone binary and therefore use the binary cache.
+BINARY_BACKENDS = ("aot", "embed")
 
 # A case directory's identity includes the .xr.expected oracle: a changed
 # expected file must change the key, or a stale AOT binary would be diffed
@@ -180,6 +201,9 @@ class RunnerConfig:
     aot_opt: str
     aot_cache: Path
     aot_bin_cache: Path
+    # The embedded-bytecode form gets its own binary cache: the two forms build
+    # the same case into different binaries, so one cache would answer for both.
+    embed_bin_cache: Path
     diff_stderr: bool
     # Optimizer policy handed to both lanes, or "" for each pipeline's default.
     #
@@ -200,23 +224,31 @@ class RunnerConfig:
     case_timeout: float | None
 
 
-def build_aot_binary(
-    config: RunnerConfig, case: Path, rel: str, case_key: str
+def binary_cache_dir(config: RunnerConfig, kind: str) -> Path:
+    return config.aot_bin_cache if kind == "aot" else config.embed_bin_cache
+
+
+def build_case_binary(
+    config: RunnerConfig, kind: str, case: Path, rel: str, case_key: str
 ) -> tuple[Path | None, bytes]:
-    """Build (or reuse) the native binary for one case, under a directory lock.
+    """Build (or reuse) one case's binary for a binary-producing form, under a lock.
 
     The lock is the shared DirLock: exactly one racer builds while the rest wait,
     then everyone reuses the finished binary. The tmp-then-rename keeps a partial
     build from ever being seen as a cache hit.
+
+    `aot` and `embed` differ only in the build command and the cache root: the
+    surrounding locking, reuse, and log capture are identical, so they share this
+    body rather than drifting apart in two copies.
     """
-    bin_dir = config.aot_bin_cache / case_cache_name(rel, case_key)
-    binary = bin_dir / "aot"
+    bin_dir = binary_cache_dir(config, kind) / case_cache_name(rel, case_key)
+    binary = bin_dir / kind
     if binary.is_file() and os.access(binary, os.X_OK):
         return binary, f"cached: {binary}\n".encode()
 
     import threading
 
-    tmp = bin_dir / f"aot.{os.getpid()}.{threading.get_ident()}"
+    tmp = bin_dir / f"{kind}.{os.getpid()}.{threading.get_ident()}"
     lock = cache.DirLock(bin_dir.with_name(bin_dir.name + ".lock"))
     bin_dir.mkdir(parents=True, exist_ok=True)
     if not lock.acquire():
@@ -230,10 +262,17 @@ def build_aot_binary(
             pass
         env = os.environ.copy()
         env.setdefault("XRAY_AOT_FAST_TEST_BUILD", "1")
-        cmd = [
-            config.xray, "build", "--native", "-O", config.aot_opt,
-            "--cache-dir", config.aot_cache, case, "-o", tmp,
-        ]
+        if kind == "aot":
+            cmd = [
+                config.xray, "build", "--native", "-O", config.aot_opt,
+                "--cache-dir", config.aot_cache, case, "-o", tmp,
+            ]
+        else:
+            # The default build. -O reaches only the host C compile of the
+            # generated shim, so it is held at the lane's level for build speed;
+            # what is under test is the serialized bytecode, which -O cannot
+            # reach. No --cache-dir: the bytecode path has no object cache.
+            cmd = [config.xray, "build", "-O", config.aot_opt, case, "-o", tmp]
         if config.xi_opt:
             cmd[2:2] = ["--xi-opt", config.xi_opt]
         result = proc.run(cmd, env=env, timeout=config.case_timeout)
@@ -269,10 +308,10 @@ def run_backend(
         rc = 124 if r.timed_out else r.returncode
         return BackendResult(rc, r.stdout, r.stderr)
 
-    if kind == "aot":
+    if kind in BINARY_BACKENDS:
         rel = rel_path(case)
         key = cache.dir_key(case.parent, CASE_DIR_GLOBS)
-        binary, buildlog = build_aot_binary(config, case, rel, key)
+        binary, buildlog = build_case_binary(config, kind, case, rel, key)
         if binary is None:
             return BackendResult(200, b"BUILDFAIL\n", b"", buildlog)
         r = proc.run([binary, *args], stdin=stdin_bytes, timeout=config.case_timeout)
@@ -291,7 +330,7 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
 
     enabled: list[str] = []
     excluded: list[str] = []
-    for backend in ("vm", "aot"):
+    for backend in BACKEND_ORDER:
         if backend not in config.backends:
             continue
         if case_backends and backend not in case_backends:
@@ -301,7 +340,11 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
 
     prefix = f"  {name:<84}"
     if len(enabled) < 2:
-        if enabled == ["vm"] and aot_reject:
+        # The rejection contract is an assertion about the native backend, so it
+        # is only owed by a lane that runs it. A vm/embed lane must not re-assert
+        # it: the AOT lane already does, and doing it here would spend a native
+        # build per case on a lane that has no native side.
+        if enabled == ["vm"] and aot_reject and "aot" in config.backends:
             args = read_args(case)
             stdin_bytes = read_stdin(case)
             vm = run_backend(config, "vm", case, args, stdin_bytes)
@@ -436,19 +479,22 @@ def collect_cases(base_cases_file: str, extra_cases_file: str) -> list[Path]:
     return cases
 
 
-def aot_binary_cache_hot(config: RunnerConfig, selected: list[tuple[int, Path]]) -> bool:
-    if "aot" not in config.backends:
+def binary_cache_hot(config: RunnerConfig, selected: list[tuple[int, Path]]) -> bool:
+    """True when every binary this lane needs is already built and executable."""
+    kinds = [k for k in BINARY_BACKENDS if k in config.backends]
+    if not kinds:
         return True
     for _order, case in selected:
         case_backends_raw = read_first_directive(case, "// diff-backends: ", 5)
         case_backends = [b.strip() for b in case_backends_raw.split(",") if b.strip()]
-        if case_backends and "aot" not in case_backends:
-            continue
         rel = rel_path(case)
         key = cache.dir_key(case.parent, CASE_DIR_GLOBS)
-        binary = config.aot_bin_cache / case_cache_name(rel, key) / "aot"
-        if not (binary.is_file() and os.access(binary, os.X_OK)):
-            return False
+        for kind in kinds:
+            if case_backends and kind not in case_backends:
+                continue
+            binary = binary_cache_dir(config, kind) / case_cache_name(rel, key) / kind
+            if not (binary.is_file() and os.access(binary, os.X_OK)):
+                return False
     return True
 
 
@@ -480,6 +526,11 @@ def main(argv: list[str]) -> int:
     xray = Path(xray_raw)
 
     backends = [b.strip() for b in os.environ.get("XRAY_DIFF_BACKENDS", "vm,aot").split(",") if b.strip()]
+    unknown = [b for b in backends if b not in BACKEND_ORDER]
+    if unknown:
+        print(f"error: unknown backend(s) in XRAY_DIFF_BACKENDS: {','.join(unknown)}", file=sys.stderr)
+        print(f"known backends: {','.join(BACKEND_ORDER)}", file=sys.stderr)
+        return 2
     requested_jobs = os.environ.get("XRAY_DIFF_JOBS", os.environ.get("XRAY_TEST_JOBS", "auto"))
     jobs, auto_jobs = configure_jobs(requested_jobs)
     aot_opt = os.environ.get("XRAY_AOT_TEST_OPT", "0")
@@ -492,6 +543,12 @@ def main(argv: list[str]) -> int:
     )
     aot_bin_cache = Path(
         os.environ.get("XRAY_DIFF_BIN_CACHE_DIR", str(diff_stable_cache_dir("backend-diff-bin", xray) / cache_tag))
+    )
+    embed_bin_cache = Path(
+        os.environ.get(
+            "XRAY_DIFF_EMBED_BIN_CACHE_DIR",
+            str(diff_stable_cache_dir("backend-diff-embed-bin", xray) / cache_tag),
+        )
     )
     diff_stderr = os.environ.get("XRAY_DIFF_STDERR", "0") == "1"
     shard_total_raw = os.environ.get("XRAY_DIFF_SHARD_TOTAL", "1")
@@ -512,8 +569,8 @@ def main(argv: list[str]) -> int:
 
     config = RunnerConfig(
         xray=xray, backends=backends, jobs=jobs, aot_opt=aot_opt,
-        aot_cache=aot_cache, aot_bin_cache=aot_bin_cache, diff_stderr=diff_stderr,
-        case_timeout=case_timeout, xi_opt=xi_opt,
+        aot_cache=aot_cache, aot_bin_cache=aot_bin_cache, embed_bin_cache=embed_bin_cache,
+        diff_stderr=diff_stderr, case_timeout=case_timeout, xi_opt=xi_opt,
     )
 
     if single_case:
@@ -556,12 +613,12 @@ def main(argv: list[str]) -> int:
             selected.append((case_index, case))
         case_index += 1
 
-    cache_state = "hot" if aot_binary_cache_hot(config, selected) else "cold"
+    cache_state = "hot" if binary_cache_hot(config, selected) else "cold"
     if auto_jobs and cache_state == "hot":
         jobs = max(1, min(jobs, env_int("XRAY_DIFF_HOT_MAX_AUTO_JOBS", 8)))
         config.jobs = jobs
 
-    print("=== Backend Differential (VM / AOT) ===")
+    print(f"=== Backend Differential ({' / '.join(b.upper() for b in backends)}) ===")
     print(f"Binary:   {xray_raw}")
     print(f"Backends: {','.join(backends)}")
     print(f"Jobs:     {jobs}")
@@ -572,6 +629,8 @@ def main(argv: list[str]) -> int:
     print(f"Xi opt:   {xi_opt if xi_opt else 'per-pipeline default (lanes differ)'}")
     print(f"Cache:    {aot_cache}")
     print(f"BinCache: {aot_bin_cache}")
+    if "embed" in backends:
+        print(f"EmbedBinCache: {embed_bin_cache}")
     print("RunCache: disabled")
     if shard_total > 1:
         print(f"Shard:    {shard_index} / {shard_total}")
@@ -649,7 +708,7 @@ def main(argv: list[str]) -> int:
         print(f"=== New differential failures (not in {rel_path(baseline_path)}) ===")
         for name in verdict.new_failures:
             print(f"  {name}")
-        print("A VM/AOT divergence is a correctness bug in one of the two backends.")
+        print(f"A divergence between {' / '.join(backends)} is a correctness bug in one of them.")
         print("Fix it, or -- only with a written reason -- add it to the baseline.")
         status = 1
 

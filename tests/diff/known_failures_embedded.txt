@@ -1,0 +1,18 @@
+# Embedded-bytecode differential ratchet baseline
+#
+# Ratchet for backend_diff_embedded: the same .xr through `xray run` and through
+# the default `xray build`, whose binary carries the program as bytecode
+# serialized into the constant-pool container and deserialized by the VM at
+# startup. Both sides execute the same VM, so a divergence here is the round
+# trip, not a backend disagreement about the language.
+#
+# Rules are the shared ones: the list may only shrink, a case outside it that
+# fails is a regression, and a listed case that starts passing must have its
+# line deleted in the same change.
+#
+# This file is deliberately empty. The lane was added because the embedded form
+# had no differential gate at all, and the first full-corpus run found real
+# divergences -- crashes and wrong output, not harness noise. Baselining them
+# would restate the same blind spot in a file instead of a missing lane, so the
+# failures stay visible until they are fixed. Add a line only with a written
+# reason, and never to make an unrelated change go green.
