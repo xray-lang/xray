@@ -176,6 +176,7 @@ typedef struct SourceNamespaceStorageFixture {
     XiImportRef import_ref;
     XiValue *namespace_ref;
     XiValue *namespace_alias;
+    XiValue *namespace_retain;
     XiValue *namespace_store;
     XiValue *receiver;
     XiValue *receiver_alias;
@@ -658,7 +659,7 @@ static const XiFunc *source_namespace_resolve_method(
 }
 
 static SourceNamespaceStorageFixture source_namespace_storage_fixture_create(
-    bool extra_use) {
+    bool extra_use, bool standalone) {
     SourceNamespaceStorageFixture fixture = {0};
     XiFunc *dependency_root =
         xi_func_new("source_namespace_dependency_init", &scalar_unit);
@@ -735,22 +736,33 @@ static SourceNamespaceStorageFixture source_namespace_storage_fixture_create(
     fixture.namespace_ref = xi_value_new(fixture.function, root_entry,
                                           XI_IMPORT_REF,
                                           &module_namespace, 0);
-    fixture.namespace_alias = xi_value_new(fixture.function, root_entry,
-                                            XI_COPY,
-                                            &module_namespace, 1);
+    fixture.namespace_alias = standalone
+                                  ? NULL
+                                  : xi_value_new(fixture.function, root_entry,
+                                                 XI_COPY,
+                                                 &module_namespace, 1);
+    fixture.namespace_retain = xi_value_new(fixture.function, root_entry,
+                                             XI_RETAIN,
+                                             &module_namespace, 1);
     fixture.namespace_store = xi_value_new(fixture.function, root_entry,
-                                            XI_SET_SHARED,
-                                            &scalar_unit, 1);
-    REQUIRE(fixture.namespace_ref && fixture.namespace_alias &&
-            fixture.namespace_store);
+                                             XI_SET_SHARED,
+                                             &scalar_unit, 1);
+    REQUIRE(fixture.namespace_ref && fixture.namespace_retain &&
+            fixture.namespace_store &&
+            (standalone || fixture.namespace_alias));
     XiImportRef *live_import = (XiImportRef *) xi_func_arena_alloc(
         fixture.function, sizeof(*live_import));
     REQUIRE(live_import);
     *live_import = fixture.import_ref;
     fixture.namespace_ref->aux = live_import;
-    fixture.namespace_alias->args[0] = fixture.namespace_ref;
-    fixture.namespace_alias->aux_int = XI_COPY_KIND_IDENTITY;
-    fixture.namespace_store->args[0] = fixture.namespace_alias;
+    if (fixture.namespace_alias) {
+        fixture.namespace_alias->args[0] = fixture.namespace_ref;
+        fixture.namespace_alias->aux_int = XI_COPY_KIND_IDENTITY;
+    }
+    fixture.namespace_retain->args[0] = fixture.namespace_ref;
+    fixture.namespace_store->args[0] = fixture.namespace_alias
+                                           ? fixture.namespace_alias
+                                           : fixture.namespace_ref;
     fixture.namespace_store->aux_int = 0;
     if (extra_use) {
         XiValue *unexpected = xi_value_new(fixture.function, root_entry,
@@ -760,19 +772,21 @@ static SourceNamespaceStorageFixture source_namespace_storage_fixture_create(
     }
     fixture.function->nshared = 1;
     xi_block_set_return(root_entry, NULL);
-    fixture.receiver = xi_value_new(fixture.caller, caller_entry,
-                                     XI_GET_SHARED, &module_namespace, 0);
-    fixture.receiver_alias = xi_value_new(fixture.caller, caller_entry,
-                                          XI_COPY, &module_namespace, 1);
-    fixture.call = xi_value_new(fixture.caller, caller_entry,
-                                XI_CALL_METHOD, &scalar_unit, 1);
-    REQUIRE(fixture.receiver && fixture.receiver_alias && fixture.call);
-    fixture.receiver->aux_int = 0;
-    fixture.receiver_alias->args[0] = fixture.receiver;
-    fixture.receiver_alias->aux_int = XI_COPY_KIND_IDENTITY;
-    fixture.call->args[0] = fixture.receiver_alias;
-    fixture.call->aux = (void *) "worker";
-    fixture.call->aux_int = 0;
+    if (!standalone) {
+        fixture.receiver = xi_value_new(fixture.caller, caller_entry,
+                                         XI_GET_SHARED, &module_namespace, 0);
+        fixture.receiver_alias = xi_value_new(fixture.caller, caller_entry,
+                                               XI_COPY, &module_namespace, 1);
+        fixture.call = xi_value_new(fixture.caller, caller_entry,
+                                    XI_CALL_METHOD, &scalar_unit, 1);
+        REQUIRE(fixture.receiver && fixture.receiver_alias && fixture.call);
+        fixture.receiver->aux_int = 0;
+        fixture.receiver_alias->args[0] = fixture.receiver;
+        fixture.receiver_alias->aux_int = XI_COPY_KIND_IDENTITY;
+        fixture.call->args[0] = fixture.receiver_alias;
+        fixture.call->aux = (void *) "worker";
+        fixture.call->aux_int = 0;
+    }
     xi_block_set_return(caller_entry, NULL);
     fixture.function->stage = fixture.caller->stage =
         XI_STAGE_SEMANTIC_LOWERED;
@@ -962,7 +976,7 @@ static XrAotRefinementPlan *build_refused_plan(
 
 static void test_open_target_direct_call_refuses_without_baseline_change(void) {
     SourceNamespaceStorageFixture fixture =
-        source_namespace_storage_fixture_create(false);
+        source_namespace_storage_fixture_create(false, false);
     XrFingerprint semantic_before =
         xr_target_plan_semantic_fingerprint(fixture.target_plan);
     XrFingerprint target_before =
@@ -1163,7 +1177,7 @@ static void test_direct_call_out_of_range_request_fails_closed(void) {
 
 static void test_stale_state_and_baseline_mutations_fail_closed(void) {
     SourceNamespaceStorageFixture fixture =
-        source_namespace_storage_fixture_create(false);
+        source_namespace_storage_fixture_create(false, false);
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = build_refused_plan(fixture.target_plan, &diag);
     XrAotRefinementPlanView original = xr_aot_refinement_plan_view(plan);
@@ -1925,7 +1939,7 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
 
 static void test_source_namespace_storage_is_exact_and_fail_closed(void) {
     SourceNamespaceStorageFixture fixture =
-        source_namespace_storage_fixture_create(false);
+        source_namespace_storage_fixture_create(false, false);
     REQUIRE((fixture.target_plan->completed_family_mask &
              XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE) != 0);
     uint32_t import_value = XR_SEMANTIC_INDEX_NONE;
@@ -2065,7 +2079,60 @@ static void test_source_namespace_storage_is_exact_and_fail_closed(void) {
     xr_aot_refinement_plan_free(plan);
     source_namespace_storage_fixture_free(&fixture);
     SourceNamespaceStorageFixture extra =
-        source_namespace_storage_fixture_create(true);
+        source_namespace_storage_fixture_create(true, false);
+    source_namespace_storage_fixture_free(&extra);
+}
+
+static void test_standalone_source_namespace_storage_is_exact_and_fail_closed(void) {
+    SourceNamespaceStorageFixture fixture =
+        source_namespace_storage_fixture_create(false, true);
+    REQUIRE(xr_semantic_plan_dependency_count(fixture.function->semantic_plan) == 1 &&
+            xr_semantic_plan_call_target_count(fixture.function->semantic_plan) == 0 &&
+            (fixture.target_plan->completed_family_mask &
+             XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE) != 0);
+    uint32_t import_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_operation_count(fixture.function->semantic_plan);
+         i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(fixture.function->semantic_plan, i);
+        if (operation && operation->opcode == XI_IMPORT_REF)
+            import_value = operation->result_value;
+    }
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(fixture.target_plan, import_value);
+    REQUIRE(import_value != XR_SEMANTIC_INDEX_NONE && binding &&
+            fixture.target_plan->machine_reps[binding->register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            fixture.target_plan->machine_reps[binding->register_rep].ownership ==
+                XR_TARGET_OWNERSHIP_BORROWED);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, &policy, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    xi_opt_refresh_representations_with_policy(fixture.function, &policy);
+    REQUIRE(fixture.namespace_ref->rep == XR_REP_TAGGED &&
+            xr_aot_representation_materialization_verify(
+                &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    XiImportRef *live_import = (XiImportRef *) fixture.namespace_ref->aux;
+    const char *module_path = live_import->module_path;
+    live_import->module_path = "fixture/forged_standalone_dependency.xr";
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY ||
+            diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    live_import->module_path = module_path;
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    xr_aot_refinement_plan_free(plan);
+    source_namespace_storage_fixture_free(&fixture);
+    SourceNamespaceStorageFixture extra =
+        source_namespace_storage_fixture_create(true, true);
     source_namespace_storage_fixture_free(&extra);
 }
 
@@ -2547,6 +2614,7 @@ int main(void) {
     test_direct_local_shared_callee_storage_is_exact_and_fail_closed();
     test_direct_local_go_callee_storage_is_exact_and_fail_closed();
     test_source_namespace_storage_is_exact_and_fail_closed();
+    test_standalone_source_namespace_storage_is_exact_and_fail_closed();
     test_exact_string_literal_storage_is_tagged_and_fail_closed();
     test_stringbuilder_constructor_refinement_is_exact();
     test_bundle_owns_empty_policy_bound_authority();

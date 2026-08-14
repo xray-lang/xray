@@ -3556,6 +3556,34 @@ static bool verify_dependency_rows(const XrSemanticPlan *plan, char *error, size
     return true;
 }
 
+static bool source_namespace_dependency_row(const XrSemanticPlan *plan,
+                                            const XrSemanticOperationRecord *operation,
+                                            uint32_t *out_dependency) {
+    if (!plan || !operation || !out_dependency || operation->opcode != XI_IMPORT_REF ||
+        operation->function != 0 || operation->operand_count != 0 ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
+        operation->metadata_count != 2 ||
+        operation->metadata_begin + 1u >= plan->metadata_count)
+        return false;
+    const char *module_path = plan->metadata[operation->metadata_begin];
+    const char *member = plan->metadata[operation->metadata_begin + 1u];
+    if (!module_path || !module_path[0] || !member || member[0] != '\0')
+        return false;
+    uint32_t match = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->dependency_count; i++) {
+        const XrSemanticDependencyRecord *dependency = &plan->dependencies[i];
+        if (!dependency->module_path || strcmp(dependency->module_path, module_path) != 0)
+            continue;
+        if (match != XR_SEMANTIC_INDEX_NONE)
+            return false;
+        match = i;
+    }
+    if (match == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    *out_dependency = match;
+    return true;
+}
+
 bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t error_size) {
     if (!plan || !plan->frozen || plan->schema != XR_SEMANTIC_SCHEMA_VERSION)
         return report(error, error_size, "XR_SEM_0004",
@@ -3653,6 +3681,23 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
             xr_free(used);
             return false;
         }
+    }
+    for (uint32_t operation_index = 0;
+         valid && operation_index < plan->operation_count; operation_index++) {
+        const XrSemanticOperationRecord *operation = &plan->operations[operation_index];
+        if (operation->opcode != XI_IMPORT_REF ||
+            operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
+            operation->metadata_count != 2 ||
+            operation->metadata_begin + 1u >= plan->metadata_count ||
+            plan->metadata[operation->metadata_begin + 1u][0] != '\0')
+            continue;
+        uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
+        if (!source_namespace_dependency_row(plan, operation, &dependency) ||
+            dependency >= dependency_count) {
+            valid = false;
+            break;
+        }
+        used[dependency] = 1;
     }
     for (uint32_t target_index = 0; valid && target_index < plan->call_target_count;
          target_index++) {

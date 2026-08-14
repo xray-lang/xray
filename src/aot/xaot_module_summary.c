@@ -13,7 +13,6 @@
 #include "../../include/xray_version.h"
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
-#include "../incremental/xr_cache_artifact_verify.h"
 #include "../incremental/xr_cache_store.h"
 #include "../incremental/xr_module_summary_build.h"
 #include "../ir/xi_module.h"
@@ -38,6 +37,8 @@ typedef struct XaotModuleSummaryReport {
 typedef struct XaotModuleSummaryBuild {
     XrDependencyGraph *graph;
     XrCacheStore *store;
+    XiModule *const *modules;
+    int module_count;
     XrStableId *ids;
     XrModuleSummaryFacts shared;
     bool rebuild;
@@ -49,6 +50,8 @@ typedef struct XaotModuleSummaryBuild {
  * unchanged rather than proving some artifact happens to sit at the key. */
 typedef struct XaotXsmMatchContext {
     const XrSemanticPlan *expected;
+    const XrSemanticPlan *const *dependencies;
+    uint32_t dependency_count;
     bool matched;
 } XaotXsmMatchContext;
 
@@ -144,7 +147,14 @@ static bool verify_xsm_matches_plan(XrCacheArtifactKind kind, XrCacheKey key,
 
     XrSemanticPlan *decoded = NULL;
     char error[256];
-    if (!xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)))
+    bool decoded_ok = ctx->dependency_count == 0
+                          ? xr_xsm_decode(bytes, size, &decoded, error,
+                                          sizeof(error))
+                          : xr_xsm_decode_module_set(
+                                bytes, size, ctx->dependencies,
+                                ctx->dependency_count, &decoded, error,
+                                sizeof(error));
+    if (!decoded_ok)
         return false;
     bool ok = xr_semantic_plan_is_verified(decoded) &&
               xr_fingerprint_equal(xr_semantic_plan_fingerprint(decoded),
@@ -159,6 +169,78 @@ static bool rejected_publish(XrCachePublishStatus status) {
            status == XR_CACHE_PUBLISH_TOO_LARGE;
 }
 
+static const XrSemanticPlan *module_semantic_plan(const XiModule *module);
+
+static const XrSemanticEntityRecord *semantic_module_entity(
+    const XrSemanticPlan *plan) {
+    const XrSemanticEntityRecord *match = NULL;
+    size_t entity_count = xr_semantic_plan_entity_count(plan);
+    for (size_t i = 0; i < entity_count; i++) {
+        const XrSemanticEntityRecord *entity =
+            xr_semantic_plan_entity(plan, (uint32_t) i);
+        if (!entity || entity->kind != XR_SEM_ENTITY_MODULE)
+            continue;
+        if (match)
+            return NULL;
+        match = entity;
+    }
+    return match;
+}
+
+static bool collect_semantic_dependencies(
+    const XaotModuleSummaryBuild *build, const XrSemanticPlan *plan,
+    const XrSemanticPlan ***out_dependencies, uint32_t *out_count) {
+    if (out_dependencies)
+        *out_dependencies = NULL;
+    if (out_count)
+        *out_count = 0;
+    if (!build || !plan || !out_dependencies || !out_count ||
+        build->module_count < 0)
+        return false;
+    size_t dependency_size = xr_semantic_plan_dependency_count(plan);
+    if (dependency_size > UINT32_MAX)
+        return false;
+    uint32_t dependency_count = (uint32_t) dependency_size;
+    if (dependency_count == 0)
+        return true;
+    const XrSemanticPlan **dependencies =
+        (const XrSemanticPlan **) xr_calloc(dependency_count,
+                                             sizeof(*dependencies));
+    if (!dependencies)
+        return false;
+    for (uint32_t row = 0; row < dependency_count; row++) {
+        const XrSemanticDependencyRecord *dependency =
+            xr_semantic_plan_dependency(plan, row);
+        const XrSemanticPlan *match = NULL;
+        for (int module = 0; dependency && module < build->module_count;
+             module++) {
+            const XrSemanticPlan *candidate =
+                module_semantic_plan(build->modules[module]);
+            const XrSemanticEntityRecord *identity =
+                candidate ? semantic_module_entity(candidate) : NULL;
+            if (!candidate || !identity ||
+                !xr_stable_id_equal(identity->id, dependency->module) ||
+                !xr_fingerprint_equal(
+                    xr_semantic_plan_fingerprint(candidate),
+                    dependency->semantic_fingerprint))
+                continue;
+            if (match) {
+                xr_free(dependencies);
+                return false;
+            }
+            match = candidate;
+        }
+        if (!match) {
+            xr_free(dependencies);
+            return false;
+        }
+        dependencies[row] = match;
+    }
+    *out_dependencies = dependencies;
+    *out_count = dependency_count;
+    return true;
+}
+
 /* Round-trips one module's XSM artifact. A hit skips re-encoding and
  * re-publishing an artifact already proven identical. No stage of this build is
  * skipped: the plan was produced and verified before the cache was consulted. */
@@ -167,6 +249,13 @@ static bool round_trip_semantic_artifact(XaotModuleSummaryBuild *build, XrCacheK
     if (!build->store)
         return true;
 
+    const XrSemanticPlan **dependencies = NULL;
+    uint32_t dependency_count = 0;
+    if (!collect_semantic_dependencies(build, plan, &dependencies,
+                                       &dependency_count)) {
+        fprintf(stderr, "Error: module summary dependency authority is incomplete\n");
+        return false;
+    }
     bool hit = false;
     if (!build->rebuild) {
         XaotXsmMatchContext match;
@@ -174,6 +263,8 @@ static bool round_trip_semantic_artifact(XaotModuleSummaryBuild *build, XrCacheK
         memset(&match, 0, sizeof(match));
         memset(&blob, 0, sizeof(blob));
         match.expected = plan;
+        match.dependencies = dependencies;
+        match.dependency_count = dependency_count;
         XrCacheLoadStatus status = xr_cache_store_load(build->store, XR_CACHE_ARTIFACT_XSM, key,
                                                        verify_xsm_matches_plan, &match, &blob);
         xr_cache_blob_release(&blob);
@@ -181,6 +272,7 @@ static bool round_trip_semantic_artifact(XaotModuleSummaryBuild *build, XrCacheK
     }
     if (hit) {
         build->report.cache_hits++;
+        xr_free(dependencies);
         return true;
     }
     build->report.cache_missed++;
@@ -190,11 +282,19 @@ static bool round_trip_semantic_artifact(XaotModuleSummaryBuild *build, XrCacheK
     char error[256];
     if (!xr_xsm_encode(plan, &bytes, &size, error, sizeof(error))) {
         fprintf(stderr, "Error: cannot encode module summary artifact: %s\n", error);
+        xr_free(dependencies);
         return false;
     }
+    XaotXsmMatchContext publish = {
+        .expected = plan,
+        .dependencies = dependencies,
+        .dependency_count = dependency_count,
+    };
     XrCachePublishStatus status = xr_cache_store_publish(
-        build->store, XR_CACHE_ARTIFACT_XSM, key, bytes, size, xr_cache_verify_xsm_artifact, NULL);
+        build->store, XR_CACHE_ARTIFACT_XSM, key, bytes, size,
+        verify_xsm_matches_plan, &publish);
     xr_free(bytes);
+    xr_free(dependencies);
     if (rejected_publish(status)) {
         fprintf(stderr, "Error: module summary artifact publication failed with status %d\n",
                 (int) status);
@@ -298,6 +398,8 @@ static bool build_summary_graph(XaotModuleSummaryBuild *build, XrCompilerSession
     }
 
     build->store = xr_compiler_session_cache_store(session);
+    build->modules = modules;
+    build->module_count = module_count;
     build->rebuild = options->incremental_cache_rebuild;
     build->shared.target = xr_target_profile_fingerprint(profile);
     toolchain_fingerprint(&build->shared.toolchain);

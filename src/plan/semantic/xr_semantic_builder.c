@@ -2146,6 +2146,32 @@ static bool append_dependency(XrSemanticBuildContext *ctx, const XiModule *modul
     return true;
 }
 
+/* A source namespace remains a module dependency even when no member is read
+ * from the local alias.  Freeze that dependency while the resolved Xi module
+ * identity is still available; later consumers must reconstruct the binding
+ * from the frozen SOURCE_MODULE classification and this exact dependency row. */
+static bool append_source_namespace_dependency(XrSemanticBuildContext *ctx,
+                                               const XiValue *value) {
+    if (!ctx || !value || value->op != XI_IMPORT_REF)
+        return true;
+    const XiImportRef *ref = (const XiImportRef *) value->aux;
+    if (classify_import_resolution(ref) != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
+        !ref || (ref->member_name && ref->member_name[0] != '\0'))
+        return true;
+    bool dependency_present = false;
+    for (uint32_t i = 0; i < ctx->dependency_module_count; i++)
+        dependency_present |= ctx->dependency_modules[i] == ref->resolved_module;
+    if (!dependency_present)
+        return true;
+    uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
+    if (ref->resolved_func || ref->resolved_shared_slot != -1 ||
+        ref->resolved_export_slot != -1 ||
+        !append_dependency(ctx, ref->resolved_module, ref->module_path, &dependency))
+        return fail(ctx, "XR_SEM_0019",
+                    "source namespace dependency identity is incomplete");
+    return true;
+}
+
 static const XiImportRef *resolve_namespace_import_receiver(const XrSemanticBuildContext *ctx,
                                                             const XiFunc *caller,
                                                             const XiValue *receiver) {
@@ -3405,7 +3431,9 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         if (record->evidence[7] == XR_SEMANTIC_INDEX_NONE)
             return fail(ctx, "XR_SEM_0007", "try operation references an unknown block");
     }
-    if (!add_operation_metadata(ctx, value, record) || !append_constant(ctx, value, record))
+    if (!add_operation_metadata(ctx, value, record) ||
+        !append_source_namespace_dependency(ctx, value) ||
+        !append_constant(ctx, value, record))
         return false;
     if (xi_string_builder_append_rune_exact(value) &&
         semantic_string_builder_append_rune_exact(ctx, record))

@@ -2056,6 +2056,41 @@ static bool verifier_source_namespace_operation_is_exact(
              operation->metadata_count == 0));
 }
 
+static bool verifier_source_namespace_dependency_is_exact(
+    const XrSemanticPlan *semantic,
+    const XrSemanticOperationRecord *operation,
+    const char *const *metadata, uint32_t metadata_count,
+    uint32_t *out_dependency) {
+    if (!semantic || !operation || !metadata || !out_dependency ||
+        !verifier_source_namespace_operation_is_exact(
+            semantic, operation, XI_IMPORT_REF) ||
+        operation->function != 0 ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
+        operation->metadata_begin + 1u >= metadata_count)
+        return false;
+    const char *module_path = metadata[operation->metadata_begin];
+    const char *member = metadata[operation->metadata_begin + 1u];
+    if (!module_path || !module_path[0] || !member || member[0] != '\0')
+        return false;
+    uint32_t match = XR_SEMANTIC_INDEX_NONE;
+    uint32_t dependency_count =
+        (uint32_t) xr_semantic_plan_dependency_count(semantic);
+    for (uint32_t i = 0; i < dependency_count; i++) {
+        const XrSemanticDependencyRecord *dependency =
+            xr_semantic_plan_dependency(semantic, i);
+        if (!dependency || !dependency->module_path ||
+            strcmp(dependency->module_path, module_path) != 0)
+            continue;
+        if (match != XR_SEMANTIC_INDEX_NONE)
+            return false;
+        match = i;
+    }
+    if (match == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    *out_dependency = match;
+    return true;
+}
+
 static bool verifier_source_namespace_identity_copy_is_exact(
     const XrSemanticPlan *semantic,
     const XrSemanticOperationRecord *operation,
@@ -2128,11 +2163,13 @@ static bool collect_exact_source_namespace_values(
         ? (uint32_t *) xr_calloc(value_count, sizeof(*visit_epoch)) : NULL;
     uint8_t *candidate = value_count
         ? (uint8_t *) xr_calloc(value_count, sizeof(*candidate)) : NULL;
+    uint8_t *standalone_import = value_count
+        ? (uint8_t *) xr_calloc(value_count, sizeof(*standalone_import)) : NULL;
     uint8_t *exact = value_count
         ? (uint8_t *) xr_calloc(value_count, sizeof(*exact)) : NULL;
     if ((value_count && (!definition || !dependency || !expected_uses ||
-                         !retain_uses || !consumer || !visit_epoch ||
-                         !candidate || !exact)) ||
+                          !retain_uses || !consumer || !visit_epoch ||
+                          !candidate || !standalone_import || !exact)) ||
         (operation_count && !target_by_operation))
         goto allocation_failed;
     for (uint32_t i = 0; i < value_count; i++) {
@@ -2289,8 +2326,7 @@ static bool collect_exact_source_namespace_values(
             consumer_index = definition_index;
             current_value = input->value;
         }
-        const XrSemanticDependencyRecord *dep =
-            xr_semantic_plan_dependency(semantic, target->dependency);
+        uint32_t import_dependency = XR_SEMANTIC_INDEX_NONE;
         if (!import || !load || receiver->type != load->result_type ||
             import->function != 0 || load->function != call->function ||
             store->function != 0 ||
@@ -2300,12 +2336,73 @@ static bool collect_exact_source_namespace_values(
             stored->ownership_action != XR_SEM_OPERAND_CONSUME ||
             stored->parameter_mode != XR_PARAM_READ ||
             stored->access != XR_CALL_ARG_PLAIN || stored->flags != 0 ||
-            load->result_type != import->result_type || !dep || !metadata ||
-            import->metadata_begin > metadata_count ||
-            import->metadata_count > metadata_count - import->metadata_begin ||
-            strcmp(metadata[import->metadata_begin], dep->module_path) != 0 ||
-            metadata[import->metadata_begin + 1u][0] != '\0')
+            load->result_type != import->result_type ||
+            !verifier_source_namespace_dependency_is_exact(
+                semantic, import, metadata, metadata_count,
+                &import_dependency) ||
+            import_dependency != target->dependency)
             goto invalid;
+    }
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *import =
+            xr_semantic_plan_operation(semantic, i);
+        if (!import || import->opcode != XI_IMPORT_REF ||
+            import->import_resolution != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
+            import->metadata_count != 2 ||
+            import->metadata_begin + 1u >= metadata_count || !metadata ||
+            !metadata[import->metadata_begin + 1u] ||
+            metadata[import->metadata_begin + 1u][0] != '\0')
+            continue;
+        if (import->result_value >= value_count)
+            goto invalid;
+        if (candidate[import->result_value])
+            continue;
+        uint32_t import_dependency = XR_SEMANTIC_INDEX_NONE;
+        if (!verifier_source_namespace_dependency_is_exact(
+                semantic, import, metadata, metadata_count,
+                &import_dependency))
+            goto invalid;
+        uint32_t store_index = XR_SEMANTIC_INDEX_NONE;
+        int64_t shared_slot = -1;
+        for (uint32_t j = 0; j < operation_count; j++) {
+            const XrSemanticOperationRecord *operation =
+                xr_semantic_plan_operation(semantic, j);
+            if (!operation || operation->opcode != XI_SET_SHARED ||
+                operation->function != 0 || operation->operand_count != 1 ||
+                operation->operand_begin >= operand_count)
+                continue;
+            const XrSemanticOperandRecord *stored =
+                &operands[operation->operand_begin];
+            if (stored->value != import->result_value)
+                continue;
+            if (store_index != XR_SEMANTIC_INDEX_NONE ||
+                operation->semantic_immediate < 0 ||
+                operation->semantic_immediate > UINT16_MAX ||
+                stored->type != import->result_type ||
+                stored->role != XR_SEM_OPERAND_VALUE || stored->parameter != -1 ||
+                stored->ownership_action != XR_SEM_OPERAND_CONSUME ||
+                stored->parameter_mode != XR_PARAM_READ ||
+                stored->access != XR_CALL_ARG_PLAIN || stored->flags != 0)
+                goto invalid;
+            store_index = j;
+            shared_slot = operation->semantic_immediate;
+        }
+        if (store_index == XR_SEMANTIC_INDEX_NONE)
+            goto invalid;
+        for (uint32_t j = 0; j < operation_count; j++) {
+            const XrSemanticOperationRecord *operation =
+                xr_semantic_plan_operation(semantic, j);
+            if (!operation ||
+                ((operation->opcode == XI_GET_SHARED ||
+                  operation->opcode == XI_SET_SHARED) &&
+                 operation->semantic_immediate == shared_slot &&
+                 j != store_index))
+                goto invalid;
+        }
+        candidate[import->result_value] = 1;
+        standalone_import[import->result_value] = 1;
+        dependency[import->result_value] = import_dependency;
+        consumer[import->result_value] = store_index;
     }
     for (uint32_t i = 0; i < operation_count; i++) {
         const XrSemanticOperationRecord *use =
@@ -2361,26 +2458,27 @@ static bool collect_exact_source_namespace_values(
             continue;
         const XrSemanticOperationRecord *source =
             xr_semantic_plan_operation(semantic, definition[i]);
-        if (!source || expected_uses[i] != 1)
+        if (!source || expected_uses[i] != 1 ||
+            (standalone_import[i] && retain_uses[i] != 1))
             goto invalid;
         exact[i] = 1;
     }
     xr_free(definition); xr_free(target_by_operation); xr_free(dependency);
     xr_free(expected_uses); xr_free(retain_uses); xr_free(consumer);
-    xr_free(visit_epoch); xr_free(candidate);
+    xr_free(visit_epoch); xr_free(candidate); xr_free(standalone_import);
     *out_exact = exact;
     return true;
 
 allocation_failed:
     xr_free(definition); xr_free(target_by_operation); xr_free(dependency);
     xr_free(expected_uses); xr_free(retain_uses); xr_free(consumer);
-    xr_free(visit_epoch); xr_free(candidate); xr_free(exact);
+    xr_free(visit_epoch); xr_free(candidate); xr_free(standalone_import); xr_free(exact);
     return report(error, error_size, "XR_EXEC_5003",
                   "source namespace verifier allocation failed");
 invalid:
     xr_free(definition); xr_free(target_by_operation); xr_free(dependency);
     xr_free(expected_uses); xr_free(retain_uses); xr_free(consumer);
-    xr_free(visit_epoch); xr_free(candidate); xr_free(exact);
+    xr_free(visit_epoch); xr_free(candidate); xr_free(standalone_import); xr_free(exact);
     return report(error, error_size, "XR_TARGET_1001",
                   "source namespace storage authority is not exact");
 }
