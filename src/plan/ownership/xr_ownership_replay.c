@@ -419,9 +419,27 @@ static bool verify_single_disposition_postdominates(XrOwnershipReplay *replay,
         }
     }
     if (origin_block == XR_SEMANTIC_INDEX_NONE ||
-        !xr_semantic_graph_postdominates(replay->graph, close_block, origin_block))
-        return fail(replay, "XR_OWN_3005",
-                    "single ownership disposition does not post-dominate its origin");
+        !xr_semantic_graph_postdominates(replay->graph, close_block, origin_block)) {
+        if (replay->error && replay->error_size) {
+            const char *function_name = owner->function < replay->plan->function_count
+                                            ? replay->plan->functions[owner->function].name
+                                            : "<invalid>";
+            uint32_t origin_operation =
+                definition_for_value(replay, owner->function, owner->origin_value);
+            const XrSemanticOperationRecord *origin_record =
+                origin_operation < replay->plan->operation_count
+                    ? &replay->plan->operations[origin_operation]
+                    : NULL;
+            snprintf(replay->error, replay->error_size,
+                     "XR_OWN_3005: single ownership disposition does not post-dominate its "
+                     "origin (func=%s owner=%s origin=%u origin-block=%u origin-opcode=%s "
+                     "origin-line=%u close-block=%u)",
+                     function_name, owner->canonical_key, owner->origin_value, origin_block,
+                     origin_record ? xi_generated_op_name(origin_record->opcode) : "NONE",
+                     origin_record ? origin_record->source_line : 0, close_block);
+        }
+        return false;
+    }
     return true;
 }
 
