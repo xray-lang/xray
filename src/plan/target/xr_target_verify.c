@@ -25,6 +25,7 @@
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_semantic_allocation_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
+#include "../semantic/xr_semantic_enum_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_graph.h"
@@ -366,6 +367,23 @@ static bool machine_reps_are_storage_compatible(const XrTargetMachineRepRecord *
            from->null_encoding == to->null_encoding && from->register_bits == to->register_bits &&
            from->memory_size == to->memory_size && from->memory_align == to->memory_align &&
            from->detail == to->detail && from->lane_count == to->lane_count;
+}
+
+static bool machine_reps_have_same_call_abi(
+    const XrTargetMachineRepRecord *caller,
+    const XrTargetMachineRepRecord *callee) {
+    return caller && callee && caller->kind == callee->kind &&
+           caller->signedness == callee->signedness &&
+           caller->root_kind == callee->root_kind &&
+           caller->null_encoding == callee->null_encoding &&
+           caller->register_bits == callee->register_bits &&
+           caller->memory_size == callee->memory_size &&
+           caller->memory_align == callee->memory_align &&
+           caller->detail == callee->detail &&
+           caller->lane_count == callee->lane_count &&
+           caller->reserved == callee->reserved &&
+           memcmp(caller->legal_conversion_mask, callee->legal_conversion_mask,
+                  sizeof(caller->legal_conversion_mask)) == 0;
 }
 
 static bool conversion_mask_is_independently_derived(const XrTargetPlan *plan, uint32_t index) {
@@ -1103,6 +1121,18 @@ static bool semantic_direct_local_string_result_is_exact(
     return callee && callee->return_type == operation->result_type &&
            callee->return_parameter == -1 &&
            callee->return_provenance == XR_SEM_RETURN_OWNED;
+}
+
+static bool semantic_direct_local_adt_enum_result_is_exact(
+    const XrSemanticPlan *semantic, uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        operation_index == XR_SEMANTIC_INDEX_NONE
+            ? NULL
+            : xr_semantic_plan_operation(semantic, operation_index);
+    const XrSemanticFunctionRecord *callee =
+        semantic_direct_local_callee_for_operation(semantic, operation_index);
+    return xr_semantic_direct_local_adt_enum_result_is_exact(
+        semantic, operation, callee);
 }
 
 static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *type) {
@@ -2588,6 +2618,8 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
             semantic_string_literal_is_exact(plan->semantic_plan, operation) ||
             xr_semantic_string_concat_is_exact(plan->semantic_plan, operation) ||
             semantic_direct_local_string_result_is_exact(plan->semantic_plan, i) ||
+            semantic_direct_local_adt_enum_result_is_exact(plan->semantic_plan, i) ||
+            xr_semantic_adt_enum_constructor_is_exact(plan->semantic_plan, operation, NULL) ||
             semantic_stringbuilder_constructor_is_exact(plan->semantic_plan,
                                                          operation) ||
             /* The method families own their result type in their own right;
@@ -2628,8 +2660,10 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
         const XrSemanticParameterRecord *parameter =
             xr_semantic_plan_parameter(plan->semantic_plan, i);
         if (!parameter || parameter->type >= type_count ||
-            xr_semantic_class_instance_parameter_source_class(plan->semantic_plan, i) ==
-                XR_SEMANTIC_INDEX_NONE)
+            (xr_semantic_class_instance_parameter_source_class(plan->semantic_plan, i) ==
+                 XR_SEMANTIC_INDEX_NONE &&
+             !xr_semantic_adt_enum_type_is_exact(
+                 xr_semantic_plan_type(plan->semantic_plan, parameter->type))))
             continue;
         exact_types[parameter->type] = 1;
     }
@@ -2763,6 +2797,24 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                                                            plan->semantic_plan,
                                                            semantic_function,
                                                            semantic_value);
+    bool exact_adt_enum =
+        xr_semantic_adt_enum_type_is_exact(type) &&
+        ((parameter && parameter->type == semantic_type &&
+          parameter->function == semantic_function &&
+          (parameter->ownership == XI_OWN_NONE ||
+           parameter->ownership == XI_OWN_OWNED ||
+           parameter->ownership == XI_OWN_BORROWED) &&
+          parameter->mode == XR_PARAM_READ &&
+          parameter->transfer_mode == XR_TRANSFER_SHARE) ||
+         (operation && operation->result_value == semantic_value &&
+          operation->result_type == semantic_type &&
+          (xr_semantic_adt_enum_constructor_is_exact(
+               plan->semantic_plan, operation, NULL) ||
+           semantic_direct_local_adt_enum_result_is_exact(
+               plan->semantic_plan, operation_index))));
+    bool exact_adt_enum_borrowed =
+        exact_adt_enum && parameter &&
+        parameter->ownership == XI_OWN_BORROWED;
     bool exact_string_byte_parameter = semantic_u8_slice_parameter_is_exact(
         plan->semantic_plan, parameter) && parameter->type == semantic_type;
     /* Recomputed through the shared judgement for the same reason the class
@@ -2811,7 +2863,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                               exact_channel || exact_source_namespace ||
                               exact_native_module_namespace || exact_string_byte_view ||
                               exact_string_byte_parameter || exact_unit_enum ||
-                              exact_nullable_scalar
+                              exact_nullable_scalar || exact_adt_enum
                           ? 1
                           : (type ? semantic_type_expected_rep(type,
                                                                &expected_kind)
@@ -2843,7 +2895,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         exact_go_callee ||
         exact_go_task ||
         exact_channel || exact_source_namespace || exact_native_module_namespace ||
-        exact_nullable_scalar) {
+        exact_nullable_scalar || exact_adt_enum) {
         expected_kind = XR_MACHINE_REP_DYN_VALUE;
         expected_layout = target_plan_layout_for_type(plan, semantic_type);
         eligibility = expected_layout >= 0 &&
@@ -2899,6 +2951,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
             (exact_direct_callee || exact_go_callee || exact_go_task || exact_source_namespace ||
              exact_native_module_namespace || exact_nullable_scalar ||
              exact_class_instance_borrowed || exact_class_receiver_borrowed ||
+             exact_adt_enum_borrowed ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
                 : XR_TARGET_OWNERSHIP_OWNED;
@@ -4237,6 +4290,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             if (expected_calls == UINT32_MAX) { valid = false; break; }
             expected_calls++;
         }
+        if (xr_semantic_adt_enum_constructor_is_exact(semantic, operation, NULL)) {
+            if (expected_calls == UINT32_MAX) { valid = false; break; }
+            expected_calls++;
+        }
     }
     valid = valid && plan->calls_count == expected_calls;
     for (uint32_t target_index = 0;
@@ -4379,6 +4436,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             !semantic_target &&
             operation_is_exact_native_module_scalar_call(semantic, operation,
                                                          &native_module_arity);
+        XrSemanticAdtEnumConstructorShape enum_constructor_shape = {0};
+        bool adt_enum_constructor =
+            !semantic_target && xr_semantic_adt_enum_constructor_is_exact(
+                                    semantic, operation, &enum_constructor_shape);
         uint16_t result_kind = XR_MACHINE_REP_COUNT;
         const XrSemanticTypeRecord *result_type = operation
                                                        ? xr_semantic_plan_type(
@@ -4394,8 +4455,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         bool direct_string_result =
             direct && semantic_direct_local_string_result_is_exact(
                           semantic, call->semantic_operation);
+        bool direct_adt_enum_result =
+            direct && semantic_direct_local_adt_enum_result_is_exact(
+                          semantic, call->semantic_operation);
         if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string ||
-            direct_string_result || json_namespace_value || class_construction) {
+            direct_string_result || direct_adt_enum_result ||
+            json_namespace_value || class_construction ||
+            adt_enum_constructor) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -4459,10 +4525,12 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                  * re-assert it, so the two demands must stay in step. */
                 call->result_ownership ==
                     (stringbuilder_constructor || direct_string_result ||
+                             direct_adt_enum_result ||
                              stringbuilder_append_rune ||
                              stringbuilder_to_string ||
                              stringbuilder_append_string ||
-                             json_namespace_value || class_construction
+                             json_namespace_value || class_construction ||
+                             adt_enum_constructor
                          ? XR_TARGET_CALL_RETURN_OWNED
                      : string_byte_slice_view ? XR_TARGET_CALL_BORROW
                                               : XR_TARGET_CALL_NONE) &&
@@ -4506,7 +4574,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     /* An owned String result is the one non-scalar direct-local
                      * shape; its slot must carry the dynamic owned storage fact
                      * and every other result stays a trivial scalar slot. */
-                    (!direct_string_result ||
+                    (!(direct_string_result || direct_adt_enum_result) ||
                      (result->slot < plan->slots_count &&
                       plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
                       plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED));
@@ -4549,6 +4617,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 bool argument_unit_enum = parameter && parameter->type == operand->type &&
                                           semantic_unit_enum_type_is_exact(
                                               xr_semantic_plan_type(semantic, operand->type));
+                bool argument_adt_enum = parameter && parameter->type == operand->type &&
+                                         xr_semantic_adt_enum_type_is_exact(
+                                             xr_semantic_plan_type(semantic, operand->type));
+                if (argument_adt_enum)
+                    argument_kind = XR_MACHINE_REP_DYN_VALUE;
                 /* Recomputed through the same shared judgement the callee's own
                  * storage family uses, so an argument this verifier admits can
                  * never be a parameter that family refused. */
@@ -4560,6 +4633,27 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     operand->ownership_action == XR_SEM_OPERAND_CONSUME
                         ? XR_TARGET_CALL_CONSUME
                         : XR_TARGET_CALL_READ;
+                bool adt_enum_borrow_boundary =
+                    argument_adt_enum && parameter->ownership == XI_OWN_BORROWED &&
+                    caller_value && callee_value &&
+                    caller_value->register_rep < plan->machine_reps_count &&
+                    caller_value->memory_rep < plan->machine_reps_count &&
+                    callee_value->register_rep < plan->machine_reps_count &&
+                    callee_value->memory_rep < plan->machine_reps_count &&
+                    machine_reps_have_same_call_abi(
+                        &plan->machine_reps[caller_value->register_rep],
+                        &plan->machine_reps[callee_value->register_rep]) &&
+                    machine_reps_have_same_call_abi(
+                        &plan->machine_reps[caller_value->memory_rep],
+                        &plan->machine_reps[callee_value->memory_rep]) &&
+                    plan->machine_reps[caller_value->register_rep].ownership ==
+                        XR_TARGET_OWNERSHIP_OWNED &&
+                    plan->machine_reps[caller_value->memory_rep].ownership ==
+                        XR_TARGET_OWNERSHIP_OWNED &&
+                    plan->machine_reps[callee_value->register_rep].ownership ==
+                        XR_TARGET_OWNERSHIP_BORROWED &&
+                    plan->machine_reps[callee_value->memory_rep].ownership ==
+                        XR_TARGET_OWNERSHIP_BORROWED;
                 valid = parameter &&
                         operand->role == XR_SEM_OPERAND_ARGUMENT &&
                         operand->parameter == (int16_t) ordinal &&
@@ -4568,12 +4662,15 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         operand->transfer_mode == parameter->transfer_mode &&
                         (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
                         (argument_scalar == 1 || argument_u8_slice || argument_unit_enum ||
-                         argument_class_instance) &&
+                         argument_adt_enum || argument_class_instance) &&
                         parameter->mode == XR_PARAM_READ &&
                         operand->access == XR_CALL_ARG_PLAIN &&
                         (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0 &&
                         (parameter->ownership == XI_OWN_NONE ||
-                         ((argument_u8_slice || argument_unit_enum || argument_class_instance) &&
+                         (argument_adt_enum &&
+                          parameter->ownership == XI_OWN_OWNED) ||
+                         ((argument_u8_slice || argument_unit_enum || argument_adt_enum ||
+                           argument_class_instance) &&
                           parameter->ownership == XI_OWN_BORROWED)) &&
                         caller_value &&
                         callee_value &&
@@ -4597,6 +4694,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         argument->callee_slot == callee_value->slot &&
                         argument->register_rep == caller_value->register_rep &&
                         argument->memory_rep == caller_value->memory_rep &&
+                        argument->callee_register_rep == callee_value->register_rep &&
+                        argument->callee_memory_rep == callee_value->memory_rep &&
+                        ((caller_value->register_rep == callee_value->register_rep &&
+                          caller_value->memory_rep == callee_value->memory_rep) ||
+                         adt_enum_borrow_boundary) &&
                         plan->machine_reps[argument->register_rep].kind ==
                             (argument_u8_slice
                                  ? XR_MACHINE_REP_VIEW
@@ -4732,6 +4834,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         argument->callee_slot == callee_value->slot &&
                         argument->register_rep == caller_value->register_rep &&
                         argument->memory_rep == caller_value->memory_rep &&
+                        argument->callee_register_rep == callee_value->register_rep &&
+                        argument->callee_memory_rep == callee_value->memory_rep &&
                         plan->machine_reps[argument->register_rep].kind == argument_kind &&
                         argument->ordinal == ordinal &&
                         argument->mode == XR_TARGET_CALL_VALUE &&
@@ -4740,6 +4844,30 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         argument->flags == 0;
                 next_argument++;
             }
+            if (!valid)
+                break;
+        } else if (adt_enum_constructor) {
+            valid = !suspends && operation->opcode == XI_CALL_METHOD &&
+                    reconstruct_call_identity(
+                        "xray-target-adt-enum-constructor-v1", operation->id,
+                        result_type->id, enum_constructor_shape.member_ordinal,
+                        &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    call->argument_count == 0 && call->flags == 0 &&
+                    call->calling_convention ==
+                        XR_TARGET_CALL_CONVENTION_ADT_ENUM_CONSTRUCTOR &&
+                    call->target_kind ==
+                        XR_TARGET_CALL_TARGET_ADT_ENUM_CONSTRUCTOR &&
+                    call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+                    result->slot < plan->slots_count &&
+                    plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                    plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
             if (!valid)
                 break;
         } else if (channel_close) {

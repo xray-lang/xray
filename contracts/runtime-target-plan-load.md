@@ -38,8 +38,8 @@ roots, or general module activation.
    direct-local call, closure storage, minimal coroutine state-call,
    String-literal storage, direct-local-callee storage, Channel-allocation
    storage, Channel-receive storage, direct-local-GO-callee storage,
-   direct-local-GO-task-result storage, and
-   SOURCE-namespace storage. The
+   direct-local-GO-task-result storage, panic-catch storage,
+   SOURCE-namespace storage, and ADT-enum storage. The
    closure-storage family covers
    only an exact no-capture heap closure's outer `XrValue` slot as
    dynamic/owned/tagged storage. It does not authorize the closure object body,
@@ -156,16 +156,26 @@ roots, or general module activation.
    Builder, Target verifier, and AOT representation oracle re-derive the same
    judgement independently. The row grants no class body, field table, method
    table, allocation, root map, root slot, cleanup, or member lookup authority.
+   ADT-enum storage covers only exact source-backed enum parameters, direct
+   local returns, and payload-bearing constructor results whose declaration,
+   member, nominal layout, discriminant, ordered payload types, namespace
+   receiver, and ownership are frozen in SemanticPlan. Constructor payloads
+   are a CEmission recipe rather than Target call arguments. Direct-local enum
+   arguments carry both exact caller and callee representations so ownership
+   may select distinct physical rows without weakening the shared tagged ABI.
+   This family grants no guessed enum name, mutable Xi type authority, generic
+   method dispatch, object body, root map, cleanup, or fallback boxing path.
    Foundation capability masks are also exact. Allocator and panic
    requirements have dense records bound to the same canonical provider kinds.
    Missing, duplicate, additional, or mismatched family,
    capability, or provider records fail before any activation boundary.
-5. Runtime loading accepts only an XTP v19 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v20 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
-   independent TargetPlan verification. V18 is a breaking hard cutover from
-   v17 and all earlier schemas. It preserves all v17 facts while adding the
-   exact source unit-enum direct-local argument storage described above. V16 and all
-   earlier schemas are rejected rather than reinterpreted.
+   independent TargetPlan verification. V20 is a breaking hard cutover from
+   v19 and all earlier schemas. It preserves all v19 facts while adding the
+   exact ADT-enum storage and constructor authority described above and the
+   expanded caller/callee representation fields in call-argument rows. V19
+   and all earlier schemas are rejected rather than reinterpreted.
    The `Channel.close()` receiver is a dispatch target rather than an argument
    or slot, and its descriptor grants no general method ABI or execution
    authority. V17 also
@@ -244,31 +254,31 @@ anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b428893718
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
 anchor-sha256: src/plan/format/xr_xsm_decode.c b379bc41fadbc3f992b2c8ba0d9b64da00ce8ef6c4db386f016b3c55c2a5de93
-anchor-sha256: src/plan/format/xr_xtp_schema.h 04840cf64073530619483953264b801358984d6559d7928b0b733b265ef2c668
+anchor-sha256: src/plan/format/xr_xtp_schema.h 365f1b6f6177e269d0ae0293f9bc3cab5565a286610b7d72d8f541d99985b89f
 anchor-sha256: src/plan/format/xr_xtp_internal.h 2d1a76e7dd0a7d1f623ce3fc8118c4235d2694e03cceea8db756ec8f67e3a346
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1
 anchor-sha256: src/plan/format/xr_xtp_decode.c debe51ef7fd15e75b2b120642e7d4d69518784bb59b747503ea37f0e3b332d04
-anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
+anchor-sha256: src/plan/format/xr_xtp_rows.c db81206e1e9e158605e3672f79e635df5717baa6b3d4f56c832288a2306a5c4d
 anchor-sha256: src/runtime/abi/xr_target_machine_facts.h 8c8d1c341fb4639bb47c982ac6dfd851571d154823101e00011a63fcb14486d8
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h 5ea9aa4ff63d88b62dbf1f43bea9ab2875d9d63ef2722d73df5a71c59eedda1b
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 6487ae39149a4ea28fab04bdf2ccbf88c0bccaded75cf20376b38c8447dbdd1c
-anchor-sha256: src/plan/target/xr_target_profile.h 220da4d6c3ce5a3e78e756bf9967f11d0179e562916a2156683931459c3dec4a
+anchor-sha256: src/plan/target/xr_target_profile.h 84ed89d8d1d593010bcb7b12c57f71158f24f2a66e196bb67356619ede2b08bb
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h 1402e8e2d8bcb046ee7cfc25297a31223fc7249355dd5313a6c25c8d4cc3c53b
-anchor-sha256: src/plan/target/xr_target_plan.c bfce16b89e2d90c78f2343790eec1d439d7cda2192a209d8bbbb7a1afa259356
-anchor-sha256: src/plan/target/xr_target_builder.c e25a59c1aa635fbdd2b6caa95b7036602549a2038720b2afcac63ae3dd6ea062
-anchor-sha256: src/plan/target/xr_target_verify.c f2e745fdb028e5127a2da321680f4012f5e6954ea38017b2c95ac4c48e856545
+anchor-sha256: src/plan/target/xr_target_plan.h 42e11e8b6cd4929dac9233e14ed5df536025a57e111ef81b3a1ef6f0dd584f9c
+anchor-sha256: src/plan/target/xr_target_plan.c 86de22949827da2bac028fb0e655cc60ab2735bd9f6ad1e2d11cbd5969e9f171
+anchor-sha256: src/plan/target/xr_target_builder.c 828a05474bbf108720086ab4d495b560696c65a4c7cff6da6de62619846d955d
+anchor-sha256: src/plan/target/xr_target_verify.c c85a2b10efe8c5e23311a3f0251633bcf85928c3ee27a57ace9f77b02669a385
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
-anchor-sha256: src/runtime/xr_target_plan_load.c 5a244ecda8ae44db051cae61b0ea80d738ce7056b2ee77354dad8f8e4c22ef07
-anchor-sha256: src/app/cli/xcmd_run.c f998be9c0b0eda9930fec1ada371f7e27ece22404677f26b2ad27a605cf263b8
+anchor-sha256: src/runtime/xr_target_plan_load.c e7ff26e61ac4f163b7fac20b5fbef9fc0aaf54fe9aa3c5e2c6d054ca299c4f83
+anchor-sha256: src/app/cli/xcmd_run.c d2b322e5fbb45f85e1fbee30735d44241066965d0f30315e19aaa1853ea2fd1e
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 577aa49d6502b2b1cf3a88191851bbbc82775fe2e53f51ec7ea83ca58281a548
 anchor-sha256: scripts/check_legacy_product_residue.py d160f8b9ab1d16da893bcc30a7ed90d583dda9e478dd11f67c9ce299629f8d2f
-anchor-sha256: tests/unit/plan/test_target_plan.c f2aff10b08d869823e3ba7d7e38bd50a8d4c5aa84e06d50f8b11ccd3e89dc38f
-anchor-sha256: tests/unit/plan/test_xtp_format.c ab7a3766a721d1aa2e6fc2ca67031e77ad1f7b44f974d5e8b532067f58705801
+anchor-sha256: tests/unit/plan/test_target_plan.c 436353bb84404d6f3879aa0bb614b33211d3e55e7fbe373db5911f0ddc0e33c3
+anchor-sha256: tests/unit/plan/test_xtp_format.c 086d4a3c6bc7f62ddfc4ba36c4d0416b43d3e7957033a4062dd8eaf39f86f784
 anchor-sha256: tests/unit/CMakeLists.txt a216aada90e731f1c6bcddb93bb8a088d1c2cd4fa4e888799c5d113d4a6b28a9
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
-anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 15813c452e68fb35313becc65b1c382f6d8d5ab6c133eff31cfbd1eed2a752b4
+anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 29bea3f92778b4b38906795661725ece16716575108e1906f57079e1312124c1
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 0ab2232c6731a2366bbd270f838d2a9fd33c1480bfe4d75de8c9ededbadfda51

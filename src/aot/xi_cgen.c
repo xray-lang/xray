@@ -2638,9 +2638,21 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function,
     }
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     char error[256] = {0};
-    return entry && xr_aot_scalar_semantic_value_id(
-                        entry->target_plan, function, value, &semantic_function,
-                        out, error, sizeof(error)) &&
+    if (!entry)
+        return false;
+    if (xr_aot_scalar_semantic_value_id(
+            entry->target_plan, function, value, &semantic_function, out,
+            error, sizeof(error)))
+        return semantic_function == function->semantic_plan_function_index;
+    const XaotValuePlan *adapter =
+        xaot_bundle_find_value_plan(ctx->aot_bundle, value);
+    if (!adapter ||
+        !xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter) ||
+        value->nargs != 1 || !value->args || !value->args[0])
+        return false;
+    return xr_aot_scalar_semantic_value_id(
+               entry->target_plan, function, value->args[0],
+               &semantic_function, out, error, sizeof(error)) &&
            semantic_function == function->semantic_plan_function_index;
 }
 
@@ -2721,6 +2733,8 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
         left->literal_byte_length != right->literal_byte_length ||
         left->recipe_operand_value != right->recipe_operand_value ||
         left->recipe_argument_value != right->recipe_argument_value ||
+        left->recipe_layout_id != right->recipe_layout_id ||
+        left->recipe_discriminant != right->recipe_discriminant ||
         left->recipe_argument_count != right->recipe_argument_count ||
         left->recipe_reserved != right->recipe_reserved ||
         left->reserved != right->reserved || !left->c_type || !right->c_type ||
@@ -2729,6 +2743,14 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
          (left->recipe_symbol && !right->recipe_symbol)) ||
         (left->recipe_symbol &&
          strcmp(left->recipe_symbol, right->recipe_symbol) != 0) ||
+        ((!left->recipe_type_name && right->recipe_type_name) ||
+         (left->recipe_type_name && !right->recipe_type_name)) ||
+        (left->recipe_type_name &&
+         strcmp(left->recipe_type_name, right->recipe_type_name) != 0) ||
+        ((!left->recipe_member_name && right->recipe_member_name) ||
+         (left->recipe_member_name && !right->recipe_member_name)) ||
+        (left->recipe_member_name &&
+         strcmp(left->recipe_member_name, right->recipe_member_name) != 0) ||
         (left->literal_byte_length != 0 &&
          (!left->literal_bytes || !right->literal_bytes ||
           memcmp(left->literal_bytes, right->literal_bytes,
@@ -2863,6 +2885,53 @@ static bool cg_string_concat_emission_view(
             semantic_value != out->recipe_arguments[i].semantic_value) {
             (void) cg_value_emission_fail(
                 ctx, "string concat C recipe argument identity changed");
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool cg_adt_enum_constructor_emission_view(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    XrCValueEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !value || !out)
+        return false;
+    CgValueEmissionStatus status =
+        cg_value_emission_view(ctx, function, value, out);
+    if (status != CG_VALUE_EMISSION_FOUND ||
+        out->materialization !=
+            XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR)
+        return false;
+    if (out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol ||
+        !out->recipe_symbol[0] || !out->recipe_type_name ||
+        !out->recipe_type_name[0] || !out->recipe_member_name ||
+        !out->recipe_member_name[0] || out->recipe_layout_id == 0 ||
+        out->recipe_argument_count == 0 || !out->recipe_arguments ||
+        value->nargs != (uint16_t) (out->recipe_argument_count + 1u) ||
+        !value->args || !value->args[0]) {
+        (void) cg_value_emission_fail(
+            ctx, "ADT enum constructor has no exact immutable C recipe");
+        return false;
+    }
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    if (!cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
+        receiver != out->recipe_operand_value) {
+        (void) cg_value_emission_fail(
+            ctx, "ADT enum constructor receiver identity changed");
+        return false;
+    }
+    for (uint16_t i = 0; i < out->recipe_argument_count; i++) {
+        uint32_t payload = XR_SEMANTIC_INDEX_NONE;
+        if (!value->args[i + 1u] ||
+            out->recipe_arguments[i].kind !=
+                XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD ||
+            !cg_value_semantic_id(ctx, function, value->args[i + 1u],
+                                  &payload) ||
+            payload != out->recipe_arguments[i].semantic_value) {
+            (void) cg_value_emission_fail(
+                ctx, "ADT enum constructor payload identity changed");
             return false;
         }
     }
@@ -7927,6 +7996,10 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
                    user->args[0]->op == XI_CONST;
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT: {
+            XrCValueEmissionView enum_constructor = {0};
+            if (cg_adt_enum_constructor_emission_view(
+                    ctx, f, user, &enum_constructor))
+                return arg_index > 0;
             /* string.runes() is emitted as a dynamic method call whose
              * receiver is rendered through emit_value_as_rep_ctx(). */
             if (arg_index == 0 && user->nargs >= 1 && user->args[0] && user->args[0]->type &&
@@ -7951,20 +8024,6 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
                 cg_array_value_storage_info(ctx, f, user->args[0], &array_info,
                                             CG_ARRAY_STORAGE_MUTABLE))
                 return true;
-            if (arg_index >= 1 && user->nargs > 1 && user->aux) {
-                const XiEnumData *recv_enum = cg_enum_for_namespace_value(user->args[0]);
-                if (!recv_enum)
-                    recv_enum = cg_enum_for_shared_value_in_func(ctx, f, user->args[0]);
-                if (!recv_enum)
-                    recv_enum = cg_resolve_imported_enum_value(ctx, f, user->args[0]);
-                if (!recv_enum)
-                    recv_enum = xicgen_adt_enum_for_type(ctx, user->type);
-                int member = cg_enum_member_index(recv_enum, (const char *) user->aux);
-                if (recv_enum && recv_enum->is_adt && member >= 0 &&
-                    (uint32_t) member < recv_enum->member_count && recv_enum->members &&
-                    recv_enum->members[member].payload_count > 0)
-                    return true;
-            }
             return false;
         }
         case XI_INDEX_GET:

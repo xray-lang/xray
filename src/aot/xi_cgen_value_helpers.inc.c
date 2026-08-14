@@ -1182,6 +1182,28 @@ static void emit_adt_enum_construct_expr(XiCgenCtx *ctx, FILE *out, const XiEnum
     fprintf(out, ")");
 }
 
+static void emit_adt_enum_constructor_recipe_expr(
+    XiCgenCtx *ctx, FILE *out, const XiValue *value,
+    const XrCValueEmissionView *recipe) {
+    if (!ctx || !out || !value || !recipe || !recipe->recipe_symbol ||
+        !recipe->recipe_type_name || !recipe->recipe_member_name) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "%s(XRT_ENUM_AGGREGATE_MAKE(%u, %u, %u, ",
+            recipe->recipe_symbol, recipe->recipe_layout_id,
+            recipe->recipe_discriminant,
+            (unsigned) recipe->recipe_argument_count);
+    emit_c_string_literal(out, recipe->recipe_type_name);
+    fprintf(out, ", ");
+    emit_c_string_literal(out, recipe->recipe_member_name);
+    for (uint16_t i = 0; i < recipe->recipe_argument_count; i++) {
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, value->args[i + 1u], XR_REP_TAGGED);
+    }
+    fprintf(out, "))");
+}
+
 static void emit_call_hidden_closure(FILE *out, const XiFunc *current, const XiFunc *target,
                                      const XiValue *callee) {
     if (!target || target->ncaptures == 0) {

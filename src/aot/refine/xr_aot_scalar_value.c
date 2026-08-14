@@ -9,6 +9,8 @@
  */
 
 #include "xr_aot_scalar_value.h"
+#include "../../plan/semantic/xr_semantic_enum_shape.h"
+#include "../../plan/semantic/xr_semantic_string_shape.h"
 #include "../../ir/xi_own.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
@@ -157,7 +159,8 @@ static bool adapter_origin_matches(const XiValue *value) {
 
 static bool adapter_target_rep_is_exact(const XrTargetPlan *target_plan,
                                         const XrTargetValueRepRecord *binding,
-                                        const XiValue *value) {
+                                        const XiValue *value,
+                                        bool source_supports_pointer_unbox) {
     if (!target_plan || !value)
         return false;
     if (value->op == XI_BOX || value->op == XI_ENUM_DESCRIPTOR_BOX)
@@ -178,6 +181,9 @@ static bool adapter_target_rep_is_exact(const XrTargetPlan *target_plan,
         xr_target_plan_machine_rep(target_plan, binding->memory_rep);
     if (!machine)
         return false;
+    if (value->op == XI_UNBOX && source_supports_pointer_unbox &&
+        machine->kind == XR_MACHINE_REP_DYN_VALUE)
+        return value->rep == XR_REP_PTR;
     switch ((XrMachineRepKind) machine->kind) {
         case XR_MACHINE_REP_VOID: return value->rep == XR_REP_VOID;
         case XR_MACHINE_REP_F32:
@@ -198,6 +204,38 @@ static bool adapter_target_rep_is_exact(const XrTargetPlan *target_plan,
         case XR_MACHINE_REP_VIEW: return value->rep == XR_REP_PTR;
         default: return false;
     }
+}
+
+static const XrSemanticTypeRecord *semantic_value_type(
+    const XrSemanticPlan *plan, uint32_t semantic_value) {
+    const XrSemanticTypeRecord *match = NULL;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan, i);
+        if (!operation || operation->result_value != semantic_value)
+            continue;
+        const XrSemanticTypeRecord *candidate =
+            xr_semantic_plan_type(plan, operation->result_type);
+        if (!candidate || (match && match != candidate))
+            return NULL;
+        match = candidate;
+    }
+    uint32_t parameter_count =
+        (uint32_t) xr_semantic_plan_parameter_count(plan);
+    for (uint32_t i = 0; i < parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan, i);
+        if (!parameter || parameter->value != semantic_value)
+            continue;
+        const XrSemanticTypeRecord *candidate =
+            xr_semantic_plan_type(plan, parameter->type);
+        if (!candidate || (match && match != candidate))
+            return NULL;
+        match = candidate;
+    }
+    return match;
 }
 
 static bool adapter_source_rep_is_exact(
@@ -301,7 +339,13 @@ XR_FUNC bool xr_aot_rep_adapter_value_is_exact(
         !xr_type_is_enum_metadata(value->args[0]->type))
         return fail(error, error_size,
                     "backend enum adapter source lacks enum metadata authority");
-    if (!adapter_target_rep_is_exact(target_plan, binding, value))
+    const XrSemanticTypeRecord *source_type =
+        semantic_value_type(semantic_plan, source_value);
+    bool source_supports_pointer_unbox =
+        xr_semantic_adt_enum_type_is_exact(source_type) ||
+        xr_semantic_owned_string_type_is_exact(source_type);
+    if (!adapter_target_rep_is_exact(target_plan, binding, value,
+                                     source_supports_pointer_unbox))
         return fail(error, error_size,
                     "backend representation adapter output rep is inconsistent");
     return true;

@@ -14,7 +14,9 @@
 #include "xaot_abi_gen.h"
 #include "xaot_layout_gen.h"
 #include "xaot_struct_name.h"
+#include "refine/xr_aot_scalar_value.h"
 #include "../ir/xi_ops_gen.h"
+#include "../plan/semantic/xr_semantic_enum_shape.h"
 #include "../base/xmalloc.h"
 #include "../runtime/class/xclass_info.h"
 #include <string.h>
@@ -66,6 +68,54 @@ static XaotAbiSlot tagged_slot(const XrType *type) {
     slot.rep.c_type = "XrValue";
     slot.c_type = "XrValue";
     return slot;
+}
+
+static bool target_adt_enum_value_uses_tagged_abi(const XaotBundle *bundle,
+                                                  const XiFunc *func,
+                                                  const XiValue *value) {
+    const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_func(bundle, func);
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    char error[256] = {0};
+
+    if (!target_plan || !func || !value ||
+        !xr_aot_scalar_semantic_value_id(target_plan, func, value,
+                                         &semantic_function, &semantic_value,
+                                         error, sizeof(error)))
+        return false;
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *definition =
+        xr_semantic_enum_value_definition(semantic, semantic_value);
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target_plan, semantic_value);
+    if (!definition || definition->function != semantic_function || !binding)
+        return false;
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(semantic, definition->result_type);
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    return xr_semantic_adt_enum_type_is_exact(type) && register_rep && memory_rep &&
+           register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+           memory_rep->kind == XR_MACHINE_REP_DYN_VALUE;
+}
+
+static bool target_adt_enum_return_uses_tagged_abi(const XaotBundle *bundle,
+                                                   const XiFunc *func) {
+    bool found = false;
+
+    if (!bundle || !func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks ? func->blocks[bi] : NULL;
+        if (!block || block->kind != XI_BLOCK_RETURN || !block->control)
+            continue;
+        if (!target_adt_enum_value_uses_tagged_abi(bundle, func, block->control))
+            return false;
+        found = true;
+    }
+    return found;
 }
 
 static bool type_is_class_instance_ptr_boundary(const XaotBundle *bundle, const XrType *type) {
@@ -605,6 +655,8 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
         func->native_callback_kind != XI_NATIVE_CALLBACK_NONE && !is_module_init;
     class_native = xaot_class_native_func(bundle, func);
     bool native_constructor = class_native.layout && class_native.is_constructor;
+    bool target_adt_enum_return =
+        target_adt_enum_return_uses_tagged_abi(bundle, func);
 
     native_abi = !is_module_init && (native_runtime_callback || func->ncaptures == 0) &&
                  !func_has_op_class(func, XI_GEN_CLASS_COROUTINE) &&
@@ -630,6 +682,8 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
     abi->boundary_reason = XAOT_BOUNDARY_NONE;
     if (native_constructor)
         abi->ret = ptr_slot(func->return_type);
+    else if (target_adt_enum_return)
+        abi->ret = tagged_slot(func->return_type);
     else if (type_can_use_compact_adt_return(bundle, func->return_type))
         abi->ret = compact_adt_return_slot(bundle, func->return_type);
     else
@@ -638,6 +692,8 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
         const XiValue *param = func->params ? func->params[i] : NULL;
         if (i == 0 && class_native.layout)
             abi->params[i] = ptr_slot(param ? param->type : NULL);
+        else if (param && target_adt_enum_value_uses_tagged_abi(bundle, func, param))
+            abi->params[i] = tagged_slot(param->type);
         else
             abi->params[i] =
                 native_slot_for_type(bundle, func, param ? param->type : NULL, param, false);

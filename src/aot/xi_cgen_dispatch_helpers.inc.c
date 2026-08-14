@@ -7712,6 +7712,11 @@ static bool xicgen_emit_net_handle_method(XiCgenCtx *ctx, FILE *out, const XiFun
 
 static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                     const char *method) {
+    XrCValueEmissionView constructor = {0};
+    if (cg_adt_enum_constructor_emission_view(ctx, f, v, &constructor)) {
+        emit_adt_enum_constructor_recipe_expr(ctx, out, v, &constructor);
+        return true;
+    }
     const XiEnumData *recv_enum = cg_enum_for_namespace_value(v->args[0]);
     if (!recv_enum)
         recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
@@ -7722,10 +7727,7 @@ static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     int enum_member = cg_enum_member_index(recv_enum, method);
     if (!recv_enum || enum_member < 0)
         return false;
-    if (recv_enum->is_adt && recv_enum->members &&
-        recv_enum->members[enum_member].payload_count > 0) {
-        emit_adt_enum_construct_expr(ctx, out, recv_enum, enum_member, v);
-    } else if (recv_enum->is_adt && cg_value_plan_is_aggregate(ctx, v)) {
+    if (recv_enum->is_adt && cg_value_plan_is_aggregate(ctx, v)) {
         emit_adt_enum_construct_expr(ctx, out, recv_enum, enum_member, v);
     } else if (emit_static_enum_member_value_expr(ctx, out, v, recv_enum, (uint32_t) enum_member)) {
         /* Static enum variants do not need the namespace map. */
@@ -7753,6 +7755,9 @@ static bool xicgen_enum_method_call_is_aggregate_adt_construct(XiCgenCtx *ctx, c
     if (!ctx || !v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || !v->aux ||
         v->nargs < 1)
         return false;
+    XrCValueEmissionView constructor = {0};
+    if (cg_adt_enum_constructor_emission_view(ctx, f, v, &constructor))
+        return true;
     const XiEnumData *recv_enum = cg_enum_for_namespace_value(v->args[0]);
     if (!recv_enum)
         recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);

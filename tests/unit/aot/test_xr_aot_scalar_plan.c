@@ -22,6 +22,7 @@
 #error "C value emission plan must not include analyzer/runtime type objects"
 #endif
 #include "../../../src/aot/refine/xr_aot_scalar_value.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
@@ -29,6 +30,7 @@
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/runtime/value/xenum_layout.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -1043,6 +1045,152 @@ static void test_string_concat_c_emission_recipe_is_exact(void) {
     xi_func_free(function);
 }
 
+static void test_adt_enum_constructor_c_emission_recipe_is_exact(void) {
+    static const char *variant_names[] = {"Text"};
+    static const char *payload_names[] = {"value"};
+    static uint8_t payload_type_ids[] = {XR_TID_STRING};
+    int payload_counts[] = {1};
+    XrEnumLayout *layout = xr_enum_layout_new(
+        "test.aot.scalar", "RecipeValue", variant_names, 1);
+    REQUIRE(layout != NULL);
+    REQUIRE(xr_enum_layout_set_payload_counts(layout, payload_counts, 1));
+    REQUIRE(xr_enum_layout_set_variant_payload_metadata(
+        layout, 0, payload_names, payload_type_ids, 1));
+
+    XrType enum_type = {
+        .kind = XR_KIND_ENUM,
+        .id = layout->layout_id,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+        .enum_type = {
+            .enum_name = "RecipeValue",
+            .layout_id = layout->layout_id,
+            .layout = layout,
+        },
+    };
+    XrType *payload_types[] = {&scalar_string};
+    XiEnumMemberData members[] = {{
+        .name = "Text",
+        .ordinal = 0,
+        .payload_count = 1,
+        .payload_names = payload_names,
+        .payload_types = payload_types,
+    }};
+    XiEnumData enum_data = {
+        .name = "RecipeValue",
+        .member_count = 1,
+        .is_adt = true,
+        .max_payload = 1,
+        .layout_id = layout->layout_id,
+        .members = members,
+    };
+    XiFunc *function = xi_func_new("adt_enum_recipe", &enum_type);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *namespace_value =
+        xi_value_new(function, entry, XI_CONST, &enum_type, 0);
+    XiValue *payload =
+        xi_const_str(function, entry, "payload", &scalar_string);
+    XiValue *constructor =
+        xi_value_new(function, entry, XI_CALL_METHOD, &enum_type, 2);
+    REQUIRE(namespace_value && payload && constructor);
+    namespace_value->aux = &enum_data;
+    namespace_value->aux_kind = XI_AUX_KIND_ENUM_NAMESPACE;
+    constructor->args[0] = namespace_value;
+    constructor->args[1] = payload;
+    constructor->aux = "Text";
+    constructor->flags = XI_FLAG_CALL_EFFECTS;
+    constructor->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+    constructor->call_return_ownership.param_index = -1;
+    constructor->call_return_ownership.complete = true;
+    xi_block_set_return(entry, constructor);
+    function->arc_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+    function->arc_return_ownership.param_index = -1;
+    function->arc_return_ownership.complete = true;
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    bool semantic_built =
+        xr_semantic_plan_build_and_attach(function, error, sizeof(error));
+    if (!semantic_built)
+        fprintf(stderr, "ADT enum semantic plan failed: %s\n", error);
+    REQUIRE(semantic_built && function->semantic_plan != NULL);
+    XrTargetProfile *profile = build_exact_profile();
+    XrTargetPlan *target = build_target_plan(function->semantic_plan, profile);
+    REQUIRE((xr_target_plan_completed_family_mask(target) &
+             XR_TARGET_FAMILY_ADT_ENUM_STORAGE) != 0);
+    XrFingerprint profile_fingerprint =
+        xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t constructor_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t namespace_semantic_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t payload_semantic_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, constructor, &semantic_function,
+        &constructor_value, error, sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, namespace_value, &semantic_function,
+        &namespace_semantic_value, error, sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, payload, &semantic_function,
+        &payload_semantic_value, error, sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+        emission, constructor_value, &view, error, sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_TAGGED &&
+            view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR &&
+            view.recipe_operand_value == namespace_semantic_value &&
+            view.recipe_layout_id == layout->layout_id &&
+            view.recipe_discriminant == 0 &&
+            view.recipe_argument_count == 1 && view.recipe_arguments &&
+            view.recipe_arguments[0].semantic_value == payload_semantic_value &&
+            view.recipe_arguments[0].kind ==
+                XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD &&
+            strcmp(view.recipe_symbol, "xrt_enum_aggregate_box") == 0 &&
+            strcmp(view.recipe_type_name, "RecipeValue") == 0 &&
+            strcmp(view.recipe_member_name, "Text") == 0);
+
+    XrCValueEmissionView *row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++) {
+        if (emission->values[i].semantic_value == constructor_value) {
+            REQUIRE(row == NULL);
+            row = &emission->values[i];
+        }
+    }
+    REQUIRE(row != NULL && emission->recipe_argument_count == 1);
+    uint32_t saved_layout = row->recipe_layout_id;
+    row->recipe_layout_id++;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, target, profile_fingerprint, error, sizeof(error)));
+    row->recipe_layout_id = saved_layout;
+
+    const char *saved_member = row->recipe_member_name;
+    row->recipe_member_name = "Other";
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, target, profile_fingerprint, error, sizeof(error)));
+    row->recipe_member_name = saved_member;
+
+    uint32_t saved_payload = emission->recipe_arguments[0].semantic_value;
+    emission->recipe_arguments[0].semantic_value = namespace_semantic_value;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, target, profile_fingerprint, error, sizeof(error)));
+    emission->recipe_arguments[0].semantic_value = saved_payload;
+    REQUIRE(xr_c_emission_plan_verify(
+        emission, target, profile_fingerprint, error, sizeof(error)));
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+    xr_enum_layout_free(layout);
+}
+
 static void test_channel_new_c_emission_recipe_is_exact(void) {
     XiFunc *root = xi_func_new("channel_recipe", &scalar_unit);
     REQUIRE(root != NULL);
@@ -1373,6 +1521,7 @@ int main(void) {
     test_dynamic_closure_c_emission_is_exact_and_mutation_safe();
     test_panic_catch_c_emission_recipe_is_exact();
     test_string_concat_c_emission_recipe_is_exact();
+    test_adt_enum_constructor_c_emission_recipe_is_exact();
     test_channel_new_c_emission_recipe_is_exact();
     test_stringbuilder_new_c_emission_recipe_is_exact();
     test_string_byte_slice_view_c_emission_recipe_is_exact();

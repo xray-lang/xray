@@ -1,12 +1,12 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 19 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 21 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
 plan the builder emits.
-Schema 19 is a breaking hard cutover: schema 18 and earlier and a plan missing
+Schema 20 is a breaking hard cutover: schema 19 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
@@ -89,6 +89,12 @@ SOURCE_EXPORT rows bind only an exact dependency public wrapper and its
 coroutine state/result relation. They deliberately contain no local callee
 index or cross-module argument/frame storage, so this typed frame grants them
 no execution path.
+The ADT-enum-storage family describes only exact source-backed enum parameters,
+direct-local enum returns, and payload-bearing constructor results as outer
+tagged values. Its exact declaration, member, layout, discriminant, payload
+order, receiver, and ownership come from the frozen plans; it grants no enum
+object body, guessed type/name/arity, root, cleanup, or generic dispatch and
+remains outside the trivial frame allocator.
 
 The separate scalar dispatcher may use this frame only when an independently
 verified, non-empty function instruction group grants its exact execution
@@ -141,9 +147,9 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 1402e8e2d8bcb046ee7cfc25297a31223fc7249355dd5313a6c25c8d4cc3c53b
-anchor-sha256: src/vm/xr_typed_frame.h b51b7f45110ccd0f05a1b6595a4a960eec1606d2bae6dbd21e95633fed2b0151
+anchor-sha256: src/plan/target/xr_target_plan.h 42e11e8b6cd4929dac9233e14ed5df536025a57e111ef81b3a1ef6f0dd584f9c
+anchor-sha256: src/vm/xr_typed_frame.h 66642c1b44238b10c46533c3619d9f752f1f9f8f2e03fed1e27dbaafa3ed68ef
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 1a8fcbe84ce64c733d0cb2614f745a1852fbd6991ef9ae8da5683b5f0eab6de5
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c c5aef805d149418055367d92e34f263bdea0853904b437548a21d6691292e3ba
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

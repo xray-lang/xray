@@ -54,6 +54,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE = UINT64_C(1) << 27,
     XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE = UINT64_C(1) << 28,
     XR_TARGET_FAMILY_PANIC_CATCH_STORAGE = UINT64_C(1) << 29,
+    XR_TARGET_FAMILY_ADT_ENUM_STORAGE = UINT64_C(1) << 30,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -197,7 +198,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE |                  \
                  XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE |                   \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |             \
-                 XR_TARGET_FAMILY_PANIC_CATCH_STORAGE))
+                 XR_TARGET_FAMILY_PANIC_CATCH_STORAGE |                             \
+                 XR_TARGET_FAMILY_ADT_ENUM_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -322,6 +324,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR,
     XR_TARGET_CALL_CONVENTION_NATIVE_NAMESPACE_YIELDABLE,
     XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR,
+    XR_TARGET_CALL_CONVENTION_ADT_ENUM_CONSTRUCTOR,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -343,7 +346,9 @@ typedef enum XrTargetCallConvention {
  * SOURCE_CLASS_CONSTRUCTOR names the construction of a declared class through
  * its own class object, taken from the SemanticPlan call target of the same
  * name; it names no callee function and carries no argument, and it never
- * suspends. */
+ * suspends. ADT_ENUM_CONSTRUCTOR names one payload-bearing member of an exact
+ * source enum through its frozen enum namespace; its ordered payload recipe is
+ * projected by CEmissionPlan rather than reconstructed by CGen. */
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
@@ -359,6 +364,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR,
     XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE,
     XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR,
+    XR_TARGET_CALL_TARGET_ADT_ENUM_CONSTRUCTOR,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetCallErrorMode {
@@ -605,6 +611,8 @@ typedef struct XrTargetCallArgumentRecord {
     uint32_t callee_slot;
     uint16_t register_rep;
     uint16_t memory_rep;
+    uint16_t callee_register_rep;
+    uint16_t callee_memory_rep;
     uint16_t ordinal;
     uint8_t mode;
     uint8_t ownership;

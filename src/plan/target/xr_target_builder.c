@@ -16,6 +16,7 @@
 #include "xr_target_builder.h"
 #include "xr_target_instruction_verify.h"
 #include "xr_target_plan_internal.h"
+#include "../semantic/xr_semantic_enum_shape.h"
 #include "xr_target_profile_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
@@ -4762,6 +4763,160 @@ static bool builder_add_direct_local_string_result_storage(
     return true;
 }
 
+static bool note_adt_enum_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_value, uint32_t semantic_type, uint32_t semantic_function,
+    uint32_t semantic_operation, uint8_t role, XrStableId source_identity,
+    uint8_t ownership, char *error, size_t error_size) {
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(builder->semantic_plan, semantic_type);
+    if (!xr_semantic_adt_enum_type_is_exact(type) ||
+        semantic_value >= analysis->total_values ||
+        semantic_type >= analysis->type_count ||
+        semantic_function >=
+            xr_semantic_plan_function_count(builder->semantic_plan))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "ADT enum storage authority is incomplete");
+    if (analysis->defined_values[semantic_value])
+        return analysis->value_types[semantic_value] == semantic_type &&
+               analysis->value_functions[semantic_value] == semantic_function;
+    XrTargetMachineRepRecord rep;
+    if (!make_dynamic_value_rep(
+            xr_target_profile_machine_facts(builder->profile), &rep) ||
+        (ownership != XR_TARGET_OWNERSHIP_OWNED &&
+         ownership != XR_TARGET_OWNERSHIP_BORROWED))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize ADT enum storage");
+    rep.ownership = ownership;
+    if (!append_rep_intent(builder, &rep, error, error_size))
+        return false;
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, semantic_function, role,
+                            source_identity, XR_SEMANTIC_INDEX_NONE,
+                            &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "ADT enum slot identity is incomplete");
+    bool parameter = role == XR_TARGET_SLOT_PARAMETER;
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = semantic_function,
+        .semantic_value = semantic_value,
+        .semantic_operation = parameter ? XR_SEMANTIC_INDEX_NONE
+                                        : semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = role,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = ownership,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = semantic_value,
+        .semantic_function = semantic_function,
+        .semantic_type = semantic_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[semantic_type] &&
+         !append_layout_intent(builder, semantic_type,
+                               XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                               error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[semantic_value] = 1;
+    analysis->used_types[semantic_type] = 1;
+    analysis->value_types[semantic_value] = semantic_type;
+    analysis->value_functions[semantic_value] = semantic_function;
+    analysis->type_rep_kinds[semantic_type] = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+/* Bind only the exact ADT enum values needed at the constructor and
+ * direct-local ABI boundary. Other enum-producing operations remain outside
+ * the family until their own immutable producer contract exists. */
+static bool builder_add_adt_enum_storage(XrTargetPlanBuilder *builder,
+                                         char *error, size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_ADT_ENUM_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis,
+                                              error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values) {
+            analysis.defined_values[value->semantic_value] = 1;
+            analysis.used_types[value->semantic_type] = 1;
+            analysis.value_types[value->semantic_value] = value->semantic_type;
+            analysis.value_functions[value->semantic_value] =
+                value->semantic_function;
+        }
+    }
+    uint32_t parameter_count =
+        (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(builder->semantic_plan, i);
+        if (!parameter ||
+            !xr_semantic_adt_enum_type_is_exact(xr_semantic_plan_type(
+                builder->semantic_plan, parameter->type)))
+            continue;
+        if ((parameter->ownership != XI_OWN_NONE &&
+             parameter->ownership != XI_OWN_OWNED &&
+             parameter->ownership != XI_OWN_BORROWED) ||
+            parameter->mode != XR_PARAM_READ ||
+            parameter->transfer_mode != XR_TRANSFER_SHARE) {
+            if (error && error_size)
+                snprintf(error, error_size,
+                         "XR_TARGET_1001: ADT enum parameter ownership is unsupported "
+                         "(ownership=%u mode=%u transfer=%u)",
+                         parameter->ownership, parameter->mode,
+                         parameter->transfer_mode);
+            valid = false;
+        }
+        else
+            valid = note_adt_enum_storage_value(
+                builder, &analysis, parameter->value, parameter->type,
+                parameter->function, XR_SEMANTIC_INDEX_NONE,
+                XR_TARGET_SLOT_PARAMETER, parameter->id,
+                parameter->ownership == XI_OWN_BORROWED
+                    ? XR_TARGET_OWNERSHIP_BORROWED
+                    : XR_TARGET_OWNERSHIP_OWNED,
+                error, error_size);
+    }
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        const XrSemanticFunctionRecord *callee =
+            semantic_direct_local_callee_for_operation(builder->semantic_plan, i);
+        bool constructor = xr_semantic_adt_enum_constructor_is_exact(
+            builder->semantic_plan, operation, NULL);
+        bool direct_result =
+            xr_semantic_direct_local_adt_enum_result_is_exact(
+                builder->semantic_plan, operation, callee);
+        if (!constructor && !direct_result)
+            continue;
+        valid = note_adt_enum_storage_value(
+            builder, &analysis, operation->result_value,
+            operation->result_type, operation->function, i,
+            XR_TARGET_SLOT_TEMPORARY, operation->id,
+            XR_TARGET_OWNERSHIP_OWNED, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_ADT_ENUM_STORAGE;
+    return true;
+}
+
 static bool builder_add_direct_local_callee_storage(
     XrTargetPlanBuilder *builder, char *error, size_t error_size) {
     if (!builder_begin_family(
@@ -6559,6 +6714,46 @@ static bool collect_native_module_scalar_call_intent(XrTargetPlanBuilder *builde
     return append_call_intent(builder, &call, error, error_size);
 }
 
+/* A payload-bearing source enum constructor has no callee ABI: its namespace
+ * receiver and payloads are frozen semantic inputs to the materialization
+ * recipe. The call row owns the exact constructor dispatch and the fresh
+ * tagged result, while CEmissionPlan projects the ordered payload recipe. */
+static bool collect_adt_enum_constructor_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error,
+    size_t error_size) {
+    XrSemanticAdtEnumConstructorShape shape = {0};
+    const XrSemanticTypeRecord *result_type =
+        operation ? xr_semantic_plan_type(builder->semantic_plan,
+                                          operation->result_type)
+                  : NULL;
+    if (!xr_semantic_adt_enum_constructor_is_exact(
+            builder->semantic_plan, operation, &shape) || !result_type)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "ADT enum constructor dispatch authority is incomplete");
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_RETURN_OWNED,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_ADT_ENUM_CONSTRUCTOR,
+        .target_kind = XR_TARGET_CALL_TARGET_ADT_ENUM_CONSTRUCTOR,
+    };
+    if (!stable_identity_from_pair("xray-target-adt-enum-constructor-v1",
+                                   operation->id, result_type->id,
+                                   shape.member_ordinal, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "ADT enum constructor call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
                                              uint32_t target_index,
                                              const XrSemanticCallTargetRecord *target,
@@ -6595,7 +6790,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
             xr_semantic_plan_parameter_count(plan) - callee->parameter_begin ||
         operation->result_type != callee->return_type ||
         (!call_type_is_exact_scalar(plan, operation->result_type) &&
-         !semantic_direct_local_string_result_is_exact(plan, operation, callee)))
+         !semantic_direct_local_string_result_is_exact(plan, operation, callee) &&
+         !xr_semantic_direct_local_adt_enum_result_is_exact(
+             plan, operation, callee)))
         return fail(error, error_size, "XR_TARGET_1003",
                     "direct-local signature or result storage is incomplete");
     const XrSemanticOperandRecord *callee_operand = &operands[operation->operand_begin];
@@ -6617,7 +6814,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
         .argument_count = callee->parameter_count,
         .result_mode = XR_TARGET_CALL_VALUE,
         .result_ownership =
-            semantic_direct_local_string_result_is_exact(plan, operation, callee)
+            (semantic_direct_local_string_result_is_exact(plan, operation, callee) ||
+             xr_semantic_direct_local_adt_enum_result_is_exact(
+                 plan, operation, callee))
                 ? XR_TARGET_CALL_RETURN_OWNED
                 : XR_TARGET_CALL_NONE,
         .calling_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
@@ -6642,6 +6841,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
         bool exact_unit_enum = parameter && parameter->type == operand->type &&
                                semantic_unit_enum_type_is_exact(
                                    xr_semantic_plan_type(plan, operand->type));
+        bool exact_adt_enum = parameter && parameter->type == operand->type &&
+                              xr_semantic_adt_enum_type_is_exact(
+                                  xr_semantic_plan_type(plan, operand->type));
         /* A class instance is admitted as an argument through the same shared
          * judgement that binds its storage on the callee side, so a parameter
          * this call passes can never be one the callee's own family refused. */
@@ -6654,12 +6856,14 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
             operand->parameter_mode != parameter->mode ||
             operand->transfer_mode != parameter->transfer_mode ||
             (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
-            (!exact_scalar && !exact_u8_slice && !exact_unit_enum && !exact_class_instance) ||
+            (!exact_scalar && !exact_u8_slice && !exact_unit_enum &&
+             !exact_adt_enum && !exact_class_instance) ||
             parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
             (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0 ||
             (parameter->ownership != XI_OWN_NONE &&
-             !((exact_u8_slice || exact_unit_enum || exact_class_instance) &&
-               parameter->ownership == XI_OWN_BORROWED)))
+             !(exact_adt_enum && parameter->ownership == XI_OWN_OWNED) &&
+             !((exact_u8_slice || exact_unit_enum || exact_adt_enum ||
+                exact_class_instance) && parameter->ownership == XI_OWN_BORROWED)))
             return fail(error, error_size, "XR_TARGET_1003",
                         "direct-local argument contract needs unsupported storage or ownership");
         XrTargetCallArgumentIntent argument = {
@@ -7001,6 +7205,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_native_module_scalar_call_is_exact(plan, operation, NULL)) {
             valid = collect_native_module_scalar_call_intent(builder, i, operation, error,
                                                              error_size);
+        } else if (xr_semantic_adt_enum_constructor_is_exact(plan, operation, NULL)) {
+            valid = collect_adt_enum_constructor_call_intent(
+                builder, i, operation, error, error_size);
         } else if (semantic_operation_is_call_shaped(plan, operation)) {
             uint32_t metadata_count = 0;
             uint32_t operand_count = 0;
@@ -8097,6 +8304,23 @@ static int find_rep_kind(const XrTargetMaterializedPlan *materialized, uint16_t 
     return -1;
 }
 
+static bool machine_reps_have_same_call_abi(
+    const XrTargetMachineRepRecord *caller,
+    const XrTargetMachineRepRecord *callee) {
+    return caller && callee && caller->kind == callee->kind &&
+           caller->register_bits == callee->register_bits &&
+           caller->memory_size == callee->memory_size &&
+           caller->memory_align == callee->memory_align &&
+           caller->signedness == callee->signedness &&
+           caller->root_kind == callee->root_kind &&
+           caller->null_encoding == callee->null_encoding &&
+           caller->detail == callee->detail &&
+           caller->lane_count == callee->lane_count &&
+           caller->reserved == callee->reserved &&
+           memcmp(caller->legal_conversion_mask, callee->legal_conversion_mask,
+                  sizeof(caller->legal_conversion_mask)) == 0;
+}
+
 static bool materialize_calls_and_adapters(
     const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
     char *error, size_t error_size) {
@@ -8175,12 +8399,37 @@ static bool materialize_calls_and_adapters(
                                                        ? find_materialized_value(
                                                              materialized, parameter->value)
                                                        : NULL;
+            const XrSemanticTypeRecord *parameter_type =
+                parameter ? xr_semantic_plan_type(builder->semantic_plan,
+                                                  parameter->type)
+                          : NULL;
+            bool adt_enum_borrow_boundary =
+                xr_semantic_adt_enum_type_is_exact(parameter_type) && caller && callee &&
+                caller->register_rep < materialized->machine_rep_count &&
+                caller->memory_rep < materialized->machine_rep_count &&
+                callee->register_rep < materialized->machine_rep_count &&
+                callee->memory_rep < materialized->machine_rep_count &&
+                machine_reps_have_same_call_abi(
+                    &materialized->machine_reps[caller->register_rep],
+                    &materialized->machine_reps[callee->register_rep]) &&
+                machine_reps_have_same_call_abi(
+                    &materialized->machine_reps[caller->memory_rep],
+                    &materialized->machine_reps[callee->memory_rep]) &&
+                materialized->machine_reps[caller->register_rep].ownership ==
+                    XR_TARGET_OWNERSHIP_OWNED &&
+                materialized->machine_reps[callee->register_rep].ownership ==
+                    XR_TARGET_OWNERSHIP_BORROWED &&
+                materialized->machine_reps[caller->memory_rep].ownership ==
+                    XR_TARGET_OWNERSHIP_OWNED &&
+                materialized->machine_reps[callee->memory_rep].ownership ==
+                    XR_TARGET_OWNERSHIP_BORROWED;
             if (argument_intent->call_intent != i ||
                 argument_intent->ordinal != ordinal || !caller || !callee ||
                 caller->slot == XR_SEMANTIC_INDEX_NONE ||
                 callee->slot == XR_SEMANTIC_INDEX_NONE ||
-                caller->register_rep != callee->register_rep ||
-                caller->memory_rep != callee->memory_rep)
+                ((caller->register_rep != callee->register_rep ||
+                  caller->memory_rep != callee->memory_rep) &&
+                 !adt_enum_borrow_boundary))
                 return fail(error, error_size, "XR_TARGET_1003",
                             "direct-local argument lacks identical caller/callee storage");
             materialized->call_arguments[next_argument] =
@@ -8194,6 +8443,8 @@ static bool materialize_calls_and_adapters(
                     .callee_slot = callee->slot,
                     .register_rep = caller->register_rep,
                     .memory_rep = caller->memory_rep,
+                    .callee_register_rep = callee->register_rep,
+                    .callee_memory_rep = callee->memory_rep,
                     .ordinal = argument_intent->ordinal,
                     .mode = argument_intent->mode,
                     .ownership = argument_intent->ownership,
@@ -8689,6 +8940,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_stringbuilder_append_string_storage(builder, error, error_size) ||
         !builder_add_json_namespace_value_storage(builder, error, error_size) ||
         !builder_add_direct_local_string_result_storage(builder, error, error_size) ||
+        !builder_add_adt_enum_storage(builder, error, error_size) ||
         !builder_add_direct_local_callee_storage(builder, error, error_size) ||
         !builder_add_direct_local_go_callee_storage(builder, error, error_size) ||
         !builder_add_direct_local_go_task_result_storage(builder, error, error_size) ||

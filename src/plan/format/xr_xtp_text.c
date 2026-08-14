@@ -119,6 +119,7 @@ static const XrXtpTextFamilyName family_names[] = {
     {XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE,
      "DIRECT_LOCAL_GO_TASK_RESULT_STORAGE"},
     {XR_TARGET_FAMILY_PANIC_CATCH_STORAGE, "PANIC_CATCH_STORAGE"},
+    {XR_TARGET_FAMILY_ADT_ENUM_STORAGE, "ADT_ENUM_STORAGE"},
 };
 
 /* ========== Row emission ========== */

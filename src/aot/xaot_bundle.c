@@ -5378,7 +5378,7 @@ XR_FUNC bool xaot_value_plan_is_exact_rep_adapter(
     bool target_source = binding != NULL;
     bool legacy_source_exact = rep_adapter_exact_non_scalar_legacy_source(
         legacy_source, plan->func, source, plan->value->op);
-    if (target_source == legacy_source_exact)
+    if (!target_source && !legacy_source_exact)
         return false;
 
     if (plan->value->op == XI_BOX ||
@@ -5386,6 +5386,11 @@ XR_FUNC bool xaot_value_plan_is_exact_rep_adapter(
         return rep_adapter_fields_are_exact(
             &plan->rep, XAOT_VALUE_TAGGED, XAOT_REP_TAGGED,
             plan->value->type, "XrValue", 0);
+    if (target_source && plan->value->op == XI_UNBOX &&
+        plan->value->rep == XR_REP_PTR)
+        return rep_adapter_fields_are_exact(
+            &plan->rep, XAOT_VALUE_PTR, XAOT_REP_PTR,
+            plan->value->type, "void *", 0);
     if (target_source)
         return rep_adapter_exact_target_scalar_output(
             target_plan, binding, plan->value->type, &plan->rep);

@@ -1090,6 +1090,11 @@ TEST(aot_semantic_snapshot_survives_analyzer_pool_churn) {
     char *code = generate_c_with_status(ir, "snapshot", &had_error);
     TEST_REQUIRE(code != NULL && !had_error,
                  "AOT planning and C generation use only the detached snapshot");
+    TEST_REQUIRE(strstr(code,
+                        "xrt_enum_aggregate_box(XRT_ENUM_AGGREGATE_MAKE(") != NULL,
+                 "payload enum constructor consumes the immutable C recipe");
+    TEST_REQUIRE(strstr(code, "\"SnapshotValue\", \"Text\",") != NULL,
+                 "payload enum recipe freezes the nominal type and member");
 
     xr_free(code);
     xi_func_free(ir);

@@ -262,6 +262,8 @@ static void hash_call_argument(XrSHA256Context *ctx,
     hash_u64(ctx, record->callee_slot);
     hash_u64(ctx, record->register_rep);
     hash_u64(ctx, record->memory_rep);
+    hash_u64(ctx, record->callee_register_rep);
+    hash_u64(ctx, record->callee_memory_rep);
     hash_u64(ctx, record->ordinal);
     hash_u64(ctx, record->mode);
     hash_u64(ctx, record->ownership);
@@ -414,6 +416,8 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
         hash_call_argument(&ctx, argument);
         hash_machine_rep(&ctx, &plan->machine_reps[argument->register_rep]);
         hash_machine_rep(&ctx, &plan->machine_reps[argument->memory_rep]);
+        hash_machine_rep(&ctx, &plan->machine_reps[argument->callee_register_rep]);
+        hash_machine_rep(&ctx, &plan->machine_reps[argument->callee_memory_rep]);
     }
     for (uint32_t i = 0; i < call->adapter_count; i++)
         hash_adapter(&ctx, &plan->adapters[call->adapter_begin + i]);
@@ -421,7 +425,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v16\0";
+    static const uint8_t domain[] = "xray-target-plan-v17\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -618,11 +622,14 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
          * that table. */
         bool source_class_constructor =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
+        bool adt_enum_constructor =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ADT_ENUM_CONSTRUCTOR;
         if ((!direct_local && !channel_close && !source_export &&
              !stringbuilder_constructor && !string_byte_slice_view &&
              !stringbuilder_append_rune && !stringbuilder_to_string && !stringbuilder_append_string &&
              !json_namespace_value && !array_member_scalar && !native_module_scalar &&
-             !native_namespace_yieldable && !source_class_constructor) ||
+             !native_namespace_yieldable && !source_class_constructor &&
+             !adt_enum_constructor) ||
             plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
             ((direct_local || source_export || native_namespace_yieldable ||
@@ -631,7 +638,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
                  xr_semantic_plan_call_target_count(plan->semantic_plan)) ||
             ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
               stringbuilder_append_rune || stringbuilder_to_string || stringbuilder_append_string ||
-              json_namespace_value || array_member_scalar || native_module_scalar) &&
+              json_namespace_value || array_member_scalar || native_module_scalar ||
+              adt_enum_constructor) &&
              plan->calls[i].semantic_call_target != XR_SEMANTIC_INDEX_NONE) ||
             plan->calls[i].result_register_rep >= plan->machine_reps_count ||
             plan->calls[i].result_memory_rep >= plan->machine_reps_count ||
@@ -648,7 +656,9 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             const XrTargetCallArgumentRecord *argument =
                 &plan->call_arguments[plan->calls[i].argument_begin + a];
             if (argument->register_rep >= plan->machine_reps_count ||
-                argument->memory_rep >= plan->machine_reps_count)
+                argument->memory_rep >= plan->machine_reps_count ||
+                argument->callee_register_rep >= plan->machine_reps_count ||
+                argument->callee_memory_rep >= plan->machine_reps_count)
                 goto invalid_call;
         }
         xr_target_call_compute_fingerprint(plan, i, &plan->calls[i].fingerprint);

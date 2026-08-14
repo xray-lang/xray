@@ -142,7 +142,8 @@
 #define XR_XTP_TEXT_CALL_ARGUMENT_FIELDS(F)                                                             \
     F(ID, identity) F(U32, call) F(U32, semantic_operand) F(U32, semantic_value)                  \
     F(U32, callee_parameter) F(U32, caller_slot) F(U32, callee_slot) F(U16, register_rep)        \
-    F(U16, memory_rep) F(U16, ordinal) F(U8, mode) F(U8, ownership) F(U8, transfer_mode)         \
+    F(U16, memory_rep) F(U16, callee_register_rep) F(U16, callee_memory_rep)                    \
+    F(U16, ordinal) F(U8, mode) F(U8, ownership) F(U8, transfer_mode)                            \
     F(U8, flags)
 #define XR_XTP_TEXT_ROOT_MAP_FIELDS(F)                                                                  \
     F(U32, id) F(U32, function) F(U32, semantic_operation) F(U32, slot_begin)                    \

@@ -11,6 +11,7 @@
 #include "xr_c_emission_plan.h"
 #include "../../plan/target/xr_target_plan.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
+#include "../../plan/semantic/xr_semantic_enum_shape.h"
 #include "../../plan/semantic/xr_semantic_string_shape.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
@@ -22,7 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(14)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(15)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -34,6 +35,7 @@
 #define XR_C_STRINGBUILDER_TO_STRING_SYMBOL "xrt_strbuf_finish"
 #define XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL "xrt_strbuf_append"
 #define XR_C_STRING_CONCAT_SYMBOL "xrt_str_concat_parts"
+#define XR_C_ADT_ENUM_CONSTRUCTOR_SYMBOL "xrt_enum_aggregate_box"
 
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
@@ -322,6 +324,92 @@ static bool string_concat_argument_has_exact_projection(
     return binding && register_rep && memory_rep &&
            register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
            memory_rep->kind == XR_MACHINE_REP_DYN_VALUE;
+}
+
+static bool exact_adt_enum_constructor_recipe(
+    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
+    XrSemanticAdtEnumConstructorShape *shape,
+    const XrSemanticOperandRecord **payloads) {
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    XrSemanticAdtEnumConstructorShape derived = {0};
+    const XrTargetCallRecord *call = NULL;
+
+    if (shape)
+        memset(shape, 0, sizeof(*shape));
+    if (payloads)
+        *payloads = NULL;
+    if (!target_plan || !binding || !semantic || !operation || !operands ||
+        !calls || operation->result_value != binding->semantic_value ||
+        !xr_semantic_adt_enum_constructor_is_exact(semantic, operation,
+                                                   &derived) ||
+        derived.payload_operand_begin > operand_count ||
+        derived.payload_count > operand_count - derived.payload_operand_begin)
+        return false;
+    for (uint32_t i = 0; i < call_count; i++) {
+        if (xr_semantic_plan_operation(semantic,
+                                       calls[i].semantic_operation) != operation)
+            continue;
+        if (call)
+            return false;
+        call = &calls[i];
+    }
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    if (!call || call->result_value != binding->semantic_value ||
+        call->result_slot != binding->slot ||
+        call->result_register_rep != binding->register_rep ||
+        call->result_memory_rep != binding->memory_rep ||
+        call->argument_count != 0 || call->adapter_count != 0 ||
+        call->calling_convention !=
+            XR_TARGET_CALL_CONVENTION_ADT_ENUM_CONSTRUCTOR ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ADT_ENUM_CONSTRUCTOR ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_RETURN_OWNED ||
+        !register_rep || !memory_rep ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE)
+        return false;
+    if (shape)
+        *shape = derived;
+    if (payloads)
+        *payloads = &operands[derived.payload_operand_begin];
+    return true;
+}
+
+static bool adt_enum_payload_has_exact_projection(
+    const XrTargetPlan *target_plan, uint32_t semantic_value) {
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(target_plan,
+                                             binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(target_plan,
+                                             binding->memory_rep)
+                : NULL;
+    XrCValueRep register_c_rep = XR_C_VALUE_REP_COUNT;
+    XrCValueRep memory_c_rep = XR_C_VALUE_REP_COUNT;
+    const char *register_c_type = NULL;
+    const char *memory_c_type = NULL;
+    return binding && register_rep && memory_rep &&
+           machine_kind_to_c_rep(register_rep->kind, &register_c_rep,
+                                 &register_c_type) &&
+           machine_kind_to_c_rep(memory_rep->kind, &memory_c_rep,
+                                 &memory_c_type) &&
+           register_rep->kind == memory_rep->kind &&
+           register_c_rep == memory_c_rep &&
+           strcmp(register_c_type, memory_c_type) == 0;
 }
 
 /* Builder-side collector. The recipe is admitted only by the frozen
@@ -1055,7 +1143,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v13\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v14\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -1082,6 +1170,8 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
         hash_u64(&ctx, value->literal_byte_length);
         hash_u64(&ctx, value->recipe_operand_value);
         hash_u64(&ctx, value->recipe_argument_value);
+        hash_u64(&ctx, value->recipe_layout_id);
+        hash_u64(&ctx, value->recipe_discriminant);
         hash_u64(&ctx, value->recipe_argument_count);
         hash_u64(&ctx, value->recipe_reserved);
         size_t c_type_length = strlen(value->c_type);
@@ -1097,6 +1187,22 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
         if (recipe_symbol_length)
             xr_sha256_update(&ctx, (const uint8_t *) value->recipe_symbol,
                              recipe_symbol_length);
+        size_t recipe_type_name_length = value->recipe_type_name
+                                             ? strlen(value->recipe_type_name)
+                                             : 0;
+        hash_u64(&ctx, recipe_type_name_length);
+        if (recipe_type_name_length)
+            xr_sha256_update(&ctx,
+                             (const uint8_t *) value->recipe_type_name,
+                             recipe_type_name_length);
+        size_t recipe_member_name_length = value->recipe_member_name
+                                               ? strlen(value->recipe_member_name)
+                                               : 0;
+        hash_u64(&ctx, recipe_member_name_length);
+        if (recipe_member_name_length)
+            xr_sha256_update(&ctx,
+                             (const uint8_t *) value->recipe_member_name,
+                             recipe_member_name_length);
     }
     for (uint32_t i = 0; i < plan->recipe_argument_count; i++) {
         const XrCRecipeArgumentView *argument = &plan->recipe_arguments[i];
@@ -1279,6 +1385,31 @@ static bool verify_value(const XrCValueEmissionView *value) {
                            argument->reserved[1] == 0 &&
                            argument->reserved[2] == 0;
         }
+    } else if (value->materialization ==
+               XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR) {
+        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_argument_value == UINT32_MAX &&
+                       value->recipe_layout_id != 0 &&
+                       value->recipe_argument_count > 0 &&
+                       value->recipe_arguments != NULL && value->recipe_symbol &&
+                       strcmp(value->recipe_symbol,
+                              XR_C_ADT_ENUM_CONSTRUCTOR_SYMBOL) == 0 &&
+                       value->recipe_type_name && value->recipe_type_name[0] &&
+                       value->recipe_member_name && value->recipe_member_name[0];
+        for (uint16_t i = 0; recipe_valid &&
+                             i < value->recipe_argument_count; i++) {
+            const XrCRecipeArgumentView *argument =
+                &value->recipe_arguments[i];
+            recipe_valid = argument->semantic_value != UINT32_MAX &&
+                           argument->kind ==
+                               XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD &&
+                           argument->reserved[0] == 0 &&
+                           argument->reserved[1] == 0 &&
+                           argument->reserved[2] == 0;
+        }
     } else {
         recipe_valid = recipe_valid && value->recipe_argument_count == 0 &&
                        value->recipe_arguments == NULL;
@@ -1292,6 +1423,12 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_argument_count == 0 &&
                        value->recipe_arguments == NULL &&
                        value->recipe_symbol == NULL;
+    if (value->materialization !=
+        XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR)
+        recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
+                       value->recipe_discriminant == 0 &&
+                       value->recipe_type_name == NULL &&
+                       value->recipe_member_name == NULL;
     return expected_rep == (XrCValueRep) value->rep && value->c_type &&
            value->reserved == 0 && value->recipe_reserved == 0 && recipe_valid &&
            strcmp(value->c_type, expected_c_type) == 0 &&
@@ -1525,7 +1662,13 @@ bool xr_c_emission_plan_verify(
             &expected_concat_argument_count);
         bool expected_panic_catch =
             exact_panic_catch_recipe(target_plan, binding);
-        uint8_t expected_recipe = expected_panic_catch
+        XrSemanticAdtEnumConstructorShape expected_enum = {0};
+        const XrSemanticOperandRecord *expected_enum_payloads = NULL;
+        bool expected_adt_enum = exact_adt_enum_constructor_recipe(
+            target_plan, binding, &expected_enum, &expected_enum_payloads);
+        uint8_t expected_recipe = expected_adt_enum
+                                      ? XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR
+                                      : expected_panic_catch
                                       ? XR_C_VALUE_MATERIALIZATION_PANIC_CATCH
                                       : expected_literal
                                       ? XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW
@@ -1546,7 +1689,9 @@ bool xr_c_emission_plan_verify(
                                                                                 : expected_string_concat
                                                                                       ? XR_C_VALUE_MATERIALIZATION_STRING_CONCAT
                                                                                       : XR_C_VALUE_MATERIALIZATION_NONE;
-        uint32_t expected_operand = expected_channel
+        uint32_t expected_operand = expected_adt_enum
+                                        ? expected_enum.receiver_value
+                                        : expected_channel
                                         ? expected_capacity
                                         : expected_receive_symbol
                                               ? expected_receiver
@@ -1560,7 +1705,9 @@ bool xr_c_emission_plan_verify(
         uint32_t expected_argument = expected_stringbuilder_append
                                          ? expected_append_argument
                                          : expected_append_string?expected_append_string_argument:UINT32_MAX;
-        const char *expected_symbol = expected_channel
+        const char *expected_symbol = expected_adt_enum
+                                          ? XR_C_ADT_ENUM_CONSTRUCTOR_SYMBOL
+                                          : expected_channel
                                           ? XR_C_CHANNEL_NEW_SYMBOL
                                           : expected_receive_symbol
                                                 ? expected_receive_symbol
@@ -1583,6 +1730,19 @@ bool xr_c_emission_plan_verify(
             row->literal_byte_length != expected_length ||
             row->recipe_operand_value != expected_operand ||
             row->recipe_argument_value != expected_argument ||
+            row->recipe_layout_id !=
+                (expected_adt_enum ? expected_enum.layout_id : 0) ||
+            row->recipe_discriminant !=
+                (expected_adt_enum ? expected_enum.member_ordinal : 0) ||
+            (expected_adt_enum
+                 ? (!row->recipe_type_name ||
+                    strcmp(row->recipe_type_name,
+                           expected_enum.enum_name) != 0 ||
+                    !row->recipe_member_name ||
+                    strcmp(row->recipe_member_name,
+                           expected_enum.member_name) != 0)
+                 : row->recipe_type_name != NULL ||
+                       row->recipe_member_name != NULL) ||
             (expected_symbol
                  ? (!row->recipe_symbol ||
                     strcmp(row->recipe_symbol,
@@ -1595,7 +1755,34 @@ bool xr_c_emission_plan_verify(
                  : row->literal_bytes != NULL))
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "C emission materialization recipe is not exact");
-        if (expected_string_concat) {
+        if (expected_adt_enum) {
+            if (!expected_enum_payloads ||
+                row->recipe_argument_count != expected_enum.payload_count ||
+                !row->recipe_arguments ||
+                expected_enum.payload_count >
+                    plan->recipe_argument_count - projected_recipe_arguments ||
+                row->recipe_arguments !=
+                    &plan->recipe_arguments[projected_recipe_arguments])
+                return emission_error(
+                    error, error_size, "XR_TARGET_1001",
+                    "C emission ADT enum payload partition is invalid");
+            for (uint16_t argument = 0;
+                 argument < expected_enum.payload_count; argument++) {
+                const XrCRecipeArgumentView *actual =
+                    &row->recipe_arguments[argument];
+                if (actual->semantic_value !=
+                        expected_enum_payloads[argument].value ||
+                    !adt_enum_payload_has_exact_projection(
+                        target_plan, actual->semantic_value) ||
+                    actual->kind != XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD ||
+                    actual->reserved[0] != 0 || actual->reserved[1] != 0 ||
+                    actual->reserved[2] != 0)
+                    return emission_error(
+                        error, error_size, "XR_TARGET_1001",
+                        "C emission ADT enum payload is not exact");
+            }
+            projected_recipe_arguments += expected_enum.payload_count;
+        } else if (expected_string_concat) {
             if (!expected_concat_arguments ||
                 row->recipe_argument_count != expected_concat_argument_count ||
                 !row->recipe_arguments ||
@@ -1670,7 +1857,9 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE |
         XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE |
         XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |
-        XR_TARGET_FAMILY_PANIC_CATCH_STORAGE;
+        XR_TARGET_FAMILY_PANIC_CATCH_STORAGE |
+        XR_TARGET_FAMILY_ADT_ENUM_STORAGE |
+        XR_TARGET_FAMILY_CALL_ADAPTER;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",
@@ -1714,6 +1903,26 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         }
         const XrSemanticOperandRecord *concat_arguments = NULL;
         uint16_t concat_argument_count = 0;
+        XrSemanticAdtEnumConstructorShape enum_shape = {0};
+        const XrSemanticOperandRecord *enum_payloads = NULL;
+        if (exact_adt_enum_constructor_recipe(target_plan, binding,
+                                              &enum_shape,
+                                              &enum_payloads)) {
+            if (!enum_payloads ||
+                enum_shape.payload_count > UINT32_MAX - recipe_argument_count)
+                return emission_error(
+                    error, error_size, "XR_EXEC_5003",
+                    "ADT enum recipe argument budget overflow");
+            for (uint16_t argument = 0;
+                 argument < enum_shape.payload_count; argument++) {
+                if (!adt_enum_payload_has_exact_projection(
+                        target_plan, enum_payloads[argument].value))
+                    return emission_error(
+                        error, error_size, "XR_TARGET_1001",
+                        "ADT enum payload has no exact C projection");
+            }
+            recipe_argument_count += enum_shape.payload_count;
+        }
         if (exact_string_concat_recipe(target_plan, binding,
                                        &concat_arguments,
                                        &concat_argument_count)) {
@@ -1802,7 +2011,48 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         bool string_concat = exact_string_concat_recipe(
             target_plan, binding, &concat_arguments, &concat_argument_count);
         bool panic_catch = exact_panic_catch_recipe(target_plan, binding);
-        if (panic_catch) {
+        XrSemanticAdtEnumConstructorShape enum_shape = {0};
+        const XrSemanticOperandRecord *enum_payloads = NULL;
+        bool adt_enum = exact_adt_enum_constructor_recipe(
+            target_plan, binding, &enum_shape, &enum_payloads);
+        if (adt_enum) {
+            if (!enum_payloads ||
+                enum_shape.payload_count >
+                    plan->recipe_argument_count - recipe_argument_index) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(
+                    error, error_size, "XR_TARGET_1001",
+                    "ADT enum recipe argument partition is invalid");
+            }
+            value->recipe_symbol =
+                xr_strdup(XR_C_ADT_ENUM_CONSTRUCTOR_SYMBOL);
+            value->recipe_type_name = xr_strdup(enum_shape.enum_name);
+            value->recipe_member_name = xr_strdup(enum_shape.member_name);
+            if (!value->recipe_symbol || !value->recipe_type_name ||
+                !value->recipe_member_name) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(
+                    error, error_size, "XR_EXEC_5003",
+                    "ADT enum recipe allocation failed");
+            }
+            value->materialization =
+                XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR;
+            value->recipe_operand_value = enum_shape.receiver_value;
+            value->recipe_layout_id = enum_shape.layout_id;
+            value->recipe_discriminant = enum_shape.member_ordinal;
+            value->recipe_argument_count = enum_shape.payload_count;
+            value->recipe_arguments =
+                &plan->recipe_arguments[recipe_argument_index];
+            for (uint16_t argument = 0;
+                 argument < enum_shape.payload_count; argument++) {
+                XrCRecipeArgumentView *recipe_argument =
+                    &plan->recipe_arguments[recipe_argument_index++];
+                recipe_argument->semantic_value =
+                    enum_payloads[argument].value;
+                recipe_argument->kind =
+                    XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD;
+            }
+        } else if (panic_catch) {
             value->materialization = XR_C_VALUE_MATERIALIZATION_PANIC_CATCH;
         } else if (string_concat) {
             size_t symbol_length = sizeof(XR_C_STRING_CONCAT_SYMBOL);
@@ -2001,6 +2251,10 @@ void xr_c_emission_plan_free(XrCEmissionPlan *plan) {
         xr_free((void *) plan->values[i].literal_bytes);
     for (uint32_t i = 0; i < plan->value_count; i++)
         xr_free((void *) plan->values[i].recipe_symbol);
+    for (uint32_t i = 0; i < plan->value_count; i++) {
+        xr_free((void *) plan->values[i].recipe_type_name);
+        xr_free((void *) plan->values[i].recipe_member_name);
+    }
     xr_free(plan->recipe_arguments);
     xr_free(plan->values);
     xr_free(plan);
