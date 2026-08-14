@@ -16,6 +16,7 @@
 #include "../../ir/xi_opt.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
+#include "../../ir/xi_module.h"
 #include "../../plan/semantic/xr_semantic_graph.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
 #include "../../plan/semantic/xr_semantic_class_shape.h"
@@ -2358,6 +2359,28 @@ static bool verify_direct_local_go_callee_type_authority(
         ctx->go_callee_target_by_value);
 }
 
+static bool canonical_source_path_matches(const char *frozen,
+                                          const char *live) {
+    if (!frozen || !live)
+        return false;
+    while (live[0] == '.' && (live[1] == '/' || live[1] == '\\'))
+        live += 2;
+    if (!live[0])
+        return false;
+    for (;;) {
+        char left = *frozen++;
+        char right = *live++;
+        if (left == '\\')
+            left = '/';
+        if (right == '\\')
+            right = '/';
+        if (left != right)
+            return false;
+        if (!left)
+            return true;
+    }
+}
+
 static bool verify_source_namespace_type_authority(
     VerifyAuthority *ctx, const XrSemanticOperationRecord *operation,
     const XiValue *live) {
@@ -2378,11 +2401,17 @@ static bool verify_source_namespace_type_authority(
         const XiImportRef *ref =
             live->aux ? (const XiImportRef *) live->aux : NULL;
         const char *member = ref ? ref->member_name : NULL;
-        return live->op == XI_IMPORT_REF && ref && metadata &&
+        /* module_path is the source spelling (for example a package name).
+         * The resolver-bound module path is the durable identity frozen by
+         * SemanticPlan, so independently normalize and compare that path. */
+        const char *resolved_path =
+            ref && xi_import_ref_is_source_module(ref) && ref->resolved_module
+                ? ref->resolved_module->path
+                : NULL;
+        return live->op == XI_IMPORT_REF && ref && metadata && resolved_path &&
                operation->metadata_begin + 1u < metadata_count &&
-               ref->module_path &&
-               strcmp(ref->module_path,
-                      metadata[operation->metadata_begin]) == 0 &&
+               canonical_source_path_matches(
+                   metadata[operation->metadata_begin], resolved_path) &&
                strcmp(member ? member : "",
                       metadata[operation->metadata_begin + 1u]) == 0;
     }
