@@ -1,0 +1,20 @@
+// anchor: continue-nested-inner-only
+// The continue belongs to the inner loop; the outer loop's body must still run
+// to completion on every outer iteration.
+fn run() {
+    var total = 0
+    var outer_visits = 0
+    for (var i = 0; i < 3; i++) {
+        for (var j = 0; j < 6; j++) {
+            if (j % 2 == 0) {
+                continue
+            }
+            total = total + 1
+        }
+        outer_visits = outer_visits + 1
+    }
+    print(total)
+    print(outer_visits)
+}
+
+run()

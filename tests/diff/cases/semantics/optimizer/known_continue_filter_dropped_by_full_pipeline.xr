@@ -1,0 +1,16 @@
+// anchor: known-continue-filter-dropped
+// Reported divergence. At the native backend's optimization level this program
+// answers 45 instead of 25: the parity filter stops filtering and every value is
+// accumulated.
+fn run() {
+    var sum = 0
+    for (var j = 0; j < 10; j++) {
+        if (j % 2 == 0) {
+            continue
+        }
+        sum = sum + j
+    }
+    print(sum)
+}
+
+run()

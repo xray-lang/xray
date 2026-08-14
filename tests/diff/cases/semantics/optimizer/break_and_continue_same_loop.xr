@@ -1,0 +1,18 @@
+// anchor: break-and-continue-same-loop
+// One body carrying both a filter and an exit. The exit edge and the latch edge
+// leave the same conditional region.
+fn run() {
+    var sum = 0
+    for (var i = 0; i < 100; i++) {
+        if (i >= 8) {
+            break
+        }
+        if (i % 2 == 0) {
+            continue
+        }
+        sum = sum + i
+    }
+    print(sum)
+}
+
+run()

@@ -1,0 +1,13 @@
+// anchor: continue-loop-tail-position
+// A continue as the last statement is a no-op in source terms; it must stay one
+// after the loop passes have rewritten the body.
+fn run() {
+    var sum = 0
+    for (var i = 0; i < 6; i++) {
+        sum = sum + i
+        continue
+    }
+    print(sum)
+}
+
+run()

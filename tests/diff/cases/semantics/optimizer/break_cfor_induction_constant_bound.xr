@@ -1,0 +1,15 @@
+// anchor: break-cfor-induction-constant-bound
+// Same exit shape written as a C-style for. The induction variable is the
+// loop's own step variable rather than a body assignment.
+fn run() {
+    var sum = 0
+    for (var i = 0; i < 100; i++) {
+        if (i >= 5) {
+            break
+        }
+        sum = sum + i
+    }
+    print(sum)
+}
+
+run()

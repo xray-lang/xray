@@ -1,0 +1,23 @@
+// anchor: nested-inner-break-outer-continue
+// The inner loop exits early while the outer loop filters, so the outer body
+// tail is skipped on some iterations and the inner loop is cut on all of them.
+fn run() {
+    var total = 0
+    var tail_visits = 0
+    for (var i = 0; i < 6; i++) {
+        for (var j = 0; j < 50; j++) {
+            if (j >= 2) {
+                break
+            }
+            total = total + 1
+        }
+        if (i % 2 == 0) {
+            continue
+        }
+        tail_visits = tail_visits + 1
+    }
+    print(total)
+    print(tail_visits)
+}
+
+run()

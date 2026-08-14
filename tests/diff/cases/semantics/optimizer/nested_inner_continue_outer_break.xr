@@ -1,0 +1,23 @@
+// anchor: nested-inner-continue-outer-break
+// The inner loop filters, the outer loop exits. Both jumps target different
+// loops from inside the same nest.
+fn run() {
+    var total = 0
+    var outer_visits = 0
+    for (var i = 0; i < 100; i++) {
+        if (i >= 3) {
+            break
+        }
+        outer_visits = outer_visits + 1
+        for (var j = 0; j < 6; j++) {
+            if (j % 2 == 0) {
+                continue
+            }
+            total = total + 1
+        }
+    }
+    print(total)
+    print(outer_visits)
+}
+
+run()

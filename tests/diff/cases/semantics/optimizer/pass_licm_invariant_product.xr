@@ -1,0 +1,22 @@
+// anchor: pass-licm-invariant-product
+// Loop-invariant code motion: the product depends on nothing the loop writes, so
+// it may be computed once. The accumulated total pins the value it must keep.
+fn run() {
+    var k = 7
+    var sum = 0
+    for (i in 0..10) {
+        sum = sum + k * 3
+    }
+    print(sum)
+    var m = 2
+    var acc = 0
+    var i2 = 0
+    while (i2 < 5) {
+        var scale = m * m
+        acc = acc + scale + i2
+        i2 = i2 + 1
+    }
+    print(acc)
+}
+
+run()

@@ -1,0 +1,20 @@
+// anchor: pass-inline-small-callee
+// Inlining: a small body called from a loop, plus a nested function value, plus
+// a call whose result feeds another call.
+fn scale(a: int, b: int) -> int {
+    return a * b + 1
+}
+
+fn run() {
+    var total = 0
+    for (var i = 0; i < 4; i++) {
+        total = total + scale(i, 3)
+    }
+    print(total)
+    fn local(v: int) -> int {
+        return v + 10
+    }
+    print(local(scale(2, 5)))
+}
+
+run()

@@ -1,0 +1,19 @@
+// anchor: known-loop-exit-dropped
+// Reported divergence. Running the VM at the optimization level the native
+// backend uses turns this program's answer from 10/5 into 4950/100: the guarded
+// exit is dropped and the loop runs to its header bound.
+fn run() {
+    var i = 0
+    var sum = 0
+    while (i < 100) {
+        if (i >= 5) {
+            break
+        }
+        sum = sum + i
+        i = i + 1
+    }
+    print(sum)
+    print(i)
+}
+
+run()

@@ -1,0 +1,15 @@
+// anchor: continue-inside-match-arm
+// The continue leaves a match arm rather than an if body.
+fn run() {
+    var sum = 0
+    for (i in 0..12) {
+        match (i % 3) {
+            0 -> { continue }
+            1 -> { sum = sum + 1 }
+            _ -> { sum = sum + 10 }
+        }
+    }
+    print(sum)
+}
+
+run()

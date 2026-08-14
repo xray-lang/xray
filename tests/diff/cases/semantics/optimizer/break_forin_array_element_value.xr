@@ -1,0 +1,19 @@
+// anchor: break-forin-array-element-value
+// The exit test reads the current element. The trip count depends on data the
+// loop header knows nothing about.
+fn run() {
+    var arr = [3, 1, 4, 1, 5, 9, 2, 6]
+    var sum = 0
+    var count = 0
+    for (v in arr) {
+        if (v == 9) {
+            break
+        }
+        sum = sum + v
+        count = count + 1
+    }
+    print(sum)
+    print(count)
+}
+
+run()

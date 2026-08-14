@@ -1,0 +1,16 @@
+// anchor: pass-loop-rotate-guarded-body
+// Loop rotation moves the header test to the latch behind an entry guard. A loop
+// whose body may run zero times is the case the guard exists for.
+fn total(n: int) -> int {
+    var sum = 0
+    var i = 0
+    while (i < n) {
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+
+print(total(0))
+print(total(1))
+print(total(10))

@@ -1,0 +1,16 @@
+// anchor: pass-range-bce-index-in-bounds
+// Range analysis plus bounds-check elimination: every index is provably inside
+// the array, and the one that is not must still throw.
+fn run() {
+    var arr = [0, 1, 2, 3, 4, 5, 6, 7]
+    var sum = 0
+    for (var i = 0; i < 8; i++) {
+        sum = sum + arr[i]
+    }
+    print(sum)
+    var j = 3
+    print(arr[j])
+    print(arr[j + 4])
+}
+
+run()

@@ -1,0 +1,17 @@
+// anchor: break-nested-inner-induction-bound
+// The inner loop carries the induction-versus-invariant exit; the outer loop
+// runs to its header bound. Only the inner trip count is cut.
+fn run() {
+    var total = 0
+    for (var i = 0; i < 4; i++) {
+        for (var j = 0; j < 50; j++) {
+            if (j >= 3) {
+                break
+            }
+            total = total + 1
+        }
+    }
+    print(total)
+}
+
+run()

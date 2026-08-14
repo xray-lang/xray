@@ -1,0 +1,19 @@
+// anchor: break-two-exit-points
+// Two break sites in one body: one on the induction variable, one on the
+// accumulator. Whichever fires first decides the trip count.
+fn run(cap: int) -> int {
+    var sum = 0
+    for (var i = 0; i < 100; i++) {
+        if (i >= 20) {
+            break
+        }
+        sum = sum + i
+        if (sum > cap) {
+            break
+        }
+    }
+    return sum
+}
+
+print(run(6))
+print(run(1000))

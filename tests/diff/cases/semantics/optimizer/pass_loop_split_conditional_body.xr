@@ -1,0 +1,18 @@
+// anchor: pass-loop-split-conditional-body
+// Loop splitting: the body's condition switches once over the iteration space,
+// so the loop can be split into two loops with unconditional bodies.
+fn run() {
+    var low = 0
+    var high = 0
+    for (var i = 0; i < 20; i++) {
+        if (i < 10) {
+            low = low + i
+        } else {
+            high = high + i
+        }
+    }
+    print(low)
+    print(high)
+}
+
+run()

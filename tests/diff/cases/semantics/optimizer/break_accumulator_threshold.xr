@@ -1,0 +1,15 @@
+// anchor: break-accumulator-threshold
+// The exit test reads the accumulator, not the induction variable, so no trip
+// count can be derived from it. This is the control for the induction cases.
+fn run() {
+    var sum = 0
+    for (var i = 0; i < 10; i++) {
+        sum = sum + i
+        if (sum > 6) {
+            break
+        }
+    }
+    print(sum)
+}
+
+run()

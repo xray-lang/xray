@@ -1,0 +1,20 @@
+// anchor: continue-labeled-outer
+// A labeled continue abandons the inner loop and resumes the outer one, so the
+// statements after the inner loop are skipped.
+fn run() {
+    var total = 0
+    var tail_visits = 0
+    outer: for (var i = 0; i < 3; i++) {
+        for (var j = 0; j < 4; j++) {
+            if (j == 1) {
+                continue outer
+            }
+            total = total + 1
+        }
+        tail_visits = tail_visits + 1
+    }
+    print(total)
+    print(tail_visits)
+}
+
+run()

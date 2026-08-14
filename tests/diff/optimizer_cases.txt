@@ -1,10 +1,22 @@
 # Cases that must run through the Xi middle end to mean anything.
 #
-# The default differential lane builds AOT at -O0, where LICM, GVN-PRE and the
-# rest of the optimiser do not run (they start at XI_OPT_FULL, i.e. -O2). These
-# cases exist to catch code motion, so backend_diff_optimized re-runs them with
-# XRAY_AOT_TEST_OPT=2. They also appear in the ordinary lane through the
-# tests/diff/cases/**/*.xr glob, where they are still valid but prove less.
+# What -O actually selects. The Xi optimization level is fixed per pipeline, not
+# taken from the command line: xi_pipeline_default_config() pins the VM at
+# XI_OPT_LIGHT and xi_pipeline_aot_config() pins the native backend at
+# XI_OPT_FULL. The -O flag reaches only the host C compiler and the link
+# manifest, so `xray build --native -O 0` already runs SCCP, GVN-PRE, LICM,
+# loop splitting, inlining and if-conversion. Confirm it with XRAY_XI_STATS=1
+# on any -O0 native build.
+#
+# Two consequences. The ordinary differential lane is the level comparison: it
+# runs the light VM against the full native backend on every case under
+# tests/diff/cases/. And backend_diff_optimized adds no middle-end coverage on
+# top of it -- XRAY_AOT_TEST_OPT=2 changes the host compiler's flag and nothing
+# in Xi. What this manifest still buys is a second host optimization level over
+# programs whose answers depend on the middle end.
+#
+# Nothing runs the VM at XI_OPT_FULL, so a middle-end defect that the native
+# backend cannot reach (it rejects the program earlier) has no lane at all.
 tests/diff/cases/semantics/optimizer/tbaa_raw_pointer_store_kills_array_load.xr
 tests/diff/cases/semantics/evaluation_order/e1_e3_binary_operand_order.xr
 tests/diff/cases/semantics/evaluation_order/e2_call_argument_order.xr
@@ -13,3 +25,54 @@ tests/diff/cases/semantics/evaluation_order/e5_e6_assignment_order.xr
 tests/diff/cases/semantics/evaluation_order/e7_literal_element_order.xr
 tests/diff/cases/semantics/evaluation_order/e8_interpolation_order.xr
 tests/diff/cases/semantics/evaluation_order/e9_e10_match_slice_range.xr
+tests/diff/cases/semantics/optimizer/break_accumulator_threshold.xr
+tests/diff/cases/semantics/optimizer/break_and_continue_same_loop.xr
+tests/diff/cases/semantics/optimizer/break_cfor_induction_constant_bound.xr
+tests/diff/cases/semantics/optimizer/break_forin_array_element_value.xr
+tests/diff/cases/semantics/optimizer/break_forin_array_index_counter_bound.xr
+tests/diff/cases/semantics/optimizer/break_forin_range_induction_constant_bound.xr
+tests/diff/cases/semantics/optimizer/break_inside_match_arm.xr
+tests/diff/cases/semantics/optimizer/break_labeled_outer_induction_bound.xr
+tests/diff/cases/semantics/optimizer/break_loop_tail_position.xr
+tests/diff/cases/semantics/optimizer/break_nested_inner_induction_bound.xr
+tests/diff/cases/semantics/optimizer/break_toplevel_induction_constant_bound.xr
+tests/diff/cases/semantics/optimizer/break_two_exit_points.xr
+tests/diff/cases/semantics/optimizer/break_unconditional_first_statement.xr
+tests/diff/cases/semantics/optimizer/break_while_induction_constant_bound.xr
+tests/diff/cases/semantics/optimizer/break_while_induction_local_variable_bound.xr
+tests/diff/cases/semantics/optimizer/break_while_induction_parameter_bound.xr
+tests/diff/cases/semantics/optimizer/continue_cfor_modulo_filter.xr
+tests/diff/cases/semantics/optimizer/continue_forin_array_predicate.xr
+tests/diff/cases/semantics/optimizer/continue_forin_range_modulo_filter.xr
+tests/diff/cases/semantics/optimizer/continue_induction_vs_invariant_bound.xr
+tests/diff/cases/semantics/optimizer/continue_inside_match_arm.xr
+tests/diff/cases/semantics/optimizer/continue_labeled_outer.xr
+tests/diff/cases/semantics/optimizer/continue_loop_tail_position.xr
+tests/diff/cases/semantics/optimizer/continue_nested_inner_only.xr
+tests/diff/cases/semantics/optimizer/continue_toplevel_modulo_filter.xr
+tests/diff/cases/semantics/optimizer/continue_two_sites.xr
+tests/diff/cases/semantics/optimizer/continue_while_modulo_filter.xr
+tests/diff/cases/semantics/optimizer/known_continue_filter_dropped_by_full_pipeline.xr
+tests/diff/cases/semantics/optimizer/known_empty_call_result_is_null.xr
+tests/diff/cases/semantics/optimizer/known_loop_exit_dropped_by_full_pipeline.xr
+tests/diff/cases/semantics/optimizer/known_nullable_never_assigned_keeps_type.xr
+tests/diff/cases/semantics/optimizer/known_struct_copy_is_not_an_alias.xr
+tests/diff/cases/semantics/optimizer/known_two_armed_assignment_picks_one_arm.xr
+tests/diff/cases/semantics/optimizer/nested_inner_break_outer_continue.xr
+tests/diff/cases/semantics/optimizer/nested_inner_continue_outer_break.xr
+tests/diff/cases/semantics/optimizer/pass_block_simplify_empty_and_chained.xr
+tests/diff/cases/semantics/optimizer/pass_const_fixpoint_folded_chain.xr
+tests/diff/cases/semantics/optimizer/pass_gvn_redundant_expression.xr
+tests/diff/cases/semantics/optimizer/pass_ifconv_select_shape.xr
+tests/diff/cases/semantics/optimizer/pass_inline_small_callee.xr
+tests/diff/cases/semantics/optimizer/pass_ivsr_derived_induction.xr
+tests/diff/cases/semantics/optimizer/pass_jump_thread_correlated_branches.xr
+tests/diff/cases/semantics/optimizer/pass_licm_invariant_product.xr
+tests/diff/cases/semantics/optimizer/pass_loop_inv_branch_unswitch.xr
+tests/diff/cases/semantics/optimizer/pass_loop_peel_first_iteration.xr
+tests/diff/cases/semantics/optimizer/pass_loop_rotate_guarded_body.xr
+tests/diff/cases/semantics/optimizer/pass_loop_split_conditional_body.xr
+tests/diff/cases/semantics/optimizer/pass_loop_unroll_small_trip_count.xr
+tests/diff/cases/semantics/optimizer/pass_range_and_bce_index_in_bounds.xr
+tests/diff/cases/semantics/optimizer/pass_sccp_conditional_constant.xr
+tests/diff/cases/semantics/optimizer/pass_tail_call_accumulator.xr

@@ -1,0 +1,19 @@
+// anchor: break-while-induction-constant-bound
+// A `break` guarded by `induction >= invariant` is the loop's real exit; the
+// header test is not. A loop pass that trusts the header alone runs the body to
+// the header bound and reports the wrong sum and the wrong final counter.
+fn run() {
+    var i = 0
+    var sum = 0
+    while (i < 100) {
+        if (i >= 5) {
+            break
+        }
+        sum = sum + i
+        i = i + 1
+    }
+    print(sum)
+    print(i)
+}
+
+run()

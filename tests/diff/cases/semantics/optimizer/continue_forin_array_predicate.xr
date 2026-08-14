@@ -1,0 +1,18 @@
+// anchor: continue-forin-array-predicate
+// The filter reads the element rather than the loop variable.
+fn run() {
+    var arr = [3, 1, 4, 1, 5, 9, 2, 6]
+    var sum = 0
+    var kept = 0
+    for (v in arr) {
+        if (v < 3) {
+            continue
+        }
+        sum = sum + v
+        kept = kept + 1
+    }
+    print(sum)
+    print(kept)
+}
+
+run()

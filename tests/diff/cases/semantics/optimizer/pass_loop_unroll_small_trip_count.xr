@@ -1,0 +1,17 @@
+// anchor: pass-loop-unroll-small-trip-count
+// Loop unrolling: a small constant trip count is the case a pass may replace
+// with straight-line copies of the body.
+fn run() {
+    var sum = 0
+    for (var i = 0; i < 4; i++) {
+        sum = sum * 10 + i
+    }
+    print(sum)
+    var prod = 1
+    for (j in 1..5) {
+        prod = prod * j
+    }
+    print(prod)
+}
+
+run()

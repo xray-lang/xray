@@ -1,0 +1,20 @@
+// anchor: break-labeled-outer-induction-bound
+// A labeled break leaves both loops at once. The outer loop's exit is therefore
+// controlled from inside the inner loop's body.
+fn run() {
+    var total = 0
+    var last = -1
+    outer: for (var i = 0; i < 50; i++) {
+        for (var j = 0; j < 4; j++) {
+            if (i >= 3) {
+                break outer
+            }
+            total = total + 1
+        }
+        last = i
+    }
+    print(total)
+    print(last)
+}
+
+run()
