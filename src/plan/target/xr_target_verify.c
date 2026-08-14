@@ -24,6 +24,7 @@
 #include "../semantic/xr_semantic_verify.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_semantic_class_shape.h"
+#include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
@@ -2511,6 +2512,7 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
             xr_semantic_class_object_is_exact(plan->semantic_plan, operation) ||
             xr_semantic_class_instance_value_is_exact(plan->semantic_plan, operation, NULL) ||
             semantic_string_literal_is_exact(plan->semantic_plan, operation) ||
+            xr_semantic_string_concat_is_exact(plan->semantic_plan, operation) ||
             semantic_direct_local_string_result_is_exact(plan->semantic_plan, i) ||
             semantic_stringbuilder_constructor_is_exact(plan->semantic_plan,
                                                          operation) ||
@@ -2593,6 +2595,12 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         semantic_array_allocation_is_exact(plan->semantic_plan, operation);
     bool exact_string_literal =
         semantic_string_literal_is_exact(plan->semantic_plan, operation);
+    /* Recomputed from the plan through the shared judgement rather than read
+     * back from the builder: the String a concatenation allocates is a fresh
+     * owner whose only storage fact is the outer tagged value. */
+    bool exact_string_concat =
+        xr_semantic_string_concat_is_exact(plan->semantic_plan, operation) && operation &&
+        operation->result_value == semantic_value && operation->result_type == semantic_type;
     /* Recomputed from the plan through the shared judgement rather than read
      * back from the builder, so a builder row this verifier cannot re-derive
      * stays unproven. */
@@ -2689,7 +2697,8 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     int eligibility = operation_result_void || exact_heap_closure ||
                               exact_array_allocation || exact_class_object ||
                               exact_class_instance || exact_class_receiver ||
-                              exact_string_literal || exact_direct_string_result ||
+                              exact_string_literal || exact_string_concat ||
+                              exact_direct_string_result ||
                               exact_stringbuilder ||
                               exact_stringbuilder_append ||
                               exact_stringbuilder_to_string ||
@@ -2719,7 +2728,8 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     int expected_layout = -1;
     if (exact_heap_closure || exact_array_allocation || exact_class_object ||
         exact_class_instance || exact_class_receiver ||
-        exact_string_literal || exact_direct_string_result ||
+        exact_string_literal || exact_string_concat ||
+        exact_direct_string_result ||
         exact_stringbuilder ||
         exact_stringbuilder_append ||
         exact_stringbuilder_to_string ||

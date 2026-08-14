@@ -18,6 +18,7 @@
 #include "../../ir/xi_ops_gen.h"
 #include "../../plan/semantic/xr_semantic_graph.h"
 #include "../../plan/semantic/xr_semantic_class_shape.h"
+#include "../../plan/semantic/xr_semantic_string_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../stdlib/xstdlib_metadata.h"
@@ -3959,6 +3960,187 @@ static bool oracle_dynamic_direct_local_string_result_storage(
     return true;
 }
 
+/* The String a concatenation allocates materializes an owned dynamic value in
+ * its own temporary slot. Its storage is tagged because the runtime joiner
+ * returns a boxed object; the frozen slot, layout and ownership rows are
+ * rebuilt here rather than read back from the collector. */
+static bool oracle_dynamic_string_concat_result_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value, XrRep *out_storage,
+    uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !xr_semantic_string_concat_is_exact(ctx->semantic, operation))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                             binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding
+            ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep)
+            : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+/* A length read borrows one container and yields the plain machine integer the
+ * language types it. The receiver keeps the single tagged storage fact its own
+ * family already proved: the owned array allocation, the string literal, or the
+ * owned String a direct-local call returned. A container without such a row, a
+ * consumed receiver, or a result that is not the exact signed 64-bit integer
+ * leaves the read without authority rather than falling back to a guess. */
+static bool oracle_length_read_is_exact(const VerifyAuthority *ctx,
+                                        uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    if (!ctx || !operation || !operands || operation->opcode != XI_LEN ||
+        operation->operand_count != 1 ||
+        operation->operand_begin >= operand_count ||
+        operation->auxiliary_kind != 0 || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->allocation_key != NULL ||
+        operation->effects != xi_generated_op_effects(XI_LEN) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(XI_LEN) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        !semantic_exact_i64_type(
+            xr_semantic_plan_type(ctx->semantic, operation->result_type)))
+        return false;
+    const XrSemanticOperandRecord *container =
+        &operands[operation->operand_begin];
+    XrRep container_storage = XR_REP_TAGGED;
+    uint16_t container_kind = XR_MACHINE_REP_COUNT;
+    return container->role == XR_SEM_OPERAND_VALUE &&
+           container->parameter == -1 && container->flags == 0 &&
+           container->ownership_action == XR_SEM_OPERAND_BORROW &&
+           container->value < ctx->value_count &&
+           (oracle_dynamic_array_allocation_storage(
+                ctx, container->value, &container_storage, &container_kind) ||
+            oracle_dynamic_string_literal_storage(
+                ctx, container->value, &container_storage, &container_kind) ||
+            oracle_dynamic_string_concat_result_storage(
+                ctx, container->value, &container_storage, &container_kind) ||
+            oracle_dynamic_direct_local_string_result_storage(
+                ctx, container->value, &container_storage, &container_kind));
+}
+
+/* One equality over two proved String values. String is immutable and shared,
+ * so its single storage fact is the outer tagged value and both sides of the
+ * comparison stay in that carrier; the truth value the comparison writes keeps
+ * the machine storage its own definition already names. Both sides must be a
+ * String this authority already proved, both must be borrowed, and the result
+ * must be the plain boolean the language types a comparison. Ordering
+ * relations are not admitted here: only equality and inequality carry a
+ * storage fact this authority states for a reference operand. */
+static bool oracle_string_equality_is_exact(const VerifyAuthority *ctx,
+                                            uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    const XrSemanticTypeRecord *result_type =
+        operation ? xr_semantic_plan_type(ctx->semantic, operation->result_type)
+                  : NULL;
+    if (!ctx || !operation || !operands || !result_type ||
+        (operation->opcode != XI_EQ && operation->opcode != XI_NE) ||
+        operation->operand_count != 2 || operand_count < 2u ||
+        operation->operand_begin > operand_count - 2u ||
+        operation->auxiliary_kind != 0 || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->allocation_key != NULL ||
+        operation->effects != xi_generated_op_effects(operation->opcode) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(operation->opcode) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        result_type->kind != XR_KIND_BOOL ||
+        result_type->builtin_type != XR_TID_NULL ||
+        result_type->child_count != 0 || result_type->aggregate_extent != 0 ||
+        result_type->aggregate_align != 0 ||
+        result_type->scalar_rep != XR_SCALAR_REP_NONE ||
+        result_type->flags != 0)
+        return false;
+    for (uint16_t i = 0; i < 2u; i++) {
+        const XrSemanticOperandRecord *side =
+            &operands[operation->operand_begin + i];
+        XrRep side_storage = XR_REP_TAGGED;
+        uint16_t side_kind = XR_MACHINE_REP_COUNT;
+        if (side->role != XR_SEM_OPERAND_VALUE || side->parameter != -1 ||
+            side->flags != 0 ||
+            side->ownership_action != XR_SEM_OPERAND_BORROW ||
+            side->value >= ctx->value_count ||
+            (!oracle_dynamic_string_literal_storage(ctx, side->value,
+                                                    &side_storage, &side_kind) &&
+             !oracle_dynamic_string_concat_result_storage(ctx, side->value,
+                                                          &side_storage, &side_kind) &&
+             !oracle_dynamic_direct_local_string_result_storage(
+                 ctx, side->value, &side_storage, &side_kind)))
+            return false;
+    }
+    return true;
+}
+
 /* The JSON namespace call materializes an owned dynamic value in its own
  * temporary slot.  Its storage is tagged because the runtime encoder returns a
  * boxed value; the call row proves the slot, layout, and ownership. */
@@ -4706,6 +4888,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
         case XI_ARRAY_NEW:
             return oracle_dynamic_array_allocation_storage(
                 ctx, semantic_value, out_storage, out_machine_kind);
+        case XI_STR_CONCAT:
+            return oracle_dynamic_string_concat_result_storage(
+                ctx, semantic_value, out_storage, out_machine_kind);
         case XI_CLASS_CREATE:
             return oracle_dynamic_source_class_object_storage(
                 ctx, semantic_value, out_storage, out_machine_kind);
@@ -4873,6 +5058,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_direct_local_string_result_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
+                !oracle_dynamic_string_concat_result_storage(
+                    ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_array_allocation_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(
@@ -4904,6 +5091,10 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 !oracle_dynamic_string_literal_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_direct_local_string_result_storage(
+                    ctx, source_value, &machine_storage, &ignored_kind) &&
+                !oracle_dynamic_string_concat_result_storage(
+                    ctx, source_value, &machine_storage, &ignored_kind) &&
+                !oracle_dynamic_array_allocation_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
@@ -4942,8 +5133,6 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         case XI_BIT_CLZ:
         case XI_BIT_MUL_HIGH:
         case XI_BIT_CTZ:
-        case XI_EQ:
-        case XI_NE:
         case XI_LT:
         case XI_LE:
         case XI_GT:
@@ -5058,6 +5247,39 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 return false;
             return oracle_machine_storage(ctx, source_value, out_storage,
                                           &ignored_kind);
+        }
+        case XI_EQ:
+        case XI_NE:
+            /* A comparison over machine scalars keeps their native storage. The
+             * one reference shape admitted here is a proved String on both
+             * sides, which stays in the tagged carrier its own family named. */
+            if (oracle_machine_storage(ctx, source_value, out_storage,
+                                       &ignored_kind))
+                return true;
+            if (!oracle_string_equality_is_exact(ctx, operation_index))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
+        case XI_LEN:
+            /* The container of a proved length read stays in the tagged carrier
+             * its own storage family named; the integer the read produces keeps
+             * its native scalar storage at its own definition. */
+            if (operand_index != 0 ||
+                !oracle_length_read_is_exact(ctx, operation_index))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
+        case XI_STR_CONCAT: {
+            /* Every piece a proved concatenation joins is an owned String, and
+             * each one stays in the tagged carrier its own family named. A join
+             * this authority has not proved leaves its pieces unclaimed. */
+            XrRep piece_storage = XR_REP_TAGGED;
+            if (!oracle_dynamic_string_concat_result_storage(
+                    ctx, operation->result_value, &piece_storage,
+                    &ignored_kind))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
         }
         case XI_INDEX_SET:
         case XI_INDEX_GET:
@@ -5196,6 +5418,8 @@ static bool oracle_return_storage(const VerifyAuthority *ctx, uint32_t value,
            oracle_nullable_scalar_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_closure_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_string_literal_storage(ctx, value, out_storage, out_machine_kind) ||
+           oracle_dynamic_string_concat_result_storage(ctx, value, out_storage,
+                                                       out_machine_kind) ||
            oracle_dynamic_source_class_receiver_storage(ctx, value, out_storage,
                                                         out_machine_kind) ||
            oracle_dynamic_direct_local_string_result_storage(ctx, value, out_storage,

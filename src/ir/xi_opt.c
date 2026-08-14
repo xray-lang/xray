@@ -3005,10 +3005,16 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             *out = XR_REP_TAGGED;
             return true;
         case XI_LEN:
+            /* The receiver of a length read follows the same container rule an
+             * index access follows: a freshly allocated heap array has one
+             * storage fact, the owned tagged outer value, so a native pointer
+             * view of it here would need a representation adapter no frozen
+             * storage row can state. Every other container keeps the native
+             * boundary it already carries at its own definition. */
             if (arg_idx == 0 && user->nargs == 1 &&
                 (sr_is_typed_array_length_field(user) ||
                  sr_is_static_collection_length_field(user))) {
-                *out = sr_type_native_boundary_rep(user->args[0]->type);
+                *out = sr_container_operand_rep(user->args[0]);
                 return true;
             }
             *out = XR_REP_TAGGED;
