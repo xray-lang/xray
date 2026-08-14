@@ -3503,6 +3503,37 @@ if(BUILD_TESTS)
         TIMEOUT 900
     )
 
+    # The default `xray build` -- bytecode serialized through the constant pool
+    # into the produced binary -- is a third execution form, and until this lane
+    # existed nothing compared it against anything. Two defects reached the tree
+    # through that gap (a dropped BigInt literal tag, host-heap pointers written
+    # into the container); both were invisible to backend_diff, which runs only
+    # `xray run` and `xray build --native`.
+    #
+    # The lane is vm/embed rather than three-way on purpose: embed runs the same
+    # VM as the vm lane, so a divergence localizes to the serialize/embed round
+    # trip instead of being confounded with a native-backend difference, and the
+    # vm/aot edge is already gated above. Its own baseline for the same reason.
+    add_test(
+        NAME backend_diff_embedded
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_DIFF_BACKENDS=vm,embed
+                XRAY_DIFF_BASELINE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/known_failures_embedded.txt
+                XRAY_DIFF_MAX_AUTO_JOBS=${XRAY_CTEST_DIFF_JOBS}
+                XRAY_DIFF_COLD_MAX_AUTO_JOBS=4
+                XRAY_DIFF_HOT_MAX_AUTO_JOBS=8
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(backend_diff_embedded PROPERTIES
+        LABELS "diff;cross;backend;embedded-bytecode"
+        PROCESSORS ${XRAY_CTEST_DIFF_PROCESSORS}
+        COST 200
+        TIMEOUT 900
+    )
+
     foreach(_task190_diff
             extern:tests/diff/task190_extern_cases.txt
             layout:tests/diff/task190_layout_cases.txt
