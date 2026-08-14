@@ -319,6 +319,19 @@ row names the declared class and no callee at all; a method identity on such a
 row is refused as stale, and a class that does declare an instance constructor
 keeps the ordinary method callsite and composes that body's effects.
 
+The SemanticPlan names that construction in its own right as well, through a
+call-target kind whose row names the declaration and nothing else: no callee
+identity, no dependency, no export. What the call builds is proved from the
+instance type it returns and from the class object its callee operand loads out
+of its module slot, and the two must name the same declaration. A slot the
+module writes more than once, a value it defines more than once, or a call whose
+effects are not the generated call effects names nothing and is refused rather
+than guessed, so a construction that may suspend keeps no row at all. The row
+grounds no reachable callee and therefore leaves the coroutine-state expectation
+of its operation unchanged. The plan builder and the plan verifier derive the
+construction from the same shared judgement, and the verifier reads the frozen
+plan rather than the row it is checking.
+
 ## Digest anchors
 
 anchor-sha256: src/frontend/analyzer/xa_effect_db.h 3f8e0952e2b25291fa4aaeb96baa05197f789c4292db2ec2291da407d9724b01
@@ -346,11 +359,11 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
 anchor-sha256: src/plan/format/xr_xsm_encode.c e56ac921cb9c4be957086f9b6b960c5d194a04b066986ddefafc9efc838e8876
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c e9f9b56f8931d339a813fc6fa281c2c848a3c87dca687f19f58bd882a8182511
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 9fa1d2a37c93d9ea20bb18b775be940004fe8b9b924d558086ecc20018a87bc9
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 6f5048cf95e341617e68eba47ffbf51ae396b72f9771328ff2ba8f8f500bf459
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c ea4675808fc8b4cc1bd3539b4b437756b9b0b92afd5a2afd1dd17ad9b1e9e7b0
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h b7d4ee7263ab3ba46e872560d8741ad84eb697c28e746aa75e6c11fdb50bc976
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h e82e181c4d8ad9c061c4b26ec3def4902f6617ea5b1079eb55233642f2a1ca79
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c aacda5a63c278919d76479b2984a5b54b2750f61f062d3d3de74e07c96c64822
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 8d0d37a0765740decd42a93ad72b00acc4a22bd8da03a1a6aa0f5dc080562deb
 anchor-sha256: src/stdlib/xstdlib_metadata.h 4f0d9628ff18ec6522c48bf602a9ba738813cb1a11f2d059dc7d9c7daf179c14
 anchor-sha256: tests/unit/plan/test_semantic_plan.c e1ac83687f5c72f019e103d079e9a749b86a2ee4ff12ea1200854bbfa7f76ffd
