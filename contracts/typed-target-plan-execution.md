@@ -15,13 +15,18 @@ The only supported execution family is a closed signed `i64` program consisting
 of constants, parameter bindings, copies, wrapping addition, wrapping
 subtraction, wrapping multiplication, bitwise and, or, exclusive or, wrapping
 negation, bitwise complement, masked left shift, masked arithmetic right shift,
-truncating division, remainder, unconditional jumps, conditional branches, and
-returns. A non-empty function group must form an exact table partition in
-canonical function and dense row order. Its independent verifier requires every
-referenced slot to belong to that function and have identical trivial
-signed-`i64` register and memory representations. It also proves single
-assignment, canonical arity and unused fields, and that a computation row is
-never the last row of a group. Unknown or unsupported instructions fail closed.
+truncating division, remainder, the six equality and order relations,
+unconditional jumps, conditional branches, and returns. A non-empty function
+group must form an exact table partition in canonical function and dense row
+order. Its independent verifier requires every referenced slot to belong to
+that function and to be one of exactly two shapes: a trivial signed-`i64` slot
+with identical register and memory representations, or the one-byte trivial
+truth slot a relation answers into. Which shape a row's result must have is
+fixed by its opcode, so a row is never admitted against whichever family its
+own result slot happens to carry, and neither shape is ever widened, narrowed,
+or coerced into the other. The verifier also proves single assignment,
+canonical arity and unused fields, and that a computation row is never the last
+row of a group. Unknown or unsupported instructions fail closed.
 
 Control flow is proved from the rows, never declared alongside them. There is
 no target-level block table: a basic block begins at the group's first row and
@@ -48,12 +53,32 @@ admits against, so a group can never be emitted that verification would then
 refuse. Blocks per function are capped so the proof's per-block slot bitmaps
 are bounded rather than trimmed.
 
-A conditional branch tests an ordinary defined `i64` slot against zero and
-takes its first edge when the slot is not zero. There is no boolean slot,
-machine representation, or comparison row in this family, so a condition needs
-no proof the slot proof does not already give it, and every `i64` value selects
-an edge. A block whose condition is not exact signed `i64` leaves the whole
-function unavailable rather than being coerced.
+A conditional branch tests a defined condition slot against zero and takes its
+first edge when the slot is not zero. There are two such rows, one per
+condition shape, and each fixes the width it reads: one tests an ordinary
+signed `i64` slot, so every `i64` value selects an edge, and one tests the
+one-byte truth slot a relation answers into. Neither reads its own width off
+the slot while it runs. A block whose condition is neither shape leaves the
+whole function unavailable rather than being coerced into one.
+
+The six relations - equal, not equal, less, less or equal, greater, greater or
+equal - each read the same exact signed `i64` pair every other two-operand row
+reads, and each is its own opcode rather than one opcode selecting a relation
+from its immediate, so a row's meaning never depends on a field its opcode does
+not already fix. A relation is the one row whose result is not a signed `i64`:
+the language types a comparison `bool` and the plan lays a `bool` value out as a
+one-byte `I1` slot, so no spelling in this family could put that answer in an
+eight-byte signed slot, and a truth slot is what the relation writes. That is
+also why a comparison could not have been added as an `i64`-valued row: the
+executable family would then have admitted no comparison a real program
+produces. The verifier rejects a non-zero immediate on a relation, so there is
+no immediate comparison form and both operands always arrive through slots the
+definite-assignment proof has seen. What each relation means is the shared
+comparison owner's signed 64-bit lane, the same one the bytecode VM, the AOT
+runtime, and constant folding consume, so this executor cannot state the six
+relations a seventh time or drift from them. The executor writes 0 or 1, and
+the truth branch tests the whole byte against zero, so the edge taken depends
+on no assumption about which non-zero byte a true answer is.
 
 A shift row takes its count modulo 64, which is the language rule and the
 same shared shift owner the bytecode VM, the AOT runtime, and constant folding
@@ -217,9 +242,9 @@ instead of executing against implicit zeros. This adds no public CLI, export
 selection, or general typed VM instruction coverage, calls, aggregates,
 ownership, exceptions, coroutines, or complete typed TargetPlan VM execution.
 The control flow it does cover is jumps and two-way branches between blocks of
-one function; there is no phi, no comparison row, and therefore no way to merge
-a value produced by two arms, which leaves any function that needs one
-unavailable.
+one function, including a branch on a relation the same function computed;
+there is no phi, and therefore no way to merge a value produced by two arms,
+which leaves any function that needs one unavailable.
 
 The required `COROUTINE_STATE_CALL` family is independent of this
 dispatcher. It freezes only the state/resume/direct-call/result-slot relation;
@@ -264,6 +289,23 @@ Evidence:
   attributable to its own rule. It also proves that a program whose last row
   jumps backward verifies and then stops on the executor's step budget instead
   of running forever.
+  It proves each of the six relations on the program the production builder
+  emits from `if (first REL second) { return first + second } return
+  first - second`, whose condition is the `bool` a relation answered rather than
+  an integer the caller passed. The two arms are different functions of the same
+  pair and the greater, less, and equal argument pairs give every relation a
+  triple of answers no other relation produces, so a relation cannot pass with
+  another relation's edges and no answer could have been folded into the plan.
+  It also proves that the relation's result slot really is the one-byte `I1`
+  slot while the arithmetic row beside it keeps its eight-byte one, and that
+  the branch reads exactly the slot the relation wrote. It rejects an immediate
+  on a relation, a relation missing its second operand, an operand read before
+  its definition, an arithmetic row writing a truth slot, a relation writing a
+  signed `i64` slot, and the eight-byte branch taking a truth slot as its
+  condition. Weakening the result-family rule makes exactly the two result-slot
+  refusals stop firing and leaves the branch refusal standing, and weakening the
+  branch condition rule makes exactly that one stop firing, so each of the three
+  is attributable to its own rule.
 - `test_xtp_format` proves the instruction row width is part of the complete
   exact codec registry and exercises the public XSM/XTP generation route.
 - `test_typed_frame_runtime_archive` proves the dispatcher and verifier link
@@ -276,20 +318,20 @@ Evidence:
   program fault, separate from the authority failures an unsupported plan
   gives.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 0e1fca9d4ab16f59f206b8adc8ef48f9f50d7a3d1824efbdf6b84f3f1a75a548
+anchor-sha256: src/plan/target/xr_target_plan.h 30d186c4d32ab6c40a58601f78bc4b80cc82b4986370900cc948c6074b9ec484
 anchor-sha256: src/plan/target/xr_target_plan.c 868089fd22c110dc090e0236a14ae8941d5d28f66f7c0cd414787050b35f1237
-anchor-sha256: src/plan/target/xr_target_builder.c 0476f46fd862479b97adc4edcb74a99524feb8aece5b591ef1f1be4fa0ff9fe2
+anchor-sha256: src/plan/target/xr_target_builder.c 0b3fc5792dee8d64c5e5d46de042cf4776f5338fa9ea7198f6985b9fae90e47b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 6099812f9cee4af8b01c5ffb422c9e359cbd95ec7ebc61c927bc051bc2bf904b
-anchor-sha256: src/plan/target/xr_target_instruction_verify.c 1b7eb7533380ba84c66c7d772e8bd239e3fad261d8bbc99962a4cd02cdc70f14
+anchor-sha256: src/plan/target/xr_target_instruction_verify.c 687ab0df5479e46e51e200e54ea8b935579e6319598fd9830009f935eb057b77
 anchor-sha256: src/plan/target/xr_target_verify.c 7b59bd7c19ba229835ea24260d5bcb8e9f5032c48add72a3d8cec6d57e01a309
 anchor-sha256: src/plan/format/xr_xtp_schema.h 04840cf64073530619483953264b801358984d6559d7928b0b733b265ef2c668
 anchor-sha256: src/plan/format/xr_xtp_rows.c 85e8842a3857fd250c68c5cc12b7aba35787461650317dacdb39eaf92da317a9
 anchor-sha256: src/plan/format/xr_xtp_encode.c 8cb0983494ace434ec1d1f7389f19d4780ad82f6f88460144e04a9e28c1502bc
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/vm/xr_typed_dispatch.h 30b893c4f791e6b99a87cf46194c982b63972072675d2bfbc329ab55fcba1b25
-anchor-sha256: src/vm/xr_typed_dispatch.c b89abe0916835904f3ea7bc7394e7a8eab23d2f2c37bf3a711d44941858e0591
+anchor-sha256: src/vm/xr_typed_dispatch.c 551515f2222a29214a6a0902189934bf4517d40424b6c4eff52589b47dfb208d
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c 2a372c17d0959bb4e3b086259c54db5623449f77d2b624b7b7c347f05f18545b
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 6d43ca3a24b401123ee9a8948e2e8ee70994abafc4a5441630415c92569d1c29
 anchor-sha256: tests/unit/plan/test_xtp_format.c ab7a3766a721d1aa2e6fc2ca67031e77ad1f7b44f974d5e8b532067f58705801
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 1a8fcbe84ce64c733d0cb2614f745a1852fbd6991ef9ae8da5683b5f0eab6de5
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0

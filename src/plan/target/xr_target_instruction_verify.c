@@ -32,18 +32,36 @@ static bool range_valid(uint32_t begin, uint32_t count, uint32_t total) {
     return begin <= total && count <= total - begin;
 }
 
-static bool rep_is_trivial_i64(const XrTargetMachineRepRecord *rep) {
-    return rep && rep->kind == XR_MACHINE_REP_I64 &&
-           rep->register_bits == 64 && rep->memory_size == 8 &&
-           rep->memory_align == 8 && rep->signedness == XR_TARGET_SIGN_SIGNED &&
-           rep->root_kind == XR_TARGET_ROOT_NONE &&
-           rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+/* The two slot families this executable program may name. A comparison answers
+ * a truth value, and the plan gives a `bool` semantic value a one-byte I1 slot,
+ * so the truth family exists because no spelling here can turn that slot into
+ * the eight-byte signed one every arithmetic row writes. Both families are one
+ * exact shape apiece, stated once and selected by the opcode; neither widens
+ * the other and no row may read one where its opcode names the other. */
+typedef enum SlotFamily {
+    SLOT_FAMILY_I64 = 0,
+    SLOT_FAMILY_BOOL,
+} SlotFamily;
+
+static bool rep_is_trivial(const XrTargetMachineRepRecord *rep,
+                           SlotFamily family) {
+    if (!rep || rep->root_kind != XR_TARGET_ROOT_NONE ||
+        rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+        return false;
+    if (family == SLOT_FAMILY_BOOL)
+        return rep->kind == XR_MACHINE_REP_I1 && rep->register_bits == 1 &&
+               rep->memory_size == 1 && rep->memory_align == 1 &&
+               rep->signedness == XR_TARGET_SIGN_NONE;
+    return rep->kind == XR_MACHINE_REP_I64 && rep->register_bits == 64 &&
+           rep->memory_size == 8 && rep->memory_align == 8 &&
+           rep->signedness == XR_TARGET_SIGN_SIGNED;
 }
 
-static bool slot_is_i64(const XrTargetPlan *plan,
-                        const XrTargetFunctionRecord *function,
-                        uint32_t function_index, uint32_t slot_index,
-                        const XrTargetSlotRecord **out) {
+static bool slot_is_family(const XrTargetPlan *plan,
+                           const XrTargetFunctionRecord *function,
+                           uint32_t function_index, uint32_t slot_index,
+                           SlotFamily family,
+                           const XrTargetSlotRecord **out) {
     uint32_t slot_count = 0;
     const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
     if (!slots || !range_valid(function->slot_begin, function->slot_count,
@@ -56,15 +74,25 @@ static bool slot_is_i64(const XrTargetPlan *plan,
         xr_target_plan_machine_rep(plan, slot->register_rep);
     const XrTargetMachineRepRecord *memory_rep =
         xr_target_plan_machine_rep(plan, slot->memory_rep);
+    uint32_t width = family == SLOT_FAMILY_BOOL ? 1u : 8u;
     if (slot->id != slot_index || slot->function != function_index ||
-        slot->size != 8 || slot->align != 8 ||
+        slot->size != width || slot->align != width ||
         slot->root_kind != XR_TARGET_ROOT_NONE ||
         slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
-        !rep_is_trivial_i64(register_rep) || !rep_is_trivial_i64(memory_rep))
+        !rep_is_trivial(register_rep, family) ||
+        !rep_is_trivial(memory_rep, family))
         return false;
     if (out)
         *out = slot;
     return true;
+}
+
+static bool slot_is_i64(const XrTargetPlan *plan,
+                        const XrTargetFunctionRecord *function,
+                        uint32_t function_index, uint32_t slot_index,
+                        const XrTargetSlotRecord **out) {
+    return slot_is_family(plan, function, function_index, slot_index,
+                          SLOT_FAMILY_I64, out);
 }
 
 /* Row shape only. That an operand is already defined where it is read is a
@@ -75,6 +103,22 @@ static bool operand_is_function_i64(const XrTargetPlan *plan,
                                     const XrTargetFunctionRecord *function,
                                     uint32_t function_index, uint32_t slot) {
     return slot_is_i64(plan, function, function_index, slot, NULL);
+}
+
+static bool operand_is_function_bool(const XrTargetPlan *plan,
+                                     const XrTargetFunctionRecord *function,
+                                     uint32_t function_index, uint32_t slot) {
+    return slot_is_family(plan, function, function_index, slot,
+                          SLOT_FAMILY_BOOL, NULL);
+}
+
+/* Which family a row's result slot must belong to. A comparison writes the
+ * truth family and every other computation writes the signed i64 one, so the
+ * opcode alone decides it and a row can never be admitted against the family
+ * its own result happens to have. */
+static SlotFamily row_result_family(uint8_t opcode) {
+    return XR_TARGET_INSTRUCTION_IS_COMPARE(opcode) ? SLOT_FAMILY_BOOL
+                                                    : SLOT_FAMILY_I64;
 }
 
 /* Counted independently of the rows so that a group binding fewer arguments
@@ -301,7 +345,11 @@ bool xr_target_instruction_rows_control_flow_is_exact(
                             XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(immediate),
                             &proof.successors[block * 2u]);
                 break;
+            /* Both branch rows carry the same pair of explicit edges; only the
+             * width of the condition they read differs, and that is a row-shape
+             * question rather than a control-flow one. */
             case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64:
+            case XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL:
                 valid = control_flow_target_block(
                             proof.block_start, block_count,
                             XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(immediate),
@@ -508,6 +556,22 @@ static bool verify_function_group(const XrTargetPlan *plan,
                 valid = binary_row_shape_is_exact(plan, function, function_index,
                                                   row, terminal);
                 break;
+            case XR_TARGET_INSTRUCTION_CMP_EQ_I64:
+            case XR_TARGET_INSTRUCTION_CMP_NE_I64:
+            case XR_TARGET_INSTRUCTION_CMP_LT_I64:
+            case XR_TARGET_INSTRUCTION_CMP_LE_I64:
+            case XR_TARGET_INSTRUCTION_CMP_GT_I64:
+            case XR_TARGET_INSTRUCTION_CMP_GE_I64:
+                /* A relation reads the same exact signed i64 pair every other
+                 * two-operand row reads; only what it writes differs, and that
+                 * is proved by the result-family rule below rather than here,
+                 * so the operand shape stays one statement for the whole
+                 * family. Rejecting a non-zero immediate means there is no
+                 * immediate comparison form, so a relation always answers about
+                 * two slots the def-use proof has seen. */
+                valid = binary_row_shape_is_exact(plan, function, function_index,
+                                                  row, terminal);
+                break;
             case XR_TARGET_INSTRUCTION_SHL_MASKED_I64:
             case XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64:
                 /* The count is the second operand and nothing else: rejecting a
@@ -564,6 +628,17 @@ static bool verify_function_group(const XrTargetPlan *plan,
                         operand_is_function_i64(plan, function, function_index,
                                                 row->operand_slots[0]);
                 break;
+            case XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL:
+                /* The same edge rule over a truth slot. The condition family is
+                 * fixed by the opcode rather than read off the slot while the
+                 * row runs, so the executor never has to decide how wide its
+                 * own condition is. */
+                valid = row->operand_count == 1 &&
+                        row->result_slot == XR_TARGET_INSTRUCTION_SLOT_NONE &&
+                        row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
+                        operand_is_function_bool(plan, function, function_index,
+                                                 row->operand_slots[0]);
+                break;
             default:
                 valid = false;
                 break;
@@ -574,8 +649,8 @@ static bool verify_function_group(const XrTargetPlan *plan,
         if (!valid || XR_TARGET_INSTRUCTION_IS_TERMINATOR(row->opcode))
             continue;
         const XrTargetSlotRecord *result = NULL;
-        if (!slot_is_i64(plan, function, function_index, row->result_slot,
-                         &result) ||
+        if (!slot_is_family(plan, function, function_index, row->result_slot,
+                            row_result_family(row->opcode), &result) ||
             (row->opcode != XR_TARGET_INSTRUCTION_PARAM_I64 &&
              result->role == XR_TARGET_SLOT_PARAMETER)) {
             valid = false;

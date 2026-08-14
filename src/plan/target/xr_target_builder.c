@@ -5796,19 +5796,42 @@ static bool semantic_type_is_exact_i64(const XrSemanticPlan *plan,
            (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
 }
 
-static bool materialized_rep_is_exact_i64(
-    const XrTargetMachineRepRecord *rep) {
-    return rep && rep->kind == XR_MACHINE_REP_I64 &&
-           rep->register_bits == 64 && rep->memory_size == 8 &&
-           rep->memory_align == 8 &&
-           rep->signedness == XR_TARGET_SIGN_SIGNED &&
-           rep->root_kind == XR_TARGET_ROOT_NONE &&
-           rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+/* The comparison relations answer a truth value, which the language types
+ * `bool` and the plan lays out as a one-byte I1 slot, so the executable family
+ * admits exactly that second slot shape beside the signed i64 one. Both shapes
+ * are stated once here and selected by the row, and neither is ever coerced
+ * into the other. */
+typedef enum XrTargetScalarSlotFamily {
+    XR_TARGET_SCALAR_SLOT_I64 = 0,
+    XR_TARGET_SCALAR_SLOT_BOOL,
+} XrTargetScalarSlotFamily;
+
+static bool semantic_type_is_exact_bool(const XrSemanticPlan *plan,
+                                        uint32_t type_index) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, type_index);
+    return type && type->kind == XR_KIND_BOOL &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
 }
 
-static bool materialized_i64_slot(const XrTargetMaterializedPlan *materialized,
-                                  uint32_t function, uint32_t semantic_value,
-                                  uint32_t *out_slot) {
+static bool materialized_rep_is_exact(const XrTargetMachineRepRecord *rep,
+                                      XrTargetScalarSlotFamily family) {
+    if (!rep || rep->root_kind != XR_TARGET_ROOT_NONE ||
+        rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+        return false;
+    if (family == XR_TARGET_SCALAR_SLOT_BOOL)
+        return rep->kind == XR_MACHINE_REP_I1 && rep->register_bits == 1 &&
+               rep->memory_size == 1 && rep->memory_align == 1 &&
+               rep->signedness == XR_TARGET_SIGN_NONE;
+    return rep->kind == XR_MACHINE_REP_I64 && rep->register_bits == 64 &&
+           rep->memory_size == 8 && rep->memory_align == 8 &&
+           rep->signedness == XR_TARGET_SIGN_SIGNED;
+}
+
+static bool materialized_scalar_slot(
+    const XrTargetMaterializedPlan *materialized, uint32_t function,
+    uint32_t semantic_value, XrTargetScalarSlotFamily family,
+    uint32_t *out_slot) {
     const XrTargetValueRepRecord *value =
         find_materialized_value(materialized, semantic_value);
     if (!value || value->slot == XR_SEMANTIC_INDEX_NONE ||
@@ -5817,20 +5840,28 @@ static bool materialized_i64_slot(const XrTargetMaterializedPlan *materialized,
         value->memory_rep >= materialized->machine_rep_count)
         return false;
     const XrTargetSlotRecord *slot = &materialized->slots[value->slot];
+    uint32_t width = family == XR_TARGET_SCALAR_SLOT_BOOL ? 1u : 8u;
     if (slot->id != value->slot || slot->function != function ||
         slot->semantic_value != semantic_value ||
         slot->register_rep != value->register_rep ||
-        slot->memory_rep != value->memory_rep || slot->size != 8 ||
-        slot->align != 8 || slot->root_kind != XR_TARGET_ROOT_NONE ||
+        slot->memory_rep != value->memory_rep || slot->size != width ||
+        slot->align != width || slot->root_kind != XR_TARGET_ROOT_NONE ||
         slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
-        !materialized_rep_is_exact_i64(
-            &materialized->machine_reps[value->register_rep]) ||
-        !materialized_rep_is_exact_i64(
-            &materialized->machine_reps[value->memory_rep]))
+        !materialized_rep_is_exact(
+            &materialized->machine_reps[value->register_rep], family) ||
+        !materialized_rep_is_exact(
+            &materialized->machine_reps[value->memory_rep], family))
         return false;
     if (out_slot)
         *out_slot = value->slot;
     return true;
+}
+
+static bool materialized_i64_slot(const XrTargetMaterializedPlan *materialized,
+                                  uint32_t function, uint32_t semantic_value,
+                                  uint32_t *out_slot) {
+    return materialized_scalar_slot(materialized, function, semantic_value,
+                                    XR_TARGET_SCALAR_SLOT_I64, out_slot);
 }
 
 static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
@@ -5855,6 +5886,15 @@ static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
          * reaches here, so no row can silently zero fill. */
         case XI_SHL: return XR_TARGET_INSTRUCTION_SHL_MASKED_I64;
         case XI_SHR: return XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64;
+        /* The six relations over signed i64 operands. Their result is the
+         * language's `bool`, so their row writes the truth slot the plan
+         * already laid out for that value rather than a signed i64 one. */
+        case XI_EQ: return XR_TARGET_INSTRUCTION_CMP_EQ_I64;
+        case XI_NE: return XR_TARGET_INSTRUCTION_CMP_NE_I64;
+        case XI_LT: return XR_TARGET_INSTRUCTION_CMP_LT_I64;
+        case XI_LE: return XR_TARGET_INSTRUCTION_CMP_LE_I64;
+        case XI_GT: return XR_TARGET_INSTRUCTION_CMP_GT_I64;
+        case XI_GE: return XR_TARGET_INSTRUCTION_CMP_GE_I64;
         case XI_PARAM: return XR_TARGET_INSTRUCTION_PARAM_I64;
         default: return XR_TARGET_INSTRUCTION_INVALID;
     }
@@ -5881,6 +5921,12 @@ static uint16_t scalar_instruction_operand_count(uint8_t opcode) {
         case XR_TARGET_INSTRUCTION_BXOR_I64:
         case XR_TARGET_INSTRUCTION_SHL_MASKED_I64:
         case XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64:
+        case XR_TARGET_INSTRUCTION_CMP_EQ_I64:
+        case XR_TARGET_INSTRUCTION_CMP_NE_I64:
+        case XR_TARGET_INSTRUCTION_CMP_LT_I64:
+        case XR_TARGET_INSTRUCTION_CMP_LE_I64:
+        case XR_TARGET_INSTRUCTION_CMP_GT_I64:
+        case XR_TARGET_INSTRUCTION_CMP_GE_I64:
             return 2;
         /* Terminators are not lowered from a semantic operation: they come from
          * the block kind, so they have no arity here at all. */
@@ -5888,6 +5934,7 @@ static uint16_t scalar_instruction_operand_count(uint8_t opcode) {
         case XR_TARGET_INSTRUCTION_RETURN_I64:
         case XR_TARGET_INSTRUCTION_JUMP:
         case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64:
+        case XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL:
         case XR_TARGET_INSTRUCTION_COUNT:
             break;
     }
@@ -5975,9 +6022,10 @@ static bool scalar_block_is_admissible(const XrSemanticPlan *semantic,
                 return false;
             break;
         case XI_BLOCK_IF:
-            /* The condition becomes a nonzero test on an ordinary i64 slot, so
-             * a block whose condition is not exact signed i64 is refused when
-             * that slot is resolved rather than coerced into one. */
+            /* The condition becomes a nonzero test on the slot the plan already
+             * gave its value, so a block whose condition is neither an exact
+             * signed i64 nor an exact truth slot is refused when that slot is
+             * resolved rather than coerced into either. */
             if (block->control_value == XR_SEMANTIC_INDEX_NONE ||
                 !scalar_block_successor_local(function, block->successors[0],
                                               NULL) ||
@@ -6027,14 +6075,26 @@ static bool scalar_block_terminator_row(
                 XR_TARGET_INSTRUCTION_TARGET_PACK(block_row[taken], 0);
             return true;
         case XI_BLOCK_IF:
-            if (!materialized_i64_slot(materialized, function_index,
-                                       block->control_value, &control_slot) ||
-                !scalar_block_successor_local(function, block->successors[0],
+            /* The condition's own slot decides which branch row this is: a
+             * signed i64 condition keeps the nonzero test it already had, and
+             * the truth slot a comparison writes gets the branch that reads one
+             * byte. The choice is frozen into the row here, so nothing at
+             * execution has to work out how wide the condition is. */
+            if (materialized_i64_slot(materialized, function_index,
+                                      block->control_value, &control_slot))
+                row->opcode = XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64;
+            else if (materialized_scalar_slot(materialized, function_index,
+                                              block->control_value,
+                                              XR_TARGET_SCALAR_SLOT_BOOL,
+                                              &control_slot))
+                row->opcode = XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL;
+            else
+                return false;
+            if (!scalar_block_successor_local(function, block->successors[0],
                                               &taken) ||
                 !scalar_block_successor_local(function, block->successors[1],
                                               &untaken))
                 return false;
-            row->opcode = XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64;
             row->operand_count = 1;
             row->operand_slots[0] = control_slot;
             row->immediate_bits = XR_TARGET_INSTRUCTION_TARGET_PACK(
@@ -6142,10 +6202,27 @@ static bool materialize_scalar_instruction_function(
                 operation->block != block_index || operation->effects != 0 ||
                 operation->operand_count != expected_operands ||
                 operation->operand_begin > operand_total ||
-                operation->operand_count > operand_total - operation->operand_begin ||
-                !semantic_type_is_exact_i64(semantic, operation->result_type) ||
-                !materialized_i64_slot(materialized, function_index,
-                                       operation->result_value, &result_slot)) {
+                operation->operand_count > operand_total - operation->operand_begin) {
+                admissible = false;
+                break;
+            }
+            /* A relation answers a truth value and every other admitted
+             * operation answers a signed i64, so the opcode decides which
+             * result the operation must have declared. Both are proved exactly;
+             * neither is inferred from what the operation happens to carry. */
+            bool comparison = XR_TARGET_INSTRUCTION_IS_COMPARE(opcode);
+            if (comparison
+                    ? !semantic_type_is_exact_bool(semantic,
+                                                   operation->result_type) ||
+                          !materialized_scalar_slot(materialized, function_index,
+                                                    operation->result_value,
+                                                    XR_TARGET_SCALAR_SLOT_BOOL,
+                                                    &result_slot)
+                    : !semantic_type_is_exact_i64(semantic,
+                                                  operation->result_type) ||
+                          !materialized_i64_slot(materialized, function_index,
+                                                 operation->result_value,
+                                                 &result_slot)) {
                 admissible = false;
                 break;
             }

@@ -412,6 +412,7 @@
         "src/aot/xrt_value.h",
         "src/ir/xi_opt.c",
         "src/ir/xi_opt_sccp.c",
+        "src/vm/xr_typed_dispatch.c",
         "src/vm/xvm_internal.h",
         "src/vm/xvm_ops.c"
       ],

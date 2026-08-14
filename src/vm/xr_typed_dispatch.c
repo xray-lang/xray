@@ -17,6 +17,7 @@
 #include "xr_typed_frame.h"
 #include "../plan/target/xr_target_instruction_verify.h"
 #include "../shared/xr_bits_core.h"
+#include "../shared/xr_compare_core.h"
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include <string.h>
@@ -25,6 +26,17 @@ static XrTypedDispatchStatus describe_i64(XrTypedFrame *frame, uint32_t slot,
                                           XrTypedSlotAccess *access) {
     if (xr_typed_frame_describe_slot(frame, slot, access) != XR_TYPED_FRAME_OK ||
         access->size != sizeof(uint64_t) || access->alignment != sizeof(uint64_t))
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    return XR_TYPED_DISPATCH_OK;
+}
+
+/* The truth slot a comparison writes. It is one byte, so it is the second and
+ * only other width this executor reads; the width comes from the opcode, and
+ * this repeats the plan's own answer rather than choosing one. */
+static XrTypedDispatchStatus describe_bool(XrTypedFrame *frame, uint32_t slot,
+                                           XrTypedSlotAccess *access) {
+    if (xr_typed_frame_describe_slot(frame, slot, access) != XR_TYPED_FRAME_OK ||
+        access->size != sizeof(uint8_t) || access->alignment != sizeof(uint8_t))
         return XR_TYPED_DISPATCH_FRAME_ERROR;
     return XR_TYPED_DISPATCH_OK;
 }
@@ -51,6 +63,45 @@ static XrTypedDispatchStatus store_i64_bits(XrTypedFrame *frame, uint32_t slot,
                    XR_TYPED_FRAME_OK
                ? XR_TYPED_DISPATCH_OK
                : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+static XrTypedDispatchStatus load_bool_byte(XrTypedFrame *frame, uint32_t slot,
+                                            uint8_t *byte) {
+    XrTypedSlotAccess access = {0};
+    XrTypedDispatchStatus status = describe_bool(frame, slot, &access);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    return xr_typed_frame_load(frame, &access, byte, sizeof(*byte)) ==
+                   XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+static XrTypedDispatchStatus store_bool_byte(XrTypedFrame *frame, uint32_t slot,
+                                             uint8_t byte) {
+    XrTypedSlotAccess access = {0};
+    XrTypedDispatchStatus status = describe_bool(frame, slot, &access);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    return xr_typed_frame_store(frame, &access, &byte, sizeof(byte)) ==
+                   XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+/* The relation a comparison row names, as the shared comparison owner spells
+ * it. The row's opcode is the only thing that selects it, so the executor never
+ * restates what any relation means. */
+static bool compare_row_kind(uint8_t opcode, XrCompareKind *kind) {
+    switch ((XrTargetInstructionOpcode) opcode) {
+        case XR_TARGET_INSTRUCTION_CMP_EQ_I64: *kind = XR_COMPARE_EQ; return true;
+        case XR_TARGET_INSTRUCTION_CMP_NE_I64: *kind = XR_COMPARE_NE; return true;
+        case XR_TARGET_INSTRUCTION_CMP_LT_I64: *kind = XR_COMPARE_LT; return true;
+        case XR_TARGET_INSTRUCTION_CMP_LE_I64: *kind = XR_COMPARE_LE; return true;
+        case XR_TARGET_INSTRUCTION_CMP_GT_I64: *kind = XR_COMPARE_GT; return true;
+        case XR_TARGET_INSTRUCTION_CMP_GE_I64: *kind = XR_COMPARE_GE; return true;
+        default: return false;
+    }
 }
 
 /*
@@ -191,11 +242,44 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
             memcpy(&left, &computed, sizeof(left));
             return store_i64_bits(frame, row->result_slot, left);
         }
+        case XR_TARGET_INSTRUCTION_CMP_EQ_I64:
+        case XR_TARGET_INSTRUCTION_CMP_NE_I64:
+        case XR_TARGET_INSTRUCTION_CMP_LT_I64:
+        case XR_TARGET_INSTRUCTION_CMP_LE_I64:
+        case XR_TARGET_INSTRUCTION_CMP_GT_I64:
+        case XR_TARGET_INSTRUCTION_CMP_GE_I64: {
+            XrCompareKind kind = XR_COMPARE_EQ;
+            if (!compare_row_kind(row->opcode, &kind))
+                return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+            status = load_i64_bits(frame, row->operand_slots[0], &left);
+            if (status != XR_TYPED_DISPATCH_OK)
+                return status;
+            status = load_i64_bits(frame, row->operand_slots[1], &right);
+            if (status != XR_TYPED_DISPATCH_OK)
+                return status;
+            int64_t first = 0;
+            int64_t second = 0;
+            memcpy(&first, &left, sizeof(first));
+            memcpy(&second, &right, sizeof(second));
+            /* The shared comparison owner is the single definition of what each
+             * relation means. Both operands are proved exact signed i64, so the
+             * pair lands on the owner's signed 64-bit lane and needs no route
+             * question; going through the owner is what keeps this executor in
+             * agreement with the bytecode VM, the AOT runtime, and constant
+             * folding instead of stating the six relations a seventh time. */
+            bool holds = XR_COMPARE_OWNER_APPLY_I64(
+                XR_SEM_OWNER_ID_SHARED_COMPARE_HI,
+                XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_VM, kind,
+                first, second);
+            return store_bool_byte(frame, row->result_slot,
+                                   holds ? (uint8_t) 1u : (uint8_t) 0u);
+        }
         case XR_TARGET_INSTRUCTION_RETURN_I64:
             *returned = true;
             return load_i64_bits(frame, row->operand_slots[0], return_bits);
         case XR_TARGET_INSTRUCTION_JUMP:
-        case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64: {
+        case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64:
+        case XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL: {
             uint32_t target = XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(
                 row->immediate_bits);
             if (row->opcode == XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64) {
@@ -206,6 +290,17 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                  * every i64 value selects an edge and no value is outside the
                  * test. */
                 if (left == 0)
+                    target = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(
+                        row->immediate_bits);
+            } else if (row->opcode == XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL) {
+                uint8_t truth = 0;
+                status = load_bool_byte(frame, row->operand_slots[0], &truth);
+                if (status != XR_TYPED_DISPATCH_OK)
+                    return status;
+                /* The same test one byte wide. Only a comparison row writes a
+                 * truth slot and it writes 0 or 1, but testing the whole byte
+                 * against zero needs no such assumption. */
+                if (truth == 0)
                     target = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(
                         row->immediate_bits);
             }
