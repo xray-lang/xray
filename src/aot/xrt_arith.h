@@ -1338,6 +1338,13 @@ static inline XrValue xrt_typename(XrValue v) {
         case XR_TAG_RANGE:
             return xr_str_lit(&xs_range);
         case XR_TAG_ENUM: {
+            /* A payload variant constructor shares the enum tag but is a
+             * callable, not a member of the enum's value domain, so it reports
+             * what every other callable reports. Matches the VM, which answers
+             * constructors from the public type id table. */
+            const XrObjHeader *hdr = (const XrObjHeader *) v.ptr;
+            if (hdr && hdr->type == XR_TENUM_CTOR)
+                return xr_str_lit(&xs_function);
             const char *enum_name = NULL;
             return xrt_enum_key_parts(v, &enum_name, NULL, NULL, NULL) && enum_name
                        ? xr_box_str(enum_name)

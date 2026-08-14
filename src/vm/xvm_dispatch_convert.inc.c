@@ -161,14 +161,8 @@ vmcase(OP_TYPENAME) {
     XR_DCHECK(!XR_IS_SLICE_REF(val) && !XR_IS_ARRAY_REF(val),
               "typename: slice and array refs are folded during lowering");
     const char *type_name = NULL;
-    // For payload variant constructors, return the parent enum name.
-    if (XR_IS_ENUM_CTOR(val)) {
-        XrEnumCtor *ev = (XrEnumCtor *) XR_TO_PTR(val);
-        if (ev->enum_name)
-            type_name = ev->enum_name;
-    }
     // For instances, return class name
-    if (type_name == NULL && xr_value_is_instance(val)) {
+    if (xr_value_is_instance(val)) {
         XrInstance *inst = xr_value_to_instance(val);
         XrClass *cls = xr_instance_get_class(inst);
         if (cls && cls->builtin_kind == XR_BK_STRUCT_OBJECT)
@@ -185,6 +179,9 @@ vmcase(OP_TYPENAME) {
         if (cls && cls->name)
             type_name = cls->name;
     }
+    /* Everything else, a payload variant constructor included, answers from the
+     * public type id table. A constructor is a callable, so it reports what
+     * every other callable reports rather than the enum it belongs to. */
     if (type_name == NULL) {
         type_name = xr_typeid_name(xr_value_typeid(val));
     }
