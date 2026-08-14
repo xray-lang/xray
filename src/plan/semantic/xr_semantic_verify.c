@@ -14,6 +14,7 @@
 #include "xr_semantic_graph.h"
 #include "xr_semantic_ops.h"
 #include "xr_semantic_plan_internal.h"
+#include "xr_semantic_string_runes_shape.h"
 #include "../ownership/xr_ownership_check.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
@@ -175,7 +176,7 @@ static bool semantic_source_enum_identity_exact(const XrSemanticTypeRecord *type
                type->enum_layout_id == 0 && type->enum_member_count == 0 &&
                type->enum_flags == 0 && type->reserved_enum == 0;
     const char *cursor = type->source_enum_key;
-    static const char prefix[] = "source-enum-v1:schema=24:owner=";
+    static const char prefix[] = "source-enum-v1:schema=25:owner=";
     if (!cursor || strncmp(cursor, prefix, sizeof(prefix) - 1u) != 0 ||
         !verify_id(cursor, type->source_enum_identity) ||
         type->enum_member_count == 0 || type->enum_layout_id == 0 ||
@@ -1558,6 +1559,16 @@ static bool verify_string_builder_append_rune(
                            "StringBuilder.append(rune) authority is not exact");
 }
 
+static bool verify_string_runes(const XrSemanticPlan *plan,
+                                const XrSemanticOperationRecord *operation,
+                                char *error, size_t error_size) {
+    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_STRING_RUNES)
+        return true;
+    return xr_semantic_string_runes_is_exact(plan, operation, NULL) ||
+           report(error, error_size, "XR_SEM_0019",
+                  "String.runes authority is not exact");
+}
+
 static bool verify_string_builder_to_string(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     char *error, size_t error_size) {
@@ -2183,6 +2194,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!operation_debug_span_valid(plan, i))
             return report(error, error_size, "XR_SEM_0019", "operation debug span is invalid");
         if (!verify_string_byte_slice_view(plan, operation, error, error_size))
+            return false;
+        if (!verify_string_runes(plan, operation, error, error_size))
             return false;
         if (!verify_string_builder_append_rune(plan, operation, error, error_size))
             return false;

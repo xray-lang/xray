@@ -2850,6 +2850,31 @@ static bool cg_channel_receive_emission_view(
     return true;
 }
 
+static bool cg_string_runes_emission_view(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    XrCValueEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !value || !out)
+        return false;
+    CgValueEmissionStatus status =
+        cg_value_emission_view(ctx, function, value, out);
+    if (status != CG_VALUE_EMISSION_FOUND ||
+        out->materialization != XR_C_VALUE_MATERIALIZATION_STRING_RUNES)
+        return false;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    if (!value->args || !value->args[0] ||
+        out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol ||
+        !out->recipe_symbol[0] ||
+        !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
+        receiver != out->recipe_operand_value) {
+        (void) cg_value_emission_fail(
+            ctx, "String.runes has no exact immutable C recipe");
+        return false;
+    }
+    return true;
+}
+
 static void cg_emit_channel_receive_payload_expression(
     FILE *out, const XrCValueEmissionView *view, uint32_t value_id,
     bool coroutine) {
@@ -8008,12 +8033,9 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
             if (cg_adt_enum_constructor_emission_view(
                     ctx, f, user, &enum_constructor))
                 return arg_index > 0;
-            /* string.runes() is emitted as a dynamic method call whose
-             * receiver is rendered through emit_value_as_rep_ctx(). */
-            if (arg_index == 0 && user->nargs >= 1 && user->args[0] && user->args[0]->type &&
-                user->args[0]->type->kind == XR_KIND_STRING && user->aux &&
-                strcmp((const char *) user->aux, "runes") == 0)
-                return true;
+            XrCValueEmissionView runes = {0};
+            if (cg_string_runes_emission_view(ctx, f, user, &runes))
+                return arg_index == 0;
             /* The runtime string-slice helper and float formatting helper
              * render their scalar arguments with emit_value_as_rep_ctx(). */
             if (arg_index >= 1 && user->args[0] && user->args[0]->type && user->aux &&
@@ -8153,9 +8175,11 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
                     bool allowed_string_use =
                         cg_string_concat_emission_view(ctx, f, user,
                                                        &concat) ||
-                        (user->op == XI_SET_SHARED && a == 0) ||
-                        ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
-                         a == 0 && user->aux && strcmp((const char *) user->aux, "runes") == 0);
+                        (user->op == XI_SET_SHARED && a == 0);
+                    XrCValueEmissionView runes = {0};
+                    if (!allowed_string_use &&
+                        cg_string_runes_emission_view(ctx, f, user, &runes))
+                        allowed_string_use = a == 0;
                     if (!allowed_string_use)
                         return false;
                 }

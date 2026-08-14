@@ -837,6 +837,12 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
     return XR_NULL_VAL;
 }
 
+/* Dedicated target-plan spelling for the exact built-in String.runes member.
+ * Generated C never re-selects the numeric method symbol. */
+static inline XrValue xrt_string_runes(XrValue receiver) {
+    return xrt_method_0(receiver, XRT_SYM_RUNES);
+}
+
 static inline XrValue xrt_len_value(XrValue recv) {
     XrValue result = xrt_method_0(recv, XRT_SYM_LENGTH);
     if (!XR_IS_NULL(result))

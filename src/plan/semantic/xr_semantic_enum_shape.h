@@ -194,7 +194,7 @@ static inline bool xr_semantic_enum_source_key_matches(
     const XrSemanticTypeRecord *type, const char *enum_name,
     const char *const *metadata, uint32_t metadata_count,
     uint32_t member_metadata_begin, uint32_t member_count) {
-    static const char prefix[] = "source-enum-v1:schema=24:owner=";
+    static const char prefix[] = "source-enum-v1:schema=25:owner=";
     if (!type || !type->source_enum_key || !enum_name || !metadata ||
         strncmp(type->source_enum_key, prefix, sizeof(prefix) - 1u) != 0)
         return false;

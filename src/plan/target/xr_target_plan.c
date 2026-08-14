@@ -609,6 +609,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         bool stringbuilder_append_rune =
             plan->calls[i].target_kind ==
             XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE;
+        bool string_runes =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRING_RUNES;
         bool stringbuilder_to_string =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING;
         bool stringbuilder_append_string = plan->calls[i].target_kind ==
@@ -633,7 +635,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_INTRINSIC;
         if ((!direct_local && !channel_close && !source_export &&
              !stringbuilder_constructor && !string_byte_slice_view &&
-             !stringbuilder_append_rune && !stringbuilder_to_string && !stringbuilder_append_string &&
+             !stringbuilder_append_rune && !string_runes && !stringbuilder_to_string &&
+             !stringbuilder_append_string &&
              !json_namespace_value && !array_member_scalar && !native_module_scalar &&
              !native_namespace_yieldable && !source_class_constructor &&
              !adt_enum_constructor && !array_intrinsic) ||
@@ -645,6 +648,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
                  xr_semantic_plan_call_target_count(plan->semantic_plan)) ||
             ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
               stringbuilder_append_rune || stringbuilder_to_string || stringbuilder_append_string ||
+              string_runes ||
               json_namespace_value || array_member_scalar || native_module_scalar ||
               adt_enum_constructor || array_intrinsic) &&
              plan->calls[i].semantic_call_target != XR_SEMANTIC_INDEX_NONE) ||

@@ -9355,12 +9355,17 @@ static bool xicgen_byte_slice_copy_method_drops_helper(XiCgenCtx *ctx, const XiV
     return cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_COPY, XAOT_SLICE_DROP_HELPER);
 }
 
-static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
+static bool xicgen_runtime_method_call_is_direct_nothrow(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
-    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1 ||
-        !v->aux)
+    if (!v)
         return false;
-
+    XrCValueEmissionView string_runes = {0};
+    if (cg_string_runes_emission_view(ctx, function, v, &string_runes))
+        return true;
+    if ((v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) ||
+        v->nargs < 1 || !v->aux)
+        return false;
     const char *method = (const char *) v->aux;
     uint16_t nargs = (uint16_t) (v->nargs - 1);
     const XrType *receiver_type = v->args[0] ? v->args[0]->type : NULL;
@@ -9373,7 +9378,7 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
     if (receiver_type && receiver_type->kind == XR_KIND_RUNE)
         return strcmp(method, "toUInt32") == 0 && nargs == 0;
     if (receiver_type && receiver_type->kind == XR_KIND_STRING)
-        return (strcmp(method, "runes") == 0 || strcmp(method, "iterator") == 0) && nargs == 0;
+        return strcmp(method, "iterator") == 0 && nargs == 0;
     if (xr_type_is_builtin_named_class(receiver_type, "Iterator"))
         /* Iterator<T> deliberately does not encode its producer kind.  A
          * collection iterator cannot publish a value-channel error, but a
@@ -9455,7 +9460,7 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
         return true;
     if (cg_array_builtin_call_is_trusted_nothrow(ctx, current, v))
         return true;
-    if (xicgen_runtime_method_call_is_direct_nothrow(v))
+    if (xicgen_runtime_method_call_is_direct_nothrow(ctx, current, v))
         return true;
     if (xicgen_stdlib_call_is_declared_nothrow(ctx, current, v))
         return true;
@@ -11325,7 +11330,21 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
 
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
+    XrCValueEmissionView string_runes = {0};
+    if (cg_string_runes_emission_view(ctx, f, v, &string_runes)) {
+        bool discard = cg_unused_call_result_emits_statement(ctx, f, v);
+        if (discard)
+            fprintf(out, "xrt_discard_owned(");
+        fprintf(out, "%s(", string_runes.recipe_symbol);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, discard ? "))" : ")");
+        return;
+    }
     XR_DCHECK(v->nargs >= 1, "xicgen_call_method: need receiver");
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     const char *method = (const char *) v->aux;
     if (v->xg_map_shape_id != XG_NO_ID && method && strcmp(method, "add") == 0) {
         const XaotMapShapePlan *plan = xicgen_static_map_shape_plan(ctx, v);

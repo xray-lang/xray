@@ -10,6 +10,7 @@
 
 #include "xr_semantic_builder.h"
 #include "xr_semantic_class_shape.h"
+#include "xr_semantic_string_runes_shape.h"
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_verify.h"
 #include "../ownership/xr_ownership_obligation.h"
@@ -2767,6 +2768,16 @@ static bool xi_type_names_string_builder(const XrType *type) {
     return xr_type_is_named_class(type, "StringBuilder");
 }
 
+static bool xi_string_runes_exact(const XiValue *value) {
+    const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
+    const XrType *receiver_type = receiver ? receiver->type : NULL;
+    return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
+           strcmp((const char *) value->aux, "runes") == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
+           (value->aux_int & 1) == 0 && receiver_type &&
+           receiver_type->kind == XR_KIND_STRING;
+}
+
 static bool xi_string_builder_constructor_candidate(const XiValue *value) {
     if (!value || value->op != XI_CALL_BUILTIN)
         return false;
@@ -3470,6 +3481,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         !append_source_namespace_dependency(ctx, value) ||
         !append_constant(ctx, value, record))
         return false;
+    if (xi_string_runes_exact(value)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_STRING_RUNES;
+        if (!xr_semantic_string_runes_is_exact(ctx->plan, record, NULL))
+            return fail(ctx, "XR_SEM_0019", "String.runes authority is not exact");
+    }
     if (xi_string_builder_append_rune_exact(value) &&
         semantic_string_builder_append_rune_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE;
