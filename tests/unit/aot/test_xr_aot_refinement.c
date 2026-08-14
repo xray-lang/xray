@@ -186,6 +186,16 @@ typedef struct SourceNamespaceStorageFixture {
     XrTargetPlan *target_plan;
 } SourceNamespaceStorageFixture;
 
+typedef struct NativeNamespaceYieldableStorageFixture {
+    XiFunc *function;
+    XiFunc *caller;
+    XiValue *namespace_ref;
+    XiValue *namespace_load;
+    XiValue *call;
+    XrTargetProfile *target_profile;
+    XrTargetPlan *target_plan;
+} NativeNamespaceYieldableStorageFixture;
+
 static XrType scalar_int = {
     .kind = XR_KIND_INT,
     .id = 1,
@@ -842,6 +852,111 @@ static void source_namespace_storage_fixture_free(
     xi_func_free(fixture->function);
     xi_func_free(dependency_function);
     xr_semantic_plan_free(fixture->dependency);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
+static int native_namespace_suspendability(void *ud, const XiFunc *current,
+                                           const XiValue *call) {
+    (void) ud;
+    (void) current;
+    return call && call->op == XI_CALL_METHOD && call->aux &&
+                   strcmp((const char *) call->aux, "sleep") == 0
+               ? 1
+               : -1;
+}
+
+static NativeNamespaceYieldableStorageFixture
+native_namespace_yieldable_storage_fixture_create(bool extra_use) {
+    NativeNamespaceYieldableStorageFixture fixture = {0};
+    fixture.function = xi_func_new("native_namespace_root", &scalar_unit);
+    fixture.caller = xi_func_new("native_namespace_caller", &scalar_unit);
+    XiBlock *root_entry = xi_block_new(fixture.function);
+    XiBlock *caller_entry = xi_block_new(fixture.caller);
+    REQUIRE(fixture.function && fixture.caller && root_entry && caller_entry);
+    root_entry->sealed = caller_entry->sealed = true;
+    fixture.function->children =
+        (XiFunc **) xr_calloc(1, sizeof(*fixture.function->children));
+    REQUIRE(fixture.function->children != NULL);
+    fixture.function->children[0] = fixture.caller;
+    fixture.function->nchildren = fixture.function->children_cap = 1;
+    fixture.caller->parent_func = fixture.function;
+
+    XiImportRef *import_ref = (XiImportRef *) xi_func_arena_alloc(
+        fixture.function, sizeof(*import_ref));
+    REQUIRE(import_ref != NULL);
+    *import_ref = (XiImportRef) {
+        .module_path = "time",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolution_attempted = true,
+    };
+    fixture.namespace_ref = xi_value_new(
+        fixture.function, root_entry, XI_IMPORT_REF, &module_namespace, 0);
+    XiValue *retain = xi_value_new(fixture.function, root_entry, XI_RETAIN,
+                                   &module_namespace, 1);
+    XiValue *store = xi_value_new(fixture.function, root_entry, XI_SET_SHARED,
+                                  &scalar_unit, 1);
+    REQUIRE(fixture.namespace_ref && retain && store);
+    fixture.namespace_ref->aux = import_ref;
+    retain->args[0] = fixture.namespace_ref;
+    store->args[0] = fixture.namespace_ref;
+    store->aux_int = 0;
+    fixture.function->nshared = 1;
+    xi_block_set_return(root_entry, NULL);
+
+    fixture.namespace_load = xi_value_new(
+        fixture.caller, caller_entry, XI_GET_SHARED, &module_namespace, 0);
+    XiValue *argument =
+        xi_const_int(fixture.caller, caller_entry, 1, &scalar_int);
+    fixture.call = xi_value_new(fixture.caller, caller_entry, XI_CALL_METHOD,
+                                &scalar_unit, 2);
+    REQUIRE(fixture.namespace_load && argument && fixture.call);
+    fixture.namespace_load->aux_int = 0;
+    fixture.call->args[0] = fixture.namespace_load;
+    fixture.call->args[1] = argument;
+    fixture.call->aux = (void *) "sleep";
+    fixture.call->aux_int = 0;
+    if (extra_use) {
+        XiValue *unexpected = xi_value_new(fixture.caller, caller_entry,
+                                           XI_PRINT, &scalar_unit, 1);
+        REQUIRE(unexpected != NULL);
+        unexpected->args[0] = fixture.namespace_load;
+    }
+    xi_block_set_return(caller_entry, NULL);
+    fixture.function->stage = fixture.caller->stage =
+        XI_STAGE_SEMANTIC_LOWERED;
+    fixture.function->invariant_mask = fixture.caller->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    XiCoroResolver resolver = {
+        .call_suspendability = native_namespace_suspendability,
+    };
+    REQUIRE(xi_coro_lower(fixture.function, &resolver));
+    fixture.function->stage = fixture.caller->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build_and_attach(
+        fixture.function, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native namespace SemanticPlan build failed: %s\n",
+                error);
+    REQUIRE(built);
+    fixture.target_profile = build_target_profile();
+    built = xr_target_plan_build(fixture.function->semantic_plan,
+                                 fixture.target_profile,
+                                 &fixture.target_plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native namespace TargetPlan build failed: %s\n",
+                error);
+    REQUIRE(built && fixture.target_plan);
+    return fixture;
+}
+
+static void native_namespace_yieldable_storage_fixture_free(
+    NativeNamespaceYieldableStorageFixture *fixture) {
+    xr_target_plan_free(fixture->target_plan);
+    xr_target_profile_free(fixture->target_profile);
+    xi_func_free(fixture->function);
     memset(fixture, 0, sizeof(*fixture));
 }
 
@@ -2136,6 +2251,115 @@ static void test_standalone_source_namespace_storage_is_exact_and_fail_closed(vo
     source_namespace_storage_fixture_free(&extra);
 }
 
+static void test_native_namespace_yieldable_storage_uses_frozen_call_identity(void) {
+    NativeNamespaceYieldableStorageFixture fixture =
+        native_namespace_yieldable_storage_fixture_create(false);
+    REQUIRE((fixture.target_plan->completed_family_mask &
+             XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE) != 0);
+    const XrSemanticPlan *semantic = fixture.function->semantic_plan;
+    REQUIRE(xr_semantic_plan_call_target_count(semantic) == 1);
+    const XrSemanticCallTargetRecord *semantic_target =
+        xr_semantic_plan_call_target(semantic, 0);
+    REQUIRE(semantic_target &&
+            semantic_target->kind ==
+                XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE);
+
+    char error[512] = {0};
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t load_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        fixture.target_plan, fixture.caller, fixture.namespace_load,
+        &semantic_function, &load_value, error, sizeof(error)));
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(fixture.target_plan, load_value);
+    REQUIRE(binding && binding->slot < fixture.target_plan->slots_count);
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(fixture.target_plan,
+                                   binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(fixture.target_plan, binding->memory_rep);
+    const XrTargetSlotRecord *slot =
+        &fixture.target_plan->slots[binding->slot];
+    REQUIRE(register_rep && memory_rep &&
+            register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            register_rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            memory_rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            register_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            slot->semantic_value == load_value &&
+            slot->role == XR_TARGET_SLOT_TEMPORARY &&
+            slot->ownership == XR_TARGET_OWNERSHIP_BORROWED);
+
+    uint32_t call_index = UINT32_MAX;
+    for (uint32_t i = 0; i < fixture.target_plan->calls_count; i++)
+        if (fixture.target_plan->calls[i].target_kind ==
+            XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE)
+            call_index = call_index == UINT32_MAX ? i : UINT32_MAX;
+    REQUIRE(call_index != UINT32_MAX &&
+            fixture.target_plan->calls[call_index].semantic_call_target == 0 &&
+            (fixture.target_plan->calls[call_index].flags &
+             XR_TARGET_CALL_SUSPEND) != 0);
+
+    XrTargetCallRecord saved_call = fixture.target_plan->calls[call_index];
+    XrFingerprint saved_plan_fingerprint = fixture.target_plan->fingerprint;
+    fixture.target_plan->calls[call_index].semantic_call_target =
+        XR_SEMANTIC_INDEX_NONE;
+    xr_target_call_compute_fingerprint(
+        fixture.target_plan, call_index,
+        &fixture.target_plan->calls[call_index].fingerprint);
+    xr_target_plan_compute_fingerprint(fixture.target_plan,
+                                       &fixture.target_plan->fingerprint);
+    REQUIRE(!xr_target_plan_verify(fixture.target_plan, error, sizeof(error)));
+    fixture.target_plan->calls[call_index] = saved_call;
+    fixture.target_plan->fingerprint = saved_plan_fingerprint;
+    REQUIRE(xr_target_plan_verify(fixture.target_plan, error, sizeof(error)));
+
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(
+        fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), &emission,
+        error, sizeof(error)));
+    XrCValueEmissionView load_view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+        emission, load_value, &load_view, error, sizeof(error)));
+    REQUIRE(load_view.rep == XR_C_VALUE_REP_TAGGED &&
+            load_view.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
+            strcmp(load_view.c_type, "XrValue") == 0);
+    xr_c_emission_plan_free(emission);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    bool refined = xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, &policy, &plan, &diag);
+    if (!refined)
+        fprintf(stderr,
+                "native namespace refinement failed: issue=%u value=%u operation=%u\n",
+                (unsigned) diag.issue, diag.semantic_value,
+                diag.semantic_operation);
+    REQUIRE(refined);
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count == 0);
+    xi_opt_refresh_representations_with_policy(fixture.function, &policy);
+    REQUIRE(fixture.namespace_ref->rep == XR_REP_TAGGED &&
+            fixture.namespace_load->rep == XR_REP_TAGGED &&
+            xr_aot_representation_materialization_verify(
+                &view, fixture.function, fixture.target_plan, &policy,
+                &diag));
+    xr_aot_refinement_plan_free(plan);
+    native_namespace_yieldable_storage_fixture_free(&fixture);
+
+    NativeNamespaceYieldableStorageFixture extra =
+        native_namespace_yieldable_storage_fixture_create(true);
+    plan = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        extra.target_plan, &policy, &plan, &diag));
+    REQUIRE(plan == NULL &&
+            diag.issue ==
+                XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
+    native_namespace_yieldable_storage_fixture_free(&extra);
+}
+
 static void test_exact_string_literal_storage_is_tagged_and_fail_closed(void) {
     XiFunc *function = xi_func_new("representation_string_authority",
                                    &scalar_unit);
@@ -2615,6 +2839,7 @@ int main(void) {
     test_direct_local_go_callee_storage_is_exact_and_fail_closed();
     test_source_namespace_storage_is_exact_and_fail_closed();
     test_standalone_source_namespace_storage_is_exact_and_fail_closed();
+    test_native_namespace_yieldable_storage_uses_frozen_call_identity();
     test_exact_string_literal_storage_is_tagged_and_fail_closed();
     test_stringbuilder_constructor_refinement_is_exact();
     test_bundle_owns_empty_policy_bound_authority();

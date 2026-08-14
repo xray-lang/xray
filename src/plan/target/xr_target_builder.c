@@ -1460,6 +1460,89 @@ static bool semantic_native_module_scalar_call_is_exact(const XrSemanticPlan *pl
     return true;
 }
 
+/* A yieldable namespace member is identified by the frozen SemanticPlan call
+ * target, not by its spelling alone. Rebuild the registry tuple and stable
+ * target identity here so the namespace storage family consumes the same
+ * exact invocation authority as the call family. */
+static bool semantic_native_module_yieldable_call_is_exact(
+    const XrSemanticPlan *plan, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, const char *module_path,
+    uint32_t receiver_value, uint32_t receiver_type) {
+    uint32_t operand_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata =
+        xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!plan || !operation || !module_path || !module_path[0] ||
+        !operands || !metadata || operation->opcode != XI_CALL_METHOD ||
+        (operation->semantic_immediate & 1) != 0 ||
+        operation->operand_count == 0 ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 1 ||
+        operation->metadata_begin >= metadata_count ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD))
+        return false;
+    const XrSemanticOperandRecord *receiver =
+        &operands[operation->operand_begin];
+    if (receiver->role != XR_SEM_OPERAND_RECEIVER ||
+        receiver->parameter != -1 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        receiver->value != receiver_value || receiver->type != receiver_type)
+        return false;
+    for (uint16_t i = 1; i < operation->operand_count; i++) {
+        const XrSemanticOperandRecord *argument = receiver + i;
+        if (argument->role != XR_SEM_OPERAND_ARGUMENT ||
+            argument->parameter != (int16_t) (i - 1) ||
+            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+            return false;
+    }
+    const char *selector = metadata[operation->metadata_begin];
+    const XrStdlibDefEntry *binding =
+        selector ? xr_stdlib_metadata_unique_func(module_path, selector) : NULL;
+    if (!binding || !binding->signature || !binding->vm ||
+        !binding->vm_binding || strcmp(binding->vm_binding, "yieldable") != 0 ||
+        operation->operand_count != (uint16_t) (binding->argc + 1u))
+        return false;
+    const XrSemanticCallTargetRecord *target = NULL;
+    uint32_t target_count =
+        (uint32_t) xr_semantic_plan_call_target_count(plan);
+    for (uint32_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *candidate =
+            xr_semantic_plan_call_target(plan, i);
+        if (!candidate || candidate->operation != operation_index)
+            continue;
+        if (target)
+            return false;
+        target = candidate;
+    }
+    XrStableId zero = {{0}};
+    if (!target ||
+        target->kind != XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE ||
+        target->function != XR_SEMANTIC_INDEX_NONE ||
+        target->dependency != XR_SEMANTIC_INDEX_NONE ||
+        target->source_export != XR_SEMANTIC_INDEX_NONE ||
+        target->callable_type != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(target->export_identity, zero) ||
+        !xr_stable_id_equal(target->callee_function, zero))
+        return false;
+    char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[320];
+    xr_stable_id_hex(operation->id, operation_id);
+    int length = snprintf(
+        key, sizeof(key),
+        "call-target-v5:schema=%u:operation=%s:native-namespace=%s.%s:kind=%u",
+        XR_SEMANTIC_SCHEMA_VERSION, operation_id, module_path, selector,
+        (unsigned) target->kind);
+    XrStableId expected_id;
+    XrFingerprint digest;
+    return length > 0 && (size_t) length < sizeof(key) &&
+           target->canonical_key && strcmp(target->canonical_key, key) == 0 &&
+           xr_stable_id_from_key(key, &expected_id, &digest) &&
+           xr_stable_id_equal(target->id, expected_id);
+}
+
 /* A native stdlib namespace value is one of the two rows above, and it is
  * admitted only when a proven member call consumes it: the namespace handle is
  * a borrowed compiler-owned reference with no other statable use. */
@@ -1502,15 +1585,20 @@ static bool semantic_native_module_namespace_value_is_exact(
             const char *selector = NULL;
             uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
             uint32_t arity = 0;
-            if (use->opcode != XI_CALL_METHOD || a != 0 ||
-                !semantic_native_module_scalar_call_shape_is_exact(plan, use, &selector,
-                                                                    &receiver_value, &arity) ||
-                receiver_value != operation->result_value)
+            if (use->opcode != XI_CALL_METHOD || a != 0)
                 return false;
             if (!module_path)
                 module_path = semantic_native_module_namespace_path(plan, operation->result_value);
-            if (!module_path || !xr_stdlib_metadata_exact_native_direct_member(
-                                    module_path, selector, (uint16_t) arity))
+            bool scalar =
+                semantic_native_module_scalar_call_shape_is_exact(
+                    plan, use, &selector, &receiver_value, &arity) &&
+                receiver_value == operation->result_value && module_path &&
+                xr_stdlib_metadata_exact_native_direct_member(
+                    module_path, selector, (uint16_t) arity);
+            bool yieldable = semantic_native_module_yieldable_call_is_exact(
+                plan, i, use, module_path, operation->result_value,
+                operation->result_type);
+            if (!scalar && !yieldable)
                 return false;
             consumed = true;
         }
