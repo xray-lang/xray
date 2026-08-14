@@ -2755,6 +2755,202 @@ static bool oracle_dynamic_source_class_parameter_storage(const VerifyAuthority 
     return true;
 }
 
+static bool aot_u8_slice_type_is_exact(const XrSemanticPlan *semantic,
+                                       uint32_t type_index,
+                                       uint32_t *out_element_type) {
+    const XrSemanticTypeRecord *type =
+        semantic ? xr_semantic_plan_type(semantic, type_index) : NULL;
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        semantic ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
+    const uint8_t required =
+        XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW;
+    const uint8_t allowed = required | XR_SEM_TYPE_CONST;
+    if (!type || !children || type->kind != XR_KIND_SLICE ||
+        type->builtin_type != XR_TID_NULL ||
+        type->scalar_rep != XR_SCALAR_REP_NONE ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->child_count != 1 || type->child_begin >= child_count ||
+        (type->flags & required) != required || (type->flags & ~allowed) != 0)
+        return false;
+    uint32_t element_type = children[type->child_begin];
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(semantic, element_type);
+    if (!element || element->kind != XR_KIND_INT ||
+        element->builtin_type != XR_TID_NULL ||
+        element->scalar_rep != XR_NATIVE_U8 || element->flags != 0 ||
+        element->child_count != 0 || element->aggregate_extent != 0 ||
+        element->aggregate_align != 0)
+        return false;
+    if (out_element_type)
+        *out_element_type = element_type;
+    return true;
+}
+
+/* A borrowed Slice<byte> parameter is the one view value whose identity is
+ * fixed before the backend starts: its SemanticPlan parameter row names the
+ * function, value, and type, and the TargetPlan binds that exact subject to a
+ * VIEW rep, parameter slot, and unique view layout.  Re-prove every storage
+ * fact needed by Xi here; a live type or an unbound pointer is never authority. */
+static bool oracle_u8_slice_parameter_storage(const VerifyAuthority *ctx,
+                                              uint32_t semantic_value,
+                                              XrRep *out_storage,
+                                              uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind ||
+        (xr_target_plan_completed_family_mask(ctx->target_plan) &
+         XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE) == 0)
+        return false;
+    uint32_t parameter_index = ctx->parameter_by_value[semantic_value];
+    const XrSemanticParameterRecord *parameter =
+        parameter_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
+            : NULL;
+    if (!parameter || parameter->value != semantic_value ||
+        parameter->function >= xr_semantic_plan_function_count(ctx->semantic) ||
+        parameter->mode != XR_PARAM_READ ||
+        parameter->ownership != XI_OWN_BORROWED ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
+        parameter->reserved != 0 ||
+        !aot_u8_slice_type_is_exact(ctx->semantic, parameter->type, NULL))
+        return false;
+
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != parameter->type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        binding->semantic_value != semantic_value ||
+        register_rep->id != binding->register_rep ||
+        memory_rep->id != binding->memory_rep ||
+        register_rep->kind != XR_MACHINE_REP_VIEW ||
+        memory_rep->kind != XR_MACHINE_REP_VIEW ||
+        register_rep->register_bits != 128 ||
+        memory_rep->register_bits != 128 ||
+        register_rep->memory_size != 16 || memory_rep->memory_size != 16 ||
+        register_rep->memory_align != 8 || memory_rep->memory_align != 8 ||
+        register_rep->signedness != XR_TARGET_SIGN_NONE ||
+        memory_rep->signedness != XR_TARGET_SIGN_NONE ||
+        register_rep->root_kind != XR_TARGET_ROOT_VIEW_OWNER ||
+        memory_rep->root_kind != XR_TARGET_ROOT_VIEW_OWNER ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        register_rep->null_encoding != XR_TARGET_NULL_NOT_NULLABLE ||
+        memory_rep->null_encoding != XR_TARGET_NULL_NOT_NULLABLE ||
+        register_rep->detail != parameter->type ||
+        memory_rep->detail != parameter->type ||
+        register_rep->lane_count != 0 || memory_rep->lane_count != 0 ||
+        register_rep->reserved != 0 || memory_rep->reserved != 0 ||
+        layout->kind != XR_TARGET_LAYOUT_VIEW || layout->reserved != 0 ||
+        layout->align != 8 || layout->fixed_prefix_size != 16 ||
+        layout->field_count != 0 || layout->root_field_count != 0 ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != XR_SEMANTIC_INDEX_NONE ||
+        slot->function != parameter->function ||
+        slot->logical_slot != XR_SEMANTIC_INDEX_NONE ||
+        slot->size != 16 || slot->align != 8 ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->role != XR_TARGET_SLOT_PARAMETER ||
+        slot->root_kind != XR_TARGET_ROOT_VIEW_OWNER ||
+        slot->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        slot->reserved != 0 ||
+        slot->debug_variable != XR_SEMANTIC_INDEX_NONE)
+        return false;
+    for (uint32_t i = 0; i < 4; i++)
+        if (register_rep->legal_conversion_mask[i] != 0 ||
+            memory_rep->legal_conversion_mask[i] != 0)
+            return false;
+    *out_storage = XR_REP_PTR;
+    *out_machine_kind = XR_MACHINE_REP_VIEW;
+    return true;
+}
+
+static bool oracle_u8_slice_element_read_is_exact(const VerifyAuthority *ctx,
+                                                  uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    if (!ctx || !operation || !operands || operation->opcode != XI_INDEX_GET ||
+        operation->operand_count != 2 || operand_count < 2 ||
+        operation->operand_begin > operand_count - 2 ||
+        operation->auxiliary_kind != 0 || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->allocation_key != NULL ||
+        operation->effects != xi_generated_op_effects(XI_INDEX_GET) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(XI_INDEX_GET) ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1)
+        return false;
+    const XrSemanticOperandRecord *view = &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *index = view + 1;
+    uint32_t parameter_index =
+        view->value < ctx->value_count
+            ? ctx->parameter_by_value[view->value]
+            : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticParameterRecord *parameter =
+        parameter_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
+            : NULL;
+    uint32_t element_type = XR_SEMANTIC_INDEX_NONE;
+    XrRep view_storage = XR_REP_TAGGED;
+    uint16_t view_kind = XR_MACHINE_REP_COUNT;
+    if (!parameter || parameter->function != operation->function ||
+        parameter->type != view->type ||
+        !aot_u8_slice_type_is_exact(ctx->semantic, view->type,
+                                    &element_type) ||
+        operation->result_type != element_type ||
+        view->role != XR_SEM_OPERAND_VALUE || view->parameter != -1 ||
+        view->transfer_mode != XR_TRANSFER_SHARE ||
+        view->ownership_action != XR_SEM_OPERAND_BORROW ||
+        view->parameter_mode != XR_PARAM_READ ||
+        view->access != XR_CALL_ARG_PLAIN ||
+        view->origin != XI_PLACE_ORIGIN_NONE ||
+        view->lifetime != XI_PLACE_LIFETIME_NONE ||
+        view->escape != XI_PLACE_ESCAPE_NONE || view->flags != 0 ||
+        index->role != XR_SEM_OPERAND_VALUE || index->parameter != -1 ||
+        index->transfer_mode != XR_TRANSFER_SHARE ||
+        index->ownership_action != XR_SEM_OPERAND_BORROW ||
+        index->parameter_mode != XR_PARAM_READ ||
+        index->access != XR_CALL_ARG_PLAIN ||
+        index->origin != XI_PLACE_ORIGIN_NONE ||
+        index->lifetime != XI_PLACE_LIFETIME_NONE ||
+        index->escape != XI_PLACE_ESCAPE_NONE || index->flags != 0 ||
+        !semantic_exact_i64_type(
+            xr_semantic_plan_type(ctx->semantic, index->type)) ||
+        !oracle_u8_slice_parameter_storage(ctx, view->value, &view_storage,
+                                           &view_kind))
+        return false;
+    return view_storage == XR_REP_PTR && view_kind == XR_MACHINE_REP_VIEW;
+}
+
 /* An element read or write is admitted only against a container this authority
  * already proved to be an exact array allocation. The index is an exact signed
  * 64-bit integer, the stored element matches the container's own element entry,
@@ -3822,6 +4018,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
         if (oracle_dynamic_source_class_parameter_storage(ctx, semantic_value, out_storage,
                                                           out_machine_kind))
             return true;
+        if (oracle_u8_slice_parameter_storage(ctx, semantic_value, out_storage,
+                                              out_machine_kind))
+            return true;
         return oracle_machine_storage(ctx, semantic_value, out_storage,
                                       out_machine_kind);
     }
@@ -3920,9 +4119,11 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             return oracle_machine_storage(ctx, semantic_value, out_storage,
                                           out_machine_kind);
         case XI_INDEX_GET:
-            /* Only an element read off an exact array allocation is admitted;
-             * its storage is the element's own scalar machine storage. */
-            if (!oracle_array_element_access_is_exact(ctx, operation_index))
+            /* Array allocations and borrowed byte views are disjoint frozen
+             * storage families; both name the same scalar result only after
+             * their receiver identity has been independently re-proved. */
+            if (!oracle_array_element_access_is_exact(ctx, operation_index) &&
+                !oracle_u8_slice_element_read_is_exact(ctx, operation_index))
                 return false;
             return oracle_machine_storage(ctx, semantic_value, out_storage,
                                           out_machine_kind);
@@ -4330,9 +4531,18 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         }
         case XI_INDEX_SET:
         case XI_INDEX_GET:
-            /* The container is the owned tagged allocation, and the index and
-             * the element keep their own native scalar storage. Every other
-             * container shape stays without authority. */
+            /* A byte-view receiver stays in its frozen VIEW storage. Arrays
+             * remain owned tagged allocations, and all indices/elements keep
+             * the native scalar storage bound for their own subject. */
+            if (oracle_u8_slice_element_read_is_exact(ctx, operation_index)) {
+                if (operation->opcode != XI_INDEX_GET)
+                    return false;
+                if (operand_index == 0)
+                    return oracle_u8_slice_parameter_storage(
+                        ctx, source_value, out_storage, &ignored_kind);
+                return oracle_machine_storage(ctx, source_value, out_storage,
+                                              &ignored_kind);
+            }
             if (!oracle_array_element_access_is_exact(ctx, operation_index))
                 return false;
             if (operand_index == 0)
@@ -4467,6 +4677,8 @@ static bool authority_add_obligation(CollectContext *ctx,
 static bool oracle_return_storage(const VerifyAuthority *ctx, uint32_t value,
                                   XrRep *out_storage, uint16_t *out_machine_kind) {
     return oracle_machine_storage(ctx, value, out_storage, out_machine_kind) ||
+           oracle_u8_slice_parameter_storage(ctx, value, out_storage,
+                                             out_machine_kind) ||
            oracle_nullable_scalar_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_closure_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_string_literal_storage(ctx, value, out_storage, out_machine_kind) ||

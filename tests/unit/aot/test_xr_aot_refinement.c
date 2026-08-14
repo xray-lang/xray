@@ -51,6 +51,7 @@
 #error "refinement public API must not expose mutable compiler IR"
 #endif
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/aot/xaot_bundle.h"
@@ -248,6 +249,21 @@ static XrType module_namespace = {
     .id = 8,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
+};
+
+static XrType scalar_byte = {
+    .kind = XR_KIND_INT,
+    .id = 9,
+    .frozen = true,
+    .scalar_rep = XR_NATIVE_U8,
+};
+
+static XrType borrowed_byte_slice = {
+    .kind = XR_KIND_SLICE,
+    .id = 10,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &scalar_byte},
 };
 
 static XrSemanticPlan *build_semantic_plan(void) {
@@ -2333,6 +2349,82 @@ static XrTargetPlan *build_attached_target_plan(XiFunc *function,
     return target_plan;
 }
 
+static void test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed(void) {
+    XiFunc *function = xi_func_new("borrowed_byte_slice_parameter",
+                                   &scalar_byte);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *parameter = xi_param(function, entry, 0, &borrowed_byte_slice);
+    REQUIRE(parameter != NULL);
+    function->nparams = 1;
+    function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = parameter;
+    function->arc_borrow_sig = (XiBorrowSig *) xi_func_arena_alloc(
+        function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->valid = true;
+    XiValue *index = xi_const_int(function, entry, 0, &scalar_int);
+    XiValue *read = xi_value_new(function, entry, XI_INDEX_GET, &scalar_byte, 2);
+    REQUIRE(index && read);
+    read->args[0] = parameter;
+    read->args[1] = index;
+    xi_block_set_return(entry, read);
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    char error[512] = {0};
+    uint32_t ignored_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t parameter_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, parameter, &ignored_function, &parameter_value,
+        error, sizeof(error)));
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target, parameter_value);
+    REQUIRE(binding && binding->register_rep < target->machine_reps_count &&
+            binding->memory_rep < target->machine_reps_count &&
+            binding->slot < target->slots_count &&
+            target->machine_reps[binding->register_rep].kind ==
+                XR_MACHINE_REP_VIEW &&
+            target->machine_reps[binding->memory_rep].kind ==
+                XR_MACHINE_REP_VIEW);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    REQUIRE(plan != NULL && xr_aot_refinement_plan_view(plan).record_count == 0);
+    xr_aot_refinement_plan_free(plan);
+
+    uint32_t saved_detail =
+        target->machine_reps[binding->register_rep].detail;
+    target->machine_reps[binding->register_rep].detail =
+        XR_SEMANTIC_INDEX_NONE;
+    plan = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
+    target->machine_reps[binding->register_rep].detail = saved_detail;
+
+    uint8_t saved_root = target->slots[binding->slot].root_kind;
+    target->slots[binding->slot].root_kind = XR_TARGET_ROOT_NONE;
+    plan = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
+    target->slots[binding->slot].root_kind = saved_root;
+
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_enum_descriptor_adapter_refuses_without_layout_family(void) {
     RepresentationFixture fixture = representation_fixture_create();
     XrAotRefinementDiagnostic diag = {0};
@@ -2386,6 +2478,7 @@ int main(void) {
     test_stringbuilder_constructor_refinement_is_exact();
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();
+    test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     printf("TargetPlan-native AOT refinement tests passed\n");
     return 0;
