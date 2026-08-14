@@ -357,6 +357,21 @@ static size_t substring_count(const char *text, const char *needle) {
     return count;
 }
 
+static void detach_block_value(XiBlock *block, const XiValue *value) {
+    REQUIRE(block != NULL);
+    REQUIRE(value != NULL);
+    uint32_t index = 0;
+    while (index < block->nvalues && block->values[index] != value)
+        index++;
+    REQUIRE(index < block->nvalues);
+    if (index + 1u < block->nvalues) {
+        memmove(&block->values[index], &block->values[index + 1u],
+                (block->nvalues - index - 1u) * sizeof(*block->values));
+    }
+    block->nvalues--;
+    block->values[block->nvalues] = NULL;
+}
+
 static void require_target_plan_summary(const char *dump, uint32_t module_index,
                                         const XrTargetPlan *target_plan) {
     char fingerprint[XR_FINGERPRINT_BYTES * 2 + 1];
@@ -572,6 +587,29 @@ static void test_plan_dump_rejects_missing_duplicate_and_residue_authority(void)
     REQUIRE(xaot_bundle_dump_plan(&absent_target.bundle) == NULL);
     absent_target.bundle.target_plans[0] = saved;
     cutover_bundle_free(&absent_target);
+}
+
+static void test_plan_dump_accepts_eliminated_target_values_only(void) {
+    CutoverBundle target_eliminated;
+    cutover_bundle_create(&target_eliminated);
+    cutover_bundle_bind_all(&target_eliminated);
+    REQUIRE(xaot_prepare_bundle(&target_eliminated.bundle, NULL));
+    XiBlock *target_block = target_eliminated.modules[0].function->blocks[0];
+    detach_block_value(target_block, target_eliminated.modules[0].text);
+    char *dump = xaot_bundle_dump_plan(&target_eliminated.bundle);
+    REQUIRE(dump != NULL);
+    REQUIRE(substring_count(dump, " authority=target ") == 5);
+    xr_free(dump);
+    cutover_bundle_free(&target_eliminated);
+
+    CutoverBundle legacy_eliminated;
+    cutover_bundle_create(&legacy_eliminated);
+    cutover_bundle_bind_all(&legacy_eliminated);
+    REQUIRE(xaot_prepare_bundle(&legacy_eliminated.bundle, NULL));
+    XiBlock *legacy_block = legacy_eliminated.modules[0].function->blocks[0];
+    detach_block_value(legacy_block, legacy_eliminated.modules[0].enum_ordinal);
+    REQUIRE(xaot_bundle_dump_plan(&legacy_eliminated.bundle) == NULL);
+    cutover_bundle_free(&legacy_eliminated);
 }
 
 static void test_plan_dump_preserves_exact_enum_ordinal_authority(void) {
@@ -939,6 +977,7 @@ int main(void) {
     test_multi_module_prepare_has_no_scalar_legacy_rows();
     test_plan_dump_records_exact_value_authority();
     test_plan_dump_rejects_missing_duplicate_and_residue_authority();
+    test_plan_dump_accepts_eliminated_target_values_only();
     test_plan_dump_preserves_exact_enum_ordinal_authority();
     test_corrupt_bound_plan_and_scalar_residue_fail_closed();
     test_exact_rep_adapter_family_and_mutations();

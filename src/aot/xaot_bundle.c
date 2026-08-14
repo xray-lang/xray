@@ -7568,6 +7568,15 @@ static bool dump_validate_function_authority(const XaotBundle *bundle,
         uint32_t matches = 0;
         const XiValue *value = dump_func_value_by_id(func, value_id, &matches);
         XaotDumpValueAuthority authority;
+        if (!value && matches == 0) {
+            /* SemanticPlan freezes dense source identities before Xi DCE.  A
+             * removed SSA value has no legacy row to consume; an immutable
+             * TargetPlan binding, when present, is still counted below. */
+            uint32_t semantic_value = semantic_function->value_begin + value_id;
+            if (xr_target_plan_value_rep(target_plan, semantic_value))
+                target_count++;
+            continue;
+        }
         if (!value || matches != 1 ||
             !dump_value_authority(bundle, function_plan, semantic_function, value, &authority))
             return false;
@@ -8260,6 +8269,8 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         for (uint32_t value_id = 0; value_id < semantic_function->value_count; value_id++) {
             const XiValue *value = dump_func_value_by_id(func, value_id, NULL);
             XaotDumpValueAuthority authority;
+            if (!value)
+                continue;
             (void) dump_value_authority(bundle, plan, semantic_function, value, &authority);
             if (authority.target) {
                 const XrTargetMachineRepRecord *register_rep =

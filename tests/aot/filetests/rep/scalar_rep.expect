@@ -1,11 +1,11 @@
 contains=xaot-plan v0
-contains=function 1 name=narrow module=0 depth=1 abi=native boundary=none params=1 ret=uint8_t/scalar/u8
+contains=function 1 name=narrow module=0 semantic_function=1 depth=1 abi=native boundary=none params=1 ret=uint8_t/scalar/u8
 contains=  ret class=scalar kind=scalar rep=u8 c_type=uint8_t
 contains=  param 0 class=scalar kind=scalar rep=u8 c_type=uint8_t
-contains=  value v0 op=PARAM kind=scalar rep=u8 c_type=uint8_t
-contains=  value v4 op=NARROW_U8 kind=scalar rep=u8 c_type=uint8_t
+contains=  value v0 op=PARAM semantic=9 authority=target family=target-plan
+contains=  value v4 op=NARROW_U8 semantic=13 authority=target family=target-plan
 c_regex=static (XRT_FN_[A-Z]+ )?uint8_t scalar_rep_[0-9a-f]+_narrow_[0-9]+\(xrt_closure_t \*_cl, uint8_t p0\)
-contains=function 2 name=total module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
+contains=function 2 name=total module=0 semantic_function=2 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
 contains=  param 0 class=scalar kind=scalar rep=i64 c_type=int64_t
 contains=  param 1 class=scalar kind=scalar rep=i64 c_type=int64_t
 contains=stats functions=3 native=2 tagged=1 coro=0
