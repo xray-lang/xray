@@ -36,6 +36,7 @@
 #include "xi_range.h"
 #include "xi_value_query.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
+#include "../plan/semantic/xr_semantic_plan.h"
 #include "../os/os_thread.h"
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_bits_core.h"
@@ -4098,6 +4099,14 @@ XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f) {
                 (v->op == XI_BOX && inner->op == XI_UNBOX) ||
                 (v->op == XI_ENUM_DESCRIPTOR_UNBOX && inner->op == XI_ENUM_DESCRIPTOR_BOX) ||
                 (v->op == XI_ENUM_DESCRIPTOR_BOX && inner->op == XI_ENUM_DESCRIPTOR_UNBOX);
+            if (elim && f->semantic_plan &&
+                f->semantic_plan_function_index != XR_SEMANTIC_INDEX_NONE) {
+                const XrSemanticFunctionRecord *semantic_function =
+                    xr_semantic_plan_function(f->semantic_plan,
+                                              f->semantic_plan_function_index);
+                if (semantic_function && v->id < semantic_function->value_count)
+                    elim = false;
+            }
             if (elim) {
                 rewrite_to_copy(v, inner->args[0]);
                 chg.values_changed = true;

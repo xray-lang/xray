@@ -10278,9 +10278,48 @@ static bool cg_value_traces_to_explicit_vector(const XiValue *value) {
  * Debug source variables still synchronize at the alias statement.  Only the
  * redundant C declaration/assignment disappears.
  */
+static bool cg_rep_alias_source_relation_is_exact(XiCgenCtx *ctx,
+                                                  const XiValue *alias,
+                                                  const XiValue *source) {
+    if (!ctx || !alias || !source || alias->nargs != 1 || !alias->args ||
+        !alias->args[0])
+        return false;
+    if (alias->args[0] == source)
+        return true;
+    const XiValue *adapter = alias->args[0];
+    bool inverse = (alias->op == XI_UNBOX && adapter->op == XI_BOX &&
+                    adapter->backend_origin == XI_BACKEND_VALUE_REP_BOX) ||
+                   (alias->op == XI_BOX && adapter->op == XI_UNBOX &&
+                    adapter->backend_origin == XI_BACKEND_VALUE_REP_UNBOX);
+    if (!inverse || adapter->nargs != 1 || !adapter->args ||
+        adapter->args[0] != source)
+        return false;
+    const XaotValuePlan *adapter_plan =
+        xaot_bundle_find_value_plan(ctx->aot_bundle, adapter);
+    return adapter_plan &&
+           xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter_plan);
+}
+
+static const XiValue *cg_rep_alias_exact_source(XiCgenCtx *ctx,
+                                                const XiValue *alias) {
+    if (!ctx || !alias || alias->nargs != 1 || !alias->args ||
+        !alias->args[0])
+        return NULL;
+    const XiValue *source = alias->args[0];
+    if ((alias->op == XI_UNBOX && source->op == XI_BOX) ||
+        (alias->op == XI_BOX && source->op == XI_UNBOX)) {
+        if (source->nargs == 1 && source->args && source->args[0] &&
+            cg_rep_alias_source_relation_is_exact(ctx, alias,
+                                                  source->args[0]))
+            return source->args[0];
+    }
+    return source;
+}
+
 static bool cg_rep_identical_alias_can_share_c_local(XiCgenCtx *ctx, const XiFunc *f,
                                                      const XiValue *alias, const XiValue *source) {
-    if (!ctx || !f || !alias || !source || alias->nargs != 1 || alias->args[0] != source)
+    if (!ctx || !f || !alias || !source ||
+        !cg_rep_alias_source_relation_is_exact(ctx, alias, source))
         return false;
     if (source->op == XI_PHI)
         return false;
@@ -10432,7 +10471,7 @@ static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
             const XiValue *alias = blk->values[vi];
             if (!alias || alias->id >= need || alias->nargs != 1 || !alias->args[0])
                 continue;
-            const XiValue *source = alias->args[0];
+            const XiValue *source = cg_rep_alias_exact_source(ctx, alias);
             if (source->id >= need ||
                 !cg_rep_identical_alias_can_share_c_local(ctx, f, alias, source))
                 continue;
