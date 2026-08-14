@@ -5577,7 +5577,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(plan, operation_index);
         if (!operation || operation->function >= function_count) {
-            valid = false;
+            valid = fail(error, error_size, "XR_TARGET_1003",
+                         "call coverage operation has no owning function authority");
             break;
         }
         if (((operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 ||
@@ -5602,6 +5603,25 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
              operation->opcode != XI_TAIL_CALL) ||
             (source && operation->opcode != XI_CALL_METHOD) ||
             target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE) {
+            /* A SemanticPlan call-target kind this family does not yet consume
+             * is a coverage limit, not an internal inconsistency.  Name the
+             * kind, the opcode and the selector: an unnamed refusal here is
+             * indistinguishable from an allocation failure, and the evidence
+             * needed to extend the family is exactly what the refusal saw. */
+            uint32_t metadata_count = 0;
+            const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+            const char *selector = operation && operation->metadata_count == 1 &&
+                                           operation->metadata_begin < metadata_count
+                                       ? metadata[operation->metadata_begin]
+                                       : "";
+            if (error && error_size)
+                snprintf(error, error_size,
+                         "XR_TARGET_1003: call target has no consumable adapter authority "
+                         "target=%u kind=%u operation=%u opcode=%u selector=%s function=%u",
+                         i, target ? target->kind : 0u,
+                         target ? target->operation : XR_SEMANTIC_INDEX_NONE,
+                         operation ? operation->opcode : 0u, selector,
+                         target ? target->function : XR_SEMANTIC_INDEX_NONE);
             valid = false;
             break;
         }
