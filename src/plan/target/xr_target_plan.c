@@ -608,13 +608,18 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE;
         bool array_push_scalar =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_PUSH_SCALAR;
+        /* The construction is one of the rows that names a SemanticPlan call
+         * target rather than a sealed builtin, so its target index must index
+         * that table. */
+        bool source_class_constructor =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
         if ((!direct_local && !channel_close && !source_export &&
              !stringbuilder_constructor && !string_byte_slice_view &&
              !stringbuilder_append_rune && !stringbuilder_to_string && !stringbuilder_append_string &&
-             !json_namespace_value && !array_push_scalar) ||
+             !json_namespace_value && !array_push_scalar && !source_class_constructor) ||
             plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
-            ((direct_local || source_export) &&
+            ((direct_local || source_export || source_class_constructor) &&
              plan->calls[i].semantic_call_target >=
                  xr_semantic_plan_call_target_count(plan->semantic_plan)) ||
             ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
