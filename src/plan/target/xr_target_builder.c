@@ -5813,10 +5813,10 @@ static bool source_namespace_type_is_exact(
                      operation->metadata_count == 0;
 }
 
-static bool source_namespace_dependency_is_exact(
+static bool source_import_dependency_is_exact(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     const char *const *metadata, uint32_t metadata_count,
-    uint32_t *out_dependency) {
+    bool named_export, uint32_t *out_dependency) {
     if (!plan || !operation || !metadata || !out_dependency ||
         !source_namespace_type_is_exact(plan, operation, XI_IMPORT_REF) ||
         operation->function != 0 ||
@@ -5825,7 +5825,8 @@ static bool source_namespace_dependency_is_exact(
         return false;
     const char *module_path = metadata[operation->metadata_begin];
     const char *member = metadata[operation->metadata_begin + 1u];
-    if (!module_path || !module_path[0] || !member || member[0] != '\0')
+    if (!module_path || !module_path[0] || !member ||
+        ((member[0] != '\0') != named_export))
         return false;
     uint32_t match = XR_SEMANTIC_INDEX_NONE;
     uint32_t dependency_count =
@@ -5941,6 +5942,10 @@ static bool source_namespace_storage_analysis_init(
             xr_semantic_plan_call_target(plan, i);
         if (!target || target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
             continue;
+        const XrSemanticOperationRecord *call =
+            target->operation < operation_count
+                ? xr_semantic_plan_operation(plan, target->operation)
+                : NULL;
         if (target->operation >= operation_count ||
             target->dependency >= xr_semantic_plan_dependency_count(plan) ||
             source_target_by_operation[target->operation] !=
@@ -5963,17 +5968,21 @@ static bool source_namespace_storage_analysis_init(
             xr_semantic_plan_call_target(plan, target_index);
         const XrSemanticOperationRecord *call =
             xr_semantic_plan_operation(plan, i);
-        if (!target || !call || call->opcode != XI_CALL_METHOD ||
+        bool named_export = call && call->opcode == XI_CALL;
+        if (!target || !call ||
+            (call->opcode != XI_CALL && call->opcode != XI_CALL_METHOD) ||
             call->operand_count == 0 || call->operand_begin >= operand_count)
             goto invalid;
         const XrSemanticOperandRecord *receiver =
             &operands[call->operand_begin];
-        if (receiver->role != XR_SEM_OPERAND_RECEIVER ||
+        if (receiver->role != (named_export ? XR_SEM_OPERAND_CALLEE
+                                            : XR_SEM_OPERAND_RECEIVER) ||
             receiver->parameter != -1 ||
             receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
             receiver->parameter_mode != XR_PARAM_READ ||
             receiver->access != XR_CALL_ARG_PLAIN ||
-            (receiver->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0)
+            receiver->flags != (named_export ? 0u
+                                             : XR_SEM_OPERAND_CALL_CONTRACT))
             goto invalid;
         const XrSemanticOperationRecord *load = NULL;
         uint32_t current_value = receiver->value;
@@ -6099,8 +6108,9 @@ static bool source_namespace_storage_analysis_init(
             stored->parameter_mode != XR_PARAM_READ ||
             stored->access != XR_CALL_ARG_PLAIN || stored->flags != 0 ||
             load->result_type != import->result_type ||
-            !source_namespace_dependency_is_exact(
-                plan, import, metadata, metadata_count, &import_dependency) ||
+            !source_import_dependency_is_exact(
+                plan, import, metadata, metadata_count, named_export,
+                &import_dependency) ||
             import_dependency != target->dependency)
             goto invalid;
     }
@@ -6123,8 +6133,8 @@ static bool source_namespace_storage_analysis_init(
         if (candidate[import->result_value])
             continue;
         uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
-        if (!source_namespace_dependency_is_exact(
-                plan, import, metadata, metadata_count, &dependency))
+        if (!source_import_dependency_is_exact(
+                plan, import, metadata, metadata_count, false, &dependency))
             goto invalid;
         uint32_t store_index = XR_SEMANTIC_INDEX_NONE;
         int64_t shared_slot = -1;
@@ -6186,16 +6196,20 @@ static bool source_namespace_storage_analysis_init(
             const XrSemanticOperationRecord *definition =
                 xr_semantic_plan_operation(plan, definition_index);
             bool expected = i == consumer_by_value[operand->value] && a == 0;
-            if (expected && use->opcode == XI_CALL_METHOD) {
+            if (expected &&
+                (use->opcode == XI_CALL || use->opcode == XI_CALL_METHOD)) {
                 uint32_t target_index = source_target_by_operation[i];
                 const XrSemanticCallTargetRecord *target =
                     target_index != XR_SEMANTIC_INDEX_NONE
                         ? xr_semantic_plan_call_target(plan, target_index)
                         : NULL;
-                expected = target &&
+                expected = target && target->operation == i &&
                            target->dependency ==
                                analysis->dependency_by_value[operand->value] &&
-                           operand->role == XR_SEM_OPERAND_RECEIVER;
+                           operand->role ==
+                               (use->opcode == XI_CALL
+                                    ? XR_SEM_OPERAND_CALLEE
+                                    : XR_SEM_OPERAND_RECEIVER);
             } else if (expected) {
                 expected = (use->opcode == XI_COPY ||
                             use->opcode == XI_SET_SHARED) &&
@@ -6262,7 +6276,7 @@ invalid:
 static bool builder_add_source_namespace_storage(
     XrTargetPlanBuilder *builder, char *error, size_t error_size) {
     if (!builder_begin_family(builder,
-                              XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE,
+                              XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE,
                               error, error_size))
         return false;
     XrTargetValueStorageAnalysis values = {0};
@@ -6293,7 +6307,7 @@ static bool builder_add_source_namespace_storage(
         return false;
     }
     builder->completed_family_mask |=
-        XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE;
+        XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE;
     return true;
 }
 
@@ -7441,13 +7455,19 @@ static bool collect_source_export_call_intent(
             : NULL;
     const XrSemanticOperationRecord *operation =
         target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+    const XrSemanticTypeRecord *result_type =
+        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    const XrSemanticTypeRecord *callee_result_type =
+        callee ? xr_semantic_plan_type(dependency, callee->return_type) : NULL;
     if (!target || !dependency || !source_export || !callee || !operation ||
         target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
         target->function != XR_SEMANTIC_INDEX_NONE ||
-        operation->opcode != XI_CALL_METHOD || !suspends ||
+        (operation->opcode != XI_CALL_METHOD && operation->opcode != XI_CALL) ||
         operation->operand_count != (uint32_t) callee->parameter_count + 1u ||
         !xr_stable_id_equal(target->export_identity, source_export->id) ||
         !xr_stable_id_equal(target->callee_function, callee->id) ||
+        !result_type || !callee_result_type ||
+        !xr_stable_id_equal(result_type->id, callee_result_type->id) ||
         !call_type_is_exact_scalar(plan, operation->result_type))
         return fail(error, error_size, "XR_TARGET_1003",
                     "source-export call authority is incomplete");
@@ -7463,17 +7483,76 @@ static bool collect_source_export_call_intent(
         .source_callee_identity = target->callee_function,
         .result_value = operation->result_value,
         .argument_begin = builder->call_argument_intent_count,
-        .argument_count = 0,
+        .argument_count = callee->parameter_count,
         .result_mode = XR_TARGET_CALL_VALUE,
         .result_ownership = XR_TARGET_CALL_NONE,
         .calling_convention = XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT,
         .target_kind = XR_TARGET_CALL_TARGET_SOURCE_EXPORT,
-        .suspends = true,
+        .suspends = suspends,
     };
     if (!stable_identity_from_pair("xray-target-call-v5", target->id,
                                    operation->id, 0, &call.identity))
         return fail(error, error_size, "XR_TARGET_1003",
                     "source-export call identity is incomplete");
+    uint32_t call_intent = builder->call_intent_count;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan, &operand_count);
+    if (!operands ||
+        (uint64_t) operation->operand_begin + operation->operand_count >
+            (uint64_t) operand_count)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "source-export operands are incomplete");
+    for (uint32_t ordinal = 0; ordinal < callee->parameter_count; ordinal++) {
+        uint32_t parameter_index = callee->parameter_begin + ordinal;
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(dependency, parameter_index);
+        uint32_t semantic_operand = operation->operand_begin + ordinal + 1u;
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        const XrSemanticTypeRecord *operand_type =
+            xr_semantic_plan_type(plan, operand->type);
+        const XrSemanticTypeRecord *parameter_type =
+            parameter ? xr_semantic_plan_type(dependency, parameter->type) : NULL;
+        bool reference = parameter && parameter->mode == XR_PARAM_REF;
+        bool read = parameter && parameter->mode == XR_PARAM_READ;
+        bool addressable =
+            (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0;
+        if (!parameter || parameter->function != source_export->function ||
+            parameter->ordinal != ordinal || !operand_type || !parameter_type ||
+            !xr_stable_id_equal(operand_type->id, parameter_type->id) ||
+            operand->role != XR_SEM_OPERAND_ARGUMENT ||
+            operand->parameter != (int16_t) ordinal ||
+            operand->parameter_mode != parameter->mode ||
+            operand->transfer_mode != parameter->transfer_mode ||
+            (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
+            (!read && !reference) ||
+            (read && (operand->access != XR_CALL_ARG_PLAIN || addressable)) ||
+            (reference &&
+             (operand->access != XR_CALL_ARG_REF || !addressable ||
+              operand->ownership_action != XR_SEM_OPERAND_BORROW)))
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "source-export argument authority is incomplete");
+        XrTargetCallArgumentIntent argument = {
+            .call_intent = call_intent,
+            .semantic_operand = semantic_operand,
+            .semantic_value = operand->value,
+            .callee_parameter = parameter_index,
+            .ordinal = (uint16_t) ordinal,
+            .mode = reference ? XR_TARGET_CALL_REFERENCE : XR_TARGET_CALL_VALUE,
+            .ownership = reference
+                             ? XR_TARGET_CALL_WRITEBACK
+                             : operand->ownership_action == XR_SEM_OPERAND_CONSUME
+                                   ? XR_TARGET_CALL_CONSUME
+                                   : XR_TARGET_CALL_READ,
+            .transfer_mode = operand->transfer_mode,
+            .flags = reference ? XR_TARGET_CALL_ARGUMENT_ADDRESSABLE : 0,
+        };
+        if (!stable_identity_from_pair("xray-target-source-call-argument-v1",
+                                       target->id, parameter->id, ordinal,
+                                       &argument.identity) ||
+            !append_call_argument_intent(builder, &argument, error, error_size))
+            return false;
+    }
     return append_call_intent(builder, &call, error, error_size);
 }
 
@@ -7625,7 +7704,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             (direct && target->function >= function_count) ||
             (direct && operation->opcode != XI_CALL &&
              operation->opcode != XI_TAIL_CALL) ||
-            (source && operation->opcode != XI_CALL_METHOD) ||
+            (source && operation->opcode != XI_CALL_METHOD &&
+             operation->opcode != XI_CALL) ||
             (native_namespace && operation->opcode != XI_CALL_METHOD) ||
             (class_construction && operation->opcode != XI_CALL) ||
             target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE) {
@@ -7656,7 +7736,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         if (direct) {
             reverse_next[i] = reverse_head[target->function];
             reverse_head[target->function] = i;
-        } else if (!class_construction && !suspendable[operation->function]) {
+        } else if (!class_construction && state_by_operation[target->operation] != 0 &&
+                   !suspendable[operation->function]) {
             /* A construction enters no body this row names, and the shared
              * judgement already refused any call that may suspend, so it never
              * makes its caller suspendable. */
@@ -8953,18 +9034,25 @@ static bool materialize_calls_and_adapters(
             bool array_intrinsic =
                 intent->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_INTRINSIC &&
                 intent->target_kind == XR_TARGET_CALL_TARGET_ARRAY_INTRINSIC;
+            bool source_export =
+                intent->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
+            const XrSemanticPlan *callee_semantic =
+                source_export && intent->source_dependency <
+                                     builder->semantic_dependency_count
+                    ? builder->semantic_dependencies[intent->source_dependency]
+                    : builder->semantic_plan;
             const XrSemanticParameterRecord *parameter = array_intrinsic
                 ? NULL
-                : xr_semantic_plan_parameter(builder->semantic_plan,
+                : xr_semantic_plan_parameter(callee_semantic,
                                              argument_intent->callee_parameter);
             const XrTargetValueRepRecord *caller = find_materialized_value(
                 materialized, argument_intent->semantic_value);
-            const XrTargetValueRepRecord *callee = parameter
+            const XrTargetValueRepRecord *callee = !source_export && parameter
                                                        ? find_materialized_value(
                                                              materialized, parameter->value)
                                                        : NULL;
             const XrSemanticTypeRecord *parameter_type =
-                parameter ? xr_semantic_plan_type(builder->semantic_plan,
+                parameter ? xr_semantic_plan_type(callee_semantic,
                                                   parameter->type)
                           : NULL;
             bool adt_enum_borrow_boundary =
@@ -9016,14 +9104,15 @@ static bool materialize_calls_and_adapters(
                 continue;
             }
             if (argument_intent->call_intent != i ||
-                argument_intent->ordinal != ordinal || !caller || !callee ||
+                argument_intent->ordinal != ordinal || !parameter || !caller ||
                 caller->slot == XR_SEMANTIC_INDEX_NONE ||
-                callee->slot == XR_SEMANTIC_INDEX_NONE ||
-                ((caller->register_rep != callee->register_rep ||
-                  caller->memory_rep != callee->memory_rep) &&
-                 !adt_enum_borrow_boundary))
+                (!source_export &&
+                 (!callee || callee->slot == XR_SEMANTIC_INDEX_NONE ||
+                  ((caller->register_rep != callee->register_rep ||
+                    caller->memory_rep != callee->memory_rep) &&
+                   !adt_enum_borrow_boundary))))
                 return fail(error, error_size, "XR_TARGET_1003",
-                            "direct-local argument lacks identical caller/callee storage");
+                            "call argument lacks exact caller/callee storage");
             materialized->call_arguments[next_argument] =
                 (XrTargetCallArgumentRecord) {
                     .identity = argument_intent->identity,
@@ -9032,11 +9121,14 @@ static bool materialize_calls_and_adapters(
                     .semantic_value = argument_intent->semantic_value,
                     .callee_parameter = argument_intent->callee_parameter,
                     .caller_slot = caller->slot,
-                    .callee_slot = callee->slot,
+                    .callee_slot = source_export ? XR_SEMANTIC_INDEX_NONE
+                                                 : callee->slot,
                     .register_rep = caller->register_rep,
                     .memory_rep = caller->memory_rep,
-                    .callee_register_rep = callee->register_rep,
-                    .callee_memory_rep = callee->memory_rep,
+                    .callee_register_rep = source_export ? caller->register_rep
+                                                         : callee->register_rep,
+                    .callee_memory_rep = source_export ? caller->memory_rep
+                                                       : callee->memory_rep,
                     .ordinal = argument_intent->ordinal,
                     .mode = argument_intent->mode,
                     .ownership = argument_intent->ownership,

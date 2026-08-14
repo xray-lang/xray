@@ -1,6 +1,6 @@
 # Typed TargetPlan scalar execution contract
 
-TargetPlan schema 24 may carry a canonical per-function instruction table.
+TargetPlan schema 25 may carry a canonical per-function instruction table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
 family. A function with zero instruction rows is execution unavailable, never
@@ -123,11 +123,14 @@ own status, distinct from every status that reports an unacceptable plan or
 call, so a plan can never hang the caller that ran it and the same call refused
 once is refused every time.
 
-Schema 21 is a hard cutover from v20 and all earlier schemas. It preserves all
-v20 authorities while adding an exact semantic field-name identity to each
-Target aggregate field row. Named value aggregates can therefore derive their
-C type spelling from frozen SemanticPlan/TargetPlan authority without mutable
-Xi type, name, or arity inference. Schema 20 added exact source-backed ADT-enum storage and
+Schema 25 is a hard cutover from v24 and all earlier schemas. It preserves the
+exact semantic field-name identity of every named aggregate and all existing
+ADT-enum, Array-intrinsic, String-runes, and Iterator-rune authorities while
+replacing the narrower source-namespace family with exact SOURCE-import
+storage and dense SOURCE_EXPORT call-argument rows. Named value aggregates
+continue to derive their C spelling from frozen SemanticPlan/TargetPlan
+authority without mutable Xi type, name, or arity inference. The source-backed
+ADT-enum family provides
 payload-bearing constructor dispatch. The family binds declaration, member,
 nominal layout, discriminant, ordered payload types, namespace receiver,
 ownership, and direct-local argument/return relations. Call-argument rows bind
@@ -197,16 +200,21 @@ is public-wrapper identity and suspension authority only: it supplies no
 cross-module argument slots, private/native callee, child frame, roots,
 cleanup, drop, cancel, or executable call ABI. Standalone materialization and
 all ungrounded method calls remain fail closed.
-The dedicated SOURCE-namespace-storage rows cover only the borrowed dynamic
-outer `XrValue` tokens in the exact
+The dedicated SOURCE-import-storage rows cover only borrowed dynamic outer
+`XrValue` tokens in either the exact namespace
 `IMPORT_REF -> identity COPY* -> SET_SHARED -> GET_SHARED -> identity COPY*`
-chain used as SOURCE_EXPORT call receivers. Identity-COPY chains are bounded,
+receiver chain or the exact named-export
+`IMPORT_REF(member) -> SET_SHARED -> GET_SHARED` callee chain used by the same
+SOURCE_EXPORT call. Identity-COPY chains are bounded,
 acyclic, and same-function; every endpoint and COPY keeps its own exact slot
 identity and unique expected consumer. Three independent reconstructions prove
 dependency/module identity, unique shared slot, complete use sets, and receiver
-binding. They grant no imported module object body, allocation,
-root, cleanup, member lookup, dependency activation, argument ABI, or
-cross-module frame.
+binding. Each SOURCE_EXPORT argument row binds the dependency parameter stable
+identity and ordinal to the caller operand, semantic value, slot, mode,
+ownership, transfer, and machine representation. An exact `ref` row alone
+authorizes the C projection's additional pointer level. These rows grant no
+imported module object body, allocation, root, cleanup, guessed member lookup,
+dependency activation, unrelated argument ABI, or cross-module frame.
 The C emission projection schema 19 mechanically spells all verified dynamic
 families as exact `TAGGED`/`XrValue` rows. For an exact String literal it also
 owns the immutable literal bytes and the explicit String-view materialization
@@ -218,6 +226,11 @@ The independent verifier reconstructs expected literal bytes only from the
 frozen SemanticPlan bound through TargetPlan and rejects missing, extra,
 reordered, wrong-kind, wrong-spelling, wrong-operand, wrong-recipe, profile, target, and
 projection fingerprint mutations.
+It also projects an exact raw-pointer TargetPlan binding without consulting a
+live Xi type. When and only when the same semantic `LOCAL_ADDR` value is bound
+by a SOURCE_EXPORT `ref` argument row, the projection adds one C pointer level;
+the C consumer cannot infer that level from an import name, callee type, or
+legacy representation plan.
 For the sealed `StringBuilder()` call it owns the zero-operand
 `xrt_strbuf_new` materialization recipe. Sync and coroutine CGen have no
 name-based fallback for that constructor. For the exact String byte-slice view,
@@ -302,12 +315,12 @@ Evidence:
   program fault, separate from the authority failures an unsupported plan
   gives.
 
-anchor-sha256: src/plan/target/xr_target_plan.h dd9ce3996f1109c8d4372911d53d273cbf3699764f20f51fe2ac2101c73c8565
+anchor-sha256: src/plan/target/xr_target_plan.h e28f0121e13044768ac303b1133bb4c0e3530fc51e665ba1d30c3cd88ae6a63d
 anchor-sha256: src/plan/target/xr_target_plan.c b13c7fd708c6702c5c4014fab5dfa413bcacdc2d8673cfa472cbc274b08e6c4f
-anchor-sha256: src/plan/target/xr_target_builder.c e8898dc1d25338895dd06b5f8a8928f808d017469243577780edefddad5375ba
+anchor-sha256: src/plan/target/xr_target_builder.c c64fdb5065729f0899487c40cfd2c35e6c2c0c77b777e0284bc62184c5631d8d
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 6099812f9cee4af8b01c5ffb422c9e359cbd95ec7ebc61c927bc051bc2bf904b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 687ab0df5479e46e51e200e54ea8b935579e6319598fd9830009f935eb057b77
-anchor-sha256: src/plan/target/xr_target_verify.c d4902582468104978fe06aec2fdce0d6d3d65694b08318a88026bf329de0960d
+anchor-sha256: src/plan/target/xr_target_verify.c 17356f03e1ba9a555145d7089ce890c46020eb38464892ee2393a0e51f7b40ef
 anchor-sha256: src/plan/format/xr_xtp_schema.h 80f19a514b874f76c396717289054612cdf291b860e97ac148b649243c6399d1
 anchor-sha256: src/plan/format/xr_xtp_rows.c 868dde2fe9a991b4bada65a0055722a961fb66bce2d550abc10c7c3918f41ca7
 anchor-sha256: src/plan/format/xr_xtp_encode.c 2f6f1fa32e35fd1681ab07bc8a3808d133f33f27e43139224d3f9e253447bd74
@@ -317,7 +330,7 @@ anchor-sha256: src/vm/xr_typed_dispatch.c 551515f2222a29214a6a0902189934bf4517d4
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 6d43ca3a24b401123ee9a8948e2e8ee70994abafc4a5441630415c92569d1c29
 anchor-sha256: tests/unit/plan/test_xtp_format.c b23546102bcf4bf6d09d4a3a8c7d88fbe5a3552ff5a4d449b427e271655af657
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c e488cf61f7523c84d557ca8508fcd571f9b03e8567a87885d110cdeea1a2d4c2
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 2512c79e6daf28ee6dddd1a566af740d90425d3a5ddb8492436ef6ae2fe3b437
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation.c f3fe95413105fbb79fb40b5a0a6f718179b997ad4b823a90baae94a045ba103a
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

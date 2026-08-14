@@ -643,21 +643,27 @@ static XrSemanticPlan *build_string_byte_slice_view_semantic(void) {
     return semantic;
 }
 
+typedef struct SourceExportResolverFixture {
+    const XiFunc *callee;
+    int suspendability;
+} SourceExportResolverFixture;
+
 static int source_export_call_suspendability(void *ud, const XiFunc *current, const XiValue *call) {
-    (void) ud;
     (void) current;
-    return call && call->op == XI_CALL_METHOD && call->aux &&
+    const SourceExportResolverFixture *fixture = (const SourceExportResolverFixture *) ud;
+    return fixture && call && call->op == XI_CALL_METHOD && call->aux &&
                    strcmp((const char *) call->aux, "writeBytes") == 0
-               ? 1
+               ? fixture->suspendability
                : -1;
 }
 
 static const XiFunc *source_export_resolve_method(void *ud, const XiFunc *current,
                                                   const XiValue *call) {
     (void) current;
-    return ud && call && call->op == XI_CALL_METHOD && call->aux &&
+    const SourceExportResolverFixture *fixture = (const SourceExportResolverFixture *) ud;
+    return fixture && call && call->op == XI_CALL_METHOD && call->aux &&
                    strcmp((const char *) call->aux, "writeBytes") == 0
-               ? (const XiFunc *) ud
+               ? fixture->callee
                : NULL;
 }
 
@@ -1517,7 +1523,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "0945413cf17d0aebb760454f780986dd531341bca4b2e417a78ba464431b331f") == 0);
+                   "0d2b6888b9357cd72a73c9764ef019a35a951ebf6dc8226a16a9c916e4bcbf31") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2345,7 +2351,8 @@ static void test_channel_receive_storage_authority(void) {
     xr_target_profile_free(profile);
 }
 
-static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_out) {
+static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_out,
+                                                    bool with_argument) {
     XiFunc *dependency_root = xi_func_new("net_init", &stub_unit);
     XiFunc *write_bytes = xi_func_new("writeBytes", &stub_unit);
     REQUIRE(dependency_root && write_bytes);
@@ -2358,6 +2365,14 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
     dependency_root->children[0] = write_bytes;
     dependency_root->nchildren = dependency_root->children_cap = 1;
     write_bytes->parent_func = dependency_root;
+    if (with_argument) {
+        write_bytes->nparams = write_bytes->min_params = 1;
+        write_bytes->params =
+            (XiValue **) xr_calloc(1, sizeof(*write_bytes->params));
+        REQUIRE(write_bytes->params);
+        write_bytes->params[0] = xi_param(write_bytes, write_entry, 0, &stub_bool);
+        REQUIRE(write_bytes->params[0]);
+    }
     XiValue *closure =
         xi_value_new(dependency_root, dependency_entry, XI_CLOSURE_NEW, &stub_function, 0);
     XiValue *store = xi_value_new(dependency_root, dependency_entry, XI_SET_SHARED, &stub_unit, 1);
@@ -2367,8 +2382,8 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
     store->aux_int = 0;
     dependency_root->nshared = 1;
     xi_block_set_return(dependency_entry, NULL);
-    XiValue *yield = xi_value_new(write_bytes, write_entry, XI_YIELD, &stub_unit, 0);
-    REQUIRE(yield);
+    if (!with_argument)
+        REQUIRE(xi_value_new(write_bytes, write_entry, XI_YIELD, &stub_unit, 0));
     xi_block_set_return(write_entry, NULL);
     dependency_root->stage = write_bytes->stage = XI_STAGE_SEMANTIC_LOWERED;
     dependency_root->invariant_mask = write_bytes->invariant_mask =
@@ -2427,22 +2442,31 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
         xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_module_namespace, 0);
     XiValue *receiver_alias =
         xi_value_new(caller, caller_entry, XI_COPY, &stub_module_namespace, 1);
-    XiValue *method = xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, 1);
-    REQUIRE(receiver && receiver_alias && method);
+    XiValue *argument =
+        with_argument ? xi_const_bool(caller, caller_entry, true, &stub_bool) : NULL;
+    XiValue *method =
+        xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, with_argument ? 2 : 1);
+    REQUIRE(receiver && receiver_alias && (!with_argument || argument) && method);
     receiver->aux_int = 0;
     receiver_alias->args[0] = receiver;
     receiver_alias->aux_int = XI_COPY_KIND_IDENTITY;
     method->args[0] = receiver_alias;
+    if (with_argument)
+        method->args[1] = argument;
     method->aux = (void *) "writeBytes";
     method->aux_int = 0;
     xi_block_set_return(caller_entry, method);
     caller_root->stage = caller->stage = XI_STAGE_SEMANTIC_LOWERED;
     caller_root->invariant_mask = caller->invariant_mask =
         xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    SourceExportResolverFixture fixture = {
+        .callee = write_bytes,
+        .suspendability = with_argument ? 0 : 1,
+    };
     XiCoroResolver resolver = {
         .resolve_method = source_export_resolve_method,
         .call_suspendability = source_export_call_suspendability,
-        .ud = write_bytes,
+        .ud = &fixture,
     };
     REQUIRE(xi_coro_lower(caller_root, &resolver));
     caller_root->stage = caller->stage = XI_STAGE_OPTIMIZED;
@@ -2451,8 +2475,12 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
     caller_root->module = caller_module;
     caller_module->nslots = 1;
     XiModule *dependency_modules[] = {dependency_module};
-    REQUIRE(xr_semantic_plan_build_and_attach_module_set(caller_root, dependency_modules, 1, error,
-                                                         sizeof(error)));
+    bool module_set_built = xr_semantic_plan_build_and_attach_module_set(
+        caller_root, dependency_modules, 1, error, sizeof(error));
+    if (!module_set_built) {
+        fprintf(stderr, "source export module-set fixture failed: %s\n", error);
+    }
+    REQUIRE(module_set_built);
     XrSemanticPlan *semantic = xr_semantic_plan_retain(caller_root->semantic_plan);
     REQUIRE(semantic);
     xi_func_free(caller_root);
@@ -2940,7 +2968,7 @@ static void mutate_source_export_call(XrTargetCallRecord *call, SourceExportCall
 
 static void test_source_export_call_authority(void) {
     XrSemanticPlan *dependency = NULL;
-    XrSemanticPlan *semantic = build_source_export_semantic(&dependency);
+    XrSemanticPlan *semantic = build_source_export_semantic(&dependency, false);
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
@@ -2970,7 +2998,7 @@ static void test_source_export_call_authority(void) {
             plan->coroutines[0].result_slot == call->result_slot &&
             plan->coroutines[0].flags ==
                 (XR_TARGET_COROUTINE_DIRECT_CHILD | XR_TARGET_COROUTINE_SOURCE_CHILD));
-    REQUIRE((plan->completed_family_mask & XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE) != 0);
+    REQUIRE((plan->completed_family_mask & XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE) != 0);
     uint32_t import_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t load_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t copy_values[2] = {XR_SEMANTIC_INDEX_NONE, XR_SEMANTIC_INDEX_NONE};
@@ -3020,7 +3048,7 @@ static void test_source_export_call_authority(void) {
     }
 
     uint64_t saved_mask = plan->completed_family_mask;
-    plan->completed_family_mask &= ~XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE;
+    plan->completed_family_mask &= ~XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE;
     expect_verify_failure(plan, "XR_TARGET_1001");
     plan->completed_family_mask = saved_mask;
     uint16_t saved_ownership = plan->machine_reps[import_binding->register_rep].ownership;
@@ -3091,6 +3119,52 @@ static void test_source_export_call_authority(void) {
     REQUIRE(failed == NULL);
     semantic->blocks[0].control_value = saved_control;
     xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_semantic_plan_free(dependency);
+}
+
+static void test_source_export_call_argument_authority(void) {
+    XrSemanticPlan *dependency = NULL;
+    XrSemanticPlan *semantic = build_source_export_semantic(&dependency, true);
+    XrTargetProfile *profile = build_profile(0);
+    const XrSemanticPlan *dependencies[] = {dependency};
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build_module_set(semantic, dependencies, 1, profile, &plan, error,
+                                                 sizeof(error));
+    if (!built)
+        fprintf(stderr, "source export argument Target fixture failed: %s\n", error);
+    REQUIRE(built && plan && xr_target_plan_verify(plan, error, sizeof(error)));
+    REQUIRE(plan->calls_count == 1 && plan->call_arguments_count == 1 &&
+            plan->coroutines_count == 0);
+    XrTargetCallRecord *call = &plan->calls[0];
+    XrTargetCallArgumentRecord *argument = &plan->call_arguments[0];
+    REQUIRE(call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
+            call->calling_convention == XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
+            call->argument_begin == 0 && call->argument_count == 1 && call->flags == 0);
+    REQUIRE(argument->call == call->id && argument->ordinal == 0 &&
+            argument->callee_parameter == 0 &&
+            argument->callee_slot == XR_SEMANTIC_INDEX_NONE &&
+            argument->mode == XR_TARGET_CALL_VALUE &&
+            argument->ownership == XR_TARGET_CALL_CONSUME &&
+            argument->flags == 0 && argument->callee_register_rep == argument->register_rep &&
+            argument->callee_memory_rep == argument->memory_rep);
+
+    XrTargetCallArgumentRecord saved = *argument;
+    argument->mode = XR_TARGET_CALL_REFERENCE;
+    xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    *argument = saved;
+    xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
+    argument->identity.bytes[0] ^= 1u;
+    xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    *argument = saved;
+    xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
     xr_semantic_plan_free(dependency);
@@ -4262,6 +4336,7 @@ int main(int argc, char **argv) {
     test_channel_receive_storage_authority();
     test_channel_close_call_authority();
     test_source_export_call_authority();
+    test_source_export_call_argument_authority();
     test_profile_freeze_and_determinism();
     test_plan_snapshot_and_determinism();
     test_builder_materializes_canonical_scalar_intents();

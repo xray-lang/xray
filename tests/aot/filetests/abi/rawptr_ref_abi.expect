@@ -1,6 +1,7 @@
-contains=function 1 name=resetRawConst module=0 depth=1 abi=native boundary=none params=1 ret=uint8_t/scalar/bool
+contains=function 1 name=resetRawConst module=0 semantic_function=1 depth=1 abi=native boundary=none params=1 ret=uint8_t/scalar/bool
 contains=  param 0 class=ptr kind=view rep=rawptr c_type=const void * *
 # Generated pointer casts are now the exact pointer type instead of `void *`;
 # the address-of itself is unchanged.
 c_regex=const void \* \* v[0-9]+ = \(const void \* \*\)\(&v[0-9]+\);
 c_regex=_rawptr_ref_abi_lib_[0-9a-f]+_resetRawConst_exp\(NULL, \(const void \* \*\)\(v[0-9]+\)\)
+c_syntax=pass

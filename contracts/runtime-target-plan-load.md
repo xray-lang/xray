@@ -39,7 +39,7 @@ roots, or general module activation.
    String-literal storage, direct-local-callee storage, Channel-allocation
    storage, Channel-receive storage, direct-local-GO-callee storage,
    direct-local-GO-task-result storage, panic-catch storage,
-   SOURCE-namespace storage, and ADT-enum storage. The
+   SOURCE-import storage, and ADT-enum storage. The
    scalar family admits an unaliased SemanticPlan `Ptr` or `MutPtr` only as an
    exact TargetPlan `RAW_PTR` with target-profile pointer layout and a trivial,
    non-root, null-zero lifecycle. The independent verifier re-parses the frozen
@@ -102,16 +102,23 @@ roots, or general module activation.
    that exact semantic type and direct-local parameter/argument relation. It
    grants no payload enum, boxing, allocation, root, cleanup, or dispatch
    authority.
-   SOURCE-namespace storage covers only the borrowed dynamic outer `XrValue`
-   tokens in the exact
+   SOURCE-import storage covers only borrowed dynamic outer `XrValue` tokens
+   in either the exact namespace
    `IMPORT_REF -> identity COPY* -> SET_SHARED -> GET_SHARED -> identity COPY*`
-   chain consumed as SOURCE_EXPORT call receivers. Identity-COPY chains are
+   receiver chain or the exact named-export
+   `IMPORT_REF(member) -> SET_SHARED -> GET_SHARED` callee chain consumed by
+   the same SOURCE_EXPORT call. Identity-COPY chains are
    bounded, acyclic, and same-function; every endpoint and COPY keeps its own
    exact slot identity and unique expected consumer. Builder, Target verifier,
    and AOT materialization verifier independently reconstruct the ordered
-   dependency, module identity, shared slot, complete use sets, and receiver binding. This row
-   grants no imported module object body, allocation, root, cleanup, member
-   lookup, argument ABI, dependency activation, or cross-module frame.
+   dependency, module identity, shared slot, complete use sets, and call binding.
+   These rows grant no imported module object body, allocation, root, cleanup,
+   guessed member lookup, dependency activation, or cross-module frame. A
+   parameterized SOURCE_EXPORT separately carries dense call-argument rows
+   binding dependency parameter stable identity, caller operand/value/slot,
+   mode, ownership, transfer, and identical machine representation. An exact
+   `ref` row authorizes one additional C pointer level; Xi/name/type and legacy
+   representation plans cannot create that authority.
    Source-class-object storage covers only the owned dynamic outer `XrValue`
    produced by an exact frozen `XI_CLASS_CREATE`. The allocation's result type
    is the erased reference the IR selects for it, so the class identity is
@@ -270,12 +277,12 @@ anchor-sha256: src/plan/format/xr_xtp_rows.c 868dde2fe9a991b4bada65a0055722a961f
 anchor-sha256: src/runtime/abi/xr_target_machine_facts.h 8c8d1c341fb4639bb47c982ac6dfd851571d154823101e00011a63fcb14486d8
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h 5ea9aa4ff63d88b62dbf1f43bea9ab2875d9d63ef2722d73df5a71c59eedda1b
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 6487ae39149a4ea28fab04bdf2ccbf88c0bccaded75cf20376b38c8447dbdd1c
-anchor-sha256: src/plan/target/xr_target_profile.h 5a9f4bc54135f39ee703e872f19267734b54e17f4f3828b62d1d66aab2602cc3
+anchor-sha256: src/plan/target/xr_target_profile.h 5dffe396f69f641b2e6820af633feedf5bba0772d054e602298ceb196bd66c7d
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h dd9ce3996f1109c8d4372911d53d273cbf3699764f20f51fe2ac2101c73c8565
+anchor-sha256: src/plan/target/xr_target_plan.h e28f0121e13044768ac303b1133bb4c0e3530fc51e665ba1d30c3cd88ae6a63d
 anchor-sha256: src/plan/target/xr_target_plan.c b13c7fd708c6702c5c4014fab5dfa413bcacdc2d8673cfa472cbc274b08e6c4f
-anchor-sha256: src/plan/target/xr_target_builder.c e8898dc1d25338895dd06b5f8a8928f808d017469243577780edefddad5375ba
-anchor-sha256: src/plan/target/xr_target_verify.c d4902582468104978fe06aec2fdce0d6d3d65694b08318a88026bf329de0960d
+anchor-sha256: src/plan/target/xr_target_builder.c c64fdb5065729f0899487c40cfd2c35e6c2c0c77b777e0284bc62184c5631d8d
+anchor-sha256: src/plan/target/xr_target_verify.c 17356f03e1ba9a555145d7089ce890c46020eb38464892ee2393a0e51f7b40ef
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
@@ -284,7 +291,7 @@ anchor-sha256: src/runtime/xr_target_plan_load.c f405d17bc64b93c2582026a9860dbe4
 anchor-sha256: src/app/cli/xcmd_run.c daf2fcff233493c568bf4d3269c8abf84ad1262344d3312fd4384c06d68dd770
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 577aa49d6502b2b1cf3a88191851bbbc82775fe2e53f51ec7ea83ca58281a548
 anchor-sha256: scripts/check_legacy_product_residue.py d160f8b9ab1d16da893bcc30a7ed90d583dda9e478dd11f67c9ce299629f8d2f
-anchor-sha256: tests/unit/plan/test_target_plan.c 96267de5aa4a7a3687758d96a66b294884edec8c73f424fa433006e75f7e9402
+anchor-sha256: tests/unit/plan/test_target_plan.c 0d744933b6ef08969eda9274890b8393d824d6b5c6b089c66ef34e5b28878b35
 anchor-sha256: tests/unit/plan/test_xtp_format.c b23546102bcf4bf6d09d4a3a8c7d88fbe5a3552ff5a4d449b427e271655af657
 anchor-sha256: tests/unit/CMakeLists.txt d8bedb9c848e0d7a75cd63035487e9e65e3dedf4e28f78225b83a7a6f3c4b440
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20

@@ -2235,6 +2235,43 @@ static const XiImportRef *resolve_namespace_import_receiver(const XrSemanticBuil
     return dependency_present ? ref : NULL;
 }
 
+/* Resolve a named source import while the module graph identity still exists.
+ * A shared load is admitted only through the unique root initializer store;
+ * the member string alone is never used as call authority. */
+static const XiImportRef *resolve_source_import_callee(
+    const XrSemanticBuildContext *ctx, const XiFunc *caller,
+    const XiValue *callee) {
+    callee = strip_identity_copies(caller, callee);
+    const XiValue *source = callee;
+    if (callee && callee->block && callee->block->func == caller &&
+        callee->op == XI_GET_SHARED && callee->aux_int >= 0) {
+        const XiFunc *root = caller;
+        while (root->parent_func)
+            root = root->parent_func;
+        bool ambiguous = false;
+        const XiValue *store = indexed_root_shared_store(
+            ctx, callee->aux_int, &ambiguous);
+        if (ambiguous || !store || store->nargs != 1 ||
+            !root_store_precedes_activation(root, store))
+            return NULL;
+        source = strip_identity_copies(root, store->args[0]);
+    }
+    if (!source || source->op != XI_IMPORT_REF || !source->aux)
+        return NULL;
+    const XiImportRef *ref = (const XiImportRef *) source->aux;
+    if (classify_import_resolution(ref) !=
+            XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
+        !ref->member_name || ref->member_name[0] == '\0' ||
+        !ref->resolved_func || ref->resolved_shared_slot < 0 ||
+        ref->resolved_export_slot < 0)
+        return NULL;
+    bool dependency_present = false;
+    for (uint32_t i = 0; i < ctx->dependency_module_count; i++)
+        dependency_present |=
+            ctx->dependency_modules[i] == ref->resolved_module;
+    return dependency_present ? ref : NULL;
+}
+
 static const XiImportRef *
 resolve_native_namespace_import_receiver(const XrSemanticBuildContext *ctx, const XiFunc *caller,
                                          const XiValue *receiver) {
@@ -2568,26 +2605,37 @@ static bool append_source_instance_method_open_call_target(XrSemanticBuildContex
 
 static bool append_source_export_call_target(XrSemanticBuildContext *ctx, const XiValue *value,
                                              uint32_t operation) {
-    if (!value || value->op != XI_CALL_METHOD || value->nargs == 0 || !value->aux ||
-        (value->aux_int & 1) != 0)
+    if (!value || (value->op != XI_CALL && value->op != XI_CALL_METHOD) ||
+        value->nargs == 0 ||
+        (value->op == XI_CALL_METHOD &&
+         (!value->aux || (value->aux_int & 1) != 0)))
         return true;
     const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
     const XiFunc *caller = ctx->functions[call->function].source;
-    const XiImportRef *ref = resolve_namespace_import_receiver(ctx, caller, value->args[0]);
+    const XiImportRef *ref =
+        value->op == XI_CALL_METHOD
+            ? resolve_namespace_import_receiver(ctx, caller, value->args[0])
+            : resolve_source_import_callee(ctx, caller, value->args[0]);
     if (!ref)
         return true;
+    const char *selector = value->op == XI_CALL_METHOD
+                               ? (const char *) value->aux
+                               : ref->member_name;
     const XrSemanticPlan *dependency_plan =
         ref->resolved_module->init ? ref->resolved_module->init->semantic_plan : NULL;
     uint32_t source_export = XR_SEMANTIC_INDEX_NONE;
     const XrSemanticSourceExportRecord *exported =
-        find_source_export(dependency_plan, (const char *) value->aux, &source_export);
+        find_source_export(dependency_plan, selector, &source_export);
     const XrSemanticFunctionRecord *callee =
         exported ? xr_semantic_plan_function(dependency_plan, exported->function) : NULL;
     const uint8_t *suspendable = plan_suspendability(ctx, dependency_plan);
-    if (!exported || !callee || !suspendable || !suspendable[exported->function] ||
+    if (!exported || !callee || !suspendable ||
         callee->parameter_count == UINT16_MAX ||
-        value->nargs != (uint16_t) (callee->parameter_count + 1u) || call->metadata_count != 1 ||
-        strcmp(ctx->plan->metadata[call->metadata_begin], exported->name) != 0)
+        value->nargs != (uint16_t) (callee->parameter_count + 1u) ||
+        (value->op == XI_CALL_METHOD &&
+         (call->metadata_count != 1 ||
+          strcmp(ctx->plan->metadata[call->metadata_begin], exported->name) != 0)) ||
+        (value->op == XI_CALL && call->metadata_count != 0))
         return true;
     uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
     if (!append_dependency(ctx, ref->resolved_module, &dependency))
@@ -2694,6 +2742,11 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
                    : append_source_instance_method_open_call_target(ctx, value, operation);
     }
     if (value->op != XI_CALL && value->op != XI_TAIL_CALL)
+        return true;
+    uint32_t before = ctx->plan->call_target_count;
+    if (!append_source_export_call_target(ctx, value, operation))
+        return false;
+    if (ctx->plan->call_target_count != before)
         return true;
     uint32_t caller = ctx->plan->operations[operation].function;
     /* A call on its own activation carries no callee value to resolve: the

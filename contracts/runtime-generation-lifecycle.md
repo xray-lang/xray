@@ -35,9 +35,10 @@ product activation path.
    call-argument, root-map, root-slot, cleanup, adapter, or coroutine execution
    authority. Any other verified plan remains VERIFIED and fails PREPARE with
    `XR_EXEC_5004`; it is not partially activated.
-   TargetPlan schema 24 preserves SOURCE-namespace, exact ADT-enum, exact
-   aggregate field-name, Array-intrinsic, String-runes result, and sealed
-   Iterator-rune call authority. Those dynamic rows remain
+   TargetPlan schema 25 preserves exact SOURCE-import storage and dense
+   SOURCE_EXPORT argument rows together with exact ADT-enum, aggregate
+   field-name, Array-intrinsic, String-runes result, and sealed Iterator-rune
+   call authority. Those dynamic rows remain
    storage/call authority and
    therefore continue to make this sole-scalar PREPARE route fail closed.
    Its sealed StringBuilder constructor call likewise remains non-executable
@@ -91,7 +92,7 @@ product activation path.
     ACTIVE generation, a plan-bounded function index, and the exact installed
     scalar i64 execution family. A resolved handle is a module-owned loan that
     the module invalidates at unload; the caller never frees it.
-11. Publishing a source export requires source-namespace shared storage, and
+11. Publishing a source export requires source-import shared storage, and
     clause 5 admits only a sole scalar i64 function with no storage authority,
     so the two are mutually exclusive at this boundary: a module this runtime
     can load publishes no export, and a module that publishes one cannot load.
@@ -108,7 +109,7 @@ anchor-sha256: src/runtime/xr_module_generation.c f3fe95413105fbb79fb40b5a0a6f71
 anchor-sha256: src/runtime/xr_module_generation_verify.c 0f146f9f8526f83d84157febadde7cb92327f24186fb6d8d45138968ecaaf4bd
 anchor-sha256: src/vm/xr_typed_dispatch.h 30b893c4f791e6b99a87cf46194c982b63972072675d2bfbc329ab55fcba1b25
 anchor-sha256: src/vm/xr_typed_dispatch.c 551515f2222a29214a6a0902189934bf4517d40424b6c4eff52589b47dfb208d
-anchor-sha256: src/vm/xr_typed_frame.h 75452198fb1e040f3e9ce6b72502ee472ea62b9aa4b86683f6011e4afd610b77
+anchor-sha256: src/vm/xr_typed_frame.h d51e9496f92c227bfd707faf8138453aedad906e9dcff32fcde4b633e93cb4c9
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

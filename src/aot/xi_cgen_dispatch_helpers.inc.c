@@ -15393,11 +15393,18 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     }
     const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v);
+    XrCValueEmissionView emission;
+    CgValueEmissionStatus emission_status =
+        cg_value_emission_view(ctx, f, v, &emission);
     XrRep result_rep = value_plan ? xaot_value_storage_rep(value_plan->rep) : XR_REP_RAWPTR;
-    const char *result_c_type = value_plan && value_plan->rep.c_type &&
-                                        (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR)
-                                    ? value_plan->rep.c_type
-                                    : "void *";
+    const char *result_c_type =
+        emission_status == CG_VALUE_EMISSION_FOUND &&
+                emission.rep == XR_C_VALUE_REP_RAW_PTR && emission.c_type
+            ? emission.c_type
+            : value_plan && value_plan->rep.c_type &&
+                      (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR)
+                  ? value_plan->rep.c_type
+                  : "void *";
     if ((v->aux_int & XI_LOCAL_ADDR_AUX_RAW_DEREF) != 0) {
         const XiValue *load = v->args[0];
         if (!load || load->op != XI_PTR_LOAD || load->nargs < 1 || !load->args[0]) {

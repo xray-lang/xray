@@ -2076,7 +2076,7 @@ static void test_source_namespace_storage_is_exact_and_fail_closed(void) {
     SourceNamespaceStorageFixture fixture =
         source_namespace_storage_fixture_create(false, false);
     REQUIRE((fixture.target_plan->completed_family_mask &
-             XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE) != 0);
+             XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE) != 0);
     uint32_t import_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t load_value = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0;
@@ -2231,7 +2231,7 @@ static void test_standalone_source_namespace_storage_is_exact_and_fail_closed(vo
     REQUIRE(xr_semantic_plan_dependency_count(fixture.function->semantic_plan) == 1 &&
             xr_semantic_plan_call_target_count(fixture.function->semantic_plan) == 0 &&
             (fixture.target_plan->completed_family_mask &
-             XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE) != 0);
+             XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE) != 0);
     uint32_t import_value = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0;
          i < xr_semantic_plan_operation_count(fixture.function->semantic_plan);

@@ -1,7 +1,7 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 24 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 25 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
@@ -80,15 +80,16 @@ parameter role because the value is bound on entry rather than computed, and
 its ownership is the parameter's own recorded ownership. It grants no class
 body, field or method table, allocation, root, cleanup, or member lookup, and
 remains outside the trivial frame allocator.
-The SOURCE-namespace-storage family describes only borrowed dynamic outer
-`XrValue` tokens in an exact import/store/load chain whose load is consumed as
-the receiver of a SOURCE_EXPORT call. It grants no imported module object
-body, allocation, root, cleanup, dependency activation, argument ABI, or
+The SOURCE-import-storage family describes only borrowed dynamic outer
+`XrValue` tokens in exact namespace-receiver or named-export-callee
+import/store/load chains consumed by a SOURCE_EXPORT call. It grants no imported
+module object body, allocation, root, cleanup, dependency activation, or
 cross-module frame and remains outside the trivial frame allocator.
-SOURCE_EXPORT rows bind only an exact dependency public wrapper and its
-coroutine state/result relation. They deliberately contain no local callee
-index or cross-module argument/frame storage, so this typed frame grants them
-no execution path.
+SOURCE_EXPORT rows bind an exact dependency public wrapper, coroutine
+state/result relation, and dense argument contracts. `ref` arguments bind a
+caller place and one additional C pointer level, but no local callee slot or
+executable cross-module frame is introduced, so this typed frame grants them no
+execution path.
 The ADT-enum-storage family describes only exact source-backed enum parameters,
 direct-local enum returns, and payload-bearing constructor results as outer
 tagged values. Its exact declaration, member, layout, discriminant, payload
@@ -147,9 +148,9 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h dd9ce3996f1109c8d4372911d53d273cbf3699764f20f51fe2ac2101c73c8565
-anchor-sha256: src/vm/xr_typed_frame.h 75452198fb1e040f3e9ce6b72502ee472ea62b9aa4b86683f6011e4afd610b77
+anchor-sha256: src/plan/target/xr_target_plan.h e28f0121e13044768ac303b1133bb4c0e3530fc51e665ba1d30c3cd88ae6a63d
+anchor-sha256: src/vm/xr_typed_frame.h d51e9496f92c227bfd707faf8138453aedad906e9dcff32fcde4b633e93cb4c9
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c e488cf61f7523c84d557ca8508fcd571f9b03e8567a87885d110cdeea1a2d4c2
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 2512c79e6daf28ee6dddd1a566af740d90425d3a5ddb8492436ef6ae2fe3b437
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

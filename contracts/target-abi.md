@@ -50,6 +50,15 @@ return-ownership metadata above, this controls caller ARC placement only: the
 public value representation, calling convention, parameter list, and native
 return ABI are unchanged, and an unresolved reference keeps the conservative
 moved-argument convention.
+A native SOURCE_EXPORT call does not rediscover that ABI from the resolved Xi
+import. Its verified TargetPlan row binds the dependency fingerprint, export
+and callee stable identities, and one dense argument row per dependency
+parameter. A `ref Ptr<T>` row must name the exact caller `LOCAL_ADDR` value,
+addressable operand contract, dependency parameter ordinal, writeback mode,
+caller slot, and RAW_PTR machine representation. Prepare resolves the unique
+dependency ABI only through those identities, and C emission projects the
+additional pointer level only from that row. There is no import-name, Xi-type,
+shared-slot, or legacy value-plan fallback.
 Task 254 makes mutable capture cells explicit in Xi and changes the internal VM
 cell opcode operand shape. Closure upvalues remain tagged `XrValue` slots and
 the public target ABI, calling convention, and closure layout are unchanged.
@@ -358,13 +367,13 @@ the compiler core does not download a provider.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de082761402165a3c36919
-anchor-sha256: src/aot/xaot_prepare.c ad3eee22709eef4d919a2762a6f46eb423ba5741de795c219bbda0fbef4b75ae
+anchor-sha256: src/aot/xaot_prepare.c 8c74ea5c1dc68062d78911d37b95f6508a90c21c911362eed341017e2715f114
 anchor-sha256: src/aot/xaot_bundle.c 81c1abe09b224312abece4db6eead5be3bfa48bb50e39a75c1d7dbf03fbde21c
 anchor-sha256: src/aot/xaot_verify.c f0012f689493caba9ca93f2dadeb527e56ea4cd35b8d96b68ba563c68ba31033
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c af9835dcaa8b6db67d54f5f79438cbf7922ae70ed6d3cad0fe2b345579e06b9a
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 3d8783c535eb0ea3d3d347763405d059db6378566afdb7c965d7b8c8c6fddd2c
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 70df8d4d8c285f3a3997b16b13d42e9cf195c2a6711f01d11d039f2e7a4f4573
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h a911a7a8294683d91115cb82e9b839c2a3cd9eb535d63b324eb89d5cac07a2fe
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c fc5412db39a7e40621c94286818cf1e0adea44beaabd5b36b3cfc3b825e13dba
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 1315bc2f90348f203964d4409bc50b7a169c52dbab0328206e832213f98dba4b
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h 3b15121cb6b155db2013d23e65b17027d5d9d8309a8796819d79c7799aa7f9f0
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 4e3e92b683979f70bfcca0157984a467aafb6b48f219069915a178044d6a8406
 anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h c73cff6cc95acdd375a3ede48b49ae7313500d3e3824725757b299f48d687243
@@ -372,7 +381,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h bbcaf57e24a92d
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d19001054ed1aa8334872e2998949bb515a8a2cf46fc2d682a681c82d6529f9d
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 4e63b69f6828aefd149170dc7815da693d3ef88d7cefb182c807acacbbaa3dec
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c f0110919fa8e0b939577fa1ce860249510c887a428bd16b561f4a00b883b1974
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c dc63078ccba7e4be6f519de56cdba00f294c23dec9bf87c993697445d1a2566c
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c a2b68a584de4406eabc6443affcac25eebf6ab070e03597ea4128c274a1d1987
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 375af2e4b45271d06e6ce6ed798be2e6f9f8786c25e68d38ea3f4ca6f41160c6
 anchor-sha256: src/aot/xi_cgen.c 210303f2a7823aaf904f808144d61959141c1009b5849946ad3295a1c9acefc3

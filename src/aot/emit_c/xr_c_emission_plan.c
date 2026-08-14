@@ -125,6 +125,70 @@ static const char *emission_raw_pointer_c_type(
     return pointer_mutable ? "void *" : "const void *";
 }
 
+/* A SOURCE_EXPORT ref argument freezes one additional C pointer level on the
+ * caller's LOCAL_ADDR result. The base pointee spelling still comes from the
+ * semantic raw-pointer identity above; the extra level is admitted only by an
+ * exact TargetPlan call-argument row, never by a source name or Xi type. */
+static const char *emission_source_ref_place_c_type(
+    const XrTargetPlan *target_plan, uint32_t semantic_value) {
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *definition = NULL;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (!operation || operation->result_value != semantic_value)
+            continue;
+        if (definition)
+            return NULL;
+        definition = operation;
+    }
+    if (!definition || definition->opcode != XI_LOCAL_ADDR ||
+        definition->operand_count != 1)
+        return NULL;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target_plan, semantic_value);
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    uint32_t argument_count = 0;
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(target_plan, &argument_count);
+    bool matched = false;
+    for (uint32_t i = 0; i < argument_count; i++) {
+        const XrTargetCallArgumentRecord *argument = &arguments[i];
+        if (argument->semantic_value != semantic_value)
+            continue;
+        const XrTargetCallRecord *call =
+            argument->call < call_count ? &calls[argument->call] : NULL;
+        if (!binding || !call ||
+            call->target_kind != XR_TARGET_CALL_TARGET_SOURCE_EXPORT ||
+            call->calling_convention !=
+                XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT ||
+            argument->mode != XR_TARGET_CALL_REFERENCE ||
+            argument->ownership != XR_TARGET_CALL_WRITEBACK ||
+            argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
+            argument->caller_slot != binding->slot ||
+            argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+            argument->register_rep != binding->register_rep ||
+            argument->memory_rep != binding->memory_rep ||
+            argument->callee_register_rep != binding->register_rep ||
+            argument->callee_memory_rep != binding->memory_rep)
+            return NULL;
+        matched = true;
+    }
+    if (!matched)
+        return NULL;
+    const char *base =
+        emission_raw_pointer_c_type(target_plan, semantic_value);
+    return base && strcmp(base, "const void *") == 0
+               ? "const void * *"
+           : base && strcmp(base, "void *") == 0 ? "void * *"
+                                                  : NULL;
+}
+
 static bool machine_kind_to_c_rep(const XrTargetPlan *target_plan,
                                   uint32_t semantic_value, uint16_t kind,
                                   XrCValueRep *out, const char **c_type) {
@@ -202,8 +266,11 @@ static bool machine_kind_to_c_rep(const XrTargetPlan *target_plan,
             return true;
         case XR_MACHINE_REP_RAW_PTR:
             *out = XR_C_VALUE_REP_RAW_PTR;
-            *c_type = emission_raw_pointer_c_type(target_plan,
-                                                   semantic_value);
+            *c_type = emission_source_ref_place_c_type(target_plan,
+                                                       semantic_value);
+            if (!*c_type)
+                *c_type = emission_raw_pointer_c_type(target_plan,
+                                                       semantic_value);
             return *c_type != NULL;
         default: return false;
     }
@@ -1727,7 +1794,9 @@ static bool verify_value(const XrCValueEmissionView *value) {
             expected_rep = XR_C_VALUE_REP_RAW_PTR;
             if (!value->c_type ||
                 (strcmp(value->c_type, "const void *") != 0 &&
-                 strcmp(value->c_type, "void *") != 0))
+                 strcmp(value->c_type, "void *") != 0 &&
+                 strcmp(value->c_type, "const void * *") != 0 &&
+                 strcmp(value->c_type, "void * *") != 0))
                 return false;
             expected_c_type = value->c_type;
             break;
@@ -2034,8 +2103,11 @@ static bool verify_target_kind_projection(const XrTargetPlan *target_plan,
             return true;
         case XR_MACHINE_REP_RAW_PTR:
             *out_rep = XR_C_VALUE_REP_RAW_PTR;
-            *out_c_type = emission_raw_pointer_c_type(target_plan,
-                                                       semantic_value);
+            *out_c_type = emission_source_ref_place_c_type(target_plan,
+                                                           semantic_value);
+            if (!*out_c_type)
+                *out_c_type = emission_raw_pointer_c_type(target_plan,
+                                                           semantic_value);
             return *out_c_type != NULL;
         default: return false;
     }
@@ -2387,7 +2459,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE |
         XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |
         XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |
-        XR_TARGET_FAMILY_SOURCE_NAMESPACE_STORAGE |
+        XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE |
         XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |
         XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |
         XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |

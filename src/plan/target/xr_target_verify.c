@@ -1047,6 +1047,85 @@ static bool mark_coroutine_functions(const XrSemanticPlan *plan, uint8_t *deferr
     return true;
 }
 
+static bool semantic_function_suspendability_is_exact(const XrSemanticPlan *plan,
+                                                       uint32_t function, bool *out) {
+    if (!plan || !out)
+        return false;
+    uint32_t function_count = (uint32_t) xr_semantic_plan_function_count(plan);
+    uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(plan);
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
+    if (function >= function_count)
+        return false;
+    uint8_t *suspendable = function_count ? (uint8_t *) xr_calloc(function_count, 1) : NULL;
+    uint32_t *head = function_count
+                         ? (uint32_t *) xr_malloc((size_t) function_count * sizeof(*head))
+                         : NULL;
+    uint32_t *next = target_count
+                         ? (uint32_t *) xr_malloc((size_t) target_count * sizeof(*next))
+                         : NULL;
+    uint32_t *queue = function_count
+                          ? (uint32_t *) xr_malloc((size_t) function_count * sizeof(*queue))
+                          : NULL;
+    bool valid = (!function_count || (suspendable && head && queue)) &&
+                 (!target_count || next);
+    if (valid) {
+        for (uint32_t i = 0; i < function_count; i++)
+            head[i] = XR_SEMANTIC_INDEX_NONE;
+        for (uint32_t i = 0; i < target_count; i++)
+            next[i] = XR_SEMANTIC_INDEX_NONE;
+        valid = mark_coroutine_functions(plan, suspendable, function_count);
+    }
+    for (uint32_t i = 0; valid && i < target_count; i++) {
+        const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
+        const XrSemanticOperationRecord *operation =
+            target && target->operation < operation_count
+                ? xr_semantic_plan_operation(plan, target->operation)
+                : NULL;
+        if (!target || !operation || operation->function >= function_count) {
+            valid = false;
+            break;
+        }
+        if ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+             target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) &&
+            target->function < function_count &&
+            (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
+             operation->opcode == XI_CALL_METHOD)) {
+            next[i] = head[target->function];
+            head[target->function] = i;
+        }
+    }
+    uint32_t begin = 0;
+    uint32_t end = 0;
+    for (uint32_t i = 0; valid && i < function_count; i++)
+        if (suspendable[i])
+            queue[end++] = i;
+    while (valid && begin < end) {
+        uint32_t callee = queue[begin++];
+        for (uint32_t edge = head[callee]; edge != XR_SEMANTIC_INDEX_NONE;
+             edge = next[edge]) {
+            const XrSemanticCallTargetRecord *target =
+                xr_semantic_plan_call_target(plan, edge);
+            const XrSemanticOperationRecord *operation =
+                target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+            if (!operation || operation->function >= function_count) {
+                valid = false;
+                break;
+            }
+            if (!suspendable[operation->function]) {
+                suspendable[operation->function] = 1;
+                queue[end++] = operation->function;
+            }
+        }
+    }
+    if (valid)
+        *out = suspendable[function] != 0;
+    xr_free(suspendable);
+    xr_free(head);
+    xr_free(next);
+    xr_free(queue);
+    return valid;
+}
+
 static const XrSemanticParameterRecord *semantic_parameter_for_value(
     const XrSemanticPlan *plan, uint32_t function, uint32_t value) {
     uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(plan);
@@ -2324,11 +2403,11 @@ static bool verifier_source_namespace_operation_is_exact(
              operation->metadata_count == 0));
 }
 
-static bool verifier_source_namespace_dependency_is_exact(
+static bool verifier_source_import_dependency_is_exact(
     const XrSemanticPlan *semantic,
     const XrSemanticOperationRecord *operation,
     const char *const *metadata, uint32_t metadata_count,
-    uint32_t *out_dependency) {
+    bool named_export, uint32_t *out_dependency) {
     if (!semantic || !operation || !metadata || !out_dependency ||
         !verifier_source_namespace_operation_is_exact(
             semantic, operation, XI_IMPORT_REF) ||
@@ -2338,7 +2417,8 @@ static bool verifier_source_namespace_dependency_is_exact(
         return false;
     const char *module_path = metadata[operation->metadata_begin];
     const char *member = metadata[operation->metadata_begin + 1u];
-    if (!module_path || !module_path[0] || !member || member[0] != '\0')
+    if (!module_path || !module_path[0] || !member ||
+        ((member[0] != '\0') != named_export))
         return false;
     uint32_t match = XR_SEMANTIC_INDEX_NONE;
     uint32_t dependency_count =
@@ -2459,6 +2539,10 @@ static bool collect_exact_source_namespace_values(
             xr_semantic_plan_call_target(semantic, i);
         if (!target || target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
             continue;
+        const XrSemanticOperationRecord *call =
+            target->operation < operation_count
+                ? xr_semantic_plan_operation(semantic, target->operation)
+                : NULL;
         if (target->operation >= operation_count ||
             target->dependency >= xr_semantic_plan_dependency_count(semantic) ||
             target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE)
@@ -2480,16 +2564,20 @@ static bool collect_exact_source_namespace_values(
             xr_semantic_plan_call_target(semantic, target_index);
         const XrSemanticOperationRecord *call =
             xr_semantic_plan_operation(semantic, i);
-        if (!target || !call || call->opcode != XI_CALL_METHOD ||
+        bool named_export = call && call->opcode == XI_CALL;
+        if (!target || !call ||
+            (call->opcode != XI_CALL && call->opcode != XI_CALL_METHOD) ||
             call->operand_count == 0 || call->operand_begin >= operand_count)
             goto invalid;
         const XrSemanticOperandRecord *receiver = &operands[call->operand_begin];
-        if (receiver->role != XR_SEM_OPERAND_RECEIVER ||
+        if (receiver->role != (named_export ? XR_SEM_OPERAND_CALLEE
+                                            : XR_SEM_OPERAND_RECEIVER) ||
             receiver->parameter != -1 ||
             receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
             receiver->parameter_mode != XR_PARAM_READ ||
             receiver->access != XR_CALL_ARG_PLAIN ||
-            (receiver->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0)
+            receiver->flags != (named_export ? 0u
+                                             : XR_SEM_OPERAND_CALL_CONTRACT))
             goto invalid;
         const XrSemanticOperationRecord *load = NULL;
         uint32_t current_value = receiver->value;
@@ -2605,8 +2693,8 @@ static bool collect_exact_source_namespace_values(
             stored->parameter_mode != XR_PARAM_READ ||
             stored->access != XR_CALL_ARG_PLAIN || stored->flags != 0 ||
             load->result_type != import->result_type ||
-            !verifier_source_namespace_dependency_is_exact(
-                semantic, import, metadata, metadata_count,
+            !verifier_source_import_dependency_is_exact(
+                semantic, import, metadata, metadata_count, named_export,
                 &import_dependency) ||
             import_dependency != target->dependency)
             goto invalid;
@@ -2626,8 +2714,8 @@ static bool collect_exact_source_namespace_values(
         if (candidate[import->result_value])
             continue;
         uint32_t import_dependency = XR_SEMANTIC_INDEX_NONE;
-        if (!verifier_source_namespace_dependency_is_exact(
-                semantic, import, metadata, metadata_count,
+        if (!verifier_source_import_dependency_is_exact(
+                semantic, import, metadata, metadata_count, false,
                 &import_dependency))
             goto invalid;
         uint32_t store_index = XR_SEMANTIC_INDEX_NONE;
@@ -2685,12 +2773,16 @@ static bool collect_exact_source_namespace_values(
             const XrSemanticOperationRecord *source =
                 xr_semantic_plan_operation(semantic, definition[operand->value]);
             bool expected = i == consumer[operand->value] && a == 0;
-            if (expected && use->opcode == XI_CALL_METHOD)
+            if (expected &&
+                (use->opcode == XI_CALL || use->opcode == XI_CALL_METHOD))
                 expected = target_by_operation[i] != XR_SEMANTIC_INDEX_NONE &&
                            xr_semantic_plan_call_target(
                                semantic, target_by_operation[i])->dependency ==
                                dependency[operand->value] &&
-                           operand->role == XR_SEM_OPERAND_RECEIVER;
+                           operand->role ==
+                               (use->opcode == XI_CALL
+                                    ? XR_SEM_OPERAND_CALLEE
+                                    : XR_SEM_OPERAND_RECEIVER);
             else if (expected)
                 expected = (use->opcode == XI_COPY ||
                             use->opcode == XI_SET_SHARED) &&
@@ -4630,7 +4722,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             (direct && target->function >= semantic_functions) ||
             (direct && operation->opcode != XI_CALL &&
              operation->opcode != XI_TAIL_CALL) ||
-            (source && operation->opcode != XI_CALL_METHOD) ||
+            (source && operation->opcode != XI_CALL_METHOD &&
+             operation->opcode != XI_CALL) ||
             (native_namespace && operation->opcode != XI_CALL_METHOD) ||
             (class_construction && operation->opcode != XI_CALL)) {
             valid = false;
@@ -4640,7 +4733,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         if (direct) {
             reverse_next[target_index] = reverse_head[target->function];
             reverse_head[target->function] = target_index;
-        } else if (!class_construction && !suspendable[operation->function]) {
+        } else if (!class_construction && state_counts[target->operation] != 0 &&
+                   !suspendable[operation->function]) {
             suspendable[operation->function] = 1;
             queue[queue_end++] = operation->function;
         }
@@ -4712,6 +4806,21 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 ? xr_semantic_plan_function(dependency,
                                             source_export->function)
                 : NULL;
+        const XrSemanticTypeRecord *source_result_type =
+            source_callee
+                ? xr_semantic_plan_type(dependency,
+                                        source_callee->return_type)
+                : NULL;
+        const XrSemanticTypeRecord *caller_result_type =
+            operation ? xr_semantic_plan_type(semantic,
+                                              operation->result_type)
+                      : NULL;
+        bool source_callee_suspendable = false;
+        bool source_suspendability_exact =
+            !source ||
+            (source_callee && semantic_function_suspendability_is_exact(
+                                  dependency, source_export->function,
+                                  &source_callee_suspendable));
         XrStableId expected_identity;
         uint32_t receiver_type_index = XR_SEMANTIC_INDEX_NONE;
         bool channel_close =
@@ -4811,12 +4920,14 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         state_counts[call->semantic_operation] == 1;
         bool expected_suspend =
             operation && ((operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 ||
-                          operation->opcode == XI_GO ||
-                          source || native_namespace ||
-                          (operation->opcode == XI_CALL && target &&
-                           target->function < semantic_functions &&
-                           suspendable[target->function] != 0));
-        valid = operation && machine && call->semantic_operation < semantic_operations &&
+                           operation->opcode == XI_GO ||
+                           native_namespace ||
+                           (source && source_callee_suspendable) ||
+                           (operation->opcode == XI_CALL && target &&
+                            target->function < semantic_functions &&
+                            suspendable[target->function] != 0));
+        valid = operation && machine && source_suspendability_exact &&
+                call->semantic_operation < semantic_operations &&
                 !covered[call->semantic_operation] &&
                 (previous_operation == XR_SEMANTIC_INDEX_NONE ||
                  call->semantic_operation > previous_operation) &&
@@ -5049,8 +5160,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 next_argument++;
             }
         } else if (source) {
-            valid = source_export && source_callee && suspends &&
-                    expected_suspend && operation->opcode == XI_CALL_METHOD &&
+            valid = source_export && source_callee &&
+                    source_result_type && caller_result_type &&
+                    xr_stable_id_equal(source_result_type->id,
+                                       caller_result_type->id) &&
+                    suspends == expected_suspend &&
+                    (operation->opcode == XI_CALL_METHOD ||
+                     operation->opcode == XI_CALL) &&
                     operation->operand_count ==
                         (uint32_t) source_callee->parameter_count + 1u &&
                     reconstruct_call_identity("xray-target-call-v5", target->id,
@@ -5064,13 +5180,94 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                                        target->export_identity) &&
                     xr_stable_id_equal(call->source_callee_identity,
                                        target->callee_function) &&
-                    call->argument_count == 0 &&
-                    call->flags == XR_TARGET_CALL_SUSPEND &&
+                    call->argument_count == source_callee->parameter_count &&
+                    call->flags == (suspends ? XR_TARGET_CALL_SUSPEND : 0) &&
                     call->calling_convention ==
                         XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
                     call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
             if (!valid)
                 break;
+            for (uint32_t ordinal = 0;
+                 valid && ordinal < call->argument_count; ordinal++) {
+                const XrTargetCallArgumentRecord *argument =
+                    &plan->call_arguments[next_argument];
+                uint32_t parameter_index =
+                    source_callee->parameter_begin + ordinal;
+                uint32_t semantic_operand =
+                    operation->operand_begin + ordinal + 1u;
+                const XrSemanticParameterRecord *parameter =
+                    xr_semantic_plan_parameter(dependency, parameter_index);
+                const XrSemanticOperandRecord *operand =
+                    &operands[semantic_operand];
+                const XrSemanticTypeRecord *parameter_type =
+                    parameter ? xr_semantic_plan_type(dependency,
+                                                      parameter->type)
+                              : NULL;
+                const XrSemanticTypeRecord *operand_type =
+                    xr_semantic_plan_type(semantic, operand->type);
+                const XrTargetValueRepRecord *caller_value =
+                    xr_target_plan_value_rep(plan, operand->value);
+                bool reference = parameter && parameter->mode == XR_PARAM_REF;
+                bool read = parameter && parameter->mode == XR_PARAM_READ;
+                bool addressable =
+                    (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0;
+                uint8_t expected_mode = reference
+                                            ? XR_TARGET_CALL_REFERENCE
+                                            : XR_TARGET_CALL_VALUE;
+                uint8_t expected_ownership =
+                    reference
+                        ? XR_TARGET_CALL_WRITEBACK
+                        : operand->ownership_action == XR_SEM_OPERAND_CONSUME
+                              ? XR_TARGET_CALL_CONSUME
+                              : XR_TARGET_CALL_READ;
+                uint8_t expected_flags =
+                    reference ? XR_TARGET_CALL_ARGUMENT_ADDRESSABLE : 0;
+                XrStableId argument_identity;
+                valid = parameter && parameter_type && operand_type &&
+                        caller_value &&
+                        parameter->function == source_export->function &&
+                        parameter->ordinal == ordinal &&
+                        xr_stable_id_equal(parameter_type->id,
+                                           operand_type->id) &&
+                        operand->role == XR_SEM_OPERAND_ARGUMENT &&
+                        operand->parameter == (int16_t) ordinal &&
+                        operand->parameter_mode == parameter->mode &&
+                        operand->transfer_mode == parameter->transfer_mode &&
+                        (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
+                        (read || reference) &&
+                        (!read ||
+                         (operand->access == XR_CALL_ARG_PLAIN &&
+                          !addressable)) &&
+                        (!reference ||
+                         (operand->access == XR_CALL_ARG_REF && addressable &&
+                          operand->ownership_action ==
+                              XR_SEM_OPERAND_BORROW)) &&
+                        slot_binds_value_in_function(
+                            plan, caller_value, operation->function) &&
+                        reconstruct_call_identity(
+                            "xray-target-source-call-argument-v1", target->id,
+                            parameter->id, ordinal, &argument_identity) &&
+                        xr_stable_id_equal(argument->identity,
+                                           argument_identity) &&
+                        argument->call == i &&
+                        argument->semantic_operand == semantic_operand &&
+                        argument->semantic_value == operand->value &&
+                        argument->callee_parameter == parameter_index &&
+                        argument->caller_slot == caller_value->slot &&
+                        argument->callee_slot == XR_SEMANTIC_INDEX_NONE &&
+                        argument->register_rep == caller_value->register_rep &&
+                        argument->memory_rep == caller_value->memory_rep &&
+                        argument->callee_register_rep ==
+                            caller_value->register_rep &&
+                        argument->callee_memory_rep ==
+                            caller_value->memory_rep &&
+                        argument->ordinal == ordinal &&
+                        argument->mode == expected_mode &&
+                        argument->ownership == expected_ownership &&
+                        argument->transfer_mode == operand->transfer_mode &&
+                        argument->flags == expected_flags;
+                next_argument++;
+            }
         } else if (native_namespace) {
             valid = target && suspends && expected_suspend &&
                     operation->opcode == XI_CALL_METHOD &&

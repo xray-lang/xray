@@ -4928,6 +4928,218 @@ static bool prepare_seed_direct_call_aggregate_returns(XaotBundle *bundle, XiFun
     return true;
 }
 
+/* Consume the frozen SOURCE_EXPORT argument rows before the legacy local-call
+ * ABI seeding path. Cross-module calls are identified only by the verified
+ * SemanticPlan/TargetPlan content address and callee stable ID; no live Xi
+ * name, type, shared-slot, or import spelling participates in the decision. */
+static bool prepare_seed_source_export_call_place_reps(
+    XaotBundle *bundle, XiFunc *func, XiValue *call, bool *out_source) {
+    const XrTargetPlan *caller_target;
+    const XrSemanticPlan *caller_semantic;
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls;
+    const XrTargetCallRecord *source_call = NULL;
+    const XrSemanticOperationRecord *source_operation = NULL;
+
+    if (out_source)
+        *out_source = false;
+    if (!bundle || !func || !call || !out_source)
+        return false;
+    caller_target = xaot_bundle_target_plan_for_func(bundle, func);
+    caller_semantic = caller_target
+                          ? xr_target_plan_semantic_plan(caller_target)
+                          : NULL;
+    if (!caller_target || !caller_semantic ||
+        !xr_aot_scalar_semantic_value_id(
+            caller_target, func, call, &semantic_function, &semantic_value,
+            NULL, 0))
+        return true;
+    calls = xr_target_plan_calls(caller_target, &call_count);
+    for (uint32_t i = 0; i < call_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(caller_semantic,
+                                       calls[i].semantic_operation);
+        if (!operation || operation->function != semantic_function ||
+            operation->result_value != semantic_value ||
+            operation->opcode != call->op)
+            continue;
+        if (calls[i].target_kind != XR_TARGET_CALL_TARGET_SOURCE_EXPORT ||
+            calls[i].calling_convention !=
+                XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT)
+            continue;
+        if (source_call) {
+            bundle->error_msg =
+                "AOT source-export call has ambiguous TargetPlan authority";
+            return false;
+        }
+        source_call = &calls[i];
+        source_operation = operation;
+    }
+    if (!source_call)
+        return true;
+    *out_source = true;
+
+    const XrSemanticDependencyRecord *dependency =
+        xr_semantic_plan_dependency(caller_semantic,
+                                    source_call->source_dependency);
+    const XrTargetPlan *callee_target = NULL;
+    const XrSemanticPlan *callee_semantic = NULL;
+    for (uint32_t i = 0; dependency && i < bundle->nmodules; i++) {
+        const XrTargetPlan *candidate =
+            bundle->target_plans ? bundle->target_plans[i] : NULL;
+        if (!candidate ||
+            !xr_fingerprint_equal(
+                xr_target_plan_semantic_fingerprint(candidate),
+                dependency->semantic_fingerprint))
+            continue;
+        if (callee_target) {
+            bundle->error_msg =
+                "AOT source-export dependency TargetPlan is ambiguous";
+            return false;
+        }
+        callee_target = candidate;
+        callee_semantic = xr_target_plan_semantic_plan(candidate);
+    }
+    if (!callee_target || !callee_semantic) {
+        bundle->error_msg =
+            "AOT source-export dependency TargetPlan is missing";
+        return false;
+    }
+
+    uint32_t export_index = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticSourceExportRecord *source_export = NULL;
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_source_export_count(callee_semantic); i++) {
+        const XrSemanticSourceExportRecord *candidate =
+            xr_semantic_plan_source_export(callee_semantic, i);
+        if (!candidate ||
+            !xr_stable_id_equal(candidate->id,
+                                source_call->source_export_identity))
+            continue;
+        if (source_export) {
+            bundle->error_msg =
+                "AOT source-export identity is ambiguous";
+            return false;
+        }
+        source_export = candidate;
+        export_index = i;
+    }
+    const XrSemanticFunctionRecord *callee_function =
+        source_export
+            ? xr_semantic_plan_function(callee_semantic,
+                                        source_export->function)
+            : NULL;
+    if (!source_export || export_index != source_call->source_export ||
+        !callee_function ||
+        !xr_stable_id_equal(callee_function->id,
+                            source_call->source_callee_identity) ||
+        source_call->argument_count != callee_function->parameter_count ||
+        call->nargs != (uint16_t) (source_call->argument_count + 1u)) {
+        bundle->error_msg =
+            "AOT source-export call disagrees with dependency authority";
+        return false;
+    }
+
+    const XaotFuncPlan *callee_func_plan = NULL;
+    for (uint32_t i = 0; i < bundle->nfunc_plans; i++) {
+        const XaotFuncPlan *candidate = &bundle->func_plans[i];
+        if (!candidate->func || candidate->func->semantic_plan != callee_semantic ||
+            candidate->func->semantic_plan_function_index !=
+                source_export->function)
+            continue;
+        if (callee_func_plan) {
+            bundle->error_msg =
+                "AOT source-export callee function is ambiguous";
+            return false;
+        }
+        callee_func_plan = candidate;
+    }
+    if (!callee_func_plan || callee_func_plan->abi.nparams !=
+                                 source_call->argument_count ||
+        (source_call->argument_count != 0 &&
+         !callee_func_plan->abi.params)) {
+        bundle->error_msg =
+            "AOT source-export callee ABI is incomplete";
+        return false;
+    }
+
+    uint32_t argument_count = 0;
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(caller_target, &argument_count);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(caller_semantic, &operand_count);
+    if ((uint64_t) source_call->argument_begin +
+            source_call->argument_count >
+            (uint64_t) argument_count ||
+        (uint64_t) source_operation->operand_begin +
+                source_operation->operand_count >
+            (uint64_t) operand_count) {
+        bundle->error_msg =
+            "AOT source-export argument authority is out of bounds";
+        return false;
+    }
+    for (uint16_t ordinal = 0; ordinal < source_call->argument_count;
+         ordinal++) {
+        const XrTargetCallArgumentRecord *argument =
+            &arguments[source_call->argument_begin + ordinal];
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(
+                callee_semantic,
+                callee_function->parameter_begin + ordinal);
+        const XrSemanticOperandRecord *operand =
+            &operands[source_operation->operand_begin + ordinal + 1u];
+        XiValue *place = call->args[ordinal + 1u];
+        uint32_t place_function = XR_SEMANTIC_INDEX_NONE;
+        uint32_t place_value = XR_SEMANTIC_INDEX_NONE;
+        if (!parameter || !operand || argument->call != source_call->id ||
+            argument->ordinal != ordinal ||
+            argument->callee_parameter !=
+                callee_function->parameter_begin + ordinal ||
+            argument->semantic_operand !=
+                source_operation->operand_begin + ordinal + 1u ||
+            argument->semantic_value != operand->value ||
+            argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+            argument->callee_register_rep != argument->register_rep ||
+            argument->callee_memory_rep != argument->memory_rep ||
+            !xr_aot_scalar_semantic_value_id(
+                caller_target, func, place, &place_function, &place_value,
+                NULL, 0) ||
+            place_function != semantic_function ||
+            place_value != argument->semantic_value) {
+            bundle->error_msg =
+                "AOT source-export argument lacks exact TargetPlan identity";
+            return false;
+        }
+        if (argument->mode != XR_TARGET_CALL_REFERENCE)
+            continue;
+        const XaotAbiSlot *slot = &callee_func_plan->abi.params[ordinal];
+        const XrTargetMachineRepRecord *machine =
+            xr_target_plan_machine_rep(caller_target,
+                                       argument->memory_rep);
+        if (parameter->mode != XR_PARAM_REF ||
+            argument->ownership != XR_TARGET_CALL_WRITEBACK ||
+            argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
+            !machine || machine->kind != XR_MACHINE_REP_RAW_PTR || !place ||
+            place->op != XI_LOCAL_ADDR || place->nargs != 1 ||
+            !place->args[0] ||
+            (slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0 ||
+            slot->rep.rep != XAOT_REP_RAWPTR || !slot->rep.c_type) {
+            bundle->error_msg =
+                "AOT source-export ref argument lacks exact place ABI";
+            return false;
+        }
+        /* Target-bound semantic values deliberately have no mutable legacy
+         * value plan. The row proves the call-side pointer depth; C emission
+         * consumes the callee ABI cast while LOCAL_ADDR keeps its TargetPlan
+         * RAW_PTR storage. Mutating the backend adapter feeding LOCAL_ADDR
+         * would destroy its independently verified representation identity. */
+    }
+    return true;
+}
+
 static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func) {
     if (!bundle || !func)
         return false;
@@ -4940,6 +5152,12 @@ static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func
             uint16_t first_arg = 0;
             if (!call || (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
                           call->op != XI_CALL_METHOD_DIRECT))
+                continue;
+            bool source_export = false;
+            if (!prepare_seed_source_export_call_place_reps(
+                    bundle, func, call, &source_export))
+                return false;
+            if (source_export)
                 continue;
             const XiFunc *target =
                 xaot_boundary_resolve_direct_call_target(bundle, func, call, &first_arg);
