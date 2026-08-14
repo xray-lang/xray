@@ -43,7 +43,6 @@ typedef struct XaotAbiSlot {
     XaotValueRep rep;
     XaotValueRep pointee_rep;
     const char *c_type;
-    const char *c_name;
     uint32_t flags;
 } XaotAbiSlot;
 
@@ -57,8 +56,6 @@ typedef struct XaotFuncAbi {
     XaotAbiSlot *params;
     uint16_t nparams;
     XaotBoundaryReason boundary_reason;
-    const char *c_symbol;
-    const char *boxed_symbol;
 } XaotFuncAbi;
 
 XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, const XiFunc *func,

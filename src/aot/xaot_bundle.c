@@ -4653,8 +4653,7 @@ static bool xaot_extern_slot_equal(const XaotAbiSlot *a, const XaotAbiSlot *b) {
     return a && b && a->cls == b->cls && a->flags == b->flags &&
            xaot_value_reps_equal(a->rep, b->rep) &&
            xaot_value_reps_equal(a->pointee_rep, b->pointee_rep) &&
-           xaot_extern_text_equal(a->c_type, b->c_type) &&
-           xaot_extern_text_equal(a->c_name, b->c_name);
+           xaot_extern_text_equal(a->c_type, b->c_type);
 }
 
 static uint32_t xaot_extern_attributes(const XiFunc *func) {
