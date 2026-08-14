@@ -3932,6 +3932,64 @@ static bool oracle_length_read_is_exact(const VerifyAuthority *ctx,
                 ctx, container->value, &container_storage, &container_kind));
 }
 
+/* One equality over two proved String values. String is immutable and shared,
+ * so its single storage fact is the outer tagged value and both sides of the
+ * comparison stay in that carrier; the truth value the comparison writes keeps
+ * the machine storage its own definition already names. Both sides must be a
+ * String this authority already proved, both must be borrowed, and the result
+ * must be the plain boolean the language types a comparison. Ordering
+ * relations are not admitted here: only equality and inequality carry a
+ * storage fact this authority states for a reference operand. */
+static bool oracle_string_equality_is_exact(const VerifyAuthority *ctx,
+                                            uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    const XrSemanticTypeRecord *result_type =
+        operation ? xr_semantic_plan_type(ctx->semantic, operation->result_type)
+                  : NULL;
+    if (!ctx || !operation || !operands || !result_type ||
+        (operation->opcode != XI_EQ && operation->opcode != XI_NE) ||
+        operation->operand_count != 2 || operand_count < 2u ||
+        operation->operand_begin > operand_count - 2u ||
+        operation->auxiliary_kind != 0 || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->allocation_key != NULL ||
+        operation->effects != xi_generated_op_effects(operation->opcode) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(operation->opcode) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        result_type->kind != XR_KIND_BOOL ||
+        result_type->builtin_type != XR_TID_NULL ||
+        result_type->child_count != 0 || result_type->aggregate_extent != 0 ||
+        result_type->aggregate_align != 0 ||
+        result_type->scalar_rep != XR_SCALAR_REP_NONE ||
+        result_type->flags != 0)
+        return false;
+    for (uint16_t i = 0; i < 2u; i++) {
+        const XrSemanticOperandRecord *side =
+            &operands[operation->operand_begin + i];
+        XrRep side_storage = XR_REP_TAGGED;
+        uint16_t side_kind = XR_MACHINE_REP_COUNT;
+        if (side->role != XR_SEM_OPERAND_VALUE || side->parameter != -1 ||
+            side->flags != 0 ||
+            side->ownership_action != XR_SEM_OPERAND_BORROW ||
+            side->value >= ctx->value_count ||
+            (!oracle_dynamic_string_literal_storage(ctx, side->value,
+                                                    &side_storage, &side_kind) &&
+             !oracle_dynamic_direct_local_string_result_storage(
+                 ctx, side->value, &side_storage, &side_kind)))
+            return false;
+    }
+    return true;
+}
+
 /* The JSON namespace call materializes an owned dynamic value in its own
  * temporary slot.  Its storage is tagged because the runtime encoder returns a
  * boxed value; the call row proves the slot, layout, and ownership. */
@@ -4911,8 +4969,6 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         case XI_BIT_CLZ:
         case XI_BIT_MUL_HIGH:
         case XI_BIT_CTZ:
-        case XI_EQ:
-        case XI_NE:
         case XI_LT:
         case XI_LE:
         case XI_GT:
@@ -5028,6 +5084,18 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             return oracle_machine_storage(ctx, source_value, out_storage,
                                           &ignored_kind);
         }
+        case XI_EQ:
+        case XI_NE:
+            /* A comparison over machine scalars keeps their native storage. The
+             * one reference shape admitted here is a proved String on both
+             * sides, which stays in the tagged carrier its own family named. */
+            if (oracle_machine_storage(ctx, source_value, out_storage,
+                                       &ignored_kind))
+                return true;
+            if (!oracle_string_equality_is_exact(ctx, operation_index))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
         case XI_LEN:
             /* The container of a proved length read stays in the tagged carrier
              * its own storage family named; the integer the read produces keeps
