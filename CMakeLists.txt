@@ -3990,6 +3990,25 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # One command drives every evidence collector and publishes the assembled
+    # set.  Matrix rows are produced independently, so point --row-results-dir
+    # at the directory holding those results before expecting that lane to pass.
+    add_custom_target(target_machine_completion_evidence
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/collect_target_machine_completion_evidence.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --build ${CMAKE_BINARY_DIR}
+                --owner target-machine-completion
+                --raw-root ${CMAKE_BINARY_DIR}/target-machine-raw-evidence
+                --output ${CMAKE_BINARY_DIR}/target-machine-completion-evidence
+                --row-results-dir
+                ${CMAKE_BINARY_DIR}/target-machine-matrix-row-results
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Collecting and publishing target-machine completion evidence"
+        USES_TERMINAL
+        VERBATIM
+    )
+
     # The terminal product check remains explicit while legacy owners are reachable.
     # Register it with CTest only in the atomic change that deletes those owners.
     add_custom_target(target_machine_completion_governance

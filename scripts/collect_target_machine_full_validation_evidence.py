@@ -37,7 +37,12 @@ LANE_REGEX = {
     "vm": r"vm_regression|test_xvm|backend_diff",
     "stdlib": r"stdlib",
     "ffi": r"ffi",
-    "coroutine": r"coro|coroutine",
+    # The coroutine suite lives in tests/unit/coro/ and no registered test
+    # carries "coro" in its name, so a name substring selects nothing and the
+    # lane can never be discovered.  Anchor the exact registered names.
+    "coroutine": (r"coro|coroutine|^test_(async_pool|channel_close|mpsc_queue|"
+                  r"native_backend|result_group|scheduler_runq|scope_wait|"
+                  r"steal_queue|timer_wheel|work_queue_wait)$"),
     "concurrency": r"concurrency|thread|atomic",
     "contract": r"^(contract_freeze|meta_ownership_inventory|semantic_owner_inventory)$",
     "asan-ubsan": r"asan_focused|ubsan",
