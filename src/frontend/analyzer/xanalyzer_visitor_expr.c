@@ -19,6 +19,7 @@
 #include "xtype_ref_resolve.h"
 #include "xa_selection.h"
 #include "xanalyzer_mono.h"
+#include "xanalyzer_operator_overload.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../module/xmodule_graph.h"
 #include "../../base/xchecks.h"
@@ -1429,7 +1430,7 @@ static void xa_check_removed_typeof_string_compare(XaInferContext *ctx, AstNode 
                                &loc);
 }
 
-static AstNode *xa_contextual_numeric_literal_node(AstNode *node) {
+XR_FUNC AstNode *xa_contextual_numeric_literal_node(AstNode *node) {
     while (node && node->type == AST_GROUPING)
         node = node->as.grouping;
     if (!node)
@@ -1650,10 +1651,30 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_DIV:
         case AST_BINARY_MOD: {
             XrType *result = binary_arith_distribute(ctx, node->type, left, right);
-            if (result && XR_TYPE_IS_UNKNOWN(result) &&
-                xa_binary_operator_should_report_static_error(left, right)) {
-                xa_report_binary_operator_type_error(ctx, node, node->type, left, right);
-                return xr_type_new_error(ctx->analyzer->isolate);
+            if (result && XR_TYPE_IS_UNKNOWN(result)) {
+                /* No built-in meaning for this operand pair. A class instance
+                 * selects its operator method here, once, so both backends read
+                 * one answer instead of the VM guessing at run time and the AOT
+                 * having no way to guess at all. */
+                XaSymbol *method = NULL;
+                XrType *fn_type = NULL;
+                XaOperatorOverloadStatus status = xa_resolve_binary_operator_overload(
+                    ctx, node, left, right, &method, &fn_type);
+                if (status == XA_OPERATOR_OVERLOAD_REJECTED)
+                    return xr_type_new_error(ctx->analyzer->isolate);
+                if (status == XA_OPERATOR_OVERLOAD_RESOLVED) {
+                    /* The selection carries the callable type, matching what an
+                     * explicit `obj.method` access records; the canonicalizer
+                     * copies it onto the callee it synthesizes so lowering reads
+                     * one selection fact either way. */
+                    note_selection(ctx, node, XA_SEL_METHOD, left, method, -1, fn_type, false);
+                    XrType *return_type = xr_type_get_return(fn_type);
+                    return return_type ? return_type : xr_type_new_unit(NULL);
+                }
+                if (xa_binary_operator_should_report_static_error(left, right)) {
+                    xa_report_binary_operator_type_error(ctx, node, node->type, left, right);
+                    return xr_type_new_error(ctx->analyzer->isolate);
+                }
             }
             return result;
         }

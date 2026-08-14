@@ -25,6 +25,7 @@
 #include "../parser/xast_api.h"
 #include "../parser/xparse_internal.h"
 #include "../analyzer/xanalyzer.h"
+#include "../analyzer/xa_selection.h"
 #include "../../runtime/value/xtype.h"
 
 #include <stdio.h>
@@ -553,6 +554,110 @@ static void canon_nullish_coalesce(XrCanonCtx *ctx, AstNode *node, bool in_stmt_
     node->node_id = saved_id;
 }
 
+/* ========== Arithmetic operator overload expansion ========== */
+
+/* The member name an overloaded arithmetic operator resolves to. Operator
+ * methods are stored under the operator spelling itself (xr_parse_operator_method),
+ * so this is also the name the runtime symbol table knows them by. */
+static const char *canon_arith_operator_name(AstNodeType type) {
+    switch (type) {
+        case AST_BINARY_ADD:
+            return "+";
+        case AST_BINARY_SUB:
+            return "-";
+        case AST_BINARY_MUL:
+            return "*";
+        case AST_BINARY_DIV:
+            return "/";
+        case AST_BINARY_MOD:
+            return "%";
+        default:
+            return NULL;
+    }
+}
+
+/* The selection the analyzer recorded on a binary node when it resolved the
+ * operator to a class method (xa_resolve_binary_operator_overload). Absent for
+ * every ordinary arithmetic node, which is the common case. */
+static const XaSelection *canon_operator_overload_selection(XrCanonCtx *ctx, AstNode *node) {
+    const XaSelection *sel;
+    if (!ctx || !ctx->analyzer || !node || !canon_arith_operator_name(node->type))
+        return NULL;
+    sel = xa_analyzer_get_selection(ctx->analyzer, node);
+    if (!sel || sel->kind != XA_SEL_METHOD || !sel->target_symbol)
+        return NULL;
+    return sel;
+}
+
+/* Expand a resolved arithmetic operator into the method call it denotes.
+ *   a + b  →  a.`+`(b)     where a's class declares operator+
+ *
+ * The analyzer already chose the method and published the result type; this is
+ * the mechanical rewrite. Running it here, before whole-program evidence is
+ * produced and before lowering, is what lets the call reach both backends
+ * through the ordinary method-call path instead of an arithmetic opcode that
+ * only the VM knows how to redirect.
+ *
+ * The synthesized callee inherits the operator token's own source coordinate,
+ * so chained operators on one line stay distinguishable: callsite identity is
+ * derived from the callee's position, not from the node pointer. */
+static void canon_operator_overload(XrCanonCtx *ctx, AstNode *node) {
+    const XaSelection *found = canon_operator_overload_selection(ctx, node);
+    /* Copied out of the table: recording the callee's own fact below writes to
+     * the same table, and a fact read from it must not be held across that. */
+    XaSelection sel;
+    const char *op_name;
+    AstNode *receiver;
+    AstNode *argument;
+    AstNode *callee;
+    AstNode *call;
+    uint32_t saved_id;
+
+    if (!found)
+        return;
+    sel = *found;
+    op_name = canon_arith_operator_name(node->type);
+    receiver = node->as.binary.left;
+    argument = node->as.binary.right;
+    XR_DCHECK(receiver != NULL && argument != NULL, "canon_operator_overload: missing operand");
+    if (!receiver || !argument)
+        return;
+
+    callee = xr_ast_member_access(ctx->session, receiver, op_name, node->line);
+    XR_DCHECK(callee != NULL, "canon_operator_overload: callee alloc");
+    if (!callee)
+        return;
+    callee->column = node->column;
+    callee->end_line = node->end_line;
+    callee->end_column = node->end_column;
+    /* The callee is a method access, exactly as `obj.method` would be: lowering
+     * reads its type for the parameter modes and its selection for the receiver
+     * mode and return ownership. */
+    canon_set_node_type(ctx, callee, sel.result_type);
+    if (ctx->analyzer->selection_table)
+        xa_selection_table_set((XaSelectionTable *) ctx->analyzer->selection_table, callee, &sel);
+
+    call = xr_ast_call_expr(ctx->session, callee, &argument, NULL, 1, node->line);
+    XR_DCHECK(call != NULL, "canon_operator_overload: call alloc");
+    if (!call)
+        return;
+
+    /* Keep the binary node's id so the result type the analyzer published for
+     * this expression still resolves after the node becomes a call, and keep
+     * its source span so diagnostics still point at the operator. */
+    saved_id = node->node_id;
+    int saved_line = node->line;
+    int saved_column = node->column;
+    int saved_end_line = node->end_line;
+    int saved_end_column = node->end_column;
+    *node = *call;
+    node->node_id = saved_id;
+    node->line = saved_line;
+    node->column = saved_column;
+    node->end_line = saved_end_line;
+    node->end_column = saved_end_column;
+}
+
 /* ========== AST walk (recursive, dispatches on node type) ========== */
 
 /* Forward declaration — the walker calls itself recursively. */
@@ -604,6 +709,9 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         canon_nullish_coalesce(ctx, node, /*in_stmt_context=*/false);
         /* May have changed to AST_TERNARY (simple LHS) or stayed as-is. */
     }
+    canon_operator_overload(ctx, node);
+    /* An overloaded arithmetic operator is now AST_CALL_EXPR; the walk below
+     * descends through the callee and reaches a nested overload on the left. */
 
     switch (node->type) {
         /* ---- Statements with bodies ---- */
