@@ -213,6 +213,22 @@ static const XrCliOptionSpec verify_options[] = {
      "Bypass cached provider probes for realized verification"},
     XR_CLI_OPT_END};
 
+static const XrCliOptionSpec plan_options[] = {
+    {"semantic-plan", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
+     "Exact XSM semantic authority required to verify a plan"},
+    {"context", 0, XR_CLI_VALUE_INT, false, false, "N",
+     "Rows shown around the first difference (default 3)"},
+    XR_CLI_OPT_END};
+
+static const XrCliCommandSpec plan_subcommands[] = {
+    {"dump", "Render a TargetPlan artifact as deterministic text", NULL, plan_options, 1, 1, false,
+     false, NULL, NULL, 0},
+    {"verify", "Run the complete TargetPlan verification chain", NULL, plan_options, 1, 1, false,
+     false, NULL, NULL, 0},
+    {"diff", "Report the first difference between two TargetPlan artifacts", NULL, plan_options, 2,
+     2, false, false, NULL, NULL, 0},
+    {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
+
 #ifdef XR_HAS_LSP
 static const XrCliOptionSpec lsp_options[] = {
     {"stdio", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Use stdio transport (default)"},
@@ -299,6 +315,8 @@ static XrCliCommandSpec cli_commands[] = {
      false, false, NULL, NULL, 0},
     {"verify", "Verify semantic and backend contracts", NULL, verify_options, 0, 0, false, false,
      NULL, NULL, 0},
+    {"plan", "Inspect, verify, and compare exact TargetPlan artifacts", NULL, plan_options, 1, -1,
+     false, false, NULL, plan_subcommands, 3},
 
     /* Package management (has subcommands) */
     {"pkg", "Package management", NULL, pkg_options, 0, -1, false, false, NULL, pkg_subcommands, 8},

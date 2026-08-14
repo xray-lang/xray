@@ -75,6 +75,7 @@ XR_FUNC int cmd_explain(const XrCliInvocation *inv);
 XR_FUNC int cmd_toolchain(const XrCliInvocation *inv);
 XR_FUNC int cmd_language(const XrCliInvocation *inv);
 XR_FUNC int cmd_verify(const XrCliInvocation *inv);
+XR_FUNC int cmd_plan(const XrCliInvocation *inv);
 XR_FUNC int cmd_pkg(const XrCliInvocation *inv);
 XR_FUNC int cmd_builtin_dump(const XrCliInvocation *inv);
 /* Defined below in this file */
@@ -107,6 +108,7 @@ void xr_cli_register_all_handlers(void) {
     xr_cli_register_handler("toolchain", cmd_toolchain);
     xr_cli_register_handler("language", cmd_language);
     xr_cli_register_handler("verify", cmd_verify);
+    xr_cli_register_handler("plan", cmd_plan);
     xr_cli_register_handler("pkg", cmd_pkg);
     xr_cli_register_handler("info", cmd_info);
     xr_cli_register_handler("self", cmd_self);
