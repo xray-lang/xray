@@ -1198,47 +1198,32 @@ static void emit_call_hidden_closure(FILE *out, const XiFunc *current, const XiF
     fprintf(out, ".ptr");
 }
 
-static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (!v || v->nargs == 0) {
-        cg_emit_str_value(ctx, out, "");
-        return;
-    }
-    if (v->nargs == 1 && v->args[0] && v->args[0]->type &&
-        v->args[0]->type->kind == XR_KIND_STRING) {
-        emit_vref(out, v->args[0]);
-        return;
-    }
-    if (v->nargs == 1) {
-        if (cg_value_type_is_unsigned_int(v->args[0])) {
-            fprintf(out, "xrt_uint64_to_string((uint64_t)");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-            fprintf(out, ")");
-        } else {
-            fprintf(out, "xrt_to_string(");
-            emit_value_as_display_tagged(ctx, out, v->args[0]);
-            fprintf(out, ")");
-        }
+static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out,
+                                 const XiFunc *function,
+                                 const XiValue *v) {
+    XrCValueEmissionView recipe = {0};
+    if (!cg_string_concat_emission_view(ctx, function, v, &recipe)) {
+        emit_codegen_abort_expr(out);
         return;
     }
 
     fprintf(out, "({ xrt_strpart_t _scp_%u[%u]; ", v->id, (unsigned) v->nargs);
     for (uint16_t i = 0; i < v->nargs; i++) {
-        if (cg_value_type_is_unsigned_int(v->args[i])) {
-            fprintf(out, "xrt_strpart_init_u64(&_scp_%u[%u], (uint64_t)", v->id, (unsigned) i);
-            emit_value_as_rep_ctx(ctx, out, v->args[i], XR_REP_I64);
-            fprintf(out, "); ");
-        } else {
-            fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
-            emit_value_as_display_tagged(ctx, out, v->args[i]);
-            fprintf(out, "); ");
-        }
+        fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id,
+                (unsigned) i);
+        emit_value_as_display_tagged(ctx, out, v->args[i]);
+        fprintf(out, "); ");
     }
-    fprintf(out, "xrt_str_concat_parts(%u, _scp_%u); })", (unsigned) v->nargs, v->id);
+    fprintf(out, "%s(%u, _scp_%u); })", recipe.recipe_symbol,
+            (unsigned) v->nargs, v->id);
 }
 
 static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        bool storage_predeclared) {
-    if (!ctx || !out || !f || !v || v->op != XI_STR_CONCAT || v->nargs <= 1)
+    if (!ctx || !out || !f || !v)
+        return false;
+    XrCValueEmissionView recipe = {0};
+    if (!cg_string_concat_emission_view(ctx, f, v, &recipe))
         return false;
 
     /* A coroutine body declares every value in the frame prologue, so an
@@ -1250,14 +1235,9 @@ static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
     }
     fprintf(out, "    {\n        xrt_strpart_t _scp_%u[%u];\n", v->id, (unsigned) v->nargs);
     for (uint16_t i = 0; i < v->nargs; i++) {
-        fprintf(out, "        ");
-        if (cg_value_type_is_unsigned_int(v->args[i])) {
-            fprintf(out, "xrt_strpart_init_u64(&_scp_%u[%u], (uint64_t)", v->id, (unsigned) i);
-            emit_value_as_rep_ctx(ctx, out, v->args[i], XR_REP_I64);
-        } else {
-            fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
-            emit_value_as_display_tagged(ctx, out, v->args[i]);
-        }
+        fprintf(out, "        xrt_strpart_init(&_scp_%u[%u], ", v->id,
+                (unsigned) i);
+        emit_value_as_display_tagged(ctx, out, v->args[i]);
         fprintf(out, ");\n");
     }
     fprintf(out, "        ");
@@ -1265,7 +1245,8 @@ static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
     fprintf(out, " = ");
     const char *suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_decl_storage_rep(ctx, f, v));
-    fprintf(out, "xrt_str_concat_parts(%u, _scp_%u)", (unsigned) v->nargs, v->id);
+    fprintf(out, "%s(%u, _scp_%u)", recipe.recipe_symbol,
+            (unsigned) v->nargs, v->id);
     emit_conversion_suffix(out, suffix);
     fprintf(out, ";\n    }\n");
     emit_value_generated_line_reset(ctx, out, v);

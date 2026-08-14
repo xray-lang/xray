@@ -6579,9 +6579,8 @@ static void xicgen_set_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 
 static void xicgen_str_concat(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
-    (void) f;
     (void) prefix;
-    emit_str_concat_expr(ctx, out, v);
+    emit_str_concat_expr(ctx, out, f, v);
 }
 
 static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -11808,7 +11807,7 @@ static void xicgen_stack_alloc(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
             (v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 8;
         fprintf(out, "xrt_set_stack_new(%" PRId64 ")", cap);
     } else if (orig_op == XI_STR_CONCAT) {
-        emit_str_concat_expr(ctx, out, v);
+        emit_str_concat_expr(ctx, out, f, v);
     } else if (orig_op == XI_CLOSURE_NEW) {
         emit_closure_new_expr(ctx, out, f, prefix, v);
     } else {

@@ -2691,26 +2691,43 @@ static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx,
 
 static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
                                            const XrCValueEmissionView *right) {
-    return left && right && left->target_register_rep == right->target_register_rep &&
-           left->target_memory_rep == right->target_memory_rep &&
-           left->target_register_kind == right->target_register_kind &&
-           left->target_memory_kind == right->target_memory_kind &&
-           left->register_bits == right->register_bits &&
-           left->memory_align == right->memory_align &&
-           left->memory_size == right->memory_size && left->rep == right->rep &&
-           left->materialization == right->materialization &&
-           left->literal_byte_length == right->literal_byte_length &&
-           left->recipe_operand_value == right->recipe_operand_value &&
-           left->recipe_argument_value == right->recipe_argument_value &&
-           left->reserved == right->reserved && left->c_type && right->c_type &&
-           strcmp(left->c_type, right->c_type) == 0 &&
-           ((!left->recipe_symbol && !right->recipe_symbol) ||
-            (left->recipe_symbol && right->recipe_symbol &&
-             strcmp(left->recipe_symbol, right->recipe_symbol) == 0)) &&
-           (left->literal_byte_length == 0 ||
-            (left->literal_bytes && right->literal_bytes &&
-             memcmp(left->literal_bytes, right->literal_bytes,
-                    left->literal_byte_length) == 0));
+    if (!left || !right ||
+        left->target_register_rep != right->target_register_rep ||
+        left->target_memory_rep != right->target_memory_rep ||
+        left->target_register_kind != right->target_register_kind ||
+        left->target_memory_kind != right->target_memory_kind ||
+        left->register_bits != right->register_bits ||
+        left->memory_align != right->memory_align ||
+        left->memory_size != right->memory_size || left->rep != right->rep ||
+        left->materialization != right->materialization ||
+        left->literal_byte_length != right->literal_byte_length ||
+        left->recipe_operand_value != right->recipe_operand_value ||
+        left->recipe_argument_value != right->recipe_argument_value ||
+        left->recipe_argument_count != right->recipe_argument_count ||
+        left->recipe_reserved != right->recipe_reserved ||
+        left->reserved != right->reserved || !left->c_type || !right->c_type ||
+        strcmp(left->c_type, right->c_type) != 0 ||
+        ((!left->recipe_symbol && right->recipe_symbol) ||
+         (left->recipe_symbol && !right->recipe_symbol)) ||
+        (left->recipe_symbol &&
+         strcmp(left->recipe_symbol, right->recipe_symbol) != 0) ||
+        (left->literal_byte_length != 0 &&
+         (!left->literal_bytes || !right->literal_bytes ||
+          memcmp(left->literal_bytes, right->literal_bytes,
+                 left->literal_byte_length) != 0)))
+        return false;
+    for (uint16_t i = 0; i < left->recipe_argument_count; i++) {
+        if (!left->recipe_arguments || !right->recipe_arguments ||
+            left->recipe_arguments[i].semantic_value !=
+                right->recipe_arguments[i].semantic_value ||
+            left->recipe_arguments[i].kind !=
+                right->recipe_arguments[i].kind ||
+            memcmp(left->recipe_arguments[i].reserved,
+                   right->recipe_arguments[i].reserved,
+                   sizeof(left->recipe_arguments[i].reserved)) != 0)
+            return false;
+    }
+    return true;
 }
 
 static bool cg_value_emission_storage_rep(XiCgenCtx *ctx,
@@ -2796,6 +2813,42 @@ static void cg_emit_channel_receive_payload_expression(
                 "xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(_chan_try_%u))",
                 value_id);
     fprintf(out, ")");
+}
+
+static bool cg_string_concat_emission_view(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    XrCValueEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !value || !out)
+        return false;
+    CgValueEmissionStatus status =
+        cg_value_emission_view(ctx, function, value, out);
+    if (status != CG_VALUE_EMISSION_FOUND ||
+        out->materialization != XR_C_VALUE_MATERIALIZATION_STRING_CONCAT)
+        return false;
+    if (out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol ||
+        !out->recipe_symbol[0] || out->recipe_argument_count < 2u ||
+        out->recipe_argument_count != value->nargs ||
+        !out->recipe_arguments) {
+        (void) cg_value_emission_fail(
+            ctx, "string concat has no exact immutable C recipe");
+        return false;
+    }
+    for (uint16_t i = 0; i < out->recipe_argument_count; i++) {
+        uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+        if (!value->args[i] ||
+            out->recipe_arguments[i].kind !=
+                XR_C_RECIPE_ARGUMENT_STRING_VALUE ||
+            !cg_value_semantic_id(ctx, function, value->args[i],
+                                  &semantic_value) ||
+            semantic_value != out->recipe_arguments[i].semantic_value) {
+            (void) cg_value_emission_fail(
+                ctx, "string concat C recipe argument identity changed");
+            return false;
+        }
+    }
+    return true;
 }
 #include "xi_cgen_abi_helpers.inc.c"
 
@@ -7654,11 +7707,6 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
         case XI_CALL_METHOD:
             return arg_index >= 1 &&
                    cg_call_method_is_typed_array_resize_zero_specialization(ctx, f, user);
-        case XI_STR_CONCAT:
-            /* Only unsigned interpolation selects the direct u64 part
-             * emitter.  Other scalar parts request TAGGED and therefore still
-             * need their BOX local even in a multi-part concat. */
-            return arg_index < user->nargs && cg_value_type_is_unsigned_int(user->args[arg_index]);
         case XI_CALL:
             if (arg_index == 0 && user->nargs >= 1 && user->args[0] && user->args[0]->type &&
                 XR_TYPE_IS_C_FUNCTION(user->args[0]->type))
@@ -7850,10 +7898,10 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
              * literal-aware representation emitter. */
             return arg_index == 1 && user->nargs >= 2;
         case XI_STR_CONCAT:
-            /* Multi-part concat lowers every part through the literal-aware
-             * representation emitter.  The one-part string fast path still
-             * calls emit_vref() and therefore deliberately fails closed. */
-            return user->nargs > 1;
+        {
+            XrCValueEmissionView concat = {0};
+            return cg_string_concat_emission_view(ctx, f, user, &concat);
+        }
         case XI_ARRAY_NEW:
             /* Array constructors fold a direct scalar capacity into the
              * selected typed or generic allocation expression. */
@@ -8016,8 +8064,10 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
                     continue;
                 seen_use = true;
                 if (v->type->kind == XR_KIND_STRING) {
+                    XrCValueEmissionView concat = {0};
                     bool allowed_string_use =
-                        (user->op == XI_STR_CONCAT && user->nargs > 1) ||
+                        cg_string_concat_emission_view(ctx, f, user,
+                                                       &concat) ||
                         (user->op == XI_SET_SHARED && a == 0) ||
                         ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
                          a == 0 && user->aux && strcmp((const char *) user->aux, "runes") == 0);

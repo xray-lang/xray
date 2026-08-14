@@ -2039,7 +2039,10 @@ TEST(cgen_returned_null_constant_emits_immediate_without_local) {
 }
 
 TEST(cgen_multi_concat_string_constants_emit_immediate_without_locals) {
-    XrType string_type = {.kind = XR_KIND_STRING, .id = 937, .frozen = true};
+    XrType string_type = {.kind = XR_KIND_STRING,
+                          .id = 937,
+                          .scalar_rep = XR_SCALAR_REP_NONE,
+                          .frozen = true};
     XiFunc *ir = xi_func_new("manual_concat_literals", &string_type);
     TEST_REQUIRE(ir != NULL, "manual concat-literal function allocated");
     XiBlock *entry = xi_block_new(ir);

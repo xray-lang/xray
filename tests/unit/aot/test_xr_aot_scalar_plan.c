@@ -38,6 +38,8 @@
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
     uint32_t value_count;
+    XrCRecipeArgumentView *recipe_arguments;
+    uint32_t recipe_argument_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
     XrFingerprint profile_fingerprint;
@@ -841,6 +843,107 @@ static void test_dynamic_closure_c_emission_is_exact_and_mutation_safe(void) {
     xi_func_free(root);
 }
 
+static void test_string_concat_c_emission_recipe_is_exact(void) {
+    XiFunc *function = xi_func_new("string_concat_recipe", &scalar_string);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *left = xi_const_str(function, entry, "left", &scalar_string);
+    XiValue *right = xi_const_str(function, entry, "right", &scalar_string);
+    XiValue *concat =
+        xi_value_new(function, entry, XI_STR_CONCAT, &scalar_string, 2);
+    REQUIRE(left && right && concat);
+    concat->args[0] = left;
+    concat->args[1] = right;
+    xi_block_set_return(entry, concat);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(function, error, sizeof(error)));
+    XrTargetProfile *profile = build_exact_profile();
+    XrTargetPlan *target =
+        build_target_plan(function->semantic_plan, profile);
+    REQUIRE((xr_target_plan_completed_family_mask(target) &
+             XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE) != 0);
+    XrFingerprint profile_fingerprint =
+        xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t concat_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t left_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t right_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, concat, &semantic_function, &concat_value, error,
+        sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, left, &semantic_function, &left_value, error,
+        sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, right, &semantic_function, &right_value, error,
+        sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, concat_value, &view,
+                                           error, sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_TAGGED &&
+            view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_STRING_CONCAT &&
+            view.recipe_argument_count == 2 && view.recipe_arguments &&
+            strcmp(view.recipe_symbol, "xrt_str_concat_parts") == 0);
+    REQUIRE(view.recipe_arguments[0].semantic_value == left_value &&
+            view.recipe_arguments[1].semantic_value == right_value &&
+            view.recipe_arguments[0].kind ==
+                XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
+            view.recipe_arguments[1].kind ==
+                XR_C_RECIPE_ARGUMENT_STRING_VALUE);
+
+    XrCValueEmissionView *concat_row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++) {
+        if (emission->values[i].semantic_value == concat_value) {
+            REQUIRE(concat_row == NULL);
+            concat_row = &emission->values[i];
+        }
+    }
+    REQUIRE(concat_row != NULL && emission->recipe_argument_count == 2);
+    uint32_t saved_value = emission->recipe_arguments[0].semantic_value;
+    emission->recipe_arguments[0].semantic_value = right_value;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    emission->recipe_arguments[0].semantic_value = saved_value;
+
+    uint8_t saved_kind = emission->recipe_arguments[1].kind;
+    emission->recipe_arguments[1].kind = XR_C_RECIPE_ARGUMENT_INVALID;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    emission->recipe_arguments[1].kind = saved_kind;
+
+    uint16_t saved_count = concat_row->recipe_argument_count;
+    concat_row->recipe_argument_count = 1;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    concat_row->recipe_argument_count = saved_count;
+
+    const char *saved_symbol = concat_row->recipe_symbol;
+    concat_row->recipe_symbol = "xrt_add";
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    concat_row->recipe_symbol = saved_symbol;
+    REQUIRE(xr_c_emission_plan_verify(emission, target,
+                                       profile_fingerprint, error,
+                                       sizeof(error)));
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_channel_new_c_emission_recipe_is_exact(void) {
     XiFunc *root = xi_func_new("channel_recipe", &scalar_unit);
     REQUIRE(root != NULL);
@@ -1169,6 +1272,7 @@ int main(void) {
     test_aggregate_bindings_are_excluded_from_scalar_projection();
     test_profile_mismatch_fails_before_projection();
     test_dynamic_closure_c_emission_is_exact_and_mutation_safe();
+    test_string_concat_c_emission_recipe_is_exact();
     test_channel_new_c_emission_recipe_is_exact();
     test_stringbuilder_new_c_emission_recipe_is_exact();
     test_string_byte_slice_view_c_emission_recipe_is_exact();

@@ -50,8 +50,20 @@ typedef enum XrCValueMaterializationRecipe {
     XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_RUNE = 6,
     XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_TO_STRING = 7,
     XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING = 8,
+    XR_C_VALUE_MATERIALIZATION_STRING_CONCAT = 9,
     XR_C_VALUE_MATERIALIZATION_COUNT,
 } XrCValueMaterializationRecipe;
+
+typedef enum XrCRecipeArgumentKind {
+    XR_C_RECIPE_ARGUMENT_INVALID = 0,
+    XR_C_RECIPE_ARGUMENT_STRING_VALUE = 1,
+} XrCRecipeArgumentKind;
+
+typedef struct XrCRecipeArgumentView {
+    uint32_t semantic_value;
+    uint8_t kind;
+    uint8_t reserved[3];
+} XrCRecipeArgumentView;
 
 typedef struct XrCValueEmissionView {
     uint32_t semantic_value;
@@ -68,9 +80,12 @@ typedef struct XrCValueEmissionView {
     uint32_t literal_byte_length;
     uint32_t recipe_operand_value;
     uint32_t recipe_argument_value;
+    uint16_t recipe_argument_count;
+    uint16_t recipe_reserved;
     const char *c_type;
     const char *literal_bytes;
     const char *recipe_symbol;
+    const XrCRecipeArgumentView *recipe_arguments;
 } XrCValueEmissionView;
 
 #endif  // XR_C_EMISSION_SCHEMA_H

@@ -71,6 +71,8 @@
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
     uint32_t value_count;
+    XrCRecipeArgumentView *recipe_arguments;
+    uint32_t recipe_argument_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
     XrFingerprint profile_fingerprint;

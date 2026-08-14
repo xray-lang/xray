@@ -11,6 +11,7 @@
 #include "xr_c_emission_plan.h"
 #include "../../plan/target/xr_target_plan.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
+#include "../../plan/semantic/xr_semantic_string_shape.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include "../../ir/xi.h"
@@ -21,7 +22,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(12)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(13)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -32,10 +33,13 @@
 #define XR_C_STRINGBUILDER_APPEND_RUNE_SYMBOL "xrt_strbuf_append"
 #define XR_C_STRINGBUILDER_TO_STRING_SYMBOL "xrt_strbuf_finish"
 #define XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL "xrt_strbuf_append"
+#define XR_C_STRING_CONCAT_SYMBOL "xrt_str_concat_parts"
 
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
     uint32_t value_count;
+    XrCRecipeArgumentView *recipe_arguments;
+    uint32_t recipe_argument_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
     XrFingerprint profile_fingerprint;
@@ -166,6 +170,49 @@ static const XrSemanticOperationRecord *binding_operation(
     return operation < xr_semantic_plan_operation_count(semantic)
                ? xr_semantic_plan_operation(semantic, operation)
                : NULL;
+}
+
+static bool exact_string_concat_recipe(
+    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
+    const XrSemanticOperandRecord **arguments, uint16_t *argument_count) {
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    if (arguments)
+        *arguments = NULL;
+    if (argument_count)
+        *argument_count = 0;
+    if (!semantic || !operation || !binding || !operands ||
+        !xr_semantic_string_concat_is_exact(semantic, operation) ||
+        operation->result_value != binding->semantic_value ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin)
+        return false;
+    if (arguments)
+        *arguments = &operands[operation->operand_begin];
+    if (argument_count)
+        *argument_count = operation->operand_count;
+    return true;
+}
+
+static bool string_concat_argument_has_exact_projection(
+    const XrTargetPlan *target_plan, uint32_t semantic_value) {
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(target_plan,
+                                             binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(target_plan,
+                                             binding->memory_rep)
+                : NULL;
+    return binding && register_rep && memory_rep &&
+           register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+           memory_rep->kind == XR_MACHINE_REP_DYN_VALUE;
 }
 
 /* Builder-side collector. The recipe is admitted only by the frozen
@@ -899,7 +946,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v12\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v13\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -909,6 +956,7 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
     xr_sha256_update(&ctx, plan->profile_fingerprint.bytes,
                      sizeof(plan->profile_fingerprint.bytes));
     hash_u64(&ctx, plan->value_count);
+    hash_u64(&ctx, plan->recipe_argument_count);
     for (uint32_t i = 0; i < plan->value_count; i++) {
         const XrCValueEmissionView *value = &plan->values[i];
         hash_u64(&ctx, value->semantic_value);
@@ -925,6 +973,8 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
         hash_u64(&ctx, value->literal_byte_length);
         hash_u64(&ctx, value->recipe_operand_value);
         hash_u64(&ctx, value->recipe_argument_value);
+        hash_u64(&ctx, value->recipe_argument_count);
+        hash_u64(&ctx, value->recipe_reserved);
         size_t c_type_length = strlen(value->c_type);
         hash_u64(&ctx, c_type_length);
         xr_sha256_update(&ctx, (const uint8_t *) value->c_type, c_type_length);
@@ -938,6 +988,14 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
         if (recipe_symbol_length)
             xr_sha256_update(&ctx, (const uint8_t *) value->recipe_symbol,
                              recipe_symbol_length);
+    }
+    for (uint32_t i = 0; i < plan->recipe_argument_count; i++) {
+        const XrCRecipeArgumentView *argument = &plan->recipe_arguments[i];
+        hash_u64(&ctx, argument->semantic_value);
+        hash_u64(&ctx, argument->kind);
+        hash_u64(&ctx, argument->reserved[0]);
+        hash_u64(&ctx, argument->reserved[1]);
+        hash_u64(&ctx, argument->reserved[2]);
     }
     xr_sha256_final(&ctx, out->bytes);
 }
@@ -1092,8 +1150,32 @@ static bool verify_value(const XrCValueEmissionView *value) {
         recipe_valid=value->rep==XR_C_VALUE_REP_TAGGED&&value->recipe_operand_value!=UINT32_MAX&&
             value->recipe_argument_value!=UINT32_MAX&&value->recipe_symbol&&
             strcmp(value->recipe_symbol,XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL)==0;
+    if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRING_CONCAT) {
+        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value == UINT32_MAX &&
+                       value->recipe_argument_value == UINT32_MAX &&
+                       value->recipe_argument_count >= 2u &&
+                       value->recipe_arguments != NULL && value->recipe_symbol &&
+                       strcmp(value->recipe_symbol, XR_C_STRING_CONCAT_SYMBOL) == 0;
+        for (uint16_t i = 0; recipe_valid &&
+                             i < value->recipe_argument_count; i++) {
+            const XrCRecipeArgumentView *argument =
+                &value->recipe_arguments[i];
+            recipe_valid = argument->semantic_value != UINT32_MAX &&
+                           argument->kind ==
+                               XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
+                           argument->reserved[0] == 0 &&
+                           argument->reserved[1] == 0 &&
+                           argument->reserved[2] == 0;
+        }
+    } else {
+        recipe_valid = recipe_valid && value->recipe_argument_count == 0 &&
+                       value->recipe_arguments == NULL;
+    }
     return expected_rep == (XrCValueRep) value->rep && value->c_type &&
-           value->reserved == 0 && recipe_valid &&
+           value->reserved == 0 && value->recipe_reserved == 0 && recipe_valid &&
            strcmp(value->c_type, expected_c_type) == 0 &&
            (value->rep == XR_C_VALUE_REP_VOID
                 ? value->register_bits == 0 && value->memory_size == 0 &&
@@ -1104,13 +1186,27 @@ static bool verify_value(const XrCValueEmissionView *value) {
 
 static bool verify_plan(const XrCEmissionPlan *plan) {
     if (!plan || plan->schema_version != XR_C_EMISSION_PLAN_SCHEMA_VERSION ||
-        (plan->value_count && !plan->values))
+        (plan->value_count && !plan->values) ||
+        (plan->recipe_argument_count && !plan->recipe_arguments) ||
+        (!plan->recipe_argument_count && plan->recipe_arguments))
         return false;
+    uint32_t next_argument = 0;
     for (uint32_t i = 0; i < plan->value_count; i++) {
-        if (!verify_value(&plan->values[i]) ||
+        const XrCValueEmissionView *value = &plan->values[i];
+        if (!verify_value(value) ||
             (i && plan->values[i - 1u].semantic_value >= plan->values[i].semantic_value))
             return false;
+        if (value->recipe_argument_count) {
+            if (value->recipe_argument_count >
+                    plan->recipe_argument_count - next_argument ||
+                value->recipe_arguments !=
+                    &plan->recipe_arguments[next_argument])
+                return false;
+            next_argument += value->recipe_argument_count;
+        }
     }
+    if (next_argument != plan->recipe_argument_count)
+        return false;
     XrFingerprint actual = {{0}};
     compute_fingerprint(plan, &actual);
     return xr_fingerprint_equal(actual, plan->fingerprint);
@@ -1218,7 +1314,9 @@ bool xr_c_emission_plan_verify(
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission TargetPlan fingerprint is stale");
     if (plan->schema_version != XR_C_EMISSION_PLAN_SCHEMA_VERSION ||
-        (plan->value_count && !plan->values))
+        (plan->value_count && !plan->values) ||
+        (plan->recipe_argument_count && !plan->recipe_arguments) ||
+        (!plan->recipe_argument_count && plan->recipe_arguments))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission schema is invalid");
 
@@ -1229,6 +1327,7 @@ bool xr_c_emission_plan_verify(
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "TargetPlan value-representation table is missing");
     uint32_t projected = 0;
+    uint32_t projected_recipe_arguments = 0;
     for (uint32_t i = 0; i < value_count; i++) {
         const XrTargetValueRepRecord *binding = &values[i];
         const XrTargetMachineRepRecord *register_rep =
@@ -1301,6 +1400,11 @@ bool xr_c_emission_plan_verify(
         uint32_t expected_append_string_receiver=UINT32_MAX,expected_append_string_argument=UINT32_MAX;
         bool expected_append_string=exact_stringbuilder_append_string_recipe(target_plan,binding,
             &expected_append_string_receiver,&expected_append_string_argument);
+        const XrSemanticOperandRecord *expected_concat_arguments = NULL;
+        uint16_t expected_concat_argument_count = 0;
+        bool expected_string_concat = exact_string_concat_recipe(
+            target_plan, binding, &expected_concat_arguments,
+            &expected_concat_argument_count);
         uint8_t expected_recipe = expected_literal
                                       ? XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW
                                       : expected_channel
@@ -1317,7 +1421,9 @@ bool xr_c_emission_plan_verify(
                                                                           ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_TO_STRING
                                                                           : expected_append_string
                                                                                 ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING
-                                                                                : XR_C_VALUE_MATERIALIZATION_NONE;
+                                                                                : expected_string_concat
+                                                                                      ? XR_C_VALUE_MATERIALIZATION_STRING_CONCAT
+                                                                                      : XR_C_VALUE_MATERIALIZATION_NONE;
         uint32_t expected_operand = expected_channel
                                         ? expected_capacity
                                         : expected_receive_symbol
@@ -1344,9 +1450,14 @@ bool xr_c_emission_plan_verify(
                                                                   ? XR_C_STRINGBUILDER_APPEND_RUNE_SYMBOL
                                                                   : expected_stringbuilder_finish
                                                                         ? XR_C_STRINGBUILDER_TO_STRING_SYMBOL
-                                                                        : expected_append_string?XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL:NULL;
+                                                                        : expected_append_string
+                                                                              ? XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL
+                                                                              : expected_string_concat
+                                                                                    ? XR_C_STRING_CONCAT_SYMBOL
+                                                                                    : NULL;
         size_t expected_length = expected_literal ? strlen(expected_literal) : 0;
         if (row->materialization != expected_recipe || row->reserved != 0 ||
+            row->recipe_reserved != 0 ||
             row->literal_byte_length != expected_length ||
             row->recipe_operand_value != expected_operand ||
             row->recipe_argument_value != expected_argument ||
@@ -1362,10 +1473,44 @@ bool xr_c_emission_plan_verify(
                  : row->literal_bytes != NULL))
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "C emission materialization recipe is not exact");
+        if (expected_string_concat) {
+            if (!expected_concat_arguments ||
+                row->recipe_argument_count != expected_concat_argument_count ||
+                !row->recipe_arguments ||
+                expected_concat_argument_count >
+                    plan->recipe_argument_count - projected_recipe_arguments ||
+                row->recipe_arguments !=
+                    &plan->recipe_arguments[projected_recipe_arguments])
+                return emission_error(error, error_size, "XR_TARGET_1001",
+                                      "C emission string concat argument partition is invalid");
+            for (uint16_t argument = 0;
+                 argument < expected_concat_argument_count; argument++) {
+                const XrCRecipeArgumentView *actual =
+                    &row->recipe_arguments[argument];
+                if (actual->semantic_value !=
+                        expected_concat_arguments[argument].value ||
+                    !string_concat_argument_has_exact_projection(
+                        target_plan, actual->semantic_value) ||
+                    actual->kind != XR_C_RECIPE_ARGUMENT_STRING_VALUE ||
+                    actual->reserved[0] != 0 || actual->reserved[1] != 0 ||
+                    actual->reserved[2] != 0)
+                    return emission_error(
+                        error, error_size, "XR_TARGET_1001",
+                        "C emission string concat argument is not exact");
+            }
+            projected_recipe_arguments += expected_concat_argument_count;
+        } else if (row->recipe_argument_count != 0 ||
+                   row->recipe_arguments != NULL) {
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "C emission row has unexpected recipe arguments");
+        }
     }
     if (projected != plan->value_count)
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission projection has an extra row");
+    if (projected_recipe_arguments != plan->recipe_argument_count)
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "C emission recipe argument table has an extra row");
     if (!verify_plan(plan))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission fingerprint or canonical form is invalid");
@@ -1400,7 +1545,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE |
         XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |
         XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE |
-        XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE;
+        XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE |
+        XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",
@@ -1418,6 +1564,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "TargetPlan value-representation table is missing");
     uint32_t emission_value_count = 0;
+    uint32_t recipe_argument_count = 0;
     for (uint32_t i = 0; i < target_value_count; i++) {
         const XrTargetValueRepRecord *binding = &values[i];
         const XrTargetMachineRepRecord *register_rep =
@@ -1441,6 +1588,25 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "TargetPlan value binding has no exact C projection");
         }
+        const XrSemanticOperandRecord *concat_arguments = NULL;
+        uint16_t concat_argument_count = 0;
+        if (exact_string_concat_recipe(target_plan, binding,
+                                       &concat_arguments,
+                                       &concat_argument_count)) {
+            if (!concat_arguments ||
+                concat_argument_count > UINT32_MAX - recipe_argument_count)
+                return emission_error(error, error_size, "XR_EXEC_5003",
+                                      "C emission recipe argument budget overflow");
+            for (uint16_t argument = 0;
+                 argument < concat_argument_count; argument++) {
+                if (!string_concat_argument_has_exact_projection(
+                        target_plan, concat_arguments[argument].value))
+                    return emission_error(
+                        error, error_size, "XR_TARGET_1001",
+                        "string concat argument has no exact C projection");
+            }
+            recipe_argument_count += concat_argument_count;
+        }
         emission_value_count++;
     }
     if (emission_value_count > SIZE_MAX / sizeof(XrCValueEmissionView))
@@ -1460,11 +1626,28 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                                   "C emission value record allocation failed");
         }
     }
+    if (recipe_argument_count) {
+        if (recipe_argument_count >
+            SIZE_MAX / sizeof(*plan->recipe_arguments)) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  "C emission recipe argument budget overflow");
+        }
+        plan->recipe_arguments = (XrCRecipeArgumentView *) xr_calloc(
+            recipe_argument_count, sizeof(*plan->recipe_arguments));
+        if (!plan->recipe_arguments) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  "C emission recipe argument allocation failed");
+        }
+    }
     plan->value_count = emission_value_count;
+    plan->recipe_argument_count = recipe_argument_count;
     plan->schema_version = XR_C_EMISSION_PLAN_SCHEMA_VERSION;
     plan->target_fingerprint = xr_target_plan_fingerprint(target_plan);
     plan->profile_fingerprint = actual_profile_fingerprint;
     uint32_t value_index = 0;
+    uint32_t recipe_argument_index = 0;
     for (uint32_t i = 0; i < target_value_count; i++) {
         const XrTargetValueRepRecord *binding = &values[i];
         const XrTargetMachineRepRecord *register_rep =
@@ -1490,7 +1673,43 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         value->recipe_argument_value = UINT32_MAX;
         value->c_type = c_type;
         const char *literal = build_exact_string_literal(target_plan, binding);
-        if (literal) {
+        const XrSemanticOperandRecord *concat_arguments = NULL;
+        uint16_t concat_argument_count = 0;
+        bool string_concat = exact_string_concat_recipe(
+            target_plan, binding, &concat_arguments, &concat_argument_count);
+        if (string_concat) {
+            size_t symbol_length = sizeof(XR_C_STRING_CONCAT_SYMBOL);
+            char *owned = (char *) xr_malloc(symbol_length);
+            if (!owned) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(error, error_size, "XR_EXEC_5003",
+                                      "string concat recipe allocation failed");
+            }
+            if (!concat_arguments ||
+                concat_argument_count >
+                    plan->recipe_argument_count - recipe_argument_index) {
+                xr_free(owned);
+                xr_c_emission_plan_free(plan);
+                return emission_error(
+                    error, error_size, "XR_TARGET_1001",
+                    "string concat recipe argument partition is invalid");
+            }
+            memcpy(owned, XR_C_STRING_CONCAT_SYMBOL, symbol_length);
+            value->materialization = XR_C_VALUE_MATERIALIZATION_STRING_CONCAT;
+            value->recipe_argument_count = concat_argument_count;
+            value->recipe_arguments =
+                &plan->recipe_arguments[recipe_argument_index];
+            value->recipe_symbol = owned;
+            for (uint16_t argument = 0;
+                 argument < concat_argument_count; argument++) {
+                XrCRecipeArgumentView *recipe_argument =
+                    &plan->recipe_arguments[recipe_argument_index++];
+                recipe_argument->semantic_value =
+                    concat_arguments[argument].value;
+                recipe_argument->kind =
+                    XR_C_RECIPE_ARGUMENT_STRING_VALUE;
+            }
+        } else if (literal) {
             size_t length = strlen(literal);
             if (length > UINT32_MAX) {
                 xr_c_emission_plan_free(plan);
@@ -1631,6 +1850,11 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission value partition is not exact");
     }
+    if (recipe_argument_index != recipe_argument_count) {
+        xr_c_emission_plan_free(plan);
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "C emission recipe argument partition is not exact");
+    }
     compute_fingerprint(plan, &plan->fingerprint);
     if (!xr_c_emission_plan_verify(plan, target_plan,
                                    expected_profile_fingerprint, error,
@@ -1650,6 +1874,7 @@ void xr_c_emission_plan_free(XrCEmissionPlan *plan) {
         xr_free((void *) plan->values[i].literal_bytes);
     for (uint32_t i = 0; i < plan->value_count; i++)
         xr_free((void *) plan->values[i].recipe_symbol);
+    xr_free(plan->recipe_arguments);
     xr_free(plan->values);
     xr_free(plan);
 }
