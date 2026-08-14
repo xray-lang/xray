@@ -16,6 +16,7 @@
 #include "xr_artifact_kind.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
+#include "../../shared/xr_align_guard.h"
 #include <limits.h>
 #include <string.h>
 
@@ -32,14 +33,6 @@ static bool bytes_are_zero(const uint8_t *bytes, size_t size) {
     for (size_t i = 0; i < size; i++)
         if (bytes[i] != 0)
             return false;
-    return true;
-}
-
-static bool checked_align(size_t value, size_t alignment, size_t *out) {
-    size_t mask = alignment - 1u;
-    if ((alignment & mask) != 0 || value > SIZE_MAX - mask)
-        return false;
-    *out = (value + mask) & ~mask;
     return true;
 }
 
@@ -147,7 +140,7 @@ static bool parse_directory(const uint8_t *bytes, size_t size, size_t directory_
                             const XrXtpResourceManifest *resources, XrXtpSectionView views[],
                             char *error, size_t error_size) {
     size_t expected_offset = 0;
-    if (!checked_align(XR_XTP_HEADER_SIZE + directory_length, XR_XTP_SECTION_ALIGNMENT,
+    if (!xr_checked_align_size(XR_XTP_HEADER_SIZE + directory_length, XR_XTP_SECTION_ALIGNMENT,
                        &expected_offset) || expected_offset > size ||
         !bytes_are_zero(bytes + XR_XTP_HEADER_SIZE + directory_length,
                         expected_offset - XR_XTP_HEADER_SIZE - directory_length)) {
@@ -198,7 +191,7 @@ static bool parse_directory(const uint8_t *bytes, size_t size, size_t directory_
         total_rows += raw_count;
         table_bytes += raw_length;
         size_t section_end = expected_offset + (size_t) raw_length;
-        if (!checked_align(section_end, XR_XTP_SECTION_ALIGNMENT, &expected_offset) ||
+        if (!xr_checked_align_size(section_end, XR_XTP_SECTION_ALIGNMENT, &expected_offset) ||
             expected_offset > size ||
             !bytes_are_zero(bytes + section_end, expected_offset - section_end)) {
             xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2001",

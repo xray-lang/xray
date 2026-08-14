@@ -30,6 +30,7 @@
 #include "../../runtime/value/xtype.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_semantic_array_member_shape.h"
+#include "../../shared/xr_align_guard.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -383,14 +384,6 @@ static bool semantic_nullable_scalar_type_is_exact(const XrSemanticTypeRecord *t
         default:
             return false;
     }
-}
-
-static bool checked_align_u32(uint32_t value, uint32_t alignment, uint32_t *out) {
-    if (!alignment || (alignment & (alignment - 1u)) != 0 ||
-        value > UINT32_MAX - alignment + 1u)
-        return false;
-    *out = (value + alignment - 1u) & ~(alignment - 1u);
-    return true;
 }
 
 static bool rep_layout_for_kind(const XrTargetMachineFacts *profile, uint16_t kind,
@@ -6733,7 +6726,7 @@ static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
             return false;
         const XrTargetLayoutRecord *child = &materialized->layouts[child_layout];
         uint32_t aligned = 0;
-        if (!checked_align_u32(offset, child->align, &aligned) ||
+        if (!xr_checked_align_u32(offset, child->align, &aligned) ||
             child->fixed_prefix_size > UINT32_MAX - aligned)
             return fail(error, error_size, "XR_EXEC_5003",
                         "aggregate field offset or size overflows");
@@ -6760,7 +6753,7 @@ static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
     }
     if (!offset)
         offset = 1;
-    if (!checked_align_u32(offset, aggregate_align, &layout->fixed_prefix_size) ||
+    if (!xr_checked_align_u32(offset, aggregate_align, &layout->fixed_prefix_size) ||
         layout->fixed_prefix_size > UINT16_MAX / 8u)
         return fail(error, error_size, "XR_EXEC_5003",
                     "aggregate representation exceeds its checked width budget");
@@ -6948,7 +6941,7 @@ static bool materialize_functions_and_slots(XrTargetPlanBuilder *builder,
                             "slot intent has no exact representation");
             const XrTargetMachineRepRecord *resolved_memory =
                 &materialized->machine_reps[memory_rep];
-            if (!checked_align_u32(offset, resolved_memory->memory_align, &aligned) ||
+            if (!xr_checked_align_u32(offset, resolved_memory->memory_align, &aligned) ||
                 resolved_memory->memory_size > UINT32_MAX - aligned)
                 return fail(error, error_size, "XR_EXEC_5003", "packed slot frame overflows");
             XrTargetSlotRecord *slot = &materialized->slots[next_slot];
@@ -6975,7 +6968,7 @@ static bool materialize_functions_and_slots(XrTargetPlanBuilder *builder,
             next_slot++;
         }
         function_record->slot_count = next_slot - function_record->slot_begin;
-        if (!checked_align_u32(offset, function_record->frame_align,
+        if (!xr_checked_align_u32(offset, function_record->frame_align,
                                &function_record->frame_size))
             return fail(error, error_size, "XR_EXEC_5003", "packed function frame overflows");
     }

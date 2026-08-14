@@ -30,6 +30,7 @@
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
 #include "../semantic/xr_semantic_array_member_shape.h"
+#include "../../shared/xr_align_guard.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -53,13 +54,6 @@ static bool checked_u32_add(uint32_t left, uint32_t right, uint32_t *out) {
     if (left > UINT32_MAX - right)
         return false;
     *out = left + right;
-    return true;
-}
-
-static bool checked_align_u32(uint32_t value, uint32_t alignment, uint32_t *out) {
-    if (!is_power_of_two(alignment) || value > UINT32_MAX - alignment + 1u)
-        return false;
-    *out = (value + alignment - 1u) & ~(alignment - 1u);
     return true;
 }
 
@@ -3115,7 +3109,7 @@ static bool verify_layouts(const XrTargetPlan *plan,
             uint32_t expected_offset = 0;
             if (field->layout != i || !field->size || !is_power_of_two(field->align) ||
                 field->semantic_field != f || child_layout_index < 0 ||
-                !checked_align_u32(previous_end, field->align, &expected_offset) ||
+                !xr_checked_align_u32(previous_end, field->align, &expected_offset) ||
                 field->offset != expected_offset ||
                 field->offset > layout->fixed_prefix_size ||
                 field->size > layout->fixed_prefix_size - field->offset ||
@@ -3154,7 +3148,7 @@ static bool verify_layouts(const XrTargetPlan *plan,
         uint32_t expected_size = previous_end ? previous_end : 1u;
         if (semantic_type->aggregate_align > expected_align)
             expected_align = semantic_type->aggregate_align;
-        if (!checked_align_u32(expected_size, expected_align, &expected_size) ||
+        if (!xr_checked_align_u32(expected_size, expected_align, &expected_size) ||
             roots != layout->root_field_count ||
             (layout->kind == XR_TARGET_LAYOUT_AGGREGATE &&
              (layout->align != expected_align || layout->fixed_prefix_size != expected_size)))
@@ -3235,7 +3229,7 @@ static bool verify_functions_and_slots(const XrTargetPlan *plan, char *error,
             if (slot->id != slot_index || slot->function != i ||
                 stable_id_is_zero(slot->identity) || !slot->size ||
                 !is_power_of_two(slot->align) || slot->offset % slot->align != 0 ||
-                !checked_align_u32(previous_end, slot->align, &expected_offset) ||
+                !xr_checked_align_u32(previous_end, slot->align, &expected_offset) ||
                 slot->offset != expected_offset ||
                 !checked_u32_add(slot->offset, slot->size, &slot_end) ||
                 slot->register_rep >= plan->machine_reps_count ||
@@ -3260,7 +3254,7 @@ static bool verify_functions_and_slots(const XrTargetPlan *plan, char *error,
             previous_end = slot_end;
         }
         uint32_t expected_frame_size = 0;
-        if (!checked_align_u32(previous_end, expected_frame_align, &expected_frame_size) ||
+        if (!xr_checked_align_u32(previous_end, expected_frame_align, &expected_frame_size) ||
             function->frame_align != expected_frame_align ||
             function->frame_size != expected_frame_size)
             return report(error, error_size, "XR_TARGET_1002",
