@@ -3886,6 +3886,52 @@ static bool oracle_dynamic_direct_local_string_result_storage(
     return true;
 }
 
+/* A length read borrows one container and yields the plain machine integer the
+ * language types it. The receiver keeps the single tagged storage fact its own
+ * family already proved: the owned array allocation, the string literal, or the
+ * owned String a direct-local call returned. A container without such a row, a
+ * consumed receiver, or a result that is not the exact signed 64-bit integer
+ * leaves the read without authority rather than falling back to a guess. */
+static bool oracle_length_read_is_exact(const VerifyAuthority *ctx,
+                                        uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    if (!ctx || !operation || !operands || operation->opcode != XI_LEN ||
+        operation->operand_count != 1 ||
+        operation->operand_begin >= operand_count ||
+        operation->auxiliary_kind != 0 || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->allocation_key != NULL ||
+        operation->effects != xi_generated_op_effects(XI_LEN) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(XI_LEN) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        !semantic_exact_i64_type(
+            xr_semantic_plan_type(ctx->semantic, operation->result_type)))
+        return false;
+    const XrSemanticOperandRecord *container =
+        &operands[operation->operand_begin];
+    XrRep container_storage = XR_REP_TAGGED;
+    uint16_t container_kind = XR_MACHINE_REP_COUNT;
+    return container->role == XR_SEM_OPERAND_VALUE &&
+           container->parameter == -1 && container->flags == 0 &&
+           container->ownership_action == XR_SEM_OPERAND_BORROW &&
+           container->value < ctx->value_count &&
+           (oracle_dynamic_array_allocation_storage(
+                ctx, container->value, &container_storage, &container_kind) ||
+            oracle_dynamic_string_literal_storage(
+                ctx, container->value, &container_storage, &container_kind) ||
+            oracle_dynamic_direct_local_string_result_storage(
+                ctx, container->value, &container_storage, &container_kind));
+}
+
 /* The JSON namespace call materializes an owned dynamic value in its own
  * temporary slot.  Its storage is tagged because the runtime encoder returns a
  * boxed value; the call row proves the slot, layout, and ownership. */
@@ -4980,6 +5026,15 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             return oracle_machine_storage(ctx, source_value, out_storage,
                                           &ignored_kind);
         }
+        case XI_LEN:
+            /* The container of a proved length read stays in the tagged carrier
+             * its own storage family named; the integer the read produces keeps
+             * its native scalar storage at its own definition. */
+            if (operand_index != 0 ||
+                !oracle_length_read_is_exact(ctx, operation_index))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
         case XI_INDEX_SET:
         case XI_INDEX_GET:
             /* The container is the owned tagged allocation, and the index and
