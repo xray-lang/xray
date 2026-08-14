@@ -106,8 +106,8 @@ TEST(spec_option_count) {
     ASSERT_NOT_NULL(spec);
     int count = xr_cli_option_count(spec->options);
     /* run has: trace, dump-bytecode, semantic-plan, timings, workers,
-     *          coro-watch, coro-http, dump-ic = 8 */
-    ASSERT_EQ_INT(count, 8);
+     *          coro-watch, coro-http, dump-ic, xi-opt = 9 */
+    ASSERT_EQ_INT(count, 9);
 }
 
 TEST(spec_option_count_empty) {
