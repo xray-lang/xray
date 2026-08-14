@@ -7884,14 +7884,12 @@ static bool verify_fixed_bytes_plans(const XaotBundle *bundle, char *errbuf, siz
     return true;
 }
 
-XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, char *errbuf,
-                                size_t errbuf_len) {
+XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     uint32_t mi;
     uint32_t fi;
     uint32_t closure_count = 0;
     uint32_t transfer_count = 0;
 
-    (void) mode;
     if (!bundle)
         return set_error(errbuf, errbuf_len, "NULL AOT bundle");
     if (!bundle->modules || bundle->nmodules == 0)

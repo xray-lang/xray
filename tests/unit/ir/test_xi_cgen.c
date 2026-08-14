@@ -817,7 +817,7 @@ static bool test_aot_plan_try_prepare_with_targets(TestAotPlan *plan, XiModule *
     if (!xaot_prepare_bundle(&plan->bundle, NULL))
         return false;
     test_aot_annotate_class_field_values(modules, nmodules, &plan->evidence);
-    if (!xaot_verify_bundle(&plan->bundle, XAOT_VERIFY_AOT_READY, verify_err, sizeof(verify_err))) {
+    if (!xaot_verify_bundle(&plan->bundle, verify_err, sizeof(verify_err))) {
         fprintf(stderr, "  AOT verify error: %s\n", verify_err);
         for (uint32_t i = 0; i < plan->evidence.nclasses; i++) {
             const XgClassSummary *cls = &plan->evidence.classes[i];

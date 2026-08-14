@@ -16,15 +16,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef enum XaotVerifyMode {
-    XAOT_VERIFY_REP_READY = 0,
-    XAOT_VERIFY_LAYOUT_READY,
-    XAOT_VERIFY_ABI_READY,
-    XAOT_VERIFY_BOUNDARY_READY,
-    XAOT_VERIFY_AOT_READY,
-} XaotVerifyMode;
-
-XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, char *errbuf,
-                                size_t errbuf_len);
+XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, char *errbuf, size_t errbuf_len);
 
 #endif  // XAOT_VERIFY_H

@@ -2548,8 +2548,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     {
         char verify_err[512];
-        if (!xaot_verify_bundle(&aot_bundle, XAOT_VERIFY_AOT_READY, verify_err,
-                                sizeof(verify_err))) {
+        if (!xaot_verify_bundle(&aot_bundle, verify_err, sizeof(verify_err))) {
             /* A requested semantic-evidence dump is produced before Xi/AOT
              * preparation.  Preserve that diagnostic on a later verifier
              * failure: fail-closed plans are specifically when the evidence
