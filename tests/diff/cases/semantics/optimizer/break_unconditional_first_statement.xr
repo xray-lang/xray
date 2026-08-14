@@ -1,0 +1,13 @@
+// anchor: break-unconditional-first-statement
+// An unconditional break as the first statement makes the body run exactly once
+// no matter what the header says.
+fn run() {
+    var visits = 0
+    for (var i = 0; i < 100; i++) {
+        visits = visits + 1
+        break
+    }
+    print(visits)
+}
+
+run()

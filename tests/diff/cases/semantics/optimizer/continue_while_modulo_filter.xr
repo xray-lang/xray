@@ -1,0 +1,17 @@
+// anchor: continue-while-modulo-filter
+// A continue skips the rest of the body without leaving the loop. The step must
+// still happen, which is why the step precedes the continue here.
+fn run() {
+    var i = 0
+    var sum = 0
+    while (i < 10) {
+        i = i + 1
+        if (i % 2 == 0) {
+            continue
+        }
+        sum = sum + i
+    }
+    print(sum)
+}
+
+run()

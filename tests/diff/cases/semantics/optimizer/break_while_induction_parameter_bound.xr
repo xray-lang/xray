@@ -1,0 +1,23 @@
+// anchor: break-while-induction-parameter-bound
+// The exit bound arrives as a parameter, so no caller-side constant can be
+// folded into the loop before the exit is analysed.
+fn count_to(limit: int, ceiling: int) -> int {
+    var i = 0
+    var sum = 0
+    while (i < ceiling) {
+        if (i >= limit) {
+            break
+        }
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+
+fn run() {
+    print(count_to(5, 100))
+    print(count_to(0, 100))
+    print(count_to(100, 7))
+}
+
+run()

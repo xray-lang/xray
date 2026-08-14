@@ -1,0 +1,20 @@
+// anchor: known-struct-copy-not-alias
+// Reported divergence. `var d = a` copies a value struct, so writing through d
+// must not change a. A pass that gives both names one value number answers true
+// for the second comparison.
+struct Point {
+    x: float
+    y: float
+}
+
+fn run() {
+    var a = Point{x: 1.0, y: 2.0}
+    var d = a
+    print(a == d)
+    d.x = 99.0
+    print(a == d)
+    print(a.x)
+    print(d.x)
+}
+
+run()

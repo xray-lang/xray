@@ -1,0 +1,14 @@
+// anchor: known-nullable-never-assigned-keeps-type
+// Reported divergence. The assignment is unreachable, so `a` is null at the
+// coalesce. Proving the branch dead must not also narrow the variable's declared
+// nullable type away.
+fn run() {
+    var a: string? = null
+    var flag = false
+    if (flag) {
+        a = "abc"
+    }
+    print(a ?? "fallback")
+}
+
+run()

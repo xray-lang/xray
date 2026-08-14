@@ -1,0 +1,18 @@
+// anchor: continue-two-sites
+// Two continue sites give the loop latch three predecessors, which is what a
+// block-merging pass has to keep straight.
+fn run() {
+    var sum = 0
+    for (var i = 0; i < 12; i++) {
+        if (i % 2 == 0) {
+            continue
+        }
+        if (i % 3 == 0) {
+            continue
+        }
+        sum = sum + i
+    }
+    print(sum)
+}
+
+run()

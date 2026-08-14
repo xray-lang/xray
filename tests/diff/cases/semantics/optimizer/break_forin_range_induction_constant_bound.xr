@@ -1,0 +1,16 @@
+// anchor: break-forin-range-induction-constant-bound
+// Same exit shape over a range. The range gives the header an exact trip count,
+// which is precisely the fact a loop pass must not use once a `break` can cut
+// the loop short.
+fn run() {
+    var sum = 0
+    for (i in 0..100) {
+        if (i >= 5) {
+            break
+        }
+        sum = sum + i
+    }
+    print(sum)
+}
+
+run()

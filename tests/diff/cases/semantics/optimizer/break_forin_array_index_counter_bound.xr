@@ -1,0 +1,19 @@
+// anchor: break-forin-array-index-counter-bound
+// The induction variable is a body-maintained counter rather than the loop
+// variable, and the container supplies the header bound.
+fn run() {
+    var arr = [10, 20, 30, 40, 50, 60, 70, 80]
+    var seen = 0
+    var sum = 0
+    for (v in arr) {
+        if (seen >= 3) {
+            break
+        }
+        sum = sum + v
+        seen = seen + 1
+    }
+    print(sum)
+    print(seen)
+}
+
+run()

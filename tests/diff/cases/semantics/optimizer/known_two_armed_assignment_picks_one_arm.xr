@@ -1,0 +1,32 @@
+// anchor: known-two-armed-assignment-picks-one-arm
+// Reported divergence, minimal form: no loop, no call, one if/else whose arms
+// assign different values to the same variable. At the optimization level the
+// native backend uses, both calls answer with the else arm's value.
+//
+// The condition kind does not matter: a bool value and a comparison behave the
+// same. What matters is that the merge is read afterwards, so the diamond is a
+// select candidate.
+fn from_bool(flag: bool, x: int) -> int {
+    var out = 0
+    if (flag) {
+        out = x * 2
+    } else {
+        out = x + 1
+    }
+    return out
+}
+
+fn from_comparison(a: int, b: int) -> int {
+    var out = 0
+    if (a > b) {
+        out = 100
+    } else {
+        out = 200
+    }
+    return out
+}
+
+print(from_bool(true, 20))
+print(from_bool(false, 20))
+print(from_comparison(9, 3))
+print(from_comparison(3, 9))

@@ -1,0 +1,49 @@
+// anchor: pass-ifconv-select-shape
+// If-conversion: a diamond whose two arms only pick a value is the shape that
+// becomes a select. Every call below must produce a different answer for each
+// arm, so an oracle cannot be satisfied by a select that always yields one side.
+fn pick_larger(a: int, b: int) -> int {
+    var r = 0
+    if (a > b) {
+        r = a
+    } else {
+        r = b
+    }
+    return r
+}
+
+fn label(a: int, b: int) -> int {
+    var out = 0
+    if (a > b) {
+        out = 100
+    } else {
+        out = 200
+    }
+    return out
+}
+
+fn run() {
+    print(pick_larger(3, 9))
+    print(pick_larger(9, 3))
+    print(label(9, 3))
+    print(label(3, 9))
+    // A diamond with a side effect in one arm is not a select candidate.
+    var trace = ""
+    var v = 0
+    if (pick_larger(1, 2) == 2) {
+        trace = trace + "hi"
+        v = 1
+    } else {
+        v = 2
+    }
+    print(trace)
+    print(v)
+}
+
+run()
+
+// The same two calls made from module scope rather than from inside a function
+// body. Caller context decides whether the diamond is converted at all, so both
+// placements have to be pinned.
+print(label(9, 3))
+print(label(3, 9))

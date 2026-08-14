@@ -1,0 +1,21 @@
+// anchor: pass-jump-thread-correlated-branches
+// Jump threading: the second branch tests a condition the first branch already
+// settled, so one edge can jump straight past it.
+fn run(x: int) -> int {
+    var flag = false
+    if (x > 10) {
+        flag = true
+    }
+    var out = 0
+    if (flag) {
+        out = x * 2
+    } else {
+        out = x + 1
+    }
+    return out
+}
+
+print(run(20))
+print(run(5))
+print(run(11))
+print(run(10))

@@ -1,0 +1,24 @@
+// anchor: pass-sccp-conditional-constant
+// Sparse conditional constant propagation: the branch condition is a constant,
+// so one arm is unreachable and the merge has a single reaching value.
+fn run() {
+    var flag = true
+    var v = 0
+    if (flag) {
+        v = 7
+    } else {
+        v = 9
+    }
+    var w = v * 3
+    print(v)
+    print(w)
+    var seed = 4
+    var doubled = seed + seed
+    if (doubled == 8) {
+        print("eight")
+    } else {
+        print("other")
+    }
+}
+
+run()

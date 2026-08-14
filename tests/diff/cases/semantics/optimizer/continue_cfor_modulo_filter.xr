@@ -1,0 +1,15 @@
+// anchor: continue-cfor-modulo-filter
+// In a C-style for the step is owned by the loop header, so a continue must
+// still reach it.
+fn run() {
+    var sum = 0
+    for (var j = 0; j < 10; j++) {
+        if (j % 2 == 0) {
+            continue
+        }
+        sum = sum + j
+    }
+    print(sum)
+}
+
+run()

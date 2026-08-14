@@ -1,0 +1,15 @@
+// anchor: break-toplevel-induction-constant-bound
+// The same exit shape at module scope rather than inside a function body. Module
+// scope and function scope reach the optimizer as different Xi functions, so both
+// need their own case.
+var i = 0
+var sum = 0
+while (i < 100) {
+    if (i >= 5) {
+        break
+    }
+    sum = sum + i
+    i = i + 1
+}
+print(sum)
+print(i)

@@ -1,0 +1,19 @@
+// anchor: continue-induction-vs-invariant-bound
+// The continue test has the induction-versus-invariant shape that the break
+// cases use, but it does not leave the loop. The trip count is unchanged; only
+// the accumulator is filtered.
+fn run() {
+    var sum = 0
+    var visits = 0
+    for (var i = 0; i < 10; i++) {
+        visits = visits + 1
+        if (i >= 5) {
+            continue
+        }
+        sum = sum + i
+    }
+    print(sum)
+    print(visits)
+}
+
+run()

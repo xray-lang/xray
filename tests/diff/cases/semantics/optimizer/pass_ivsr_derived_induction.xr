@@ -1,0 +1,14 @@
+// anchor: pass-ivsr-derived-induction
+// Induction variable strength reduction: the derived value is an affine function
+// of the loop counter, so it can be maintained by addition instead of
+// multiplication.
+fn run() {
+    var sum = 0
+    for (var i = 0; i < 12; i++) {
+        var derived = i * 8 + 3
+        sum = sum + derived
+    }
+    print(sum)
+}
+
+run()

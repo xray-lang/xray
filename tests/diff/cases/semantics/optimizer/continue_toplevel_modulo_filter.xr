@@ -1,0 +1,10 @@
+// anchor: continue-toplevel-modulo-filter
+// The same filter at module scope rather than inside a function body.
+var sum = 0
+for (var j = 0; j < 10; j++) {
+    if (j % 2 == 0) {
+        continue
+    }
+    sum = sum + j
+}
+print(sum)

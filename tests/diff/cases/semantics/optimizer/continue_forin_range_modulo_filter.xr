@@ -1,0 +1,14 @@
+// anchor: continue-forin-range-modulo-filter
+// The same filter over a range.
+fn run() {
+    var sum = 0
+    for (j in 0..10) {
+        if (j % 2 == 0) {
+            continue
+        }
+        sum = sum + j
+    }
+    print(sum)
+}
+
+run()

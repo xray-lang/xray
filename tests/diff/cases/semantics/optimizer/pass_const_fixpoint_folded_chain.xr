@@ -1,0 +1,19 @@
+// anchor: pass-const-fixpoint-folded-chain
+// The constant fixpoint: a chain of definitions that becomes constant only after
+// earlier links fold, including one that flows through a loop-carried variable.
+fn run() {
+    var a = 2
+    var b = a + 3
+    var c = b * b
+    var d = c - a
+    print(d)
+    var acc = 0
+    for (var i = 0; i < 3; i++) {
+        acc = acc + d
+    }
+    print(acc)
+    var s = "x" + "y"
+    print(s + string(d))
+}
+
+run()
