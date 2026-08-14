@@ -124,7 +124,13 @@ XR_FUNC void xi_emit_release(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    XiEmitReg src = reg_of(ctx, v->args[0]);
+    /* A later definition of the same source variable may already have taken
+     * over the coalesced register.  When that happened, the operand's content
+     * was copied aside first, and that copy — not the register — is the object
+     * this release owns. */
+    XiEmitReg src = owner_save_reg_of(ctx, v->args[0]);
+    if (src == NO_REG)
+        src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
     emit_inst(ctx, CREATE_ABC(OP_DROP, src, 0, 0));

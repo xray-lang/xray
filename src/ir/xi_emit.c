@@ -166,6 +166,8 @@ static uint32_t xi_emit_var_state_count(const XiFunc *f) {
 static void xi_emit_free_var_state(EmitCtx *ctx) {
     xr_free(ctx->var_reg);
     ctx->var_reg = NULL;
+    xr_free(ctx->var_addressed);
+    ctx->var_addressed = NULL;
     ctx->var_state_count = 0;
 }
 
@@ -175,13 +177,16 @@ static bool xi_emit_init_var_state(EmitCtx *ctx, XiFunc *f) {
         return true;
 
     ctx->var_reg = (XiEmitReg *) xr_malloc((size_t) ctx->var_state_count * sizeof(*ctx->var_reg));
-    if (!ctx->var_reg) {
+    ctx->var_addressed =
+        (bool *) xr_calloc((size_t) ctx->var_state_count, sizeof(*ctx->var_addressed));
+    if (!ctx->var_reg || !ctx->var_addressed) {
         xi_emit_free_var_state(ctx);
         return false;
     }
     for (uint32_t i = 0; i < ctx->var_state_count; i++) {
         ctx->var_reg[i] = NO_REG;
     }
+    collect_addressed_vars(ctx, f);
     return true;
 }
 
@@ -989,6 +994,7 @@ cleanup:;
         xr_instruction_unit_free(ctx.proto);
     }
     xi_emit_free_var_state(&ctx);
+    xr_free(ctx.owner_saves);
     xr_free(ctx.last_use);
     xr_free(ctx.reg_map);
     xr_free(ctx.block_pc);

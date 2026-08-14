@@ -360,6 +360,12 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
         XiValue *v = blk->values[i];
         ctx->current_ordinal++;
         ctx->current_line = (int) v->line;
+        /* Preserve any content of this value's coalesced register that a
+         * release later in this block still owns, before the definition
+         * overwrites it. */
+        split_owner_live_range(ctx, blk, i);
+        if (ctx->status != XI_EMIT_OK)
+            return;
         emit_value(ctx, v);
         if (ctx->status != XI_EMIT_OK)
             return;
@@ -381,6 +387,10 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
             }
         }
     }
+
+    /* No terminator or successor reads an ownership save, so the copies made
+     * for this block die here. */
+    discard_owner_saves(ctx);
 
     ctx->current_ordinal++; /* ordinal for terminator */
     /* Emit terminator */
