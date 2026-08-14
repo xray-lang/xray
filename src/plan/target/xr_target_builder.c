@@ -24,6 +24,7 @@
 #include "../../ir/xi_ops_gen.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../semantic/xr_semantic_verify.h"
+#include "../semantic/xr_semantic_allocation_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../../runtime/value/xtype.h"
@@ -809,32 +810,12 @@ static bool index_value_operations(const XrSemanticPlan *plan,
     return true;
 }
 
-static bool semantic_allocation_identity_is_canonical(
-    const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
-    if (!operation || !operation->canonical_key || !operation->allocation_key)
-        return false;
-    size_t canonical_length = strlen(operation->canonical_key);
-    size_t allocation_length = strlen(operation->allocation_key);
-    if (canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix,
-               sizeof(suffix)) != 0)
-        return false;
-    XrStableId expected;
-    XrFingerprint digest;
-    return xr_stable_id_from_key(operation->allocation_key, &expected, &digest) &&
-           xr_stable_id_equal(expected, operation->allocation_id);
-}
-
 static bool semantic_heap_closure_is_exact(const XrSemanticPlan *plan,
                                            const XrSemanticOperationRecord *operation) {
     if (!plan || !operation || operation->opcode != XI_CLOSURE_NEW ||
         operation->callable_function >= xr_semantic_plan_function_count(plan) ||
         operation->operand_count != 0 ||
-        !semantic_allocation_identity_is_canonical(operation) ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
         return false;
     const XrSemanticFunctionRecord *callee =
@@ -991,7 +972,7 @@ static bool semantic_stringbuilder_constructor_is_exact(
         operation->result_alias_operand != -1 ||
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
         operation->return_parameter != -1 || operation->return_complete != 1 ||
-        !semantic_allocation_identity_is_canonical(operation))
+        !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(plan, operation->result_type);
@@ -1511,7 +1492,7 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *plan,
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
         operation->return_complete != 1 || operation->return_parameter != -1 ||
         operation->result_alias_operand != -1 ||
-        !semantic_allocation_identity_is_canonical(operation))
+        !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, operation->result_type);
     if (!semantic_array_member_receiver_type_is_exact(type) ||
@@ -1639,7 +1620,7 @@ static bool semantic_channel_allocation_is_exact(
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->operand_count != 1 ||
         operation->operand_begin >= operand_count ||
-        !semantic_allocation_identity_is_canonical(operation) ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         !semantic_channel_type_is_exact(plan, operation->result_type,
                                         &element_type) ||
         operation->constant != XR_SEMANTIC_INDEX_NONE ||

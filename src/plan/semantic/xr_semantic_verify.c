@@ -9,6 +9,7 @@
  */
 
 #include "xr_semantic_verify.h"
+#include "xr_semantic_allocation_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_graph.h"
 #include "xr_semantic_ops.h"
@@ -1420,18 +1421,6 @@ static bool semantic_type_is_exact_string_builder(const XrSemanticTypeRecord *ty
            type->canonical_key && strcmp(type->canonical_key, expected) == 0;
 }
 
-static bool allocation_identity_is_exact(const XrSemanticOperationRecord *operation) {
-    if (!operation || !operation->canonical_key || !operation->allocation_key ||
-        !verify_id(operation->allocation_key, operation->allocation_id))
-        return false;
-    size_t operation_length = strlen(operation->canonical_key);
-    static const char suffix[] = "/allocation";
-    size_t allocation_length = strlen(operation->allocation_key);
-    return allocation_length == operation_length + sizeof(suffix) - 1u &&
-           memcmp(operation->allocation_key, operation->canonical_key, operation_length) == 0 &&
-           memcmp(operation->allocation_key + operation_length, suffix, sizeof(suffix)) == 0;
-}
-
 static bool semantic_type_is_exact_string(const XrSemanticTypeRecord *type) {
     return type && type->kind == XR_KIND_STRING && type->builtin_type == XR_TID_NULL &&
            type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
@@ -1997,7 +1986,7 @@ static bool verify_string_builder_constructor(const XrSemanticPlan *plan,
                  operation->flags == xi_generated_op_default_flags(XI_CALL_BUILTIN) &&
                  operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
                  operation->return_provenance == XR_SEM_RETURN_OWNED &&
-                 operation->return_complete == 1 && allocation_identity_is_exact(operation);
+                 operation->return_complete == 1 && xr_semantic_allocation_identity_is_canonical(operation);
     return exact || report(error, error_size, "XR_SEM_0019",
                            "StringBuilder constructor authority is not exact");
 }

@@ -23,6 +23,7 @@
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../../stdlib/xstdlib_metadata.h"
+#include "../semantic/xr_semantic_allocation_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_graph.h"
@@ -663,18 +664,11 @@ static bool semantic_array_allocation_type_is_exact(const XrSemanticTypeRecord *
 
 static bool semantic_array_allocation_is_exact(const XrSemanticPlan *semantic,
                                                const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
-    XrStableId expected_allocation;
-    XrFingerprint allocation_digest;
     uint32_t operand_count = 0, child_count = 0;
     const XrSemanticOperandRecord *operands =
         semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
     const uint32_t *children =
         semantic ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
-    size_t canonical_length =
-        operation && operation->canonical_key ? strlen(operation->canonical_key) : 0;
-    size_t allocation_length =
-        operation && operation->allocation_key ? strlen(operation->allocation_key) : 0;
     if (!semantic || !operation || !operands || !children ||
         operation->opcode != XI_ARRAY_NEW || operation->operand_count != 1 ||
         operation->operand_begin >= operand_count ||
@@ -686,14 +680,8 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *semantic,
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
         operation->return_complete != 1 || operation->return_parameter != -1 ||
-        operation->result_alias_operand != -1 || !operation->canonical_key ||
-        !operation->allocation_key || canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key, canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix, sizeof(suffix)) != 0 ||
-        !xr_stable_id_from_key(operation->allocation_key, &expected_allocation,
-                               &allocation_digest) ||
-        !xr_stable_id_equal(expected_allocation, operation->allocation_id))
+        operation->result_alias_operand != -1 ||
+        !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(semantic, operation->result_type);
@@ -947,30 +935,10 @@ static int target_plan_layout_for_type(const XrTargetPlan *plan, uint32_t semant
 
 static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
                                            const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
-    XrStableId expected_allocation;
-    XrFingerprint allocation_digest;
-    size_t canonical_length =
-        operation && operation->canonical_key
-            ? strlen(operation->canonical_key)
-            : 0;
-    size_t allocation_length =
-        operation && operation->allocation_key
-            ? strlen(operation->allocation_key)
-            : 0;
     if (!semantic || !operation || operation->opcode != XI_CLOSURE_NEW ||
         operation->callable_function >= xr_semantic_plan_function_count(semantic) ||
-        operation->operand_count != 0 || !operation->canonical_key ||
-        !operation->allocation_key ||
-        canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix,
-               sizeof(suffix)) != 0 ||
-        !xr_stable_id_from_key(operation->allocation_key,
-                               &expected_allocation, &allocation_digest) ||
-        !xr_stable_id_equal(expected_allocation, operation->allocation_id) ||
+        operation->operand_count != 0 ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
         return false;
     const XrSemanticFunctionRecord *callee =
@@ -1129,18 +1097,9 @@ static bool operation_is_exact_native_module_scalar_call(
 static bool semantic_stringbuilder_constructor_is_exact(
     const XrSemanticPlan *semantic,
     const XrSemanticOperationRecord *operation) {
-    static const char suffix[] = "/allocation";
     uint32_t metadata_count = 0;
     const char *const *metadata =
         xr_semantic_plan_metadata(semantic, &metadata_count);
-    size_t canonical_length = operation && operation->canonical_key
-                                  ? strlen(operation->canonical_key)
-                                  : 0;
-    size_t allocation_length = operation && operation->allocation_key
-                                   ? strlen(operation->allocation_key)
-                                   : 0;
-    XrStableId expected_allocation;
-    XrFingerprint digest;
     if (!semantic || !operation || operation->opcode != XI_CALL_BUILTIN ||
         operation->operand_count != 0 || operation->metadata_count != 1 ||
         operation->metadata_begin >= metadata_count || !metadata ||
@@ -1160,16 +1119,7 @@ static bool semantic_stringbuilder_constructor_is_exact(
         operation->result_alias_operand != -1 ||
         operation->return_provenance != XR_SEM_RETURN_OWNED ||
         operation->return_parameter != -1 || operation->return_complete != 1 ||
-        !operation->canonical_key || !operation->allocation_key ||
-        canonical_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != canonical_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               canonical_length) != 0 ||
-        memcmp(operation->allocation_key + canonical_length, suffix,
-               sizeof(suffix)) != 0 ||
-        !xr_stable_id_from_key(operation->allocation_key,
-                               &expected_allocation, &digest) ||
-        !xr_stable_id_equal(expected_allocation, operation->allocation_id))
+        !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(semantic, operation->result_type);
@@ -1277,15 +1227,6 @@ static bool verifier_channel_allocation_is_exact(
     const XrSemanticOperationRecord *operation) {
     if (!semantic || !operation)
         return false;
-    static const char suffix[] = "/allocation";
-    size_t key_length = operation->canonical_key
-                            ? strlen(operation->canonical_key)
-                            : 0;
-    size_t allocation_length = operation->allocation_key
-                                   ? strlen(operation->allocation_key)
-                                   : 0;
-    XrStableId expected_allocation;
-    XrFingerprint digest;
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands =
         xr_semantic_plan_operands(semantic, &operand_count);
@@ -1293,16 +1234,7 @@ static bool verifier_channel_allocation_is_exact(
     if (operation->opcode != XI_CHAN_NEW ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->operand_count != 1 || operation->operand_begin >= operand_count ||
-        !operation->canonical_key || !operation->allocation_key ||
-        key_length > SIZE_MAX - sizeof(suffix) ||
-        allocation_length != key_length + sizeof(suffix) - 1u ||
-        memcmp(operation->allocation_key, operation->canonical_key,
-               key_length) != 0 ||
-        memcmp(operation->allocation_key + key_length, suffix,
-               sizeof(suffix)) != 0 ||
-        !xr_stable_id_from_key(operation->allocation_key,
-                               &expected_allocation, &digest) ||
-        !xr_stable_id_equal(expected_allocation, operation->allocation_id) ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
         !verifier_channel_type_is_exact(semantic, operation->result_type,
                                         &element_type) ||
         operation->constant != XR_SEMANTIC_INDEX_NONE ||
