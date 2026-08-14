@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Uncaught panics read the same on the VM and the AOT backend.
+"""Uncaught panics read the same on the VM, embedded-bytecode and AOT forms.
 
 One line, built from the fault's error code and message:
 
@@ -74,7 +74,7 @@ def check_run(rec: Recorder, xray: Path, label: str, args: Sequence,
     """Run piped (never a TTY) and assert on exit code, stdout and stderr."""
     result = proc.run([xray] + list(args), timeout=timeout)
     raw_err = result.stderr.decode("utf-8", "replace")
-    got_out = result.stdout.decode("utf-8", "replace").rstrip("\n")
+    got_out = result.stdout.decode("utf-8", "replace").rstrip("\r\n")
     got_err = strip_ansi(raw_err)
 
     if result.returncode != want_rc:
@@ -119,13 +119,58 @@ def check_aot(rec: Recorder, xray: Path, div: Path, work: Path,
         return
 
     result = proc.run([native], timeout=timeout)
-    out = result.stdout.decode("utf-8", "replace").rstrip("\n")
+    out = result.stdout.decode("utf-8", "replace").rstrip("\r\n")
     err = strip_ansi(result.stderr.decode("utf-8", "replace"))
     if (result.returncode == 1 and out == "before"
             and DIV_REPORT in err and TRACE not in err):
         rec.ok("aot div-by-zero matches the VM panic report")
     else:
         rec.bad(f"FAIL: aot div-by-zero - rc={result.returncode} out='{out}' "
+                f"err='{err}'")
+
+
+def check_embed(rec: Recorder, xray: Path, div: Path, work: Path,
+                timeout: float | None) -> None:
+    """The generated entry must map every VM failure to process status 1."""
+    generated = work / "div_embed.c"
+    emit = proc.run([xray, "build", "-c", div, "-o", generated], timeout=timeout)
+    if not emit.ok or not generated.is_file():
+        rec.bad("FAIL: embedded div-by-zero - C source generation failed")
+        return
+
+    normalized_return = "return result == 0 ? EXIT_SUCCESS : EXIT_FAILURE;"
+    try:
+        generated_text = generated.read_text(encoding="utf-8")
+    except OSError as exc:
+        rec.bad(f"FAIL: embedded div-by-zero - cannot read generated C: {exc}")
+        return
+    if normalized_return not in generated_text:
+        rec.bad("FAIL: embedded div-by-zero - generated entry leaks the VM result "
+                "as a process exit status")
+        return
+    rec.ok("embedded div-by-zero normalizes the process exit status")
+
+    embedded = work / platform.exe_name("div_embed")
+    build = proc.run([xray, "build", div, "-o", embedded], timeout=timeout)
+    if not build.ok:
+        diagnostic = build.stdout + build.stderr
+        if b"failed to start compiler" in diagnostic:
+            print("SKIP: embedded div-by-zero runtime - no portable C compiler available")
+            return
+        rec.bad("FAIL: embedded div-by-zero - binary build failed")
+        return
+    if not os.access(embedded, os.X_OK):
+        rec.bad("FAIL: embedded div-by-zero - binary was not produced")
+        return
+
+    result = proc.run([embedded], timeout=timeout)
+    out = result.stdout.decode("utf-8", "replace").rstrip("\r\n")
+    err = strip_ansi(result.stderr.decode("utf-8", "replace"))
+    if (result.returncode == 1 and out == "before"
+            and DIV_REPORT in err and TRACE not in err):
+        rec.ok("embedded div-by-zero matches the VM panic report")
+    else:
+        rec.bad(f"FAIL: embedded div-by-zero - rc={result.returncode} out='{out}' "
                 f"err='{err}'")
 
 
@@ -148,6 +193,7 @@ def main(argv: list[str]) -> int:
         check_run(rec, xray, "vm array-oob panic report", ["run", oob],
                   1, "before", OOB_REPORT, TRACE, timeout)
         check_backtrace(rec, xray, div, timeout)
+        check_embed(rec, xray, div, ws.root, timeout)
         check_aot(rec, xray, div, ws.root, timeout)
 
     print("----------------------------------------")

@@ -1441,7 +1441,7 @@ static void write_bytecode_main(FILE *f, const char *bundle_source) {
                "    int result = xray_vm_eval_bundle(X, &xr_app_bundle);\n"
                "    xray_vm_multicore_destroy(X);\n"
                "    xray_vm_delete(X);\n"
-               "    return result;\n"
+               "    return result == 0 ? EXIT_SUCCESS : EXIT_FAILURE;\n"
                "}\n");
 }
 

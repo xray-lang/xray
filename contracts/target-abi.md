@@ -6,6 +6,9 @@ ARC-managed, and implicit error cleanup was confined to the existing cold
 propagation branch. Iterator values retain their traversed source without
 changing their public value tag or body layout. The public target and Slice
 ABIs are unchanged.
+The embedded-bytecode program entry maps every nonzero VM evaluation result to
+`EXIT_FAILURE`. This normalizes the host process status without changing the VM
+result contract, generated bundle ABI, or runtime representation.
 Portable SIMD values crossing hosted module shared slots recover their fixed
 aggregate layout from the tagged reference; scalar, native, and cross-endian
 lowering retain one lane-order contract.
@@ -324,7 +327,7 @@ anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1
 anchor-sha256: src/aot/xrt_core_freestanding.h 4637d9be259b16363f74d330ad0bc3d016c71f588d418e71ed9a57cffcf6ecfb
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: include/xray_hosted_fragment_abi.h bcf50466f8320c265a49c6776f669912b83ac4ac3d04f397d4f6c527f1ead02c
-anchor-sha256: src/app/cli/xcmd_build.c c9c43f88c847ae805466e784a78b56b933cca446a18238956fac29118c48e423
+anchor-sha256: src/app/cli/xcmd_build.c 900651a20c01bf90053bf8af7c1241e2e5c9104bb8814433d6afdc2133f031b9
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 8d1cb7212b432a7cefe7e3e3d202509c75dd84190e084c3e7d2a88af62ca4eb1
 anchor-sha256: src/ir/xi.h 5fb8179ca2860735de92b1c3e0a458386708ea66878f450605dafa6f22e83b7e
