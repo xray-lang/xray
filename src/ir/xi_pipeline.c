@@ -556,6 +556,14 @@ static bool xi_pipeline_push_source_file(struct XaAnalyzer *analyzer, const XiPi
 
 /* ========== Configuration ========== */
 
+/* Neither pipeline carries a wall-clock optimizer budget. A budget cuts the
+ * pass sequence wherever the machine happened to be busy, so the same compiler
+ * on the same source could emit different artifacts between two runs, and the
+ * VM and the native backend could enter representation selection from programs
+ * that were optimized to different depths for no stated reason. The two
+ * pipelines still choose their own optimization level; that choice is a stated
+ * property of each configuration rather than an accident of timing. */
+
 XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     XiPipelineConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
@@ -572,7 +580,6 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.run_canonicalize = true;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
-    cfg.budget_ns = XI_BUDGET_OPT_NS;
     cfg.rep_policy = xi_rep_policy_tagged_boundary();
     return cfg;
 }

@@ -113,16 +113,10 @@ typedef enum {
     X(LOOP_SPLIT, "loop_split")                                                                    \
     X(LOOP_INV_BRANCH, "loop_inv_branch")                                                          \
     X(INLINE, "inline")                                                                            \
-    X(DEVIRT, "devirt")                                                                            \
     X(TAIL_CALL, "tail_call")                                                                      \
     X(IFCONV, "ifconv")                                                                            \
     X(JUMP_THREAD, "jump_thread")                                                                  \
     X(BLOCK_SIMPLIFY, "block_simplify")                                                            \
-    X(BLOCK_LAYOUT, "block_layout")                                                                \
-    X(SLP, "slp")                                                                                  \
-    X(LOOP_VEC, "loop_vec")                                                                        \
-    X(REDUCTION, "reduction")                                                                      \
-    X(CALL_SPECIALIZE, "call_specialize")                                                          \
     X(CONST_FIXPOINT, "const_fixpoint")
 
 typedef enum {
@@ -159,16 +153,10 @@ typedef uint32_t XiOptDisableMask;
 #define XI_OPT_DISABLE_LOOP_SPLIT XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_SPLIT)
 #define XI_OPT_DISABLE_LOOP_INV_BRANCH XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_INV_BRANCH)
 #define XI_OPT_DISABLE_INLINE XI_OPT_DISABLE_BIT(XI_OPT_PASS_INLINE)
-#define XI_OPT_DISABLE_DEVIRT XI_OPT_DISABLE_BIT(XI_OPT_PASS_DEVIRT)
 #define XI_OPT_DISABLE_TAIL_CALL XI_OPT_DISABLE_BIT(XI_OPT_PASS_TAIL_CALL)
 #define XI_OPT_DISABLE_IFCONV XI_OPT_DISABLE_BIT(XI_OPT_PASS_IFCONV)
 #define XI_OPT_DISABLE_JUMP_THREAD XI_OPT_DISABLE_BIT(XI_OPT_PASS_JUMP_THREAD)
 #define XI_OPT_DISABLE_BLOCK_SIMPLIFY XI_OPT_DISABLE_BIT(XI_OPT_PASS_BLOCK_SIMPLIFY)
-#define XI_OPT_DISABLE_BLOCK_LAYOUT XI_OPT_DISABLE_BIT(XI_OPT_PASS_BLOCK_LAYOUT)
-#define XI_OPT_DISABLE_SLP XI_OPT_DISABLE_BIT(XI_OPT_PASS_SLP)
-#define XI_OPT_DISABLE_LOOP_VEC XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_VEC)
-#define XI_OPT_DISABLE_REDUCTION XI_OPT_DISABLE_BIT(XI_OPT_PASS_REDUCTION)
-#define XI_OPT_DISABLE_CALL_SPECIALIZE XI_OPT_DISABLE_BIT(XI_OPT_PASS_CALL_SPECIALIZE)
 #define XI_OPT_DISABLE_CONST_FIXPOINT XI_OPT_DISABLE_BIT(XI_OPT_PASS_CONST_FIXPOINT)
 
 /* ========== Pass Descriptor ========== */
