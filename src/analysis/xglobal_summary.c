@@ -828,6 +828,8 @@ XR_FUNC const char *xg_callsite_kind_name(uint8_t kind) {
             return "native";
         case XG_CALL_EXTERN:
             return "extern";
+        case XG_CALL_CLASS_ALLOC:
+            return "class_alloc";
         default:
             return "unknown";
     }
@@ -2676,7 +2678,11 @@ static bool xg_callsite_effects_compose(const XgGlobalEvidence *evidence,
 
     if (!evidence || !call || !state || !memo || !out_effect_bits)
         return false;
-    if (call->kind == XG_CALL_NATIVE || call->kind == XG_CALL_EXTERN) {
+    /* A class allocation without a declared constructor runs no user body, so
+     * its composed effect set is empty for the same reason a sealed native or
+     * extern call's is: there is no callee summary to compose. */
+    if (call->kind == XG_CALL_NATIVE || call->kind == XG_CALL_EXTERN ||
+        call->kind == XG_CALL_CLASS_ALLOC) {
         *out_effect_bits = 0;
         return true;
     }
@@ -2830,7 +2836,8 @@ static bool xg_body_reachability_mark_call(const XgGlobalEvidence *evidence,
     uint32_t target_index = 0;
     if (!call)
         return false;
-    if (call->kind == XG_CALL_NATIVE || call->kind == XG_CALL_EXTERN)
+    if (call->kind == XG_CALL_NATIVE || call->kind == XG_CALL_EXTERN ||
+        call->kind == XG_CALL_CLASS_ALLOC)
         return true;
     if (call->kind == XG_CALL_DIRECT_FUNC ||
         (call->kind == XG_CALL_CLOSURE && call->static_target_func_id != XG_NO_ID)) {

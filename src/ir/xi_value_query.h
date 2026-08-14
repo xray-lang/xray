@@ -88,4 +88,21 @@ XR_FUNC bool xi_value_known_nonnegative_at(const XiFunc *f, const XiValue *value
 XR_FUNC bool xi_value_known_ge_at(const XiFunc *f, const XiValue *value, const XiBlock *site,
                                   int64_t lower_bound);
 
+/* The class declaration a call constructs, or NULL when the call is not a
+ * source class construction.
+ *
+ * A construction is recognized from the lowering-proved constructor flag plus
+ * the frozen module class row the callee's shared slot names, so the answer
+ * never depends on how the callee value was spelled at the source level. On a
+ * match, 'out_constructor' receives the declared instance constructor body, or
+ * NULL when the class declares none and the construction is therefore a bare
+ * allocation with no user code to run.
+ *
+ * Every layer that has to decide what a construction does - coroutine
+ * resolution completeness and callsite suspendability alike - asks this one
+ * query, so no two layers can disagree about which calls build an instance. */
+XR_FUNC const struct XiClassData *xi_value_class_constructor_call(const XiFunc *func,
+                                                                  const XiValue *call,
+                                                                  const XiFunc **out_constructor);
+
 #endif  // XI_VALUE_QUERY_H

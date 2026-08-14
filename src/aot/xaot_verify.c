@@ -3520,6 +3520,21 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence extern callsite declaration is missing");
                 break;
+            case XG_CALL_CLASS_ALLOC:
+                /* The row names a declared class and no callee at all: a
+                 * method identity here would mean a body the kind denies. */
+                if (call->static_target_func_id != XG_NO_ID ||
+                    call->receiver_static_class_id == XG_NO_ID ||
+                    call->receiver_static_interface_id != XG_NO_ID ||
+                    call->method_id != XG_NO_ID || call->method_name_id != 0 ||
+                    call->method_signature_key != 0)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence class allocation callsite identity is "
+                                     "stale");
+                if (!verify_find_evidence_class(ev, call->receiver_static_class_id))
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence class allocation class is missing");
+                break;
             default:
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence callsite kind is invalid");

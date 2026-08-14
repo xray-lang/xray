@@ -807,25 +807,8 @@ static bool xi_coro_is_closed_builtin_method_call(const XiValue *v) {
  * that body instead. */
 static bool xi_coro_is_default_class_constructor_call(const XiFunc *f,
                                                        const XiValue *call) {
-    if (!f || !call || call->op != XI_CALL || call->nargs < 1 ||
-        !xi_value_is_constructor_call(call))
-        return false;
-    const XiValue *callee = call->args[0];
-    while (callee && callee->nargs > 0 &&
-           (xi_copy_is_identity_alias(callee) || xi_op_is_identity_forward(callee->op)))
-        callee = callee->args[0];
-    const XiModule *module = xi_coro_owning_module(f);
-    if (!callee || callee->op != XI_GET_SHARED || callee->aux_int < 0 || !module ||
-        !module->slot_classes || callee->aux_int >= module->nslots)
-        return false;
-    const XiClassData *class_data = module->slot_classes[callee->aux_int];
-    if (!class_data)
-        return false;
-    for (uint16_t i = 0; class_data->methods && i < class_data->nmethod; i++) {
-        if (class_data->methods[i].is_constructor && !class_data->methods[i].is_static)
-            return false;
-    }
-    return true;
+    const XiFunc *constructor = NULL;
+    return xi_value_class_constructor_call(f, call, &constructor) != NULL && !constructor;
 }
 
 static bool xi_coro_call_resolution_complete(const XiFunc *f, const XiValue *v,

@@ -1081,7 +1081,8 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
             continue;
         if (call->op == XI_CALL) {
             if (row->kind != XG_CALL_DIRECT_FUNC && row->kind != XG_CALL_NATIVE &&
-                row->kind != XG_CALL_EXTERN && row->kind != XG_CALL_CLOSURE)
+                row->kind != XG_CALL_EXTERN && row->kind != XG_CALL_CLOSURE &&
+                row->kind != XG_CALL_CLASS_ALLOC)
                 continue;
         } else {
             if (row->kind != XG_CALL_METHOD && row->kind != XG_CALL_INTERFACE)
