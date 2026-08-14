@@ -5593,7 +5593,7 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     }
     v->line = (uint32_t) node->line;
     if (is_self_call)
-        v->aux_int = 1;
+        v->aux_int = XI_CALL_FLAG_SELF;
     if (xi_lower_call_constructs_instance(l, call, result_type))
         v->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     v->call_plan = call_plan;

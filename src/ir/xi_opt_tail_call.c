@@ -274,10 +274,6 @@ static void replace_params_with_phis(XiFunc *f, XiBlock *header) {
 /* A self-call carries no callee value: Xi encodes "call the current function"
  * as XI_CALL with a CONST null in args[0] and the self flag in aux_int, and the
  * emitter reads the current frame's closure instead of that operand. */
-static bool call_is_self_encoded(const XiValue *call) {
-    return call && (call->aux_int & 0xFFu) == 1u;
-}
-
 /* Find a general (non-self) tail call in a RETURN block.
  * Returns the call value if found, NULL otherwise. */
 static XiValue *find_general_tail_call(const XiBlock *blk) {
@@ -293,15 +289,15 @@ static XiValue *find_general_tail_call(const XiBlock *blk) {
     if (ret_val->op != XI_CALL)
         return NULL;
 
-    /* Self-calls keep XI_CALL plus XI_FLAG_TAIL: their callee-less layout is
-     * consumed by the dedicated self-call emitter, which reads the frame's own
-     * closure.  XI_TAIL_CALL instead loads args[0] as the callee, so promoting
-     * a self-call would hand the generic tail-call path the CONST null that
-     * stands in for the missing callee.  This mirrors the rule the verifier
-     * states for XI_FLAG_TAIL — a tail XI_CALL is a self-call or its callee is
-     * typed as a function — which promotion would otherwise escape by clearing
-     * the flag it is checked through. */
-    if (call_is_self_encoded(ret_val))
+    /* A call on its own activation is not a general tail call: its callee slot
+     * holds the placeholder constant the self encoding uses, and only the
+     * self-aware emission reads the frame's own closure instead.  XI_TAIL_CALL
+     * loads args[0] as the callee, so promoting a self-call would hand that
+     * placeholder to the general tail path as if it were the callee.  This
+     * mirrors the rule the verifier states for XI_FLAG_TAIL - a tail XI_CALL is
+     * a self-call or its callee is typed as a function - which promotion would
+     * otherwise escape by clearing the flag it is checked through. */
+    if (xi_call_targets_own_frame(ret_val->op, ret_val->aux_int))
         return NULL;
 
     /* Must be the last value in the block. */
