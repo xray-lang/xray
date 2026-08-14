@@ -19,6 +19,7 @@
 #include "../../plan/semantic/xr_semantic_graph.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
+#include "../../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -616,6 +617,7 @@ typedef struct VerifyAuthority {
     uint8_t *exact_channel_allocation_value;
     uint8_t *exact_source_namespace_value;
     uint32_t *source_namespace_dependency_by_value;
+    uint8_t *exact_native_module_namespace_value;
     uint64_t bytes;
     uint64_t work;
 } VerifyAuthority;
@@ -670,6 +672,7 @@ static void verify_authority_dispose(VerifyAuthority *ctx) {
     xr_free(ctx->exact_channel_allocation_value);
     xr_free(ctx->exact_source_namespace_value);
     xr_free(ctx->source_namespace_dependency_by_value);
+    xr_free(ctx->exact_native_module_namespace_value);
     ctx->operation_by_value = NULL;
     ctx->parameter_by_value = NULL;
     ctx->direct_callee_target_by_value = NULL;
@@ -685,6 +688,7 @@ static void verify_authority_dispose(VerifyAuthority *ctx) {
     ctx->exact_channel_allocation_value = NULL;
     ctx->exact_source_namespace_value = NULL;
     ctx->source_namespace_dependency_by_value = NULL;
+    ctx->exact_native_module_namespace_value = NULL;
 }
 
 static bool verify_bounded_string_length(VerifyAuthority *ctx,
@@ -1437,6 +1441,242 @@ invalid_authority:
              XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
              (uint32_t) ctx->work, 0, 0);
     return false;
+}
+
+/* Rebuilt here a third time, from the frozen rows alone. A native stdlib
+ * namespace receiver is the module-init import reference published into a
+ * shared slot: its frozen import classification is resolved against the native
+ * definition registry, and its metadata pair names the module path with an
+ * empty member. */
+static bool aot_native_module_scalar_type_is_exact(const XrSemanticTypeRecord *type) {
+    return type && (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
+                    type->kind == XR_KIND_BOOL) &&
+           type->builtin_type == XR_TID_NULL && type->scalar_rep != XR_SCALAR_REP_NONE &&
+           type->flags == 0 && type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE;
+}
+
+static bool aot_native_module_import_is_exact(const XrSemanticPlan *semantic,
+                                              const XrSemanticOperationRecord *record,
+                                              const char **out_module_path) {
+    uint32_t metadata_count = 0;
+    const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);
+    const XrSemanticTypeRecord *type =
+        record ? xr_semantic_plan_type(semantic, record->result_type) : NULL;
+    if (!record || !type || !metadata || record->opcode != XI_IMPORT_REF ||
+        record->function != 0 || record->operand_count != 0 || record->metadata_count != 2 ||
+        record->metadata_begin + 1u >= metadata_count ||
+        record->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
+        record->semantic_immediate < -1 || record->semantic_immediate > UINT16_MAX ||
+        record->allocation_key || !aot_stable_id_is_zero(record->allocation_id) ||
+        record->constant != XR_SEMANTIC_INDEX_NONE ||
+        record->callable_function != XR_SEMANTIC_INDEX_NONE || record->auxiliary_kind != 0 ||
+        record->effects != xi_generated_op_effects(XI_IMPORT_REF) ||
+        record->flags != xi_generated_op_default_flags(XI_IMPORT_REF) ||
+        record->ownership_use != xi_generated_op_own_use(XI_IMPORT_REF) ||
+        record->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        record->result_alias_operand != -1 ||
+        record->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        record->return_parameter != -1 || record->return_complete != 1 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    const char *module_path = metadata[record->metadata_begin];
+    const char *member = metadata[record->metadata_begin + 1u];
+    if (!module_path || !member || member[0] != '\0' ||
+        !xr_stdlib_metadata_module_known(module_path))
+        return false;
+    if (out_module_path)
+        *out_module_path = module_path;
+    return true;
+}
+
+static bool aot_native_module_load_is_exact(const XrSemanticPlan *semantic,
+                                            const XrSemanticOperationRecord *record) {
+    const XrSemanticTypeRecord *type =
+        record ? xr_semantic_plan_type(semantic, record->result_type) : NULL;
+    return record && type && record->opcode == XI_GET_SHARED && record->operand_count == 0 &&
+           record->metadata_count == 0 && record->semantic_immediate >= 0 &&
+           record->semantic_immediate <= UINT16_MAX && !record->allocation_key &&
+           aot_stable_id_is_zero(record->allocation_id) &&
+           record->constant == XR_SEMANTIC_INDEX_NONE &&
+           record->callable_function == XR_SEMANTIC_INDEX_NONE &&
+           record->auxiliary_kind == 0 &&
+           record->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+           record->effects == xi_generated_op_effects(XI_GET_SHARED) &&
+           record->flags == xi_generated_op_default_flags(XI_GET_SHARED) &&
+           record->ownership_use == xi_generated_op_own_use(XI_GET_SHARED) &&
+           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+           record->result_alias_operand == -1 &&
+           record->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
+           record->return_parameter == -1 && record->return_complete == 1 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT);
+}
+
+static const char *aot_native_module_namespace_path(const XrSemanticPlan *semantic,
+                                                    uint32_t receiver_value) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
+    const XrSemanticOperationRecord *load = NULL;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->result_value != receiver_value)
+            continue;
+        if (load)
+            return NULL;
+        load = candidate;
+    }
+    if (!aot_native_module_load_is_exact(semantic, load))
+        return NULL;
+    const XrSemanticOperationRecord *store = NULL;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->opcode != XI_SET_SHARED || candidate->function != 0 ||
+            candidate->semantic_immediate != load->semantic_immediate)
+            continue;
+        if (store)
+            return NULL;
+        store = candidate;
+    }
+    if (!store || store->operand_count != 1 || store->operand_begin >= operand_count)
+        return NULL;
+    const XrSemanticOperandRecord *stored = &operands[store->operand_begin];
+    if (stored->role != XR_SEM_OPERAND_VALUE || stored->parameter != -1 ||
+        stored->ownership_action != XR_SEM_OPERAND_CONSUME || stored->flags != 0 ||
+        stored->type != load->result_type)
+        return NULL;
+    const XrSemanticOperationRecord *import = NULL;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->result_value != stored->value)
+            continue;
+        if (import)
+            return NULL;
+        import = candidate;
+    }
+    const char *module_path = NULL;
+    return import && import->result_type == load->result_type &&
+                   aot_native_module_import_is_exact(semantic, import, &module_path)
+               ? module_path
+               : NULL;
+}
+
+static bool aot_native_module_call_shape_is_exact(const XrSemanticPlan *semantic,
+                                                  const XrSemanticOperationRecord *operation,
+                                                  const char **out_selector,
+                                                  uint32_t *out_receiver_value,
+                                                  uint32_t *out_arity) {
+    uint32_t operands_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operands_count);
+    const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);
+    if (!semantic || !operation ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL ||
+        operation->opcode != XI_CALL_METHOD || operation->semantic_immediate <= 0 ||
+        (operation->semantic_immediate & 1) != 0 || operation->operand_count == 0 ||
+        operation->operand_begin >= operands_count ||
+        operation->operand_count > operands_count - operation->operand_begin ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        !metadata || (operation->flags & XI_FLAG_MAY_SUSPEND) != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        operation->result_alias_operand != -1 ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
+        !aot_native_module_scalar_type_is_exact(
+            xr_semantic_plan_type(semantic, operation->result_type)))
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    if (receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW)
+        return false;
+    for (uint16_t i = 1; i < operation->operand_count; i++) {
+        const XrSemanticOperandRecord *argument = receiver + i;
+        if (argument->role != XR_SEM_OPERAND_ARGUMENT ||
+            argument->parameter != (int16_t) (i - 1) ||
+            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+            !aot_native_module_scalar_type_is_exact(
+                xr_semantic_plan_type(semantic, argument->type)))
+            return false;
+    }
+    if (out_selector)
+        *out_selector = metadata[operation->metadata_begin];
+    if (out_receiver_value)
+        *out_receiver_value = receiver->value;
+    if (out_arity)
+        *out_arity = (uint32_t) (operation->operand_count - 1u);
+    return true;
+}
+
+static bool aot_native_module_namespace_value_is_exact(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
+    if (!operation)
+        return false;
+    if (operation->opcode == XI_IMPORT_REF) {
+        if (!aot_native_module_import_is_exact(semantic, operation, NULL))
+            return false;
+    } else if (operation->opcode == XI_GET_SHARED) {
+        if (!aot_native_module_load_is_exact(semantic, operation) ||
+            !aot_native_module_namespace_path(semantic, operation->result_value))
+            return false;
+    } else {
+        return false;
+    }
+    bool consumed = false;
+    const char *module_path = NULL;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *use = xr_semantic_plan_operation(semantic, i);
+        if (!use || use->operand_begin > operand_count ||
+            use->operand_count > operand_count - use->operand_begin)
+            return false;
+        for (uint16_t a = 0; a < use->operand_count; a++) {
+            const XrSemanticOperandRecord *operand = &operands[use->operand_begin + a];
+            if (operand->value != operation->result_value)
+                continue;
+            if ((use->opcode == XI_RETAIN || use->opcode == XI_RELEASE ||
+                 use->opcode == XI_SET_SHARED) &&
+                a == 0)
+                continue;
+            const char *selector = NULL;
+            uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
+            uint32_t arity = 0;
+            if (use->opcode != XI_CALL_METHOD || a != 0 ||
+                !aot_native_module_call_shape_is_exact(semantic, use, &selector, &receiver_value,
+                                                        &arity) ||
+                receiver_value != operation->result_value)
+                return false;
+            if (!module_path)
+                module_path = aot_native_module_namespace_path(semantic, operation->result_value);
+            if (!module_path || !xr_stdlib_metadata_exact_native_direct_member(
+                                    module_path, selector, (uint16_t) arity))
+                return false;
+            consumed = true;
+        }
+    }
+    return operation->opcode == XI_IMPORT_REF || consumed;
+}
+
+static bool aot_index_native_module_namespace_values(VerifyAuthority *ctx) {
+    if (!verify_alloc(ctx, ctx->value_count,
+                      sizeof(*ctx->exact_native_module_namespace_value),
+                      (void **) &ctx->exact_native_module_namespace_value))
+        return false;
+    for (uint32_t i = 0; i < ctx->operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(ctx->semantic, i);
+        if (!operation ||
+            (operation->opcode != XI_IMPORT_REF && operation->opcode != XI_GET_SHARED) ||
+            operation->result_value >= ctx->value_count ||
+            !aot_native_module_namespace_value_is_exact(ctx->semantic, operation))
+            continue;
+        ctx->exact_native_module_namespace_value[operation->result_value] = 1;
+    }
+    return true;
 }
 
 static bool aot_source_namespace_operation_is_exact(
@@ -2314,6 +2554,30 @@ static bool verify_direct_local_go_callee_type_authority(
         ctx->go_callee_target_by_value);
 }
 
+static bool verify_native_module_namespace_type_authority(
+    VerifyAuthority *ctx, const XrSemanticOperationRecord *operation, const XiValue *live) {
+    if (!ctx || !operation || !live || !live->type ||
+        operation->result_value >= ctx->value_count ||
+        !ctx->exact_native_module_namespace_value ||
+        !ctx->exact_native_module_namespace_value[operation->result_value] ||
+        !aot_native_module_namespace_value_is_exact(ctx->semantic, operation) ||
+        !source_type_matches(live->type,
+                             xr_semantic_plan_type(ctx->semantic, operation->result_type)))
+        return false;
+    if (operation->opcode == XI_IMPORT_REF) {
+        uint32_t metadata_count = 0;
+        const char *const *metadata = xr_semantic_plan_metadata(ctx->semantic, &metadata_count);
+        const XiImportRef *ref = live->aux ? (const XiImportRef *) live->aux : NULL;
+        const char *member = ref ? ref->member_name : NULL;
+        return live->op == XI_IMPORT_REF && ref && metadata &&
+               operation->metadata_begin + 1u < metadata_count && ref->module_path &&
+               strcmp(ref->module_path, metadata[operation->metadata_begin]) == 0 &&
+               strcmp(member ? member : "", metadata[operation->metadata_begin + 1u]) == 0;
+    }
+    return operation->opcode == XI_GET_SHARED && live->op == XI_GET_SHARED &&
+           live->aux_int == operation->semantic_immediate;
+}
+
 static bool verify_source_namespace_type_authority(
     VerifyAuthority *ctx, const XrSemanticOperationRecord *operation,
     const XiValue *live) {
@@ -2451,6 +2715,7 @@ static bool verify_authority_init(VerifyAuthority *ctx) {
     return aot_index_direct_local_callee_values(ctx) &&
            aot_index_direct_local_go_callee_values(ctx) &&
            aot_index_source_namespace_values(ctx) &&
+           aot_index_native_module_namespace_values(ctx) &&
            aot_index_channel_values(ctx);
 }
 
@@ -2671,6 +2936,12 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                                             operation->result_value]
                                   ? verify_source_namespace_type_authority(
                                         ctx, operation, value)
+                              : operation->result_value < ctx->value_count &&
+                                        ctx->exact_native_module_namespace_value &&
+                                        ctx->exact_native_module_namespace_value[
+                                            operation->result_value]
+                                  ? verify_native_module_namespace_type_authority(
+                                        ctx, operation, value)
                               : semantic_string_literal_is_exact(ctx->semantic,
                                                                  operation)
                                   ? verify_string_literal_type_authority(
@@ -2758,6 +3029,15 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                                   ctx, source_operation, value->args[a]) &&
                                   operand->type == source_operation->result_type
                         : source_operation &&
+                                  source_operation->result_value <
+                                      ctx->value_count &&
+                                  ctx->exact_native_module_namespace_value &&
+                                  ctx->exact_native_module_namespace_value[
+                                      source_operation->result_value]
+                            ? verify_native_module_namespace_type_authority(
+                                  ctx, source_operation, value->args[a]) &&
+                                  operand->type == source_operation->result_type
+                        : source_operation &&
                                   semantic_string_literal_is_exact(
                                       ctx->semantic, source_operation)
                             ? verify_string_literal_type_authority(
@@ -2805,6 +3085,12 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                                     ctx->exact_source_namespace_value[
                                         operation->result_value]
                               ? verify_source_namespace_type_authority(
+                                    ctx, operation, value)
+                          : operation && operation->result_value < ctx->value_count &&
+                                    ctx->exact_native_module_namespace_value &&
+                                    ctx->exact_native_module_namespace_value[
+                                        operation->result_value]
+                              ? verify_native_module_namespace_type_authority(
                                     ctx, operation, value)
                           : operation &&
                                     semantic_string_literal_is_exact(
@@ -3566,6 +3852,64 @@ static bool oracle_static_direct_local_callee_storage(
     return true;
 }
 
+/* The native stdlib namespace handle is a borrowed compiler-owned reference:
+ * it is loaded from a module shared slot and never adapted to a native
+ * representation, so its storage stays the borrowed tagged value. */
+static bool oracle_native_module_namespace_storage(const VerifyAuthority *ctx,
+                                                   uint32_t semantic_value, XrRep *out_storage,
+                                                   uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind ||
+        !ctx->exact_native_module_namespace_value ||
+        !ctx->exact_native_module_namespace_value[semantic_value])
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index < ctx->operation_count
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep) : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (!operation || layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!operation || !binding || !register_rep || !memory_rep || !slot || !layout ||
+        !aot_native_module_namespace_value_is_exact(ctx->semantic, operation) ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 || layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align || slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index || slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY || slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep || slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static bool oracle_source_namespace_storage(
     const VerifyAuthority *ctx, uint32_t semantic_value,
     XrRep *out_storage, uint16_t *out_machine_kind) {
@@ -3932,6 +4276,10 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
         ctx->exact_source_namespace_value[semantic_value])
         return oracle_source_namespace_storage(
             ctx, semantic_value, out_storage, out_machine_kind);
+    if (ctx->exact_native_module_namespace_value &&
+        ctx->exact_native_module_namespace_value[semantic_value])
+        return oracle_native_module_namespace_storage(ctx, semantic_value, out_storage,
+                                                      out_machine_kind);
     if (oracle_dynamic_json_namespace_value_storage(ctx, semantic_value, out_storage,
                                                     out_machine_kind))
         return true;
@@ -4143,7 +4491,9 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 !(ctx->exact_source_namespace_value &&
                   ctx->exact_source_namespace_value[source_value] &&
                   oracle_source_namespace_storage(
-                      ctx, source_value, &literal_storage, &ignored_kind)))
+                      ctx, source_value, &literal_storage, &ignored_kind)) &&
+                !oracle_native_module_namespace_storage(ctx, source_value, &literal_storage,
+                                                        &ignored_kind))
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
@@ -4167,7 +4517,9 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 !oracle_dynamic_json_namespace_value_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_source_namespace_storage(
-                    ctx, source_value, &machine_storage, &ignored_kind))
+                    ctx, source_value, &machine_storage, &ignored_kind) &&
+                !oracle_native_module_namespace_storage(ctx, source_value, &machine_storage,
+                                                        &ignored_kind))
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
@@ -4539,6 +4891,7 @@ static bool authority_collect_obligations(CollectContext *ctx) {
     bool valid = aot_index_direct_local_callee_values(&oracle) &&
                  aot_index_direct_local_go_callee_values(&oracle) &&
                  aot_index_source_namespace_values(&oracle) &&
+                 aot_index_native_module_namespace_values(&oracle) &&
                  aot_index_channel_values(&oracle) &&
                  authority_collect_obligations_indexed(ctx, &oracle);
     xr_free(oracle.direct_callee_target_by_value);
@@ -4549,6 +4902,7 @@ static bool authority_collect_obligations(CollectContext *ctx) {
     xr_free(oracle.exact_channel_allocation_value);
     xr_free(oracle.exact_source_namespace_value);
     xr_free(oracle.source_namespace_dependency_by_value);
+    xr_free(oracle.exact_native_module_namespace_value);
     return valid;
 }
 

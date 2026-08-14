@@ -43,6 +43,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE = UINT64_C(1) << 16,
     XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE = UINT64_C(1) << 17,
     XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE = UINT64_C(1) << 18,
+    XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE = UINT64_C(1) << 19,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -175,7 +176,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                  \
                  XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE |                  \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE |            \
-                 XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE))
+                 XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |                       \
+                 XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -297,6 +299,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING,
     XR_TARGET_CALL_CONVENTION_JSON_NAMESPACE_VALUE,
     XR_TARGET_CALL_CONVENTION_ARRAY_PUSH_SCALAR,
+    XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -307,7 +310,11 @@ typedef enum XrTargetCallConvention {
  * member, whose receiver is a reserved builtin global rather than a value.
  * ARRAY_PUSH_SCALAR names the sealed builtin container member on an array
  * receiver whose element carries no reference, so the consumed argument leaves
- * no reference-count obligation behind the call. */
+ * no reference-count obligation behind the call.
+ * NATIVE_MODULE_SCALAR names the member the frozen stdlib definition registry
+ * binds for one imported native module namespace and selector, whose receiver
+ * is a module handle rather than a value and whose arguments and result are all
+ * plain scalars, so the row carries no argument intent of its own. */
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
@@ -320,6 +327,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING,
     XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE,
     XR_TARGET_CALL_TARGET_ARRAY_PUSH_SCALAR,
+    XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetCallErrorMode {

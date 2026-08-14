@@ -72,11 +72,7 @@ family. Zero instruction rows mean execution unavailable. A trivial
 signed-`i64` parameter-role slot is an ordinary uninitialized slot of this
 frame at creation: the dispatcher fills it through the verified parameter row
 that names its argument ordinal, so no slot is ever live before a store and
-the frame gains no argument-passing authority of its own. The one-byte truth
-slot a comparison row answers into is likewise an ordinary packed trivial slot
-here, accessed at the size and alignment its own plan record states; the frame
-learns nothing about relations, truth, or which rows may write which slot
-family, all of which the instruction group proves before the frame exists. A slot the
+the frame gains no argument-passing authority of its own. A slot the
 dispatcher writes on one path and reads on another is proved defined by the
 instruction group's own control-flow judgement before the frame is created, so
 the frame keeps its single rule that a load requires a prior store and gains no
@@ -121,7 +117,7 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 30d186c4d32ab6c40a58601f78bc4b80cc82b4986370900cc948c6074b9ec484
+anchor-sha256: src/plan/target/xr_target_plan.h 8bd8036fe2461b119c33621c0a8b179ccabfc0d92387ba389f028bc5d50c4b98
 anchor-sha256: src/vm/xr_typed_frame.h b51b7f45110ccd0f05a1b6595a4a960eec1606d2bae6dbd21e95633fed2b0151
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816

@@ -1,0 +1,24 @@
+// anchor: native-module-scalar-call-target
+// A call through an imported stdlib module namespace is a method call whose
+// receiver is the module handle published into a shared slot, not a value the
+// program can construct. Without an exact dispatch authority for that shape the
+// native backend rejected every such callsite as having no target while the VM
+// kept executing it, so passing under `xray run` proves nothing about the
+// native path: this case is the only coverage that pins the namespace handle,
+// its scalar arguments, and its scalar result to one proven target on both
+// paths. The bounds are equal so the member is a pure function of its
+// arguments and the two paths must print the same digits.
+import math
+
+fn pinned(low: int) -> int {
+    return math.randomInt(low, low)
+}
+
+fn main() {
+    print(math.randomInt(7, 7))
+    print(pinned(3))
+    var doubled = math.randomInt(4, 4) + math.randomInt(5, 5)
+    print(doubled)
+}
+
+main()
