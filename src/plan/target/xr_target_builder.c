@@ -3442,6 +3442,115 @@ static bool builder_add_source_class_instance_storage(XrTargetPlanBuilder *build
     return true;
 }
 
+/* Binds the instance a constructor receives. The receiver is the one value in
+ * the construction family whose declaration its own type row cannot name, so it
+ * is bound from the function's identity instead; everything else about it is
+ * the same outer tagged value the construction returns, because the IR gives an
+ * instance no machine geometry a bare object pointer could state. The ownership
+ * is the parameter's own recorded ownership rather than a property of the
+ * family, and the slot is a parameter slot rather than a temporary, because the
+ * value is bound on entry rather than computed. The allocation, its roots and
+ * its cleanup stay with semantic ownership and the existing AOT class lifetime
+ * path, so this family adds no root or cleanup row. */
+static bool note_source_class_receiver_storage_value(XrTargetPlanBuilder *builder,
+                                                     XrTargetValueStorageAnalysis *analysis,
+                                                     uint32_t parameter_index, char *error,
+                                                     size_t error_size) {
+    const XrSemanticPlan *plan = builder->semantic_plan;
+    const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
+    if (xr_semantic_class_constructor_receiver_source_class(plan, parameter_index) ==
+            XR_SEMANTIC_INDEX_NONE ||
+        !parameter || parameter->value >= analysis->total_values ||
+        parameter->type >= analysis->type_count ||
+        parameter->function >= xr_semantic_plan_function_count(plan) ||
+        analysis->defined_values[parameter->value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "source class receiver storage authority is incomplete");
+    bool owned = parameter->ownership == XI_OWN_OWNED;
+    if (!owned && parameter->ownership != XI_OWN_BORROWED)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "source class receiver has no exact ownership authority");
+    if (analysis->type_rep_kinds[parameter->type] != XR_MACHINE_REP_COUNT &&
+        analysis->type_rep_kinds[parameter->type] != XR_MACHINE_REP_DYN_VALUE)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "semantic class receiver type has conflicting storage representations");
+    XrTargetMachineRepRecord rep;
+    const XrTargetMachineFacts *facts = xr_target_profile_machine_facts(builder->profile);
+    if (!(owned ? make_dynamic_value_rep(facts, &rep)
+                : make_borrowed_dynamic_value_rep(facts, &rep)) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize exact class receiver storage");
+    XrStableId slot_identity;
+    if (!make_slot_identity(plan, parameter->function, XR_TARGET_SLOT_PARAMETER, parameter->id,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "class receiver slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = parameter->function,
+        .semantic_value = parameter->value,
+        .semantic_operation = XR_SEMANTIC_INDEX_NONE,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_PARAMETER,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = owned ? XR_TARGET_OWNERSHIP_OWNED : XR_TARGET_OWNERSHIP_BORROWED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = parameter->value,
+        .semantic_function = parameter->function,
+        .semantic_type = parameter->type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[parameter->type] &&
+         !append_layout_intent(builder, parameter->type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                               error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[parameter->value] = 1;
+    analysis->used_types[parameter->type] = 1;
+    analysis->value_types[parameter->value] = parameter->type;
+    analysis->value_functions[parameter->value] = parameter->function;
+    analysis->type_rep_kinds[parameter->type] = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+static bool builder_add_source_class_receiver_storage(XrTargetPlanBuilder *builder, char *error,
+                                                      size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    /* A value another family already bound is not this family's to claim. */
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values)
+            analysis.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < parameter_count; i++) {
+        if (xr_semantic_class_constructor_receiver_source_class(builder->semantic_plan, i) ==
+            XR_SEMANTIC_INDEX_NONE)
+            continue;
+        valid = note_source_class_receiver_storage_value(builder, &analysis, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE;
+    return true;
+}
+
 static bool builder_add_string_literal_storage(
     XrTargetPlanBuilder *builder, char *error, size_t error_size) {
     if (!builder_begin_family(builder,
@@ -7259,6 +7368,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_array_allocation_storage(builder, error, error_size) ||
         !builder_add_source_class_object_storage(builder, error, error_size) ||
         !builder_add_source_class_instance_storage(builder, error, error_size) ||
+        !builder_add_source_class_receiver_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
         !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_append_rune_storage(builder, error, error_size) ||

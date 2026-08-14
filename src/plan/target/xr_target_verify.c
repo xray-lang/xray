@@ -2475,6 +2475,19 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
              exact_source_namespaces[operation->result_value] != 0))
             exact_types[operation->result_type] = 1;
     }
+    /* The constructor receiver is the one dynamic value in the plan that no
+     * operation result names: it is bound on entry rather than computed, so its
+     * type reaches this collector through the parameter table or not at all. */
+    size_t parameter_count = xr_semantic_plan_parameter_count(plan->semantic_plan);
+    for (uint32_t i = 0; i < (uint32_t) parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan->semantic_plan, i);
+        if (!parameter || parameter->type >= type_count ||
+            xr_semantic_class_constructor_receiver_source_class(plan->semantic_plan, i) ==
+                XR_SEMANTIC_INDEX_NONE)
+            continue;
+        exact_types[parameter->type] = 1;
+    }
     *out = exact_types;
     return true;
 }
@@ -2574,6 +2587,26 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                                                            semantic_value);
     bool exact_string_byte_parameter = semantic_u8_slice_parameter_is_exact(
         plan->semantic_plan, parameter) && parameter->type == semantic_type;
+    /* Recomputed through the shared judgement for the same reason the class
+     * object and the instance are. The receiver is the one value in the family
+     * whose declaration its type row cannot name, so the judgement reads it off
+     * the constructor's own identity; a builder row this verifier cannot
+     * re-derive from that identity stays unproven. */
+    uint32_t receiver_parameter =
+        operation ? XR_SEMANTIC_INDEX_NONE
+                  : xr_semantic_class_parameter_for_value(plan->semantic_plan, semantic_value);
+    const XrSemanticParameterRecord *receiver_record =
+        xr_semantic_plan_parameter(plan->semantic_plan, receiver_parameter);
+    bool exact_class_receiver =
+        xr_semantic_class_constructor_receiver_source_class(plan->semantic_plan,
+                                                            receiver_parameter) !=
+            XR_SEMANTIC_INDEX_NONE &&
+        receiver_record && receiver_record->type == semantic_type &&
+        receiver_record->function == semantic_function;
+    /* Whether the receiver owns its allocation is the parameter's own recorded
+     * ownership, never a property of the family. */
+    bool exact_class_receiver_borrowed =
+        exact_class_receiver && receiver_record->ownership == XI_OWN_BORROWED;
     bool exact_unit_enum = semantic_unit_enum_type_is_exact(type);
     uint16_t receive_scalar_kind = XR_MACHINE_REP_COUNT;
     bool scalar_channel_receive =
@@ -2584,7 +2617,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         XR_VALUE_BINDING_FAIL(10);
     int eligibility = operation_result_void || exact_heap_closure ||
                               exact_array_allocation || exact_class_object ||
-                              exact_class_instance ||
+                              exact_class_instance || exact_class_receiver ||
                               exact_string_literal || exact_direct_string_result ||
                               exact_stringbuilder ||
                               exact_stringbuilder_append ||
@@ -2612,7 +2645,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                         : 0;
     int expected_layout = -1;
     if (exact_heap_closure || exact_array_allocation || exact_class_object ||
-        exact_class_instance ||
+        exact_class_instance || exact_class_receiver ||
         exact_string_literal || exact_direct_string_result ||
         exact_stringbuilder ||
         exact_stringbuilder_append ||
@@ -2673,7 +2706,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     if (expected_kind == XR_MACHINE_REP_DYN_VALUE) {
         uint8_t expected_ownership =
             (exact_direct_callee || exact_go_callee || exact_source_namespace ||
-             exact_class_instance_borrowed ||
+             exact_class_instance_borrowed || exact_class_receiver_borrowed ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
                 : XR_TARGET_OWNERSHIP_OWNED;

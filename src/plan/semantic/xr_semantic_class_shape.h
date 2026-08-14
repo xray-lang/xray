@@ -23,6 +23,7 @@
 #include "xr_semantic_plan.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
+#include "../../ir/xi_own.h"
 #include "../../runtime/value/xtype.h"
 #include <string.h>
 
@@ -62,6 +63,22 @@ static inline bool xr_semantic_class_object_operation_is_exact(
            operation->view_source_parameter == -1;
 }
 
+/* Whether the plan's source-class table names one frozen declaration at this
+ * index. A generic skeleton or a monomorphized instantiation has no single
+ * frozen object identity, and a row whose own ordinal disagrees with the index
+ * it sits at names nothing, so neither is any caller's to claim. Every judgement
+ * below asks this one question rather than restating it, so a declaration one
+ * layer accepts cannot be a declaration another layer refuses. */
+static inline bool xr_semantic_class_declaration_is_frozen(const XrSemanticPlan *plan,
+                                                           uint32_t source_class) {
+    if (!plan || source_class == XR_SEMANTIC_INDEX_NONE ||
+        source_class >= (uint32_t) xr_semantic_plan_source_class_count(plan))
+        return false;
+    const XrSemanticSourceClassRecord *record = xr_semantic_plan_source_class(plan, source_class);
+    return record && (record->flags & XR_SEM_SOURCE_CLASS_GENERIC) == 0 &&
+           record->ordinal == source_class && record->canonical_key && record->module_path;
+}
+
 /* The declaration this allocation builds, or XR_SEMANTIC_INDEX_NONE when the
  * plan cannot name exactly one. The match is by class name because that is the
  * only class identity the operation retains; a name that names two declarations
@@ -91,15 +108,7 @@ static inline uint32_t xr_semantic_class_object_source_class(
             return XR_SEMANTIC_INDEX_NONE;
         match = i;
     }
-    if (match == XR_SEMANTIC_INDEX_NONE)
-        return XR_SEMANTIC_INDEX_NONE;
-    const XrSemanticSourceClassRecord *record = xr_semantic_plan_source_class(plan, match);
-    /* A generic skeleton or monomorphized instantiation has no single frozen
-     * object identity, so it stays outside this family. */
-    if ((record->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0 || record->ordinal != match ||
-        !record->canonical_key || !record->module_path)
-        return XR_SEMANTIC_INDEX_NONE;
-    return match;
+    return xr_semantic_class_declaration_is_frozen(plan, match) ? match : XR_SEMANTIC_INDEX_NONE;
 }
 
 static inline bool xr_semantic_class_object_is_exact(const XrSemanticPlan *plan,
@@ -120,16 +129,175 @@ static inline uint32_t xr_semantic_class_instance_type_source_class(
         type->child_count != 0 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
         type->enum_member_count != 0 || type->enum_flags != 0 ||
         type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
-        type->source_class == XR_SEMANTIC_INDEX_NONE ||
-        type->source_class >= (uint32_t) xr_semantic_plan_source_class_count(plan))
+        !xr_semantic_class_declaration_is_frozen(plan, type->source_class))
         return XR_SEMANTIC_INDEX_NONE;
     const XrSemanticSourceClassRecord *record =
         xr_semantic_plan_source_class(plan, type->source_class);
-    if (!record || (record->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0 ||
-        record->ordinal != type->source_class || !record->canonical_key ||
-        !record->module_path || !xr_stable_id_equal(type->source_class_identity, record->id))
+    if (!record || !xr_stable_id_equal(type->source_class_identity, record->id))
         return XR_SEMANTIC_INDEX_NONE;
     return type->source_class;
+}
+
+/* The anonymous instance shape a constructor receiver carries. It is the
+ * instance row stripped of its class identity: the frontend types `this` as a
+ * bare instance that names no declaration, so this judgement proves only that
+ * the row is a reference-capable ownership root with no aggregate, enum or
+ * scalar geometry, and deliberately requires the class name to be absent. A row
+ * that does name a declaration is the instance judgement's to answer, not this
+ * one's, and a row carrying geometry is neither's. */
+static inline bool xr_semantic_class_anonymous_instance_type_is_exact(
+    const XrSemanticTypeRecord *type) {
+    XrStableId zero = {{0}};
+    return type && type->kind == XR_KIND_INSTANCE && type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->enum_member_count == 0 && type->enum_flags == 0 &&
+           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT);
+}
+
+/* The declaration whose instance a constructor receives, or NONE. Every other
+ * value in this family keeps its declaration in its own type row; the receiver
+ * cannot, because the frontend types `this` as a bare instance naming no
+ * declaration at all, so the type table has no answer to give. The authority is
+ * the function's identity instead: a function the plan records as the
+ * constructor of one frozen declaration receives that declaration's instance,
+ * and the receiver is the parameter its own parameter range starts with rather
+ * than any parameter that merely claims ordinal zero. The row must still be the
+ * anonymous instance shape, so a constructor whose receiver carries geometry or
+ * already names a class stays outside this family. */
+static inline uint32_t xr_semantic_class_constructor_receiver_source_class(
+    const XrSemanticPlan *plan, uint32_t parameter_index) {
+    if (!plan || parameter_index == XR_SEMANTIC_INDEX_NONE ||
+        parameter_index >= (uint32_t) xr_semantic_plan_parameter_count(plan))
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(plan, parameter_index);
+    if (!parameter || parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->ordinal != 0 ||
+        parameter->mode != XR_PARAM_READ || parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
+        parameter->function >= (uint32_t) xr_semantic_plan_function_count(plan))
+        return XR_SEMANTIC_INDEX_NONE;
+    /* The receiver is bound by reference either way, but which of the two the
+     * plan recorded is the plan's fact to state, not this judgement's to pick. */
+    if (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED)
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(plan, parameter->function);
+    /* Parameter zero of the function is the one its range starts with. Trusting
+     * the ordinal alone would let a parameter belonging to another function's
+     * range answer for this one. */
+    if (!function || function->source_kind != XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR ||
+        function->parameter_count == 0 || function->parameter_begin != parameter_index ||
+        !xr_semantic_class_declaration_is_frozen(plan, function->source_class))
+        return XR_SEMANTIC_INDEX_NONE;
+    if (!xr_semantic_class_anonymous_instance_type_is_exact(
+            xr_semantic_plan_type(plan, parameter->type)))
+        return XR_SEMANTIC_INDEX_NONE;
+    return function->source_class;
+}
+
+/* The one function the plan records as the constructor of `source_class`, or
+ * NONE when the plan records none or more than one. A declaration that declares
+ * no constructor has none, and that is not a failure: its construction then
+ * carries no argument at all. Two constructors for one declaration name no
+ * single body, so the caller must refuse rather than pick. */
+static inline uint32_t xr_semantic_class_constructor_function(const XrSemanticPlan *plan,
+                                                              uint32_t source_class) {
+    if (!xr_semantic_class_declaration_is_frozen(plan, source_class))
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t function_count = (uint32_t) xr_semantic_plan_function_count(plan);
+    uint32_t found = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < function_count; i++) {
+        const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, i);
+        if (!function || function->source_kind != XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR ||
+            function->source_class != source_class)
+            continue;
+        if (found != XR_SEMANTIC_INDEX_NONE)
+            return XR_SEMANTIC_INDEX_NONE;
+        found = i;
+    }
+    return found;
+}
+
+/* The one parameter in the module bound to `value`, or NONE when the module
+ * binds it zero times or more than once. A value two parameters claim carries
+ * no single receiver identity, so it names nothing. */
+static inline uint32_t xr_semantic_class_parameter_for_value(const XrSemanticPlan *plan,
+                                                             uint32_t value) {
+    if (!plan || value == XR_SEMANTIC_INDEX_NONE)
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(plan);
+    uint32_t found = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, i);
+        if (!parameter || parameter->value != value)
+            continue;
+        if (found != XR_SEMANTIC_INDEX_NONE)
+            return XR_SEMANTIC_INDEX_NONE;
+        found = i;
+    }
+    return found;
+}
+
+/* The declaration whose instance a field store writes through, or NONE. The
+ * store is the generated field write: a borrowed receiver, one consumed value
+ * and one metadata name, with no allocation, constant, callee or view of its
+ * own. Which field the name selects is the frontend's proof; what this
+ * judgement adds is that the receiver is a constructor receiver this family
+ * named, so the write lands in a proved allocation rather than in an open
+ * object. The stored value's own storage is deliberately not this judgement's
+ * question: a field whose type has no storage row must still be refused by the
+ * caller that asks for it. */
+static inline uint32_t xr_semantic_class_field_store_source_class(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    XrStableId zero = {{0}};
+    if (!plan || xr_semantic_plan_source_class_count(plan) == 0 || !operation ||
+        operation->opcode != XI_STORE_FIELD || operation->operand_count != 2 ||
+        operation->metadata_count != 1 || operation->semantic_immediate < 0 ||
+        operation->allocation_key || !xr_stable_id_equal(operation->allocation_id, zero) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != 0 ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->effects != xi_generated_op_effects(XI_STORE_FIELD) ||
+        operation->flags != xi_generated_op_default_flags(XI_STORE_FIELD) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_STORE_FIELD) ||
+        operation->result_ownership != xi_generated_op_result_ownership(XI_STORE_FIELD) ||
+        operation->transfer_mode != 0 || operation->parameter_mode != 0 ||
+        operation->parameter_ownership != 0 || operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 || operation->view_complete != 0 ||
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1)
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    if (!operands || operation->operand_begin >= operand_count ||
+        operand_count - operation->operand_begin < 2)
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *stored = &operands[operation->operand_begin + 1];
+    if (receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
+        receiver->transfer_mode != 0 || receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        receiver->parameter_mode != 0 || receiver->access != 0 || receiver->origin != 0 ||
+        receiver->lifetime != 0 || receiver->escape != 0 || receiver->flags != 0)
+        return XR_SEMANTIC_INDEX_NONE;
+    if (stored->role != XR_SEM_OPERAND_VALUE || stored->parameter != -1 ||
+        stored->transfer_mode != 0 || stored->ownership_action != XR_SEM_OPERAND_CONSUME ||
+        stored->parameter_mode != 0 || stored->access != 0 || stored->origin != 0 ||
+        stored->lifetime != 0 || stored->escape != 0 || stored->flags != 0)
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t parameter_index = xr_semantic_class_parameter_for_value(plan, receiver->value);
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(plan, parameter_index);
+    uint32_t source_class =
+        xr_semantic_class_constructor_receiver_source_class(plan, parameter_index);
+    /* The store must run inside the very constructor that receives the
+     * instance; a store reading another function's receiver names nothing. */
+    if (source_class == XR_SEMANTIC_INDEX_NONE || !parameter ||
+        parameter->type != receiver->type || parameter->function != operation->function)
+        return XR_SEMANTIC_INDEX_NONE;
+    return source_class;
 }
 
 /* The generated shape of a module-level shared load: a borrowed static read of
@@ -272,14 +440,16 @@ static inline uint32_t xr_semantic_class_object_read_source_class(
 }
 
 /* The declaration a construction call builds, or NONE. The call names no callee
- * function and carries no argument: what it constructs is proved from the
- * instance type it returns and from the class object its callee operand loads,
- * and the two must name the same declaration. */
+ * function: what it constructs is proved from the instance type it returns and
+ * from the class object its callee operand loads, and the two must name the
+ * same declaration. Any argument it carries is proved against the declaration's
+ * own constructor, so the arity and the contract of a construction can never be
+ * taken on the call's word alone. */
 static inline uint32_t xr_semantic_class_construction_source_class(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
     XrStableId zero = {{0}};
     if (!plan || xr_semantic_plan_source_class_count(plan) == 0 || !operation ||
-        operation->opcode != XI_CALL || operation->operand_count != 1 ||
+        operation->opcode != XI_CALL || operation->operand_count < 1 ||
         operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
         operation->allocation_key || !xr_stable_id_equal(operation->allocation_id, zero) ||
         operation->constant != XR_SEMANTIC_INDEX_NONE ||
