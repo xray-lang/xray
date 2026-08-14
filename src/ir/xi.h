@@ -696,19 +696,6 @@ static inline bool xi_op_is_identity_forward(uint16_t op) {
     return op == XI_SOURCE_MOVE || op == XI_OWNER_FORWARD;
 }
 
-/* XI_CALL flag byte of aux_int (bits 0-7); bits 8-15 hold the result count. */
-#define XI_CALL_FLAGS_MASK INT64_C(0xff)
-#define XI_CALL_FLAG_SELF INT64_C(1)
-
-/* True when the call names its own activation as the callee: the callee slot
- * holds a placeholder constant nobody reads, and the target is the closure the
- * running frame already carries.  The immediate is the whole authority for
- * that, so the emitter, the IR verifier and both plan layers ask it here
- * instead of each restating the encoding. */
-static inline bool xi_call_targets_own_frame(uint16_t op, int64_t immediate) {
-    return op == XI_CALL && (immediate & XI_CALL_FLAGS_MASK) == XI_CALL_FLAG_SELF;
-}
-
 /* XI_CORO_OP sub-type constants (stored in aux_int) */
 #define XI_CORO_SUB_SET_LOCAL 0
 #define XI_CORO_SUB_GET_LOCAL 1

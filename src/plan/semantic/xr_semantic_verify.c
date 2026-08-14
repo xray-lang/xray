@@ -2386,12 +2386,6 @@ static uint32_t resolve_frozen_direct_call_target(const XrSemanticPlan *plan,
     const XrSemanticOperationRecord *call = &plan->operations[operation_index];
     if ((call->opcode != XI_CALL && call->opcode != XI_TAIL_CALL) || call->operand_count == 0)
         return XR_SEMANTIC_INDEX_NONE;
-    /* Re-derived from the frozen immediate through the same shared judgement
-     * the IR emitter obeys, never read back from the row being checked: a call
-     * on its own activation names the function it already sits in, and its
-     * callee operand holds a placeholder no layer resolves. */
-    if (xi_call_targets_own_frame(call->opcode, call->semantic_immediate))
-        return call->function < plan->function_count ? call->function : XR_SEMANTIC_INDEX_NONE;
     uint32_t value = plan->operands[call->operand_begin].value;
     for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
         if (value >= value_count)

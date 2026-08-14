@@ -129,7 +129,7 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     }
     uint16_t nargs = (uint16_t) (v->nargs - 1);
-    bool self_call = xi_call_targets_own_frame(v->op, v->aux_int);
+    bool self_call = ((v->aux_int & 0xFF) == 1);
     int nresults = (int) ((v->aux_int >> 8) & 0xFF);
     if (nresults == 0)
         nresults = 1;

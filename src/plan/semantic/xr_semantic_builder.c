@@ -2634,15 +2634,7 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     if (value->op != XI_CALL && value->op != XI_TAIL_CALL)
         return true;
     uint32_t caller = ctx->plan->operations[operation].function;
-    /* A call on its own activation carries no callee value to resolve: the
-     * shared judgement reads the whole target out of the immediate, and the
-     * function it names is the caller.  Everything past this point is the
-     * ordinary direct-local row, so a self-call is admitted on exactly the
-     * signature, argument and result terms any other local call must meet. */
-    int function = xi_call_targets_own_frame(value->op, value->aux_int)
-                       ? (int) caller
-                       : resolve_direct_local_callee(ctx, ctx->functions[caller].source,
-                                                     value->args[0]);
+    int function = resolve_direct_local_callee(ctx, ctx->functions[caller].source, value->args[0]);
     const char *native_module = NULL;
     const char *native_member = NULL;
     bool native_yieldable =

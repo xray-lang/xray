@@ -1626,7 +1626,7 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
 
             /* XI_CALL: must be self-call or callee typed as function */
             if (v->op == XI_CALL) {
-                bool is_self = xi_call_targets_own_frame(v->op, v->aux_int);
+                bool is_self = (v->aux_int & 0xFF) == 1;
                 bool callee_is_func = v->nargs >= 1 && v->args[0] && v->args[0]->type &&
                                       v->args[0]->type->kind == XR_KIND_FUNCTION;
                 if (!is_self && !callee_is_func) {
