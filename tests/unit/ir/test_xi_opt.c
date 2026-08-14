@@ -1585,6 +1585,39 @@ TEST(non_coroutine_plan_keeps_full_optimizer_pipeline) {
     xi_func_free(f);
 }
 
+TEST(the_none_level_runs_no_pass_and_reports_no_statistics) {
+    XiFunc *f = make_func("none_level", &stub_int);
+    XiValue *dead = xi_const_int(f, f->entry, 41, &stub_int);
+    XiValue *result = xi_const_int(f, f->entry, 42, &stub_int);
+    assert(dead && result);
+    xi_block_set_return(f->entry, result);
+
+    uint32_t values_before = f->entry->nvalues;
+    XiPipelineStats stats;
+    /* Poisoned on purpose: the driver reports statistics for a run in which
+     * nothing ran, so it has to clear the buffer before it returns. */
+    memset(&stats, 0xAB, sizeof(stats));
+
+    XiOptResult opt = xi_opt_run_pipeline_ex(f, XI_OPT_NONE, &stats, 0);
+    assert(opt.ok);
+    /* The dead constant survives. At the light level DCE removes it, which is
+     * what makes this an assertion about the level rather than about the
+     * function being unoptimizable. */
+    assert(f->entry->nvalues == values_before);
+    assert(!opt.change.values_changed);
+    assert(!opt.change.cfg_changed);
+    assert(stats.npass == 0);
+    assert(stats.total_rounds == 0);
+    assert(stats.total_ns == 0);
+
+    XiOptResult light = xi_opt_run_pipeline_ex(f, XI_OPT_LIGHT, &stats, 0);
+    assert(light.ok);
+    assert(f->entry->nvalues < values_before);
+    assert(stats.npass > 0);
+
+    xi_func_free(f);
+}
+
 /* ========== Tuple Projection Peephole Tests ========== */
 
 /* TUPLE_GET(TUPLE_NEW(a, b), 0) collapses to COPY(a). */
@@ -2157,6 +2190,7 @@ int main(void) {
     run_select_rep_advances_empty_func_tree();
     run_full_pipeline_preserves_frozen_coroutine_plan();
     run_non_coroutine_plan_keeps_full_optimizer_pipeline();
+    run_the_none_level_runs_no_pass_and_reports_no_statistics();
 
     /* Tuple projection peephole */
     run_tuple_get_of_tuple_new_first();

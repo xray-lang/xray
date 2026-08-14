@@ -4689,13 +4689,16 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
     XiAnalysisManager analysis_manager;
     xi_analysis_manager_init(&analysis_manager, f);
 
+    /* The caller reads `stats` whether or not any pass ran, so it is cleared
+     * before the level is consulted. The none level used to be unreachable
+     * and this buffer was left holding whatever the caller's stack held. */
+    if (stats)
+        memset(stats, 0, sizeof(*stats));
+
     if (level == XI_OPT_NONE) {
         result.change = xi_pass_no_change();
         return result;
     }
-
-    if (stats)
-        memset(stats, 0, sizeof(*stats));
 
     /* XRAY_XI_CHECK=1 enables per-pass verification to pinpoint
      * the exact pass that breaks an invariant. */

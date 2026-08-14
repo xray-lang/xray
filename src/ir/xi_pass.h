@@ -15,7 +15,8 @@
  *     3. Gate passes by optimization level
  *
  *   Three optimization levels control which passes fire:
- *     XI_OPT_NONE  — verification only (check pipelines, AOT dry-run)
+ *     XI_OPT_NONE  — no pass runs; verification and the rest of the pipeline
+ *                    still do
  *     XI_OPT_LIGHT — cheap cleanup (VM default: constfold, copy_prop, DCE)
  *     XI_OPT_FULL  — all passes including SCCP, GVN, LICM (AOT)
  *
@@ -85,7 +86,10 @@ static inline XiPassChange xi_pass_merge(XiPassChange a, XiPassChange b) {
 /* ========== Optimization Levels ========== */
 
 typedef enum {
-    XI_OPT_NONE = 0,  /* no optimization (verify-only pipeline) */
+    /* No pass runs at all. The stage verifiers and the rest of the pipeline
+     * still run, so this is the setting a bisection starts from: whatever it
+     * answers, no optimization produced it. */
+    XI_OPT_NONE = 0,
     XI_OPT_LIGHT = 1, /* constfold + strength_reduce + copy_prop + phi_simp + DCE */
     XI_OPT_FULL = 2,  /* LIGHT + SCCP + GVN + LICM + GCM + inlining + if-conv */
 } XiOptLevel;
