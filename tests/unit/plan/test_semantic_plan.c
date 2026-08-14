@@ -927,7 +927,9 @@ static XrSemanticPlan *build_source_instance_method_open_plan(XrSemanticPlan **d
     return plan;
 }
 
-static XrSemanticPlan *build_source_export_call_target_plan(XrSemanticPlan **dependency_out) {
+static XrSemanticPlan *build_source_export_call_target_plan(XrSemanticPlan **dependency_out,
+                                                            bool parent_state,
+                                                            bool expect_success) {
     XiFunc *dependency_root = xi_func_new("net_init", &stub_unit);
     XiFunc *write_bytes = xi_func_new("writeBytes", &stub_unit);
     REQUIRE(dependency_root != NULL && write_bytes != NULL);
@@ -982,15 +984,19 @@ static XrSemanticPlan *build_source_export_call_target_plan(XrSemanticPlan **dep
 
     XiFunc *caller_root = xi_func_new("http_init", &stub_unit);
     XiFunc *caller = xi_func_new("_serverWriteAll", &stub_unit);
-    REQUIRE(caller_root != NULL && caller != NULL);
+    XiFunc *parent = xi_func_new("_serverWriteHttpResponse", &stub_unit);
+    REQUIRE(caller_root != NULL && caller != NULL && parent != NULL);
     XiBlock *root_entry = xi_block_new(caller_root);
     XiBlock *caller_entry = xi_block_new(caller);
-    REQUIRE(root_entry != NULL && caller_entry != NULL);
-    caller_root->children = (XiFunc **) xr_malloc(sizeof(*caller_root->children));
+    XiBlock *parent_entry = xi_block_new(parent);
+    REQUIRE(root_entry != NULL && caller_entry != NULL && parent_entry != NULL);
+    caller_root->children = (XiFunc **) xr_malloc(2 * sizeof(*caller_root->children));
     REQUIRE(caller_root->children != NULL);
     caller_root->children[0] = caller;
-    caller_root->nchildren = caller_root->children_cap = 1;
+    caller_root->children[1] = parent;
+    caller_root->nchildren = caller_root->children_cap = 2;
     caller->parent_func = caller_root;
+    parent->parent_func = caller_root;
     XiImportRef import_ref = {
         .module_path = "net",
         .member_name = NULL,
@@ -1005,7 +1011,15 @@ static XrSemanticPlan *build_source_export_call_target_plan(XrSemanticPlan **dep
     namespace_ref->aux = &import_ref;
     namespace_store->args[0] = namespace_ref;
     namespace_store->aux_int = 0;
-    caller_root->nshared = 1;
+    XiValue *caller_closure =
+        xi_value_new(caller_root, root_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *caller_store =
+        xi_value_new(caller_root, root_entry, XI_SET_SHARED, &stub_unit, 1);
+    REQUIRE(caller_closure != NULL && caller_store != NULL);
+    caller_closure->aux = caller;
+    caller_store->args[0] = caller_closure;
+    caller_store->aux_int = 1;
+    caller_root->nshared = 2;
     xi_block_set_return(root_entry, NULL);
     XiValue *receiver = xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_shape, 0);
     XiValue *method = xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, 1);
@@ -1026,16 +1040,38 @@ static XrSemanticPlan *build_source_export_call_target_plan(XrSemanticPlan **dep
         .points = &caller_point,
     };
     caller->coro_plan = &caller_coroutine;
-    caller_root->stage = caller->stage = XI_STAGE_OPTIMIZED;
+    XiValue *local_callee = xi_value_new(parent, parent_entry, XI_GET_SHARED, &stub_function, 0);
+    XiValue *local_call = xi_value_new(parent, parent_entry, XI_CALL, &stub_unit, 1);
+    REQUIRE(local_callee != NULL && local_call != NULL);
+    local_callee->aux_int = 1;
+    local_call->args[0] = local_callee;
+    xi_block_set_return(parent_entry, local_call);
+    XiCoroSuspendPoint parent_point = {
+        .state_id = 1,
+        .op = local_call,
+        .kind = XI_CORO_SUSP_CALL,
+        .resolved_callee = caller,
+    };
+    XiCoroPlan parent_coroutine = {
+        .is_coroutine = true,
+        .nstates = 1,
+        .points = &parent_point,
+    };
+    parent->coro_plan = parent_state ? &parent_coroutine : NULL;
+    caller_root->stage = caller->stage = parent->stage = XI_STAGE_OPTIMIZED;
     XiModule *caller_module = xi_module_new("stdlib/http/http.xr", "http", caller_root);
     REQUIRE(caller_module != NULL);
     caller_root->module = caller_module;
-    caller_module->nslots = 1;
+    caller_module->nslots = 2;
     XiModule *dependency_modules[] = {dependency_module};
-    REQUIRE(xr_semantic_plan_build_and_attach_module_set(caller_root, dependency_modules, 1, error,
-                                                         sizeof(error)));
-    XrSemanticPlan *result = xr_semantic_plan_retain(caller_root->semantic_plan);
-    REQUIRE(result != NULL);
+    bool built = xr_semantic_plan_build_and_attach_module_set(
+        caller_root, dependency_modules, 1, error, sizeof(error));
+    if (built != expect_success)
+        fprintf(stderr, "transitive source-export plan build=%u expected=%u: %s\n",
+                built ? 1u : 0u, expect_success ? 1u : 0u, error);
+    REQUIRE(built == expect_success);
+    XrSemanticPlan *result = built ? xr_semantic_plan_retain(caller_root->semantic_plan) : NULL;
+    REQUIRE(!built || result != NULL);
     xi_func_free(caller_root);
     xi_func_free(dependency_root);
     *dependency_out = dependency;
@@ -2820,7 +2856,7 @@ static void test_indirect_callable_state_authority(void) {
 
 static void test_source_export_call_target_authority(void) {
     XrSemanticPlan *dependency = NULL;
-    XrSemanticPlan *plan = build_source_export_call_target_plan(&dependency);
+    XrSemanticPlan *plan = build_source_export_call_target_plan(&dependency, true, true);
     REQUIRE(plan != NULL && dependency != NULL);
     REQUIRE(xr_semantic_plan_is_verified(plan));
     REQUIRE(plan->dependency_count == 1 && dependency->source_export_count == 1);
@@ -2831,8 +2867,22 @@ static void test_source_export_call_target_authority(void) {
             source_import = &plan->operations[operation];
     REQUIRE(source_import != NULL && source_import->metadata_count == 2 &&
             strcmp(plan->metadata[source_import->metadata_begin], "stdlib/net/net.xr") == 0);
-    REQUIRE(plan->call_target_count == 1);
-    XrSemanticCallTargetRecord *target = &plan->call_targets[0];
+    REQUIRE(plan->call_target_count == 2);
+    XrSemanticCallTargetRecord *target = NULL;
+    XrSemanticCallTargetRecord *local_target = NULL;
+    for (uint32_t index = 0; index < plan->call_target_count; index++) {
+        if (plan->call_targets[index].kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+            target = &plan->call_targets[index];
+        else if (plan->call_targets[index].kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            local_target = &plan->call_targets[index];
+    }
+    REQUIRE(target != NULL && local_target != NULL);
+    REQUIRE(local_target->function < plan->function_count);
+    REQUIRE(strcmp(plan->functions[local_target->function].name, "_serverWriteAll") == 0);
+    uint32_t state_count = 0;
+    for (uint32_t index = 0; index < plan->entity_count; index++)
+        state_count += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE;
+    REQUIRE(state_count == 2);
     REQUIRE(target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT);
     REQUIRE(target->dependency == 0 && target->source_export == 0);
     REQUIRE(xr_stable_id_equal(target->export_identity, dependency->source_exports[0].id));
@@ -2864,7 +2914,7 @@ static void test_source_export_call_target_authority(void) {
     memset(error, 0, sizeof(error));
     REQUIRE(xr_xsm_decode_module_set(bytes, size, dependencies, 1, &decoded, error, sizeof(error)));
     REQUIRE(decoded != NULL && xr_semantic_plan_is_verified(decoded));
-    REQUIRE(decoded->dependency_count == 1 && decoded->call_target_count == 1);
+    REQUIRE(decoded->dependency_count == 1 && decoded->call_target_count == 2);
     xr_semantic_plan_free(decoded);
     xr_free(bytes);
 
@@ -2911,6 +2961,11 @@ static void test_source_export_call_target_authority(void) {
     REQUIRE(!xr_semantic_plan_verify_module_set(plan, NULL, 0, error, sizeof(error)));
     xr_semantic_plan_free(plan);
     xr_semantic_plan_free(dependency);
+
+    XrSemanticPlan *missing_parent_state_dependency = NULL;
+    REQUIRE(build_source_export_call_target_plan(&missing_parent_state_dependency, false, false) ==
+            NULL);
+    xr_semantic_plan_free(missing_parent_state_dependency);
 }
 
 static void test_native_yieldable_call_target_authority(void) {

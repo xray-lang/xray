@@ -59,6 +59,14 @@ caller slot, and RAW_PTR machine representation. Prepare resolves the unique
 dependency ABI only through those identities, and C emission projects the
 additional pointer level only from that row. There is no import-name, Xi-type,
 shared-slot, or legacy value-plan fallback.
+SOURCE_EXPORT suspendability is intentionally absent from a standalone
+SemanticPlan: the dependency plan is the only owner of the exported callee's
+coroutine fact. That unresolved fact propagates only through exact
+DIRECT_LOCAL and local source-method target rows, never through a name or type
+guess. The ordered module-set verifier independently reconstructs the frozen
+dependency callee, closes the transitive local call graph, and requires every
+SOURCE_EXPORT and dependent local call to carry exactly the resulting
+coroutine-state row before TargetPlan extraction may begin.
 Task 254 makes mutable capture cells explicit in Xi and changes the internal VM
 cell opcode operand shape. Closure upvalues remain tagged `XrValue` slots and
 the public target ABI, calling convention, and closure layout are unchanged.

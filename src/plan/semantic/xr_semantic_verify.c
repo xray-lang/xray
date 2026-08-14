@@ -3268,6 +3268,7 @@ static bool operation_propagates_suspend(const XrSemanticOperationRecord *operat
 typedef struct XrCoroutineAuthorityWork {
     uint8_t *state_counts;
     uint8_t *suspendable;
+    uint8_t *dependency_unknown;
     uint32_t *target_by_operation;
     uint32_t *reverse_head;
     uint32_t *reverse_next;
@@ -3277,6 +3278,7 @@ typedef struct XrCoroutineAuthorityWork {
 static void coroutine_authority_work_dispose(XrCoroutineAuthorityWork *work) {
     xr_free(work->state_counts);
     xr_free(work->suspendable);
+    xr_free(work->dependency_unknown);
     xr_free(work->target_by_operation);
     xr_free(work->reverse_head);
     xr_free(work->reverse_next);
@@ -3288,6 +3290,8 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
     XrCoroutineAuthorityWork work = {0};
     work.state_counts = (uint8_t *) xr_calloc(plan->operation_count, sizeof(*work.state_counts));
     work.suspendable = (uint8_t *) xr_calloc(plan->function_count, sizeof(*work.suspendable));
+    work.dependency_unknown =
+        (uint8_t *) xr_calloc(plan->function_count, sizeof(*work.dependency_unknown));
     work.target_by_operation = plan->operation_count
                                    ? (uint32_t *) xr_malloc((size_t) plan->operation_count *
                                                             sizeof(*work.target_by_operation))
@@ -3304,7 +3308,8 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
                      ? (uint32_t *) xr_malloc((size_t) plan->function_count * sizeof(*work.queue))
                      : NULL;
     if ((plan->operation_count && (!work.state_counts || !work.target_by_operation)) ||
-        (plan->function_count && (!work.suspendable || !work.reverse_head || !work.queue)) ||
+        (plan->function_count &&
+         (!work.suspendable || !work.dependency_unknown || !work.reverse_head || !work.queue)) ||
         (plan->call_target_count && !work.reverse_next)) {
         coroutine_authority_work_dispose(&work);
         return report(error, error_size, "XR_EXEC_5003",
@@ -3356,7 +3361,11 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
             }
             /* Whether an external source export suspends is not a fact this
              * standalone plan owns. The ordered module-set verifier below
-             * completes that fact from the dependency's frozen plan. */
+             * completes that fact from the dependency's frozen plan. This
+             * uncertainty also propagates through exact local callers: a
+             * standalone plan cannot reject the caller state that the module
+             * set may later prove necessary. */
+            work.dependency_unknown[operation->function] = 1;
         } else if (target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE) {
             const XrSemanticOperationRecord *operation = &plan->operations[target->operation];
             if (target->function != XR_SEMANTIC_INDEX_NONE ||
@@ -3436,6 +3445,25 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
         }
     }
 
+    queue_begin = 0;
+    queue_end = 0;
+    for (uint32_t function = 0; function < plan->function_count; function++)
+        if (work.dependency_unknown[function])
+            work.queue[queue_end++] = function;
+    while (queue_begin < queue_end) {
+        uint32_t callee = work.queue[queue_begin++];
+        for (uint32_t target_index = work.reverse_head[callee];
+             target_index != XR_SEMANTIC_INDEX_NONE;
+             target_index = work.reverse_next[target_index]) {
+            uint32_t operation = plan->call_targets[target_index].operation;
+            uint32_t caller = plan->operations[operation].function;
+            if (work.dependency_unknown[caller])
+                continue;
+            work.dependency_unknown[caller] = 1;
+            work.queue[queue_end++] = caller;
+        }
+    }
+
     for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
         uint32_t target_index = work.target_by_operation[operation];
         bool dynamic_suspend = false;
@@ -3457,13 +3485,24 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
         }
         bool expected =
             operation_is_static_suspend(&plan->operations[operation]) || dynamic_suspend;
-        /* SOURCE_EXPORT suspension is deliberately incomplete in a standalone
-         * plan: both a state and no state are valid until the dependency plan
-         * supplies the callee's exact frozen coroutine authority. The ordered
-         * module-set verifier below proves the one permitted answer before a
-         * TargetPlan can consume this call. */
-        if (target_index != XR_SEMANTIC_INDEX_NONE &&
-            plan->call_targets[target_index].kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+        /* SOURCE_EXPORT suspension and exact local calls transitively rooted
+         * in it are deliberately incomplete in a standalone plan. Both a
+         * state and no state are valid only while no independent local/static
+         * fact already proves suspension. The ordered module-set verifier
+         * below closes the dependency fact before a TargetPlan can consume
+         * either answer. */
+        bool dependency_deferred = false;
+        if (target_index != XR_SEMANTIC_INDEX_NONE) {
+            const XrSemanticCallTargetRecord *target = &plan->call_targets[target_index];
+            dependency_deferred =
+                target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
+                ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+                  target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) &&
+                 target->function < plan->function_count &&
+                 work.dependency_unknown[target->function] != 0 &&
+                 work.suspendable[target->function] == 0);
+        }
+        if (dependency_deferred)
             continue;
         if (work.state_counts[operation] != (uint8_t) expected) {
             char detail[256];
@@ -3718,6 +3757,174 @@ static uint8_t semantic_operation_coroutine_state_count(
             count++;
     }
     return count;
+}
+
+static bool verify_module_set_coroutine_authority(
+    const XrSemanticPlan *plan, const XrSemanticPlan *const *dependencies,
+    uint32_t dependency_count, uint8_t *const *dependency_suspendable,
+    char *error, size_t error_size) {
+    XrCoroutineAuthorityWork work = {0};
+    work.state_counts = (uint8_t *) xr_calloc(plan->operation_count, sizeof(*work.state_counts));
+    work.suspendable = (uint8_t *) xr_calloc(plan->function_count, sizeof(*work.suspendable));
+    work.target_by_operation = plan->operation_count
+                                   ? (uint32_t *) xr_malloc((size_t) plan->operation_count *
+                                                            sizeof(*work.target_by_operation))
+                                   : NULL;
+    work.reverse_head =
+        plan->function_count
+            ? (uint32_t *) xr_malloc((size_t) plan->function_count * sizeof(*work.reverse_head))
+            : NULL;
+    work.reverse_next =
+        plan->call_target_count
+            ? (uint32_t *) xr_malloc((size_t) plan->call_target_count * sizeof(*work.reverse_next))
+            : NULL;
+    work.queue = plan->function_count
+                     ? (uint32_t *) xr_malloc((size_t) plan->function_count * sizeof(*work.queue))
+                     : NULL;
+    if ((plan->operation_count && (!work.state_counts || !work.target_by_operation)) ||
+        (plan->function_count && (!work.suspendable || !work.reverse_head || !work.queue)) ||
+        (plan->call_target_count && !work.reverse_next)) {
+        coroutine_authority_work_dispose(&work);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "module-set coroutine verifier budget exhausted");
+    }
+    for (uint32_t operation = 0; operation < plan->operation_count; operation++)
+        work.target_by_operation[operation] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t function = 0; function < plan->function_count; function++)
+        work.reverse_head[function] = XR_SEMANTIC_INDEX_NONE;
+
+    for (uint32_t target_index = 0; target_index < plan->call_target_count; target_index++) {
+        const XrSemanticCallTargetRecord *target = &plan->call_targets[target_index];
+        if (target->operation >= plan->operation_count ||
+            work.target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE) {
+            coroutine_authority_work_dispose(&work);
+            return report(error, error_size, "XR_SEM_0019",
+                          "module-set call-target operation relation is not one-to-one");
+        }
+        work.target_by_operation[target->operation] = target_index;
+        work.reverse_next[target_index] = XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *operation = &plan->operations[target->operation];
+        if ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+             target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) &&
+            operation_propagates_suspend(operation)) {
+            if (target->function >= plan->function_count) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "module-set direct call target is out of range");
+            }
+            work.reverse_next[target_index] = work.reverse_head[target->function];
+            work.reverse_head[target->function] = target_index;
+            continue;
+        }
+        bool directly_suspendable =
+            target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE ||
+            target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE ||
+            target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE ||
+            target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE ||
+            target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN;
+        if (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT) {
+            const XrSemanticPlan *dependency =
+                target->dependency < dependency_count ? dependencies[target->dependency] : NULL;
+            const XrSemanticSourceExportRecord *source_export =
+                dependency && target->source_export < dependency->source_export_count
+                    ? &dependency->source_exports[target->source_export]
+                    : NULL;
+            if (!source_export || !dependency_suspendable ||
+                !dependency_suspendable[target->dependency] ||
+                source_export->function >= dependency->function_count) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "module-set source export suspendability is unavailable");
+            }
+            directly_suspendable =
+                dependency_suspendable[target->dependency][source_export->function] != 0;
+        }
+        if (directly_suspendable) {
+            if (operation->function >= plan->function_count) {
+                coroutine_authority_work_dispose(&work);
+                return report(error, error_size, "XR_SEM_0019",
+                              "module-set suspendable caller is out of range");
+            }
+            work.suspendable[operation->function] = 1;
+        }
+    }
+
+    for (uint32_t entity_index = 0; entity_index < plan->entity_count; entity_index++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[entity_index];
+        if (entity->kind == XR_SEM_ENTITY_COROUTINE_STATE)
+            work.state_counts[entity->subject]++;
+    }
+    for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
+        uint32_t function = plan->operations[operation].function;
+        if (operation_is_static_suspend(&plan->operations[operation]) &&
+            function < plan->function_count)
+            work.suspendable[function] = 1;
+    }
+    uint32_t queue_begin = 0;
+    uint32_t queue_end = 0;
+    for (uint32_t function = 0; function < plan->function_count; function++)
+        if (work.suspendable[function])
+            work.queue[queue_end++] = function;
+    while (queue_begin < queue_end) {
+        uint32_t callee = work.queue[queue_begin++];
+        for (uint32_t target_index = work.reverse_head[callee];
+             target_index != XR_SEMANTIC_INDEX_NONE;
+             target_index = work.reverse_next[target_index]) {
+            uint32_t operation = plan->call_targets[target_index].operation;
+            uint32_t caller = plan->operations[operation].function;
+            if (work.suspendable[caller])
+                continue;
+            work.suspendable[caller] = 1;
+            work.queue[queue_end++] = caller;
+        }
+    }
+
+    for (uint32_t operation_index = 0; operation_index < plan->operation_count;
+         operation_index++) {
+        const XrSemanticOperationRecord *operation = &plan->operations[operation_index];
+        uint32_t target_index = work.target_by_operation[operation_index];
+        bool dynamic_suspend = false;
+        if (target_index != XR_SEMANTIC_INDEX_NONE) {
+            const XrSemanticCallTargetRecord *target = &plan->call_targets[target_index];
+            if (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT) {
+                const XrSemanticPlan *dependency = dependencies[target->dependency];
+                const XrSemanticSourceExportRecord *source_export =
+                    &dependency->source_exports[target->source_export];
+                dynamic_suspend =
+                    dependency_suspendable[target->dependency][source_export->function] != 0;
+            } else {
+                dynamic_suspend =
+                    ((operation->opcode == XI_CALL || operation->opcode == XI_CALL_METHOD) &&
+                     (target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE ||
+                      ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+                        target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) &&
+                       work.suspendable[target->function] != 0))) ||
+                    (operation->opcode == XI_CALL_METHOD &&
+                     (target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE ||
+                      target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE ||
+                      target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN)) ||
+                    (operation->opcode == XI_CALL &&
+                     target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE);
+            }
+        }
+        bool expected =
+            (target_index == XR_SEMANTIC_INDEX_NONE ||
+             plan->call_targets[target_index].kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+                ? operation_is_static_suspend(operation) || dynamic_suspend
+                : dynamic_suspend;
+        if (work.state_counts[operation_index] != (uint8_t) expected) {
+            char detail[256];
+            snprintf(detail, sizeof(detail),
+                     "module-set coroutine state disagrees with frozen dependency authority "
+                     "function=%u operation=%u opcode=%u expected=%u actual=%u",
+                     operation->function, operation_index, operation->opcode,
+                     expected ? 1u : 0u, work.state_counts[operation_index]);
+            coroutine_authority_work_dispose(&work);
+            return report(error, error_size, "XR_SEM_0019", detail);
+        }
+    }
+    coroutine_authority_work_dispose(&work);
+    return true;
 }
 
 static bool verify_dependency_rows(const XrSemanticPlan *plan, char *error, size_t error_size) {
@@ -4096,6 +4303,14 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
     xr_free(stores.rows);
     for (uint32_t i = 0; valid && i < dependency_count; i++)
         valid = used[i] != 0;
+    if (valid && !verify_module_set_coroutine_authority(
+                     plan, dependencies, dependency_count, suspendable, error, error_size)) {
+        for (uint32_t i = 0; i < dependency_count; i++)
+            xr_free(suspendable[i]);
+        xr_free(suspendable);
+        xr_free(used);
+        return false;
+    }
     for (uint32_t i = 0; i < dependency_count; i++)
         xr_free(suspendable[i]);
     xr_free(suspendable);
