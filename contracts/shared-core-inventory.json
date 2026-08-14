@@ -713,6 +713,7 @@
         "src/aot/xrt_arith.h",
         "src/aot/xrt_core_freestanding.h",
         "src/aot/xrt_method.h",
+        "src/api/xray_runtime.c",
         "src/ir/xi_opt.c",
         "src/ir/xi_opt_sccp.c",
         "src/runtime/value/xint_methods.h",
