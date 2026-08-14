@@ -23,9 +23,7 @@ typedef struct XaotBundle XaotBundle;
 typedef enum XaotAbiKind {
     XAOT_ABI_NATIVE = 0,
     XAOT_ABI_TAGGED,
-    XAOT_ABI_ADAPTER,
     XAOT_ABI_CORO,
-    XAOT_ABI_RUNTIME_HELPER,
 } XaotAbiKind;
 
 typedef enum XaotArgClass {
