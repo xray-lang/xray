@@ -1285,6 +1285,11 @@ AstNode *xr_parse_binary(Parser *parser, AstNode *left) {
     XR_DCHECK(parser != NULL, "parse_binary: NULL parser");
     XrTokenType operator_type = parser->previous.type;
     int line = parser->previous.line;
+    /* The operator token is the node's own source coordinate. Two operators on
+     * one line therefore get distinct positions, which is what keeps a
+     * diagnostic pointed at the operator and what separates the identities of
+     * `a + b` and `a + b + c` once an overloaded operator becomes a call. */
+    int column = parser->previous.column;
 
     const ParseRule *rule = xr_get_rule(operator_type);
 
@@ -1301,7 +1306,10 @@ AstNode *xr_parse_binary(Parser *parser, AstNode *left) {
         return NULL;
     }
 
-    return xr_ast_binary(parser->compiler_session, ast_type, left, right, line);
+    AstNode *node = xr_ast_binary(parser->compiler_session, ast_type, left, right, line);
+    if (node)
+        node->column = column;
+    return node;
 }
 
 // Parse 'is' expression: expr is Type

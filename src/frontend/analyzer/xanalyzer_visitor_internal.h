@@ -357,6 +357,13 @@ XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSy
 XR_FUNC void xa_check_constructor_visibility(XaInferContext *ctx, AstNode *node,
                                              struct XrClassInfo *owner);
 
+/* The numeric literal inside an expression that can still take its type from
+ * context (the literal itself, a grouped one, or a negated one), or NULL.
+ * Defined in xanalyzer_visitor_expr.c. One definition serves every position
+ * that gives a literal its type from a surrounding expectation, so those
+ * positions cannot drift apart. */
+XR_FUNC AstNode *xa_contextual_numeric_literal_node(AstNode *node);
+
 // Module graph export-symbol lookup (defined in xanalyzer_visitor.c).
 // Resolves an import specifier to the target module's semantic export-symbol
 // hashmap. The specifier's shape says what it is, so there is no quotedness to

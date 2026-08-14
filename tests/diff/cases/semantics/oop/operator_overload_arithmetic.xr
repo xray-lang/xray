@@ -1,0 +1,86 @@
+// anchor: operator-overload-arithmetic
+// `+ - * / %` on a class instance resolve to the class's operator methods
+// (spec §5.3.5). The VM was the only backend that honoured them: it looked the
+// method up at run time from the opcode, while the shared IR emitted a plain
+// XI_ADD for both backends and the AOT side had no overload path at all.
+// Overload selection is a static fact in a monomorphising language, so it is
+// resolved once in the shared front end and both backends see an ordinary
+// method call.
+
+class Vec2 {
+    x: float
+    y: float
+
+    constructor(x: float, y: float) {
+        this.x = x
+        this.y = y
+    }
+
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+
+    operator-(other: Vec2) -> Vec2 {
+        return Vec2(this.x - other.x, this.y - other.y)
+    }
+
+    operator*(scalar: float) -> Vec2 {
+        return Vec2(this.x * scalar, this.y * scalar)
+    }
+
+    operator/(scalar: float) -> Vec2 {
+        return Vec2(this.x / scalar, this.y / scalar)
+    }
+}
+
+class ModPair {
+    a: int
+    b: int
+
+    constructor(a: int, b: int) {
+        this.a = a
+        this.b = b
+    }
+
+    operator%(other: ModPair) -> ModPair {
+        return ModPair(this.a % other.a, this.b % other.b)
+    }
+}
+
+fn main() {
+    var a = Vec2(1.0, 2.0)
+    var b = Vec2(3.0, 4.0)
+
+    var sum = a + b
+    print(sum.x)
+    print(sum.y)
+
+    var diff = a - b
+    print(diff.x)
+    print(diff.y)
+
+    var scaled = a * 2.0
+    print(scaled.x)
+    print(scaled.y)
+
+    var halved = b / 2.0
+    print(halved.x)
+    print(halved.y)
+
+    // Chained: the result of an overloaded op feeds the next one.
+    var c = Vec2(10.0, 20.0)
+    var chained = a + b + c
+    print(chained.x)
+    print(chained.y)
+
+    // The receiver may be a temporary produced by another overload.
+    var mixed = (a + b) * 3.0
+    print(mixed.x)
+    print(mixed.y)
+
+    var m = ModPair(17, 23) % ModPair(5, 7)
+    print(m.a)
+    print(m.b)
+}
+
+main()
