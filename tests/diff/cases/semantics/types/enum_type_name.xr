@@ -1,0 +1,20 @@
+// typeName() over the enum surface, which both backends must spell the same.
+//
+// A member of a plain enum and a non-payload variant of an ADT enum are values
+// of their enum, so they report the enum's name. A payload variant constructor
+// is not a member of that value domain -- it is a callable that produces one --
+// so it reports "function", the same answer every other callable gets and the
+// same answer the public type id table gives XR_TID_BOUND_METHOD and
+// XR_TID_FUNCTION. Using a constructor as a value is itself rejected at
+// analysis (E0354), so that answer is settled here in both runtimes rather than
+// demonstrated from source.
+enum Color { Red, Green }
+
+enum Shape {
+    Circle(int),
+    Point
+}
+
+print(typeName(Color.Red))
+print(typeName(Color.Green))
+print(typeName(Shape.Point))

@@ -296,95 +296,12 @@ static inline XrValue xrt_as_owned(XrValue value, int64_t expected_tid, bool is_
     return XR_NULL_VAL;
 }
 
-/* Header-only XrTypeId -> canonical name, mirroring the VM's xr_typeid_name with
- * the same TYPE_NAME_* literals. Inlined into the generated program so standalone
- * AOT (which does not link the runtime value layer) still produces identical
- * user-visible type names. Ids are runtime XrTypeId values (see xrt_typeof_id). */
+/* XrTypeId -> canonical name. The mapping itself lives in the shared kernel
+ * xr_type_names_core.h, which is header-only, so standalone AOT (which links no
+ * runtime value layer) resolves the same names the VM does without a second
+ * table to keep in step. Ids are runtime XrTypeId values (see xrt_typeof_id). */
 static inline const char *xrt_type_name(int64_t tid) {
-    switch ((XrTypeId) tid) {
-        case XR_TID_NULL:
-            return TYPE_NAME_NULL;
-        case XR_TID_BOOL:
-            return TYPE_NAME_BOOL;
-        case XR_TID_I8:
-            return TYPE_NAME_I8;
-        case XR_TID_U8:
-            return TYPE_NAME_U8;
-        case XR_TID_I16:
-            return TYPE_NAME_I16;
-        case XR_TID_U16:
-            return TYPE_NAME_U16;
-        case XR_TID_I32:
-            return TYPE_NAME_I32;
-        case XR_TID_U32:
-            return TYPE_NAME_U32;
-        case XR_TID_INT:
-            return TYPE_NAME_INT;
-        case XR_TID_U64:
-            return TYPE_NAME_U64;
-        case XR_TID_F32:
-            return TYPE_NAME_F32;
-        case XR_TID_FLOAT:
-            return TYPE_NAME_FLOAT;
-        case XR_TID_STRING:
-            return TYPE_NAME_STRING;
-        case XR_TID_RUNE:
-            return TYPE_NAME_RUNE;
-        case XR_TID_FUNCTION:
-            return TYPE_NAME_FUNCTION;
-        case XR_TID_BOUND_METHOD:
-            return TYPE_NAME_BOUND_METHOD;
-        case XR_TID_ARRAY:
-            return TYPE_NAME_ARRAY;
-        case XR_TID_SET:
-            return TYPE_NAME_SET;
-        case XR_TID_MAP:
-            return TYPE_NAME_MAP;
-        case XR_TID_INSTANCE:
-            return TYPE_NAME_INSTANCE;
-        case XR_TID_OBJECT:
-            return TYPE_NAME_OBJECT;
-        case XR_TID_BIGINT:
-            return TYPE_NAME_BIGINT;
-        case XR_TID_STRINGBUILDER:
-            return TYPE_NAME_STRINGBUILDER;
-        case XR_TID_CHANNEL:
-            return TYPE_NAME_CHANNEL;
-        case XR_TID_REGEX:
-            return TYPE_NAME_REGEX;
-        case XR_TID_DATETIME:
-            return TYPE_NAME_DATETIME;
-        case XR_TID_PANIC_INFO:
-            return TYPE_NAME_PANIC_INFO;
-        case XR_TID_ENUM_VALUE:
-            return TYPE_NAME_ENUM_VALUE;
-        case XR_TID_ENUM_TYPE:
-            return TYPE_NAME_ENUM_TYPE;
-        case XR_TID_ITERATOR:
-            return TYPE_NAME_ITERATOR;
-        case XR_TID_MODULE:
-            return TYPE_NAME_MODULE;
-        case XR_TID_COROUTINE:
-            return TYPE_NAME_COROUTINE;
-        case XR_TID_RANGE:
-            return TYPE_NAME_RANGE;
-        case XR_TID_TASK:
-            return TYPE_NAME_TASK;
-        case XR_TID_NETCONN:
-            return TYPE_NAME_NETCONN;
-        case XR_TID_NETLISTENER:
-            return TYPE_NAME_NETLISTENER;
-        case XR_TID_ATOMIC:
-            return TYPE_NAME_ATOMIC;
-        case XR_TID_WORKQUEUE:
-            return TYPE_NAME_WORKQUEUE;
-        case XR_TID_RESULTGROUP:
-            return TYPE_NAME_RESULTGROUP;
-        case XR_TID_THREAD:
-            return TYPE_NAME_THREAD;
-        default:
-            return TYPE_NAME_UNKNOWN;
-    }
+    return xr_type_name_from_tid((XrTypeId) tid);
 }
 
 /* =========================================================================

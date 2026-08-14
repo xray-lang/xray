@@ -55,12 +55,13 @@ static const uint8_t XR_ELEM_SIZES[XR_ELEM_COUNT] = {
 
 /* Map semantic XrTypeId to storage layout.
  *
- * The ids are literal constants so this header stays dependency-free (there
- * are two parallel XrTypeId enums — xr_type_names_core.h and xtype_names.h —
- * and including either one here would collide with the other).
+ * The ids are literal constants so this header stays dependency-free: every
+ * profile that maps element storage can include it without dragging in the
+ * public type vocabulary.
  *
- * The copy is pinned from the other side: xr_type_names_core.h carries a
- * _Static_assert for every id named below. Without that, deleting two TIDs
+ * The copy is pinned from the other side: xr_type_names_core.h generates a
+ * _Static_assert for every id from xr_type_names.def. Without that, deleting
+ * two TIDs
  * shifted XR_TID_RUNE from 45 to 43, the hand-copied `case 45` stopped
  * matching, and every Slice<rune> silently became XR_ELEM_ANY — Slice.fill
  * then rejected its own receiver as "not POD" at runtime, with nothing failing

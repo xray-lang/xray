@@ -1,0 +1,94 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xr_type_names.def - Single source of truth for public type ids and the
+ * user-visible name each one displays.
+ *
+ * X-Macro format: XR_TYPE_NAME(suffix, id, display)
+ *   suffix  - token pasted after XR_TID_ (e.g. STRING -> XR_TID_STRING)
+ *   id      - the stable numeric id, spelled out so a renumbering is a
+ *             compile error rather than a silent behaviour change
+ *   display - the TYPE_NAME_* macro holding the user-visible spelling
+ *
+ * Consumers:
+ *   - xr_type_names_core.h  : XrTypeId enum, per-id pinning asserts and
+ *                             xr_type_name_from_tid()
+ *   - xvalue_typeid.c       : typeid_names[] (also the reverse name lookup)
+ *   - test_type_names_parity.c : VM/AOT agreement over every row
+ *
+ * Ids are consumed by more than the name tables. xr_elem_type.h hand-copies
+ * the scalar ids as literals to stay dependency-free, and the asserts
+ * generated from this file are what keep that copy honest: deleting two ids
+ * once shifted RUNE from 45 to 43, its hand-copied `case 45` stopped matching,
+ * and every Slice<rune> quietly degraded to XR_ELEM_ANY until a differential
+ * test caught it.
+ *
+ * Two ids deliberately share one display name: a bound method is a callable
+ * and reports "function", exactly as a plain function does.
+ */
+
+XR_TYPE_NAME(NULL, 0, TYPE_NAME_NULL)
+XR_TYPE_NAME(BOOL, 1, TYPE_NAME_BOOL)
+
+/* Integer family */
+XR_TYPE_NAME(I8, 2, TYPE_NAME_I8)
+XR_TYPE_NAME(U8, 3, TYPE_NAME_U8)
+XR_TYPE_NAME(I16, 4, TYPE_NAME_I16)
+XR_TYPE_NAME(U16, 5, TYPE_NAME_U16)
+XR_TYPE_NAME(I32, 6, TYPE_NAME_I32)
+XR_TYPE_NAME(U32, 7, TYPE_NAME_U32)
+XR_TYPE_NAME(INT, 8, TYPE_NAME_INT) /* = int64, "int" is the canonical name */
+XR_TYPE_NAME(U64, 9, TYPE_NAME_U64)
+
+/* Float family */
+XR_TYPE_NAME(F32, 10, TYPE_NAME_F32)
+XR_TYPE_NAME(FLOAT, 11, TYPE_NAME_FLOAT) /* = float64, "float" is canonical */
+
+/* Object types */
+XR_TYPE_NAME(STRING, 12, TYPE_NAME_STRING)
+XR_TYPE_NAME(FUNCTION, 13, TYPE_NAME_FUNCTION)
+XR_TYPE_NAME(ARRAY, 14, TYPE_NAME_ARRAY)
+XR_TYPE_NAME(SET, 15, TYPE_NAME_SET)
+XR_TYPE_NAME(MAP, 16, TYPE_NAME_MAP)
+XR_TYPE_NAME(INSTANCE, 17, TYPE_NAME_INSTANCE)
+XR_TYPE_NAME(OBJECT, 18, TYPE_NAME_OBJECT) /* Json object and structural object values */
+XR_TYPE_NAME(BIGINT, 19, TYPE_NAME_BIGINT)
+XR_TYPE_NAME(STRINGBUILDER, 20, TYPE_NAME_STRINGBUILDER)
+XR_TYPE_NAME(CHANNEL, 21, TYPE_NAME_CHANNEL)
+XR_TYPE_NAME(REGEX, 22, TYPE_NAME_REGEX)
+XR_TYPE_NAME(DATETIME, 23, TYPE_NAME_DATETIME)
+XR_TYPE_NAME(PANIC_INFO, 24, TYPE_NAME_PANIC_INFO)
+XR_TYPE_NAME(ENUM_VALUE, 25, TYPE_NAME_ENUM_VALUE)
+XR_TYPE_NAME(ENUM_TYPE, 26, TYPE_NAME_ENUM_TYPE)
+XR_TYPE_NAME(BOUND_METHOD, 27, TYPE_NAME_FUNCTION)
+XR_TYPE_NAME(ITERATOR, 28, TYPE_NAME_ITERATOR)
+XR_TYPE_NAME(MODULE, 29, TYPE_NAME_MODULE)
+XR_TYPE_NAME(COROUTINE, 30, TYPE_NAME_COROUTINE)
+XR_TYPE_NAME(RANGE, 31, TYPE_NAME_RANGE)
+XR_TYPE_NAME(TASK, 32, TYPE_NAME_TASK)
+XR_TYPE_NAME(NETCONN, 33, TYPE_NAME_NETCONN)
+XR_TYPE_NAME(NETLISTENER, 34, TYPE_NAME_NETLISTENER)
+XR_TYPE_NAME(ATOMIC, 35, TYPE_NAME_ATOMIC)
+XR_TYPE_NAME(WORKQUEUE, 36, TYPE_NAME_WORKQUEUE)
+XR_TYPE_NAME(RESULTGROUP, 37, TYPE_NAME_RESULTGROUP)
+XR_TYPE_NAME(COUNTDOWNLATCH, 38, TYPE_NAME_COUNTDOWNLATCH)
+XR_TYPE_NAME(SEMAPHORE, 39, TYPE_NAME_SEMAPHORE)
+XR_TYPE_NAME(EVENTCOUNT, 40, TYPE_NAME_EVENTCOUNT)
+XR_TYPE_NAME(THREAD, 41, TYPE_NAME_THREAD)
+XR_TYPE_NAME(BUFFER, 42, TYPE_NAME_BUFFER)
+
+/* Analyzer-only id: never returned by typeof at runtime, but Slice<rune>
+ * storage selection reads it, so it carries a real display name. */
+XR_TYPE_NAME(RUNE, 43, TYPE_NAME_RUNE)
+
+/* The Json value domain. Never returned by typeof either: a Json value reports
+ * the tag it actually carries, which is any of null, bool, int, float, string,
+ * array or object. This id names the domain those forms belong to, so `is`
+ * against it asks about membership rather than tag equality. XR_TID_OBJECT
+ * stays what it says -- an object value -- and does not double as the answer
+ * for Json. */
+XR_TYPE_NAME(JSON, 44, TYPE_NAME_JSON)

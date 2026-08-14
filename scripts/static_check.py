@@ -25,7 +25,7 @@ XVM_C = os.path.join(PROJECT_ROOT, "src/vm/xvm.c")
 XVM_API_C = os.path.join(PROJECT_ROOT, "src/vm/xvm_api.c")
 XVM_OPS_C = os.path.join(PROJECT_ROOT, "src/vm/xvm_ops.c")
 XCORO_HEAP_C = os.path.join(PROJECT_ROOT, "src/runtime/mem/xcoro_heap.c")
-XTYPE_NAMES_H = os.path.join(PROJECT_ROOT, "src/runtime/value/xtype_names.h")
+XTYPE_NAMES_H = os.path.join(PROJECT_ROOT, "src/shared/xr_type_names_core.h")
 XOBJ_HEADER_H = os.path.join(PROJECT_ROOT, "src/runtime/mem/xobj_header.h")
 YAML_PARSER_C = os.path.join(PROJECT_ROOT, "stdlib/yaml/yaml_parser.c")
 ANALYZER_DIR = os.path.join(PROJECT_ROOT, "src/frontend/analyzer")
@@ -536,7 +536,7 @@ class StaticChecker:
             'TYPE_NAME_DATETIME': 'DateTime',
             'TYPE_NAME_STRINGBUILDER': 'StringBuilder',
             'TYPE_NAME_CHANNEL': 'Channel',
-            'TYPE_NAME_EXCEPTION': 'Exception',
+            'TYPE_NAME_PANIC_INFO': 'PanicInfo',
             'TYPE_NAME_COROUTINE': 'Coroutine',
         }
 

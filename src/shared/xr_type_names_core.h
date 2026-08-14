@@ -6,6 +6,11 @@
  * Licensed under the MIT License
  *
  * xr_type_names_core.h - Runtime-neutral public type names and TypeId values.
+ *
+ * This is the only place the XrTypeId enum and the tid -> display name mapping
+ * exist. Both are expanded from xr_type_names.def, so an id and the name it
+ * shows cannot drift apart. Depending on <stdint.h> alone keeps the header
+ * usable from the standalone AOT profile, which links no runtime value layer.
  */
 
 #ifndef XR_TYPE_NAMES_CORE_H
@@ -28,11 +33,14 @@
 #define TYPE_NAME_U32 "u32"
 #define TYPE_NAME_I64 "int"
 #define TYPE_NAME_U64 "u64"
+#define TYPE_NAME_ISIZE "isize"
+#define TYPE_NAME_USIZE "usize"
 #define TYPE_NAME_FLOAT "float"
 #define TYPE_NAME_F32 "f32"
 #define TYPE_NAME_F64 "float"
 #define TYPE_NAME_STRING "string"
 #define TYPE_NAME_BOOL "bool"
+#define TYPE_NAME_RUNE "rune"
 #define TYPE_NAME_NULL "null"
 #define TYPE_NAME_VOID "void"
 #define TYPE_NAME_UNIT "()"
@@ -57,7 +65,7 @@
 #define TYPE_NAME_ENUM_TYPE "enum_type"
 #define TYPE_NAME_ENUM_VALUE "enum_value"
 #define TYPE_NAME_ERROR "error"
-#define TYPE_NAME_EXCEPTION "Exception"
+#define TYPE_NAME_PANIC_INFO "PanicInfo"
 #define TYPE_NAME_MODULE "module"
 #define TYPE_NAME_ITERATOR "iterator"
 #define TYPE_NAME_STRUCT "struct"
@@ -118,174 +126,36 @@
  * Used by typeof(), Type.xxx constants, analyzer registries, LSP completion,
  * VM runtime helpers and AOT direct codegen helpers. */
 typedef enum {
-    XR_TID_NULL = 0,
-    XR_TID_BOOL,           /* 1 */
-    XR_TID_I8,             /* 2 */
-    XR_TID_U8,             /* 3 */
-    XR_TID_I16,            /* 4 */
-    XR_TID_U16,            /* 5 */
-    XR_TID_I32,            /* 6 */
-    XR_TID_U32,            /* 7 */
-    XR_TID_INT,            /* 8  (= int64, "int" is the canonical name) */
-    XR_TID_U64,            /* 9 */
-    XR_TID_F32,            /* 10 */
-    XR_TID_FLOAT,          /* 11 (= float64, "float" is the canonical name) */
-    XR_TID_STRING,         /* 12 */
-    XR_TID_FUNCTION,       /* 13 */
-    XR_TID_ARRAY,          /* 14 */
-    XR_TID_SET,            /* 15 */
-    XR_TID_MAP,            /* 16 */
-    XR_TID_INSTANCE,       /* 17 */
-    XR_TID_OBJECT,         /* 18 (Json object and structural object values) */
-    XR_TID_BIGINT,         /* 19 */
-    XR_TID_STRINGBUILDER,  /* 20 */
-    XR_TID_CHANNEL,        /* 21 */
-    XR_TID_REGEX,          /* 22 */
-    XR_TID_DATETIME,       /* 23 */
-    XR_TID_EXCEPTION,      /* 24 */
-    XR_TID_ENUM_VALUE,     /* 25 */
-    XR_TID_ENUM_TYPE,      /* 26 */
-    XR_TID_BOUND_METHOD,   /* 27 */
-    XR_TID_ITERATOR,       /* 28 */
-    XR_TID_MODULE,         /* 29 */
-    XR_TID_COROUTINE,      /* 30 */
-    XR_TID_RANGE,          /* 31 */
-    XR_TID_TASK,           /* 32 */
-    XR_TID_NETCONN,        /* 33 */
-    XR_TID_NETLISTENER,    /* 34 */
-    XR_TID_ATOMIC,         /* 35 */
-    XR_TID_WORKQUEUE,      /* 36 */
-    XR_TID_RESULTGROUP,    /* 37 */
-    XR_TID_COUNTDOWNLATCH, /* 38 */
-    XR_TID_SEMAPHORE,      /* 39 */
-    XR_TID_EVENTCOUNT,     /* 40 */
-    XR_TID_THREAD,         /* 41 */
-    XR_TID_BUFFER,         /* 42 */
-    /* 43 is XR_TID_RUNE, declared only in the runtime-side enum. Skipping it
-     * by hand is what keeps the two numbered alike; appending here instead
-     * would quietly hand this id RUNE's number. */
-    XR_TID_JSON = 44, /* the Json value domain; see the runtime enum */
+#define XR_TYPE_NAME(suffix, id, display) XR_TID_##suffix = (id),
+#include "xr_type_names.def"
+#undef XR_TYPE_NAME
     XR_TID_COUNT
 } XrTypeId;
 
-/* xr_elem_type.h hand-copies these ids so it can stay dependency-free (there
- * are two parallel XrTypeId enums, and it can include neither without
- * colliding with the other). Pin them here so a renumbering breaks the BUILD
- * rather than a Slice at runtime.
- *
- * This is not hypothetical: deleting XR_TID_WEAKMAP / XR_TID_WEAKSET shifted
- * XR_TID_RUNE from 45 to 43, xr_tid_to_elem_type's `case 45` stopped matching,
- * and every Slice<rune> quietly degraded to XR_ELEM_ANY — Slice.fill then
- * rejected its own receiver as "not POD", and only a differential test caught
- * it. Update xr_tid_to_elem_type together with any change here.
- *
- * XR_TID_RUNE is pinned in xtype_names.h instead: this enum stops at
- * XR_TID_BUFFER, and the runtime-side enum is the one that declares it. */
-_Static_assert(XR_TID_BOOL == 1, "xr_elem_type.h: xr_tid_to_elem_type case for BOOL");
-_Static_assert(XR_TID_I8 == 2, "xr_elem_type.h: xr_tid_to_elem_type case for I8");
-_Static_assert(XR_TID_U8 == 3, "xr_elem_type.h: xr_tid_to_elem_type case for U8");
-_Static_assert(XR_TID_I16 == 4, "xr_elem_type.h: xr_tid_to_elem_type case for I16");
-_Static_assert(XR_TID_U16 == 5, "xr_elem_type.h: xr_tid_to_elem_type case for U16");
-_Static_assert(XR_TID_I32 == 6, "xr_elem_type.h: xr_tid_to_elem_type case for I32");
-_Static_assert(XR_TID_U32 == 7, "xr_elem_type.h: xr_tid_to_elem_type case for U32");
-_Static_assert(XR_TID_INT == 8, "xr_elem_type.h: xr_tid_to_elem_type case for INT");
-_Static_assert(XR_TID_U64 == 9, "xr_elem_type.h: xr_tid_to_elem_type case for U64");
-_Static_assert(XR_TID_F32 == 10, "xr_elem_type.h: xr_tid_to_elem_type case for F32");
-_Static_assert(XR_TID_FLOAT == 11, "xr_elem_type.h: xr_tid_to_elem_type case for FLOAT");
+/* Every id is pinned to its number. xr_elem_type.h hand-copies the scalar ids
+ * as literals so it can stay dependency-free, and these are what keep that copy
+ * honest: a renumbering breaks the BUILD rather than a Slice at runtime.
+ * Update xr_tid_to_elem_type together with any change to the row order. */
+#define XR_TYPE_NAME(suffix, id, display)                                                          \
+    _Static_assert(XR_TID_##suffix == (id), "public type id drifted: " #suffix);
+#include "xr_type_names.def"
+#undef XR_TYPE_NAME
 
 #define XR_TID_IS_INT(tid) ((tid) >= XR_TID_I8 && (tid) <= XR_TID_U64)
 #define XR_TID_IS_FLOAT(tid) ((tid) == XR_TID_F32 || (tid) == XR_TID_FLOAT)
 #define XR_TID_IS_NUMBER(tid) (XR_TID_IS_INT(tid) || XR_TID_IS_FLOAT(tid))
 
+/* The canonical display name for a public type id. Every consumer -- VM,
+ * hosted AOT and standalone AOT -- answers through this one switch, so the
+ * same id can never print two different names. */
 static inline const char *xr_type_name_from_tid(XrTypeId tid) {
     switch (tid) {
-        case XR_TID_NULL:
-            return TYPE_NAME_NULL;
-        case XR_TID_BOOL:
-            return TYPE_NAME_BOOL;
-        case XR_TID_I8:
-            return TYPE_NAME_I8;
-        case XR_TID_U8:
-            return TYPE_NAME_U8;
-        case XR_TID_I16:
-            return TYPE_NAME_I16;
-        case XR_TID_U16:
-            return TYPE_NAME_U16;
-        case XR_TID_I32:
-            return TYPE_NAME_I32;
-        case XR_TID_U32:
-            return TYPE_NAME_U32;
-        case XR_TID_INT:
-            return TYPE_NAME_INT;
-        case XR_TID_U64:
-            return TYPE_NAME_U64;
-        case XR_TID_F32:
-            return TYPE_NAME_F32;
-        case XR_TID_FLOAT:
-            return TYPE_NAME_FLOAT;
-        case XR_TID_STRING:
-            return TYPE_NAME_STRING;
-        case XR_TID_FUNCTION:
-        case XR_TID_BOUND_METHOD:
-            return TYPE_NAME_FUNCTION;
-        case XR_TID_ARRAY:
-            return TYPE_NAME_ARRAY;
-        case XR_TID_SET:
-            return TYPE_NAME_SET;
-        case XR_TID_MAP:
-            return TYPE_NAME_MAP;
-        case XR_TID_INSTANCE:
-            return TYPE_NAME_INSTANCE;
-        case XR_TID_OBJECT:
-            return TYPE_NAME_OBJECT;
-        case XR_TID_BIGINT:
-            return TYPE_NAME_BIGINT;
-        case XR_TID_STRINGBUILDER:
-            return TYPE_NAME_STRINGBUILDER;
-        case XR_TID_CHANNEL:
-            return TYPE_NAME_CHANNEL;
-        case XR_TID_REGEX:
-            return TYPE_NAME_REGEX;
-        case XR_TID_DATETIME:
-            return TYPE_NAME_DATETIME;
-        case XR_TID_EXCEPTION:
-            return TYPE_NAME_EXCEPTION;
-        case XR_TID_ENUM_VALUE:
-            return TYPE_NAME_ENUM_VALUE;
-        case XR_TID_ENUM_TYPE:
-            return TYPE_NAME_ENUM_TYPE;
-        case XR_TID_ITERATOR:
-            return TYPE_NAME_ITERATOR;
-        case XR_TID_MODULE:
-            return TYPE_NAME_MODULE;
-        case XR_TID_COROUTINE:
-            return TYPE_NAME_COROUTINE;
-        case XR_TID_RANGE:
-            return TYPE_NAME_RANGE;
-        case XR_TID_TASK:
-            return TYPE_NAME_TASK;
-        case XR_TID_NETCONN:
-            return TYPE_NAME_NETCONN;
-        case XR_TID_NETLISTENER:
-            return TYPE_NAME_NETLISTENER;
-        case XR_TID_ATOMIC:
-            return TYPE_NAME_ATOMIC;
-        case XR_TID_WORKQUEUE:
-            return TYPE_NAME_WORKQUEUE;
-        case XR_TID_RESULTGROUP:
-            return TYPE_NAME_RESULTGROUP;
-        case XR_TID_COUNTDOWNLATCH:
-            return TYPE_NAME_COUNTDOWNLATCH;
-        case XR_TID_SEMAPHORE:
-            return TYPE_NAME_SEMAPHORE;
-        case XR_TID_EVENTCOUNT:
-            return TYPE_NAME_EVENTCOUNT;
-        case XR_TID_THREAD:
-            return TYPE_NAME_THREAD;
-        case XR_TID_BUFFER:
-            return TYPE_NAME_BUFFER;
-        case XR_TID_JSON:
-            return TYPE_NAME_JSON;
+#define XR_TYPE_NAME(suffix, id, display)                                                          \
+    case XR_TID_##suffix:                                                                          \
+        return display;
+#include "xr_type_names.def"
+#undef XR_TYPE_NAME
+        case XR_TID_COUNT:
         default:
             return TYPE_NAME_UNKNOWN;
     }

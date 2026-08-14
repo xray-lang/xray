@@ -153,16 +153,16 @@ vmcase(OP_TYPENAME) {
     } else {
         val = R(b);
     }
+    /* Slice and fixed-array spellings are decided once, in the shared lowering:
+     * xi_lower_expr folds typeName() for those static types into a constant, so
+     * a ref value cannot arrive here. The VM used to spell them a second time
+     * and disagree with that fold -- "[byte;4]" against "[byte; 4]" -- which is
+     * a divergence waiting for the first value whose static type is lost. */
+    XR_DCHECK(!XR_IS_SLICE_REF(val) && !XR_IS_ARRAY_REF(val),
+              "typename: slice and array refs are folded during lowering");
     const char *type_name = NULL;
-    char type_name_buf[64];
-    // For payload variant constructors, return the parent enum name.
-    if (XR_IS_ENUM_CTOR(val)) {
-        XrEnumCtor *ev = (XrEnumCtor *) XR_TO_PTR(val);
-        if (ev->enum_name)
-            type_name = ev->enum_name;
-    }
     // For instances, return class name
-    if (type_name == NULL && xr_value_is_instance(val)) {
+    if (xr_value_is_instance(val)) {
         XrInstance *inst = xr_value_to_instance(val);
         XrClass *cls = xr_instance_get_class(inst);
         if (cls && cls->builtin_kind == XR_BK_STRUCT_OBJECT)
@@ -170,40 +170,18 @@ vmcase(OP_TYPENAME) {
         else if (cls && cls->name)
             type_name = cls->name;
     }
-    // For struct refs, extract class pointer from struct area header
-    if (type_name == NULL && XR_IS_SLICE_REF(val)) {
-        type_name = "Slice";
-    }
-    if (type_name == NULL && XR_IS_ARRAY_REF(val)) {
-        const char *elem_name = "unknown";
-        switch (XR_ARRAY_REF_ELEM_TYPE(val)) {
-            case XR_ELEM_U8:
-                elem_name = "byte";
-                break;
-            case XR_ELEM_I64:
-                elem_name = "int";
-                break;
-            case XR_ELEM_F64:
-                elem_name = "float";
-                break;
-            case XR_ELEM_BOOL:
-                elem_name = "bool";
-                break;
-            case XR_ELEM_RUNE:
-                elem_name = "rune";
-                break;
-            default:
-                break;
-        }
-        snprintf(type_name_buf, sizeof(type_name_buf), "[%s;%u]", elem_name,
-                 (unsigned) XR_ARRAY_REF_ELEM_COUNT(val));
-        type_name = type_name_buf;
-    }
-    if (type_name == NULL && val.tag == XR_TAG_AGG_REF && !XR_IS_ARRAY_REF(val) && val.ptr) {
+    /* A struct ref keeps its class pointer in the first word of the struct
+     * area. Array and slice refs share the aggregate tag but start with view
+     * state instead, so they must not be read this way. */
+    if (type_name == NULL && val.tag == XR_TAG_AGG_REF && !XR_IS_ARRAY_REF(val) &&
+        !XR_IS_SLICE_REF(val) && val.ptr) {
         XrClass *cls = *(XrClass **) val.ptr;
         if (cls && cls->name)
             type_name = cls->name;
     }
+    /* Everything else, a payload variant constructor included, answers from the
+     * public type id table. A constructor is a callable, so it reports what
+     * every other callable reports rather than the enum it belongs to. */
     if (type_name == NULL) {
         type_name = xr_typeid_name(xr_value_typeid(val));
     }
