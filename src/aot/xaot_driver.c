@@ -1853,6 +1853,55 @@ static bool xaot_build_module_target_plans(
     return installed;
 }
 
+/* Pass identity for the direct-call binding authority. Stable so a refinement
+ * plan built by this stage is attributable in diagnostics. */
+#define XAOT_DIRECT_CALL_REFINEMENT_PASS_ID UINT32_C(27902)
+
+/* Validate every planned call of every module against the verified TargetPlan
+ * before C emission. A call whose direct binding cannot be proved is recorded
+ * as an explicit refusal, which leaves the baseline lowering in force; only a
+ * checker-detected inconsistency in the baseline itself fails the build. */
+static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
+    if (!bundle || !bundle->modules || bundle->nmodules == 0)
+        return false;
+    for (uint32_t module_index = 0; module_index < bundle->nmodules;
+         module_index++) {
+        const XiModule *module = bundle->modules[module_index];
+        const XrTargetPlan *target_plan =
+            xaot_bundle_target_plan_for_module(bundle, module_index);
+        XrAotRefinementPlan *refinement = NULL;
+        XrAotRefinementDiagnostic diag = {0};
+        if (!module || !target_plan ||
+            !xr_aot_refinement_direct_call_authority_build(
+                target_plan, XAOT_DIRECT_CALL_REFINEMENT_PASS_ID, &refinement,
+                &diag)) {
+            fprintf(stderr,
+                    "Error: module direct-call validation failed for '%s': "
+                    "%s record=%u target-call=%u\n",
+                    module && module->name ? module->name : "?",
+                    xr_aot_refinement_issue_name(diag.issue), diag.record_index,
+                    diag.target_call_index);
+            xr_aot_refinement_plan_free(refinement);
+            return false;
+        }
+        /* Re-verify the frozen plan through the public entry point: the
+         * builder's own freeze-time check must not be the only one. */
+        XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
+        if (!xr_aot_refinement_verify(&view, target_plan, &diag)) {
+            fprintf(stderr,
+                    "Error: module direct-call authority rejected for '%s': "
+                    "%s record=%u target-call=%u\n",
+                    module->name ? module->name : "?",
+                    xr_aot_refinement_issue_name(diag.issue), diag.record_index,
+                    diag.target_call_index);
+            xr_aot_refinement_plan_free(refinement);
+            return false;
+        }
+        xr_aot_refinement_plan_free(refinement);
+    }
+    return true;
+}
+
 static bool xaot_install_module_representation_refinements(
     XaotBundle *bundle, const XiRepPolicy *policy) {
     if (!bundle || !policy || !bundle->modules ||
@@ -2479,6 +2528,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             evidence_cache_verbose, options->target_plan_workers,
             options->target_plan_cancellation,
             &result->target_plan_cache))
+        goto fail_free_ir;
+    if (!xaot_validate_module_direct_calls(&aot_bundle))
         goto fail_free_ir;
     if (!xaot_install_module_representation_refinements(
             &aot_bundle, &cfg.rep_policy))
