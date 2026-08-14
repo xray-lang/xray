@@ -1,0 +1,35 @@
+# NormalizeInstalledArchives.cmake - byte-reproducible archive tables of contents.
+#
+# On Apple, CMake follows every installed static library with a plain
+# `ranlib <archive>`, and that rewrite stamps the table of contents with the
+# current time. The installed archive therefore differs from the build copy and
+# from every earlier install, so a replayed install re-copies and re-stamps it
+# and republishes different digests. Rewriting the table in ranlib's
+# deterministic mode zeroes the archive mtime info, which makes the installed
+# bytes a pure function of the archive members.
+#
+# This runs before the runtime and payload manifests so both hash the
+# normalized bytes.
+
+get_filename_component(_xray_install_prefix "${CMAKE_INSTALL_PREFIX}" ABSOLUTE)
+set(_xray_root "$ENV{DESTDIR}${_xray_install_prefix}")
+
+# Only this project's own archives. A component install publishes a subset, and
+# a later component install normalizes the rest; the rewrite is idempotent.
+file(GLOB_RECURSE _xray_archives
+    LIST_DIRECTORIES false
+    "${_xray_root}/lib/xray/*@CMAKE_STATIC_LIBRARY_SUFFIX@")
+list(SORT _xray_archives)
+
+foreach(_xray_archive IN LISTS _xray_archives)
+    execute_process(
+        COMMAND "@CMAKE_RANLIB@" -D "${_xray_archive}"
+        RESULT_VARIABLE _xray_ranlib_result
+        ERROR_VARIABLE _xray_ranlib_error
+    )
+    if(NOT _xray_ranlib_result EQUAL 0)
+        message(FATAL_ERROR
+            "Unable to write a reproducible table of contents for "
+            "'${_xray_archive}':\n${_xray_ranlib_error}")
+    endif()
+endforeach()

@@ -4477,6 +4477,11 @@ configure_file(
     "${_XRAY_INSTALL_METADATA_DIR}/GenerateRuntimeManifest.cmake"
     @ONLY
 )
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/NormalizeInstalledArchives.cmake.in"
+    "${_XRAY_INSTALL_METADATA_DIR}/NormalizeInstalledArchives.cmake"
+    @ONLY
+)
 
 # Install executable
 install(TARGETS xray
@@ -4510,6 +4515,17 @@ install(TARGETS xray_aot_core xray_rt_coro
     ARCHIVE DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
     COMPONENT XraySDK
 )
+
+# Apple's post-install ranlib stamps each archive table of contents with the
+# current time, so an installed archive is not a function of its members and a
+# replayed install republishes different bytes. Rewrite the tables
+# deterministically here, after every static library rule and before anything
+# hashes an installed archive.
+if(APPLE)
+    install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/NormalizeInstalledArchives.cmake"
+        ALL_COMPONENTS
+    )
+endif()
 
 install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/GenerateRuntimeManifest.cmake"
     ALL_COMPONENTS
