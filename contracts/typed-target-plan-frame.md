@@ -122,7 +122,13 @@ the frame gains no argument-passing authority of its own. A slot the
 dispatcher writes on one path and reads on another is proved defined by the
 instruction group's own control-flow judgement before the frame is created, so
 the frame keeps its single rule that a load requires a prior store and gains no
-knowledge of blocks or edges. The frame's supported family mask is the exact
+authority to choose blocks or edges. An uncached dispatcher asks the frame to
+reconstruct the next instruction and block entry from the verified rows. After
+an exact immutable decoded cache has already been bound to the same plan, the
+dispatcher may instead pass that cache's instruction and block-entry identities
+through the frame's O(1) decoded-entry operation. That operation only updates
+frame context; it cannot build a cache, choose a successor, or make an invalid
+plan executable. The frame's supported family mask is the exact
 completed closure the production builder emits, so a plan built for any other
 closure is refused rather than executed against a frame that never saw one of
 its families. The coroutine
@@ -193,12 +199,12 @@ Evidence:
   the exact XSM/XTP sole-function generation route.
 
 anchor-sha256: src/plan/target/xr_target_plan.h a2835453ea48011c9b5a3c12a31283fb7227d35c9ff1f722f19f24b8fd8fc5fc
-anchor-sha256: src/vm/xr_typed_frame.h 5acde34be5501c7892b1b20d78d18e32dca3269b1722380a77c6545f1c9df649
-anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
-anchor-sha256: src/vm/xr_typed_dispatch.c a8112d151f6566489cb8c34fc9f295db79d683ee98d34faf14e2f8afdcff8b14
+anchor-sha256: src/vm/xr_typed_frame.h d07112355960a3d2acc9781d3927e1374e4add29a3c5b52a3da61602e611e115
+anchor-sha256: src/vm/xr_typed_frame.c 5e5d7615d8dfe580ac8104f6f391219b876f2789335cfa41ea9e122abf45adb1
+anchor-sha256: src/vm/xr_typed_dispatch.c 8f1aafc1b2a27cae8ea451ef06cec0c4cfbc5abfa3dd0e8ca8b9617af8a6f2c1
 anchor-sha256: scripts/check_typed_call_staging.py 70224976eb831b98465bd1f719f2e66bd81fdf59503a4c929a2542b2081e8655
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 55b0266cbe630f2eb3a34b9593a75f337e2ca47bc9862e4da89d5d4f087d36c7
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py e9e057b890df32005e054290a3425f239c1b3c594432a044a04bd6a12dc6dd14
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8f2acc619749a086bf3be97ef9799ea6abef2c45151113b13a87b9a3609f8101
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 81f28d9eef2915dec8be0a5676640cce16338a86b5f993f42f79b5df9828ddde
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 971cf9989386d2c660c828f8e36df295d1ee61fa1458d12b03700e1ecb88f246

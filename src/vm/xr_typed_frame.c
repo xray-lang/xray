@@ -627,6 +627,26 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_enter_instruction(
     return XR_TYPED_FRAME_OK;
 }
 
+XR_FUNC XrTypedFrameStatus xr_typed_frame_enter_decoded_instruction(
+    XrTypedFrame *frame, uint32_t instruction,
+    uint32_t block_entry_instruction) {
+    if (!frame)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    if (frame->cleaned)
+        return XR_TYPED_FRAME_CLEANED;
+    if (!frame_plan_identity_is_intact(frame))
+        return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
+    if (frame->child)
+        return XR_TYPED_FRAME_CHILD_ACTIVE;
+    if (instruction == XR_TYPED_FRAME_CONTEXT_INDEX_NONE ||
+        block_entry_instruction == XR_TYPED_FRAME_CONTEXT_INDEX_NONE ||
+        block_entry_instruction > instruction)
+        return XR_TYPED_FRAME_CONTEXT_UNAVAILABLE;
+    frame->current_instruction = instruction;
+    frame->current_block_instruction = block_entry_instruction;
+    return XR_TYPED_FRAME_OK;
+}
+
 XR_FUNC XrTypedFrameStatus xr_typed_frame_bind_coroutine_state(
     XrTypedFrame *frame, uint32_t coroutine_state) {
     if (!frame)

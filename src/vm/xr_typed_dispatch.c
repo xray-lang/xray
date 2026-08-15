@@ -15,6 +15,7 @@
 
 #include "xr_typed_dispatch.h"
 #include "xr_typed_frame.h"
+#include "xr_vm_decoded_cache.h"
 #include "../plan/target/xr_target_instruction_verify.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_compare_core.h"
@@ -97,6 +98,7 @@ typedef struct XrTypedDispatchRowContext {
     bool *returned;
     uint64_t *return_bits;
     struct XrTypedDispatchExecution *execution;
+    const XrVmDecodedInstruction *decoded;
     bool parameters_prebound;
     uint32_t frame_id;
 } XrTypedDispatchRowContext;
@@ -110,6 +112,7 @@ typedef struct XrTypedDispatchExecution {
     uint32_t next_frame_id;
     uint64_t next_event_ordinal;
     const XrVmDebugSession *debug_session;
+    const XrVmDecodedCache *decoded_cache;
 } XrTypedDispatchExecution;
 
 static XrTypedDispatchStatus execute_function(
@@ -361,8 +364,10 @@ static XrTypedDispatchStatus execute_branch(
     XrTypedFrame *frame, const XrTargetInstructionRecord *row,
     const XrTargetInstructionContract *contract,
     XrTypedDispatchRowContext *context) {
-    uint32_t target =
-        XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(row->immediate_bits);
+    uint32_t target = context->decoded
+                          ? context->decoded->target_if_nonzero
+                          : XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(
+                                row->immediate_bits);
     if (contract->dispatch_argument ==
         XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_I64) {
         uint64_t bits = 0;
@@ -371,7 +376,10 @@ static XrTypedDispatchStatus execute_branch(
         if (status != XR_TYPED_DISPATCH_OK)
             return status;
         if (bits == 0)
-            target = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(row->immediate_bits);
+            target = context->decoded
+                         ? context->decoded->target_if_zero
+                         : XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(
+                               row->immediate_bits);
     } else if (contract->dispatch_argument ==
                XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BOOL) {
         uint8_t truth = 0;
@@ -380,7 +388,10 @@ static XrTypedDispatchStatus execute_branch(
         if (status != XR_TYPED_DISPATCH_OK)
             return status;
         if (truth == 0)
-            target = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(row->immediate_bits);
+            target = context->decoded
+                         ? context->decoded->target_if_zero
+                         : XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(
+                               row->immediate_bits);
     } else if (contract->dispatch_argument !=
                XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_JUMP) {
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
@@ -504,6 +515,7 @@ cleanup:
  * corrupted row cannot select a handler whose metadata disagrees. */
 static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                                          const XrTargetInstructionRecord *row,
+                                         const XrVmDecodedInstruction *decoded,
                                          const int64_t *arguments,
                                          uint32_t argument_count,
                                          uint32_t row_count, uint32_t *next,
@@ -513,12 +525,13 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                                          bool parameters_prebound,
                                          uint32_t frame_id) {
     const XrTargetInstructionContract *contract =
-        xr_target_instruction_contract(row->opcode);
+        decoded ? decoded->contract
+                : xr_target_instruction_contract(row->opcode);
     if (!contract)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     XrTypedDispatchRowContext context = {
         arguments, argument_count, row_count, next, returned, return_bits,
-        execution, parameters_prebound, frame_id,
+        execution, decoded, parameters_prebound, frame_id,
     };
     switch ((XrTargetInstructionOpcode) row->opcode) {
 #define XR_VM_OP(symbol, handler, kind, argument)                                                   \
@@ -555,17 +568,31 @@ static XrTypedDispatchStatus execute_function(
     uint16_t current_opcode = XR_TARGET_INSTRUCTION_INVALID;
     bool returned = false;
     uint32_t instruction_count = 0;
-    const XrTargetInstructionRecord *instructions =
-        xr_target_plan_function_instructions(execution->plan, function,
-                                             &instruction_count);
-    if (!instructions || !instruction_count) {
+    const XrTargetInstructionRecord *instructions = NULL;
+    XrVmDecodedFunctionView decoded_function = {0};
+    if (execution->decoded_cache) {
+        if (!xr_typed_decoded_cache_function(execution->decoded_cache, function,
+                                             &decoded_function)) {
+            status = XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+            goto finish;
+        }
+        instruction_count = decoded_function.instruction_count;
+    } else {
+        instructions = xr_target_plan_function_instructions(
+            execution->plan, function, &instruction_count);
+    }
+    if ((!instructions && !decoded_function.instructions) ||
+        !instruction_count) {
         status = XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
         goto finish;
     }
-    uint32_t declared_parameters = 0;
-    for (uint32_t i = 0; i < instruction_count; i++)
-        declared_parameters +=
-            instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64;
+    uint32_t declared_parameters = decoded_function.instructions
+                                       ? decoded_function.parameter_count
+                                       : 0;
+    if (!decoded_function.instructions)
+        for (uint32_t i = 0; i < instruction_count; i++)
+            declared_parameters +=
+                instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64;
     if (declared_parameters != argument_count) {
         status = XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
         goto finish;
@@ -581,44 +608,74 @@ static XrTypedDispatchStatus execute_function(
             goto finish_with_instruction;
         }
         execution->remaining_steps--;
-        current_instruction = instructions[current].id;
-        current_opcode = instructions[current].opcode;
-        if (xr_typed_frame_enter_instruction(frame,
-                                              current_instruction) !=
-            XR_TYPED_FRAME_OK) {
-            status = XR_TYPED_DISPATCH_FRAME_ERROR;
-            goto finish_with_instruction;
+        const XrVmDecodedInstruction *decoded =
+            decoded_function.instructions
+                ? &decoded_function.instructions[current]
+                : NULL;
+        const XrTargetInstructionRecord *row =
+            decoded ? &decoded->row : &instructions[current];
+        current_instruction = row->id;
+        current_opcode = row->opcode;
+        uint32_t block_entry_instruction = XR_VM_TRACE_ID_NONE;
+        if (decoded) {
+            if (decoded->block >= decoded_function.block_count) {
+                status = XR_TYPED_DISPATCH_PROGRAM_INVALID;
+                goto finish_with_instruction;
+            }
+            uint32_t block_first =
+                decoded_function.blocks[decoded->block].first_row;
+            if (block_first >= instruction_count) {
+                status = XR_TYPED_DISPATCH_PROGRAM_INVALID;
+                goto finish_with_instruction;
+            }
+            block_entry_instruction =
+                decoded_function.instructions[block_first].row.id;
+            if (xr_typed_frame_enter_decoded_instruction(
+                    frame, current_instruction,
+                    block_entry_instruction) != XR_TYPED_FRAME_OK) {
+                status = XR_TYPED_DISPATCH_FRAME_ERROR;
+                goto finish_with_instruction;
+            }
+        } else {
+            if (xr_typed_frame_enter_instruction(frame,
+                                                  current_instruction) !=
+                XR_TYPED_FRAME_OK) {
+                status = XR_TYPED_DISPATCH_FRAME_ERROR;
+                goto finish_with_instruction;
+            }
+            XrTypedFrameContext frame_context;
+            if (xr_typed_frame_context(frame, &frame_context) !=
+                XR_TYPED_FRAME_OK) {
+                status = XR_TYPED_DISPATCH_FRAME_ERROR;
+                goto finish_with_instruction;
+            }
+            block_entry_instruction =
+                frame_context.block_entry_instruction;
         }
-        XrTypedFrameContext frame_context;
-        if (xr_typed_frame_context(frame, &frame_context) !=
-            XR_TYPED_FRAME_OK) {
-            status = XR_TYPED_DISPATCH_FRAME_ERROR;
-            goto finish_with_instruction;
-        }
-        if (frame_context.block_entry_instruction != last_block) {
+        if (block_entry_instruction != last_block) {
             XrVmTraceEvent block_enter = make_trace_event(
                 XR_VM_TRACE_BLOCK_ENTER, function, frame_id,
                 parent_frame_id, frame_depth);
             block_enter.instruction = current_instruction;
-            block_enter.block = frame_context.block_entry_instruction;
+            block_enter.block = block_entry_instruction;
             block_enter.opcode = current_opcode;
             status = emit_trace_event(execution, &block_enter);
             if (status != XR_TYPED_DISPATCH_OK)
                 return status;
-            last_block = frame_context.block_entry_instruction;
+            last_block = block_entry_instruction;
         }
         XrVmTraceEvent instruction = make_trace_event(
             XR_VM_TRACE_INSTRUCTION, function, frame_id, parent_frame_id,
             frame_depth);
         instruction.instruction = current_instruction;
-        instruction.block = frame_context.block_entry_instruction;
+        instruction.block = block_entry_instruction;
         instruction.opcode = current_opcode;
         status = emit_trace_event(execution, &instruction);
         if (status != XR_TYPED_DISPATCH_OK)
             return status;
         uint32_t next = current + 1u;
         status = execute_row(
-            frame, &instructions[current], arguments, argument_count,
+            frame, row, decoded, arguments, argument_count,
             instruction_count, &next, &returned, return_bits, execution,
             parameters_prebound, frame_id);
         if (status != XR_TYPED_DISPATCH_OK)
@@ -683,11 +740,24 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
     if (!xr_fingerprint_equal(xr_target_plan_fingerprint(verified_plan),
                               *required_plan_fingerprint))
         return XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
-    char error[512] = {0};
-    if (!xr_target_plan_fingerprint_is_intact(verified_plan) ||
-        !xr_target_instruction_program_verify(verified_plan, error,
-                                               sizeof(error)))
-        return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    if (request->decoded_cache) {
+        XrVmDecodedCacheStatus cache_status =
+            xr_typed_decoded_cache_require_exact(
+                request->decoded_cache, verified_plan,
+                required_plan_fingerprint);
+        if (cache_status == XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH)
+            return XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
+        if (cache_status != XR_VM_DECODED_CACHE_OK)
+            return cache_status == XR_VM_DECODED_CACHE_PLAN_NOT_VERIFIED
+                       ? XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED
+                       : XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    } else {
+        char error[512] = {0};
+        if (!xr_target_plan_fingerprint_is_intact(verified_plan) ||
+            !xr_target_instruction_program_verify(verified_plan, error,
+                                                   sizeof(error)))
+            return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    }
     if (request->debug_session &&
         !xr_typed_debug_session_matches_plan(
             request->debug_session,
@@ -723,6 +793,7 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         .call_depth = 1,
         .next_frame_id = 1,
         .debug_session = request->debug_session,
+        .decoded_cache = request->decoded_cache,
     };
     XrTypedDispatchStatus status = execute_function(
         &execution, frame, request->function, request->arguments,

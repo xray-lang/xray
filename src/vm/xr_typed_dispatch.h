@@ -14,6 +14,8 @@
 #include "../plan/target/xr_target_plan.h"
 #include "debug/xr_vm_trace.h"
 
+typedef struct XrVmDecodedCache XrVmDecodedCache;
+
 typedef enum XrTypedDispatchStatus {
     XR_TYPED_DISPATCH_OK = 0,
     XR_TYPED_DISPATCH_INVALID_ARGUMENT,
@@ -61,6 +63,7 @@ typedef struct XrTypedDispatchI64Request {
     const int64_t *arguments;
     int64_t *result;
     const XrVmDebugSession *debug_session;
+    const XrVmDecodedCache *decoded_cache;
     uint32_t function;
     uint32_t argument_count;
 } XrTypedDispatchI64Request;

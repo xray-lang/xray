@@ -476,6 +476,7 @@ XrEntryInvokeStatus xr_entry_cell_invoke_i64(
             .required_plan_fingerprint = &token.plan_fingerprint,
             .arguments = arguments,
             .result = &executed,
+            .decoded_cache = token.generation->decoded_cache,
             .function = token.function,
             .argument_count = argument_count,
         };

@@ -163,6 +163,7 @@ static void test_scalar_generation_lifecycle(XrTargetPlan *plan) {
     REQUIRE(xr_module_generation_snapshot(generation, &before));
     REQUIRE(before.state == XR_MODULE_GENERATION_VERIFIED);
     REQUIRE(before.identity.generation_number == 1);
+    REQUIRE(generation->decoded_cache == NULL);
 
     REQUIRE(xr_runtime_generation_activation_available());
     int64_t result = 99;
@@ -171,12 +172,28 @@ static void test_scalar_generation_lifecycle(XrTargetPlan *plan) {
     REQUIRE(result == 0 && strstr(diagnostic, "XR_OWN_3003") != NULL);
     REQUIRE(xr_module_generation_prepare(generation, diagnostic,
                                          sizeof(diagnostic)));
+    REQUIRE(generation->decoded_cache != NULL);
+    XrFingerprint plan_fingerprint = xr_target_plan_fingerprint(plan);
+    REQUIRE(xr_typed_decoded_cache_require_exact(
+                generation->decoded_cache, generation->plan,
+                &plan_fingerprint) == XR_VM_DECODED_CACHE_OK);
     REQUIRE(xr_module_generation_verify(generation, diagnostic,
                                         sizeof(diagnostic)));
     REQUIRE(xr_module_generation_snapshot(generation, &after));
     REQUIRE(after.state == XR_MODULE_GENERATION_READY);
+    XrVmDecodedCache *published_cache = generation->decoded_cache;
+    xr_mutex_lock(&authority->gate);
+    generation->decoded_cache = NULL;
+    xr_mutex_unlock(&authority->gate);
+    REQUIRE(!xr_module_generation_verify(generation, diagnostic,
+                                         sizeof(diagnostic)));
+    REQUIRE(strstr(diagnostic, "XR_EXEC_5004") != NULL);
+    xr_mutex_lock(&authority->gate);
+    generation->decoded_cache = published_cache;
+    xr_mutex_unlock(&authority->gate);
     REQUIRE(xr_module_generation_activate(generation, diagnostic,
                                           sizeof(diagnostic)));
+    REQUIRE(generation->decoded_cache == published_cache);
     REQUIRE(xr_module_generation_verify(generation, diagnostic,
                                         sizeof(diagnostic)));
     REQUIRE(xr_module_generation_execute_sole_scalar_i64(

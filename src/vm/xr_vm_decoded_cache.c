@@ -47,10 +47,10 @@ static bool add_bytes(size_t *total, uint32_t count, size_t item_size) {
     return true;
 }
 
-bool xr_vm_decoded_cache_size_within_budget(uint32_t function_count,
-                                            uint32_t instruction_count,
-                                            uint32_t block_count,
-                                            size_t *total_bytes) {
+bool xr_typed_decoded_cache_size_within_budget(uint32_t function_count,
+                                                uint32_t instruction_count,
+                                                uint32_t block_count,
+                                                size_t *total_bytes) {
     if (total_bytes)
         *total_bytes = 0;
     if (!total_bytes ||
@@ -238,7 +238,7 @@ static bool initialize_function_blocks(XrVmDecodedCache *cache,
     return true;
 }
 
-XrVmDecodedCacheStatus xr_vm_decoded_cache_create(
+XrVmDecodedCacheStatus xr_typed_decoded_cache_create(
     const XrTargetPlan *verified_plan,
     const XrFingerprint *required_plan_fingerprint,
     XrVmDecodedCache **cache) {
@@ -262,7 +262,7 @@ XrVmDecodedCacheStatus xr_vm_decoded_cache_create(
         return XR_VM_DECODED_CACHE_BUDGET_EXCEEDED;
 
     size_t bytes = 0;
-    if (!xr_vm_decoded_cache_size_within_budget(
+    if (!xr_typed_decoded_cache_size_within_budget(
             function_count, instruction_count, instruction_count, &bytes))
         return XR_VM_DECODED_CACHE_BUDGET_EXCEEDED;
     if (!xr_target_plan_fingerprint_is_intact(verified_plan))
@@ -295,7 +295,7 @@ XrVmDecodedCacheStatus xr_vm_decoded_cache_create(
     }
     if (!initialize_rows(created, rows) || !index_functions(created))
         goto invalid_program;
-    if (!xr_vm_decoded_cache_size_within_budget(
+    if (!xr_typed_decoded_cache_size_within_budget(
             function_count, instruction_count, created->block_count, &bytes))
         goto budget_exceeded;
     if (created->block_count) {
@@ -325,11 +325,11 @@ allocation_failed:
     return XR_VM_DECODED_CACHE_ALLOCATION_FAILED;
 }
 
-void xr_vm_decoded_cache_free(XrVmDecodedCache *cache) {
+void xr_typed_decoded_cache_free(XrVmDecodedCache *cache) {
     dispose_storage(cache);
 }
 
-XrVmDecodedCacheStatus xr_vm_decoded_cache_require_exact(
+XrVmDecodedCacheStatus xr_typed_decoded_cache_require_exact(
     const XrVmDecodedCache *cache, const XrTargetPlan *verified_plan,
     const XrFingerprint *required_plan_fingerprint) {
     if (!cache || !verified_plan || !required_plan_fingerprint)
@@ -346,9 +346,9 @@ XrVmDecodedCacheStatus xr_vm_decoded_cache_require_exact(
     return XR_VM_DECODED_CACHE_OK;
 }
 
-bool xr_vm_decoded_cache_function(const XrVmDecodedCache *cache,
-                                  uint32_t function,
-                                  XrVmDecodedFunctionView *view) {
+bool xr_typed_decoded_cache_function(const XrVmDecodedCache *cache,
+                                     uint32_t function,
+                                     XrVmDecodedFunctionView *view) {
     if (view)
         memset(view, 0, sizeof(*view));
     if (!cache || !view || function >= cache->function_count)
@@ -366,8 +366,8 @@ bool xr_vm_decoded_cache_function(const XrVmDecodedCache *cache,
     return true;
 }
 
-bool xr_vm_decoded_cache_stats(const XrVmDecodedCache *cache,
-                               XrVmDecodedCacheStats *stats) {
+bool xr_typed_decoded_cache_stats(const XrVmDecodedCache *cache,
+                                  XrVmDecodedCacheStats *stats) {
     if (!cache || !stats)
         return false;
     *stats = (XrVmDecodedCacheStats) {

@@ -23,6 +23,10 @@ block-entry, call, and slot facts are scoped by the exact TargetPlan
 fingerprint; generation number and fingerprint are present only when exact
 generation context was supplied. A sink refusal or fixed-buffer capacity edge
 stops execution with `XR_TYPED_DISPATCH_TRACE_REJECTED` and publishes no result.
+When the request carries an exact decoded cache, block-entry identity comes
+from its verified block partition and is written into the same frame context;
+event kinds, identities, ordering, step accounting, and rejection behavior are
+unchanged.
 
 Profile counters consume only successfully accepted canonical events. They
 count event kinds and generated instruction opcodes, record maximum frame
@@ -55,9 +59,9 @@ anchor-sha256: src/vm/debug/xr_vm_profile.h 494f41cb32b3b3e48162f2f5b23c78c5e85e
 anchor-sha256: src/vm/debug/xr_vm_profile.c d4a1cd75c1d520f3a14721e64757559952ffb6c734b62c7a6769d81444ccbda1
 anchor-sha256: src/vm/debug/xr_vm_materialize.h 6e784c930527ea25bee1301db2d16065a11d091e51de5a58316ad36f65a0e9db
 anchor-sha256: src/vm/debug/xr_vm_materialize.c dc70a2881d49cab77a9382a5ae9c88e914be806803105aad55a1667001735c6e
-anchor-sha256: src/vm/xr_typed_dispatch.h ca0475a9650e79929e6529d10965ab7403815c148d695995e10ada86499257f6
-anchor-sha256: src/vm/xr_typed_dispatch.c a8112d151f6566489cb8c34fc9f295db79d683ee98d34faf14e2f8afdcff8b14
+anchor-sha256: src/vm/xr_typed_dispatch.h 878efe171bf1018cd676fe8224ebb70a19faf50741ccc8b6f17e05ff712ca68e
+anchor-sha256: src/vm/xr_typed_dispatch.c 8f1aafc1b2a27cae8ea451ef06cec0c4cfbc5abfa3dd0e8ca8b9617af8a6f2c1
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 63727b47fb9df9233402f4af919122ac99266bd193f04c6f80893ce2ab4bf69d
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 81f28d9eef2915dec8be0a5676640cce16338a86b5f993f42f79b5df9828ddde
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py e6d6038940a3fcff5c8e7f636f64142947b2878151db4ae96823bd67a174017a
-anchor-sha256: CMakeLists.txt 356a8ea05e144ba3adf500128cc58b7f1971538043113a77f0de9595f0c83981
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 3b43b83cccc5b5b2460302a5b04f3201ec6e936f16fe691fe8d09460597daf89
+anchor-sha256: CMakeLists.txt 6afe2cdfb3157defec19cb249bc3dd4a3634e3091b83845ff21e3df45096edb2

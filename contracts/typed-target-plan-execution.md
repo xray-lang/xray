@@ -106,9 +106,12 @@ section directory, the exact 32-byte row codec, and candidate materialization.
 The internal scalar dispatcher accepts one immutable request containing only a
 verified plan, its exact fingerprint, a derived nonzero function execution
 family, a positional signed-`i64` argument vector, exact typed-frame slot
-identities, and an optional runtime-only debug session. It
-independently recomputes the target-content fingerprint and does not inspect
-SemanticPlan or Xi. The verified rows are the only signature it honours: the
+identities, an optional runtime-only debug session, and an optional immutable
+decoded cache for that exact plan object. Without a cache it independently
+recomputes target-content integrity and instruction validity. With a cache it
+requires the same plan pointer, schema, recorded fingerprint, and caller-required
+fingerprint before consuming any row; it never treats a miss or mismatch as
+authority to build or execute. Neither path inspects SemanticPlan or Xi. The verified rows are the only signature it honours: the
 argument count must equal the number of parameter rows, and a shorter,
 longer, or absent vector is rejected before the frame exists rather than
 truncated, padded, or zero filled. It has no legacy VM opcode, `XrValue`, AOT,
@@ -123,6 +126,18 @@ budget rather than a wall clock. Exhausting the budget stops the call with its
 own status, distinct from every status that reports an unacceptable plan or
 call, so a plan can never hang the caller that ran it and the same call refused
 once is refused every time.
+
+The decoded cache may be published only after full TargetPlan and instruction
+verification. Per function it copies the immutable instruction rows, generated
+opcode contract binding, decoded control targets, parameter count, and the
+verified basic-block partition and successors. It does not select or duplicate
+representation, call, adapter, allocation, root, cleanup, or ownership policy.
+Function, row, block, and byte totals have fixed hard ceilings checked before
+expensive construction and again against the exact allocation shape. Published
+storage is read-only, retains the exact plan for its whole lifetime, and may be
+shared concurrently. Cached and uncached dispatch use the same generated
+handlers, frame operations, call-depth and step counters, error statuses, and
+result publication.
 
 Schema 33 is a hard cutover from v32 and every earlier TargetPlan schema. The
 instruction opcode carrier is now an unsigned 16-bit stable ID while the
@@ -330,6 +345,12 @@ Evidence:
   which divides by zero reaches ACTIVE and is stopped at execution as a
   program fault, separate from the authority failures an unsupported plan
   gives.
+- `test_vm_decoded_cache` proves exact plan-pointer/schema/fingerprint binding,
+  generated contract and block metadata, hard row/block/byte budgets,
+  fail-closed construction from a corrupted plan, concurrent read-only
+  execution, and cached/uncached parity for results, argument errors,
+  divide-by-zero, and the exact step-limit edge. Its runtime-archive companion
+  proves the cache surface links without compiler builders.
 
 anchor-sha256: src/plan/target/xr_target_plan.h a2835453ea48011c9b5a3c12a31283fb7227d35c9ff1f722f19f24b8fd8fc5fc
 anchor-sha256: src/plan/target/xr_target_plan.c 86e47a5e7ff76ed3b340545bdbdcc78a6caa0ae772944b7daef9f219d72d24ac
@@ -341,12 +362,16 @@ anchor-sha256: src/plan/format/xr_xtp_schema.h 4ae2b612f62f8a68255d3c084327d2369
 anchor-sha256: src/plan/format/xr_xtp_rows.c 37ade66cec19c828eefe6ed2066273fe16197b9f7908f2b4977e73eb39851c41
 anchor-sha256: src/plan/format/xr_xtp_encode.c 2f6f1fa32e35fd1681ab07bc8a3808d133f33f27e43139224d3f9e253447bd74
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
-anchor-sha256: src/vm/xr_typed_dispatch.h ca0475a9650e79929e6529d10965ab7403815c148d695995e10ada86499257f6
-anchor-sha256: src/vm/xr_typed_dispatch.c a8112d151f6566489cb8c34fc9f295db79d683ee98d34faf14e2f8afdcff8b14
-anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
+anchor-sha256: src/vm/xr_typed_dispatch.h 878efe171bf1018cd676fe8224ebb70a19faf50741ccc8b6f17e05ff712ca68e
+anchor-sha256: src/vm/xr_typed_dispatch.c 8f1aafc1b2a27cae8ea451ef06cec0c4cfbc5abfa3dd0e8ca8b9617af8a6f2c1
+anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
+anchor-sha256: src/vm/xr_vm_decoded_cache.c 2d4f14d54740e6aac0cdfb23fc7b90b075725c479751ba52a1948a658f91fa77
+anchor-sha256: src/vm/xr_typed_frame.c 5e5d7615d8dfe580ac8104f6f391219b876f2789335cfa41ea9e122abf45adb1
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 63727b47fb9df9233402f4af919122ac99266bd193f04c6f80893ce2ab4bf69d
+anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 852f7a3bbce9d1a0c91c2f577e384a8e58daa86dbb3c36b474fca3f556bbdfc3
 anchor-sha256: tests/unit/plan/test_xtp_format.c 9654ba47989b6b34e4e40f6196a02bb95818fd6f83aa5f4a4f78e6907bf4bd31
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 81f28d9eef2915dec8be0a5676640cce16338a86b5f993f42f79b5df9828ddde
+anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 33da22f5eec9a7889b25380fa99e070c807c19580569ac081a0f0558545eb8e3
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
-anchor-sha256: src/runtime/xr_module_generation.c 43a8bf5ff595351f4e4bb2f78e01dd6d5273f2a80a9ad18cabb93f05fb6a64ba
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1
+anchor-sha256: src/runtime/xr_module_generation.c ceb180903df3019b237f384f0c7ae7c743a7e00d8d52ee5df9261f5d72f955e1
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 971cf9989386d2c660c828f8e36df295d1ee61fa1458d12b03700e1ecb88f246

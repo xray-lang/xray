@@ -23,6 +23,7 @@
 #include "../plan/target/xr_target_verify.h"
 #include "../vm/xr_typed_dispatch.h"
 #include "../vm/xr_typed_frame.h"
+#include "../vm/xr_vm_decoded_cache.h"
 #include "abi/xr_runtime_target_authority.h"
 #include <stdio.h>
 #include <string.h>
@@ -429,6 +430,50 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status,
                 "scalar generation dispatcher returned an unknown status");
 }
 
+static XrFingerprint generation_plan_fingerprint(
+    const XrLoadedModuleGeneration *generation) {
+    XrFingerprint fingerprint = {{0}};
+    if (generation)
+        memcpy(fingerprint.bytes,
+               generation->identity.target_plan_fingerprint,
+               sizeof(fingerprint.bytes));
+    return fingerprint;
+}
+
+static bool fail_decoded_cache(XrVmDecodedCacheStatus status,
+                               char *diagnostic,
+                               size_t diagnostic_size) {
+    switch (status) {
+        case XR_VM_DECODED_CACHE_BUDGET_EXCEEDED:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                        "decoded instruction cache exceeds its hard budget");
+        case XR_VM_DECODED_CACHE_ALLOCATION_FAILED:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                        "decoded instruction cache allocation failed");
+        case XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                        "decoded instruction cache plan identity changed");
+        case XR_VM_DECODED_CACHE_PLAN_NOT_VERIFIED:
+        case XR_VM_DECODED_CACHE_PROGRAM_INVALID:
+        case XR_VM_DECODED_CACHE_INVALID_ARGUMENT:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5000",
+                        "decoded instruction cache refused the verified plan");
+        case XR_VM_DECODED_CACHE_OK:
+            return true;
+    }
+    return fail(diagnostic, diagnostic_size, "XR_EXEC_5000",
+                "decoded instruction cache returned an unknown status");
+}
+
+static XrVmDecodedCacheStatus generation_cache_require_exact(
+    const XrLoadedModuleGeneration *generation) {
+    if (!generation)
+        return XR_VM_DECODED_CACHE_INVALID_ARGUMENT;
+    XrFingerprint fingerprint = generation_plan_fingerprint(generation);
+    return xr_typed_decoded_cache_require_exact(
+        generation->decoded_cache, generation->plan, &fingerprint);
+}
+
 XRAY_API bool xr_module_generation_prepare(
     XrLoadedModuleGeneration *generation, char *diagnostic,
     size_t diagnostic_size) {
@@ -450,10 +495,23 @@ XRAY_API bool xr_module_generation_prepare(
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
                     "generation lacks the exact sole-function scalar i64 authority");
     }
+    XrFingerprint fingerprint = generation_plan_fingerprint(generation);
+    XrVmDecodedCache *decoded_cache = NULL;
+    XrVmDecodedCacheStatus cache_status = xr_typed_decoded_cache_create(
+        generation->plan, &fingerprint, &decoded_cache);
+    if (cache_status != XR_VM_DECODED_CACHE_OK) {
+        xr_mutex_unlock(&authority->gate);
+        return fail_decoded_cache(cache_status, diagnostic, diagnostic_size);
+    }
+    generation->decoded_cache = decoded_cache;
     bool ok = transition_locked(generation, XR_MODULE_GENERATION_VERIFIED,
                                 XR_MODULE_GENERATION_READY,
                                 "only a verified generation may become ready",
                                 diagnostic, diagnostic_size);
+    if (!ok) {
+        generation->decoded_cache = NULL;
+        xr_typed_decoded_cache_free(decoded_cache);
+    }
     xr_mutex_unlock(&authority->gate);
     return ok;
 }
@@ -474,10 +532,11 @@ XRAY_API bool xr_module_generation_activate(
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
                     "generation activation requires the exact READY state");
     }
-    if (!sole_scalar_generation_eligible(generation)) {
+    XrVmDecodedCacheStatus cache_status =
+        generation_cache_require_exact(generation);
+    if (cache_status != XR_VM_DECODED_CACHE_OK) {
         xr_mutex_unlock(&authority->gate);
-        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
-                    "generation lacks the exact sole-function scalar i64 authority");
+        return fail_decoded_cache(cache_status, diagnostic, diagnostic_size);
     }
     bool ok = transition_locked(generation, XR_MODULE_GENERATION_READY,
                                 XR_MODULE_GENERATION_ACTIVE,
@@ -500,11 +559,10 @@ XRAY_API bool xr_module_generation_execute_sole_scalar_i64(
             diagnostic, diagnostic_size))
         return false;
 
-    bool eligible = sole_scalar_generation_eligible(generation);
-    XrFingerprint required_fingerprint = {{0}};
-    memcpy(required_fingerprint.bytes,
-           generation->identity.target_plan_fingerprint,
-           sizeof(required_fingerprint.bytes));
+    XrVmDecodedCacheStatus cache_status =
+        generation_cache_require_exact(generation);
+    XrFingerprint required_fingerprint =
+        generation_plan_fingerprint(generation);
     int64_t executed_result = 0;
     /* This product route carries no argument vector, so a plan whose sole
      * function declares parameters fails closed instead of being executed
@@ -513,17 +571,18 @@ XRAY_API bool xr_module_generation_execute_sole_scalar_i64(
         .verified_plan = generation->plan,
         .required_plan_fingerprint = &required_fingerprint,
         .result = &executed_result,
+        .decoded_cache = generation->decoded_cache,
     };
-    XrTypedDispatchStatus status = eligible
-                                       ? xr_typed_dispatch_execute_i64(&request)
-                                       : XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+    XrTypedDispatchStatus status =
+        cache_status == XR_VM_DECODED_CACHE_OK
+            ? xr_typed_dispatch_execute_i64(&request)
+            : XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
     if (!xr_module_generation_pin_release(
             generation, XR_MODULE_GENERATION_INFLIGHT_CALL,
             diagnostic, diagnostic_size))
         return false;
-    if (!eligible)
-        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
-                    "active generation lost sole-function scalar i64 authority");
+    if (cache_status != XR_VM_DECODED_CACHE_OK)
+        return fail_decoded_cache(cache_status, diagnostic, diagnostic_size);
     if (status != XR_TYPED_DISPATCH_OK)
         return fail_typed_dispatch(status, diagnostic, diagnostic_size);
     *result = executed_result;
@@ -724,6 +783,7 @@ XRAY_API bool xr_module_generation_unload(
     authority->live_generations--;
     xr_mutex_unlock(&authority->gate);
 
+    xr_typed_decoded_cache_free(owned->decoded_cache);
     xr_target_plan_free(owned->plan);
     memset(owned, 0, sizeof(*owned));
     xr_free(owned);

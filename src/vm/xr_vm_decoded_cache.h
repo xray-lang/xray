@@ -70,20 +70,20 @@ typedef struct XrVmDecodedCacheStats {
 
 typedef struct XrVmDecodedCache XrVmDecodedCache;
 
-XR_FUNC XrVmDecodedCacheStatus xr_vm_decoded_cache_create(
+XR_FUNC XrVmDecodedCacheStatus xr_typed_decoded_cache_create(
     const XrTargetPlan *verified_plan,
     const XrFingerprint *required_plan_fingerprint,
     XrVmDecodedCache **cache);
-XR_FUNC void xr_vm_decoded_cache_free(XrVmDecodedCache *cache);
-XR_FUNC XrVmDecodedCacheStatus xr_vm_decoded_cache_require_exact(
+XR_FUNC void xr_typed_decoded_cache_free(XrVmDecodedCache *cache);
+XR_FUNC XrVmDecodedCacheStatus xr_typed_decoded_cache_require_exact(
     const XrVmDecodedCache *cache, const XrTargetPlan *verified_plan,
     const XrFingerprint *required_plan_fingerprint);
-XR_FUNC bool xr_vm_decoded_cache_function(
+XR_FUNC bool xr_typed_decoded_cache_function(
     const XrVmDecodedCache *cache, uint32_t function,
     XrVmDecodedFunctionView *view);
-XR_FUNC bool xr_vm_decoded_cache_stats(const XrVmDecodedCache *cache,
-                                       XrVmDecodedCacheStats *stats);
-XR_FUNC bool xr_vm_decoded_cache_size_within_budget(
+XR_FUNC bool xr_typed_decoded_cache_stats(const XrVmDecodedCache *cache,
+                                          XrVmDecodedCacheStats *stats);
+XR_FUNC bool xr_typed_decoded_cache_size_within_budget(
     uint32_t function_count, uint32_t instruction_count,
     uint32_t block_count, size_t *total_bytes);
 

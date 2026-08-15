@@ -11,16 +11,16 @@ int main(void) {
     XrVmDecodedFunctionView function;
     XrVmDecodedCacheStats stats;
     size_t bytes = 0;
-    if (xr_vm_decoded_cache_create(NULL, &fingerprint, &cache) !=
+    if (xr_typed_decoded_cache_create(NULL, &fingerprint, &cache) !=
             XR_VM_DECODED_CACHE_INVALID_ARGUMENT ||
-        cache != NULL || xr_vm_decoded_cache_function(NULL, 0, &function) ||
-        xr_vm_decoded_cache_stats(NULL, &stats) ||
-        !xr_vm_decoded_cache_size_within_budget(1, 1, 1, &bytes) ||
+        cache != NULL || xr_typed_decoded_cache_function(NULL, 0, &function) ||
+        xr_typed_decoded_cache_stats(NULL, &stats) ||
+        !xr_typed_decoded_cache_size_within_budget(1, 1, 1, &bytes) ||
         bytes == 0 || bytes > XR_VM_DECODED_CACHE_MAX_BYTES) {
         fputs("runtime-only VM decoded cache boundary failed\n", stderr);
         return 1;
     }
-    xr_vm_decoded_cache_free(NULL);
+    xr_typed_decoded_cache_free(NULL);
     puts("runtime-only VM decoded cache boundary passed");
     return 0;
 }

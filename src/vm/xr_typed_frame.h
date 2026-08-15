@@ -159,6 +159,11 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_context(
     const XrTypedFrame *frame, XrTypedFrameContext *context);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_enter_instruction(
     XrTypedFrame *frame, uint32_t instruction);
+/* The dispatcher may use this O(1) entry only after it has bound the frame to
+ * the same immutable plan as an exact verified decoded cache. */
+XR_FUNC XrTypedFrameStatus xr_typed_frame_enter_decoded_instruction(
+    XrTypedFrame *frame, uint32_t instruction,
+    uint32_t block_entry_instruction);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_bind_coroutine_state(
     XrTypedFrame *frame, uint32_t coroutine_state);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_bind_generation_identity(

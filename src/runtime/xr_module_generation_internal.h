@@ -13,6 +13,7 @@
 
 #include "../../include/xray_runtime_generation.h"
 #include "../os/os_thread.h"
+#include "../vm/xr_vm_decoded_cache.h"
 
 typedef enum XrModuleGenerationMutation {
     XR_MODULE_GENERATION_MUTATION_VERIFY = 0,
@@ -38,6 +39,7 @@ struct XrRuntimeGenerationAuthority {
 struct XrLoadedModuleGeneration {
     XrRuntimeGenerationAuthority *authority;
     XrTargetPlan *plan;
+    XrVmDecodedCache *decoded_cache;
     XrModuleGenerationIdentity identity;
     XrModuleGenerationState state;
     uint64_t revision;

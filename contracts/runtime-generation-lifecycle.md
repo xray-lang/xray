@@ -46,10 +46,15 @@ scalar route remains the only governed product activation path.
    therefore continue to make this sole-scalar PREPARE route fail closed.
    Its sealed StringBuilder constructor call likewise remains non-executable
    at this scalar-only runtime boundary.
+   PREPARE performs the complete plan and instruction verification before it
+   constructs and publishes one immutable decoded cache. READY is unreachable
+   if cache allocation or any hard function/row/block/byte budget fails; a
+   failed attempt leaves the generation VERIFIED and publishes nothing.
 6. A healthy ACTIVE eligible generation alone may execute its sole function.
    Execution first acquires an `INFLIGHT_CALL` pin, binds the retained plan's
-   exact generation identity fingerprint, and then uses only the verified
-   scalar instruction table and typed frame. Every success and failure path
+   exact generation identity fingerprint, requires the generation's exact
+   decoded-cache plan/schema/fingerprint binding, and then uses only its
+   verified instruction facts and typed frame. Every success and failure path
    releases the pin. DRAINING rejects new execution while permitting an
    already-started call to release its pin, and retirement still requires all
    pins to reach zero. This route passes no arguments, so a sole function whose
@@ -68,7 +73,11 @@ scalar route remains the only governed product activation path.
    generation fingerprint, state/poison invariants, counter sums, per-kind and
    global budgets. For every READY, ACTIVE, or DRAINING generation it separately
    reconstructs the same plan-specific scalar eligibility without calling the
-   production PREPARE helper. Its transition model rejects identity mutation,
+   production PREPARE helper and requires an exact published decoded cache.
+   A pre-PREPARE VERIFIED generation may have no cache; once published, the
+   cache remains generation-owned through drain and retirement, while the
+   in-flight pin prevents unload during reuse. UNLOAD destroys the cache before
+   releasing the retained plan. Its transition model rejects identity mutation,
    skipped/repeated states, mismatched pins, illegal rollback, and revision
    mutation.
 8. The standalone public header and lifecycle/scalar-execution symbols, plus the
@@ -140,22 +149,25 @@ scalar route remains the only governed product activation path.
     without acquiring a pin.
 
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
-anchor-sha256: src/runtime/xr_module_generation_internal.h 427d2d23bfa8991dd8d20463169fb9bb23d7486a38d5274cb5d84b089a14a96a
-anchor-sha256: src/runtime/xr_module_generation.c 43a8bf5ff595351f4e4bb2f78e01dd6d5273f2a80a9ad18cabb93f05fb6a64ba
-anchor-sha256: src/runtime/xr_module_generation_verify.c 0f146f9f8526f83d84157febadde7cb92327f24186fb6d8d45138968ecaaf4bd
-anchor-sha256: src/vm/xr_typed_dispatch.h ca0475a9650e79929e6529d10965ab7403815c148d695995e10ada86499257f6
-anchor-sha256: src/vm/xr_typed_dispatch.c a8112d151f6566489cb8c34fc9f295db79d683ee98d34faf14e2f8afdcff8b14
-anchor-sha256: src/vm/xr_typed_frame.h 5acde34be5501c7892b1b20d78d18e32dca3269b1722380a77c6545f1c9df649
-anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
+anchor-sha256: src/runtime/xr_module_generation_internal.h a2f5788ce7b589e4d5d2a966e67e6f9b326016c045a4d9ec7d8ce9cf3fdf5580
+anchor-sha256: src/runtime/xr_module_generation.c ceb180903df3019b237f384f0c7ae7c743a7e00d8d52ee5df9261f5d72f955e1
+anchor-sha256: src/runtime/xr_module_generation_verify.c a5d61df40d4442e6ccf8c9824bf73d7a8b3dc751b90b46ec4baf7039135feb25
+anchor-sha256: src/vm/xr_typed_dispatch.h 878efe171bf1018cd676fe8224ebb70a19faf50741ccc8b6f17e05ff712ca68e
+anchor-sha256: src/vm/xr_typed_dispatch.c 8f1aafc1b2a27cae8ea451ef06cec0c4cfbc5abfa3dd0e8ca8b9617af8a6f2c1
+anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
+anchor-sha256: src/vm/xr_vm_decoded_cache.c 2d4f14d54740e6aac0cdfb23fc7b90b075725c479751ba52a1948a658f91fa77
+anchor-sha256: src/vm/xr_typed_frame.h d07112355960a3d2acc9781d3927e1374e4add29a3c5b52a3da61602e611e115
+anchor-sha256: src/vm/xr_typed_frame.c 5e5d7615d8dfe580ac8104f6f391219b876f2789335cfa41ea9e122abf45adb1
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 971cf9989386d2c660c828f8e36df295d1ee61fa1458d12b03700e1ecb88f246
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py e6d6038940a3fcff5c8e7f636f64142947b2878151db4ae96823bd67a174017a
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 3b43b83cccc5b5b2460302a5b04f3201ec6e936f16fe691fe8d09460597daf89
 anchor-sha256: tests/install/run_install_public_surface_tests.py 1bbef0d66f5d0d78dbe41848497b678c02c88fc9663f296d9863571fe20eb38e
 anchor-sha256: include/xray_runtime_api.h c57754f0204441d3575c6c5b3891333bd01eb72b858cb1b17389f5e701866a98
 anchor-sha256: src/runtime/xr_runtime_api.c 9de680b6941442442c0a67ff66e14858c38375590bea625556da4a912f9c787e
 anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c 225e5777c21a94fcbff21619eef26956c7fad284370c7cbb7091eacebf9817c8
 anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
-anchor-sha256: src/runtime/xr_entry_cell.c c93750e8ea1d17ea2ac28dddcdfb4e0e2f8eecaec3e106f50493e1f38568046b
+anchor-sha256: src/runtime/xr_entry_cell.c 852674cb42d465fcffa368afd6bc33ebf84fee6ee8bf43fd7244d9a789bbcc4f
 anchor-sha256: tests/unit/runtime/test_entry_cell_runtime_archive.c 34bc22820144f368a5e5914ac387f2a19db85ef4555d458b07215548eef1dca0
+anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 852f7a3bbce9d1a0c91c2f577e384a8e58daa86dbb3c36b474fca3f556bbdfc3

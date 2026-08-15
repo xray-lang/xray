@@ -296,13 +296,27 @@ XRAY_API bool xr_module_generation_verify(
     bool unavailable_state =
         snapshot.state >= XR_MODULE_GENERATION_READY &&
         snapshot.state <= XR_MODULE_GENERATION_DRAINING &&
-        !verifier_sole_scalar_generation_eligible(generation);
+        (!verifier_sole_scalar_generation_eligible(generation) ||
+         !generation->decoded_cache);
+    bool cache_identity_ok = true;
+    if (generation->decoded_cache) {
+        XrFingerprint fingerprint = {{0}};
+        memcpy(fingerprint.bytes,
+               generation->identity.target_plan_fingerprint,
+               sizeof(fingerprint.bytes));
+        cache_identity_ok = xr_typed_decoded_cache_require_exact(
+                                generation->decoded_cache, generation->plan,
+                                &fingerprint) == XR_VM_DECODED_CACHE_OK;
+    }
     xr_mutex_unlock(&authority->gate);
     if (!shape_ok || !budget_ok)
         return reject(diagnostic, diagnostic_size, "XR_EXEC_5008",
                       "generation state or counter invariant is invalid");
     if (!identity_ok)
         return false;
+    if (!cache_identity_ok)
+        return reject(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                      "generation decoded cache identity is not exact");
     if (unavailable_state)
         return reject(diagnostic, diagnostic_size, "XR_EXEC_5004",
                       "generation claims a state owned by an unavailable typed executor");
