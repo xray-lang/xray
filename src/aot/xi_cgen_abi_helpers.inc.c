@@ -77,7 +77,75 @@ static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
 
+/* A frozen named aggregate is identified only by its verified Target/C-emission
+ * projection.  The C type spelling is an output of that authority, not an
+ * input discriminator.  Fixed-array backing and materialized aggregate
+ * recipes deliberately remain outside this consumer. */
+static bool cg_value_emission_is_named_aggregate(XiCgenCtx *ctx,
+                                                  const XiValue *v,
+                                                  XrCValueEmissionView *out,
+                                                  bool *authoritative) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (authoritative)
+        *authoritative = false;
+    if (!ctx || !v || !out || !authoritative)
+        return false;
+
+    CgValueEmissionStatus status =
+        cg_value_emission_view(ctx, NULL, v, out);
+    if (status == CG_VALUE_EMISSION_ERROR) {
+        *authoritative = true;
+        return false;
+    }
+    if (status == CG_VALUE_EMISSION_NOT_CONFIGURED) {
+        *authoritative = true;
+        (void) cg_value_emission_fail(
+            ctx, "named aggregate lookup has no CGen authority");
+        return false;
+    }
+    if (status != CG_VALUE_EMISSION_FOUND)
+        return false;
+
+    *authoritative = true;
+    if (out->rep != XR_C_VALUE_REP_AGGREGATE)
+        return false;
+    if (out->address_projection ==
+        XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING)
+        return false;
+    if (out->address_projection ==
+            XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE &&
+        out->materialization != XR_C_VALUE_MATERIALIZATION_NONE)
+        return false;
+    if (out->target_register_kind != XR_MACHINE_REP_AGGREGATE ||
+        out->target_memory_kind != XR_MACHINE_REP_AGGREGATE ||
+        out->address_projection !=
+            XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE ||
+        out->reserved != 0 || out->recipe_reserved != 0 ||
+        out->projection_reserved != 0 || !out->c_type || !out->c_type[0] ||
+        out->literal_byte_length != 0 || out->literal_bytes != NULL ||
+        out->recipe_operand_value != UINT32_MAX ||
+        out->recipe_argument_value != UINT32_MAX ||
+        out->recipe_layout_id != 0 || out->recipe_discriminant != 0 ||
+        out->recipe_argument_count != 0 || out->recipe_arguments != NULL ||
+        out->backing_value != 0 || out->backing_element_count != 0 ||
+        out->backing_native_type != 0 || out->backing_c_type != NULL ||
+        out->recipe_symbol != NULL || out->recipe_type_name != NULL ||
+        out->recipe_member_name != NULL) {
+        (void) cg_value_emission_fail(
+            ctx, "named aggregate C emission recipe is inconsistent");
+        return false;
+    }
+    return true;
+}
+
 static bool cg_value_plan_is_aggregate(XiCgenCtx *ctx, const XiValue *v) {
+    XrCValueEmissionView emission = {0};
+    bool authoritative = false;
+    bool named_aggregate = cg_value_emission_is_named_aggregate(
+        ctx, v, &emission, &authoritative);
+    if (authoritative)
+        return named_aggregate;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && plan->rep.kind == XAOT_VALUE_AGGREGATE;
 }
@@ -138,6 +206,12 @@ static bool cg_value_plan_is_adt_aggregate(XiCgenCtx *ctx, const XiValue *v) {
 }
 
 static bool cg_value_plan_is_struct_aggregate(XiCgenCtx *ctx, const XiValue *v) {
+    XrCValueEmissionView emission = {0};
+    bool authoritative = false;
+    bool named_aggregate = cg_value_emission_is_named_aggregate(
+        ctx, v, &emission, &authoritative);
+    if (authoritative)
+        return named_aggregate;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && cg_value_rep_is_struct_aggregate(plan->rep);
 }
@@ -207,6 +281,17 @@ static void emit_aggregate_zero_expr(FILE *out, XaotValueRep rep) {
 }
 
 static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    XrCValueEmissionView emission = {0};
+    bool authoritative = false;
+    if (cg_value_emission_is_named_aggregate(
+            ctx, v, &emission, &authoritative)) {
+        fprintf(out, "((%s){0})", emission.c_type);
+        return;
+    }
+    if (authoritative) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     if (plan && plan->rep.kind == XAOT_VALUE_AGGREGATE) {
         emit_aggregate_zero_expr(out, plan->rep);

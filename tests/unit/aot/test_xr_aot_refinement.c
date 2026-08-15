@@ -62,6 +62,7 @@
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_verify.h"
+#include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
@@ -3325,6 +3326,137 @@ static void test_fixed_array_backing_projection_is_exact_and_fail_closed(void) {
     xi_func_free(function);
 }
 
+static void test_named_aggregate_emission_is_exact_and_fail_closed(void) {
+    const char *field_names[2] = {"low", "high"};
+    XrType *field_types[2] = {&scalar_int, &scalar_int};
+    XrAggregateLayout native_layout = {
+        .field_count = 2,
+        .kind = XR_AGG_LAYOUT_STRUCT,
+        .explicit_align = 8,
+        .nominal_name = "NativePair",
+        .field_names = field_names,
+    };
+    XrClassInfo class_info = {
+        .name = "NativePair",
+        .struct_layout = &native_layout,
+    };
+    XrType named_type = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 101,
+        .frozen = true,
+        .is_value_type = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+    };
+    named_type.instance.class_name = "NativePair";
+    named_type.instance.class_ref = &class_info;
+    XiClassData declaration = {
+        .class_info = &class_info,
+        .class_name = "NativePair",
+        .instance_field_names = field_names,
+        .instance_field_types = field_types,
+        .instance_field_count = 2,
+        .needs_runtime_type = false,
+        .struct_layout = &native_layout,
+    };
+    XrType class_object = {
+        .kind = XR_KIND_UNKNOWN,
+        .id = 102,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+    };
+
+    XiFunc *function = xi_func_new("named_aggregate_emission", &named_type);
+    REQUIRE(function != NULL);
+    XiModule *module = xi_module_new("named_aggregate_emission.xr",
+                                     "named_aggregate_emission", function);
+    REQUIRE(module != NULL);
+    function->module = module;
+    module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
+    REQUIRE(module->classes != NULL);
+    module->classes[0] = &declaration;
+    module->nclasses = 1;
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *class_declaration =
+        xi_value_new(function, entry, XI_CLASS_CREATE, &class_object, 0);
+    XiValue *class_store =
+        xi_value_new(function, entry, XI_SET_SHARED, &scalar_unit, 1);
+    XiValue *class_load =
+        xi_value_new(function, entry, XI_GET_SHARED, &class_object, 0);
+    XiValue *aggregate =
+        xi_value_new(function, entry, XI_AGG_NEW, &named_type, 1);
+    REQUIRE(class_declaration && class_store && class_load && aggregate);
+    class_declaration->aux = &declaration;
+    class_store->args[0] = class_declaration;
+    class_store->aux_int = 0;
+    class_load->aux_int = 0;
+    function->nshared = 1;
+    aggregate->args[0] = class_load;
+    aggregate->aux = &native_layout;
+    xi_block_set_return(entry, aggregate);
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    char error[512] = {0};
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, aggregate, &semantic_function, &semantic_value,
+        error, sizeof(error)));
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, semantic_value, &view,
+                                          error, sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_AGGREGATE &&
+            view.target_register_kind == XR_MACHINE_REP_AGGREGATE &&
+            view.target_memory_kind == XR_MACHINE_REP_AGGREGATE &&
+            view.address_projection ==
+                XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE &&
+            view.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
+            view.c_type && view.c_type[0]);
+
+    XrCValueEmissionView *row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == semantic_value) {
+            REQUIRE(row == NULL);
+            row = &emission->values[i];
+        }
+    REQUIRE(row != NULL);
+    uint8_t saved_rep = row->rep;
+    row->rep = XR_C_VALUE_REP_TAGGED;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    row->rep = saved_rep;
+    uint8_t saved_projection = row->address_projection;
+    row->address_projection = XR_C_ADDRESS_PROJECTION_NONE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    row->address_projection = saved_projection;
+    uint8_t saved_materialization = row->materialization;
+    row->materialization = XR_C_VALUE_MATERIALIZATION_ARRAY_NEW;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    row->materialization = saved_materialization;
+    const char *saved_c_type = row->c_type;
+    row->c_type = "XrValue";
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    row->c_type = saved_c_type;
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                      error, sizeof(error)));
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    function->module = NULL;
+    xi_func_free(function);
+    module->init = NULL;
+    xi_module_free(module);
+}
+
 static void test_scalar_addressable_alias_recipe_is_exact_and_fail_closed(void) {
     XiFunc *function =
         xi_func_new("scalar_addressable_alias_recipe", &scalar_int);
@@ -4001,6 +4133,7 @@ int main(void) {
     test_representation_record_mutations_fail_closed();
     test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed();
     test_fixed_array_backing_projection_is_exact_and_fail_closed();
+    test_named_aggregate_emission_is_exact_and_fail_closed();
     test_scalar_addressable_alias_recipe_is_exact_and_fail_closed();
     test_direct_local_array_ref_parameter_index_is_exact_and_fail_closed();
     test_scalar_array_allocation_storage_is_exact_and_fail_closed();

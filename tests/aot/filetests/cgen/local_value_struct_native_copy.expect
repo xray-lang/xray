@@ -1,5 +1,6 @@
-contains=function 1 name=localCopy module=0 depth=1 abi=native boundary=none params=1 ret=uint64_t/scalar/u64
-regex=value v[0-9]+ op=AGG_NEW kind=aggregate rep=tagged c_type=xrt_struct_abi_[A-Za-z0-9_]+
+regex=function 1 name=localCopy module=0 semantic_function=[0-9]+ depth=1 abi=native boundary=none params=1 ret=uint64_t/scalar/u64
+regex=value v[0-9]+ op=AGG_NEW semantic=[0-9]+ authority=target family=target-plan register=[0-9]+\(kind=20,bits=128\) memory=[0-9]+\(kind=20,size=16,align=8\) slot=[0-9]+
 c_not_contains=xrt_value_clone_for_coro(
 c_not_contains=xrt_arc_alloc(
+c_not_contains=({
 c_syntax=pass

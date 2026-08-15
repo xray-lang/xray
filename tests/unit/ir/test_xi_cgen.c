@@ -4637,6 +4637,49 @@ TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
     xi_func_free(ir);
 }
 
+TEST(cgen_local_value_struct_copy_consumes_named_aggregate_emission) {
+    const char *src = "struct Pair {\n"
+                      "    low: u64\n"
+                      "    high: u64\n"
+                      "}\n"
+                      "fn localCopy(seed: u64) -> u64 {\n"
+                      "    var original = Pair{low: seed + 1, high: seed + 2}\n"
+                      "    var changed = original\n"
+                      "    changed.low += 7\n"
+                      "    changed.high ^= 3\n"
+                      "    return original.low + changed.low + changed.high\n"
+                      "}\n"
+                      "print(localCopy(11))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "local_struct_copy", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "local value-struct copy should generate");
+    const char *copy = find_static_function_definition(code, "localCopy");
+    TEST_REQUIRE(copy != NULL, "localCopy definition should be emitted");
+    const char *copy_end = next_static_after(copy);
+    TEST_REQUIRE(contains_between(copy, copy_end, " = ((xrt_struct_abi_"),
+                 "AGG_NEW must use the verified named-aggregate C type");
+    TEST_REQUIRE(!contains_between(copy, copy_end, "({"),
+                 "named aggregates must not use GNU statement expressions");
+    TEST_REQUIRE(!contains_between(copy, copy_end, "xrt_arc_alloc("),
+                 "native POD struct construction must not allocate");
+    TEST_REQUIRE(!contains_between(copy, copy_end, "xrt_value_clone_for_coro("),
+                 "native POD struct copy must use C assignment");
+    TEST_REQUIRE(!contains_between(copy, copy_end, ".ptr"),
+                 "native POD struct fields must not use tagged payload access");
+    TEST_REQUIRE(!contains_between(copy, copy_end, "xrt_release("),
+                 "native POD struct locals must not receive tagged cleanup");
+
+    printf("  Generated immutable named-aggregate copy %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_struct_field_only_place_loads_are_debug_guarded) {
     const char *src = "struct Pair {\n"
                       "    left: int\n"
@@ -14100,6 +14143,7 @@ int main(void) {
     run_cgen_emits_debug_source_var_slots();
     run_cgen_emits_shadowed_debug_source_var_slots();
     run_cgen_struct_debug_source_var_slots_use_typed_pointers();
+    run_cgen_local_value_struct_copy_consumes_named_aggregate_emission();
     run_cgen_struct_field_only_place_loads_are_debug_guarded();
     run_cgen_struct_raw_deref_method_receiver_skips_release_copy();
     run_cgen_struct_scalar_field_ref_skips_release_load();
