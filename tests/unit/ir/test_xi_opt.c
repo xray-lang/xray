@@ -1210,6 +1210,42 @@ TEST(phi_simplify_trivial) {
     xi_func_free(f);
 }
 
+TEST(phi_simplify_preserves_the_phi_type_view) {
+    XiFunc *f = make_func("typed_phi", &stub_void);
+    XiBlock *entry = f->entry;
+    XiValue *null_value = xi_const_null(f, entry, &stub_null);
+    REQUIRE(null_value != NULL);
+
+    XiBlock *merge = xi_block_new(f);
+    REQUIRE(merge != NULL);
+    merge->sealed = true;
+    xi_block_set_jump(entry, merge);
+
+    /* The phi is the typed join.  Its sole surviving input may have a
+     * different source type after SCCP removes an edge, but users still
+     * consume the phi's declared type view. */
+    XiPhi *phi = xi_phi_new(f, merge, &stub_str, 1);
+    REQUIRE(phi != NULL);
+    phi->value.args[0] = null_value;
+    XiValue *forward = xi_value_new(f, merge, XI_OWNER_FORWARD, &stub_str, 1);
+    REQUIRE(forward != NULL);
+    forward->args[0] = &phi->value;
+    XiValue *print = xi_value_new(f, merge, XI_PRINT, &stub_void, 1);
+    REQUIRE(print != NULL);
+    print->args[0] = forward;
+    xi_block_set_return(merge, NULL);
+
+    char errbuf[256] = {0};
+    REQUIRE(xi_verify(f, errbuf, sizeof(errbuf)));
+    XiPassChange change = xi_opt_phi_simplify(f);
+
+    REQUIRE(!change.values_changed);
+    REQUIRE(merge->phis == phi);
+    REQUIRE(forward->args[0] == &phi->value);
+    REQUIRE(xi_verify(f, errbuf, sizeof(errbuf)));
+    xi_func_free(f);
+}
+
 /* ========== Combined Pass Test ========== */
 
 TEST(opt_run_combined) {
@@ -2587,6 +2623,7 @@ int main(void) {
 
     /* Phi simplification */
     run_phi_simplify_trivial();
+    run_phi_simplify_preserves_the_phi_type_view();
     run_phi_simplify_non_trivial();
 
     /* GVN-PRE: covered by test_xi_gvn_pre.c (dedicated). */

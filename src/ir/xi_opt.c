@@ -1788,8 +1788,14 @@ XR_FUNC XiPassChange xi_opt_phi_simplify(XiFunc *f) {
                     }
                 }
 
-                if (trivial && unique) {
-                    /* Replace all uses of this phi with the unique operand */
+                if (trivial && unique && phi->value.type && unique->type &&
+                    xr_type_equals(phi->value.type, unique->type)) {
+                    /* A phi is also a typed join.  SCCP can leave it with one
+                     * source whose payload is assignable but whose type view
+                     * is narrower (notably null under a nullable/string join).
+                     * Replacing that phi would silently change every user's
+                     * declared SSA type.  Only an exactly equal type can make
+                     * the replacement an identity. */
                     replace_all_uses(f, &phi->value, unique);
                     /* Remove phi from linked list */
                     *prev_ptr = next;
