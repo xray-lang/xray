@@ -1981,6 +1981,10 @@ if(BUILD_TESTS)
     if(XRAY_HOST_PROCESSOR_COUNT LESS XRAY_CTEST_AOT_FILETEST_JOBS)
         set(XRAY_CTEST_AOT_FILETEST_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
     endif()
+    set(XRAY_CTEST_AOT_MANIFEST_JOBS 4)
+    if(XRAY_HOST_PROCESSOR_COUNT LESS XRAY_CTEST_AOT_MANIFEST_JOBS)
+        set(XRAY_CTEST_AOT_MANIFEST_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
+    endif()
     set(XRAY_CTEST_AOT_ISOLATE_JOBS 5)
     if(XRAY_HOST_PROCESSOR_COUNT LESS XRAY_CTEST_AOT_ISOLATE_JOBS)
         set(XRAY_CTEST_AOT_ISOLATE_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
@@ -3255,7 +3259,9 @@ if(BUILD_TESTS)
     # and must not accidentally pull xray_rt_coro/xray_core.
     add_test(
         NAME aot_manifest_sweep
-        COMMAND ${XRAY_PYTHON}
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_AOT_MANIFEST_JOBS=${XRAY_CTEST_AOT_MANIFEST_JOBS}
+                ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_manifest_sweep_tests.py
                 --xray $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -3263,7 +3269,7 @@ if(BUILD_TESTS)
     math(EXPR AOT_MANIFEST_SWEEP_TIMEOUT "180 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(aot_manifest_sweep PROPERTIES
         LABELS "aot;link;manifest;smoke"
-        PROCESSORS 1
+        PROCESSORS ${XRAY_CTEST_AOT_MANIFEST_JOBS}
         TIMEOUT ${AOT_MANIFEST_SWEEP_TIMEOUT}
     )
 

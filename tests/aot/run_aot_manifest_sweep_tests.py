@@ -15,11 +15,22 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from typing import Any
 
 
 PROJECT_DIR = pathlib.Path(__file__).resolve().parents[2]
 DIFF_CASE_DIR = PROJECT_DIR / "tests" / "diff" / "cases"
+
+
+def _bootstrap() -> None:
+    lib = PROJECT_DIR / "tests" / "lib"
+    if str(lib) not in sys.path:
+        sys.path.insert(0, str(lib))
+
+
+_bootstrap()
+from xraytest import scheduler  # noqa: E402
 
 EXPECTED_RUNTIME_PREFIXES = (
     "tests/diff/cases/semantics/coro/",
@@ -138,6 +149,24 @@ EXPECTED_RUNTIME_CASES = {
 }
 
 
+@dataclass(frozen=True)
+class CaseVerdict:
+    order: int
+    case: str
+    failures: tuple[str, ...] = ()
+    checked: int = 0
+    expected_runtime: int = 0
+    checked_rejections: int = 0
+
+
+def configure_jobs(raw: str) -> int:
+    if raw == "":
+        return 1
+    if raw.isdigit() and int(raw) > 0:
+        return int(raw)
+    raise ValueError("XRAY_AOT_MANIFEST_JOBS must be a positive integer")
+
+
 def rel(path: pathlib.Path) -> str:
     return path.relative_to(PROJECT_DIR).as_posix()
 
@@ -213,6 +242,87 @@ def collect_cases() -> list[pathlib.Path]:
     )
 
 
+def check_case(xray: pathlib.Path, case: pathlib.Path, out_c: pathlib.Path,
+               order: int) -> CaseVerdict:
+    case_rel = rel(case)
+    try:
+        if expects_closed_world_rejection(case):
+            run_closed_world_rejection(xray, case, out_c)
+            return CaseVerdict(order, case_rel, checked_rejections=1)
+        manifest = run_manifest(xray, case, out_c)
+    except Exception as exc:  # every governed case must produce a verdict
+        return CaseVerdict(order, case_rel, failures=(str(exc),))
+
+    failures: list[str] = []
+    runtime_caps = manifest.get("runtime_caps") or []
+    runtime_objects = manifest.get("runtime_objects") or []
+    stdlib_objects = manifest.get("stdlib_objects") or []
+
+    if "xray_core" in runtime_objects or "xray_core" in stdlib_objects:
+        failures.append(f"{case_rel}: manifest references xray_core")
+
+    expected_runtime = 0
+    if runtime_objects:
+        if is_expected_runtime_case(case_rel):
+            expected_runtime = 1
+            if runtime_objects != ["xray_rt_coro"]:
+                failures.append(
+                    f"{case_rel}: runtime contract has unexpected runtime_objects "
+                    f"{runtime_objects!r}"
+                )
+        else:
+            failures.append(
+                f"{case_rel}: unexpected runtime dependency caps={runtime_caps!r} "
+                f"objects={runtime_objects!r}"
+            )
+
+    return CaseVerdict(
+        order,
+        case_rel,
+        failures=tuple(failures),
+        checked=1,
+        expected_runtime=expected_runtime,
+    )
+
+
+def worker_failure(order: int, case: pathlib.Path, detail: str) -> CaseVerdict:
+    return CaseVerdict(order, rel(case), failures=(f"{rel(case)}: {detail}",))
+
+
+def run_cases(xray: pathlib.Path, cases: list[pathlib.Path], temp_root: pathlib.Path,
+              jobs: int) -> list[CaseVerdict]:
+    tasks = [
+        scheduler.Task(
+            key=str(order),
+            fn=(lambda o=order, c=case: check_case(
+                xray, c, temp_root / f"case-{o:04d}.c", o
+            )),
+            tag=scheduler.CPU,
+        )
+        for order, case in enumerate(cases)
+    ]
+    if jobs <= 1:
+        by_key = scheduler.run_serial(tasks)
+    else:
+        by_key = scheduler.Scheduler({scheduler.CPU: jobs}).run(tasks)
+
+    verdicts: list[CaseVerdict] = []
+    for order, case in enumerate(cases):
+        value = by_key.get(str(order))
+        if isinstance(value, BaseException):
+            verdicts.append(worker_failure(
+                order, case,
+                f"worker raised {type(value).__name__}: {value}",
+            ))
+        elif not isinstance(value, CaseVerdict):
+            verdicts.append(worker_failure(order, case, "worker produced no verdict"))
+        elif value.order != order or value.case != rel(case):
+            verdicts.append(worker_failure(order, case, "worker verdict identity mismatch"))
+        else:
+            verdicts.append(value)
+    return verdicts
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Check that non-runtime diff cases keep AOT manifests freestanding."
@@ -237,46 +347,27 @@ def main(argv: list[str]) -> int:
         )
         return 1
 
+    try:
+        jobs = configure_jobs(os.environ.get("XRAY_AOT_MANIFEST_JOBS", ""))
+    except ValueError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"AOT manifest sweep: {len(cases)} cases, {jobs} jobs")
+
     failures: list[str] = []
     checked = 0
     expected_runtime = 0
     checked_rejections = 0
 
     with tempfile.TemporaryDirectory(prefix="xray_aot_manifest_sweep.") as tmp:
-        out_c = pathlib.Path(tmp) / "case.c"
-        for case in cases:
-            case_rel = rel(case)
-            try:
-                if expects_closed_world_rejection(case):
-                    run_closed_world_rejection(xray, case, out_c)
-                    checked_rejections += 1
-                    continue
-                manifest = run_manifest(xray, case, out_c)
-            except Exception as exc:  # keep sweeping so the report is actionable
-                failures.append(str(exc))
-                continue
+        verdicts = run_cases(xray, cases, pathlib.Path(tmp), jobs)
 
-            checked += 1
-            runtime_caps = manifest.get("runtime_caps") or []
-            runtime_objects = manifest.get("runtime_objects") or []
-            stdlib_objects = manifest.get("stdlib_objects") or []
-
-            if "xray_core" in runtime_objects or "xray_core" in stdlib_objects:
-                failures.append(f"{case_rel}: manifest references xray_core")
-
-            if runtime_objects:
-                if is_expected_runtime_case(case_rel):
-                    expected_runtime += 1
-                    if runtime_objects != ["xray_rt_coro"]:
-                        failures.append(
-                            f"{case_rel}: runtime contract has unexpected runtime_objects "
-                            f"{runtime_objects!r}"
-                        )
-                    continue
-                failures.append(
-                    f"{case_rel}: unexpected runtime dependency caps={runtime_caps!r} "
-                    f"objects={runtime_objects!r}"
-                )
+    for verdict in verdicts:
+        failures.extend(verdict.failures)
+        checked += verdict.checked
+        expected_runtime += verdict.expected_runtime
+        checked_rejections += verdict.checked_rejections
 
     if failures:
         print("FAIL: AOT manifest sweep found runtime-link regressions", file=sys.stderr)
