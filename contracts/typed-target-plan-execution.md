@@ -1,6 +1,6 @@
 # Typed TargetPlan scalar execution contract
 
-TargetPlan schema 29 may carry a canonical per-function instruction table.
+TargetPlan schema 30 may carry a canonical per-function instruction table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
 family. A function with zero instruction rows is execution unavailable, never
@@ -122,6 +122,13 @@ budget rather than a wall clock. Exhausting the budget stops the call with its
 own status, distinct from every status that reports an unacceptable plan or
 call, so a plan can never hang the caller that ran it and the same call refused
 once is refused every time.
+
+Schema 30 is a hard cutover from v29 and every earlier TargetPlan schema. The
+instruction opcode carrier is now an unsigned 16-bit stable ID while the
+canonical instruction row remains exactly 32 bytes by shrinking its reserved
+tail to one byte. The generated target instruction registry is the only opcode
+authority consumed by the builder, verifier, artifact renderer, and dispatcher.
+No v29 row is widened, translated, or accepted by a compatibility reader.
 
 Schema 29 is a hard cutover from v28 and all earlier schemas. It preserves the
 exact semantic field-name identity of every named aggregate and all existing

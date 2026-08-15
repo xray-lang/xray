@@ -561,14 +561,16 @@ typedef struct XrTargetInstructionRecord {
     uint32_t function;
     uint32_t result_slot;
     uint32_t operand_slots[2];
-    uint64_t immediate_bits;
-    uint8_t opcode;
+    uint16_t opcode;
     uint8_t operand_count;
-    uint16_t reserved;
+    uint8_t reserved;
+    uint64_t immediate_bits;
 } XrTargetInstructionRecord;
 
-XR_STATIC_ASSERT(XR_TARGET_INSTRUCTION_MAX_STABLE_ID <= UINT8_MAX,
+XR_STATIC_ASSERT(XR_TARGET_INSTRUCTION_MAX_STABLE_ID <= UINT16_MAX,
                  "XTP instruction opcode carrier must fit the generated registry");
+XR_STATIC_ASSERT(sizeof(XrTargetInstructionRecord) == 32u,
+                 "XTP instruction record must remain one compact 32-byte row");
 
 typedef struct XrTargetCallArgumentRecord {
     XrStableId identity;

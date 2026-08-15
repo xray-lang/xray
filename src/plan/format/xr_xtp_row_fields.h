@@ -128,8 +128,8 @@
     F(U8, ownership) F(U8, reserved) F(U32, debug_variable)
 #define XR_XTP_TEXT_INSTRUCTION_FIELDS(F)                                                               \
     F(U32, id) F(U32, function) F(U32, result_slot) F(U32, operand_slots[0])                      \
-    F(U32, operand_slots[1]) F(U64, immediate_bits) F(U8, opcode) F(U8, operand_count)            \
-    F(U16, reserved)
+    F(U32, operand_slots[1]) F(U64, immediate_bits) F(U16, opcode) F(U8, operand_count)           \
+    F(U8, reserved)
 #define XR_XTP_TEXT_CALL_FIELDS(F)                                                                      \
     F(ID, identity) F(U32, id) F(U32, semantic_call_target) F(U32, semantic_operation)           \
     F(U32, caller_function) F(U32, callee_function) F(U32, source_dependency)                    \

@@ -181,10 +181,13 @@ roots, or general module activation.
    requirements have dense records bound to the same canonical provider kinds.
    Missing, duplicate, additional, or mismatched family,
    capability, or provider records fail before any activation boundary.
-5. Runtime loading accepts only an XTP v28 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v29 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
-   independent TargetPlan verification. V28 is a breaking hard cutover from
-   v27 and all earlier schemas. It combines exact `String.runes()` result-storage
+   independent TargetPlan verification. V29 is a breaking hard cutover from
+   v28 and all earlier schemas. Its instruction row carries the generated
+   target opcode as an unsigned 16-bit stable ID while preserving the exact
+   32-byte wire row; the prior one-byte carrier is rejected, not widened by a
+   compatibility reader. V28 combined exact `String.runes()` result-storage
    with sealed `Iterator<rune>.hasNext()` and `.next()` call authority in one
    generation; `.next()` is admitted only from the unique frozen `String.runes()`
    producer and carries a native rune result. The same generation also freezes

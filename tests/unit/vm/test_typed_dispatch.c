@@ -587,7 +587,7 @@ static void test_parameters_reach_the_executed_program(void) {
     xr_target_plan_free(refrozen);
     const struct {
         uint32_t row;
-        uint8_t opcode;
+        uint16_t opcode;
         uint64_t immediate;
     } mutations[] = {
         /* Two rows claiming the same argument leave one parameter unbound. */
@@ -656,7 +656,7 @@ static void test_instruction_mutations_fail_closed(void) {
     TypedDispatchFixture fixture = make_fixture();
     XrTargetInstructionRecord rows[16];
     memcpy(rows, fixture.rows, sizeof(rows));
-    rows[0].opcode = UINT8_MAX;
+    rows[0].opcode = UINT16_MAX;
     expect_rows_rejected(&fixture, rows);
 
     memcpy(rows, fixture.rows, sizeof(rows));
@@ -793,7 +793,7 @@ static void test_division_rows_take_the_zero_divisor_edge(void) {
     const struct {
         const char *name;
         XiOp op;
-        uint8_t opcode;
+        uint16_t opcode;
         XrTypedDispatchStatus zero_status;
         struct {
             int64_t first;
@@ -927,7 +927,7 @@ static void test_division_rows_take_the_zero_divisor_edge(void) {
  * the block boundaries the same way the verifier does: a block begins at the
  * first row and after every terminator. */
 static uint32_t row_of_opcode(const XrTargetInstructionRecord *rows,
-                              uint32_t row_count, uint8_t opcode,
+                              uint32_t row_count, uint16_t opcode,
                               uint32_t occurrence) {
     for (uint32_t i = 0; i < row_count; i++) {
         if (rows[i].opcode != opcode)
@@ -1166,7 +1166,7 @@ static void test_comparison_rows_drive_the_branch(void) {
     const struct {
         const char *name;
         XiOp op;
-        uint8_t opcode;
+        uint16_t opcode;
         /* greater, less, equal: the taken arm answers first + second and the
          * other answers first - second, so these three triples are pairwise
          * distinct across all six relations and no relation can pass with

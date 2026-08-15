@@ -718,7 +718,7 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     xr_xtp_candidate_release(candidate);
 
     const uint32_t rejected_schemas[] = {UINT32_C(12), UINT32_C(13),
-                                         UINT32_C(14)};
+                                         UINT32_C(14), UINT32_C(28)};
     for (size_t i = 0;
          i < sizeof(rejected_schemas) / sizeof(rejected_schemas[0]); i++) {
         uint8_t *old_schema = copy_artifact(&fixture);

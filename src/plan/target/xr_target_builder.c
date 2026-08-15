@@ -9017,7 +9017,7 @@ static bool materialized_i64_slot(const XrTargetMaterializedPlan *materialized,
                                     XR_TARGET_SCALAR_SLOT_I64, out_slot);
 }
 
-static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
+static uint16_t scalar_instruction_opcode(uint16_t semantic_opcode) {
     typedef struct ScalarInstructionBinding {
         uint16_t semantic_opcode;
         uint16_t target_opcode;
@@ -9036,7 +9036,7 @@ static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
             return XR_TARGET_INSTRUCTION_INVALID;
         target_opcode = bindings[i].target_opcode;
     }
-    return (uint8_t) target_opcode;
+    return target_opcode;
 }
 
 /*
@@ -9290,9 +9290,9 @@ static bool materialize_scalar_instruction_function(
             uint32_t operation_index = block->operation_begin + ordinal;
             const XrSemanticOperationRecord *operation =
                 xr_semantic_plan_operation(semantic, operation_index);
-            uint8_t opcode = operation
-                                 ? scalar_instruction_opcode(operation->opcode)
-                                 : XR_TARGET_INSTRUCTION_INVALID;
+            uint16_t opcode = operation
+                                  ? scalar_instruction_opcode(operation->opcode)
+                                  : XR_TARGET_INSTRUCTION_INVALID;
             const XrTargetInstructionContract *contract =
                 xr_target_instruction_contract(opcode);
             uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;

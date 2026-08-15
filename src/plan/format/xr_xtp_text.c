@@ -54,30 +54,9 @@ static const char *section_name(XrXtpSectionKind kind) {
     }
 }
 
-static const char *opcode_name(uint8_t opcode) {
-    switch ((XrTargetInstructionOpcode) opcode) {
-        case XR_TARGET_INSTRUCTION_INVALID: return "INVALID";
-        case XR_TARGET_INSTRUCTION_CONST_I64: return "CONST_I64";
-        case XR_TARGET_INSTRUCTION_COPY_I64: return "COPY_I64";
-        case XR_TARGET_INSTRUCTION_ADD_WRAP_I64: return "ADD_WRAP_I64";
-        case XR_TARGET_INSTRUCTION_SUB_WRAP_I64: return "SUB_WRAP_I64";
-        case XR_TARGET_INSTRUCTION_MUL_WRAP_I64: return "MUL_WRAP_I64";
-        case XR_TARGET_INSTRUCTION_DIV_TRAP_I64: return "DIV_TRAP_I64";
-        case XR_TARGET_INSTRUCTION_MOD_TRAP_I64: return "MOD_TRAP_I64";
-        case XR_TARGET_INSTRUCTION_BAND_I64: return "BAND_I64";
-        case XR_TARGET_INSTRUCTION_BOR_I64: return "BOR_I64";
-        case XR_TARGET_INSTRUCTION_BXOR_I64: return "BXOR_I64";
-        case XR_TARGET_INSTRUCTION_NEG_WRAP_I64: return "NEG_WRAP_I64";
-        case XR_TARGET_INSTRUCTION_BNOT_I64: return "BNOT_I64";
-        case XR_TARGET_INSTRUCTION_SHL_MASKED_I64: return "SHL_MASKED_I64";
-        case XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64: return "SHR_ARITH_MASKED_I64";
-        case XR_TARGET_INSTRUCTION_RETURN_I64: return "RETURN_I64";
-        case XR_TARGET_INSTRUCTION_PARAM_I64: return "PARAM_I64";
-        case XR_TARGET_INSTRUCTION_JUMP: return "JUMP";
-        case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64: return "BRANCH_IF_NONZERO_I64";
-        case XR_TARGET_INSTRUCTION_COUNT: break;
-    }
-    return "UNKNOWN";
+static const char *opcode_name(uint16_t opcode) {
+    const char *name = xr_target_instruction_opcode_name(opcode);
+    return name ? name : "UNKNOWN";
 }
 
 typedef struct XrXtpTextFamilyName {

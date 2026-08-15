@@ -280,8 +280,9 @@ static void apply_mutation(uint8_t *bytes, XtpMutation mutation) {
             return;
         case XTP_MUTATION_UNKNOWN_OPCODE:
             rows = section_bytes(bytes, XR_XTP_SECTION_INSTRUCTIONS);
-            require_fuzz(rows[28] == XR_TARGET_INSTRUCTION_CONST_I64);
-            rows[28] = UINT8_MAX;
+            require_fuzz(xr_xtp_take_u16(rows + 28) ==
+                         XR_TARGET_INSTRUCTION_CONST_I64);
+            xr_xtp_put_u16(rows + 28, UINT16_MAX);
             resign_section_and_artifact(bytes, XR_XTP_SECTION_INSTRUCTIONS);
             return;
         case XTP_MUTATION_UNKNOWN_RUNTIME_TAG:
@@ -291,11 +292,12 @@ static void apply_mutation(uint8_t *bytes, XtpMutation mutation) {
             return;
         case XTP_MUTATION_UNKNOWN_CONSTANT_FORM:
             rows = section_bytes(bytes, XR_XTP_SECTION_INSTRUCTIONS);
-            require_fuzz(rows[28] == XR_TARGET_INSTRUCTION_CONST_I64);
+            require_fuzz(xr_xtp_take_u16(rows + 28) ==
+                         XR_TARGET_INSTRUCTION_CONST_I64);
             /* Constants have no kind selector in XTP: the opcode and canonical
              * zero-operand row are their complete form. A foreign constant
              * form is therefore represented by a noncanonical operand shape. */
-            rows[29] = 1u;
+            rows[30] = 1u;
             resign_section_and_artifact(bytes, XR_XTP_SECTION_INSTRUCTIONS);
             return;
         case XTP_MUTATION_TOTAL_ROWS_BUDGET:
