@@ -1,21 +1,36 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 30 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 31 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
 plan the builder emits.
-Schema 30 is a breaking hard cutover: schema 29 and earlier and a plan missing
+Schema 31 is a breaking hard cutover: schema 30 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
 compatibility logic.
 
-The frame allocator is deliberately narrower than the accepted plan. It
-allocates and accesses only the selected function's packed, trivial scalar
-slots. Every slot access repeats the stable slot identity, physical size,
-alignment, register representation, and memory representation from the plan.
+The frame allocator validates only the selected function's packed slots; an
+unrelated representation in another function cannot make an otherwise exact
+frame unavailable. It transports complete object representations for every
+scalar width, floating-point value, Rune, unit-enum ordinal, trivial aggregate,
+and trivial raw pointer. Rooted, owned, borrowed, View, object-reference,
+code-reference, dynamic, and vector slots remain fail closed. Every access
+repeats the stable slot identity, physical size, alignment, register
+representation, and memory representation from the plan, and both
+representations must be storage-compatible with the slot's exact root and
+ownership facts.
+
+This byte transport is not a second lifecycle authority. It never forms an
+unaligned typed pointer to arena storage, dereferences a carried reference,
+guesses a tag from caller bytes, or retains/releases an object. View ownership,
+object roots, borrows, cleanup, and pointer provenance remain governed by the
+independently verified plan and executor. Object/code reference rows are
+schema-valid but not currently emitted by the production builder and remain
+unavailable to this frame until their lifecycle contracts and executor
+operations are independently frozen.
 The closure-storage family may contain a dynamic/owned/tagged outer `XrValue`
 slot for an exact no-capture heap closure, but it does not describe the closure
 object body, allocation, root map, root slot, or cleanup. Such a slot remains
@@ -114,7 +129,8 @@ its families. The coroutine
 state-call family proves only frozen state/resume/direct-call/result
 relations; it contains no child-frame, spill, root, cleanup, drop, cancel, or
 action authority. Aggregate, rooted, owned, caller-storage, coroutine, and
-adapter execution is not implemented here and remains fail closed.
+adapter execution is not implemented here and remains fail closed;
+representation transport alone does not grant any such execution family.
 
 The plan also admits one sealed non-static call descriptor: an exact,
 non-super, non-suspending `Channel.close()` operation reconstructed from
@@ -127,12 +143,15 @@ descriptor. The row binds the exact Semantic allocation identity to an owned
 dynamic result slot and grants no generic builtin dispatch, object-body
 layout, cleanup, or typed execution path.
 
-The frame retains the plan, binds its exact fingerprint, keeps initialization
-and poison state outside the untagged byte arena, enforces hard arena/slot/total
-allocation budgets, and makes cleanup terminal. Frame creation recomputes the
-target-content fingerprint without consulting SemanticPlan. No runtime type
-tag, source type inference, legacy bytecode frame, or AOT value-plan fallback
-may authorize an access.
+The frame retains the plan, binds its exact fingerprint, freezes the actual
+arena size, alignment, and selected slot range, keeps initialization and poison
+state outside the untagged byte arena, enforces hard arena/slot/total allocation
+budgets, and makes cleanup terminal. Frame creation recomputes the
+target-content fingerprint without consulting SemanticPlan. Each load/store
+uses checked offset-plus-size arithmetic against the frozen arena and actual
+allocation before forming a byte pointer, requires the complete exact slot
+size, and copies through `memcpy`. No runtime type tag, source type inference,
+legacy bytecode frame, or AOT value-plan fallback may authorize an access.
 The read-only memory-footprint query reports the fixed frame object, the exact
 packed-plan arena allocation, its bounded alignment padding, optional audit
 slot-state bytes, and their checked exact total. A Release frame carries zero
@@ -141,13 +160,18 @@ fragmentation, or any storage outside the frame allocation it owns.
 
 Evidence:
 
-- `test_typed_frame` proves exact schema/family/fingerprint rejection, packed
-  access identity, initialization/poison/cleanup state, allocation budgets,
-  the exact footprint sum, and its total-limit boundary.
+- `test_typed_frame` proves exact schema/family/fingerprint rejection, the
+  scalar/enum/aggregate/trivial-raw-pointer transport matrix, unaligned caller
+  buffers, exact-size and guard-byte boundaries, fail-closed rooted, owned,
+  borrowed, View, object/code-reference, dynamic, and vector slots,
+  frozen-arena rejection after retained-plan geometry corruption,
+  initialization/poison/cleanup state, allocation budgets, the exact footprint
+  sum, and its total-limit boundary. Schema-only representation fixtures do not
+  claim production-builder reachability.
 - `test_typed_frame_runtime_archive` proves the public header and symbols link
   from the runtime-only archive without compiler or AOT ownership, proves the
-  footprint query is present there, and proves that the scalar dispatcher is
-  present without activating it.
+  footprint and exact slot transport symbols are present there, and proves that
+  the scalar dispatcher is present without activating it.
 - `typed_target_vm_performance_gate` directly times the verified scalar
   dispatcher, one exact adapter-free `CALL_DIRECT_I64`, and packed frame
   allocation on Windows Release. The call fixture proves that argument
@@ -166,11 +190,11 @@ Evidence:
   the exact XSM/XTP sole-function generation route.
 
 anchor-sha256: src/plan/target/xr_target_plan.h d1ed20e9afa4b5c1bb361a939a8c5b627c6d4e814b68f3303b8a05454bfa5c99
-anchor-sha256: src/vm/xr_typed_frame.h d8cebf1c70bfa0066b58a5f6563007afa3c13a63078fa15dc8315212fb7b238b
-anchor-sha256: src/vm/xr_typed_frame.c 97671813b4a933163a75ea55be9e8c65ec295ec05d67ec4fdc682433f420bb4e
+anchor-sha256: src/vm/xr_typed_frame.h e6331d14764199f4256d2a11acc64f520454bedb50615c4565bf502cdf789033
+anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
 anchor-sha256: src/vm/xr_typed_dispatch.c ef9ad355401e587b4d27f3189f01c0b0e7779145e0aa1089a70a3dfca9d9147a
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c a59c3711715175cbf009341e15720bff4457d8435e37e3252145ef49cc8fe7d1
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py e9e057b890df32005e054290a3425f239c1b3c594432a044a04bd6a12dc6dd14
-anchor-sha256: tests/unit/vm/test_typed_frame.c 8bb1c1150e0f916b37c21676537fb507f18dec6a10da01b0e6932043d738e1f9
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 60932993669807446d5d1f250fe0daec85207bafaca59cebf3eb55e56144b7d3
+anchor-sha256: tests/unit/vm/test_typed_frame.c 8f2acc619749a086bf3be97ef9799ea6abef2c45151113b13a87b9a3609f8101
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c e6d70c185c2e7aa8189b8df35b6011596cd5edbb89cd52a20b6cc903e2aab1fd
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

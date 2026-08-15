@@ -29,6 +29,95 @@ typedef struct TypedFrameFixture {
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 
+typedef struct TypedRepCase {
+    uint16_t kind;
+    uint16_t register_bits;
+    uint32_t size;
+    uint16_t alignment;
+    uint8_t signedness;
+    uint8_t root_kind;
+    uint8_t ownership;
+    uint8_t null_encoding;
+    uint16_t lane_count;
+    bool supported;
+} TypedRepCase;
+
+#define XR_TEST_POINTER_SIZE ((uint32_t) sizeof(void *))
+#define XR_TEST_POINTER_ALIGN ((uint16_t) sizeof(void *))
+#define XR_TEST_POINTER_BITS ((uint16_t) (sizeof(void *) * 8u))
+
+static const TypedRepCase typed_rep_cases[] = {
+    {XR_MACHINE_REP_I1, 1, 1, 1, XR_TARGET_SIGN_NONE,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_I8, 8, 1, 1, XR_TARGET_SIGN_SIGNED,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_U8, 8, 1, 1, XR_TARGET_SIGN_UNSIGNED,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_I16, 16, 2, 2, XR_TARGET_SIGN_SIGNED,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_U16, 16, 2, 2, XR_TARGET_SIGN_UNSIGNED,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_I32, 32, 4, 4, XR_TARGET_SIGN_SIGNED,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_U32, 32, 4, 4, XR_TARGET_SIGN_UNSIGNED,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_I64, 64, 8, 8, XR_TARGET_SIGN_SIGNED,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_U64, 64, 8, 8, XR_TARGET_SIGN_UNSIGNED,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_ISIZE, XR_TEST_POINTER_BITS, XR_TEST_POINTER_SIZE,
+     XR_TEST_POINTER_ALIGN, XR_TARGET_SIGN_SIGNED, XR_TARGET_ROOT_NONE,
+     XR_TARGET_OWNERSHIP_TRIVIAL, XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_USIZE, XR_TEST_POINTER_BITS, XR_TEST_POINTER_SIZE,
+     XR_TEST_POINTER_ALIGN, XR_TARGET_SIGN_UNSIGNED, XR_TARGET_ROOT_NONE,
+     XR_TARGET_OWNERSHIP_TRIVIAL, XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_F32, 32, 4, 4, XR_TARGET_SIGN_NONE,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_F64, 64, 8, 8, XR_TARGET_SIGN_NONE,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_RUNE, 32, 4, 4, XR_TARGET_SIGN_UNSIGNED,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_ENUM_ORDINAL, 64, 8, 8, XR_TARGET_SIGN_SIGNED,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_AGGREGATE, 96, 12, 4, XR_TARGET_SIGN_NONE,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, true},
+    {XR_MACHINE_REP_VIEW, 128, 16, 8, XR_TARGET_SIGN_NONE,
+     XR_TARGET_ROOT_VIEW_OWNER, XR_TARGET_OWNERSHIP_BORROWED,
+     XR_TARGET_NULL_NOT_NULLABLE, 0, false},
+    {XR_MACHINE_REP_OBJECT_REF, XR_TEST_POINTER_BITS, XR_TEST_POINTER_SIZE,
+     XR_TEST_POINTER_ALIGN, XR_TARGET_SIGN_NONE, XR_TARGET_ROOT_OBJECT,
+     XR_TARGET_OWNERSHIP_BORROWED, XR_TARGET_NULL_ZERO, 0, false},
+    {XR_MACHINE_REP_RAW_PTR, XR_TEST_POINTER_BITS, XR_TEST_POINTER_SIZE,
+     XR_TEST_POINTER_ALIGN, XR_TARGET_SIGN_NONE, XR_TARGET_ROOT_NONE,
+     XR_TARGET_OWNERSHIP_TRIVIAL, XR_TARGET_NULL_ZERO, 0, true},
+    {XR_MACHINE_REP_RAW_PTR, XR_TEST_POINTER_BITS, XR_TEST_POINTER_SIZE,
+     XR_TEST_POINTER_ALIGN, XR_TARGET_SIGN_NONE, XR_TARGET_ROOT_NONE,
+     XR_TARGET_OWNERSHIP_BORROWED, XR_TARGET_NULL_ZERO, 0, false},
+    {XR_MACHINE_REP_CODE_REF, XR_TEST_POINTER_BITS, XR_TEST_POINTER_SIZE,
+     XR_TEST_POINTER_ALIGN, XR_TARGET_SIGN_NONE, XR_TARGET_ROOT_NONE,
+     XR_TARGET_OWNERSHIP_TRIVIAL, XR_TARGET_NULL_ZERO, 0, false},
+    {XR_MACHINE_REP_DYN_VALUE, 128, 16, 8, XR_TARGET_SIGN_NONE,
+     XR_TARGET_ROOT_DYNAMIC, XR_TARGET_OWNERSHIP_OWNED,
+     XR_TARGET_NULL_TAGGED, 0, false},
+    {XR_MACHINE_REP_VECTOR, 128, 16, 16, XR_TARGET_SIGN_NONE,
+     XR_TARGET_ROOT_NONE, XR_TARGET_OWNERSHIP_TRIVIAL,
+     XR_TARGET_NULL_NOT_NULLABLE, 2, false},
+};
+
 static XrSemanticPlan *build_semantic_plan(void) {
     XiFunc *function = xi_func_new("typed_frame_probe", &stub_int);
     REQUIRE(function != NULL);
@@ -96,6 +185,81 @@ static void dispose_fixture(TypedFrameFixture *fixture) {
     memset(fixture, 0, sizeof(*fixture));
 }
 
+/* The production builder does not yet emit every representation kind the
+ * runtime schema accepts. This unit-only rebinding isolates the frame's
+ * representation transport classifier from builder reachability: the base
+ * plan is verified, every selected slot and referenced rep is reshaped
+ * consistently, and the immutable content fingerprint is recomputed before
+ * frame creation. It is not evidence that the builder emits these kinds. */
+static void rebind_fixture_representation(TypedFrameFixture *fixture,
+                                          const TypedRepCase *rep_case) {
+    REQUIRE(fixture && fixture->plan && rep_case && rep_case->size != 0 &&
+            rep_case->alignment != 0);
+    XrTargetPlan *plan = fixture->plan;
+    XrTargetFunctionRecord *function = &plan->functions[0];
+    REQUIRE(function->slot_begin <= plan->slots_count &&
+            function->slot_count <= plan->slots_count - function->slot_begin);
+    uint32_t offset = 0;
+    for (uint32_t i = 0; i < function->slot_count; i++) {
+        XrTargetSlotRecord *slot = &plan->slots[function->slot_begin + i];
+        REQUIRE(slot->register_rep < plan->machine_reps_count &&
+                slot->memory_rep < plan->machine_reps_count &&
+                offset <= UINT32_MAX - rep_case->size);
+        uint16_t rep_indexes[2] = {slot->register_rep, slot->memory_rep};
+        for (uint32_t r = 0; r < 2; r++) {
+            XrTargetMachineRepRecord *rep =
+                &plan->machine_reps[rep_indexes[r]];
+            rep->kind = rep_case->kind;
+            rep->register_bits = rep_case->register_bits;
+            rep->memory_size = rep_case->size;
+            rep->memory_align = rep_case->alignment;
+            rep->signedness = rep_case->signedness;
+            rep->root_kind = rep_case->root_kind;
+            rep->ownership = rep_case->ownership;
+            rep->null_encoding = rep_case->null_encoding;
+            rep->detail = 0;
+            rep->lane_count = rep_case->lane_count;
+            rep->reserved = 0;
+            memset(rep->legal_conversion_mask, 0,
+                   sizeof(rep->legal_conversion_mask));
+        }
+        slot->offset = offset;
+        slot->size = rep_case->size;
+        slot->align = rep_case->alignment;
+        slot->root_kind = rep_case->root_kind;
+        slot->ownership = rep_case->ownership;
+        slot->reserved = 0;
+        offset += rep_case->size;
+    }
+    function->frame_size = offset;
+    function->frame_align = rep_case->alignment;
+    xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
+    REQUIRE(xr_target_plan_fingerprint_is_intact(plan));
+}
+
+static void make_rep_payload(const TypedRepCase *rep_case, uint8_t *payload) {
+    REQUIRE(rep_case && payload);
+    memset(payload, 0xa7, rep_case->size);
+    if (rep_case->kind == XR_MACHINE_REP_RAW_PTR) {
+        static uint8_t object;
+        void *pointer = &object;
+        REQUIRE(rep_case->size == sizeof(pointer));
+        memcpy(payload, &pointer, sizeof(pointer));
+    } else if (rep_case->kind == XR_MACHINE_REP_F32) {
+        uint32_t nan_payload = UINT32_C(0x7fc12345);
+        REQUIRE(rep_case->size == sizeof(nan_payload));
+        memcpy(payload, &nan_payload, sizeof(nan_payload));
+    } else if (rep_case->kind == XR_MACHINE_REP_F64) {
+        uint64_t negative_zero = UINT64_C(0x8000000000000000);
+        REQUIRE(rep_case->size == sizeof(negative_zero));
+        memcpy(payload, &negative_zero, sizeof(negative_zero));
+    } else if (rep_case->kind == XR_MACHINE_REP_ENUM_ORDINAL) {
+        int64_t ordinal = -1;
+        REQUIRE(rep_case->size == sizeof(ordinal));
+        memcpy(payload, &ordinal, sizeof(ordinal));
+    }
+}
+
 static XrTypedFrame *create_frame(const TypedFrameFixture *fixture,
                                   const XrTypedFrameLimits *limits) {
     XrFingerprint fingerprint = xr_target_plan_fingerprint(fixture->plan);
@@ -104,6 +268,116 @@ static XrTypedFrame *create_frame(const TypedFrameFixture *fixture,
                                   &frame) == XR_TYPED_FRAME_OK);
     REQUIRE(frame != NULL);
     return frame;
+}
+
+static void test_exact_representation_transport_matrix(void) {
+    for (size_t i = 0;
+         i < sizeof(typed_rep_cases) / sizeof(typed_rep_cases[0]); i++) {
+        const TypedRepCase *rep_case = &typed_rep_cases[i];
+        TypedFrameFixture fixture = make_fixture();
+        rebind_fixture_representation(&fixture, rep_case);
+        XrTypedFrameLimits limits;
+        xr_typed_frame_limits_default(&limits);
+        XrFingerprint fingerprint = xr_target_plan_fingerprint(fixture.plan);
+        XrTypedFrame *frame = NULL;
+        XrTypedFrameStatus status = xr_typed_frame_create(
+            fixture.plan, &fingerprint, 0, &limits, &frame);
+        if (!rep_case->supported) {
+            REQUIRE(status == XR_TYPED_FRAME_SLOT_INVALID && frame == NULL);
+            dispose_fixture(&fixture);
+            continue;
+        }
+        REQUIRE(status == XR_TYPED_FRAME_OK && frame != NULL);
+        uint32_t function_count = 0;
+        const XrTargetFunctionRecord *functions =
+            xr_target_plan_functions(fixture.plan, &function_count);
+        REQUIRE(function_count == 1 && functions[0].slot_count != 0);
+        XrTypedSlotAccess access = {0};
+        REQUIRE(xr_typed_frame_describe_slot(
+                    frame, functions[0].slot_begin, &access) ==
+                XR_TYPED_FRAME_OK);
+        REQUIRE(access.size == rep_case->size &&
+                access.alignment == rep_case->alignment);
+        uint8_t source[33] = {0};
+        uint8_t destination[33];
+        REQUIRE(access.size <= 32);
+        make_rep_payload(rep_case, source + 1);
+        memset(destination, 0xcc, sizeof(destination));
+        REQUIRE(xr_typed_frame_store(frame, &access, source + 1,
+                                     access.size) == XR_TYPED_FRAME_OK);
+        REQUIRE(xr_typed_frame_load(frame, &access, destination + 1,
+                                    access.size) == XR_TYPED_FRAME_OK);
+        REQUIRE(destination[0] == 0xcc &&
+                destination[access.size + 1u] == 0xcc &&
+                memcmp(source + 1, destination + 1, access.size) == 0);
+        xr_typed_frame_free(frame);
+        dispose_fixture(&fixture);
+    }
+}
+
+static void require_frozen_arena_rejects_geometry_mutation(
+    TypedFrameFixture *fixture, XrTypedFrame *frame,
+    const XrTypedSlotAccess *access) {
+    uint32_t original_offset = fixture->plan->slots[access->slot].offset;
+    uint32_t original_frame_size = fixture->plan->functions[0].frame_size;
+    fixture->plan->slots[access->slot].offset =
+        UINT32_MAX & ~((uint32_t) access->alignment - 1u);
+    fixture->plan->functions[0].frame_size = UINT32_MAX;
+    uint8_t loaded[16];
+    uint8_t original[16];
+    memset(loaded, 0xcc, sizeof(loaded));
+    memcpy(original, loaded, sizeof(loaded));
+    REQUIRE(xr_typed_frame_load(frame, access, loaded, access->size) ==
+            XR_TYPED_FRAME_SLOT_INVALID);
+    REQUIRE(memcmp(loaded, original, sizeof(loaded)) == 0);
+    fixture->plan->slots[access->slot].offset = original_offset;
+    fixture->plan->functions[0].frame_size = original_frame_size;
+}
+
+static void require_access_capability_rejects_mutations(
+    XrTypedFrame *frame, const XrTypedSlotAccess *access,
+    uint8_t *loaded, const uint8_t *payload) {
+    REQUIRE(xr_typed_frame_load(frame, NULL, loaded, access->size) ==
+            XR_TYPED_FRAME_INVALID_ARGUMENT);
+    REQUIRE(xr_typed_frame_load(frame, access, NULL, access->size) ==
+            XR_TYPED_FRAME_INVALID_ARGUMENT);
+    REQUIRE(xr_typed_frame_store(frame, access, NULL, access->size) ==
+            XR_TYPED_FRAME_INVALID_ARGUMENT);
+    REQUIRE(xr_typed_frame_load(frame, access, loaded, access->size - 1u) ==
+            XR_TYPED_FRAME_ACCESS_MISMATCH);
+    REQUIRE(xr_typed_frame_load(frame, access, loaded, access->size + 1u) ==
+            XR_TYPED_FRAME_ACCESS_MISMATCH);
+    REQUIRE(xr_typed_frame_store(frame, access, payload, SIZE_MAX) ==
+            XR_TYPED_FRAME_ACCESS_MISMATCH);
+
+    XrTypedSlotAccess mutation = *access;
+    mutation.identity.bytes[0] ^= 1;
+    REQUIRE(xr_typed_frame_load(frame, &mutation, loaded, mutation.size) ==
+            XR_TYPED_FRAME_ACCESS_MISMATCH);
+    mutation = *access;
+    mutation.size++;
+    REQUIRE(xr_typed_frame_load(frame, &mutation, loaded, mutation.size) ==
+            XR_TYPED_FRAME_ACCESS_MISMATCH);
+    mutation = *access;
+    mutation.alignment++;
+    REQUIRE(xr_typed_frame_store(frame, &mutation, payload, mutation.size) ==
+            XR_TYPED_FRAME_ACCESS_MISMATCH);
+    mutation = *access;
+    mutation.register_rep ^= 1u;
+    REQUIRE(xr_typed_frame_load(frame, &mutation, loaded, mutation.size) ==
+            XR_TYPED_FRAME_ACCESS_MISMATCH);
+    mutation = *access;
+    mutation.memory_rep ^= 1u;
+    REQUIRE(xr_typed_frame_load(frame, &mutation, loaded, mutation.size) ==
+            XR_TYPED_FRAME_ACCESS_MISMATCH);
+    mutation = *access;
+    mutation.reserved = 1;
+    REQUIRE(xr_typed_frame_load(frame, &mutation, loaded, mutation.size) ==
+            XR_TYPED_FRAME_ACCESS_MISMATCH);
+    mutation = *access;
+    mutation.slot = UINT32_MAX;
+    REQUIRE(xr_typed_frame_load(frame, &mutation, loaded, mutation.size) ==
+            XR_TYPED_FRAME_SLOT_INVALID);
 }
 
 static void test_exact_slot_access_and_states(void) {
@@ -182,6 +456,8 @@ static void test_exact_slot_access_and_states(void) {
             XR_TYPED_FRAME_OK);
     REQUIRE(memcmp(loaded, payload, access.size) == 0);
 
+    require_frozen_arena_rejects_geometry_mutation(&fixture, frame, &access);
+
     fixture.plan->fingerprint.bytes[0] ^= 1;
     XrTypedSlotAccess cleared = access;
     REQUIRE(xr_typed_frame_describe_slot(frame, access.slot, &cleared) ==
@@ -191,24 +467,8 @@ static void test_exact_slot_access_and_states(void) {
             XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH);
     fixture.plan->fingerprint.bytes[0] ^= 1;
 
-    XrTypedSlotAccess mutation = access;
-    mutation.identity.bytes[0] ^= 1;
-    REQUIRE(xr_typed_frame_load(frame, &mutation, loaded, mutation.size) ==
-            XR_TYPED_FRAME_ACCESS_MISMATCH);
-    mutation = access;
-    mutation.alignment = (uint16_t) (mutation.alignment + 1u);
-    REQUIRE(xr_typed_frame_store(frame, &mutation, payload, mutation.size) ==
-            XR_TYPED_FRAME_ACCESS_MISMATCH);
-    mutation = access;
-    mutation.register_rep ^= 1u;
-    REQUIRE(xr_typed_frame_load(frame, &mutation, loaded, mutation.size) ==
-            XR_TYPED_FRAME_ACCESS_MISMATCH);
-    mutation = access;
-    mutation.slot = UINT32_MAX;
-    REQUIRE(xr_typed_frame_load(frame, &mutation, loaded, mutation.size) ==
-            XR_TYPED_FRAME_SLOT_INVALID);
-    REQUIRE(xr_typed_frame_load(frame, &access, loaded, access.size - 1u) ==
-            XR_TYPED_FRAME_ACCESS_MISMATCH);
+    require_access_capability_rejects_mutations(frame, &access, loaded,
+                                                payload);
 
 #if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
     REQUIRE(xr_typed_frame_poison(frame, &access) == XR_TYPED_FRAME_OK);
@@ -528,6 +788,7 @@ static void test_parent_child_context_links(void) {
 }
 
 int main(void) {
+    test_exact_representation_transport_matrix();
     test_exact_slot_access_and_states();
     test_plan_identity_shape_and_budgets();
     test_plan_ownership_and_void_binding();

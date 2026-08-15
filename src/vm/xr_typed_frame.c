@@ -37,7 +37,10 @@ struct XrTypedFrame {
     uint8_t *states;
 #endif
     size_t allocation_size;
+    size_t arena_size;
+    uint32_t slot_begin;
     uint32_t slot_count;
+    uint16_t frame_alignment;
     bool generation_bound;
     bool cleaned;
 };
@@ -47,6 +50,17 @@ typedef struct XrTypedFrameShape {
     const XrTargetSlotRecord *slots;
     size_t arena_allocation_bytes;
 } XrTypedFrameShape;
+
+typedef enum XrTypedFrameTransfer {
+    XR_TYPED_FRAME_TRANSFER_LOAD = 0,
+    XR_TYPED_FRAME_TRANSFER_STORE,
+} XrTypedFrameTransfer;
+
+typedef struct XrTypedResolvedSlot {
+    const XrTargetSlotRecord *record;
+    uint8_t *bytes;
+    uint32_t local_slot;
+} XrTypedResolvedSlot;
 
 static bool is_power_of_two(size_t value) {
     return value && (value & (value - 1u)) == 0;
@@ -59,16 +73,65 @@ static bool checked_add_size(size_t left, size_t right, size_t *result) {
     return true;
 }
 
-static bool supported_rep_kind(uint16_t kind) {
-    return kind == XR_MACHINE_REP_VOID ||
-           (kind >= XR_MACHINE_REP_I1 && kind <= XR_MACHINE_REP_RUNE);
+static bool reps_are_storage_compatible(
+    const XrTargetMachineRepRecord *register_rep,
+    const XrTargetMachineRepRecord *memory_rep) {
+    return register_rep && memory_rep &&
+           register_rep->kind == memory_rep->kind &&
+           register_rep->register_bits == memory_rep->register_bits &&
+           register_rep->memory_size == memory_rep->memory_size &&
+           register_rep->memory_align == memory_rep->memory_align &&
+           register_rep->signedness == memory_rep->signedness &&
+           register_rep->root_kind == memory_rep->root_kind &&
+           register_rep->ownership == memory_rep->ownership &&
+           register_rep->null_encoding == memory_rep->null_encoding &&
+           register_rep->detail == memory_rep->detail &&
+           register_rep->lane_count == memory_rep->lane_count;
 }
 
-static bool supported_stored_rep(const XrTargetMachineRepRecord *rep) {
-    return rep && rep->kind >= XR_MACHINE_REP_I1 &&
-           rep->kind <= XR_MACHINE_REP_RUNE &&
-           rep->root_kind == XR_TARGET_ROOT_NONE &&
-           rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+/* This is a representation transport boundary, not a lifecycle authority.
+ * Rooted, owned, and borrowed bytes remain fail closed until the executor has
+ * exact root, lifetime, and cleanup operations. A transported raw pointer is
+ * opaque object representation: this function never dereferences it. */
+static bool stored_rep_is_transportable(
+    const XrTargetMachineRepRecord *rep) {
+    if (!rep || rep->id > UINT16_MAX || rep->reserved != 0 ||
+        rep->kind >= XR_MACHINE_REP_COUNT ||
+        !rep->memory_size || !is_power_of_two(rep->memory_align) ||
+        rep->memory_align > rep->memory_size || rep->lane_count != 0)
+        return false;
+    if (rep->kind >= XR_MACHINE_REP_I1 &&
+        rep->kind <= XR_MACHINE_REP_RUNE)
+        return rep->root_kind == XR_TARGET_ROOT_NONE &&
+               rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+    switch (rep->kind) {
+        case XR_MACHINE_REP_ENUM_ORDINAL:
+        case XR_MACHINE_REP_AGGREGATE:
+            return rep->root_kind == XR_TARGET_ROOT_NONE &&
+                   rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+        case XR_MACHINE_REP_RAW_PTR:
+            return rep->root_kind == XR_TARGET_ROOT_NONE &&
+                   rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+        default:
+            return false;
+    }
+}
+
+static bool slot_rep_contract_is_exact(
+    const XrTargetPlan *plan, const XrTargetSlotRecord *slot) {
+    const XrTargetMachineRepRecord *register_rep =
+        slot ? xr_target_plan_machine_rep(plan, slot->register_rep) : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        slot ? xr_target_plan_machine_rep(plan, slot->memory_rep) : NULL;
+    return slot && stored_rep_is_transportable(register_rep) &&
+           stored_rep_is_transportable(memory_rep) &&
+           reps_are_storage_compatible(register_rep, memory_rep) &&
+           register_rep->id == slot->register_rep &&
+           memory_rep->id == slot->memory_rep &&
+           slot->size == memory_rep->memory_size &&
+           slot->align == memory_rep->memory_align &&
+           slot->root_kind == memory_rep->root_kind &&
+           slot->ownership == memory_rep->ownership;
 }
 
 static bool limits_are_bounded(const XrTypedFrameLimits *limits) {
@@ -93,12 +156,6 @@ static XrTypedFrameStatus validate_plan_identity(
         return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
     if (!xr_target_plan_fingerprint_is_intact(plan))
         return XR_TYPED_FRAME_PLAN_NOT_VERIFIED;
-    uint32_t rep_count = 0;
-    const XrTargetMachineRepRecord *reps =
-        xr_target_plan_machine_reps(plan, &rep_count);
-    for (uint32_t i = 0; i < rep_count; i++)
-        if (!supported_rep_kind(reps[i].kind))
-            return XR_TYPED_FRAME_UNSUPPORTED_FAMILY;
     return XR_TYPED_FRAME_OK;
 }
 
@@ -147,21 +204,13 @@ static XrTypedFrameStatus validate_shape(const XrTargetPlan *plan,
     for (uint32_t i = 0; i < function->slot_count; i++) {
         uint32_t global_slot = function->slot_begin + i;
         const XrTargetSlotRecord *slot = &slots[global_slot];
-        const XrTargetMachineRepRecord *register_rep =
-            xr_target_plan_machine_rep(plan, slot->register_rep);
-        const XrTargetMachineRepRecord *memory_rep =
-            xr_target_plan_machine_rep(plan, slot->memory_rep);
         if (slot->id != global_slot || slot->function != function_index ||
-            !slot->size || !is_power_of_two(slot->align) ||
+            slot->reserved != 0 || !slot->size ||
+            !is_power_of_two(slot->align) ||
             slot->align > function->frame_align || slot->offset % slot->align != 0 ||
             slot->offset > function->frame_size ||
             slot->size > function->frame_size - slot->offset ||
-            !supported_stored_rep(register_rep) ||
-            !supported_stored_rep(memory_rep) ||
-            slot->size != memory_rep->memory_size ||
-            slot->align != memory_rep->memory_align ||
-            slot->root_kind != XR_TARGET_ROOT_NONE ||
-            slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+            !slot_rep_contract_is_exact(plan, slot))
             return XR_TYPED_FRAME_SLOT_INVALID;
     }
     shape->function = function;
@@ -213,7 +262,10 @@ static XrTypedFrameStatus allocate_frame(const XrTargetPlan *plan,
     frame->current_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     frame->coroutine_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     frame->allocation_size = shape->arena_allocation_bytes;
+    frame->arena_size = shape->function->frame_size;
+    frame->slot_begin = shape->function->slot_begin;
     frame->slot_count = shape->function->slot_count;
+    frame->frame_alignment = shape->function->frame_align;
     *out = frame;
     return XR_TYPED_FRAME_OK;
 }
@@ -228,32 +280,104 @@ static bool frame_plan_identity_is_intact(const XrTypedFrame *frame) {
                                 xr_target_plan_fingerprint(frame->plan));
 }
 
-static XrTypedFrameStatus validate_access(const XrTypedFrame *frame,
-                                          const XrTypedSlotAccess *access,
-                                          uint32_t *local_slot) {
-    if (!frame || !access || !local_slot)
+static XrTypedFrameStatus resolve_slot(const XrTypedFrame *frame,
+                                       uint32_t slot_index,
+                                       const XrTypedSlotAccess *access,
+                                       XrTypedResolvedSlot *resolved) {
+    if (resolved)
+        memset(resolved, 0, sizeof(*resolved));
+    if (!frame || !resolved)
         return XR_TYPED_FRAME_INVALID_ARGUMENT;
     if (frame->cleaned)
         return XR_TYPED_FRAME_CLEANED;
     if (!frame_plan_identity_is_intact(frame))
         return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
-    if (access->slot < frame->function->slot_begin ||
-        access->slot - frame->function->slot_begin >= frame->slot_count)
+    if (slot_index < frame->slot_begin ||
+        slot_index - frame->slot_begin >= frame->slot_count)
         return XR_TYPED_FRAME_SLOT_INVALID;
-    uint32_t local = access->slot - frame->function->slot_begin;
+    uint32_t local = slot_index - frame->slot_begin;
     const XrTargetSlotRecord *slot = &frame->slots[local];
-    if (!slot->size || !is_power_of_two(slot->align))
+    if (slot->id != slot_index || slot->function != frame->function_index ||
+        slot->reserved != 0 || !slot->size ||
+        !is_power_of_two(frame->frame_alignment) ||
+        !is_power_of_two(slot->align) ||
+        slot->align > frame->frame_alignment ||
+        slot->offset % slot->align != 0 ||
+        !slot_rep_contract_is_exact(frame->plan, slot))
         return XR_TYPED_FRAME_SLOT_INVALID;
-    if (!xr_stable_id_equal(access->identity, slot->identity) ||
-        access->size != slot->size || access->alignment != slot->align ||
-        access->register_rep != slot->register_rep ||
-        access->memory_rep != slot->memory_rep || access->reserved != 0)
+    if (access &&
+        (!xr_stable_id_equal(access->identity, slot->identity) ||
+         access->slot != slot->id || access->size != slot->size ||
+         access->alignment != slot->align ||
+         access->register_rep != slot->register_rep ||
+         access->memory_rep != slot->memory_rep || access->reserved != 0))
         return XR_TYPED_FRAME_ACCESS_MISMATCH;
-    if (!frame->arena || slot->offset > frame->function->frame_size ||
-        slot->size > frame->function->frame_size - slot->offset ||
-        ((uintptr_t) (frame->arena + slot->offset) & (slot->align - 1u)) != 0)
+
+    size_t slot_end = 0;
+    if (!checked_add_size(slot->offset, slot->size, &slot_end) ||
+        slot_end > frame->arena_size || !frame->allocation ||
+        !frame->arena)
         return XR_TYPED_FRAME_SLOT_INVALID;
-    *local_slot = local;
+    uintptr_t allocation_address = (uintptr_t) frame->allocation;
+    uintptr_t arena_address = (uintptr_t) frame->arena;
+    if (arena_address < allocation_address)
+        return XR_TYPED_FRAME_SLOT_INVALID;
+    uintptr_t prefix_value = arena_address - allocation_address;
+    if (prefix_value > SIZE_MAX || prefix_value >= frame->frame_alignment)
+        return XR_TYPED_FRAME_SLOT_INVALID;
+    size_t arena_prefix = (size_t) prefix_value;
+    size_t allocation_end = 0;
+    size_t byte_offset = 0;
+    if (!checked_add_size(arena_prefix, slot_end, &allocation_end) ||
+        allocation_end > frame->allocation_size ||
+        !checked_add_size(arena_prefix, slot->offset, &byte_offset) ||
+        byte_offset >= frame->allocation_size)
+        return XR_TYPED_FRAME_SLOT_INVALID;
+    uint8_t *slot_bytes = frame->allocation + byte_offset;
+    if (((uintptr_t) slot_bytes & (slot->align - 1u)) != 0)
+        return XR_TYPED_FRAME_SLOT_INVALID;
+    resolved->record = slot;
+    resolved->bytes = slot_bytes;
+    resolved->local_slot = local;
+    return XR_TYPED_FRAME_OK;
+}
+
+static XrTypedFrameStatus transfer_slot(
+    const XrTypedFrame *frame, const XrTypedSlotAccess *access,
+    const void *source, void *destination, size_t size,
+    XrTypedFrameTransfer transfer) {
+    if ((transfer == XR_TYPED_FRAME_TRANSFER_STORE && !source) ||
+        (transfer == XR_TYPED_FRAME_TRANSFER_LOAD && !destination))
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    if (!access)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    XrTypedResolvedSlot resolved = {0};
+    XrTypedFrameStatus status =
+        resolve_slot(frame, access->slot, access, &resolved);
+    if (status != XR_TYPED_FRAME_OK)
+        return status;
+    if (size != resolved.record->size)
+        return XR_TYPED_FRAME_ACCESS_MISMATCH;
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
+    XrTypedSlotState state =
+        (XrTypedSlotState) frame->states[resolved.local_slot];
+    if (state == XR_TYPED_SLOT_STATE_POISONED)
+        return XR_TYPED_FRAME_POISONED;
+    if (transfer == XR_TYPED_FRAME_TRANSFER_LOAD &&
+        state == XR_TYPED_SLOT_STATE_UNINITIALIZED)
+        return XR_TYPED_FRAME_UNINITIALIZED;
+    if (transfer == XR_TYPED_FRAME_TRANSFER_LOAD &&
+        state != XR_TYPED_SLOT_STATE_INITIALIZED)
+        return XR_TYPED_FRAME_SLOT_INVALID;
+#endif
+    if (transfer == XR_TYPED_FRAME_TRANSFER_STORE) {
+        memcpy(resolved.bytes, source, size);
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
+        frame->states[resolved.local_slot] = XR_TYPED_SLOT_STATE_INITIALIZED;
+#endif
+    } else {
+        memcpy(destination, resolved.bytes, size);
+    }
     return XR_TYPED_FRAME_OK;
 }
 
@@ -292,15 +416,11 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_describe_slot(
         memset(access, 0, sizeof(*access));
     if (!frame || !access)
         return XR_TYPED_FRAME_INVALID_ARGUMENT;
-    if (frame->cleaned)
-        return XR_TYPED_FRAME_CLEANED;
-    if (!frame_plan_identity_is_intact(frame))
-        return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
-    if (slot < frame->function->slot_begin ||
-        slot - frame->function->slot_begin >= frame->slot_count)
-        return XR_TYPED_FRAME_SLOT_INVALID;
-    const XrTargetSlotRecord *record =
-        &frame->slots[slot - frame->function->slot_begin];
+    XrTypedResolvedSlot resolved = {0};
+    XrTypedFrameStatus status = resolve_slot(frame, slot, NULL, &resolved);
+    if (status != XR_TYPED_FRAME_OK)
+        return status;
+    const XrTargetSlotRecord *record = resolved.record;
     *access = (XrTypedSlotAccess) {
         .identity = record->identity,
         .slot = record->id,
@@ -315,62 +435,37 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_describe_slot(
 XR_FUNC XrTypedFrameStatus xr_typed_frame_store(
     XrTypedFrame *frame, const XrTypedSlotAccess *access, const void *bytes,
     size_t size) {
-    if (!bytes)
-        return XR_TYPED_FRAME_INVALID_ARGUMENT;
-    uint32_t local = 0;
-    XrTypedFrameStatus status = validate_access(frame, access, &local);
-    if (status != XR_TYPED_FRAME_OK)
-        return status;
-    if (size != access->size)
-        return XR_TYPED_FRAME_ACCESS_MISMATCH;
-#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
-    if (frame->states[local] == XR_TYPED_SLOT_STATE_POISONED)
-        return XR_TYPED_FRAME_POISONED;
-#endif
-    memcpy(frame->arena + frame->slots[local].offset, bytes, size);
-#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
-    frame->states[local] = XR_TYPED_SLOT_STATE_INITIALIZED;
-#endif
-    return XR_TYPED_FRAME_OK;
+    return transfer_slot(frame, access, bytes, NULL, size,
+                         XR_TYPED_FRAME_TRANSFER_STORE);
 }
 
 XR_FUNC XrTypedFrameStatus xr_typed_frame_load(
     const XrTypedFrame *frame, const XrTypedSlotAccess *access, void *bytes,
     size_t size) {
-    if (!bytes)
-        return XR_TYPED_FRAME_INVALID_ARGUMENT;
-    uint32_t local = 0;
-    XrTypedFrameStatus status = validate_access(frame, access, &local);
-    if (status != XR_TYPED_FRAME_OK)
-        return status;
-    if (size != access->size)
-        return XR_TYPED_FRAME_ACCESS_MISMATCH;
-#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
-    if (frame->states[local] == XR_TYPED_SLOT_STATE_UNINITIALIZED)
-        return XR_TYPED_FRAME_UNINITIALIZED;
-    if (frame->states[local] == XR_TYPED_SLOT_STATE_POISONED)
-        return XR_TYPED_FRAME_POISONED;
-    if (frame->states[local] != XR_TYPED_SLOT_STATE_INITIALIZED)
-        return XR_TYPED_FRAME_SLOT_INVALID;
-#endif
-    memcpy(bytes, frame->arena + frame->slots[local].offset, size);
-    return XR_TYPED_FRAME_OK;
+    return transfer_slot(frame, access, NULL, bytes, size,
+                         XR_TYPED_FRAME_TRANSFER_LOAD);
 }
 
 XR_FUNC XrTypedFrameStatus xr_typed_frame_poison(
     XrTypedFrame *frame, const XrTypedSlotAccess *access) {
 #if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
-    uint32_t local = 0;
-    XrTypedFrameStatus status = validate_access(frame, access, &local);
+    if (!access)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    XrTypedResolvedSlot resolved = {0};
+    XrTypedFrameStatus status =
+        resolve_slot(frame, access->slot, access, &resolved);
     if (status != XR_TYPED_FRAME_OK)
         return status;
-    if (frame->states[local] == XR_TYPED_SLOT_STATE_POISONED)
+    if (frame->states[resolved.local_slot] == XR_TYPED_SLOT_STATE_POISONED)
         return XR_TYPED_FRAME_POISONED;
-    frame->states[local] = XR_TYPED_SLOT_STATE_POISONED;
+    frame->states[resolved.local_slot] = XR_TYPED_SLOT_STATE_POISONED;
     return XR_TYPED_FRAME_OK;
 #else
-    uint32_t local = 0;
-    XrTypedFrameStatus status = validate_access(frame, access, &local);
+    if (!access)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    XrTypedResolvedSlot resolved = {0};
+    XrTypedFrameStatus status =
+        resolve_slot(frame, access->slot, access, &resolved);
     return status == XR_TYPED_FRAME_OK
                ? XR_TYPED_FRAME_DEBUG_METADATA_UNAVAILABLE
                : status;
@@ -387,11 +482,11 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_slot_state(
         return XR_TYPED_FRAME_CLEANED;
     if (!frame_plan_identity_is_intact(frame))
         return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
-    if (slot < frame->function->slot_begin ||
-        slot - frame->function->slot_begin >= frame->slot_count)
+    if (slot < frame->slot_begin ||
+        slot - frame->slot_begin >= frame->slot_count)
         return XR_TYPED_FRAME_SLOT_INVALID;
 #if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
-    uint8_t stored = frame->states[slot - frame->function->slot_begin];
+    uint8_t stored = frame->states[slot - frame->slot_begin];
     if (stored < XR_TYPED_SLOT_STATE_UNINITIALIZED ||
         stored > XR_TYPED_SLOT_STATE_POISONED)
         return XR_TYPED_FRAME_SLOT_INVALID;
@@ -650,7 +745,7 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_unlink_child(
 }
 
 XR_FUNC size_t xr_typed_frame_arena_size(const XrTypedFrame *frame) {
-    return frame && !frame->cleaned ? frame->function->frame_size : 0;
+    return frame && !frame->cleaned ? frame->arena_size : 0;
 }
 
 XR_FUNC uint32_t xr_typed_frame_slot_count(const XrTypedFrame *frame) {
@@ -667,7 +762,7 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_memory_footprint(
         return XR_TYPED_FRAME_CLEANED;
     if (!frame_plan_identity_is_intact(frame))
         return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
-    size_t arena_bytes = frame->function->frame_size;
+    size_t arena_bytes = frame->arena_size;
     if (frame->allocation_size < arena_bytes)
         return XR_TYPED_FRAME_SLOT_INVALID;
     XrTypedFrameMemoryFootprint measured = {
@@ -728,7 +823,10 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_cleanup(XrTypedFrame *frame) {
            sizeof(frame->generation_fingerprint));
     frame->generation_bound = false;
     frame->allocation_size = 0;
+    frame->arena_size = 0;
+    frame->slot_begin = 0;
     frame->slot_count = 0;
+    frame->frame_alignment = 0;
     return XR_TYPED_FRAME_OK;
 }
 

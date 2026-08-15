@@ -88,6 +88,13 @@ typedef struct XrTypedSlotAccess {
     uint16_t reserved;
 } XrTypedSlotAccess;
 
+/* Load and store copy exactly one verified slot's complete object
+ * representation. They never form a typed pointer to arena storage, infer a
+ * representation from the caller's buffer, dereference carried references,
+ * or perform retain/release. Only representations with no frame-local
+ * lifecycle work are accepted; rooted, owned, and borrowed representations
+ * remain fail closed until exact executor lifecycle operations exist. */
+
 /* Payload bytes requested from the allocator for one live frame. Allocator
  * bookkeeping and heap fragmentation are deliberately outside this contract:
  * neither is owned or knowable by the typed-frame implementation. */

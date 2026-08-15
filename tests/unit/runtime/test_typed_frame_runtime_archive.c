@@ -13,7 +13,9 @@ int main(void) {
     XrTypedFrame *frame = (XrTypedFrame *) (uintptr_t) 1;
     XrTypedFrameContext context;
     XrTypedFrameMemoryFootprint footprint;
+    XrTypedSlotAccess access = {0};
     XrModuleGenerationIdentity generation = {0};
+    uint8_t byte = 0;
     int64_t result = 1;
     if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(31) ||
         XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK != XR_TARGET_REQUIRED_FAMILIES ||
@@ -21,6 +23,12 @@ int main(void) {
         xr_typed_frame_create(NULL, &fingerprint, 0, &limits, &frame) !=
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
         frame != NULL ||
+        xr_typed_frame_describe_slot(NULL, 0, &access) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_store(NULL, &access, &byte, sizeof(byte)) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_load(NULL, &access, &byte, sizeof(byte)) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
         xr_typed_frame_cleanup(NULL) != XR_TYPED_FRAME_INVALID_ARGUMENT ||
         xr_typed_frame_context(NULL, &context) !=
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
