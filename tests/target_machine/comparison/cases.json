@@ -1,0 +1,47 @@
+{
+  "schema": "xray-target-machine-comparison/1",
+  "laneTimeoutSeconds": {
+    "legacy-vm-frozen": 30,
+    "typed-target-plan-vm": 10,
+    "aot-native-current": 30
+  },
+  "aotBuildTimeoutSeconds": 180,
+  "executorLanes": [
+    "legacy-vm-frozen",
+    "typed-target-plan-vm",
+    "aot-native-current"
+  ],
+  "unavailableExecutorLanes": [
+    {
+      "id": "aot-baseline-vs-refined-separate",
+      "status": "unavailable",
+      "reason": "The refinement plan can be built and verified, but no test or product execution selector exposes baseline and refined native binaries independently."
+    }
+  ],
+  "cases": [
+    {"id": "add", "arguments": [41, 1], "oracle": {"value": 42, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "sub", "arguments": [-17, 5], "oracle": {"value": -22, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "mul", "arguments": [-7, 6], "oracle": {"value": -42, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "bit-and", "arguments": [13, 10], "oracle": {"value": 8, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "bit-or", "arguments": [12, 3], "oracle": {"value": 15, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "bit-xor", "arguments": [12, 10], "oracle": {"value": 6, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "shift-left", "arguments": [7, 2], "oracle": {"value": 28, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "shift-right", "arguments": [-40, 3], "oracle": {"value": -5, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "divide", "arguments": [-7, 2], "oracle": {"value": -3, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "modulo", "arguments": [-7, 2], "oracle": {"value": -1, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "divide-by-zero", "arguments": [7, 0], "oracle": {"value": null, "error": "division-by-zero", "termination": "error", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "modulo-by-zero", "arguments": [7, 0], "oracle": {"value": null, "error": "modulo-by-zero", "termination": "error", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "cfg-eq", "arguments": [5, 5], "oracle": {"value": 10, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "cfg-ne", "arguments": [5, 5], "oracle": {"value": 0, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "cfg-lt", "arguments": [-2, 3], "oracle": {"value": 1, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "cfg-le", "arguments": [3, 3], "oracle": {"value": 6, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "cfg-gt", "arguments": [9, 4], "oracle": {"value": 13, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "cfg-ge", "arguments": [3, 4], "oracle": {"value": -1, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}}
+  ],
+  "unsupportedPositiveCases": [
+    {"id": "floating-point-arithmetic", "family": "scalar-f64", "typedStatus": "unavailable", "blocksCompletion": true, "reason": "The typed dispatcher accepts signed i64 slots only."},
+    {"id": "direct-function-call", "family": "call", "typedStatus": "unavailable", "blocksCompletion": true, "reason": "The typed dispatcher has no call instruction family."},
+    {"id": "owned-string-concat", "family": "object-ownership", "typedStatus": "unavailable", "blocksCompletion": true, "reason": "The typed dispatcher has no object slots or cleanup execution."},
+    {"id": "coroutine-resume", "family": "coroutine", "typedStatus": "unavailable", "blocksCompletion": true, "reason": "The typed dispatcher has no coroutine state-machine execution."}
+  ]
+}

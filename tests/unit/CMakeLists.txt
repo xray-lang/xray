@@ -401,6 +401,24 @@ set_tests_properties(typed_target_vm_performance_runner_self_test PROPERTIES
     LABELS "performance;target-machine;self-test"
     PROCESSORS 1
     TIMEOUT 30)
+add_executable(test_target_machine_comparison_fixture
+    ../target_machine/comparison/typed_fixture.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+target_include_directories(test_target_machine_comparison_fixture PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_target_machine_comparison_fixture PRIVATE xray_core)
+add_dependencies(test_target_machine_comparison_fixture xray)
+add_test(NAME target_machine_scalar_comparison
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/tests/target_machine/comparison/run_comparison.py
+        --xray $<TARGET_FILE:xray>
+        --typed-fixture $<TARGET_FILE:test_target_machine_comparison_fixture>
+        --manifest ${CMAKE_SOURCE_DIR}/tests/target_machine/comparison/cases.json
+        --report ${CMAKE_BINARY_DIR}/target-machine-scalar-comparison-report.json)
+set_tests_properties(target_machine_scalar_comparison PROPERTIES
+    LABELS "target-machine;comparison;vm;aot"
+    TIMEOUT 300)
 add_executable(test_typed_frame_runtime_archive
     runtime/test_typed_frame_runtime_archive.c)
 target_include_directories(test_typed_frame_runtime_archive PRIVATE
