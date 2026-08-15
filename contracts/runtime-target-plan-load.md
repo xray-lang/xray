@@ -18,6 +18,14 @@ roots, or general module activation.
    materialization reads only that snapshot. The shared hard peak covers the
    caller read buffer, candidate snapshot, decoded tables, and the frozen-plan
    copy with checked arithmetic.
+   A standalone stress gate grows valid CFG, row, table-byte, and artifact-byte
+   workloads, records decode/materialize wall time and process peak memory,
+   and rejects each hard manifest or section-row budget at one past its limit
+   with a repeatable diagnostic. It also mixes fresh decode, shared-candidate
+   materialization, and generation pins across threads. Root and cleanup rows
+   remain unavailable to valid artifacts, and there is no standalone debug
+   section; the gate records that boundary instead of manufacturing rows that
+   the independent verifier cannot authorize.
 3. A runtime artifact authority retains an independently verified
    SemanticPlan and a runtime-constructed exact TargetProfile. Its internal
    factory has no TargetProfile input: the native runtime owns and rebuilds
@@ -303,7 +311,7 @@ anchor-sha256: contracts/target-machine/legacy-product-residue.json 577aa49d6502
 anchor-sha256: scripts/check_legacy_product_residue.py d160f8b9ab1d16da893bcc30a7ed90d583dda9e478dd11f67c9ce299629f8d2f
 anchor-sha256: tests/unit/plan/test_target_plan.c 41e599eb6d56d91fd25c74c251e0d30f0e87b2e2540fd8548aa0b46f46feaa70
 anchor-sha256: tests/unit/plan/test_xtp_format.c 9654ba47989b6b34e4e40f6196a02bb95818fd6f83aa5f4a4f78e6907bf4bd31
-anchor-sha256: tests/unit/CMakeLists.txt d6895b2347515a1c26e17a9e89a515606653122b4318867564de62d856cddfb5
+anchor-sha256: tests/unit/CMakeLists.txt b036dd12a58625e5d028505afd27ba5ec94dad571b88ea70677daefb62a0970f
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 6df46f3edff17f29786f16df95615187f34b9da5283f79228c06c0cfe3f1598d
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py adbe96cb24fd2da66f8e8c3148d78eab7f59d3b2544ba07a87f41540b6f760cd
