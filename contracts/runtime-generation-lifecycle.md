@@ -36,7 +36,7 @@ scalar route remains the only governed product activation path.
    call-argument, root-map, root-slot, cleanup, adapter, or coroutine execution
    authority. Any other verified plan remains VERIFIED and fails PREPARE with
    `XR_EXEC_5004`; it is not partially activated.
-   TargetPlan schema 32 preserves exact SOURCE-import storage and dense
+   TargetPlan schema 33 preserves exact SOURCE-import storage and dense
    SOURCE_EXPORT argument rows together with exact ADT-enum, aggregate
    field-name, Array-intrinsic, String-runes result, and sealed Iterator-rune
    `hasNext`/`next`/`rune.toUInt32`/`rune.isWhitespace` call authority, plus exact direct-local
@@ -110,8 +110,8 @@ scalar route remains the only governed product activation path.
     identity at every call site. `XR_ENTRY_ABI_SCHEMA_VERSION == 1` instead hashes
     the exact signed-i64 parameter/result shape, native ABI, target data-layout
     hash, and target-profile fingerprint under an entry-specific domain. This
-    record is runtime-only and is not serialized into TargetPlan schema 32 or
-    XTP schema 31. Persisting a dynamic-call expectation later requires an atomic
+    record is runtime-only and is not serialized into TargetPlan schema 33 or
+    XTP schema 32. Persisting a dynamic-call expectation later requires an atomic
     schema cutover; no compatibility interpretation is permitted.
 13. Binding requires an immutable verified TargetPlan with an intact plan
     fingerprint, an exact `SCALAR_I64_CLOSED` function, and zero adapter rows.
@@ -145,7 +145,7 @@ anchor-sha256: src/runtime/xr_module_generation.c 43a8bf5ff595351f4e4bb2f78e01dd
 anchor-sha256: src/runtime/xr_module_generation_verify.c 0f146f9f8526f83d84157febadde7cb92327f24186fb6d8d45138968ecaaf4bd
 anchor-sha256: src/vm/xr_typed_dispatch.h ca0475a9650e79929e6529d10965ab7403815c148d695995e10ada86499257f6
 anchor-sha256: src/vm/xr_typed_dispatch.c a8112d151f6566489cb8c34fc9f295db79d683ee98d34faf14e2f8afdcff8b14
-anchor-sha256: src/vm/xr_typed_frame.h 43c04fe662cab6f2d79eca9171450d71a43805864af34e90a1f69d11f31427fe
+anchor-sha256: src/vm/xr_typed_frame.h 5acde34be5501c7892b1b20d78d18e32dca3269b1722380a77c6545f1c9df649
 anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

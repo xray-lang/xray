@@ -1,6 +1,6 @@
 # Typed TargetPlan scalar execution contract
 
-TargetPlan schema 32 may carry a canonical per-function instruction table.
+TargetPlan schema 33 may carry a canonical per-function instruction table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
 family. A function with zero instruction rows is execution unavailable, never
@@ -124,7 +124,7 @@ own status, distinct from every status that reports an unacceptable plan or
 call, so a plan can never hang the caller that ran it and the same call refused
 once is refused every time.
 
-Schema 30 is a hard cutover from v29 and every earlier TargetPlan schema. The
+Schema 33 is a hard cutover from v32 and every earlier TargetPlan schema. The
 instruction opcode carrier is now an unsigned 16-bit stable ID while the
 canonical instruction row remains exactly 32 bytes by shrinking its reserved
 tail to one byte. The generated target instruction registry is the only opcode
@@ -151,7 +151,7 @@ The view binds the frozen Semantic intrinsic and source root to the exact
 String method or slice construction authority. Schema 18 adds a sealed
 `Iterator<rune>.hasNext` bool recipe whose receiver is the exact prior
 `String.runes` result and whose fixed runtime helper preserves pending-error
-polling. C emission schema 27 adds the separate native-rune `next` recipe only
+polling. C emission schema 28 adds the separate native-rune `next` recipe only
 when the receiver has that same unique frozen `String.runes` producer, plus
 the exact native-u32 `rune.toUInt32` recipe only when its receiver is the
 unique exact `.next()` result in the same function, and the exact native-bool
@@ -231,7 +231,7 @@ ownership, transfer, and machine representation. An exact `ref` row alone
 authorizes the C projection's additional pointer level. These rows grant no
 imported module object body, allocation, root, cleanup, guessed member lookup,
 dependency activation, unrelated argument ABI, or cross-module frame.
-The C emission projection schema 27 mechanically spells all verified dynamic
+The C emission projection schema 28 mechanically spells all verified dynamic
 families as exact `TAGGED`/`XrValue` rows. For an exact String literal it also
 owns the immutable literal bytes and the explicit String-view materialization
 recipe. For exact `XI_CHAN_NEW` it owns the helper spelling and capacity
@@ -331,13 +331,13 @@ Evidence:
   program fault, separate from the authority failures an unsupported plan
   gives.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 75d5c291efec7caafc4c16ec109e80eee8e982310cdefbd3e49ad6d96eac5b05
-anchor-sha256: src/plan/target/xr_target_plan.c f680441a3a867b6e0f3b3c3587f1ec33300e1e1e8b3405ea31a32a95f0fff187
-anchor-sha256: src/plan/target/xr_target_builder.c 32410f0122085655620fb770ee5842b5e1048852ea45053dc23e7d29384937ec
+anchor-sha256: src/plan/target/xr_target_plan.h a2835453ea48011c9b5a3c12a31283fb7227d35c9ff1f722f19f24b8fd8fc5fc
+anchor-sha256: src/plan/target/xr_target_plan.c 86e47a5e7ff76ed3b340545bdbdcc78a6caa0ae772944b7daef9f219d72d24ac
+anchor-sha256: src/plan/target/xr_target_builder.c 5a644af583af1c467aad8bd9e7b4af3234fe073082613644b73a684a79ebee4e
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 895801ca13af72cb9abc02f5d58b4e87fd1782329b80038f94e631d05e154180
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c ef89e252a86b89e0c78d587f4dd974e565ba0c3a747ed48842b0d901f1587c25
-anchor-sha256: src/plan/target/xr_target_verify.c 12a65cac274117c2f88568f906308c9e7d9206b6204f783705615ef523a0aa31
-anchor-sha256: src/plan/format/xr_xtp_schema.h f215d9df313e413ee1ae701bd8cf787c1915f6b7639f4b04877d7d50b5d755d2
+anchor-sha256: src/plan/target/xr_target_verify.c 1b9c44356c9a3ca6c8e085a4b63e1e8587b1d478a83b3a2281880cf1603a77f1
+anchor-sha256: src/plan/format/xr_xtp_schema.h 4ae2b612f62f8a68255d3c084327d23692e6bfdb53909bff1237a45dbed0fca2
 anchor-sha256: src/plan/format/xr_xtp_rows.c 37ade66cec19c828eefe6ed2066273fe16197b9f7908f2b4977e73eb39851c41
 anchor-sha256: src/plan/format/xr_xtp_encode.c 2f6f1fa32e35fd1681ab07bc8a3808d133f33f27e43139224d3f9e253447bd74
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
@@ -346,7 +346,7 @@ anchor-sha256: src/vm/xr_typed_dispatch.c a8112d151f6566489cb8c34fc9f295db79d683
 anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 63727b47fb9df9233402f4af919122ac99266bd193f04c6f80893ce2ab4bf69d
 anchor-sha256: tests/unit/plan/test_xtp_format.c 9654ba47989b6b34e4e40f6196a02bb95818fd6f83aa5f4a4f78e6907bf4bd31
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 2efb2be6dbb4208c607dd07749694e4e210dc223870bd474fc01c92c9f9aa825
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 81f28d9eef2915dec8be0a5676640cce16338a86b5f993f42f79b5df9828ddde
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation.c 43a8bf5ff595351f4e4bb2f78e01dd6d5273f2a80a9ad18cabb93f05fb6a64ba
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

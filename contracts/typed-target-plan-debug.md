@@ -31,7 +31,7 @@ authority. Profile presence or absence cannot make a plan legal, change a slot
 byte, extend a generation pin, or change the program result.
 
 Materialization rechecks the immutable plan and event fingerprint, then copies
-only exact function, instruction, call, and slot rows. TargetPlan schema 32 has
+only exact function, instruction, call, and slot rows. TargetPlan schema 33 has
 no source-span table, stable owner identity, or slot-to-layout identity relation;
 those facts are reported as `XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE` rather than
 guessed from semantic IDs, names, layouts, or compiler structures. Breakpoint,
@@ -58,6 +58,6 @@ anchor-sha256: src/vm/debug/xr_vm_materialize.c dc70a2881d49cab77a9382a5ae9c88e9
 anchor-sha256: src/vm/xr_typed_dispatch.h ca0475a9650e79929e6529d10965ab7403815c148d695995e10ada86499257f6
 anchor-sha256: src/vm/xr_typed_dispatch.c a8112d151f6566489cb8c34fc9f295db79d683ee98d34faf14e2f8afdcff8b14
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 63727b47fb9df9233402f4af919122ac99266bd193f04c6f80893ce2ab4bf69d
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 2efb2be6dbb4208c607dd07749694e4e210dc223870bd474fc01c92c9f9aa825
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 81f28d9eef2915dec8be0a5676640cce16338a86b5f993f42f79b5df9828ddde
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py e6d6038940a3fcff5c8e7f636f64142947b2878151db4ae96823bd67a174017a
 anchor-sha256: CMakeLists.txt e1020fb99de6a6d3dd9b6220d2589fab6d79ea08bd235419fd4824c6d205061a

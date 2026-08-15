@@ -9,7 +9,7 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 30 preserves exact `String.runes()` builtin-member identity
+SemanticPlan schema 31 preserves exact `String.runes()` builtin-member identity
 and the sealed `Iterator<rune>.next()` result reached directly from it as frozen
 intrinsics. The latter requires one unique same-function `String.runes()` result;
 an Iterator type or selector alone is not authority. The schema also retains the
@@ -25,7 +25,12 @@ is a unique frozen required String parameter or exact String literal and its
 two ordered bounds are exact native i64 values. Its owned return provenance,
 tail flag, operand ownership, and fixed selector identity are all frozen; later
 phases cannot reconstruct this authority from selector, live type, or arity.
-The schema also retains the
+The schema additionally freezes only the exact two-operand scalar
+`Array.fill(value)` method form: its array receiver, scalar element storage,
+fill argument, receiver-alias result, ownership, effects, and selector metadata
+are canonical facts. Range overloads, non-scalar elements, live Xi types, and
+selector spelling alone remain unavailable rather than falling through to the
+scalar authority. The schema also retains the
 pointer-free `DIRECT_LOCAL` call-target
 authority to lexical shared slots. Direct SSA callees still resolve only
 through exact identity copies to a closure/function binding. A shared callee
@@ -410,7 +415,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 6d9bcf717d746d
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 9a8737a2d4c8e3deecfbca07c4f07d44c687c6d634c6b0c1d9add61ed30cf366
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 02940d35a66fa77ad3e67a9a7b11322f48c87a7af6a2829760ad514f65985b50
 anchor-sha256: src/runtime/value/xtype.h e0f9c44c615d8a91f501d3952b1804c793abe68e3eba39744c9a000ae00f10cf
-anchor-sha256: src/ir/xi.h c875a3941d18e3d15bb465d053146f7ab074cd57131adf4f5ffb48d1f7292286
+anchor-sha256: src/ir/xi.h 8e0f5423ace832cf972047ef170c526ff3725d6d50384de376094e049f4e617d
 anchor-sha256: src/ir/xi_lower.c eaa8a3371d0efb9972f8774545807e68689df94f4dc2aff9c6f4b8a20255307f
 anchor-sha256: src/app/cli/xcmd_verify.c 5fd6d66c6bc2c4be29cb121963eea94682cb48ea20f42aacdeb52fb2a2285b9b
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
@@ -422,10 +427,10 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 9e978d76154d505d5f9d37d49550062509f59888032f49791e7389e2767f446e
 anchor-sha256: src/plan/format/xr_xsm_encode.c 9b66a6e25f0bd3557a005617fce7ce569a5d00a38475bcdbdd484225392f5bae
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 7300d0e0be5d71e050e6e5682b5c4f9b1a6f4891313e695d6ea68d7e7c5ecc88
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h 51be51e5ed0b60c4b68aa36d531e2eab405edc310ff5ecf1277673d9bfa1cf05
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 6970a9ec48e6794e9f4aa09ed3e090c1822c44d6c281667253da61a85ffd7b5f
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h cbfb671b39e3c250fd801fc90dc9f2f5763ca638d1770e973edb560c2da288ff
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 90528b2d34429cb148751cdac7479de616c18c43280f0248f77070b454e28257
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 09d98a458b352458d8d7ae8f92ff47d6e4ed5d895ebe1a91da5389a95185be0e
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 10c4de98795f21aa7391669aa54bba735b1541f60fe076448c57580f4ca33dcd
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h bbcaf57e24a92de079a0cefa2bdf5c753327b3c737d656cb57fbe2b6a648616c
 anchor-sha256: src/plan/semantic/xr_semantic_string_slice_shape.h d183211f5001d7cc418b0e95c3d2b7576404593ad454b9d4f777d7cfb57f1ff9
@@ -433,6 +438,6 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d190
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h d2dff7451f5eb731348efec9541a2b8cbbfbc879e049d163ed46479352a62a1e
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 0bd5c319832db3c5c1067e5ee364135923a15b1e488b5f9ab4fe5fa7bc8e9310
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h ee7409a02d228f10ed8c812c9b9d7f835106067e37d12bc6ed50c6fa48f93e27
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c e020d51de7aedd6e995f7df1c1d8b46c308ab101cce72740a066f10ac245ddc9
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c ed73a877381a45a229896a77c93648e9796c64e7a2dcdaa0bb1dc46ad9987f08
 anchor-sha256: src/stdlib/xstdlib_metadata.h fea5c1b87e5cf4650f62720540f9728ac71dc475fdab683ba30b6458d3e3902b
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 1d5dd42a85f63f449d8a83c5ec4adbe4ea8b7b4478bd95511fd6d1607e7535bc
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 895bf86f656c0ecb1953e4a5cd889e16f3a434bbf50306a7d9cba32faa14d555
