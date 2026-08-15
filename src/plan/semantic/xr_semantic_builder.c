@@ -14,6 +14,7 @@
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
 #include "xr_semantic_rune_to_uint32_shape.h"
+#include "xr_semantic_rune_is_whitespace_shape.h"
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_verify.h"
 #include "../ownership/xr_ownership_obligation.h"
@@ -2877,6 +2878,16 @@ static bool xi_rune_to_uint32_exact(const XiValue *value) {
            xi_iterator_rune_next_exact(receiver);
 }
 
+static bool xi_rune_is_whitespace_exact(const XiValue *value) {
+    const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
+    return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
+           strcmp((const char *) value->aux, "isWhitespace") == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
+           (value->aux_int & 1) == 0 && receiver->type &&
+           receiver->type->kind == XR_KIND_RUNE && value->type &&
+           value->type->kind == XR_KIND_BOOL && xi_iterator_rune_next_exact(receiver);
+}
+
 static bool xi_string_builder_constructor_candidate(const XiValue *value) {
     if (!value || value->op != XI_CALL_BUILTIN)
         return false;
@@ -3602,6 +3613,12 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         if (!xr_semantic_rune_to_uint32_is_exact(ctx->plan, record, NULL))
             return fail(ctx, "XR_SEM_0019",
                         "rune.toUInt32 authority is not exact");
+    }
+    if (xi_rune_is_whitespace_exact(value)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_RUNE_IS_WHITESPACE;
+        if (!xr_semantic_rune_is_whitespace_is_exact(ctx->plan, record, NULL))
+            return fail(ctx, "XR_SEM_0019",
+                        "rune.isWhitespace authority is not exact");
     }
     if (xi_string_builder_append_rune_exact(value) &&
         semantic_string_builder_append_rune_exact(ctx, record))

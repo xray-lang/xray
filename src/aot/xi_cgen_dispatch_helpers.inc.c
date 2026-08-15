@@ -9366,6 +9366,10 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(
     XrCValueEmissionView rune_to_uint32 = {0};
     if (cg_rune_to_uint32_emission_view(ctx, function, v, &rune_to_uint32))
         return true;
+    XrCValueEmissionView rune_is_whitespace = {0};
+    if (cg_rune_is_whitespace_emission_view(
+            ctx, function, v, &rune_is_whitespace))
+        return true;
     if ((v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) ||
         v->nargs < 1 || !v->aux)
         return false;
@@ -11309,6 +11313,14 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
 
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
+    XrCValueEmissionView rune_is_whitespace = {0};
+    if (cg_rune_is_whitespace_emission_view(
+            ctx, f, v, &rune_is_whitespace)) {
+        fprintf(out, "%s(", rune_is_whitespace.recipe_symbol);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        fprintf(out, ")");
+        return;
+    }
     XrCValueEmissionView rune_to_uint32 = {0};
     if (cg_rune_to_uint32_emission_view(ctx, f, v, &rune_to_uint32)) {
         fprintf(out, "%s(", rune_to_uint32.recipe_symbol);

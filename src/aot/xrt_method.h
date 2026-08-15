@@ -26,6 +26,7 @@
 #include "../shared/xr_arith_core.h"  // int.addOverflows/... (task 153)
 #include "../shared/xr_range_core.h"
 #include "../shared/xr_string_core.h"
+#include "../base/xunicode.h"
 
 /* Builtin method symbol IDs. */
 #include "xrt_method_symbols.h"
@@ -98,8 +99,8 @@ static inline int xrt_rune_is_alnum(uint32_t cp) {
     return xrt_rune_is_letter(cp) || xrt_rune_is_number(cp);
 }
 
-static inline int xrt_rune_is_whitespace(uint32_t cp) {
-    return cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == '\f' || cp == '\v';
+static inline uint8_t xrt_rune_is_whitespace(uint32_t cp) {
+    return (uint8_t) xr_unicode_is_whitespace(cp);
 }
 
 static XrValue xrt_tostring(XrValue val, int slot_hint) {

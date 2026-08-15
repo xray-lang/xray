@@ -340,6 +340,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_HAS_NEXT,
     XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_NEXT,
     XR_TARGET_CALL_CONVENTION_RUNE_TO_UINT32,
+    XR_TARGET_CALL_CONVENTION_RUNE_IS_WHITESPACE,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -385,6 +386,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_ITERATOR_RUNE_HAS_NEXT,
     XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NEXT,
     XR_TARGET_CALL_TARGET_RUNE_TO_UINT32,
+    XR_TARGET_CALL_TARGET_RUNE_IS_WHITESPACE,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetArrayIntrinsicKind {

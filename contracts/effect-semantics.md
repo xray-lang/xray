@@ -9,7 +9,7 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 28 preserves exact `String.runes()` builtin-member identity
+SemanticPlan schema 29 preserves exact `String.runes()` builtin-member identity
 and the sealed `Iterator<rune>.next()` result reached directly from it as frozen
 intrinsics. The latter requires one unique same-function `String.runes()` result;
 an Iterator type or selector alone is not authority. The schema also retains the
@@ -17,6 +17,9 @@ exact `rune.toUInt32()` intrinsic only when its receiver is the unique
 same-function result of that frozen `Iterator<rune>.next()` intrinsic. Its
 result is exact non-null native `u32`; later phases cannot reconstruct the
 identity from selector, live type, or argument count. The schema also retains the
+exact `rune.isWhitespace()` intrinsic only for that same uniquely proven Rune;
+its exact bool result and call contract cannot be reconstructed from selector,
+live type, or arity. The schema also retains the
 pointer-free `DIRECT_LOCAL` call-target
 authority to lexical shared slots. Direct SSA callees still resolve only
 through exact identity copies to a closure/function binding. A shared callee
@@ -407,15 +410,16 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
 anchor-sha256: src/plan/format/xr_xsm_encode.c 9b66a6e25f0bd3557a005617fce7ce569a5d00a38475bcdbdd484225392f5bae
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c e966ddd0ceed50f34c67a14244b58bb2f1bbf52a9fe6422a7433897036df6564
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h f1374f0f8cab7ba650feba010df4d284ea1060574551027d8def01cebdd869a7
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 39d0ac4880a15f8aa0a5d46482a5756074f40021d7b1cf910c91772bd528ad72
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h f04385c2ed2962b891d5773b88ef1e706092744fc2846a40903dde9d8ac7d4b7
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 90528b2d34429cb148751cdac7479de616c18c43280f0248f77070b454e28257
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 1d32b71120e644910593fc021b1f581b3d065f641fb5f9bdc995200f4437bf56
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h e027fff84720e4562f02305aad3bb435128f17ba584522718583b674c344aeb8
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h bbcaf57e24a92de079a0cefa2bdf5c753327b3c737d656cb57fbe2b6a648616c
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d19001054ed1aa8334872e2998949bb515a8a2cf46fc2d682a681c82d6529f9d
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h d2dff7451f5eb731348efec9541a2b8cbbfbc879e049d163ed46479352a62a1e
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 0bd5c319832db3c5c1067e5ee364135923a15b1e488b5f9ab4fe5fa7bc8e9310
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 4ea90beace1b79de150fa8bab3991067981458b3c936ab78f64e1586a146adf6
+anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h ee7409a02d228f10ed8c812c9b9d7f835106067e37d12bc6ed50c6fa48f93e27
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c fe3ec21ba14d5c0dd801659daed28247ded1b2f6e037f3d8589084b7e39481c5
 anchor-sha256: src/stdlib/xstdlib_metadata.h fea5c1b87e5cf4650f62720540f9728ac71dc475fdab683ba30b6458d3e3902b
-anchor-sha256: tests/unit/plan/test_semantic_plan.c f6337ed0b32c55072b9775f100430706096030415b37de4294df447812738f21
+anchor-sha256: tests/unit/plan/test_semantic_plan.c b52425037a1513f26191d080d6e0cfbd998002b835c82dc1f3789d9f3cccd2f9

@@ -18,6 +18,7 @@
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
 #include "xr_semantic_rune_to_uint32_shape.h"
+#include "xr_semantic_rune_is_whitespace_shape.h"
 #include "../ownership/xr_ownership_check.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
@@ -179,7 +180,7 @@ static bool semantic_source_enum_identity_exact(const XrSemanticTypeRecord *type
                type->enum_layout_id == 0 && type->enum_member_count == 0 &&
                type->enum_flags == 0 && type->reserved_enum == 0;
     const char *cursor = type->source_enum_key;
-    static const char prefix[] = "source-enum-v1:schema=28:owner=";
+    static const char prefix[] = "source-enum-v1:schema=29:owner=";
     if (!cursor || strncmp(cursor, prefix, sizeof(prefix) - 1u) != 0 ||
         !verify_id(cursor, type->source_enum_identity) ||
         type->enum_member_count == 0 || type->enum_layout_id == 0 ||
@@ -1602,6 +1603,16 @@ static bool verify_rune_to_uint32(
                   "rune.toUInt32 authority is not exact");
 }
 
+static bool verify_rune_is_whitespace(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    char *error, size_t error_size) {
+    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_RUNE_IS_WHITESPACE)
+        return true;
+    return xr_semantic_rune_is_whitespace_is_exact(plan, operation, NULL) ||
+           report(error, error_size, "XR_SEM_0019",
+                  "rune.isWhitespace authority is not exact");
+}
+
 static bool verify_string_builder_to_string(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     char *error, size_t error_size) {
@@ -2235,6 +2246,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_iterator_rune_next(plan, operation, error, error_size))
             return false;
         if (!verify_rune_to_uint32(plan, operation, error, error_size))
+            return false;
+        if (!verify_rune_is_whitespace(plan, operation, error, error_size))
             return false;
         if (!verify_string_builder_append_rune(plan, operation, error, error_size))
             return false;

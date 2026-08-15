@@ -1,12 +1,12 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 28 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 29 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
 plan the builder emits.
-Schema 28 is a breaking hard cutover: schema 27 and earlier and a plan missing
+Schema 29 is a breaking hard cutover: schema 28 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
@@ -148,9 +148,9 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h b73cf13298de8e686d69d6b72c1d8515c36a4ca45c611369697c3b32eac49138
-anchor-sha256: src/vm/xr_typed_frame.h 1559a01296a671332b90e707dd9f6a7d28efd8bbc8ecf581e91322ae2363a4b7
+anchor-sha256: src/plan/target/xr_target_plan.h acf4bf939db359fbc6bf2166e0825ae529bf8fc5da019cfeeebe7a0579be03ee
+anchor-sha256: src/vm/xr_typed_frame.h 710716394f90920492033e6c85368e445dcf6d052896ecab6f9ebd809f693c9c
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 48cc93e7e1e47f5ea37e56643ae92705b90d44f5c05b823ff99812715c66b968
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c d4321af850042dc177e7861cefc84f147fac14e9de8baab668729c27b1cca6f7
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1
