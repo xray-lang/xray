@@ -13,8 +13,11 @@
 #include "../base/xmalloc.h"
 #include "../plan/target/xr_target_instruction_verify.h"
 #include "../plan/target/xr_target_verify.h"
+#include "abi/xr_runtime_target_authority.h"
 #include "../vm/xr_vm_decoded_cache.h"
 #include <stdio.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 typedef struct XrRuntimeEntryRegistryRow {
@@ -24,6 +27,35 @@ typedef struct XrRuntimeEntryRegistryRow {
     XrRuntimeEntryHandle *handle;
     atomic_uint_least64_t revision;
 } XrRuntimeEntryRegistryRow;
+
+typedef enum XrRuntimeActivationRegistrationRole {
+    XR_RUNTIME_ACTIVATION_PROVIDER = 1,
+    XR_RUNTIME_ACTIVATION_FINALIZER = 2,
+} XrRuntimeActivationRegistrationRole;
+
+typedef struct XrRuntimeActivationRegistration {
+    XrStableId provider_contract;
+    XrStableId operation;
+    uint16_t provider_kind;
+    uint8_t role;
+    uint8_t reserved;
+} XrRuntimeActivationRegistration;
+
+struct XrRuntimeModuleActivation {
+    XrRuntimeEntryRegistry *registry;
+    XrRuntimeGenerationAuthority *authority;
+    XrLoadedModuleGeneration *generation;
+    struct XrRuntimeModuleActivation *next;
+    XrRuntimeDeallocateFinalizer deallocate;
+    void *deallocate_context;
+    size_t allocation_size;
+    size_t allocation_alignment;
+    uint32_t registration_count;
+    uint32_t provider_count;
+    uint32_t finalizer_count;
+    bool published;
+    XrRuntimeActivationRegistration registrations[];
+};
 
 typedef struct XrRuntimeDynamicEntrySlot {
     xr_mutex_t gate;
@@ -56,6 +88,13 @@ struct XrRuntimeEntryRegistry {
     uint32_t count;
     uint32_t active_count;
     uint32_t capacity;
+    XrRuntimeActivationBudget activation_budget;
+    XrRuntimeProviderBindings provider_bindings;
+    XrRuntimeModuleActivation *activations;
+    uint32_t active_modules;
+    uint32_t active_provider_registrations;
+    uint32_t active_finalizer_registrations;
+    bool activation_configured;
     atomic_uint_least64_t mutations;
 };
 
@@ -288,9 +327,11 @@ bool xr_runtime_entry_registry_destroy(XrRuntimeEntryRegistry **registry,
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "entry registry is missing");
     XrRuntimeEntryRegistry *owned = *registry;
-    if (owned->active_count != 0)
+    if (owned->active_count != 0 || owned->active_modules != 0 ||
+        owned->active_provider_registrations != 0 ||
+        owned->active_finalizer_registrations != 0 || owned->activations)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
-                    "entry registry still publishes handles");
+                    "activation registry still publishes module authority");
     for (uint32_t i = 0; i < owned->count; i++)
         xr_free(owned->rows[i]);
     xr_free(owned->rows);
@@ -298,6 +339,43 @@ bool xr_runtime_entry_registry_destroy(XrRuntimeEntryRegistry **registry,
     memset(owned, 0, sizeof(*owned));
     xr_free(owned);
     *registry = NULL;
+    return true;
+}
+
+bool xr_runtime_activation_registry_configure(
+    XrRuntimeGenerationAuthority *authority,
+    const XrRuntimeActivationBudget *budget,
+    const XrRuntimeProviderBindings *bindings, char *diagnostic,
+    size_t diagnostic_size) {
+    if (!authority || !authority->entry_registry || !budget || !bindings ||
+        budget->max_active_entries == 0 ||
+        budget->max_active_entries > XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES ||
+        budget->max_active_provider_registrations == 0 ||
+        budget->max_active_provider_registrations >
+            XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES ||
+        budget->max_active_finalizer_registrations == 0 ||
+        budget->max_active_finalizer_registrations >
+            XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES ||
+        budget->reserved != 0)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "activation registry requires a complete bounded configuration");
+    XrRuntimeEntryRegistry *registry = authority->entry_registry;
+    xr_mutex_lock(&registry->mutation_gate);
+    xr_mutex_lock(&authority->gate);
+    bool configurable = !registry->activation_configured &&
+                        registry->active_count == 0 &&
+                        registry->active_modules == 0 &&
+                        authority->live_generations == 0;
+    if (configurable) {
+        registry->activation_budget = *budget;
+        registry->provider_bindings = *bindings;
+        registry->activation_configured = true;
+    }
+    xr_mutex_unlock(&authority->gate);
+    xr_mutex_unlock(&registry->mutation_gate);
+    if (!configurable)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "activation registry configuration is already frozen");
     return true;
 }
 
@@ -573,22 +651,127 @@ static void publication_items_release(
     xr_free(items);
 }
 
-bool xr_runtime_entry_registry_publish_module(
+static const XrTargetProviderContract *activation_provider_contract(
+    const XrRuntimeTargetAuthority *runtime, uint16_t provider_kind) {
+    if (!runtime)
+        return NULL;
+    for (size_t i = 0; i < runtime->provider_count; i++)
+        if (runtime->providers[i].provider_kind == provider_kind)
+            return &runtime->providers[i];
+    return NULL;
+}
+
+static bool activation_operation_role(
+    const XrTargetProviderOperationContract *operation,
+    const XrRuntimeProviderBindings *bindings, uint8_t *role) {
+    if (!operation || !bindings || !role)
+        return false;
+    if (operation->effect_flags == XR_TARGET_PROVIDER_EFFECT_ALLOCATES &&
+        operation->lifetime_flags == XR_TARGET_PROVIDER_LIFETIME_RETURNS_OWNED &&
+        operation->failure_flags == 0) {
+        *role = XR_RUNTIME_ACTIVATION_PROVIDER;
+        return bindings->allocate != NULL;
+    }
+    if (operation->effect_flags == XR_TARGET_PROVIDER_EFFECT_DEALLOCATES &&
+        operation->lifetime_flags == XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED &&
+        operation->failure_flags == 0) {
+        *role = XR_RUNTIME_ACTIVATION_FINALIZER;
+        return bindings->deallocate != NULL;
+    }
+    if (operation->effect_flags == XR_TARGET_PROVIDER_EFFECT_PANICS &&
+        operation->lifetime_flags == XR_TARGET_PROVIDER_LIFETIME_BORROWS &&
+        operation->failure_flags == XR_TARGET_PROVIDER_FAILURE_NO_RETURN) {
+        *role = XR_RUNTIME_ACTIVATION_PROVIDER;
+        return bindings->panic != NULL;
+    }
+    return false;
+}
+
+static bool activation_requirements_build(
+    const XrTargetPlan *plan, const XrRuntimeProviderBindings *bindings,
+    XrRuntimeActivationRegistration *requirements, uint32_t capacity,
+    uint32_t *requirement_count, uint32_t *provider_count,
+    uint32_t *finalizer_count) {
+    if (requirement_count)
+        *requirement_count = 0;
+    if (provider_count)
+        *provider_count = 0;
+    if (finalizer_count)
+        *finalizer_count = 0;
+    if (!plan || !bindings || !requirements || !requirement_count ||
+        !provider_count || !finalizer_count)
+        return false;
+    XrRuntimeTargetAuthority runtime;
+    if (xr_runtime_target_authority_native_hosted(&runtime) !=
+        XR_RUNTIME_ABI_OK)
+        return false;
+    uint32_t capability_count = 0;
+    const XrTargetCapabilityRecord *capabilities =
+        xr_target_plan_capabilities(plan, &capability_count);
+    for (uint32_t i = 0; i < capability_count; i++) {
+        const XrTargetCapabilityRecord *capability = &capabilities[i];
+        const XrTargetProviderContract *contract =
+            activation_provider_contract(&runtime, capability->provider);
+        if (!contract || contract->provider_kind != capability->capability)
+            return false;
+        for (uint16_t operation_index = 0;
+             operation_index < contract->operation_count; operation_index++) {
+            if (*requirement_count >= capacity)
+                return false;
+            const XrTargetProviderOperationContract *operation =
+                &contract->operations[operation_index];
+            uint8_t role = 0;
+            if (!activation_operation_role(operation, bindings, &role))
+                return false;
+            XrRuntimeActivationRegistration *registration =
+                &requirements[*requirement_count];
+            *registration = (XrRuntimeActivationRegistration) {
+                .provider_contract = contract->contract_id,
+                .operation = operation->stable_id,
+                .provider_kind = contract->provider_kind,
+                .role = role,
+            };
+            (*requirement_count)++;
+            if (role == XR_RUNTIME_ACTIVATION_FINALIZER)
+                (*finalizer_count)++;
+            else
+                (*provider_count)++;
+        }
+    }
+    return *provider_count != 0 && *finalizer_count != 0;
+}
+
+static void activation_dispose_unpublished(
+    XrRuntimeModuleActivation *activation) {
+    if (!activation)
+        return;
+    XrRuntimeDeallocateFinalizer deallocate = activation->deallocate;
+    void *context = activation->deallocate_context;
+    size_t size = activation->allocation_size;
+    size_t alignment = activation->allocation_alignment;
+    memset(activation, 0, size);
+    deallocate(context, activation, size, alignment);
+}
+
+bool xr_runtime_activation_publish_module(
     XrRuntimeGenerationAuthority *authority,
     XrLoadedModuleGeneration *generation, const XrTargetPlan *plan,
     XrRuntimeEntryHandle *const *function_handles,
-    uint32_t function_handle_count, char *diagnostic,
+    uint32_t function_handle_count,
+    XrRuntimeModuleActivation **activation, char *diagnostic,
     size_t diagnostic_size) {
+    if (activation)
+        *activation = NULL;
     const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(plan);
     char verified[512] = {0};
     size_t raw_export_count = semantic
                                   ? xr_semantic_plan_source_export_count(
                                         semantic)
                                   : 0;
-    if (!authority || !authority->entry_registry || !generation || !plan ||
-        generation->authority != authority || generation->plan != plan ||
-        !semantic || raw_export_count > XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES ||
-        raw_export_count > UINT32_MAX ||
+    if (!activation || !authority || !authority->entry_registry ||
+        !generation || !plan || generation->authority != authority ||
+        generation->plan != plan || !semantic ||
+        raw_export_count > XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES ||
         (raw_export_count && !function_handles) ||
         !xr_target_plan_is_verified(plan) ||
         !xr_target_plan_fingerprint_is_intact(plan) ||
@@ -596,11 +779,23 @@ bool xr_runtime_entry_registry_publish_module(
         !xr_target_instruction_program_verify(plan, verified,
                                               sizeof(verified)))
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
-                    "module entry publication authority is incomplete");
+                    "module activation publication authority is incomplete");
     uint32_t export_count = (uint32_t) raw_export_count;
     XrFingerprint semantic_fingerprint =
         xr_semantic_plan_fingerprint(semantic);
     XrFingerprint plan_fingerprint = xr_target_plan_fingerprint(plan);
+
+    XrRuntimeEntryRegistry *registry = authority->entry_registry;
+    XrRuntimeProviderBindings bindings;
+    XrRuntimeActivationBudget activation_budget;
+    xr_mutex_lock(&registry->mutation_gate);
+    bool configured = registry->activation_configured;
+    bindings = registry->provider_bindings;
+    activation_budget = registry->activation_budget;
+    xr_mutex_unlock(&registry->mutation_gate);
+    if (!configured)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "module activation provider bindings are not configured");
 
     xr_mutex_lock(&authority->gate);
     bool active = generation->state == XR_MODULE_GENERATION_ACTIVE &&
@@ -609,16 +804,69 @@ bool xr_runtime_entry_registry_publish_module(
     xr_mutex_unlock(&authority->gate);
     if (!active)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
-                    "module entry publication requires a healthy active generation");
-    if (!export_count)
-        return true;
+                    "module activation publication requires a healthy active generation");
+
+    enum {
+        XR_RUNTIME_ACTIVATION_MAX_REGISTRATIONS =
+            XR_RUNTIME_ABI_MAX_PROVIDERS *
+            XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS
+    };
+    XrRuntimeActivationRegistration
+        requirements[XR_RUNTIME_ACTIVATION_MAX_REGISTRATIONS];
+    uint32_t requirement_count = 0;
+    uint32_t provider_count = 0;
+    uint32_t finalizer_count = 0;
+    if (!activation_requirements_build(
+            plan, &bindings, requirements,
+            XR_RUNTIME_ACTIVATION_MAX_REGISTRATIONS, &requirement_count,
+            &provider_count, &finalizer_count))
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "module activation lacks an exact provider or finalizer binding");
+    if (requirement_count >
+        (SIZE_MAX - offsetof(XrRuntimeModuleActivation, registrations)) /
+            sizeof(requirements[0]))
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "module activation registration size overflows");
+    size_t activation_size =
+        offsetof(XrRuntimeModuleActivation, registrations) +
+        (size_t) requirement_count * sizeof(requirements[0]);
+    size_t activation_alignment = _Alignof(XrRuntimeModuleActivation);
+    void *activation_storage = bindings.allocate(
+        bindings.allocate_context, activation_size, activation_alignment);
+    if (!activation_storage)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "module activation provider allocation failed");
+    if ((uintptr_t) activation_storage % activation_alignment != 0) {
+        bindings.deallocate(bindings.deallocate_context, activation_storage,
+                            activation_size, activation_alignment);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "module activation provider returned misaligned storage");
+    }
+    XrRuntimeModuleActivation *created =
+        (XrRuntimeModuleActivation *) activation_storage;
+    memset(created, 0, activation_size);
+    created->registry = registry;
+    created->authority = authority;
+    created->generation = generation;
+    created->deallocate = bindings.deallocate;
+    created->deallocate_context = bindings.deallocate_context;
+    created->allocation_size = activation_size;
+    created->allocation_alignment = activation_alignment;
+    created->registration_count = requirement_count;
+    created->provider_count = provider_count;
+    created->finalizer_count = finalizer_count;
+    memcpy(created->registrations, requirements,
+           (size_t) requirement_count * sizeof(requirements[0]));
 
     XrRuntimeEntryPublicationItem *items =
-        (XrRuntimeEntryPublicationItem *) xr_calloc(export_count,
-                                                    sizeof(*items));
-    if (!items)
+        export_count ? (XrRuntimeEntryPublicationItem *) xr_calloc(
+                           export_count, sizeof(*items))
+                     : NULL;
+    if (export_count && !items) {
+        activation_dispose_unpublished(created);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
-                    "module entry publication allocation failed");
+                    "module activation entry allocation failed");
+    }
     for (uint32_t i = 0; i < export_count; i++) {
         const XrSemanticSourceExportRecord *export_record =
             xr_semantic_plan_source_export(semantic, i);
@@ -638,6 +886,7 @@ bool xr_runtime_entry_registry_publish_module(
                                  semantic_fingerprint, plan_fingerprint,
                                  &items[i].was_frozen)) {
             publication_items_release(items, export_count);
+            activation_dispose_unpublished(created);
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
                         "module entry binding does not match its verified export");
         }
@@ -647,6 +896,7 @@ bool xr_runtime_entry_registry_publish_module(
                 1, sizeof(*items[i].allocated_row));
         if (!items[i].allocated_row) {
             publication_items_release(items, export_count);
+            activation_dispose_unpublished(created);
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
                         "module entry publication allocation failed");
         }
@@ -658,16 +908,20 @@ bool xr_runtime_entry_registry_publish_module(
                 items[i].handle, &items[i].retained, diagnostic,
                 diagnostic_size)) {
             publication_items_release(items, export_count);
+            activation_dispose_unpublished(created);
             return false;
         }
     }
 
-    XrRuntimeEntryRegistry *registry = authority->entry_registry;
     xr_mutex_lock(&registry->mutation_gate);
     xr_mutex_lock(&authority->gate);
     active = generation->state == XR_MODULE_GENERATION_ACTIVE &&
              !generation->poisoned && !generation->rollback_requested &&
-             generation->plan == plan;
+             generation->plan == plan && registry->activation_configured;
+    for (XrRuntimeModuleActivation *cursor = registry->activations;
+         active && cursor; cursor = cursor->next)
+        if (cursor->generation == generation)
+            active = false;
     uint32_t new_rows = 0;
     for (uint32_t i = 0; active && i < export_count; i++) {
         XrRuntimeEntryRegistryRow *candidate = items[i].allocated_row;
@@ -680,6 +934,20 @@ bool xr_runtime_entry_registry_publish_module(
             new_rows++;
     }
     bool reserved = active &&
+                    registry->active_count <=
+                        activation_budget.max_active_entries &&
+                    export_count <= activation_budget.max_active_entries -
+                                        registry->active_count &&
+                    registry->active_provider_registrations <=
+                        activation_budget.max_active_provider_registrations &&
+                    provider_count <=
+                        activation_budget.max_active_provider_registrations -
+                            registry->active_provider_registrations &&
+                    registry->active_finalizer_registrations <=
+                        activation_budget.max_active_finalizer_registrations &&
+                    finalizer_count <=
+                        activation_budget.max_active_finalizer_registrations -
+                            registry->active_finalizer_registrations &&
                     registry->count <= XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES &&
                     new_rows <= XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES -
                                     registry->count &&
@@ -698,6 +966,12 @@ bool xr_runtime_entry_registry_publish_module(
             atomic_fetch_add_explicit(&row->revision, 1u,
                                       memory_order_release);
         }
+        created->published = true;
+        created->next = registry->activations;
+        registry->activations = created;
+        registry->active_modules++;
+        registry->active_provider_registrations += provider_count;
+        registry->active_finalizer_registrations += finalizer_count;
         atomic_fetch_add_explicit(&registry->mutations, 1u,
                                   memory_order_relaxed);
     }
@@ -705,14 +979,106 @@ bool xr_runtime_entry_registry_publish_module(
     xr_mutex_unlock(&registry->mutation_gate);
     if (!reserved) {
         publication_items_release(items, export_count);
+        activation_dispose_unpublished(created);
         return fail(diagnostic, diagnostic_size,
                     active ? "XR_EXEC_5003" : "XR_EXEC_5005",
-                    active ? "module entry publication budget is exhausted"
-                           : "module entry publication conflicts with an active export");
+                    active ? "module activation publication budget is exhausted"
+                           : "module activation publication conflicts with active authority");
     }
     for (uint32_t i = 0; i < export_count; i++)
         xr_free(items[i].allocated_row);
     xr_free(items);
+    *activation = created;
+    return true;
+}
+
+bool xr_runtime_activation_provider_acquire(
+    XrRuntimeModuleActivation *activation, uint16_t provider_kind,
+    char *diagnostic, size_t diagnostic_size) {
+    if (!activation || !activation->generation ||
+        provider_kind <= XR_TARGET_PROVIDER_INVALID ||
+        provider_kind >= XR_TARGET_PROVIDER_KIND_COUNT)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "activation provider acquisition is incomplete");
+    if (!xr_module_generation_pin_acquire(
+            activation->generation, XR_MODULE_GENERATION_CALLBACK,
+            diagnostic, diagnostic_size))
+        return false;
+    XrRuntimeEntryRegistry *registry = activation->registry;
+    xr_mutex_lock(&registry->mutation_gate);
+    bool published = activation->published;
+    bool present = false;
+    for (uint32_t i = 0; published && i < activation->registration_count; i++)
+        if (activation->registrations[i].role ==
+                XR_RUNTIME_ACTIVATION_PROVIDER &&
+            activation->registrations[i].provider_kind == provider_kind) {
+            present = true;
+            break;
+        }
+    xr_mutex_unlock(&registry->mutation_gate);
+    if (present)
+        return true;
+    char nested[256] = {0};
+    xr_module_generation_pin_release(
+        activation->generation, XR_MODULE_GENERATION_CALLBACK,
+        nested, sizeof(nested));
+    return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                "activation does not publish the required provider");
+}
+
+bool xr_runtime_activation_provider_release(
+    XrRuntimeModuleActivation *activation, char *diagnostic,
+    size_t diagnostic_size) {
+    if (!activation || !activation->generation)
+        return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
+                    "activation provider release is unmatched");
+    return xr_module_generation_pin_release(
+        activation->generation, XR_MODULE_GENERATION_CALLBACK,
+        diagnostic, diagnostic_size);
+}
+
+bool xr_runtime_activation_unpublish(
+    XrRuntimeModuleActivation **activation, char *diagnostic,
+    size_t diagnostic_size) {
+    if (!activation || !*activation)
+        return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
+                    "module activation owner is missing");
+    XrRuntimeModuleActivation *owned = *activation;
+    XrRuntimeEntryRegistry *registry = owned->registry;
+    XrRuntimeGenerationAuthority *authority = owned->authority;
+    if (!registry || !authority || !owned->generation)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "module activation identity is incomplete");
+    xr_mutex_lock(&registry->mutation_gate);
+    xr_mutex_lock(&authority->gate);
+    XrRuntimeModuleActivation **cursor = &registry->activations;
+    while (*cursor && *cursor != owned)
+        cursor = &(*cursor)->next;
+    bool removable = *cursor == owned && owned->published &&
+                     owned->generation->state == XR_MODULE_GENERATION_RETIRED &&
+                     owned->generation->total_pins == 0 &&
+                     registry->active_modules != 0 &&
+                     registry->active_provider_registrations >=
+                         owned->provider_count &&
+                     registry->active_finalizer_registrations >=
+                         owned->finalizer_count;
+    if (removable) {
+        *cursor = owned->next;
+        registry->active_modules--;
+        registry->active_provider_registrations -= owned->provider_count;
+        registry->active_finalizer_registrations -= owned->finalizer_count;
+        owned->published = false;
+        owned->next = NULL;
+        atomic_fetch_add_explicit(&registry->mutations, 1u,
+                                  memory_order_relaxed);
+    }
+    xr_mutex_unlock(&authority->gate);
+    xr_mutex_unlock(&registry->mutation_gate);
+    if (!removable)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
+                    "module activation is still visible or in use");
+    *activation = NULL;
+    activation_dispose_unpublished(owned);
     return true;
 }
 
@@ -962,9 +1328,15 @@ bool xr_runtime_entry_registry_stats(
     XrRuntimeEntryRegistryStats *stats) {
     if (!authority || !authority->entry_registry || !stats)
         return false;
+    memset(stats, 0, sizeof(*stats));
     xr_mutex_lock(&authority->gate);
     stats->allocated_rows = authority->entry_registry->count;
     stats->active_rows = authority->entry_registry->active_count;
+    stats->active_modules = authority->entry_registry->active_modules;
+    stats->active_provider_registrations =
+        authority->entry_registry->active_provider_registrations;
+    stats->active_finalizer_registrations =
+        authority->entry_registry->active_finalizer_registrations;
     stats->mutations = atomic_load_explicit(
         &authority->entry_registry->mutations, memory_order_relaxed);
     xr_mutex_unlock(&authority->gate);

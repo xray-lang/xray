@@ -21,12 +21,13 @@
  *   verified rows are scalar i64 and its generation reached ACTIVE. Every other
  *   export fails closed with a stable diagnostic instead of executing.
  *
- *   Exact scalar i64 source exports are registered as one bounded activation
+ *   Exact scalar i64 source exports and their exact plan-required provider and
+ *   deallocator-finalizer operations are registered as one bounded activation
  *   transaction after the complete plan and instruction program verify. The
- *   module becomes visible only after every entry binding is committed; a
- *   duplicate key or failed binding rolls the generation back. Other export
- *   representations remain unsupported and fail activation rather than
- *   reaching lookup or execution through a fallback.
+ *   module becomes visible only after every registration is committed; a
+ *   duplicate key, missing binding, or exhausted budget rolls the whole
+ *   generation back. Other export representations remain unsupported and fail
+ *   activation rather than reaching lookup or execution through a fallback.
  */
 
 #ifndef XRAY_RUNTIME_API_H
@@ -42,11 +43,45 @@ typedef struct XrRuntime XrRuntime;
 typedef struct XrModule XrModule;
 typedef struct XrExport XrExport;
 
-/*
- * There is no separate facade schema constant. The budget this runtime accepts
- * is the generation budget, and its own schema version is the one the
- * generation authority validates, so nothing here negotiates a second one.
- */
+#define XR_RUNTIME_CONFIG_SCHEMA_VERSION UINT32_C(1)
+
+typedef void *(*XrRuntimeAllocateProvider)(void *context, size_t size,
+                                           size_t alignment);
+/* This is the exact DEAllocates/Consumes-Owned operation from the verified
+ * allocator provider contract. It is the module activation finalizer in this
+ * facade; it is not an object-layout destructor. */
+typedef void (*XrRuntimeDeallocateFinalizer)(void *context, void *allocation,
+                                             size_t size, size_t alignment);
+/* The hosted panic contract is NO_RETURN. Returning from this callback is a
+ * host contract violation; normal activation and scalar execution do not call
+ * it speculatively. */
+typedef void (*XrRuntimePanicProvider)(void *context, const char *message,
+                                      size_t message_size);
+
+typedef struct XrRuntimeProviderBindings {
+    XrRuntimeAllocateProvider allocate;
+    void *allocate_context;
+    XrRuntimeDeallocateFinalizer deallocate;
+    void *deallocate_context;
+    XrRuntimePanicProvider panic;
+    void *panic_context;
+} XrRuntimeProviderBindings;
+
+typedef struct XrRuntimeActivationBudget {
+    uint32_t max_active_entries;
+    uint32_t max_active_provider_registrations;
+    uint32_t max_active_finalizer_registrations;
+    uint32_t reserved;
+} XrRuntimeActivationBudget;
+
+typedef struct XrRuntimeConfig {
+    /* Exact XR_RUNTIME_CONFIG_SCHEMA_VERSION; reserved fields must be zero. */
+    uint32_t schema_version;
+    uint32_t reserved;
+    XrRuntimeGenerationBudget generation;
+    XrRuntimeActivationBudget activation;
+    XrRuntimeProviderBindings providers;
+} XrRuntimeConfig;
 
 /*
  * The only representation the installed executor owns. A caller states the
@@ -65,11 +100,14 @@ typedef struct XrExportValue {
 } XrExportValue;
 
 /*
- * Creating a runtime creates the generation authority behind it, so the budget
- * is the same hard budget that authority checks. Destroying a runtime requires
- * every module it loaded to be unloaded first.
+ * Creating a runtime creates the generation authority behind it and installs
+ * an explicit process-local provider binding set. The bindings are candidates,
+ * not published module authority: a verified plan must require their exact
+ * provider contracts before one activation transaction can register them.
+ * There is no implicit native fallback. Destroying a runtime requires every
+ * module it loaded to be unloaded first.
  */
-XRAY_API bool xr_runtime_create(const XrRuntimeGenerationBudget *budget,
+XRAY_API bool xr_runtime_create(const XrRuntimeConfig *config,
                                 XrRuntime **runtime, char *diagnostic,
                                 size_t diagnostic_size);
 XRAY_API bool xr_runtime_destroy(XrRuntime **runtime, char *diagnostic,
@@ -80,9 +118,10 @@ XRAY_API bool xr_runtime_destroy(XrRuntime **runtime, char *diagnostic,
  * authority the target artifact must bind, so neither is optional and neither
  * is inferred from the other. Success means the generation reached ACTIVE
  * under the installed executor; a plan the executor does not own is rejected
- * here rather than at call time. Every exact source export is registered as
- * one atomic batch before the module handle is published, and no partially
- * loaded module or generation remains on any failure.
+ * here rather than at call time. Every exact source export and plan-required
+ * provider/deallocator-finalizer operation is registered as one atomic batch
+ * before the module handle is published, and no partially loaded module or
+ * generation remains on any failure.
  */
 XRAY_API bool xr_module_load_target_plan(
     XrRuntime *runtime, const uint8_t *semantic_artifact_bytes,

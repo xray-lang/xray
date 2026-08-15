@@ -8,7 +8,10 @@
 
 #include "xray_runtime_api.h"
 #include "runtime_scalar_artifacts.h"
+#include "../../../src/base/xmalloc.h"
 #include "../../../src/os/os_thread.h"
+#include <stdatomic.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -34,13 +37,83 @@ static XrRuntimeGenerationBudget make_budget(void) {
     return budget;
 }
 
+typedef struct ActivationProviderContext {
+    atomic_uint_least32_t allocations;
+    atomic_uint_least32_t deallocations;
+    atomic_uint_least32_t live_allocations;
+} ActivationProviderContext;
+
+static void *native_allocate(void *opaque, size_t size, size_t alignment) {
+    ActivationProviderContext *context =
+        (ActivationProviderContext *) opaque;
+    if (!size || alignment > _Alignof(void *))
+        return NULL;
+    void *allocation = xr_malloc(size);
+    if (allocation && context) {
+        atomic_fetch_add_explicit(&context->allocations, 1,
+                                  memory_order_relaxed);
+        atomic_fetch_add_explicit(&context->live_allocations, 1,
+                                  memory_order_relaxed);
+    }
+    return allocation;
+}
+
+static void native_deallocate(void *opaque, void *allocation, size_t size,
+                              size_t alignment) {
+    ActivationProviderContext *context =
+        (ActivationProviderContext *) opaque;
+    (void) size;
+    (void) alignment;
+    if (allocation && context) {
+        atomic_fetch_add_explicit(&context->deallocations, 1,
+                                  memory_order_relaxed);
+        atomic_fetch_sub_explicit(&context->live_allocations, 1,
+                                  memory_order_relaxed);
+    }
+    xr_free(allocation);
+}
+
+static void native_panic(void *context, const char *message,
+                         size_t message_size) {
+    (void) context;
+    (void) message;
+    (void) message_size;
+    abort();
+}
+
+static XrRuntimeConfig make_config(void) {
+    XrRuntimeConfig config = {
+        .schema_version = XR_RUNTIME_CONFIG_SCHEMA_VERSION,
+        .generation = make_budget(),
+        .activation = {
+            .max_active_entries = 8,
+            .max_active_provider_registrations = 8,
+            .max_active_finalizer_registrations = 4,
+        },
+        .providers = {
+            .allocate = native_allocate,
+            .deallocate = native_deallocate,
+            .panic = native_panic,
+        },
+    };
+    return config;
+}
+
+static XrRuntimeConfig make_tracked_config(
+    ActivationProviderContext *context) {
+    XrRuntimeConfig config = make_config();
+    config.providers.allocate_context = context;
+    config.providers.deallocate_context = context;
+    return config;
+}
+
 /* A zero budget is not a default: the facade forwards it to the same checker
  * the generation authority uses, so an incomplete budget is refused rather
  * than filled in. */
 static void test_runtime_requires_a_complete_budget(void) {
     char diagnostic[512] = {0};
     XrRuntime *runtime = (XrRuntime *) (uintptr_t) 1;
-    XrRuntimeGenerationBudget empty;
+    XrRuntimeConfig empty;
     memset(&empty, 0, sizeof(empty));
     CHECK(!xr_runtime_create(&empty, &runtime, diagnostic, sizeof(diagnostic)),
           "zero budget accepted");
@@ -48,9 +121,24 @@ static void test_runtime_requires_a_complete_budget(void) {
     CHECK(strstr(diagnostic, "XR_EXEC_5003") != NULL,
           "zero budget diagnostic code");
 
-    XrRuntimeGenerationBudget budget = make_budget();
+    XrRuntimeConfig config = make_config();
+    config.activation.max_active_provider_registrations = UINT32_C(65537);
+    CHECK(!xr_runtime_create(&config, &runtime, diagnostic,
+                             sizeof(diagnostic)),
+          "runtime accepted an unbounded provider registration budget");
+    CHECK(runtime == NULL,
+          "rejected provider budget left a runtime handle");
+    config = make_config();
+    config.activation.max_active_finalizer_registrations = UINT32_C(65537);
+    CHECK(!xr_runtime_create(&config, &runtime, diagnostic,
+                             sizeof(diagnostic)),
+          "runtime accepted an unbounded finalizer registration budget");
+    CHECK(runtime == NULL,
+          "rejected finalizer budget left a runtime handle");
+
+    config = make_config();
     runtime = (XrRuntime *) (uintptr_t) 1;
-    CHECK(!xr_runtime_create(&budget, NULL, diagnostic, sizeof(diagnostic)),
+    CHECK(!xr_runtime_create(&config, NULL, diagnostic, sizeof(diagnostic)),
           "create accepted a missing out parameter");
     CHECK(!xr_runtime_destroy(NULL, diagnostic, sizeof(diagnostic)),
           "destroy accepted a missing runtime");
@@ -63,9 +151,9 @@ static void test_runtime_requires_a_complete_budget(void) {
  * from an empty image. */
 static void test_load_requires_both_exact_artifacts(void) {
     char diagnostic[512] = {0};
-    XrRuntimeGenerationBudget budget = make_budget();
+    XrRuntimeConfig config = make_config();
     XrRuntime *runtime = NULL;
-    CHECK(xr_runtime_create(&budget, &runtime, diagnostic, sizeof(diagnostic)),
+    CHECK(xr_runtime_create(&config, &runtime, diagnostic, sizeof(diagnostic)),
           "runtime create");
     if (!runtime)
         return;
@@ -117,10 +205,10 @@ static void check_export_result(XrModule *module, int64_t expected,
  * unload, and destroy using only the runtime archive. */
 static void test_loaded_module_lifecycle_and_export_boundary(void) {
     char diagnostic[512] = {0};
-    XrRuntimeGenerationBudget budget = make_budget();
+    XrRuntimeConfig config = make_config();
     XrRuntime *runtime = NULL;
     XrModule *module = NULL;
-    CHECK(xr_runtime_create(&budget, &runtime, diagnostic, sizeof(diagnostic)),
+    CHECK(xr_runtime_create(&config, &runtime, diagnostic, sizeof(diagnostic)),
           "runtime create");
     if (!runtime)
         return;
@@ -196,11 +284,11 @@ static void test_loaded_module_lifecycle_and_export_boundary(void) {
  * callable, and the same key can be published again only after unload. */
 static void test_duplicate_publication_rolls_back(void) {
     char diagnostic[512] = {0};
-    XrRuntimeGenerationBudget budget = make_budget();
+    XrRuntimeConfig config = make_config();
     XrRuntime *runtime = NULL;
     XrModule *first = NULL;
     XrModule *duplicate = (XrModule *) (uintptr_t) 1;
-    CHECK(xr_runtime_create(&budget, &runtime, diagnostic, sizeof(diagnostic)),
+    CHECK(xr_runtime_create(&config, &runtime, diagnostic, sizeof(diagnostic)),
           "duplicate runtime create");
     uint8_t corrupted[sizeof(xr_runtime_export_xtp)];
     memcpy(corrupted, xr_runtime_export_xtp, sizeof(corrupted));
@@ -258,11 +346,12 @@ static void *load_exported_module(void *opaque) {
 
 static void test_concurrent_duplicate_publication_is_unique(void) {
     char diagnostic[512] = {0};
-    XrRuntimeGenerationBudget budget = make_budget();
+    ActivationProviderContext provider_context = {0};
+    XrRuntimeConfig config = make_tracked_config(&provider_context);
     XrRuntime *runtime = NULL;
     ConcurrentLoadContext contexts[2] = {0};
     xr_thread_t threads[2] = {0};
-    CHECK(xr_runtime_create(&budget, &runtime, diagnostic, sizeof(diagnostic)),
+    CHECK(xr_runtime_create(&config, &runtime, diagnostic, sizeof(diagnostic)),
           "concurrent runtime create");
     for (uint32_t i = 0; i < 2; i++) {
         contexts[i].runtime = runtime;
@@ -277,6 +366,13 @@ static void test_concurrent_duplicate_publication_is_unique(void) {
         loaded += contexts[i].loaded ? 1u : 0u;
     }
     CHECK(loaded == 1, "concurrent duplicate publication count");
+    CHECK(atomic_load_explicit(&provider_context.allocations,
+                               memory_order_relaxed) == 2 &&
+              atomic_load_explicit(&provider_context.deallocations,
+                                   memory_order_relaxed) == 1 &&
+              atomic_load_explicit(&provider_context.live_allocations,
+                                   memory_order_relaxed) == 1,
+          "concurrent losing activation did not roll back exactly once");
     for (uint32_t i = 0; i < 2; i++) {
         if (!contexts[i].module)
             continue;
@@ -286,6 +382,11 @@ static void test_concurrent_duplicate_publication_is_unique(void) {
                                sizeof(diagnostic)),
               "concurrent winner unload");
     }
+    CHECK(atomic_load_explicit(&provider_context.deallocations,
+                               memory_order_relaxed) == 2 &&
+              atomic_load_explicit(&provider_context.live_allocations,
+                                   memory_order_relaxed) == 0,
+          "concurrent winning activation finalizer did not run exactly once");
     CHECK(xr_runtime_destroy(&runtime, diagnostic, sizeof(diagnostic)),
           "concurrent runtime destroy");
 }
@@ -294,11 +395,11 @@ static void test_concurrent_duplicate_publication_is_unique(void) {
  * live modules by count rather than by the last handle it saw. */
 static void test_two_modules_load_and_unload_out_of_order(void) {
     char diagnostic[512] = {0};
-    XrRuntimeGenerationBudget budget = make_budget();
+    XrRuntimeConfig config = make_config();
     XrRuntime *runtime = NULL;
     XrModule *first = NULL;
     XrModule *second = NULL;
-    CHECK(xr_runtime_create(&budget, &runtime, diagnostic, sizeof(diagnostic)),
+    CHECK(xr_runtime_create(&config, &runtime, diagnostic, sizeof(diagnostic)),
           "runtime create");
     if (!runtime)
         return;
@@ -338,6 +439,120 @@ static void test_two_modules_load_and_unload_out_of_order(void) {
           "runtime destroy after both unloads");
 }
 
+static void test_verification_precedes_every_activation_callback(void) {
+    char diagnostic[512] = {0};
+    ActivationProviderContext context = {0};
+    XrRuntimeConfig config = make_tracked_config(&context);
+    XrRuntime *runtime = NULL;
+    XrModule *module = (XrModule *) (uintptr_t) 1;
+    CHECK(xr_runtime_create(&config, &runtime, diagnostic,
+                            sizeof(diagnostic)),
+          "verification-order runtime create");
+    uint8_t corrupted[sizeof(xr_runtime_export_xtp)];
+    memcpy(corrupted, xr_runtime_export_xtp, sizeof(corrupted));
+    corrupted[sizeof(corrupted) - 1u] ^= 1u;
+    CHECK(!xr_module_load_target_plan(
+              runtime, xr_runtime_export_xsm,
+              sizeof(xr_runtime_export_xsm), corrupted,
+              sizeof(corrupted), &module, diagnostic,
+              sizeof(diagnostic)),
+          "corrupt artifact reached activation callbacks");
+    CHECK(module == NULL, "corrupt artifact left a module");
+    CHECK(atomic_load_explicit(&context.allocations, memory_order_relaxed) ==
+                  0 &&
+              atomic_load_explicit(&context.deallocations,
+                                   memory_order_relaxed) == 0 &&
+              atomic_load_explicit(&context.live_allocations,
+                                   memory_order_relaxed) == 0,
+          "verification failure invoked a provider or finalizer");
+    CHECK(xr_runtime_destroy(&runtime, diagnostic, sizeof(diagnostic)),
+          "verification-order runtime destroy");
+}
+
+static void test_missing_binding_rejects_whole_activation(void) {
+    for (uint32_t missing = 0; missing < 3; missing++) {
+        char diagnostic[512] = {0};
+        ActivationProviderContext context = {0};
+        XrRuntimeConfig config = make_tracked_config(&context);
+        if (missing == 0)
+            config.providers.allocate = NULL;
+        else if (missing == 1)
+            config.providers.deallocate = NULL;
+        else
+            config.providers.panic = NULL;
+        XrRuntime *runtime = NULL;
+        XrModule *module = (XrModule *) (uintptr_t) 1;
+        CHECK(xr_runtime_create(&config, &runtime, diagnostic,
+                                sizeof(diagnostic)),
+              "missing-binding runtime create");
+        CHECK(!xr_module_load_target_plan(
+                  runtime, xr_runtime_export_xsm,
+                  sizeof(xr_runtime_export_xsm), xr_runtime_export_xtp,
+                  sizeof(xr_runtime_export_xtp), &module, diagnostic,
+                  sizeof(diagnostic)),
+              "missing binding activated a module");
+        CHECK(module == NULL && strstr(diagnostic, "XR_EXEC_5008") != NULL,
+              "missing binding activation diagnostic");
+        CHECK(atomic_load_explicit(&context.allocations,
+                                   memory_order_relaxed) == 0 &&
+                  atomic_load_explicit(&context.deallocations,
+                                       memory_order_relaxed) == 0,
+              "missing binding invoked a partial activation callback");
+        CHECK(xr_runtime_destroy(&runtime, diagnostic,
+                                 sizeof(diagnostic)),
+              "missing-binding runtime destroy");
+    }
+}
+
+static void test_registration_budget_failure_rolls_back_whole_batch(
+    bool provider_budget) {
+    char diagnostic[512] = {0};
+    ActivationProviderContext context = {0};
+    XrRuntimeConfig config = make_tracked_config(&context);
+    config.activation.max_active_provider_registrations =
+        provider_budget ? 3 : 4;
+    config.activation.max_active_finalizer_registrations =
+        provider_budget ? 2 : 1;
+    XrRuntime *runtime = NULL;
+    XrModule *first = NULL;
+    XrModule *rejected = (XrModule *) (uintptr_t) 1;
+    CHECK(xr_runtime_create(&config, &runtime, diagnostic,
+                            sizeof(diagnostic)),
+          "registration-budget runtime create");
+    CHECK(xr_module_load_target_plan(
+              runtime, xr_runtime_export_xsm,
+              sizeof(xr_runtime_export_xsm), xr_runtime_export_xtp,
+              sizeof(xr_runtime_export_xtp), &first, diagnostic,
+              sizeof(diagnostic)),
+          "registration-budget first load");
+    CHECK(!xr_module_load_target_plan(
+              runtime, xr_runtime_scalar_xsm,
+              sizeof(xr_runtime_scalar_xsm), xr_runtime_scalar_xtp,
+              sizeof(xr_runtime_scalar_xtp), &rejected, diagnostic,
+              sizeof(diagnostic)),
+          "registration budget admitted a partial second activation");
+    CHECK(rejected == NULL && strstr(diagnostic, "XR_EXEC_5003") != NULL,
+          "registration-budget rollback diagnostic");
+    CHECK(atomic_load_explicit(&context.allocations, memory_order_relaxed) ==
+                  2 &&
+              atomic_load_explicit(&context.deallocations,
+                                   memory_order_relaxed) == 1 &&
+              atomic_load_explicit(&context.live_allocations,
+                                   memory_order_relaxed) == 1,
+          "rejected registration batch did not run exact rollback finalizer");
+    check_export_result(first, 42,
+                        "published module survives registration rollback");
+    CHECK(xr_module_unload(&first, diagnostic, sizeof(diagnostic)),
+          "registration-budget first unload");
+    CHECK(atomic_load_explicit(&context.deallocations,
+                               memory_order_relaxed) == 2 &&
+              atomic_load_explicit(&context.live_allocations,
+                                   memory_order_relaxed) == 0,
+          "successful activation did not consume its unload finalizer");
+    CHECK(xr_runtime_destroy(&runtime, diagnostic, sizeof(diagnostic)),
+          "registration-budget runtime destroy");
+}
+
 int main(void) {
     test_runtime_requires_a_complete_budget();
     test_load_requires_both_exact_artifacts();
@@ -345,6 +560,10 @@ int main(void) {
     test_duplicate_publication_rolls_back();
     test_concurrent_duplicate_publication_is_unique();
     test_two_modules_load_and_unload_out_of_order();
+    test_verification_precedes_every_activation_callback();
+    test_missing_binding_rejects_whole_activation();
+    test_registration_budget_failure_rolls_back_whole_batch(true);
+    test_registration_budget_failure_rolls_back_whole_batch(false);
     if (failures) {
         fprintf(stderr, "runtime API archive boundary failures: %d\n", failures);
         return 1;

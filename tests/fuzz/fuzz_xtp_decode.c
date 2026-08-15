@@ -35,6 +35,28 @@ typedef struct XtpMutationArtifact {
     size_t size;
 } XtpMutationArtifact;
 
+static void *fuzz_activation_allocate(void *context, size_t size,
+                                      size_t alignment) {
+    (void) context;
+    return size && alignment <= _Alignof(void *) ? xr_malloc(size) : NULL;
+}
+
+static void fuzz_activation_deallocate(void *context, void *allocation,
+                                       size_t size, size_t alignment) {
+    (void) context;
+    (void) size;
+    (void) alignment;
+    xr_free(allocation);
+}
+
+static void fuzz_activation_panic(void *context, const char *message,
+                                  size_t message_size) {
+    (void) context;
+    (void) message;
+    (void) message_size;
+    abort();
+}
+
 typedef enum XtpMutationExpectation {
     XTP_EXPECT_ANY = 0,
     XTP_EXPECT_VALID,
@@ -286,17 +308,30 @@ static void exercise_runtime_boundary(const uint8_t *bytes, size_t size,
      * those later registration paths. */
     require_fuzz(!accepted && loaded == NULL);
 
-    XrRuntimeGenerationBudget budget = {
-        .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
-        .max_loaded_generations = 1,
-        .max_total_pins = 4,
-        .max_pins_per_generation = 4,
-        .max_pins_by_kind = {4, 4, 4, 4, 4},
+    XrRuntimeConfig config = {
+        .schema_version = XR_RUNTIME_CONFIG_SCHEMA_VERSION,
+        .generation = {
+            .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
+            .max_loaded_generations = 1,
+            .max_total_pins = 4,
+            .max_pins_per_generation = 4,
+            .max_pins_by_kind = {4, 4, 4, 4, 4},
+        },
+        .activation = {
+            .max_active_entries = 4,
+            .max_active_provider_registrations = 4,
+            .max_active_finalizer_registrations = 2,
+        },
+        .providers = {
+            .allocate = fuzz_activation_allocate,
+            .deallocate = fuzz_activation_deallocate,
+            .panic = fuzz_activation_panic,
+        },
     };
     XrRuntime *runtime = NULL;
     XrModule *module = (XrModule *) (uintptr_t) 1;
     char diagnostic[512] = {0};
-    require_fuzz(xr_runtime_create(&budget, &runtime, diagnostic,
+    require_fuzz(xr_runtime_create(&config, &runtime, diagnostic,
                                    sizeof(diagnostic)));
     require_fuzz(!xr_module_load_target_plan(
         runtime, fixture.semantic_bytes, fixture.semantic_size, bytes, size,

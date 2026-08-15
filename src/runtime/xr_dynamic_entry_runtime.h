@@ -12,6 +12,7 @@
 #define XR_DYNAMIC_ENTRY_RUNTIME_H
 
 #include "xr_entry_cell.h"
+#include "../../include/xray_runtime_api.h"
 #include "../vm/xr_vm_dynamic_entry.h"
 
 #define XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES UINT32_C(65536)
@@ -20,6 +21,7 @@
 typedef struct XrRuntimeEntryHandle XrRuntimeEntryHandle;
 typedef struct XrRuntimeEntryRegistry XrRuntimeEntryRegistry;
 typedef struct XrRuntimeDynamicEntryCache XrRuntimeDynamicEntryCache;
+typedef struct XrRuntimeModuleActivation XrRuntimeModuleActivation;
 
 typedef struct XrRuntimeDynamicEntryCacheStats {
     uint64_t hits;
@@ -31,6 +33,9 @@ typedef struct XrRuntimeDynamicEntryCacheStats {
 typedef struct XrRuntimeEntryRegistryStats {
     uint32_t allocated_rows;
     uint32_t active_rows;
+    uint32_t active_modules;
+    uint32_t active_provider_registrations;
+    uint32_t active_finalizer_registrations;
     uint64_t mutations;
 } XrRuntimeEntryRegistryStats;
 
@@ -44,6 +49,11 @@ XR_FUNC bool xr_runtime_entry_registry_create(
     size_t diagnostic_size);
 XR_FUNC bool xr_runtime_entry_registry_destroy(
     XrRuntimeEntryRegistry **registry, char *diagnostic,
+    size_t diagnostic_size);
+XR_FUNC bool xr_runtime_activation_registry_configure(
+    XrRuntimeGenerationAuthority *authority,
+    const XrRuntimeActivationBudget *budget,
+    const XrRuntimeProviderBindings *bindings, char *diagnostic,
     size_t diagnostic_size);
 
 XR_FUNC bool xr_runtime_entry_handle_create(
@@ -68,13 +78,24 @@ XR_FUNC bool xr_runtime_entry_registry_publish(
     XrRuntimeGenerationAuthority *authority, const XrTargetPlan *plan,
     uint32_t source_export, XrRuntimeEntryHandle *handle, char *diagnostic,
     size_t diagnostic_size);
-/* Publishes every source export of one active generation as one transaction.
- * Active duplicate keys are rejected; no row becomes visible on failure. */
-XR_FUNC bool xr_runtime_entry_registry_publish_module(
+/* Publishes every source export and every exact provider/finalizer requirement
+ * of one active generation as one transaction. No registration becomes visible
+ * on a missing binding, conflict, budget failure, or stale generation. */
+XR_FUNC bool xr_runtime_activation_publish_module(
     XrRuntimeGenerationAuthority *authority,
     XrLoadedModuleGeneration *generation, const XrTargetPlan *plan,
     XrRuntimeEntryHandle *const *function_handles,
-    uint32_t function_handle_count, char *diagnostic,
+    uint32_t function_handle_count,
+    XrRuntimeModuleActivation **activation, char *diagnostic,
+    size_t diagnostic_size);
+XR_FUNC bool xr_runtime_activation_unpublish(
+    XrRuntimeModuleActivation **activation, char *diagnostic,
+    size_t diagnostic_size);
+XR_FUNC bool xr_runtime_activation_provider_acquire(
+    XrRuntimeModuleActivation *activation, uint16_t provider_kind,
+    char *diagnostic, size_t diagnostic_size);
+XR_FUNC bool xr_runtime_activation_provider_release(
+    XrRuntimeModuleActivation *activation, char *diagnostic,
     size_t diagnostic_size);
 XR_FUNC bool xr_runtime_entry_registry_unpublish(
     XrRuntimeGenerationAuthority *authority, XrRuntimeEntryHandle *handle,

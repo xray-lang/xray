@@ -97,17 +97,21 @@ authority.
    gate owns the XSM/XTP-to-sole-scalar success route. This remains a runtime
    boundary only: it makes no source/CLI or product end-to-end claim.
 9. The artifact runtime facade adds no independent execution, verification, or
-   naming authority. A runtime owns exactly one generation authority and refuses
-   to be destroyed while it holds a loaded module. A module load requires both
-   exact artifact images: the semantic image is the authority the target image
-   must bind, neither is inferred from the other, and success means the
+   naming authority. A runtime owns exactly one generation authority and one
+   explicit, versioned activation configuration. Zero budgets are rejected at
+   construction; implicit/default provider callbacks are never installed, and a
+   missing plan-required binding is rejected at activation. A module load requires
+   both exact artifact images: the semantic image is the authority the target
+   image must bind, neither is inferred from the other, and success means the
    generation reached ACTIVE under the same PREPARE gate above and every exact
-   source export was published by the bounded entry transaction. A load that
-   cannot reach ACTIVE or complete that transaction unwinds through rollback,
-   retirement, and unload, releases both artifacts, and returns no handle, so no
-   module ever denotes a generation that cannot run or an incomplete publication.
-   `XrExport` contains only one entry cell and its exact expectation; there is no
-   parallel module/function handle or second pin path.
+   source export plus every plan-required provider/finalizer operation was
+   published by one bounded activation transaction. A load that cannot reach
+   ACTIVE or complete that transaction unwinds through rollback, retirement,
+   and unload, releases both artifacts, and returns no handle, so no module ever
+   denotes a generation that cannot run or an incomplete publication. `XrExport`
+   contains a loan to one entry handle/cell and a loan to the owning
+   activation; there is no parallel module/function handle or second execution
+   path.
 10. Export names are a semantic-artifact fact. The TargetPlan carries dense
     numeric tables and no spelling, so lookup reads the verified source export
     table the plan retains and matches an exact name in it. It never resolves an
@@ -116,16 +120,31 @@ authority.
     scalar i64 execution family. A resolved handle is a module-owned loan that
     the module invalidates at unload; the caller never frees it.
 11. After re-verifying the immutable TargetPlan and instruction program, module
-    activation binds every admitted SOURCE_EXPORT and publishes all exact keys
-    under one bounded registry transaction. Every binding is frozen, every row
-    and retained handle is prepared, and active-key conflicts are rejected before
-    the batch advances the registry epoch. Failure exposes no row, clears every
-    private entry cell and pin, rolls back the generation, and returns no module;
-    success publishes the module only after the whole batch commits. Lookup is
-    read-only and repeated lookup of the same export returns the same module-owned
-    handle. Distinct export aliases may publish the same exact function handle
-    under separate stable keys. There is no name guess, implicit entry, or result
-    reported that was not executed.
+    activation reconstructs its exact native provider requirements from the
+    verified capability rows. The hosted foundation allocator's
+    `ALLOCATES/RETURNS_OWNED` operation and the hosted panic
+    `PANICS/BORROWS/NO_RETURN` operation are provider registrations; the same
+    allocator contract's `DEALLOCATES/CONSUMES_OWNED` operation is the module
+    activation deallocator-finalizer. This finalizer owns activation-transaction
+    storage and is consumed by rollback or unload; it is not an object-layout
+    destructor and grants no destructor row authority. Missing or differently
+    shaped host bindings fail before any callback. The exact allocator callback
+    then creates the private transaction record, and activation binds every
+    admitted SOURCE_EXPORT and stages every provider/finalizer registration under
+    one bounded registry transaction. Every binding is frozen, every row and
+    retained handle is prepared, and active-key conflicts plus entry/provider/
+    finalizer budgets are rejected before anything becomes visible. Failure
+    exposes no row or provider/finalizer registration, invokes the exact
+    deallocator once for any staged record, clears every private entry cell and
+    pin, rolls back the generation, and returns no module; success publishes the
+    module only after the whole batch commits. Lookup is read-only and repeated
+    lookup of the same export returns the same module-owned handle. Export
+    execution pins the exact published allocator and panic registrations before
+    entering its cell, and unload removes provider/finalizer registrations only
+    after the generation is RETIRED with zero pins. Distinct export aliases may
+    publish the same exact function handle under separate stable keys. There is
+    no name guess, implicit provider, partial registration, or result reported
+    that was not executed.
 12. An entry ABI fingerprint is a callee identity, separate from
     `XrTargetCallRecord.fingerprint`. The target call fingerprint intentionally
     includes the semantic operation, caller function, caller/result slots, and
@@ -176,19 +195,23 @@ authority.
 
 16. The registry owns stable per-key rows until authority teardown. Each row
     has an atomic epoch and an optional retained handle. Single-entry publish
-    replacement, module-batch publish, and unpublish are serialized through a
-    mutation gate and validate each handle's frozen plan/function/generation
-    snapshot before touching a row. Module-batch publication rejects every
-    active duplicate and changes rows plus the registry epoch only after all row
-    capacity and handle retains succeed. Alias rows keep a shared handle bound
-    until its final published key is removed. Removal first clears the cell's
-    static binding, while every already-acquired in-flight token retains its own
+    replacement, activation-batch publish, and unpublish are serialized through
+    a mutation gate and validate each handle's frozen plan/function/generation
+    snapshot before touching a row. Activation publication rejects every active
+    duplicate and changes entry rows, module/provider/finalizer counts, the
+    activation list, and the registry epoch only after all row capacity and
+    handle retains succeed. Alias rows keep a shared handle bound until its final
+    published key is removed. Removal first clears the cell's static binding,
+    while every already-acquired in-flight or provider token retains its own
     generation pin, and only then releases row ownership; a sole registry or
     cache owner is never orphaned. Publication freezes and retains every handle
-    before acquiring the registry-mutation then generation-authority gates.
-    Unpublish likewise retains its guard first and drops the authority gate
-    before clearing the entry cell, so the `handle -> cell -> authority` binding
-    order has no inverse edge through publication or rollback.
+    and invokes the allocator before acquiring the registry-mutation then
+    generation-authority gates. Unpublish likewise retains its guard first and
+    drops the authority gate before clearing the entry cell. Activation removal
+    detaches counters and ownership under the same two gates, then invokes the
+    deallocator only after both gates are released. Thus neither callback nor
+    handle API creates an inverse edge against the `handle -> cell -> authority`
+    binding order through publication, rollback, or unload.
 17. Every dynamic caller generation owns one bounded cache slot per serialized
     expectation. Warm cache lookup uses only the slot mutex and the row epoch
     acquire load; it neither locks nor scans the generation authority, and
@@ -217,14 +240,14 @@ anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 2f3570bbfb67a0a73e7d0b2aea41ef422fbf096eac0cc42b1821993d5da4a19b
 anchor-sha256: tests/install/run_install_public_surface_tests.py 1bbef0d66f5d0d78dbe41848497b678c02c88fc9663f296d9863571fe20eb38e
-anchor-sha256: include/xray_runtime_api.h ca9f22c2358670184f19202f9f0764f3b1ff0fcab572ad7fb931bdf6c89b7f86
-anchor-sha256: src/runtime/xr_runtime_api.c 1224e05e1a30f5ca36ac11453d32b434dbf571c7078b5f30e7b84a7382ec58a9
-anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c 47d7e2851cafb02cafcd6005a51388c7ea237dfcef8f97bbbde00922de3a7575
+anchor-sha256: include/xray_runtime_api.h b0cff9caa4f70925bba21173b9991a8bca9837f563cd64cfb8dd91206c66b319
+anchor-sha256: src/runtime/xr_runtime_api.c 268bae675264a6b5892dea75ccae248907b6ce97eccf473f8190fac13eca9557
+anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c 36e110b8ef201e1684b5aa3830fa12664381e15e39d4166d6dd06ace0c837255
 anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
 anchor-sha256: src/runtime/xr_entry_cell.c 65446775907bdbef5c293d564b1020861836c9b94c52adf727a3e32dbb49241f
 anchor-sha256: tests/unit/runtime/test_entry_cell_runtime_archive.c 34bc22820144f368a5e5914ac387f2a19db85ef4555d458b07215548eef1dca0
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
-anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h bfef11f302f449287eb807856c9258c42269cfbb5df041d55d96035a3f391f1a
-anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 27ff412fb778fd0b9ce603e52c44e39763c42bc12e1c099f2c0a747c014299a4
+anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h f922cec7513c0e232d840936820f270d4b8a0c22c23296fe53a45e924ed76ee4
+anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 96cbabf92dc3dc8f4fb279fe85f87ad9b6a6b90f021a689fcf39505257cd8408
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h e365e02d0596394df881026895d127ac54ade9d7bccf5ff272ad6f704a88becf
-anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 233b626fd132326e2bc6946fdaed8686e1280f7ebee98fb0f4e9d9acbad317c2
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 119cca4a922e3039c9b57e69102d1fd06b9aaba5cdae55fb10e7fdda0ba9bbb9

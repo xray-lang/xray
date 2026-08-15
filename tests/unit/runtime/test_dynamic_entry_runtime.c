@@ -60,6 +60,45 @@ typedef struct ResolverFixture {
     const XiFunc *callee;
 } ResolverFixture;
 
+static void *activation_allocate(void *context, size_t size,
+                                 size_t alignment) {
+    (void) context;
+    return size && alignment <= _Alignof(void *) ? xr_malloc(size) : NULL;
+}
+
+static void activation_deallocate(void *context, void *allocation,
+                                  size_t size, size_t alignment) {
+    (void) context;
+    (void) size;
+    (void) alignment;
+    xr_free(allocation);
+}
+
+static void activation_panic(void *context, const char *message,
+                             size_t message_size) {
+    (void) context;
+    (void) message;
+    (void) message_size;
+    abort();
+}
+
+static void configure_activation_registry(
+    XrRuntimeGenerationAuthority *authority) {
+    XrRuntimeActivationBudget budget = {
+        .max_active_entries = 32,
+        .max_active_provider_registrations = 16,
+        .max_active_finalizer_registrations = 8,
+    };
+    XrRuntimeProviderBindings bindings = {
+        .allocate = activation_allocate,
+        .deallocate = activation_deallocate,
+        .panic = activation_panic,
+    };
+    char diagnostic[512] = {0};
+    REQUIRE(xr_runtime_activation_registry_configure(
+        authority, &budget, &bindings, diagnostic, sizeof(diagnostic)));
+}
+
 typedef struct RepeatPublishContext {
     XrRuntimeGenerationAuthority *authority;
     const XrTargetPlan *plan;
@@ -658,6 +697,7 @@ static void test_module_entry_batch_is_atomic(void) {
     XrRuntimeGenerationAuthority *authority = NULL;
     REQUIRE(xr_runtime_generation_authority_create(
         &budget, &authority, diagnostic, sizeof(diagnostic)));
+    configure_activation_registry(authority);
     XrLoadedModuleGeneration *generation = activate_generation(
         authority, fixture.dependency_plan);
 
@@ -694,9 +734,11 @@ static void test_module_entry_batch_is_atomic(void) {
     REQUIRE(xr_runtime_entry_registry_stats(authority, &before));
     REQUIRE(before.allocated_rows == 1 && before.active_rows == 1 &&
             before.mutations == 1);
-    REQUIRE(!xr_runtime_entry_registry_publish_module(
+    XrRuntimeModuleActivation *activation = NULL;
+    REQUIRE(!xr_runtime_activation_publish_module(
         authority, generation, fixture.dependency_plan, handles,
-        function_count, diagnostic, sizeof(diagnostic)));
+        function_count, &activation, diagnostic, sizeof(diagnostic)));
+    REQUIRE(activation == NULL);
     REQUIRE(strstr(diagnostic, "XR_EXEC_5005") != NULL);
     REQUIRE(xr_runtime_entry_registry_stats(authority, &rejected));
     REQUIRE(memcmp(&before, &rejected, sizeof(before)) == 0);
@@ -704,11 +746,15 @@ static void test_module_entry_batch_is_atomic(void) {
     REQUIRE(xr_runtime_entry_registry_unpublish(
         authority, handles[second->function], diagnostic,
         sizeof(diagnostic)));
-    REQUIRE(xr_runtime_entry_registry_publish_module(
+    REQUIRE(xr_runtime_activation_publish_module(
         authority, generation, fixture.dependency_plan, handles,
-        function_count, diagnostic, sizeof(diagnostic)));
+        function_count, &activation, diagnostic, sizeof(diagnostic)));
+    REQUIRE(activation != NULL);
     REQUIRE(xr_runtime_entry_registry_stats(authority, &rejected));
     REQUIRE(rejected.allocated_rows == 2 && rejected.active_rows == 2 &&
+            rejected.active_modules == 1 &&
+            rejected.active_provider_registrations == 2 &&
+            rejected.active_finalizer_registrations == 1 &&
             rejected.mutations == 3);
 
     for (uint32_t i = 0; i < function_count; i++) {
@@ -720,7 +766,22 @@ static void test_module_entry_batch_is_atomic(void) {
             &handles[i], diagnostic, sizeof(diagnostic)));
     }
     xr_free(handles);
-    retire_generation(&generation);
+    REQUIRE(xr_runtime_entry_registry_stats(authority, &rejected));
+    REQUIRE(rejected.active_rows == 0 && rejected.active_modules == 1 &&
+            rejected.active_provider_registrations == 2 &&
+            rejected.active_finalizer_registrations == 1);
+    REQUIRE(xr_module_generation_begin_drain(generation, diagnostic,
+                                             sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_retire(generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_runtime_activation_unpublish(
+        &activation, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_entry_registry_stats(authority, &rejected));
+    REQUIRE(rejected.active_modules == 0 &&
+            rejected.active_provider_registrations == 0 &&
+            rejected.active_finalizer_registrations == 0);
+    REQUIRE(xr_module_generation_unload(&generation, diagnostic,
+                                        sizeof(diagnostic)));
     REQUIRE(xr_runtime_generation_authority_destroy(
         &authority, diagnostic, sizeof(diagnostic)));
     free_dynamic_fixture(&fixture);

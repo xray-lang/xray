@@ -35,6 +35,7 @@
  */
 struct XrExport {
     XrRuntimeEntryHandle *handle;
+    XrRuntimeModuleActivation *activation;
 };
 
 struct XrModule {
@@ -42,6 +43,7 @@ struct XrModule {
     XrRuntimeArtifactAuthority *artifact_authority;
     XrTargetPlan *plan;
     XrLoadedModuleGeneration *generation;
+    XrRuntimeModuleActivation *activation;
     XrExport *exports;
     uint32_t function_count;
     bool unloading;
@@ -60,14 +62,16 @@ static bool fail(char *diagnostic, size_t diagnostic_size, const char *code,
     return false;
 }
 
-XRAY_API bool xr_runtime_create(const XrRuntimeGenerationBudget *budget,
+XRAY_API bool xr_runtime_create(const XrRuntimeConfig *config,
                                 XrRuntime **runtime, char *diagnostic,
                                 size_t diagnostic_size) {
     if (runtime)
         *runtime = NULL;
-    if (!runtime || !budget)
+    if (!runtime || !config ||
+        config->schema_version != XR_RUNTIME_CONFIG_SCHEMA_VERSION ||
+        config->reserved != 0)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
-                    "runtime creation requires a complete hard budget");
+                    "runtime creation requires an exact complete configuration");
     XrRuntime *created = (XrRuntime *) xr_calloc(1, sizeof(*created));
     if (!created)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
@@ -75,8 +79,18 @@ XRAY_API bool xr_runtime_create(const XrRuntimeGenerationBudget *budget,
     /* The generation authority owns budget validation, so an incomplete or
      * zero budget is refused by the same checker the lifecycle uses rather
      * than by a second copy of the rule here. */
-    if (!xr_runtime_generation_authority_create(budget, &created->authority,
+    if (!xr_runtime_generation_authority_create(&config->generation,
+                                                &created->authority,
                                                 diagnostic, diagnostic_size)) {
+        xr_free(created);
+        return false;
+    }
+    if (!xr_runtime_activation_registry_configure(
+            created->authority, &config->activation, &config->providers,
+            diagnostic, diagnostic_size)) {
+        char nested[256] = {0};
+        xr_runtime_generation_authority_destroy(
+            &created->authority, nested, sizeof(nested));
         xr_free(created);
         return false;
     }
@@ -143,6 +157,7 @@ static bool initialize_exports(XrExport *exports, uint32_t count,
 static bool bind_export_entries(XrLoadedModuleGeneration *generation,
                                 const XrTargetPlan *plan,
                                 XrExport *exports, uint32_t function_count,
+                                XrRuntimeModuleActivation **activation,
                                 char *diagnostic,
                                 size_t diagnostic_size) {
     const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(plan);
@@ -178,10 +193,13 @@ static bool bind_export_entries(XrLoadedModuleGeneration *generation,
                     "module entry publication allocation failed");
     for (uint32_t i = 0; i < function_count; i++)
         handles[i] = exports[i].handle;
-    bool published = xr_runtime_entry_registry_publish_module(
+    bool published = xr_runtime_activation_publish_module(
         generation->authority, generation, plan, handles, function_count,
-        diagnostic, diagnostic_size);
+        activation, diagnostic, diagnostic_size);
     xr_free(handles);
+    if (published)
+        for (uint32_t i = 0; i < function_count; i++)
+            exports[i].activation = *activation;
     return published;
 }
 
@@ -273,6 +291,7 @@ XRAY_API bool xr_module_load_target_plan(
         !xr_module_generation_activate(generation, diagnostic,
                                        diagnostic_size) ||
         !bind_export_entries(generation, plan, exports, function_count,
+                             &created->activation,
                              diagnostic, diagnostic_size)) {
         char ignored[1] = {0};
         clear_exports(exports, function_count, ignored, sizeof(ignored));
@@ -456,6 +475,7 @@ XRAY_API bool xr_export_call(const XrExport *export_handle,
     XrEntryCell *cell =
         xr_runtime_entry_handle_cell(export_handle->handle);
     if (!expectation || !cell ||
+        !export_handle->activation ||
         argument_count > XR_TARGET_INSTRUCTION_MAX_PARAMETERS ||
         argument_count != expectation->abi.parameter_count)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
@@ -472,12 +492,35 @@ XRAY_API bool xr_export_call(const XrExport *export_handle,
         scalars[i] = arguments[i].i64;
     }
 
+    if (!xr_runtime_activation_provider_acquire(
+            export_handle->activation, XR_TARGET_PROVIDER_ALLOCATOR,
+            diagnostic, diagnostic_size))
+        return false;
+    if (!xr_runtime_activation_provider_acquire(
+            export_handle->activation, XR_TARGET_PROVIDER_PANIC,
+            diagnostic, diagnostic_size)) {
+        char nested[256] = {0};
+        xr_runtime_activation_provider_release(
+            export_handle->activation, nested, sizeof(nested));
+        return false;
+    }
+
     int64_t executed = 0;
     uint32_t executor_status = 0;
     XrEntryInvokeStatus status = xr_entry_cell_invoke_i64(
         cell, expectation,
         argument_count ? scalars : NULL, argument_count, &executed,
         &executor_status, diagnostic, diagnostic_size);
+    char release_diagnostic[256] = {0};
+    bool panic_released = xr_runtime_activation_provider_release(
+        export_handle->activation, release_diagnostic,
+        sizeof(release_diagnostic));
+    bool allocator_released = xr_runtime_activation_provider_release(
+        export_handle->activation, release_diagnostic,
+        sizeof(release_diagnostic));
+    if (!panic_released || !allocator_released)
+        return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
+                    "export provider lease release failed");
     if (status == XR_ENTRY_INVOKE_VM_ERROR)
         return fail_typed_dispatch((XrTypedDispatchStatus) executor_status,
                                    diagnostic, diagnostic_size);
@@ -529,6 +572,8 @@ XRAY_API bool xr_module_unload(XrModule **module, char *diagnostic,
         return false;
     if (!xr_module_generation_retire(owned->generation, diagnostic,
                                      diagnostic_size) ||
+        !xr_runtime_activation_unpublish(&owned->activation, diagnostic,
+                                         diagnostic_size) ||
         !xr_module_generation_unload(&owned->generation, diagnostic,
                                      diagnostic_size))
         return false;
