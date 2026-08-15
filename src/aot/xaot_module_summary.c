@@ -13,7 +13,7 @@
 #include "../../include/xray_version.h"
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
-#include "../incremental/xr_cache_store.h"
+#include "../incremental/xr_cache_artifact_verify.h"
 #include "../incremental/xr_module_summary_build.h"
 #include "../ir/xi_module.h"
 #include "../module/xmodule_graph.h"
@@ -44,16 +44,6 @@ typedef struct XaotModuleSummaryBuild {
     bool rebuild;
     XaotModuleSummaryReport report;
 } XaotModuleSummaryBuild;
-
-/* The live plan this build already verified. A candidate is accepted only when
- * it decodes to exactly that semantic identity, so a hit proves the content is
- * unchanged rather than proving some artifact happens to sit at the key. */
-typedef struct XaotXsmMatchContext {
-    const XrSemanticPlan *expected;
-    const XrSemanticPlan *const *dependencies;
-    uint32_t dependency_count;
-    bool matched;
-} XaotXsmMatchContext;
 
 static void hash_u32(XrSHA256Context *ctx, uint32_t value) {
     uint8_t bytes[4];
@@ -136,32 +126,6 @@ static void declaration_fingerprint(const XrSemanticPlan *plan, XrFingerprint *o
         hash_u32(&ctx, record->shared_slot);
     }
     xr_sha256_final(&ctx, out->bytes);
-}
-
-static bool verify_xsm_matches_plan(XrCacheArtifactKind kind, XrCacheKey key,
-                                    const uint8_t *bytes, size_t size, void *context) {
-    (void) key;
-    XaotXsmMatchContext *ctx = (XaotXsmMatchContext *) context;
-    if (!ctx || ctx->matched || !ctx->expected || kind != XR_CACHE_ARTIFACT_XSM)
-        return false;
-
-    XrSemanticPlan *decoded = NULL;
-    char error[256];
-    bool decoded_ok = ctx->dependency_count == 0
-                          ? xr_xsm_decode(bytes, size, &decoded, error,
-                                          sizeof(error))
-                          : xr_xsm_decode_module_set(
-                                bytes, size, ctx->dependencies,
-                                ctx->dependency_count, &decoded, error,
-                                sizeof(error));
-    if (!decoded_ok)
-        return false;
-    bool ok = xr_semantic_plan_is_verified(decoded) &&
-              xr_fingerprint_equal(xr_semantic_plan_fingerprint(decoded),
-                                   xr_semantic_plan_fingerprint(ctx->expected));
-    xr_semantic_plan_free(decoded);
-    ctx->matched = ok;
-    return ok;
 }
 
 static bool rejected_publish(XrCachePublishStatus status) {
@@ -256,19 +220,21 @@ static bool round_trip_semantic_artifact(XaotModuleSummaryBuild *build, XrCacheK
         fprintf(stderr, "Error: module summary dependency authority is incomplete\n");
         return false;
     }
+    XrCacheXsmArtifactVerifyContext requirements = {
+        .expected_key = key,
+        .semantic_plan = plan,
+        .semantic_dependencies = dependencies,
+        .semantic_dependency_count = dependency_count,
+    };
     bool hit = false;
     if (!build->rebuild) {
-        XaotXsmMatchContext match;
         XrCacheBlob blob;
-        memset(&match, 0, sizeof(match));
         memset(&blob, 0, sizeof(blob));
-        match.expected = plan;
-        match.dependencies = dependencies;
-        match.dependency_count = dependency_count;
-        XrCacheLoadStatus status = xr_cache_store_load(build->store, XR_CACHE_ARTIFACT_XSM, key,
-                                                       verify_xsm_matches_plan, &match, &blob);
+        XrCacheLoadStatus status = xr_cache_store_load(
+            build->store, XR_CACHE_ARTIFACT_XSM, key,
+            xr_cache_verify_xsm_artifact, &requirements, &blob);
         xr_cache_blob_release(&blob);
-        hit = status == XR_CACHE_LOAD_HIT && match.matched;
+        hit = status == XR_CACHE_LOAD_HIT;
     }
     if (hit) {
         build->report.cache_hits++;
@@ -285,14 +251,9 @@ static bool round_trip_semantic_artifact(XaotModuleSummaryBuild *build, XrCacheK
         xr_free(dependencies);
         return false;
     }
-    XaotXsmMatchContext publish = {
-        .expected = plan,
-        .dependencies = dependencies,
-        .dependency_count = dependency_count,
-    };
     XrCachePublishStatus status = xr_cache_store_publish(
         build->store, XR_CACHE_ARTIFACT_XSM, key, bytes, size,
-        verify_xsm_matches_plan, &publish);
+        xr_cache_verify_xsm_artifact, &requirements);
     xr_free(bytes);
     xr_free(dependencies);
     if (rejected_publish(status)) {

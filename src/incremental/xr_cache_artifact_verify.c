@@ -54,16 +54,44 @@ static bool verified_authorities(const XrCacheXtpArtifactVerifyContext *context,
 
 bool xr_cache_verify_xsm_artifact(XrCacheArtifactKind kind, XrCacheKey key,
                                   const uint8_t *bytes, size_t size, void *context) {
-    (void) key;
-    (void) context;
-    if (kind != XR_CACHE_ARTIFACT_XSM || (!bytes && size != 0))
+    const XrCacheXsmArtifactVerifyContext *requirements =
+        (const XrCacheXsmArtifactVerifyContext *) context;
+    if (!requirements || kind != XR_CACHE_ARTIFACT_XSM ||
+        (!bytes && size != 0) ||
+        !xr_cache_key_equal(key, requirements->expected_key) ||
+        !requirements->semantic_plan) {
         return false;
+    }
+    char error[512] = {0};
+    if (!xr_semantic_plan_is_verified(requirements->semantic_plan) ||
+        !xr_semantic_plan_verify_module_set(
+            requirements->semantic_plan,
+            requirements->semantic_dependencies,
+            requirements->semantic_dependency_count, error, sizeof(error))) {
+        return false;
+    }
+
     XrSemanticPlan *plan = NULL;
-    char error[256];
-    if (!xr_xsm_decode(bytes, size, &plan, error, sizeof(error)))
+    bool decoded = requirements->semantic_dependency_count == 0
+                       ? xr_xsm_decode(bytes, size, &plan, error,
+                                       sizeof(error))
+                       : xr_xsm_decode_module_set(
+                             bytes, size,
+                             requirements->semantic_dependencies,
+                             requirements->semantic_dependency_count, &plan,
+                             error, sizeof(error));
+    if (!decoded)
         return false;
+    bool verified = xr_semantic_plan_verify_module_set(
+                        plan, requirements->semantic_dependencies,
+                        requirements->semantic_dependency_count, error,
+                        sizeof(error)) &&
+                    xr_fingerprint_equal(
+                        xr_semantic_plan_fingerprint(plan),
+                        xr_semantic_plan_fingerprint(
+                            requirements->semantic_plan));
     xr_semantic_plan_free(plan);
-    return true;
+    return verified;
 }
 
 bool xr_cache_xtp_key(const XrCacheXtpArtifactVerifyContext *context,

@@ -9,7 +9,9 @@
  */
 
 #include "../../../src/incremental/xr_cache_artifact_verify.h"
+#include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi.h"
+#include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/format/xr_xtp_schema.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
@@ -53,6 +55,67 @@ static XrSemanticPlan *build_semantic(const char *name, int64_t value) {
     REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
+}
+
+static XrCacheKey xsm_key(const char *identity) {
+    XrCacheFingerprint fingerprint;
+    XrCacheKey key;
+    xr_cache_fingerprint_bytes((const uint8_t *) identity, strlen(identity),
+                               &fingerprint);
+    memcpy(key.bytes, fingerprint.bytes, sizeof(key.bytes));
+    return key;
+}
+
+static void test_exact_xsm_cache_hit_and_authority_mutations(void) {
+    XrSemanticPlan *semantic =
+        build_semantic("cache_xsm_probe", INT64_C(42));
+    XrSemanticPlan *other =
+        build_semantic("cache_xsm_other", INT64_C(43));
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    char error[512] = {0};
+    REQUIRE(xr_xsm_encode(semantic, &bytes, &size, error, sizeof(error)));
+
+    XrCacheKey key = xsm_key("cache-xsm-probe-key");
+    XrCacheXsmArtifactVerifyContext requirements = {
+        .expected_key = key,
+        .semantic_plan = semantic,
+    };
+    REQUIRE(xr_cache_verify_xsm_artifact(
+        XR_CACHE_ARTIFACT_XSM, key, bytes, size, &requirements));
+
+    XrCacheKey wrong_key = key;
+    wrong_key.bytes[0] ^= UINT8_C(1);
+    REQUIRE(!xr_cache_verify_xsm_artifact(
+        XR_CACHE_ARTIFACT_XSM, wrong_key, bytes, size, &requirements));
+    requirements.expected_key = wrong_key;
+    REQUIRE(!xr_cache_verify_xsm_artifact(
+        XR_CACHE_ARTIFACT_XSM, key, bytes, size, &requirements));
+    requirements.expected_key = key;
+    requirements.semantic_plan = other;
+    REQUIRE(!xr_cache_verify_xsm_artifact(
+        XR_CACHE_ARTIFACT_XSM, key, bytes, size, &requirements));
+    requirements.semantic_plan = semantic;
+
+    const XrSemanticPlan *wrong_dependencies[] = {other};
+    requirements.semantic_dependencies = wrong_dependencies;
+    requirements.semantic_dependency_count = 1;
+    REQUIRE(!xr_cache_verify_xsm_artifact(
+        XR_CACHE_ARTIFACT_XSM, key, bytes, size, &requirements));
+    requirements.semantic_dependencies = NULL;
+    requirements.semantic_dependency_count = 0;
+
+    REQUIRE(!xr_cache_verify_xsm_artifact(
+        XR_CACHE_ARTIFACT_XSM, key, bytes, size, NULL));
+    REQUIRE(!xr_cache_verify_xsm_artifact(
+        XR_CACHE_ARTIFACT_XTP, key, bytes, size, &requirements));
+    bytes[size - 1u] ^= UINT8_C(1);
+    REQUIRE(!xr_cache_verify_xsm_artifact(
+        XR_CACHE_ARTIFACT_XSM, key, bytes, size, &requirements));
+
+    xr_free(bytes);
+    xr_semantic_plan_free(other);
+    xr_semantic_plan_free(semantic);
 }
 
 static CacheArtifactFixture make_fixture(void) {
@@ -166,6 +229,7 @@ static void test_wrong_semantic_and_profile_authorities_fail_closed(void) {
 }
 
 int main(void) {
+    test_exact_xsm_cache_hit_and_authority_mutations();
     test_exact_xtp_cache_hit();
     test_key_and_artifact_mutations_fail_closed();
     test_wrong_semantic_and_profile_authorities_fail_closed();

@@ -17,6 +17,13 @@ typedef struct XrSemanticPlan XrSemanticPlan;
 typedef struct XrTargetPlan XrTargetPlan;
 typedef struct XrTargetProfile XrTargetProfile;
 
+typedef struct XrCacheXsmArtifactVerifyContext {
+    XrCacheKey expected_key;
+    const XrSemanticPlan *semantic_plan;
+    const XrSemanticPlan *const *semantic_dependencies;
+    uint32_t semantic_dependency_count;
+} XrCacheXsmArtifactVerifyContext;
+
 typedef struct XrCacheXtpArtifactVerifyContext {
     const XrSemanticPlan *semantic_plan;
     const XrSemanticPlan *const *semantic_dependencies;
@@ -33,8 +40,8 @@ typedef struct XrCacheXtpArtifactLoadContext {
     XrTargetPlan *accepted_plan;
 } XrCacheXtpArtifactLoadContext;
 
-/* The XSM adapter delegates every schema and semantic decision to the owning
- * decoder. Cache storage never reconstructs plan rows itself. */
+/* An XSM candidate is accepted only for the exact precomputed cache key and
+ * current verified SemanticPlan/module-set authority. */
 XR_FUNC bool xr_cache_verify_xsm_artifact(XrCacheArtifactKind kind, XrCacheKey key,
                                           const uint8_t *bytes, size_t size, void *context);
 
