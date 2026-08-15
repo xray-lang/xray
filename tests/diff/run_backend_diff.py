@@ -86,13 +86,25 @@ def env_int(name: str, default: int) -> int:
 
 
 def configure_jobs(requested: str) -> tuple[int, bool]:
-    """Worker count and whether it was auto-derived (auto is capped, hot-shrunk)."""
+    """Worker count and whether cache-state caps may still adjust it."""
     if requested in ("", "auto"):
         jobs = min(cache_cpu_count(), env_int("XRAY_DIFF_MAX_AUTO_JOBS", 16))
         return max(1, jobs), True
     if is_uint(requested) and int(requested) > 0:
         return int(requested), False
     return 1, False
+
+
+def cap_auto_jobs_for_cache_state(jobs: int, auto_jobs: bool, cache_state: str) -> int:
+    """Apply the registered cold or hot cap without overriding explicit jobs."""
+    if not auto_jobs:
+        return jobs
+    cap_name = (
+        "XRAY_DIFF_HOT_MAX_AUTO_JOBS"
+        if cache_state == "hot"
+        else "XRAY_DIFF_COLD_MAX_AUTO_JOBS"
+    )
+    return max(1, min(jobs, env_int(cap_name, jobs)))
 
 
 def cache_cpu_count() -> int:
@@ -172,6 +184,17 @@ def read_expected_stdout(path: Path) -> bytes | None:
 
 def head_text(data: bytes, lines: int = _HEAD_LINES) -> str:
     return "|".join(data.decode("utf-8", "replace").splitlines()[:lines])
+
+
+def decode_build_log(data: bytes) -> str:
+    """Preserve invalid diagnostic bytes without emitting unencodable U+FFFD."""
+    return data.decode("utf-8", "backslashreplace")
+
+
+def console_safe_text(text: str, encoding: str | None = None) -> str:
+    """Escape code points unavailable in the active console encoding."""
+    codec = encoding or sys.stdout.encoding or "utf-8"
+    return text.encode(codec, "backslashreplace").decode(codec, "strict")
 
 
 # --- backend execution ------------------------------------------------------
@@ -422,7 +445,7 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
         if res.rc == 200 and res.buildlog:
             lines.extend(
                 "      " + line
-                for line in res.buildlog.decode("utf-8", "replace").splitlines()[:20]
+                for line in decode_build_log(res.buildlog).splitlines()[:20]
             )
     if other == "expected":
         lines.append(f"      {ref}: {head_text(ref_result.stdout, _PREVIEW_LINES)}")
@@ -625,9 +648,8 @@ def main(argv: list[str]) -> int:
         return 1
 
     cache_state = "hot" if binary_cache_hot(config, selected) else "cold"
-    if auto_jobs and cache_state == "hot":
-        jobs = max(1, min(jobs, env_int("XRAY_DIFF_HOT_MAX_AUTO_JOBS", 8)))
-        config.jobs = jobs
+    jobs = cap_auto_jobs_for_cache_state(jobs, auto_jobs, cache_state)
+    config.jobs = jobs
 
     print(f"=== Backend Differential ({' / '.join(b.upper() for b in backends)}) ===")
     print(f"Binary:   {xray_raw}")
@@ -684,7 +706,7 @@ def main(argv: list[str]) -> int:
 
     passed = failed = skipped = 0
     for result in sorted(results, key=lambda item: item.order):
-        print(result.output)
+        print(console_safe_text(result.output))
         if result.status == "pass":
             passed += 1
         elif result.status == "skip":

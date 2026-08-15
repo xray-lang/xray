@@ -42,6 +42,21 @@ class JobConfigTest(unittest.TestCase):
         jobs, auto = rbd.configure_jobs("not-a-number")
         self.assertEqual(jobs, 1)
 
+    def test_auto_jobs_honor_cold_and_hot_caps(self):
+        env = {
+            "XRAY_DIFF_COLD_MAX_AUTO_JOBS": "4",
+            "XRAY_DIFF_HOT_MAX_AUTO_JOBS": "8",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(rbd.cap_auto_jobs_for_cache_state(16, True, "cold"), 4)
+            self.assertEqual(rbd.cap_auto_jobs_for_cache_state(16, True, "hot"), 8)
+
+    def test_explicit_jobs_ignore_cache_state_caps(self):
+        with mock.patch.dict(
+            os.environ, {"XRAY_DIFF_COLD_MAX_AUTO_JOBS": "4"}, clear=True
+        ):
+            self.assertEqual(rbd.cap_auto_jobs_for_cache_state(12, False, "cold"), 12)
+
 
 class ShardValidationTest(unittest.TestCase):
     def test_valid_shard(self):
@@ -128,6 +143,17 @@ class SidecarTest(unittest.TestCase):
     def test_expected_sidecar_read_as_bytes(self):
         Path(str(self.case) + ".expected").write_bytes(b"out\n")
         self.assertEqual(rbd.read_expected_stdout(self.case), b"out\n")
+
+    def test_invalid_utf8_build_log_is_safe_for_windows_console(self):
+        text = rbd.decode_build_log(b"diagnostic: \xff\n")
+        self.assertEqual(text, "diagnostic: \\xff\n")
+        text.encode("gbk", "strict")
+
+    def test_unavailable_console_code_point_is_escaped(self):
+        self.assertEqual(
+            rbd.console_safe_text("diagnostic: \ufde8", "gbk"),
+            "diagnostic: \\ufde8",
+        )
 
 
 class RatchetWiringTest(unittest.TestCase):

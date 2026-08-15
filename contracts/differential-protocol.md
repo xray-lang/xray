@@ -34,5 +34,5 @@ the program-output comparison remain byte-native and are not normalized.
 
 ## Digest anchors
 
-anchor-sha256: tests/diff/run_backend_diff.py facbe4a8cf2585997b2ddf498e99d362f470373781092f2abb79b521f0f37fd1
+anchor-sha256: tests/diff/run_backend_diff.py 097572dd61a90cec25e5d2504bd3c52e2f4a362844375e14e1a3c3c25e3cefb5
 anchor-sha256: tests/aot/TOMBSTONES.tsv 1ad7d280093c5a3aedecdf490fe88dc9c48f79215de9ea1d1c8216373cd56eb7
