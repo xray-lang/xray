@@ -1406,6 +1406,7 @@ set(XRAY_VM_RUNTIME_SOURCES
     ${VM_DEBUG_SRC}
     src/vm/xr_typed_dispatch.c
     src/vm/xr_typed_frame.c
+    src/vm/xr_vm_decoded_cache.c
 )
 list(REMOVE_DUPLICATES XRAY_VM_RUNTIME_SOURCES)
 

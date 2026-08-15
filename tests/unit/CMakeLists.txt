@@ -404,6 +404,8 @@ add_xray_unit_test(test_typed_frame vm/test_typed_frame.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_typed_dispatch vm/test_typed_dispatch.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_xray_unit_test(test_vm_decoded_cache vm/test_vm_decoded_cache.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
 if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
     add_executable(typed_target_vm_benchmark
         ${CMAKE_SOURCE_DIR}/tests/benchmarks/target-machine/typed_target_vm/benchmark.c
@@ -464,6 +466,14 @@ target_link_libraries(test_typed_frame_runtime_archive PRIVATE
     xray_vm)
 add_test(NAME test_typed_frame_runtime_archive
     COMMAND $<TARGET_FILE:test_typed_frame_runtime_archive>)
+add_executable(test_vm_decoded_cache_runtime_archive
+    runtime/test_vm_decoded_cache_runtime_archive.c)
+target_include_directories(test_vm_decoded_cache_runtime_archive PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_vm_decoded_cache_runtime_archive PRIVATE
+    xray_vm)
+add_test(NAME test_vm_decoded_cache_runtime_archive
+    COMMAND $<TARGET_FILE:test_vm_decoded_cache_runtime_archive>)
 add_executable(test_xtp_fuzz_entry ../fuzz/fuzz_xtp_decode.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 target_compile_definitions(test_xtp_fuzz_entry PRIVATE FUZZ_STANDALONE)
