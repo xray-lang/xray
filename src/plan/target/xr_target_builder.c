@@ -9018,13 +9018,25 @@ static bool materialized_i64_slot(const XrTargetMaterializedPlan *materialized,
 }
 
 static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
-    switch (semantic_opcode) {
-#define XR_TARGET_SEMANTIC_CASE(semantic, target)                                                   \
-        case semantic: return XR_TARGET_INSTRUCTION_##target;
-        XR_TARGET_INSTRUCTION_SEMANTIC_BINDINGS(XR_TARGET_SEMANTIC_CASE)
-#undef XR_TARGET_SEMANTIC_CASE
-        default: return XR_TARGET_INSTRUCTION_INVALID;
+    typedef struct ScalarInstructionBinding {
+        uint16_t semantic_opcode;
+        uint16_t target_opcode;
+    } ScalarInstructionBinding;
+    static const ScalarInstructionBinding bindings[] = {
+#define XR_TARGET_SEMANTIC_BINDING(semantic, target)                                                \
+        {semantic, XR_TARGET_INSTRUCTION_##target},
+        XR_TARGET_INSTRUCTION_SEMANTIC_BINDINGS(XR_TARGET_SEMANTIC_BINDING)
+#undef XR_TARGET_SEMANTIC_BINDING
+    };
+    uint16_t target_opcode = XR_TARGET_INSTRUCTION_INVALID;
+    for (size_t i = 0; i < sizeof(bindings) / sizeof(bindings[0]); i++) {
+        if (bindings[i].semantic_opcode != semantic_opcode)
+            continue;
+        if (target_opcode != XR_TARGET_INSTRUCTION_INVALID)
+            return XR_TARGET_INSTRUCTION_INVALID;
+        target_opcode = bindings[i].target_opcode;
     }
+    return (uint8_t) target_opcode;
 }
 
 /*
