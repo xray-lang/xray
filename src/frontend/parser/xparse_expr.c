@@ -1307,8 +1307,18 @@ AstNode *xr_parse_binary(Parser *parser, AstNode *left) {
     }
 
     AstNode *node = xr_ast_binary(parser->compiler_session, ast_type, left, right, line);
-    if (node)
+    if (node) {
         node->column = column;
+        /* The binary node starts at the operator token (its stable semantic
+         * identity) and ends at the last token consumed by its right-hand
+         * operand.  parser->previous is the exact consumed token boundary, so
+         * this remains complete even when a leaf factory has no end range. */
+        if (parser->previous.line > 0 && parser->previous.column > 0 &&
+            parser->previous.length > 0) {
+            node->end_line = parser->previous.line;
+            node->end_column = parser->previous.column + parser->previous.length;
+        }
+    }
     return node;
 }
 
