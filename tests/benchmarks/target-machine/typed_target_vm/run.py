@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproducible gate for the direct typed TargetPlan scalar/frame probe."""
+"""Reproducible gate for the typed TargetPlan scalar/call/frame probe."""
 
 from __future__ import annotations
 
@@ -19,10 +19,11 @@ import sys
 from typing import Any
 
 
-RUNNER = "typed-target-vm-performance/1"
+RUNNER = "typed-target-vm-performance/2"
 DEFAULT_POLICY = Path("contracts/target-machine/baseline-manifest.json")
 ARITHMETIC_OPERATIONS = 512
 SCALAR_EXECUTIONS = 512
+CALL_EXECUTIONS = 512
 FRAME_ITERATIONS = 1024
 
 
@@ -194,7 +195,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     command = [
         str(args.benchmark), str(warmups), str(samples),
         str(ARITHMETIC_OPERATIONS),
-        str(SCALAR_EXECUTIONS), str(FRAME_ITERATIONS),
+        str(SCALAR_EXECUTIONS), str(CALL_EXECUTIONS), str(FRAME_ITERATIONS),
     ]
     completed = subprocess.run(
         command, text=True, encoding="utf-8", errors="replace",
@@ -206,24 +207,37 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
             f"benchmark probe failed ({completed.returncode}): {completed.stderr.strip()}"
         )
     probe = json.loads(completed.stdout)
-    if probe.get("schema") != 1 or probe.get("sample_count") != samples:
+    if probe.get("schema") != 2 or probe.get("sample_count") != samples:
         raise ValueError("benchmark probe schema/protocol mismatch")
     if (probe.get("warmup_runs") != warmups or
             probe.get("scalar", {}).get("arithmetic_operations_per_execution") !=
             ARITHMETIC_OPERATIONS or
             probe.get("scalar", {}).get("executions_per_sample") !=
             SCALAR_EXECUTIONS or
+            probe.get("call", {}).get("direct_calls_per_execution") != 1 or
+            probe.get("call", {}).get("executions_per_sample") !=
+            CALL_EXECUTIONS or
+            probe.get("call", {}).get("argument_count") != 1 or
+            probe.get("call", {}).get("adapter_count") != 0 or
+            probe.get("call", {}).get("argument_staging") !=
+            "immutable-target-plan-call-argument-rows" or
             probe.get("frame_memory", {}).get("frames_per_sample") !=
             FRAME_ITERATIONS):
         raise ValueError("benchmark probe workload/protocol mismatch")
     scalar_units = ARITHMETIC_OPERATIONS * SCALAR_EXECUTIONS
     scalar_samples = normalized_samples(probe["scalar"], samples, scalar_units)
+    call_samples = normalized_samples(
+        probe["call"], samples, CALL_EXECUTIONS
+    )
     frame_samples = normalized_samples(
         probe["frame_memory"], samples, FRAME_ITERATIONS
     )
     scalar = distribution(scalar_samples, "nanoseconds-per-arithmetic-operation")
+    call = distribution(call_samples, "nanoseconds-per-direct-call")
     frame = distribution(frame_samples, "nanoseconds-per-frame-create-free")
     footprint, errors = validate_footprint(probe)
+    if probe["call"].get("runtime_generic_argument_array_bytes") != 0:
+        errors.append("direct call uses a runtime generic argument array")
     identity = source_identity(args.policy.resolve().parents[2])
     if identity["git_dirty"]:
         errors.append("source worktree is dirty")
@@ -233,19 +247,20 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         errors.append("benchmark binary commit does not match source commit")
     if probe.get("build_profile") != "Release" or not probe.get("release_build"):
         errors.append("benchmark binary is not the Release profile")
-    for name, lane in (("scalar", scalar), ("frame-memory", frame)):
+    for name, lane in (("scalar", scalar), ("direct-call", call),
+                       ("frame-memory", frame)):
         if lane["coefficient_of_variation"] > max_cv:
             errors.append(
                 f"{name} coefficient of variation exceeds {max_cv}"
             )
     summary = {
         "geometric_mean_lane_median_ns_per_work_unit": round(
-            geometric_mean([scalar["p50"], frame["p50"]]), 6
+            geometric_mean([scalar["p50"], call["p50"], frame["p50"]]), 6
         ),
         "throughput_qualification": "recorded-baseline-no-frozen-numeric-threshold",
     }
     return {
-        "schema": "xray.typed-target-vm.performance.v1",
+        "schema": "xray.typed-target-vm.performance.v2",
         "runner": RUNNER,
         "result": "passed" if not errors else "failed",
         "errors": errors,
@@ -273,6 +288,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
             "python": platform.python_version(),
         },
         "scalar": {**probe["scalar"], "normalized": scalar},
+        "call": {**probe["call"], "normalized": call},
         "frame_memory": {**probe["frame_memory"], "normalized": frame},
         "footprint": footprint,
         "summary": summary,
@@ -319,7 +335,7 @@ def main() -> int:
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError,
             json.JSONDecodeError) as error:
         payload = {
-            "schema": "xray.typed-target-vm.performance.v1",
+            "schema": "xray.typed-target-vm.performance.v2",
             "runner": RUNNER,
             "result": "failed",
             "errors": [str(error)],

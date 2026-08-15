@@ -149,10 +149,14 @@ Evidence:
   footprint query is present there, and proves that the scalar dispatcher is
   present without activating it.
 - `typed_target_vm_performance_gate` directly times the verified scalar
-  dispatcher and packed frame allocation on Windows Release. It consumes the
-  frozen target-machine warmup, sample-count, CPU, power-policy, and variation
-  rules; records throughput as a baseline until a numeric typed-executor budget
-  is frozen; and gates zero Release slot-state metadata plus the exact bounded
+  dispatcher, one exact adapter-free `CALL_DIRECT_I64`, and packed frame
+  allocation on Windows Release. The call fixture proves that argument
+  staging reads the immutable `XrTargetCallArgumentRecord` rows directly and
+  reports zero runtime generic-argument-array bytes; the anchored dispatcher
+  source keeps that claim fail closed. The gate consumes the frozen
+  target-machine warmup, sample-count, CPU, power-policy, and variation rules;
+  records all three lanes as baselines until numeric typed-executor budgets are
+  frozen; and gates zero Release slot-state metadata plus the exact bounded
   footprint independently of timing.
 - `test_runtime_generation` proves that only a sole-function, nonempty scalar
   instruction plan may activate and consume this frame through the bounded
@@ -164,6 +168,9 @@ Evidence:
 anchor-sha256: src/plan/target/xr_target_plan.h d1ed20e9afa4b5c1bb361a939a8c5b627c6d4e814b68f3303b8a05454bfa5c99
 anchor-sha256: src/vm/xr_typed_frame.h d8cebf1c70bfa0066b58a5f6563007afa3c13a63078fa15dc8315212fb7b238b
 anchor-sha256: src/vm/xr_typed_frame.c 97671813b4a933163a75ea55be9e8c65ec295ec05d67ec4fdc682433f420bb4e
+anchor-sha256: src/vm/xr_typed_dispatch.c ef9ad355401e587b4d27f3189f01c0b0e7779145e0aa1089a70a3dfca9d9147a
+anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c a59c3711715175cbf009341e15720bff4457d8435e37e3252145ef49cc8fe7d1
+anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py e9e057b890df32005e054290a3425f239c1b3c594432a044a04bd6a12dc6dd14
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8bb1c1150e0f916b37c21676537fb507f18dec6a10da01b0e6932043d738e1f9
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 60932993669807446d5d1f250fe0daec85207bafaca59cebf3eb55e56144b7d3
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1
