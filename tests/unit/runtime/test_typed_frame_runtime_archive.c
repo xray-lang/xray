@@ -12,6 +12,7 @@ int main(void) {
     XrFingerprint fingerprint = {{0}};
     XrTypedFrame *frame = (XrTypedFrame *) (uintptr_t) 1;
     XrTypedFrameContext context;
+    XrTypedFrameMemoryFootprint footprint;
     XrModuleGenerationIdentity generation = {0};
     int64_t result = 1;
     if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(30) ||
@@ -22,6 +23,8 @@ int main(void) {
         frame != NULL ||
         xr_typed_frame_cleanup(NULL) != XR_TYPED_FRAME_INVALID_ARGUMENT ||
         xr_typed_frame_context(NULL, &context) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_memory_footprint(NULL, &footprint) !=
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
         xr_typed_frame_enter_instruction(NULL, 0) !=
             XR_TYPED_FRAME_INVALID_ARGUMENT ||

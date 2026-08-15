@@ -133,14 +133,27 @@ allocation budgets, and makes cleanup terminal. Frame creation recomputes the
 target-content fingerprint without consulting SemanticPlan. No runtime type
 tag, source type inference, legacy bytecode frame, or AOT value-plan fallback
 may authorize an access.
+The read-only memory-footprint query reports the fixed frame object, the exact
+packed-plan arena allocation, its bounded alignment padding, optional audit
+slot-state bytes, and their checked exact total. A Release frame carries zero
+slot-state metadata bytes. The report does not estimate allocator bookkeeping,
+fragmentation, or any storage outside the frame allocation it owns.
 
 Evidence:
 
 - `test_typed_frame` proves exact schema/family/fingerprint rejection, packed
-  access identity, initialization/poison/cleanup state, and allocation budgets.
+  access identity, initialization/poison/cleanup state, allocation budgets,
+  the exact footprint sum, and its total-limit boundary.
 - `test_typed_frame_runtime_archive` proves the public header and symbols link
-  from the runtime-only archive without compiler or AOT ownership, and proves
-  that the scalar dispatcher is present without activating it.
+  from the runtime-only archive without compiler or AOT ownership, proves the
+  footprint query is present there, and proves that the scalar dispatcher is
+  present without activating it.
+- `typed_target_vm_performance_gate` directly times the verified scalar
+  dispatcher and packed frame allocation on Windows Release. It consumes the
+  frozen target-machine warmup, sample-count, CPU, power-policy, and variation
+  rules; records throughput as a baseline until a numeric typed-executor budget
+  is frozen; and gates zero Release slot-state metadata plus the exact bounded
+  footprint independently of timing.
 - `test_runtime_generation` proves that only a sole-function, nonempty scalar
   instruction plan may activate and consume this frame through the bounded
   generation executor; rooted, call, adapter, and coroutine plans remain
@@ -149,8 +162,8 @@ Evidence:
   the exact XSM/XTP sole-function generation route.
 
 anchor-sha256: src/plan/target/xr_target_plan.h acf4bf939db359fbc6bf2166e0825ae529bf8fc5da019cfeeebe7a0579be03ee
-anchor-sha256: src/vm/xr_typed_frame.h 710716394f90920492033e6c85368e445dcf6d052896ecab6f9ebd809f693c9c
-anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
-anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c d4321af850042dc177e7861cefc84f147fac14e9de8baab668729c27b1cca6f7
+anchor-sha256: src/vm/xr_typed_frame.h 2efa9df337e0ec2ef5113cc116523c61c595c8b51914c4c3c2b85331d738a022
+anchor-sha256: src/vm/xr_typed_frame.c 97671813b4a933163a75ea55be9e8c65ec295ec05d67ec4fdc682433f420bb4e
+anchor-sha256: tests/unit/vm/test_typed_frame.c 8bb1c1150e0f916b37c21676537fb507f18dec6a10da01b0e6932043d738e1f9
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 6379d9affca2e1b817103b5d54470dc8c08436d85628dc152aa6cbee5713c262
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

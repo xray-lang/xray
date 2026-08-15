@@ -117,6 +117,21 @@ static void test_exact_slot_access_and_states(void) {
     REQUIRE(function_count == 1);
     REQUIRE(xr_typed_frame_arena_size(frame) == functions[0].frame_size);
     REQUIRE(xr_typed_frame_slot_count(frame) == functions[0].slot_count);
+    XrTypedFrameMemoryFootprint footprint;
+    REQUIRE(xr_typed_frame_memory_footprint(frame, &footprint) ==
+            XR_TYPED_FRAME_OK);
+    REQUIRE(footprint.arena_allocation_bytes == functions[0].frame_size);
+    REQUIRE(footprint.alignment_padding_bytes ==
+            (functions[0].frame_size ? functions[0].frame_align - 1u : 0u));
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
+    REQUIRE(footprint.slot_state_metadata_bytes == functions[0].slot_count);
+#else
+    REQUIRE(footprint.slot_state_metadata_bytes == 0);
+#endif
+    REQUIRE(footprint.total_bytes ==
+            footprint.fixed_frame_bytes + footprint.arena_allocation_bytes +
+                footprint.alignment_padding_bytes +
+                footprint.slot_state_metadata_bytes);
 
     XrTypedSlotAccess access;
     REQUIRE(xr_typed_frame_describe_slot(frame, functions[0].slot_begin,
@@ -218,6 +233,11 @@ static void test_exact_slot_access_and_states(void) {
     REQUIRE(xr_typed_frame_cleanup(frame) == XR_TYPED_FRAME_CLEANED);
     REQUIRE(xr_typed_frame_arena_size(frame) == 0);
     REQUIRE(xr_typed_frame_slot_count(frame) == 0);
+    memset(&footprint, 0xcc, sizeof(footprint));
+    REQUIRE(xr_typed_frame_memory_footprint(frame, &footprint) ==
+            XR_TYPED_FRAME_CLEANED);
+    REQUIRE(memcmp(&footprint, &(XrTypedFrameMemoryFootprint) {0},
+                   sizeof(footprint)) == 0);
     REQUIRE(xr_typed_frame_load(frame, &access, loaded, access.size) ==
             XR_TYPED_FRAME_CLEANED);
     xr_typed_frame_free(frame);
@@ -273,6 +293,13 @@ static void test_plan_identity_shape_and_budgets(void) {
     REQUIRE(frame == NULL);
     fixture.plan->slots[0].offset = slot_offset;
 
+    frame = create_frame(&fixture, &limits);
+    XrTypedFrameMemoryFootprint footprint;
+    REQUIRE(xr_typed_frame_memory_footprint(frame, &footprint) ==
+            XR_TYPED_FRAME_OK);
+    xr_typed_frame_free(frame);
+    frame = NULL;
+
     XrTypedFrameLimits small = limits;
     REQUIRE(fixture.plan->functions[0].frame_size > 0);
     small.max_arena_bytes = fixture.plan->functions[0].frame_size - 1u;
@@ -284,9 +311,14 @@ static void test_plan_identity_shape_and_budgets(void) {
     REQUIRE(xr_typed_frame_create(fixture.plan, &fingerprint, 0, &small,
                                   &frame) == XR_TYPED_FRAME_BUDGET_EXHAUSTED);
     small = limits;
-    small.max_total_bytes = 0;
+    small.max_total_bytes = footprint.total_bytes - 1u;
     REQUIRE(xr_typed_frame_create(fixture.plan, &fingerprint, 0, &small,
                                   &frame) == XR_TYPED_FRAME_BUDGET_EXHAUSTED);
+    small.max_total_bytes = footprint.total_bytes;
+    REQUIRE(xr_typed_frame_create(fixture.plan, &fingerprint, 0, &small,
+                                  &frame) == XR_TYPED_FRAME_OK);
+    xr_typed_frame_free(frame);
+    frame = NULL;
     small = limits;
     small.max_arena_bytes = XR_TYPED_FRAME_MAX_ARENA_BYTES + 1u;
     REQUIRE(xr_typed_frame_create(fixture.plan, &fingerprint, 0, &small,

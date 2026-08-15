@@ -657,6 +657,37 @@ XR_FUNC uint32_t xr_typed_frame_slot_count(const XrTypedFrame *frame) {
     return frame && !frame->cleaned ? frame->slot_count : 0;
 }
 
+XR_FUNC XrTypedFrameStatus xr_typed_frame_memory_footprint(
+    const XrTypedFrame *frame, XrTypedFrameMemoryFootprint *footprint) {
+    if (footprint)
+        memset(footprint, 0, sizeof(*footprint));
+    if (!frame || !footprint)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    if (frame->cleaned)
+        return XR_TYPED_FRAME_CLEANED;
+    if (!frame_plan_identity_is_intact(frame))
+        return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
+    size_t arena_bytes = frame->function->frame_size;
+    if (frame->allocation_size < arena_bytes)
+        return XR_TYPED_FRAME_SLOT_INVALID;
+    XrTypedFrameMemoryFootprint measured = {
+        .fixed_frame_bytes = sizeof(*frame),
+        .arena_allocation_bytes = arena_bytes,
+        .alignment_padding_bytes = frame->allocation_size - arena_bytes,
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
+        .slot_state_metadata_bytes = frame->slot_count,
+#endif
+    };
+    size_t total = measured.fixed_frame_bytes;
+    if (!checked_add_size(total, measured.arena_allocation_bytes, &total) ||
+        !checked_add_size(total, measured.alignment_padding_bytes, &total) ||
+        !checked_add_size(total, measured.slot_state_metadata_bytes, &total))
+        return XR_TYPED_FRAME_BUDGET_EXHAUSTED;
+    measured.total_bytes = total;
+    *footprint = measured;
+    return XR_TYPED_FRAME_OK;
+}
+
 XR_FUNC XrTypedFrameStatus xr_typed_frame_cleanup(XrTypedFrame *frame) {
     if (!frame)
         return XR_TYPED_FRAME_INVALID_ARGUMENT;

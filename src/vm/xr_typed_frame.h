@@ -88,6 +88,17 @@ typedef struct XrTypedSlotAccess {
     uint16_t reserved;
 } XrTypedSlotAccess;
 
+/* Payload bytes requested from the allocator for one live frame. Allocator
+ * bookkeeping and heap fragmentation are deliberately outside this contract:
+ * neither is owned or knowable by the typed-frame implementation. */
+typedef struct XrTypedFrameMemoryFootprint {
+    size_t fixed_frame_bytes;
+    size_t arena_allocation_bytes;
+    size_t alignment_padding_bytes;
+    size_t slot_state_metadata_bytes;
+    size_t total_bytes;
+} XrTypedFrameMemoryFootprint;
+
 /* A target function is identified by the immutable plan fingerprint plus the
  * exact target and semantic indexes. TargetPlan has no second name-based
  * function identity, so this tuple is the complete runtime identity. */
@@ -151,6 +162,8 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_unlink_child(
     XrTypedFrame *parent, XrTypedFrame *child);
 XR_FUNC size_t xr_typed_frame_arena_size(const XrTypedFrame *frame);
 XR_FUNC uint32_t xr_typed_frame_slot_count(const XrTypedFrame *frame);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_memory_footprint(
+    const XrTypedFrame *frame, XrTypedFrameMemoryFootprint *footprint);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_cleanup(XrTypedFrame *frame);
 XR_FUNC void xr_typed_frame_free(XrTypedFrame *frame);
 
