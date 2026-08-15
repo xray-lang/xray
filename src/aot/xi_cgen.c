@@ -2664,6 +2664,94 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function,
            semantic_function == function->semantic_plan_function_index;
 }
 
+/* Select a migrated cleanup only through the verified TargetPlan row and its
+ * immutable C projection.  Absence means that the release belongs to an
+ * unmigrated family; disagreement between the two frozen plans is a hard
+ * error. */
+static CgValueEmissionStatus cg_cleanup_emission_view(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    XrCCleanupEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || (!ctx->value_emission_registry &&
+                 ctx->value_emission_registry_count == 0))
+        return CG_VALUE_EMISSION_NOT_CONFIGURED;
+    if (!ctx->value_emission_registry || !function || !value || !out ||
+        !function->semantic_plan)
+        return cg_value_emission_fail(ctx,
+                                      "C cleanup emission input is missing");
+    const CgValueEmissionRegistryEntry *entry = NULL;
+    for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
+        if (ctx->value_emission_registry[i].semantic_plan !=
+            function->semantic_plan)
+            continue;
+        if (entry)
+            return cg_value_emission_fail(
+                ctx, "C cleanup SemanticPlan authority is duplicated");
+        entry = &ctx->value_emission_registry[i];
+    }
+    uint32_t cleanup_count = 0;
+    uint32_t function_count = 0;
+    const XrTargetCleanupRecord *cleanups = entry
+        ? xr_target_plan_cleanups(entry->target_plan, &cleanup_count) : NULL;
+    const XrTargetFunctionRecord *functions = entry
+        ? xr_target_plan_functions(entry->target_plan, &function_count) : NULL;
+    uint32_t function_index = function->semantic_plan_function_index;
+    if (entry && functions && function_index < function_count &&
+        functions[function_index].cleanup_count == 0)
+        return CG_VALUE_EMISSION_NOT_COVERED;
+    if (!entry || !functions || function_index >= function_count ||
+        !cleanups || cleanup_count == 0)
+        return entry ? cg_value_emission_fail(
+                           ctx, "C cleanup function partition is invalid")
+                     : cg_value_emission_fail(
+                           ctx, "C cleanup SemanticPlan authority is missing");
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    if (!cg_value_semantic_id(ctx, function, value, &semantic_value))
+        return cg_value_emission_fail(
+            ctx, "C cleanup semantic operation identity is missing");
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(
+        function->semantic_plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(function->semantic_plan, i);
+        if (!candidate ||
+            candidate->function != function->semantic_plan_function_index ||
+            candidate->result_value != semantic_value)
+            continue;
+        if (operation)
+            return cg_value_emission_fail(
+                ctx, "C cleanup semantic operation identity is ambiguous");
+        operation = candidate;
+        operation_index = i;
+    }
+    if (!operation || operation->opcode != XI_RELEASE)
+        return CG_VALUE_EMISSION_NOT_COVERED;
+    const XrTargetCleanupRecord *target = NULL;
+    for (uint32_t i = 0; cleanups && i < cleanup_count; i++) {
+        if (cleanups[i].semantic_operation != operation_index)
+            continue;
+        if (target)
+            return cg_value_emission_fail(
+                ctx, "C cleanup TargetPlan identity is duplicated");
+        target = &cleanups[i];
+    }
+    if (!target)
+        return CG_VALUE_EMISSION_NOT_COVERED;
+    char error[256] = {0};
+    if (!xr_c_emission_plan_cleanup_view(
+            entry->emission_plan, operation_index, out, error,
+            sizeof(error)) ||
+        out->target_slot != target->slot ||
+        out->action != XR_C_CLEANUP_RELEASE || out->flags != 0 ||
+        out->reserved != 0 || !out->recipe_symbol)
+        return cg_value_emission_fail(
+            ctx, error[0] ? error : "C cleanup projection is stale");
+    return CG_VALUE_EMISSION_FOUND;
+}
+
 /* Resolve Array.reserve only from the frozen SemanticPlan operation and its
  * verified TargetPlan call row.  The live Xi intrinsic id is checked after
  * that authority is found so a mutated backend value cannot borrow the row;

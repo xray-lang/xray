@@ -37,6 +37,8 @@ XR_FUNC bool xr_c_emission_plan_verify(
 XR_FUNC uint32_t xr_c_emission_plan_value_count(const XrCEmissionPlan *plan);
 XR_FUNC uint32_t xr_c_emission_plan_call_argument_count(
     const XrCEmissionPlan *plan);
+XR_FUNC uint32_t xr_c_emission_plan_cleanup_count(
+    const XrCEmissionPlan *plan);
 XR_FUNC XrFingerprint xr_c_emission_plan_fingerprint(const XrCEmissionPlan *plan);
 XR_FUNC XrFingerprint xr_c_emission_plan_target_fingerprint(const XrCEmissionPlan *plan);
 XR_FUNC XrFingerprint xr_c_emission_plan_profile_fingerprint(const XrCEmissionPlan *plan);
@@ -49,5 +51,8 @@ XR_FUNC bool xr_c_emission_plan_call_argument_view(
     const XrCEmissionPlan *plan, uint32_t semantic_call_value,
     uint16_t ordinal, XrCCallArgumentEmissionView *out, char *error,
     size_t error_size);
+XR_FUNC bool xr_c_emission_plan_cleanup_view(
+    const XrCEmissionPlan *plan, uint32_t semantic_operation,
+    XrCCleanupEmissionView *out, char *error, size_t error_size);
 
 #endif  // XR_C_EMISSION_PLAN_H

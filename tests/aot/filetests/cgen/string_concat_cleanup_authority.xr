@@ -1,0 +1,6 @@
+fn consume() {
+    var value = "left" + "right"
+    print(value)
+}
+
+consume()

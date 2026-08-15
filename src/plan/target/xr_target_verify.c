@@ -27,6 +27,7 @@
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_enum_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
+#include "../semantic/xr_semantic_cleanup_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_string_runes_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
@@ -6592,9 +6593,59 @@ static bool verify_roots_and_cleanups(const XrTargetPlan *plan, char *error, siz
                           "root slot ranges do not exactly partition their table");
     }
     if (next_root_slot != plan->root_slots_count || plan->root_maps_count ||
-        plan->root_slots_count || plan->cleanups_count)
+        plan->root_slots_count)
         return report(error, error_size, "XR_TARGET_1002",
-                      "root and cleanup tables require semantic liveness facts");
+                      "root tables require semantic liveness facts");
+
+    uint32_t expected_cleanup = 0;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(plan->semantic_plan);
+    for (uint32_t operation = 0; operation < operation_count; operation++) {
+        XrSemanticStringConcatReleaseShape shape = {0};
+        if (!xr_semantic_string_concat_release_is_exact(
+                plan->semantic_plan, operation, &shape))
+            continue;
+        if (expected_cleanup >= plan->cleanups_count)
+            return report(error, error_size, "XR_TARGET_1002",
+                          "String cleanup table is missing a release");
+        const XrTargetCleanupRecord *cleanup =
+            &plan->cleanups[expected_cleanup];
+        const XrTargetValueRepRecord *binding =
+            xr_target_plan_value_rep(plan, shape.released_value);
+        const XrTargetSlotRecord *slot =
+            binding && binding->slot < plan->slots_count
+                ? &plan->slots[binding->slot]
+                : NULL;
+        const XrTargetMachineRepRecord *register_rep =
+            binding ? xr_target_plan_machine_rep(plan,
+                                                 binding->register_rep)
+                    : NULL;
+        const XrTargetMachineRepRecord *memory_rep =
+            binding ? xr_target_plan_machine_rep(plan, binding->memory_rep)
+                    : NULL;
+        if (!slot || !register_rep || !memory_rep ||
+            cleanup->id != expected_cleanup ||
+            cleanup->function != shape.function ||
+            cleanup->semantic_operation != operation ||
+            cleanup->slot != binding->slot ||
+            cleanup->action != XR_TARGET_CLEANUP_RELEASE ||
+            cleanup->flags != 0 || cleanup->provider != 0 ||
+            register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+            memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+            slot->function != shape.function ||
+            slot->semantic_value != shape.released_value ||
+            slot->semantic_operation != shape.producer_operation ||
+            slot->register_rep != binding->register_rep ||
+            slot->memory_rep != binding->memory_rep ||
+            slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+            slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+            return report(error, error_size, "XR_TARGET_1002",
+                          "String cleanup row is not exact");
+        expected_cleanup++;
+    }
+    if (expected_cleanup != plan->cleanups_count)
+        return report(error, error_size, "XR_TARGET_1002",
+                      "String cleanup table has an extra release");
     return true;
 }
 

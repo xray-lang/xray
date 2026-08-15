@@ -11820,6 +11820,33 @@ static bool cg_release_target_is_stack_closure(const XiValue *v) {
 
 static void xicgen_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
+    XrCCleanupEmissionView cleanup = {0};
+    CgValueEmissionStatus status =
+        cg_cleanup_emission_view(ctx, f, v, &cleanup);
+    if (status == CG_VALUE_EMISSION_ERROR) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (status == CG_VALUE_EMISSION_FOUND) {
+        XrCValueEmissionView operand = {0};
+        if (!v->args || v->nargs != 1 || !v->args[0] ||
+            cg_value_emission_view(ctx, f, v->args[0], &operand) !=
+                CG_VALUE_EMISSION_FOUND ||
+            operand.semantic_value != cleanup.semantic_value ||
+            operand.rep != XR_C_VALUE_REP_TAGGED ||
+            operand.target_register_kind != XR_MACHINE_REP_DYN_VALUE ||
+            operand.target_memory_kind != XR_MACHINE_REP_DYN_VALUE ||
+            strcmp(cleanup.recipe_symbol, "xrt_release") != 0) {
+            cg_value_emission_fail(
+                ctx, "String cleanup operand disagrees with frozen authority");
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "%s(", cleanup.recipe_symbol);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+        return;
+    }
     xicgen_ownership_call(ctx, out, f, v, prefix,
                           cg_release_target_is_stack_closure(v) ? "xrt_closure_stack_drop"
                                                                 : "xrt_release");

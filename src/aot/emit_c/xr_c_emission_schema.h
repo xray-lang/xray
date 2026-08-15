@@ -83,6 +83,11 @@ typedef enum XrCAddressProjection {
     XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING = 2,
 } XrCAddressProjection;
 
+typedef enum XrCCleanupAction {
+    XR_C_CLEANUP_INVALID = 0,
+    XR_C_CLEANUP_RELEASE = 1,
+} XrCCleanupAction;
+
 typedef struct XrCRecipeArgumentView {
     uint32_t semantic_value;
     uint8_t kind;
@@ -143,5 +148,17 @@ typedef struct XrCCallArgumentEmissionView {
     uint8_t reserved[3];
     const char *c_type;
 } XrCCallArgumentEmissionView;
+
+/* Exact C projection of one TargetPlan cleanup.  The operation and slot are
+ * frozen numeric identities; recipe_symbol is the only emitter spelling. */
+typedef struct XrCCleanupEmissionView {
+    uint32_t semantic_operation;
+    uint32_t semantic_value;
+    uint32_t target_slot;
+    uint8_t action;
+    uint8_t flags;
+    uint16_t reserved;
+    const char *recipe_symbol;
+} XrCCleanupEmissionView;
 
 #endif  // XR_C_EMISSION_SCHEMA_H

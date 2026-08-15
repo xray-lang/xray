@@ -75,6 +75,40 @@ static XrType stub_stringbuilder = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .instance = {.class_name = "StringBuilder"},
 };
+static XrType stub_string = {
+    .kind = XR_KIND_STRING,
+    .id = 7,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+
+static XrSemanticPlan *build_string_concat_release_semantic_plan(void) {
+    XiFunc *function = xi_func_new("xtp_string_concat_release", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *left = xi_const_str(function, entry, "left", &stub_string);
+    XiValue *right = xi_const_str(function, entry, "right", &stub_string);
+    XiValue *concat =
+        xi_value_new(function, entry, XI_STR_CONCAT, &stub_string, 2);
+    REQUIRE(left != NULL && right != NULL && concat != NULL);
+    concat->args[0] = left;
+    concat->args[1] = right;
+    XiValue *release =
+        xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(release != NULL && result != NULL);
+    release->args[0] = concat;
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error,
+                                   sizeof(error)));
+    REQUIRE(semantic != NULL);
+    xi_func_free(function);
+    return semantic;
+}
 
 static XrSemanticPlan *build_stringbuilder_semantic_plan(void) {
     XiFunc *function = xi_func_new("xtp_stringbuilder", &stub_int);
@@ -594,6 +628,11 @@ static XtpFixture make_stringbuilder_fixture(void) {
     return make_fixture_from_semantic(build_stringbuilder_semantic_plan());
 }
 
+static XtpFixture make_string_concat_release_fixture(void) {
+    return make_fixture_from_semantic(
+        build_string_concat_release_semantic_plan());
+}
+
 static XtpFixture make_source_export_fixture(void) {
     XtpFixture fixture = {0};
     fixture.semantic =
@@ -969,6 +1008,55 @@ static void test_stringbuilder_row_roundtrip_and_mutate(void) {
         size_t offset = (size_t) xr_xtp_take_u64(entry + 8);
         copy[offset + mutations[i]] ^= 1;
         resign_section(copy, XR_XTP_SECTION_CALLS);
+        resign_artifact(copy, fixture.size);
+        expect_materialize_failure(&fixture, copy);
+        xr_free(copy);
+    }
+    dispose_fixture(&fixture);
+}
+
+static void test_cleanup_row_roundtrip_and_mutate(void) {
+    XtpFixture fixture = make_string_concat_release_fixture();
+    uint32_t count = 0;
+    const XrTargetCleanupRecord *cleanups =
+        xr_target_plan_cleanups(fixture.plan, &count);
+    REQUIRE(cleanups != NULL && count == 1 && cleanups[0].id == 0 &&
+            cleanups[0].function == 0 &&
+            cleanups[0].action == XR_TARGET_CLEANUP_RELEASE &&
+            cleanups[0].flags == 0 && cleanups[0].provider == 0);
+
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *decoded = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
+                                    error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
+                                            fixture.profile, &decoded, error,
+                                            sizeof(error)));
+    const XrTargetCleanupRecord *decoded_cleanups =
+        xr_target_plan_cleanups(decoded, &count);
+    REQUIRE(decoded_cleanups != NULL && count == 1 &&
+            decoded_cleanups[0].semantic_operation ==
+                cleanups[0].semantic_operation &&
+            decoded_cleanups[0].slot == cleanups[0].slot &&
+            decoded_cleanups[0].action == XR_TARGET_CLEANUP_RELEASE &&
+            xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
+                                 xr_target_plan_fingerprint(fixture.plan)));
+    xr_target_plan_free(decoded);
+    xr_xtp_candidate_release(candidate);
+
+    static const size_t mutations[] = {
+        8,  /* semantic_operation */
+        12, /* slot */
+        16, /* action */
+        18, /* provider */
+    };
+    for (uint32_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
+        uint8_t *copy = copy_artifact(&fixture);
+        uint8_t *entry = directory_entry(copy, XR_XTP_SECTION_CLEANUPS);
+        size_t offset = (size_t) xr_xtp_take_u64(entry + 8);
+        copy[offset + mutations[i]] ^= 1;
+        resign_section(copy, XR_XTP_SECTION_CLEANUPS);
         resign_artifact(copy, fixture.size);
         expect_materialize_failure(&fixture, copy);
         xr_free(copy);
@@ -1765,6 +1853,7 @@ int main(int argc, char **argv) {
     test_direct_call_rows_roundtrip_and_mutate();
     test_channel_close_row_roundtrip_and_mutate();
     test_stringbuilder_row_roundtrip_and_mutate();
+    test_cleanup_row_roundtrip_and_mutate();
     test_source_export_row_roundtrip_and_mutate();
     test_coroutine_rows_roundtrip_and_mutate();
     test_header_and_directory_mutations();

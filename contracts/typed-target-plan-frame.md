@@ -1,12 +1,12 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 33 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 34 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
 plan the builder emits.
-Schema 33 is a breaking hard cutover: schema 32 and earlier and a plan missing
+Schema 34 is a breaking hard cutover: schema 33 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
@@ -199,12 +199,12 @@ Evidence:
   the exact XSM/XTP sole-function generation route.
 
 anchor-sha256: src/plan/target/xr_target_plan.h a2835453ea48011c9b5a3c12a31283fb7227d35c9ff1f722f19f24b8fd8fc5fc
-anchor-sha256: src/vm/xr_typed_frame.h d07112355960a3d2acc9781d3927e1374e4add29a3c5b52a3da61602e611e115
+anchor-sha256: src/vm/xr_typed_frame.h 2a66ff7a7601917033f717c794a4c3234534cfe146bd2c9b8067eb3f15b4b48c
 anchor-sha256: src/vm/xr_typed_frame.c 5e5d7615d8dfe580ac8104f6f391219b876f2789335cfa41ea9e122abf45adb1
 anchor-sha256: src/vm/xr_typed_dispatch.c d322275c81f8e833f2f9a850ca8163384e42bb9d703d8a40c16ccb7d711aa9ac
 anchor-sha256: scripts/check_typed_call_staging.py 70224976eb831b98465bd1f719f2e66bd81fdf59503a4c929a2542b2081e8655
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c c3944b969694367aff2ecf8f46ccfbffd9dc4decbb2099d4a572a9989984eac2
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py e9e057b890df32005e054290a3425f239c1b3c594432a044a04bd6a12dc6dd14
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8f2acc619749a086bf3be97ef9799ea6abef2c45151113b13a87b9a3609f8101
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 948a32a64f0f74a42f088da5308c076788f1b87cf39bcede5589ad47aceda380
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 9a50ffa2574a505c375f372893c8168dc082873b1a11b1d546e377b9424a3031
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 971cf9989386d2c660c828f8e36df295d1ee61fa1458d12b03700e1ecb88f246

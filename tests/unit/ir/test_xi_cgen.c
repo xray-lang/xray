@@ -3910,6 +3910,26 @@ TEST(cgen_str_concat_uses_single_allocation_helper) {
 #undef CHECK_CGEN_STR_CONCAT
 }
 
+TEST(cgen_string_concat_cleanup_consumes_immutable_emission) {
+    const char *src = "fn consume() {\n"
+                      "    var value = \"left\" + \"right\"\n"
+                      "    print(value)\n"
+                      "}\n"
+                      "consume()\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "String concat cleanup fixture should compile");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "cleanup", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "String concat cleanup must consume frozen cleanup authority");
+    TEST_REQUIRE(contains(code, "xrt_str_concat_parts("),
+                 "String concat must consume its immutable allocation recipe");
+    TEST_REQUIRE(contains(code, "xrt_release("),
+                 "String concat owner must consume its immutable release recipe");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_function_call) {
     /* Function definition and call */
     const char *src = "fn add(a: int, b: int) -> int { return a + b }\n"
@@ -13833,6 +13853,7 @@ int main(void) {
     run_cgen_while_loop();
     run_cgen_string_literal();
     run_cgen_str_concat_uses_single_allocation_helper();
+    run_cgen_string_concat_cleanup_consumes_immutable_emission();
     run_cgen_function_call();
     run_cgen_canonical_generic_function_body_is_executable();
     run_cgen_plain_function_does_not_emit_public_c_abi_wrapper();

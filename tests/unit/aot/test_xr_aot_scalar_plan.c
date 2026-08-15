@@ -26,6 +26,7 @@
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_cleanup_shape.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile.h"
@@ -48,6 +49,8 @@ struct XrCEmissionPlan {
     uint32_t call_argument_count;
     XrCRecipeArgumentView *recipe_arguments;
     uint32_t recipe_argument_count;
+    XrCCleanupEmissionView *cleanups;
+    uint32_t cleanup_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
     XrFingerprint profile_fingerprint;
@@ -975,7 +978,7 @@ static void test_panic_catch_c_emission_recipe_is_exact(void) {
 }
 
 static void test_string_concat_c_emission_recipe_is_exact(void) {
-    XiFunc *function = xi_func_new("string_concat_recipe", &scalar_string);
+    XiFunc *function = xi_func_new("string_concat_recipe", &scalar_int);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
@@ -986,7 +989,12 @@ static void test_string_concat_c_emission_recipe_is_exact(void) {
     REQUIRE(left && right && concat);
     concat->args[0] = left;
     concat->args[1] = right;
-    xi_block_set_return(entry, concat);
+    XiValue *release =
+        xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
+    XiValue *result = xi_const_int(function, entry, 0, &scalar_int);
+    REQUIRE(release && result);
+    release->args[0] = concat;
+    xi_block_set_return(entry, result);
     function->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
@@ -1006,6 +1014,7 @@ static void test_string_concat_c_emission_recipe_is_exact(void) {
     uint32_t concat_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t left_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t right_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t release_value = XR_SEMANTIC_INDEX_NONE;
     REQUIRE(xr_aot_scalar_semantic_value_id(
         target, function, concat, &semantic_function, &concat_value, error,
         sizeof(error)));
@@ -1015,6 +1024,50 @@ static void test_string_concat_c_emission_recipe_is_exact(void) {
     REQUIRE(xr_aot_scalar_semantic_value_id(
         target, function, right, &semantic_function, &right_value, error,
         sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, release, &semantic_function, &release_value, error,
+        sizeof(error)));
+    uint32_t release_operation = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_operation_count(function->semantic_plan); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(function->semantic_plan, i);
+        if (operation && operation->result_value == release_value) {
+            REQUIRE(release_operation == XR_SEMANTIC_INDEX_NONE);
+            release_operation = i;
+        }
+    }
+    const XrTargetValueRepRecord *concat_binding =
+        xr_target_plan_value_rep(target, concat_value);
+    REQUIRE(xr_semantic_string_concat_release_is_exact(
+        function->semantic_plan, release_operation, NULL));
+    REQUIRE(release_operation != XR_SEMANTIC_INDEX_NONE && concat_binding &&
+            target->cleanups_count == 1 && target->functions_count == 1 &&
+            target->functions[0].cleanup_begin == 0 &&
+            target->functions[0].cleanup_count == 1);
+    XrTargetCleanupRecord *target_cleanup = &target->cleanups[0];
+    REQUIRE(target_cleanup->id == 0 && target_cleanup->function == 0 &&
+            target_cleanup->semantic_operation == release_operation &&
+            target_cleanup->slot == concat_binding->slot &&
+            target_cleanup->action == XR_TARGET_CLEANUP_RELEASE &&
+            target_cleanup->flags == 0 && target_cleanup->provider == 0);
+    uint8_t saved_target_action = target_cleanup->action;
+    target_cleanup->action = XR_TARGET_CLEANUP_DESTROY;
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
+    target_cleanup->action = saved_target_action;
+    uint32_t saved_target_slot = target_cleanup->slot;
+    target_cleanup->slot = target->slots_count;
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
+    target_cleanup->slot = saved_target_slot;
+    uint32_t saved_target_operation = target_cleanup->semantic_operation;
+    target_cleanup->semantic_operation =
+        xr_semantic_plan_operation_count(function->semantic_plan);
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
+    target_cleanup->semantic_operation = saved_target_operation;
+    target_cleanup->provider = 1;
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
+    target_cleanup->provider = 0;
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
     XrCValueEmissionView view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, concat_value, &view,
                                            error, sizeof(error)));
@@ -1029,6 +1082,16 @@ static void test_string_concat_c_emission_recipe_is_exact(void) {
                 XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
             view.recipe_arguments[1].kind ==
                 XR_C_RECIPE_ARGUMENT_STRING_VALUE);
+    REQUIRE(xr_c_emission_plan_cleanup_count(emission) == 1);
+    XrCCleanupEmissionView cleanup = {0};
+    REQUIRE(xr_c_emission_plan_cleanup_view(
+        emission, release_operation, &cleanup, error, sizeof(error)));
+    REQUIRE(cleanup.semantic_operation == release_operation &&
+            cleanup.semantic_value == concat_value &&
+            cleanup.target_slot == concat_binding->slot &&
+            cleanup.action == XR_C_CLEANUP_RELEASE && cleanup.flags == 0 &&
+            cleanup.reserved == 0 && cleanup.recipe_symbol &&
+            strcmp(cleanup.recipe_symbol, "xrt_release") == 0);
 
     XrCValueEmissionView *concat_row = NULL;
     for (uint32_t i = 0; i < emission->value_count; i++) {
@@ -1065,6 +1128,24 @@ static void test_string_concat_c_emission_recipe_is_exact(void) {
                                         profile_fingerprint, error,
                                         sizeof(error)));
     concat_row->recipe_symbol = saved_symbol;
+    XrCCleanupEmissionView *cleanup_row = &emission->cleanups[0];
+    uint8_t saved_cleanup_action = cleanup_row->action;
+    cleanup_row->action = XR_C_CLEANUP_INVALID;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    cleanup_row->action = saved_cleanup_action;
+    const char *saved_cleanup_symbol = cleanup_row->recipe_symbol;
+    cleanup_row->recipe_symbol = "xrt_retain";
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    cleanup_row->recipe_symbol = saved_cleanup_symbol;
+    emission->cleanup_count = 0;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    emission->cleanup_count = 1;
     REQUIRE(xr_c_emission_plan_verify(emission, target,
                                        profile_fingerprint, error,
                                        sizeof(error)));

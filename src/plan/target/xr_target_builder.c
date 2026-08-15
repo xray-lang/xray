@@ -28,6 +28,7 @@
 #include "../semantic/xr_semantic_allocation_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
+#include "../semantic/xr_semantic_cleanup_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_string_runes_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
@@ -229,6 +230,8 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t call_count;
     XrTargetCallArgumentRecord *call_arguments;
     uint32_t call_argument_count;
+    XrTargetCleanupRecord *cleanups;
+    uint32_t cleanup_count;
     XrTargetAdapterRecord *adapters;
     uint32_t adapter_count;
     XrTargetCapabilityRecord *capabilities;
@@ -333,6 +336,7 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     xr_free(materialized->instructions);
     xr_free(materialized->calls);
     xr_free(materialized->call_arguments);
+    xr_free(materialized->cleanups);
     xr_free(materialized->adapters);
     xr_free(materialized->capabilities);
     xr_free(materialized->coroutines);
@@ -9341,6 +9345,103 @@ static const XrTargetValueRepRecord *find_materialized_value(
                : NULL;
 }
 
+static bool materialize_string_concat_release_cleanups(
+    XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
+    char *error, size_t error_size) {
+    const XrSemanticPlan *semantic = builder->semantic_plan;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t operation = 0; operation < operation_count; operation++) {
+        if (xr_semantic_string_concat_release_is_exact(semantic, operation,
+                                                       NULL))
+            materialized->cleanup_count++;
+    }
+    materialized->cleanups = (XrTargetCleanupRecord *) allocate_records(
+        materialized->cleanup_count, sizeof(*materialized->cleanups));
+    if (materialized->cleanup_count && !materialized->cleanups)
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "cleanup materialization allocation failed");
+
+    uint32_t next = 0;
+    for (uint32_t function = 0; function < materialized->function_count;
+         function++) {
+        const XrSemanticFunctionRecord *semantic_function =
+            xr_semantic_plan_function(semantic, function);
+        XrTargetFunctionRecord *target_function =
+            &materialized->functions[function];
+        target_function->cleanup_begin = next;
+        if (!semantic_function ||
+            semantic_function->block_begin >
+                xr_semantic_plan_block_count(semantic) ||
+            semantic_function->block_count >
+                xr_semantic_plan_block_count(semantic) -
+                    semantic_function->block_begin)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "cleanup function partition is invalid");
+        for (uint32_t block_offset = 0;
+             block_offset < semantic_function->block_count; block_offset++) {
+            const XrSemanticBlockRecord *block = xr_semantic_plan_block(
+                semantic, semantic_function->block_begin + block_offset);
+            if (!block || block->function != function ||
+                block->operation_begin > operation_count ||
+                block->operation_count > operation_count - block->operation_begin)
+                return fail(error, error_size, "XR_TARGET_1001",
+                            "cleanup block partition is invalid");
+            for (uint32_t operation = block->operation_begin;
+                 operation < block->operation_begin + block->operation_count;
+                 operation++) {
+                XrSemanticStringConcatReleaseShape shape = {0};
+                if (!xr_semantic_string_concat_release_is_exact(
+                        semantic, operation, &shape))
+                    continue;
+                const XrTargetValueRepRecord *binding =
+                    find_materialized_value(materialized,
+                                            shape.released_value);
+                const XrTargetSlotRecord *slot =
+                    binding && binding->slot < materialized->slot_count
+                        ? &materialized->slots[binding->slot]
+                        : NULL;
+                const XrTargetMachineRepRecord *register_rep =
+                    binding && binding->register_rep <
+                                   materialized->machine_rep_count
+                        ? &materialized->machine_reps[binding->register_rep]
+                        : NULL;
+                const XrTargetMachineRepRecord *memory_rep =
+                    binding && binding->memory_rep <
+                                   materialized->machine_rep_count
+                        ? &materialized->machine_reps[binding->memory_rep]
+                        : NULL;
+                if (next >= materialized->cleanup_count || !slot ||
+                    !register_rep || !memory_rep ||
+                    register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+                    memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+                    slot->function != function ||
+                    slot->semantic_value != shape.released_value ||
+                    slot->semantic_operation != shape.producer_operation ||
+                    slot->register_rep != binding->register_rep ||
+                    slot->memory_rep != binding->memory_rep ||
+                    slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+                    slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+                    return fail(error, error_size, "XR_TARGET_1001",
+                                "cleanup owner has no exact owned String slot");
+                materialized->cleanups[next] = (XrTargetCleanupRecord) {
+                    .id = next,
+                    .function = function,
+                    .semantic_operation = operation,
+                    .slot = binding->slot,
+                    .action = XR_TARGET_CLEANUP_RELEASE,
+                };
+                next++;
+            }
+        }
+        target_function->cleanup_count =
+            next - target_function->cleanup_begin;
+    }
+    return next == materialized->cleanup_count ||
+           fail(error, error_size, "XR_TARGET_1001",
+                "cleanup materialization is incomplete");
+}
+
 static bool semantic_type_is_exact_i64(const XrSemanticPlan *plan,
                                        uint32_t type_index) {
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, type_index);
@@ -10756,6 +10857,8 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_field_representations(builder, materialized, error, error_size) ||
         !materialize_functions_and_slots(builder, materialized, error, error_size) ||
         !materialize_values(builder, materialized, error, error_size) ||
+        !materialize_string_concat_release_cleanups(builder, materialized,
+                                                    error, error_size) ||
         !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
         !materialize_scalar_instructions(builder, materialized, error,
                                          error_size) ||
@@ -10863,6 +10966,8 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out,
         .calls_count = materialized.call_count,
         .call_arguments = materialized.call_arguments,
         .call_arguments_count = materialized.call_argument_count,
+        .cleanups = materialized.cleanups,
+        .cleanups_count = materialized.cleanup_count,
         .adapters = materialized.adapters,
         .adapters_count = materialized.adapter_count,
         .capabilities = materialized.capabilities,

@@ -76,6 +76,8 @@ struct XrCEmissionPlan {
     uint32_t call_argument_count;
     XrCRecipeArgumentView *recipe_arguments;
     uint32_t recipe_argument_count;
+    XrCCleanupEmissionView *cleanups;
+    uint32_t cleanup_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
     XrFingerprint profile_fingerprint;
@@ -3919,6 +3921,54 @@ static void test_array_fill_scalar_authority_is_exact_and_fail_closed(void) {
     xi_func_free(function);
 }
 
+static void test_string_concat_cleanup_materialization_is_exact(void) {
+    XiFunc *function =
+        xi_func_new("string_concat_cleanup_materialization", &scalar_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *left = xi_const_str(function, entry, "left", &scalar_string);
+    XiValue *right = xi_const_str(function, entry, "right", &scalar_string);
+    XiValue *concat =
+        xi_value_new(function, entry, XI_STR_CONCAT, &scalar_string, 2);
+    XiValue *release =
+        xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
+    XiValue *result = xi_const_int(function, entry, 0, &scalar_int);
+    REQUIRE(left && right && concat && release && result);
+    concat->args[0] = left;
+    concat->args[1] = right;
+    release->args[0] = concat;
+    xi_block_set_return(entry, result);
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    REQUIRE(target->cleanups_count == 1 &&
+            target->cleanups[0].action == XR_TARGET_CLEANUP_RELEASE);
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    xi_opt_refresh_representations_with_policy(function, &policy);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+
+    XiValue *saved_argument = release->args[0];
+    release->args[0] = release;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
+    release->args[0] = saved_argument;
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+
+    xr_aot_refinement_plan_free(plan);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 int main(void) {
     test_open_target_direct_call_refuses_without_baseline_change();
     test_direct_call_authority_applies_closed_local_binding();
@@ -3946,6 +3996,7 @@ int main(void) {
     test_scalar_array_allocation_storage_is_exact_and_fail_closed();
     test_array_intrinsic_index_storage_is_exact_and_fail_closed();
     test_array_fill_scalar_authority_is_exact_and_fail_closed();
+    test_string_concat_cleanup_materialization_is_exact();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     printf("TargetPlan-native AOT refinement tests passed\n");
     return 0;

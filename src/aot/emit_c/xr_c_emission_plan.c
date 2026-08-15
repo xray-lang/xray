@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(28)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(29)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -52,6 +52,7 @@
 #define XR_C_RUNE_TO_UINT32_SYMBOL "xrt_rune_to_uint32"
 #define XR_C_RUNE_IS_WHITESPACE_SYMBOL "xrt_rune_is_whitespace"
 #define XR_C_ARRAY_NEW_SYMBOL "xrt_array_new_typed"
+#define XR_C_RELEASE_SYMBOL "xrt_release"
 #define XR_C_STRING_SLICE_RANGE_SYMBOL "xrt_string_slice_range"
 
 struct XrCEmissionPlan {
@@ -61,6 +62,8 @@ struct XrCEmissionPlan {
     uint32_t call_argument_count;
     XrCRecipeArgumentView *recipe_arguments;
     uint32_t recipe_argument_count;
+    XrCCleanupEmissionView *cleanups;
+    uint32_t cleanup_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
     XrFingerprint profile_fingerprint;
@@ -2579,7 +2582,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v21\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v22\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -2591,6 +2594,7 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
     hash_u64(&ctx, plan->value_count);
     hash_u64(&ctx, plan->call_argument_count);
     hash_u64(&ctx, plan->recipe_argument_count);
+    hash_u64(&ctx, plan->cleanup_count);
     for (uint32_t i = 0; i < plan->value_count; i++) {
         const XrCValueEmissionView *value = &plan->values[i];
         hash_u64(&ctx, value->semantic_value);
@@ -2688,6 +2692,23 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
         hash_u64(&ctx, argument->reserved[0]);
         hash_u64(&ctx, argument->reserved[1]);
         hash_u64(&ctx, argument->reserved[2]);
+    }
+    for (uint32_t i = 0; i < plan->cleanup_count; i++) {
+        const XrCCleanupEmissionView *cleanup = &plan->cleanups[i];
+        hash_u64(&ctx, cleanup->semantic_operation);
+        hash_u64(&ctx, cleanup->semantic_value);
+        hash_u64(&ctx, cleanup->target_slot);
+        hash_u64(&ctx, cleanup->action);
+        hash_u64(&ctx, cleanup->flags);
+        hash_u64(&ctx, cleanup->reserved);
+        size_t symbol_length = cleanup->recipe_symbol
+                                   ? strlen(cleanup->recipe_symbol)
+                                   : 0;
+        hash_u64(&ctx, symbol_length);
+        if (symbol_length)
+            xr_sha256_update(&ctx,
+                             (const uint8_t *) cleanup->recipe_symbol,
+                             symbol_length);
     }
     xr_sha256_final(&ctx, out->bytes);
 }
@@ -3145,7 +3166,9 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
         (plan->call_argument_count && !plan->call_arguments) ||
         (!plan->call_argument_count && plan->call_arguments) ||
         (plan->recipe_argument_count && !plan->recipe_arguments) ||
-        (!plan->recipe_argument_count && plan->recipe_arguments))
+        (!plan->recipe_argument_count && plan->recipe_arguments) ||
+        (plan->cleanup_count && !plan->cleanups) ||
+        (!plan->cleanup_count && plan->cleanups))
         return false;
     uint32_t next_argument = 0;
     for (uint32_t i = 0; i < plan->value_count; i++) {
@@ -3186,6 +3209,19 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
                         argument->semantic_call_value &&
                     plan->call_arguments[i - 1u].ordinal >=
                         argument->ordinal))))
+            return false;
+    }
+    for (uint32_t i = 0; i < plan->cleanup_count; i++) {
+        const XrCCleanupEmissionView *cleanup = &plan->cleanups[i];
+        if (cleanup->semantic_operation == UINT32_MAX ||
+            cleanup->semantic_value == UINT32_MAX ||
+            cleanup->target_slot == UINT32_MAX ||
+            cleanup->action != XR_C_CLEANUP_RELEASE ||
+            cleanup->flags != 0 || cleanup->reserved != 0 ||
+            !cleanup->recipe_symbol ||
+            strcmp(cleanup->recipe_symbol, XR_C_RELEASE_SYMBOL) != 0 ||
+            (i && plan->cleanups[i - 1u].semantic_operation >=
+                      cleanup->semantic_operation))
             return false;
     }
     XrFingerprint actual = {{0}};
@@ -3316,7 +3352,9 @@ bool xr_c_emission_plan_verify(
         (plan->call_argument_count && !plan->call_arguments) ||
         (!plan->call_argument_count && plan->call_arguments) ||
         (plan->recipe_argument_count && !plan->recipe_arguments) ||
-        (!plan->recipe_argument_count && plan->recipe_arguments))
+        (!plan->recipe_argument_count && plan->recipe_arguments) ||
+        (plan->cleanup_count && !plan->cleanups) ||
+        (!plan->cleanup_count && plan->cleanups))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission schema is invalid");
 
@@ -3783,6 +3821,33 @@ bool xr_c_emission_plan_verify(
     if (projected_call_arguments != plan->call_argument_count)
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission call argument table has an extra row");
+    uint32_t target_cleanup_count = 0;
+    const XrTargetCleanupRecord *target_cleanups =
+        xr_target_plan_cleanups(target_plan, &target_cleanup_count);
+    uint32_t target_slot_count = 0;
+    const XrTargetSlotRecord *target_slots =
+        xr_target_plan_slots(target_plan, &target_slot_count);
+    if (target_cleanup_count != plan->cleanup_count ||
+        (target_cleanup_count && (!target_cleanups || !target_slots)))
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "C cleanup projection is incomplete");
+    for (uint32_t i = 0; i < target_cleanup_count; i++) {
+        const XrTargetCleanupRecord *target = &target_cleanups[i];
+        const XrCCleanupEmissionView *actual = &plan->cleanups[i];
+        const XrTargetSlotRecord *slot =
+            target->slot < target_slot_count ? &target_slots[target->slot]
+                                             : NULL;
+        if (!slot || target->action != XR_TARGET_CLEANUP_RELEASE ||
+            target->flags != 0 || target->provider != 0 ||
+            actual->semantic_operation != target->semantic_operation ||
+            actual->semantic_value != slot->semantic_value ||
+            actual->target_slot != target->slot ||
+            actual->action != XR_C_CLEANUP_RELEASE || actual->flags != 0 ||
+            actual->reserved != 0 || !actual->recipe_symbol ||
+            strcmp(actual->recipe_symbol, XR_C_RELEASE_SYMBOL) != 0)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "C cleanup projection disagrees with Target authority");
+    }
     if (projected != plan->value_count)
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission projection has an extra row");
@@ -3855,6 +3920,16 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
     const XrTargetCallArgumentRecord *target_call_arguments =
         xr_target_plan_call_arguments(target_plan,
                                       &target_call_argument_count);
+    uint32_t target_cleanup_count = 0;
+    const XrTargetCleanupRecord *target_cleanups =
+        xr_target_plan_cleanups(target_plan, &target_cleanup_count);
+    uint32_t target_slot_count = 0;
+    const XrTargetSlotRecord *target_slots =
+        xr_target_plan_slots(target_plan, &target_slot_count);
+    if ((target_cleanup_count && (!target_cleanups || !target_slots)) ||
+        target_cleanup_count > SIZE_MAX / sizeof(XrCCleanupEmissionView))
+        return emission_error(error, error_size, "XR_EXEC_5003",
+                              "C cleanup projection budget is invalid");
     uint32_t emission_call_argument_count = 0;
     uint32_t recipe_argument_count = 0;
     for (uint32_t i = 0; i < target_value_count; i++) {
@@ -4021,9 +4096,19 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                                   "C emission recipe argument allocation failed");
         }
     }
+    if (target_cleanup_count) {
+        plan->cleanups = (XrCCleanupEmissionView *) xr_calloc(
+            target_cleanup_count, sizeof(*plan->cleanups));
+        if (!plan->cleanups) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  "C cleanup projection allocation failed");
+        }
+    }
     plan->value_count = emission_value_count;
     plan->call_argument_count = emission_call_argument_count;
     plan->recipe_argument_count = recipe_argument_count;
+    plan->cleanup_count = target_cleanup_count;
     plan->schema_version = XR_C_EMISSION_PLAN_SCHEMA_VERSION;
     plan->target_fingerprint = xr_target_plan_fingerprint(target_plan);
     plan->profile_fingerprint = actual_profile_fingerprint;
@@ -4496,6 +4581,31 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             }
         }
     }
+    for (uint32_t i = 0; i < target_cleanup_count; i++) {
+        const XrTargetCleanupRecord *cleanup = &target_cleanups[i];
+        const XrTargetSlotRecord *slot =
+            cleanup->slot < target_slot_count
+                ? &target_slots[cleanup->slot]
+                : NULL;
+        XrCCleanupEmissionView *view = &plan->cleanups[i];
+        if (!slot || cleanup->id != i ||
+            cleanup->action != XR_TARGET_CLEANUP_RELEASE ||
+            cleanup->flags != 0 || cleanup->provider != 0) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "Target cleanup has no exact C projection");
+        }
+        view->semantic_operation = cleanup->semantic_operation;
+        view->semantic_value = slot->semantic_value;
+        view->target_slot = cleanup->slot;
+        view->action = XR_C_CLEANUP_RELEASE;
+        view->recipe_symbol = xr_strdup(XR_C_RELEASE_SYMBOL);
+        if (!view->recipe_symbol) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  "C cleanup recipe allocation failed");
+        }
+    }
     for (uint32_t i = 0; i < target_call_argument_count; i++) {
         if (!direct_local_array_ref_argument_candidate(
                 &target_call_arguments[i]))
@@ -4556,6 +4666,9 @@ void xr_c_emission_plan_free(XrCEmissionPlan *plan) {
         xr_free((void *) plan->values[i].recipe_type_name);
         xr_free((void *) plan->values[i].recipe_member_name);
     }
+    for (uint32_t i = 0; i < plan->cleanup_count; i++)
+        xr_free((void *) plan->cleanups[i].recipe_symbol);
+    xr_free(plan->cleanups);
     xr_free(plan->recipe_arguments);
     xr_free(plan->call_arguments);
     xr_free(plan->values);
@@ -4573,6 +4686,11 @@ uint32_t xr_c_emission_plan_value_count(const XrCEmissionPlan *plan) {
 uint32_t xr_c_emission_plan_call_argument_count(
     const XrCEmissionPlan *plan) {
     return plan ? plan->call_argument_count : 0;
+}
+
+uint32_t xr_c_emission_plan_cleanup_count(
+    const XrCEmissionPlan *plan) {
+    return plan ? plan->cleanup_count : 0;
 }
 
 XrFingerprint xr_c_emission_plan_fingerprint(const XrCEmissionPlan *plan) {
@@ -4645,4 +4763,30 @@ bool xr_c_emission_plan_call_argument_view(
     }
     return emission_error(error, error_size, "XR_TARGET_1001",
                           "semantic call argument has no immutable C emission binding");
+}
+
+bool xr_c_emission_plan_cleanup_view(
+    const XrCEmissionPlan *plan, uint32_t semantic_operation,
+    XrCCleanupEmissionView *out, char *error, size_t error_size) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!plan || !plan->verified || !out)
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "verified C cleanup plan input is missing");
+    uint32_t begin = 0;
+    uint32_t end = plan->cleanup_count;
+    while (begin < end) {
+        uint32_t middle = begin + (end - begin) / 2u;
+        const XrCCleanupEmissionView *candidate = &plan->cleanups[middle];
+        if (candidate->semantic_operation == semantic_operation) {
+            *out = *candidate;
+            return true;
+        }
+        if (candidate->semantic_operation < semantic_operation)
+            begin = middle + 1u;
+        else
+            end = middle;
+    }
+    return emission_error(error, error_size, "XR_TARGET_1001",
+                          "semantic cleanup has no immutable C emission binding");
 }

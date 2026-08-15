@@ -22,6 +22,7 @@
 #include "../../plan/semantic/xr_semantic_graph.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
 #include "../../plan/semantic/xr_semantic_class_shape.h"
+#include "../../plan/semantic/xr_semantic_cleanup_shape.h"
 #include "../../plan/semantic/xr_semantic_string_shape.h"
 #include "../../plan/semantic/xr_semantic_task_shape.h"
 #include "../../plan/semantic/xr_semantic_string_runes_shape.h"
@@ -8423,6 +8424,73 @@ static bool verify_exact_dynamic_storage_materialization(
     return valid;
 }
 
+static bool verify_exact_cleanup_materialization(
+    const XiFunc *root, const XrTargetPlan *target_plan,
+    XrAotRefinementDiagnostic *diag) {
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    uint32_t cleanup_count = 0;
+    uint32_t slot_count = 0;
+    const XrTargetCleanupRecord *cleanups =
+        xr_target_plan_cleanups(target_plan, &cleanup_count);
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    for (uint32_t i = 0; i < cleanup_count; i++) {
+        const XrTargetCleanupRecord *cleanup = &cleanups[i];
+        XrSemanticStringConcatReleaseShape shape = {0};
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic,
+                                       cleanup->semantic_operation);
+        const XrSemanticFunctionRecord *semantic_function =
+            xr_semantic_plan_function(semantic, cleanup->function);
+        const XiFunc *function =
+            materialized_function_by_index(root, cleanup->function);
+        const XrTargetSlotRecord *slot =
+            cleanup->slot < slot_count ? &slots[cleanup->slot] : NULL;
+        uint32_t local_value = XR_SEMANTIC_INDEX_NONE;
+        uint32_t matches = 0;
+        const XiValue *release = NULL;
+        if (operation && semantic_function &&
+            operation->result_value >= semantic_function->value_begin &&
+            operation->result_value - semantic_function->value_begin <
+                semantic_function->value_count) {
+            local_value =
+                operation->result_value - semantic_function->value_begin;
+            release = materialized_value_by_id(function, local_value,
+                                               &matches);
+        }
+        uint32_t argument_function = XR_SEMANTIC_INDEX_NONE;
+        uint32_t argument_value = XR_SEMANTIC_INDEX_NONE;
+        char error[512] = {0};
+        bool exact =
+            cleanups && slots && cleanup->id == i &&
+            cleanup->action == XR_TARGET_CLEANUP_RELEASE &&
+            cleanup->flags == 0 && cleanup->provider == 0 &&
+            xr_semantic_string_concat_release_is_exact(
+                semantic, cleanup->semantic_operation, &shape) &&
+            shape.function == cleanup->function && slot &&
+            slot->function == cleanup->function &&
+            slot->semantic_value == shape.released_value &&
+            operation && semantic_function && function && release &&
+            matches == 1 &&
+            materialized_operation_shape_matches(operation, release,
+                                                 local_value) &&
+            release->nargs == 1 && release->args && release->args[0] &&
+            xr_aot_scalar_semantic_value_id(
+                target_plan, function, release->args[0],
+                &argument_function, &argument_value, error,
+                sizeof(error)) &&
+            argument_function == cleanup->function &&
+            argument_value == shape.released_value;
+        if (!exact) {
+            set_diag(diag, XR_AOT_REFINEMENT_USE_SITE, i,
+                     shape.released_value, cleanup->semantic_operation);
+            return false;
+        }
+    }
+    return cleanup_count == 0 || (cleanups && slots);
+}
+
 static int compare_adapter_pointer(const void *left, const void *right) {
     uintptr_t a = (uintptr_t) *(const XiValue *const *) left;
     uintptr_t b = (uintptr_t) *(const XiValue *const *) right;
@@ -8522,6 +8590,8 @@ bool xr_aot_representation_materialization_verify(
         return false;
     if (!verify_exact_dynamic_storage_materialization(
             view, root, target_plan, effective_policy, diag))
+        return false;
+    if (!verify_exact_cleanup_materialization(root, target_plan, diag))
         return false;
     XrFingerprint expected_policy =
         rep_policy_fingerprint(effective_policy);
