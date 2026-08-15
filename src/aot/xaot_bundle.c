@@ -5300,6 +5300,34 @@ static bool rep_adapter_fields_are_exact(const XaotValueRep *actual,
            actual->vector_width_bytes == 0;
 }
 
+static bool target_machine_scalar_rep(uint16_t machine_kind,
+                                      XaotRep *out_rep) {
+    if (!out_rep)
+        return false;
+    switch ((XrMachineRepKind) machine_kind) {
+        case XR_MACHINE_REP_VOID: *out_rep = XAOT_REP_VOID; return true;
+        case XR_MACHINE_REP_I1: *out_rep = XAOT_REP_BOOL; return true;
+        case XR_MACHINE_REP_I8: *out_rep = XAOT_REP_I8; return true;
+        case XR_MACHINE_REP_U8: *out_rep = XAOT_REP_U8; return true;
+        case XR_MACHINE_REP_I16: *out_rep = XAOT_REP_I16; return true;
+        case XR_MACHINE_REP_U16: *out_rep = XAOT_REP_U16; return true;
+        case XR_MACHINE_REP_I32: *out_rep = XAOT_REP_I32; return true;
+        case XR_MACHINE_REP_U32: *out_rep = XAOT_REP_U32; return true;
+        case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_ENUM_ORDINAL:
+            *out_rep = XAOT_REP_I64;
+            return true;
+        case XR_MACHINE_REP_U64: *out_rep = XAOT_REP_U64; return true;
+        case XR_MACHINE_REP_ISIZE: *out_rep = XAOT_REP_ISIZE; return true;
+        case XR_MACHINE_REP_USIZE: *out_rep = XAOT_REP_USIZE; return true;
+        case XR_MACHINE_REP_F32: *out_rep = XAOT_REP_F32; return true;
+        case XR_MACHINE_REP_F64: *out_rep = XAOT_REP_F64; return true;
+        case XR_MACHINE_REP_RUNE: *out_rep = XAOT_REP_RUNE; return true;
+        case XR_MACHINE_REP_RAW_PTR: *out_rep = XAOT_REP_RAWPTR; return true;
+        default: return false;
+    }
+}
+
 static bool rep_adapter_exact_non_scalar_legacy_source(
     const XaotValuePlan *source, const XiFunc *function,
     const XiValue *value, uint16_t adapter_op) {
@@ -5333,26 +5361,8 @@ static bool rep_adapter_exact_target_scalar_output(
     XaotRep rep = XAOT_REP_COUNT;
     if (!machine)
         return false;
-    switch ((XrMachineRepKind) machine->kind) {
-        case XR_MACHINE_REP_VOID: rep = XAOT_REP_VOID; break;
-        case XR_MACHINE_REP_I1: rep = XAOT_REP_BOOL; break;
-        case XR_MACHINE_REP_I8: rep = XAOT_REP_I8; break;
-        case XR_MACHINE_REP_U8: rep = XAOT_REP_U8; break;
-        case XR_MACHINE_REP_I16: rep = XAOT_REP_I16; break;
-        case XR_MACHINE_REP_U16: rep = XAOT_REP_U16; break;
-        case XR_MACHINE_REP_I32: rep = XAOT_REP_I32; break;
-        case XR_MACHINE_REP_U32: rep = XAOT_REP_U32; break;
-        case XR_MACHINE_REP_I64: rep = XAOT_REP_I64; break;
-        case XR_MACHINE_REP_ENUM_ORDINAL: rep = XAOT_REP_I64; break;
-        case XR_MACHINE_REP_U64: rep = XAOT_REP_U64; break;
-        case XR_MACHINE_REP_ISIZE: rep = XAOT_REP_ISIZE; break;
-        case XR_MACHINE_REP_USIZE: rep = XAOT_REP_USIZE; break;
-        case XR_MACHINE_REP_F32: rep = XAOT_REP_F32; break;
-        case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
-        case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
-        case XR_MACHINE_REP_RAW_PTR: rep = XAOT_REP_RAWPTR; break;
-        default: return false;
-    }
+    if (!target_machine_scalar_rep(machine->kind, &rep))
+        return false;
     const XaotRepInfo *info = xaot_rep_info(rep);
     XaotValueKind kind = rep == XAOT_REP_VOID     ? XAOT_VALUE_VOID
                          : rep == XAOT_REP_RAWPTR ? XAOT_VALUE_PTR
@@ -8325,14 +8335,30 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                     xr_target_plan_machine_rep(target_plan, authority.target->register_rep);
                 const XrTargetMachineRepRecord *memory_rep =
                     xr_target_plan_machine_rep(target_plan, authority.target->memory_rep);
+                XaotRep scalar_rep = XAOT_REP_COUNT;
+                const XaotRepInfo *scalar_info = NULL;
+                bool scalar = register_rep->kind == memory_rep->kind &&
+                              target_machine_scalar_rep(register_rep->kind,
+                                                        &scalar_rep) &&
+                              (scalar_info = xaot_rep_info(scalar_rep)) != NULL;
+                fprintf(out, "  value %s%u op=%s",
+                        value && value->op == XI_PHI ? "phi" : "v", value_id,
+                        value ? xi_op_name(value->op)
+                              : xi_op_name(frozen_operation->opcode));
+                if (scalar)
+                    fprintf(out, " kind=%s rep=%s c_type=%s",
+                            xaot_value_kind_name(
+                                scalar_rep == XAOT_REP_VOID
+                                    ? XAOT_VALUE_VOID
+                                    : scalar_rep == XAOT_REP_RAWPTR
+                                          ? XAOT_VALUE_PTR
+                                          : XAOT_VALUE_SCALAR),
+                            rep_name(scalar_rep), safe_str(scalar_info->c_type));
                 fprintf(out,
-                        "  value %s%u op=%s semantic=%u authority=target "
+                        " semantic=%u authority=target "
                         "family=target-plan "
                         "register=%u(kind=%u,bits=%u) "
                         "memory=%u(kind=%u,size=%u,align=%u) slot=%u",
-                        value && value->op == XI_PHI ? "phi" : "v", value_id,
-                        value ? xi_op_name(value->op)
-                              : xi_op_name(frozen_operation->opcode),
                         authority.semantic_value, authority.target->register_rep,
                         (unsigned) register_rep->kind, (unsigned) register_rep->register_bits,
                         authority.target->memory_rep, (unsigned) memory_rep->kind,

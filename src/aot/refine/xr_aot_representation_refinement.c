@@ -4344,7 +4344,10 @@ static bool oracle_array_element_access_is_exact(const VerifyAuthority *ctx,
     bool owned_array =
         oracle_dynamic_array_allocation_storage(ctx, container->value,
                                                 &container_storage,
-                                                &container_kind);
+                                                &container_kind) ||
+        oracle_dynamic_array_intrinsic_storage(ctx, container->value,
+                                               &container_storage,
+                                               &container_kind);
     bool borrowed_array =
         !owned_array &&
         oracle_dynamic_array_ref_storage(ctx, container->value,
@@ -6883,6 +6886,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 return false;
             if (operand_index == 0)
                 return oracle_dynamic_array_allocation_storage(
+                           ctx, source_value, out_storage, &ignored_kind) ||
+                       oracle_dynamic_array_intrinsic_storage(
                            ctx, source_value, out_storage, &ignored_kind) ||
                        oracle_dynamic_array_ref_storage(
                            ctx, source_value, out_storage, &ignored_kind);

@@ -319,6 +319,14 @@ static XrType direct_local_byte_array = {
     .container = {.element_type = &scalar_byte},
 };
 
+static XrType direct_local_int_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 12,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &scalar_int},
+};
+
 static XrType *task_unit_arguments[] = {&scalar_unit};
 
 static XrType task_unit = {
@@ -3398,6 +3406,133 @@ static void test_enum_descriptor_adapter_refuses_without_layout_family(void) {
     representation_fixture_free(&fixture);
 }
 
+static void test_array_intrinsic_index_storage_is_exact_and_fail_closed(void) {
+    XiFunc *function = xi_func_new("array_intrinsic_index_storage", &scalar_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *count = xi_const_int(function, entry, 3, &scalar_int);
+    XiValue *fill = xi_const_int(function, entry, -1, &scalar_int);
+    XiValue *array = xi_value_new(function, entry, XI_CALL_BUILTIN,
+                                  &direct_local_int_array, 2);
+    REQUIRE(count && fill && array);
+    array->args[0] = count;
+    array->args[1] = fill;
+    array->aux = (void *) "array_filled_new";
+    array->array_intrinsic_kind = XI_ARRAY_INTRINSIC_FILLED_NEW;
+    array->array_element_storage = XR_ELEM_I64;
+
+    XiValue *index = xi_const_int(function, entry, 1, &scalar_int);
+    XiValue *element = xi_const_int(function, entry, 42, &scalar_int);
+    XiValue *write = xi_value_new(function, entry, XI_INDEX_SET, &scalar_int, 3);
+    XiValue *read = xi_value_new(function, entry, XI_INDEX_GET, &scalar_int, 2);
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
+    REQUIRE(index && element && write && read && release);
+    write->args[0] = array;
+    write->args[1] = index;
+    write->args[2] = element;
+    read->args[0] = array;
+    read->args[1] = index;
+    release->args[0] = array;
+    xi_block_set_return(entry, read);
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
+    uint32_t array_operation = XR_SEMANTIC_INDEX_NONE;
+    uint32_t read_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0;
+         i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (operation && operation->opcode == XI_CALL_BUILTIN &&
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILLED_NEW)
+            array_operation = i;
+        if (operation && operation->opcode == XI_INDEX_GET)
+            read_value = operation->result_value;
+    }
+    REQUIRE(array_operation != XR_SEMANTIC_INDEX_NONE &&
+            read_value != XR_SEMANTIC_INDEX_NONE);
+    const XrSemanticOperationRecord *array_semantic =
+        xr_semantic_plan_operation(semantic, array_operation);
+    REQUIRE(array_semantic != NULL);
+    const XrTargetValueRepRecord *array_binding =
+        xr_target_plan_value_rep(target, array_semantic->result_value);
+    const XrTargetValueRepRecord *read_binding =
+        xr_target_plan_value_rep(target, read_value);
+    REQUIRE(array_binding && read_binding &&
+            target->machine_reps[array_binding->register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            target->machine_reps[array_binding->register_rep].ownership ==
+                XR_TARGET_OWNERSHIP_OWNED &&
+            target->machine_reps[read_binding->register_rep].kind ==
+                XR_MACHINE_REP_I64);
+
+    uint32_t intrinsic_call_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < target->calls_count; i++)
+        if (target->calls[i].semantic_operation == array_operation) {
+            REQUIRE(intrinsic_call_index == XR_SEMANTIC_INDEX_NONE);
+            intrinsic_call_index = i;
+        }
+    REQUIRE(intrinsic_call_index != XR_SEMANTIC_INDEX_NONE &&
+            target->calls[intrinsic_call_index].calling_convention ==
+                XR_TARGET_CALL_CONVENTION_ARRAY_INTRINSIC &&
+            target->calls[intrinsic_call_index].array_intrinsic_kind ==
+                XR_TARGET_ARRAY_INTRINSIC_FILLED_NEW &&
+            target->calls[intrinsic_call_index].array_element_storage ==
+                XR_TARGET_ARRAY_STORAGE_I64);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    REQUIRE(plan != NULL && xr_aot_refinement_plan_view(plan).record_count == 0);
+    xr_aot_refinement_plan_free(plan);
+
+    char error[512] = {0};
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(
+        target, xr_target_profile_fingerprint(profile), &emission, error,
+        sizeof(error)));
+    XrCValueEmissionView array_view = {0};
+    XrCValueEmissionView read_view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+                emission, array_semantic->result_value, &array_view, error,
+                sizeof(error)) &&
+            xr_c_emission_plan_value_view(
+                emission, read_value, &read_view, error, sizeof(error)) &&
+            array_view.rep == XR_C_VALUE_REP_TAGGED &&
+            array_view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_ARRAY_FILLED_NEW &&
+            array_view.recipe_discriminant == XR_TARGET_ARRAY_STORAGE_I64 &&
+            read_view.rep == XR_C_VALUE_REP_I64 &&
+            read_view.materialization == XR_C_VALUE_MATERIALIZATION_NONE);
+    xr_c_emission_plan_free(emission);
+
+    XrTargetCallRecord saved_call = target->calls[intrinsic_call_index];
+    XrFingerprint saved_plan_fingerprint = target->fingerprint;
+    target->calls[intrinsic_call_index].array_element_storage =
+        XR_TARGET_ARRAY_STORAGE_U8;
+    xr_target_call_compute_fingerprint(
+        target, intrinsic_call_index,
+        &target->calls[intrinsic_call_index].fingerprint);
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)) &&
+            strstr(error, "XR_TARGET_1003") != NULL);
+    plan = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
+    target->calls[intrinsic_call_index] = saved_call;
+    target->fingerprint = saved_plan_fingerprint;
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
+
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 int main(void) {
     test_open_target_direct_call_refuses_without_baseline_change();
     test_direct_call_authority_applies_closed_local_binding();
@@ -3421,6 +3556,7 @@ int main(void) {
     test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed();
     test_fixed_array_backing_projection_is_exact_and_fail_closed();
     test_scalar_addressable_alias_recipe_is_exact_and_fail_closed();
+    test_array_intrinsic_index_storage_is_exact_and_fail_closed();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     printf("TargetPlan-native AOT refinement tests passed\n");
     return 0;
