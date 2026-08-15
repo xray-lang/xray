@@ -30,8 +30,7 @@
 /* Helper: spin up a full-feature isolate with stderr suppression
  * (uncaught throws still update ctx->current_exception). */
 static XrVMRuntime *make_quiet_isolate(void) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     if (!iso)
         return NULL;

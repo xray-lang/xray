@@ -170,8 +170,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
                                                 structured, true);
     }
 
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     if (!iso) {
         int dummy_size = 0;

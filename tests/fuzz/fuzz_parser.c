@@ -33,8 +33,7 @@
 static XrVMRuntime *fuzz_isolate(void) {
     static XrVMRuntime *iso = NULL;
     if (!iso) {
-        XrVMConfig params;
-        xray_vm_config_init(&params);
+        XrVMConfig params = {0};
         iso = xray_vm_new_full(&params);
     }
     return iso;

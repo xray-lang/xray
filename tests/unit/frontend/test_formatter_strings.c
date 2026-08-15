@@ -60,8 +60,7 @@ static XrCompilerSession *g_session = NULL;
 
 static void setup(void) {
     if (!g_iso) {
-        XrVMConfig p;
-        xray_vm_config_init(&p);
+        XrVMConfig p = {0};
         g_iso = xray_vm_new_full(&p);
         g_session = xr_compiler_session_current_for_isolate(g_iso);
         ASSERT_NOT_NULL(g_session);

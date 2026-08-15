@@ -24,8 +24,7 @@
 #include <stdlib.h>
 
 static XrVMRuntime *new_test_isolate(void) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     return xray_vm_new_full(&params);
 }
 

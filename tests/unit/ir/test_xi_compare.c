@@ -87,8 +87,7 @@ static void defer_proto_free(XrProto *p) {
 
 static void setup(void) {
     if (!g_iso) {
-        XrVMConfig p;
-        xray_vm_config_init(&p);
+        XrVMConfig p = {0};
         g_iso = xray_vm_new_full(&p);
     }
 }

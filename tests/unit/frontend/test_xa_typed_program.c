@@ -21,8 +21,7 @@ static XrVMRuntime *g_isolate = NULL;
 static XrCompilerSession *g_session = NULL;
 
 static void setup(void) {
-    XrVMConfig vm_config;
-    xray_vm_config_init(&vm_config);
+    XrVMConfig vm_config = {0};
     g_isolate = xray_vm_new_full(&vm_config);
     g_session = xr_compiler_session_current_for_isolate(g_isolate);
     ASSERT_NOT_NULL(g_session);

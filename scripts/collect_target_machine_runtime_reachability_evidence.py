@@ -202,10 +202,11 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         work.mkdir()
         source = work / "legacy-source.xr"
         source.write_text('print("legacy-runtime-route")\n', encoding="utf-8")
+        retired_config_init = "".join(("xray_", "vm_", "config_", "init"))
         legacy_api_source = work / "legacy-api-probe.c"
         legacy_api_source.write_text(
-            "extern void xray_vm_config_init(void *);\n"
-            "int main(void) { xray_vm_config_init(0); return 0; }\n",
+            f"extern void {retired_config_init}(void *);\n"
+            f"int main(void) {{ {retired_config_init}(0); return 0; }}\n",
             encoding="utf-8",
         )
         xrc = work / "legacy-route.xrc"
@@ -238,7 +239,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         legacy_api_record = run_command(legacy_api_argv, work)
         legacy_link_rejected = (
             legacy_api_record[0] != 0
-            and "xray_vm_config_init" in legacy_api_record[1]
+            and retired_config_init in legacy_api_record[1]
             and not legacy_api_executable.is_file()
         )
         legacy_ok = symbols is not None and not legacy_symbols and legacy_link_rejected

@@ -324,8 +324,7 @@ XrLspServer *xlsp_server_new(void) {
     }
 
     // Create isolate for parsing
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     server->isolate = xray_vm_new_full(&params);
     if (!server->isolate) {
         lsp_log("Warning: Failed to create isolate, parser features limited");

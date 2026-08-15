@@ -72,8 +72,7 @@ static uint32_t evidence_object_shape_count_by_domain(const XgGlobalEvidence *ev
 static void setup_parser_session(void) {
     if (g_iso)
         return;
-    XrVMConfig vm_cfg;
-    xray_vm_config_init(&vm_cfg);
+    XrVMConfig vm_cfg = {0};
     g_iso = xray_vm_new_full(&vm_cfg);
     g_session = xr_compiler_session_current_for_isolate(g_iso);
     ASSERT_NOT_NULL(g_session);

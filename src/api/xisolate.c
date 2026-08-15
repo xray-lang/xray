@@ -11,7 +11,6 @@
  *   - xisolate_full.c: sole VM constructor
  *   - xisolate_runtime.c: shared runtime prelude enum registration
  *   - xisolate_tls.c: g_current_isolate + enter/exit
- *   - xisolate_params.c: config_init
  *   - xisolate_scripting.c: dostring/dofile (compiler-dependent)
  */
 

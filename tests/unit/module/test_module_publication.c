@@ -11,8 +11,7 @@
 #include "xray_vm.h"
 
 TEST(module_exports_are_invisible_until_atomic_publication) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_NOT_NULL(isolate);
 
@@ -51,8 +50,7 @@ TEST(module_exports_are_invisible_until_atomic_publication) {
 }
 
 TEST(failed_module_never_publishes_partial_exports) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_NOT_NULL(isolate);
 

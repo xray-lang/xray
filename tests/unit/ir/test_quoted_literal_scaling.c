@@ -35,8 +35,7 @@ typedef struct ScalingResult {
 } ScalingResult;
 
 static void setup(void) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     g_iso = xray_vm_new_full(&config);
 }
 

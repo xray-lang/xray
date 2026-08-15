@@ -36,8 +36,7 @@
 
 TEST(vm_current_ctx_returns_elided_root_ctx) {
     char *script_argv[] = {"alpha", "beta"};
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     params.script_file = "script_identity.xr";
     params.script_argc = 2;
     params.script_argv = script_argv;
@@ -95,8 +94,7 @@ TEST(vm_current_ctx_returns_elided_root_ctx) {
 }
 
 TEST(vm_elided_root_allocates_without_task_identity) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
     ASSERT_NULL(xr_current_coro(iso));
@@ -115,8 +113,7 @@ TEST(vm_elided_root_allocates_without_task_identity) {
 /* ========== xr_vm_prepare_entry contract ========== */
 
 TEST(vm_prepare_entry_within_capacity_is_noop) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -135,8 +132,7 @@ TEST(vm_prepare_entry_within_capacity_is_noop) {
 }
 
 TEST(vm_prepare_entry_rejects_elided_root_overflow) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -157,8 +153,7 @@ TEST(vm_prepare_entry_rejects_elided_root_overflow) {
 }
 
 TEST(vm_prepare_entry_zero_extra_succeeds) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -173,8 +168,7 @@ TEST(vm_prepare_entry_zero_extra_succeeds) {
 /* ========== xr_vm_call_closure NULL safety ========== */
 
 TEST(vm_call_closure_null_closure_returns_null) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -189,8 +183,7 @@ TEST(vm_call_closure_null_closure_returns_null) {
 
 #ifdef NDEBUG
 TEST(vm_interpret_proto_null_proto_returns_error) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -204,8 +197,7 @@ TEST(vm_interpret_proto_null_proto_returns_error) {
 #endif
 
 TEST(vm_bind_proto_shared_slots_is_vm_owned) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso1 = xray_vm_new_full(&params);
     XrVMRuntime *iso2 = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso1);
@@ -230,8 +222,7 @@ TEST(vm_bind_proto_shared_slots_is_vm_owned) {
 /* ========== End-to-end: deep recursion exercises grow path ========== */
 
 TEST(vm_deep_recursion_via_dostring) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -255,8 +246,7 @@ TEST(vm_deep_recursion_via_dostring) {
 /* ========== End-to-end: large maxstacksize entry ========== */
 
 TEST(vm_large_maxstacksize_entry) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -287,8 +277,7 @@ TEST(vm_large_maxstacksize_entry) {
 /* ========== End-to-end: vararg entry ========== */
 
 TEST(vm_vararg_entry) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -322,8 +311,7 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
           f);
     fclose(f);
 
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 

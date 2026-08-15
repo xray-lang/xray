@@ -289,8 +289,7 @@ static void *worker_thread(void *arg) {
     lsp_log("[IndexPool] Worker %d started", worker->worker_id);
 
     // Create per-worker Isolate
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
 
     worker->isolate = xray_vm_new_full(&params);
     if (!worker->isolate) {

@@ -776,8 +776,7 @@ TEST(tools_call_format_schema_has_optional_params) {
 
 TEST(tools_call_format_returns_structured_content) {
     XmcpServer server = test_server();
-    XrVMConfig iso_params;
-    xray_vm_config_init(&iso_params);
+    XrVMConfig iso_params = {0};
     server.isolate = xray_vm_new_full(&iso_params);
     ASSERT_NOT_NULL(server.isolate);
     XrCompilerSession *session = test_compiler_session(server.isolate);
@@ -814,8 +813,7 @@ TEST(tools_call_format_returns_structured_content) {
 
 TEST(tools_call_format_syntax_errors_are_structured) {
     XmcpServer server = test_server();
-    XrVMConfig iso_params;
-    xray_vm_config_init(&iso_params);
+    XrVMConfig iso_params = {0};
     server.isolate = xray_vm_new_full(&iso_params);
     ASSERT_NOT_NULL(server.isolate);
     XrCompilerSession *session = test_compiler_session(server.isolate);
@@ -884,8 +882,7 @@ TEST(tools_call_analyze_schema) {
 
 TEST(tools_call_analyze_returns_structured_diagnostics) {
     XmcpServer server = test_server();
-    XrVMConfig iso_params;
-    xray_vm_config_init(&iso_params);
+    XrVMConfig iso_params = {0};
     server.isolate = xray_vm_new_full(&iso_params);
     ASSERT_NOT_NULL(server.isolate);
 

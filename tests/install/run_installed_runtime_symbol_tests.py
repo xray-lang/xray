@@ -286,7 +286,13 @@ def verify_member_resolution_invariants() -> None:
     retired_multicore = "".join(("xray_", "vm_", "multicore_", "destroy"))
     retired_script_info = "".join(("xray_", "vm_", "set_", "script_", "info"))
     retired_minimal_constructor = "".join(("xray_", "vm_", "new"))
-    retired = {retired_multicore, retired_script_info, retired_minimal_constructor}
+    retired_config_init = "".join(("xray_", "vm_", "config_", "init"))
+    retired = {
+        retired_multicore,
+        retired_script_info,
+        retired_minimal_constructor,
+        retired_config_init,
+    }
     if legacy_symbols(retired) != retired:
         raise AssertionError("installed archive inventory accepts retired public VM APIs")
     owners = {

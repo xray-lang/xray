@@ -166,8 +166,7 @@ static char *build_source(const uint8_t *data, size_t size) {
 }
 
 static int run_source(const char *source) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     if (!iso)
         return 0;

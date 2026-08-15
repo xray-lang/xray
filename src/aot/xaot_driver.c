@@ -908,8 +908,7 @@ static bool xaot_collect_imported_package_payloads_from_cache(
  * Equivalent to XR_ISOLATE_PROFILE_RUN without depending on the
  * isolate-profile factory in src/api/. */
 static XrVMRuntime *create_isolate(void) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     return xray_vm_new_full(&params);
 }
 

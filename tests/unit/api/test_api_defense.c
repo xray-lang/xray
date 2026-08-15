@@ -27,12 +27,6 @@ TEST(api_isolate_delete_null) {
     ASSERT_TRUE(1);  // survived without crash
 }
 
-TEST(api_isolate_params_init_null) {
-    // xray_vm_config_init(NULL) should be safe
-    xray_vm_config_init(NULL);
-    ASSERT_TRUE(1);
-}
-
 /* ========== Isolate Scripting NULL Safety ========== */
 
 #ifndef NDEBUG
@@ -58,8 +52,7 @@ TEST(api_isolate_dostring_null_source) {
         return;
     }
     // Need a valid isolate to test NULL source
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     if (!iso) {
         ASSERT_TRUE(1);
@@ -86,8 +79,7 @@ TEST(api_isolate_dofile_null_filename) {
         ASSERT_TRUE(1);
         return;
     }
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     if (!iso) {
         ASSERT_TRUE(1);
@@ -103,8 +95,7 @@ TEST(api_isolate_dofile_null_filename) {
 /* ========== Isolate Lifecycle (valid) ========== */
 
 TEST(api_isolate_create_destroy) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
 
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
@@ -130,7 +121,6 @@ TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("API Boundary Defense - NULL Safety");
 RUN_TEST(api_isolate_delete_null);
-RUN_TEST(api_isolate_params_init_null);
 RUN_TEST(api_isolate_dostring_null_isolate);
 RUN_TEST(api_isolate_dostring_null_source);
 RUN_TEST(api_isolate_dofile_null_isolate);

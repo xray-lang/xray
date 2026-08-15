@@ -94,8 +94,7 @@ static int verify_function(const char *module, const char *member, XrStdlibVmFas
 }
 
 static int verify_runtime_overlay(void) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_TRUE(isolate != NULL);
 
@@ -117,8 +116,7 @@ static int verify_runtime_overlay(void) {
 }
 
 static int verify_yieldable_runtime_overlay(void) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_TRUE(isolate != NULL);
     /* os keeps its Xray exports now that a module reaching private native
@@ -138,8 +136,7 @@ static int verify_yieldable_runtime_overlay(void) {
 }
 
 static int verify_string_boundary(void) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_TRUE(isolate != NULL);
     ASSERT_TRUE(xr_test_init_coro(isolate) != NULL);
@@ -192,8 +189,7 @@ static int verify_string_boundary(void) {
 }
 
 static int verify_byte_array_boundary(void) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_TRUE(isolate != NULL);
     XrCoroutine *coro = xr_test_init_coro(isolate);
@@ -268,8 +264,7 @@ static int verify_byte_array_boundary(void) {
 }
 
 static int verify_scalar_array_boundary(void) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_TRUE(isolate != NULL);
     XrCoroutine *coro = xr_test_init_coro(isolate);
@@ -294,8 +289,7 @@ static int verify_scalar_array_boundary(void) {
 }
 
 static int verify_deferred_log_state_boundary(void) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_TRUE(isolate != NULL);
     ASSERT_TRUE(xr_test_init_coro(isolate) != NULL);

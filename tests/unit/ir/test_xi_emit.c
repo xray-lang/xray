@@ -52,8 +52,7 @@ static XiFunc *make_func(const char *name, XrType *ret) {
 }
 
 static XrVMRuntime *new_test_isolate(void) {
-    XrVMConfig p;
-    xray_vm_config_init(&p);
+    XrVMConfig p = {0};
     return xray_vm_new_full(&p);
 }
 

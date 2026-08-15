@@ -22,8 +22,7 @@ static XrTypePool *type_pool = NULL;
 /* ========== Setup / Teardown ========== */
 
 static void setup(void) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     X = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(X);
     main_coro = xr_test_init_coro(X);

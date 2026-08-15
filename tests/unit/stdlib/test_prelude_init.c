@@ -19,8 +19,7 @@
 /* ========== Helpers ========== */
 
 static XrVMRuntime *make_full_isolate(void) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     return xray_vm_new_full(&params);
 }
 

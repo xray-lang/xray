@@ -50,8 +50,7 @@ static XaAnalyzer *g_analyzer = NULL;
 
 static void setup_pool(void) {
     if (!g_isolate) {
-        XrVMConfig p;
-        xray_vm_config_init(&p);
+        XrVMConfig p = {0};
         g_isolate = xray_vm_new_full(&p);
         g_session = xr_compiler_session_current_for_isolate(g_isolate);
         assert(g_session != NULL);

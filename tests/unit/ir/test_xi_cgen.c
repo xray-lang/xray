@@ -113,8 +113,7 @@ static void set_single_param_ownership_contract(XiFunc *function, uint8_t parame
 
 static void setup(void) {
     if (!g_iso) {
-        XrVMConfig p;
-        xray_vm_config_init(&p);
+        XrVMConfig p = {0};
         g_iso = xray_vm_new_full(&p);
     }
 }

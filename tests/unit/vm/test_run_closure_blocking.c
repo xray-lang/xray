@@ -37,8 +37,7 @@ static XrValue root_string(XrVMRuntime *iso, const char *s) {
 
 /* A thrown error propagates through out_error and the entry returns null. */
 TEST(run_closure_blocking_propagates_thrown_error) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
     xr_isolate_multicore_init(iso, 2);
@@ -63,8 +62,7 @@ TEST(run_closure_blocking_propagates_thrown_error) {
  * single main coroutine across calls, as a package command drives several
  * requests in sequence). */
 TEST(run_closure_blocking_reuses_isolate_across_calls) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -86,8 +84,7 @@ TEST(run_closure_blocking_reuses_isolate_across_calls) {
  * survives the drive. http.post to an invalid URL throws before any I/O, so
  * this covers the byte-array argument path without the network. */
 TEST(run_closure_blocking_accepts_byte_array_argument) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -116,8 +113,7 @@ TEST(run_closure_blocking_accepts_byte_array_argument) {
 
 /* NULL closure short-circuits to null without crashing. */
 TEST(run_closure_blocking_null_closure_is_safe) {
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 

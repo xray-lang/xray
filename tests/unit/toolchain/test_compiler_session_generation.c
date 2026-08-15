@@ -191,8 +191,7 @@ TEST(repl_declaration_generations_publish_and_abandon_without_reuse) {
 }
 
 TEST(production_repl_eval_publishes_and_abandons_declaration_generations) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_NOT_NULL(isolate);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
@@ -931,8 +930,7 @@ TEST(operation_scope_rejects_forged_and_stale_commits) {
 }
 
 TEST(production_compile_entry_commits_or_aborts_one_operation) {
-    XrVMConfig config;
-    xray_vm_config_init(&config);
+    XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_NOT_NULL(isolate);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);

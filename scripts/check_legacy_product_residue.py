@@ -440,6 +440,14 @@ def self_test() -> int:
         )
         minimal_constructor_drifted, _ = check(root, collect(root))
         retired_minimal_constructor.unlink()
+        retired_config_initializer = root / "include/xray_vm.h"
+        retired_config_initializer.write_text(
+            "void " + "".join(("xray_", "vm_", "config_", "init"))
+            + "(void *);\n",
+            encoding="utf-8",
+        )
+        config_initializer_drifted, _ = check(root, collect(root))
+        retired_config_initializer.unlink()
         retired_tls_api = root / "include/xray_vm.h"
         retired_tls_api.write_text(
             "void xray_vm_enter(void *);\n"
@@ -704,6 +712,7 @@ def self_test() -> int:
             or multicore_destroy_api_drifted
             or script_info_setter_drifted
             or minimal_constructor_drifted
+            or config_initializer_drifted
             or tls_api_drifted
             or dead_vm_lifecycle_drifted
             or machine_ctx_setter_drifted

@@ -111,8 +111,7 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program, char **ar
     }
 
     // Create isolate
-    XrVMConfig params;
-    xray_vm_config_init(&params);
+    XrVMConfig params = {0};
     params.trace_execution = false;
     params.userdata = ctrl;
     params.script_file = program;

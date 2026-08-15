@@ -8,8 +8,8 @@
  * xisolate_profile.c - Profile-based isolate creation
  *
  * KEY CONCEPT:
- *   Each profile starts from bytecode VM defaults; callers override only what
- *   they need (trace, workers, etc.).  Creation uses the explicit full VM
+ *   Each profile starts from the all-zero VM configuration; callers override
+ *   only what they need (trace, workers, etc.).  Creation uses the explicit full VM
  *   constructor. This eliminates the repeated
  *   XrVMConfig boilerplate across run/repl/test/check/fmt/compile/
  *   deps/eval and the MCP analyzer isolate.
@@ -18,15 +18,14 @@
 #include "xisolate_profile.h"
 #include "../base/xchecks.h"
 #include <stdio.h>
-#include <string.h>
 
 /* ========== Profile Configuration ========== */
 
 void xr_isolate_profile_params(XrIsolateProfile profile, XrVMConfig *out) {
     XR_DCHECK(out != NULL, "out must not be NULL");
 
-    /* Start with defaults */
-    xray_vm_config_init(out);
+    /* The all-zero representation is the default configuration. */
+    *out = (XrVMConfig){0};
 
     (void) profile;
 }
