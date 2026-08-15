@@ -58,13 +58,13 @@ Fuzzing 需要 Clang 编译器（libFuzzer 是 LLVM 的一部分）：
 
 ```bash
 # 配置 fuzzing 构建
-cmake -B build-fuzz \
+cmake -S . -B build-fuzz -G Ninja \
   -DENABLE_FUZZING=ON \
   -DCMAKE_C_COMPILER=clang \
   -DCMAKE_CXX_COMPILER=clang++
 
 # 构建 fuzzer
-cmake --build build-fuzz --target fuzz_lexer fuzz_parser fuzz_stdlib_data
+cmake --build build-fuzz --target fuzz_lexer fuzz_parser fuzz_stdlib_data fuzz_xtp_decode
 ```
 
 ## 运行
@@ -100,6 +100,21 @@ cp ../../tests/regression/**/*.xr corpus/parser/ 2>/dev/null || true
 # 运行纯 Xray CSV/TOML/XML/YAML parser fuzzer
 ./build-fuzz/tests/fuzz/fuzz_stdlib_data corpus/stdlib_data -max_len=4096
 ```
+
+### XTP Decoder and Whole-plan Verifier Fuzzer
+
+`fuzz_xtp_decode` 对每个输入执行两条路径：原始字节进入 bounded decoder；另一路以同一输入选择一项确定性结构化 mutation，作用于当前 schema 生成的有效 XTP。后者逐项断言拒绝发生在 decoder 或 whole-plan materializer 的预期边界。运行时 loader 还必须保持输出 plan 为 `NULL`，因此无效 artifact 无法到达后续 provider、finalizer 或 entry 注册所需的 verified-plan 边界。
+
+当前结构化矩阵覆盖 schema 版本、完整件与 section digest、semantic identity 与 plan fingerprint、section bounds/length/count/order、unknown instruction opcode、unknown runtime tag、非 canonical constant form，以及 total-row/verification-work hard budget。
+
+`corpus/xtp/*.xtpseed` 是透明文本控制种子。命名的矩阵 seed 以稳定 mutation code 开头；文件名说明类别，fuzzer 对其他首字节按矩阵索引取模以保留随机探索。有效 XTP 在运行时由当前 builder 生成，不提交不透明二进制 artifact。
+
+```bash
+./build-fuzz/tests/fuzz/fuzz_xtp_decode corpus/xtp \
+  -max_len=1048576 -max_total_time=3600
+```
+
+默认测试构建中的 `test_xtp_fuzz_entry` 会不依赖 libFuzzer 地逐项执行完整确定性 mutation matrix，适合快速回归；它不替代长时间 sanitizer fuzzing。
 
 ## 常用选项
 
