@@ -2656,6 +2656,62 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function,
            semantic_function == function->semantic_plan_function_index;
 }
 
+static const XrCEmissionPlan *cg_function_c_emission_plan(
+    XiCgenCtx *ctx, const XiFunc *function) {
+    if (!ctx || !function || !function->semantic_plan)
+        return NULL;
+    const XrCEmissionPlan *match = NULL;
+    for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
+        const CgValueEmissionRegistryEntry *entry =
+            &ctx->value_emission_registry[i];
+        if (entry->semantic_plan != function->semantic_plan)
+            continue;
+        if (match)
+            return NULL;
+        match = entry->emission_plan;
+    }
+    return match;
+}
+
+static bool cg_direct_local_array_ref_argument_emission(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *call,
+    uint16_t ordinal, const XiValue *argument,
+    XrCCallArgumentEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    uint32_t semantic_call = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_argument = XR_SEMANTIC_INDEX_NONE;
+    const XrCEmissionPlan *plan =
+        cg_function_c_emission_plan(ctx, function);
+    char error[256] = {0};
+    if (!out || !plan || !cg_value_semantic_id(ctx, function, call,
+                                               &semantic_call) ||
+        !cg_value_semantic_id(ctx, function, argument,
+                              &semantic_argument) ||
+        !xr_c_emission_plan_call_argument_view(
+            plan, semantic_call, ordinal, out, error, sizeof(error)))
+        return false;
+    if (out->semantic_call_value != semantic_call ||
+        out->semantic_value != semantic_argument || out->ordinal != ordinal ||
+        out->caller_register_kind != XR_MACHINE_REP_DYN_VALUE ||
+        out->caller_memory_kind != XR_MACHINE_REP_DYN_VALUE ||
+        out->callee_register_kind != XR_MACHINE_REP_RAW_PTR ||
+        out->callee_memory_kind != XR_MACHINE_REP_RAW_PTR ||
+        out->mode != XR_TARGET_CALL_REFERENCE ||
+        out->ownership != XR_TARGET_CALL_BORROW ||
+        out->transfer_mode != XR_TRANSFER_SHARE ||
+        out->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
+        out->array_element_storage <= XR_TARGET_ARRAY_STORAGE_NONE ||
+        out->array_element_storage >= XR_TARGET_ARRAY_STORAGE_COUNT ||
+        out->reserved[0] != 0 || out->reserved[1] != 0 ||
+        out->reserved[2] != 0 || !out->c_type ||
+        strcmp(out->c_type, "XrValue *") != 0) {
+        ctx->error = true;
+        return false;
+    }
+    return true;
+}
+
 static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx,
                                         const XrCValueEmissionView *view,
                                         XaotRep *out) {
@@ -2709,6 +2765,19 @@ static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx,
             return true;
         case XR_C_VALUE_REP_VIEW:
             *out = XAOT_REP_SLICE;
+            return true;
+        case XR_C_VALUE_REP_RAWPTR:
+            if (view->materialization !=
+                    XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER ||
+                view->target_register_kind != XR_MACHINE_REP_RAW_PTR ||
+                view->target_memory_kind != XR_MACHINE_REP_RAW_PTR ||
+                view->recipe_discriminant <=
+                    XR_TARGET_ARRAY_STORAGE_NONE ||
+                view->recipe_discriminant >=
+                    XR_TARGET_ARRAY_STORAGE_COUNT ||
+                !view->c_type || strcmp(view->c_type, "XrValue *") != 0)
+                break;
+            *out = XAOT_REP_RAWPTR;
             return true;
         case XR_C_VALUE_REP_VOID:
             *out = XAOT_REP_VOID;
@@ -2805,6 +2874,19 @@ static bool cg_value_emission_storage_rep(XiCgenCtx *ctx,
              * aggregate lowering token while its declaration and recipe come
              * solely from the immutable emission row. */
             *out = XR_REP_TAGGED;
+            return true;
+        case XR_C_VALUE_REP_RAWPTR:
+            if (view->materialization !=
+                    XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER ||
+                view->target_register_kind != XR_MACHINE_REP_RAW_PTR ||
+                view->target_memory_kind != XR_MACHINE_REP_RAW_PTR ||
+                view->recipe_discriminant <=
+                    XR_TARGET_ARRAY_STORAGE_NONE ||
+                view->recipe_discriminant >=
+                    XR_TARGET_ARRAY_STORAGE_COUNT ||
+                !view->c_type || strcmp(view->c_type, "XrValue *") != 0)
+                break;
+            *out = XR_REP_RAWPTR;
             return true;
         case XR_C_VALUE_REP_COUNT: break;
     }

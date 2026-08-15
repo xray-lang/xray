@@ -138,6 +138,7 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
         case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
         case XR_MACHINE_REP_DYN_VALUE: rep = XAOT_REP_TAGGED; break;
         case XR_MACHINE_REP_VIEW: rep = XAOT_REP_SLICE; break;
+        case XR_MACHINE_REP_RAW_PTR: rep = XAOT_REP_RAWPTR; break;
         default: return false;
     }
     info = xaot_rep_info(rep);
@@ -150,7 +151,9 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
                                           : XAOT_VALUE_SCALAR;
     out->rep = rep;
     out->type = value->type;
-    out->c_type = info->c_type;
+    out->c_type = machine->kind == XR_MACHINE_REP_RAW_PTR
+                      ? "XrValue *"
+                      : info->c_type;
     if (machine->kind == XR_MACHINE_REP_ENUM_ORDINAL)
         out->flags = XAOT_VALUE_FLAG_ENUM;
     return true;
@@ -749,7 +752,25 @@ static bool array_method_is_hof_result(const XiValue *value) {
     return strcmp(method, "map") == 0 || strcmp(method, "filter") == 0;
 }
 
-static bool derive_array_storage_plan(const XaotBundle *bundle, const XiValue *array_value,
+static bool prepare_target_binding_has_machine_kind(
+    XaotBundle *bundle, const XiValue *value, XrMachineRepKind kind) {
+    const XrTargetValueRepRecord *binding = NULL;
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    if (!bundle || !function ||
+        !prepare_target_value_binding(bundle, function, value, &binding) ||
+        !binding)
+        return false;
+    const XrTargetPlan *target_plan =
+        xaot_bundle_target_plan_for_func(bundle, function);
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    return register_rep && memory_rep && register_rep->kind == kind &&
+           memory_rep->kind == kind;
+}
+
+static bool derive_array_storage_plan(XaotBundle *bundle, const XiValue *array_value,
                                       uint32_t required_flag, XaotContainerElemPlan *out_elem,
                                       const XiValue **out_origin, uint8_t depth) {
     const XiValue *value = unwrap_identity_value(array_value);
@@ -802,6 +823,27 @@ static bool derive_array_storage_plan(const XaotBundle *bundle, const XiValue *a
 
     if (!array_elem_plan_for_value(bundle, value, &self_elem))
         return false;
+
+    /* A ref parameter is the address of the callee's XrValue slot, not an
+     * Array value.  Only its exact PLACE_LOAD result participates in Array
+     * storage.  The verified TargetPlan RAW_PTR/DYN pair is the prior identity;
+     * no parameter name, source spelling, or generic Array type inference is
+     * accepted here. */
+    if (value->op == XI_PARAM &&
+        prepare_target_binding_has_machine_kind(
+            bundle, value, XR_MACHINE_REP_RAW_PTR))
+        return false;
+    if (value->op == XI_PLACE_LOAD && value->nargs == 1 && value->args &&
+        prepare_target_binding_has_machine_kind(
+            bundle, value, XR_MACHINE_REP_DYN_VALUE) &&
+        prepare_target_binding_has_machine_kind(
+            bundle, value->args[0], XR_MACHINE_REP_RAW_PTR)) {
+        if (out_elem)
+            *out_elem = self_elem;
+        if (out_origin)
+            *out_origin = value;
+        return true;
+    }
 
     /* Typed array class fields serve reads and writes alike: the element
      * type is static, and the write paths stay runtime-checked unless a

@@ -37,6 +37,7 @@ typedef enum XrCValueRep {
     XR_C_VALUE_REP_RUNE,
     XR_C_VALUE_REP_TAGGED,
     XR_C_VALUE_REP_VIEW,
+    XR_C_VALUE_REP_RAWPTR,
     XR_C_VALUE_REP_COUNT,
 } XrCValueRep;
 
@@ -55,6 +56,7 @@ typedef enum XrCValueMaterializationRecipe {
     XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR = 11,
     XR_C_VALUE_MATERIALIZATION_ARRAY_WITH_CAPACITY = 12,
     XR_C_VALUE_MATERIALIZATION_ARRAY_FILLED_NEW = 13,
+    XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER = 14,
     XR_C_VALUE_MATERIALIZATION_COUNT,
 } XrCValueMaterializationRecipe;
 
@@ -96,5 +98,27 @@ typedef struct XrCValueEmissionView {
     const char *recipe_member_name;
     const XrCRecipeArgumentView *recipe_arguments;
 } XrCValueEmissionView;
+
+/* Exact C boundary for one direct-local ref Array argument.  This row is
+ * keyed by the semantic CALL result and parameter ordinal; it deliberately
+ * carries no selector, source name, analyzer type, or mutable Xi pointer. */
+typedef struct XrCCallArgumentEmissionView {
+    uint32_t semantic_call_value;
+    uint32_t semantic_operand;
+    uint32_t semantic_value;
+    uint32_t callee_parameter;
+    uint16_t ordinal;
+    uint16_t caller_register_kind;
+    uint16_t caller_memory_kind;
+    uint16_t callee_register_kind;
+    uint16_t callee_memory_kind;
+    uint8_t mode;
+    uint8_t ownership;
+    uint8_t transfer_mode;
+    uint8_t flags;
+    uint8_t array_element_storage;
+    uint8_t reserved[3];
+    const char *c_type;
+} XrCCallArgumentEmissionView;
 
 #endif  // XR_C_EMISSION_SCHEMA_H
