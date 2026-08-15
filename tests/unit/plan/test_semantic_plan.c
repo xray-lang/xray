@@ -4890,11 +4890,55 @@ static void test_coroutine_lifecycle_no_state_release_index_is_linear(void) {
     xr_semantic_plan_free(plan);
 }
 
+static void test_coroutine_lifecycle_large_state_release_projection_is_indexed(
+    void) {
+    const uint32_t state_count = 8192;
+    const uint32_t release_count = 256;
+    XrSemanticPlan *plan =
+        build_many_releases_without_coroutine_plan(release_count);
+    uint32_t state_operation = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t operation = 0; operation < plan->operation_count;
+         operation++) {
+        if (plan->operations[operation].function == 0) {
+            state_operation = operation;
+            break;
+        }
+    }
+    REQUIRE(state_operation != XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(plan->entity_count <= UINT32_MAX - state_count);
+    uint32_t next_entity_count = plan->entity_count + state_count;
+    void *next_entities = xr_realloc(
+        plan->entities,
+        (size_t) next_entity_count * sizeof(*plan->entities));
+    REQUIRE(next_entities != NULL);
+    plan->entities = (XrSemanticEntityRecord *) next_entities;
+    memset(&plan->entities[plan->entity_count], 0,
+           (size_t) state_count * sizeof(*plan->entities));
+    for (uint32_t state = 0; state < state_count; state++) {
+        plan->entities[plan->entity_count + state] =
+            (XrSemanticEntityRecord) {
+                .kind = XR_SEM_ENTITY_COROUTINE_STATE,
+                .subject_kind = XR_SEM_ENTITY_SUBJECT_OPERATION,
+                .subject = state_operation,
+                .ordinal = state + 1u,
+            };
+    }
+    plan->entity_count = plan->entity_capacity = next_entity_count;
+    XrSemanticGraph graph = {0};
+    REQUIRE(xr_semantic_graph_build(plan, &graph, NULL, 0));
+    XrSemanticCoroutineLifecycleProjection projection = {0};
+    REQUIRE(xr_semantic_coroutine_lifecycle_projection_build(
+                plan, &graph, 0, &projection) ==
+            XR_SEMANTIC_LIFECYCLE_PROJECTION_OK);
+    REQUIRE(projection.count == 0 && projection.rows == NULL);
+    REQUIRE(projection.indexed_work <
+            (uint64_t) state_count * release_count);
+    xr_semantic_coroutine_lifecycle_projection_dispose(&projection);
+    xr_semantic_graph_dispose(&graph);
+    xr_semantic_plan_free(plan);
+}
+
 static void test_owned_string_coroutine_lifecycle_identity(void) {
-    REQUIRE(xr_semantic_coroutine_lifecycle_work_budget_is_valid(
-        1, XR_SEMANTIC_COROUTINE_LIFECYCLE_MAX_WORK));
-    REQUIRE(!xr_semantic_coroutine_lifecycle_work_budget_is_valid(
-        1, XR_SEMANTIC_COROUTINE_LIFECYCLE_MAX_WORK + 1u));
     uint64_t charged_work = XR_SEMANTIC_LIFECYCLE_MAX_WORK - 1u;
     REQUIRE(xr_semantic_lifecycle_work_charge(&charged_work, 1u));
     REQUIRE(charged_work == XR_SEMANTIC_LIFECYCLE_MAX_WORK);
@@ -4919,6 +4963,18 @@ static void test_owned_string_coroutine_lifecycle_identity(void) {
             XR_SEMANTIC_RELEASE_INDEX_BUDGET_EXHAUSTED);
     REQUIRE(!rejected_index.rows && rejected_index.count == 0 &&
             rejected_index.capacity == 0);
+    XrSemanticPlan oversized_projection_plan = {0};
+    oversized_projection_plan.entity_count =
+        (uint32_t) XR_SEMANTIC_LIFECYCLE_MAX_WORK + 1u;
+    XrSemanticGraph empty_graph = {0};
+    XrSemanticCoroutineLifecycleProjection rejected_projection = {0};
+    REQUIRE(xr_semantic_coroutine_lifecycle_projection_build(
+                &oversized_projection_plan, &empty_graph, 0,
+                &rejected_projection) ==
+            XR_SEMANTIC_LIFECYCLE_PROJECTION_BUDGET_EXHAUSTED);
+    REQUIRE(!rejected_projection.rows && rejected_projection.count == 0 &&
+            rejected_projection.capacity == 0 &&
+            rejected_projection.indexed_work == 0);
     XrSemanticPlan *plan = build_owned_string_coroutine_lifecycle_plan();
     uint32_t lifecycle[3] = {XR_SEMANTIC_INDEX_NONE, XR_SEMANTIC_INDEX_NONE,
                              XR_SEMANTIC_INDEX_NONE};
@@ -4941,6 +4997,21 @@ static void test_owned_string_coroutine_lifecycle_identity(void) {
                 strstr(entity->canonical_key, ":release=") != NULL &&
                 strstr(entity->canonical_key, ":owner=") != NULL);
     }
+
+    uint32_t state_entity = plan->entities[lifecycle[0]].parent;
+    uint16_t saved_state_kind = plan->entities[state_entity].kind;
+    plan->entities[state_entity].kind = XR_SEM_ENTITY_OPERATION;
+    XrSemanticGraph no_state_graph = {0};
+    REQUIRE(xr_semantic_graph_build(plan, &no_state_graph, NULL, 0));
+    XrSemanticCoroutineLifecycleProjection no_state_projection = {0};
+    REQUIRE(xr_semantic_coroutine_lifecycle_projection_build(
+                plan, &no_state_graph, 1, &no_state_projection) ==
+            XR_SEMANTIC_LIFECYCLE_PROJECTION_OK);
+    REQUIRE(no_state_projection.count == 0);
+    xr_semantic_coroutine_lifecycle_projection_dispose(&no_state_projection);
+    xr_semantic_graph_dispose(&no_state_graph);
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->entities[state_entity].kind = saved_state_kind;
 
     uint32_t root_index = lifecycle[1];
     uint32_t saved_subject = plan->entities[root_index].subject;
@@ -5002,6 +5073,7 @@ int main(void) {
     test_owner_origin_ignores_preceding_alias_storage_order();
     test_nullable_borrowed_parameter_keeps_sealed_provenance();
     test_coroutine_lifecycle_no_state_release_index_is_linear();
+    test_coroutine_lifecycle_large_state_release_projection_is_indexed();
     test_owned_string_coroutine_lifecycle_identity();
     printf("SemanticPlan/XSM tests passed\n");
     return 0;

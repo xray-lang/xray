@@ -4511,7 +4511,6 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
         }
     }
 
-    uint32_t state_count = 0;
     uint64_t list_count = 0;
     uint32_t touched_capacity = 0;
     for (uint32_t function = 0; function < ctx->plan->function_count;
@@ -4519,13 +4518,6 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
         const XiCoroPlan *coro = ctx->functions[function].source->coro_plan;
         if (!coro)
             continue;
-        if (coro->nstates > UINT32_MAX - state_count) {
-            xr_free(state_entity_by_operation);
-            xr_free(operation_by_value);
-            return fail(ctx, "XR_EXEC_5003",
-                        "coroutine lifecycle state budget exhausted");
-        }
-        state_count += coro->nstates;
         for (uint32_t state = 0; state < coro->nstates; state++) {
             const XiCoroSuspendPoint *point = &coro->points[state];
             if ((point->nlive && !point->live) ||
@@ -4544,30 +4536,44 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
                 touched_capacity = rows;
         }
     }
-    XrSemanticStringConcatReleaseIndex release_index = {0};
-    XrSemanticStringConcatReleaseIndexStatus release_status =
-        xr_semantic_string_concat_release_index_build(ctx->plan,
-                                                      &release_index);
-    size_t owner_count_size = xr_ownership_certificate_owner_count(
-        xr_semantic_plan_ownership(ctx->plan));
-    if (release_status != XR_SEMANTIC_RELEASE_INDEX_OK ||
-        owner_count_size > UINT32_MAX ||
-        !xr_semantic_lifecycle_work_charge_product(
-            &release_index.linear_work, state_count, release_index.count) ||
-        !xr_semantic_lifecycle_work_charge_product(
-            &release_index.linear_work, list_count, 2u) ||
-        !xr_semantic_lifecycle_work_charge(
-            &release_index.linear_work, ctx->plan->entity_count) ||
-        !xr_semantic_lifecycle_work_charge_product(
-            &release_index.linear_work, total_values, 3u) ||
-        !xr_semantic_lifecycle_work_charge(
-            &release_index.linear_work, ctx->plan->operation_count)) {
-        xr_semantic_string_concat_release_index_dispose(&release_index);
+    if (list_count > UINT32_MAX) {
         xr_free(state_entity_by_operation);
         xr_free(operation_by_value);
-        return fail(ctx, release_status == XR_SEMANTIC_RELEASE_INDEX_INVALID
-                             ? "XR_SEM_0019"
-                             : "XR_EXEC_5003",
+        return fail(ctx, "XR_EXEC_5003",
+                    "coroutine lifecycle source row budget exhausted");
+    }
+    XrSemanticGraph graph = {0};
+    if (!xr_semantic_graph_build(ctx->plan, &graph, ctx->error,
+                                 ctx->error_size)) {
+        xr_free(state_entity_by_operation);
+        xr_free(operation_by_value);
+        return false;
+    }
+    XrSemanticCoroutineLifecycleProjection projection = {0};
+    XrSemanticCoroutineLifecycleProjectionStatus projection_status =
+        xr_semantic_coroutine_lifecycle_projection_build(
+            ctx->plan, &graph, (uint32_t) (list_count / 3u), &projection);
+    size_t owner_count_size = xr_ownership_certificate_owner_count(
+        xr_semantic_plan_ownership(ctx->plan));
+    if (projection_status != XR_SEMANTIC_LIFECYCLE_PROJECTION_OK ||
+        owner_count_size > UINT32_MAX ||
+        !xr_semantic_lifecycle_work_charge_product(
+            &projection.indexed_work, list_count, 2u) ||
+        !xr_semantic_lifecycle_work_charge(
+            &projection.indexed_work, ctx->plan->entity_count) ||
+        !xr_semantic_lifecycle_work_charge_product(
+            &projection.indexed_work, total_values, 3u) ||
+        !xr_semantic_lifecycle_work_charge(
+            &projection.indexed_work, ctx->plan->operation_count)) {
+        xr_semantic_coroutine_lifecycle_projection_dispose(&projection);
+        xr_semantic_graph_dispose(&graph);
+        xr_free(state_entity_by_operation);
+        xr_free(operation_by_value);
+        return fail(ctx,
+                    projection_status ==
+                            XR_SEMANTIC_LIFECYCLE_PROJECTION_INVALID
+                        ? "XR_SEM_0019"
+                        : "XR_EXEC_5003",
                     "coroutine lifecycle projection budget exhausted");
     }
     uint32_t owner_count = (uint32_t) owner_count_size;
@@ -4581,18 +4587,13 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
     uint32_t *touched = touched_capacity
         ? (uint32_t *) xr_malloc((size_t) touched_capacity * sizeof(*touched))
         : NULL;
-    uint32_t *seen_generation = ctx->plan->operation_count
-        ? (uint32_t *) xr_calloc(ctx->plan->operation_count,
-                                sizeof(*seen_generation))
-        : NULL;
     if ((owner_count && !owner_entities) || (total_values && !membership) ||
-        (touched_capacity && !touched) ||
-        (ctx->plan->operation_count && !seen_generation)) {
-        xr_free(seen_generation);
+        (touched_capacity && !touched)) {
         xr_free(touched);
         xr_free(membership);
         xr_free(owner_entities);
-        xr_semantic_string_concat_release_index_dispose(&release_index);
+        xr_semantic_coroutine_lifecycle_projection_dispose(&projection);
+        xr_semantic_graph_dispose(&graph);
         xr_free(state_entity_by_operation);
         xr_free(operation_by_value);
         return fail(ctx, "XR_EXEC_5003",
@@ -4615,13 +4616,7 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
         }
         owner_entities[record->subject] = entity;
     }
-    XrSemanticGraph graph = {0};
-    if (!xr_semantic_graph_build(ctx->plan, &graph, ctx->error,
-                                 ctx->error_size)) {
-        lifecycle_ok = false;
-        goto lifecycle_cleanup;
-    }
-    uint32_t generation = 0;
+    uint32_t projection_cursor = 0;
     for (uint32_t function = 0; lifecycle_ok &&
                                 function < ctx->plan->function_count;
          function++) {
@@ -4672,36 +4667,33 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
                     }
                 }
             }
-            generation++;
-            if (generation == 0) {
-                memset(seen_generation, 0,
-                       (size_t) ctx->plan->operation_count *
-                           sizeof(*seen_generation));
-                generation = 1;
+            if (projection_cursor < projection.count &&
+                projection.rows[projection_cursor].state_entity <
+                    state_entity) {
+                lifecycle_ok = fail(
+                    ctx, "XR_SEM_0019",
+                    "owned String coroutine lifecycle state order is invalid");
             }
-            for (uint32_t release = 0;
-                 lifecycle_ok && release < release_index.count; release++) {
-                XrSemanticCoroutineLifecycleShape shape = {0};
-                if (!xr_semantic_owned_string_coroutine_lifecycle_from_release_is_exact(
-                        ctx->plan, &graph, state_entity,
-                        &release_index.rows[release], &shape))
-                    continue;
-                if (shape.function != function ||
-                    shape.logical_state != point->state_id ||
-                    shape.producer_value >= total_values ||
-                    membership[shape.producer_value] != UINT8_C(0x15) ||
-                    shape.producer_operation >= ctx->plan->operation_count ||
-                    seen_generation[shape.producer_operation] == generation ||
-                    shape.owner >= owner_count ||
-                    owner_entities[shape.owner] == XR_SEMANTIC_INDEX_NONE) {
+            while (lifecycle_ok && projection_cursor < projection.count &&
+                   projection.rows[projection_cursor].state_entity ==
+                       state_entity) {
+                const XrSemanticCoroutineLifecycleShape *shape =
+                    &projection.rows[projection_cursor++];
+                if (shape->function != function ||
+                    shape->logical_state != point->state_id ||
+                    shape->producer_value >= total_values ||
+                    membership[shape->producer_value] != UINT8_C(0x15) ||
+                    shape->producer_operation >=
+                        ctx->plan->operation_count ||
+                    shape->owner >= owner_count ||
+                    owner_entities[shape->owner] == XR_SEMANTIC_INDEX_NONE) {
                     lifecycle_ok = fail(
                         ctx, "XR_SEM_0019",
                         "owned String coroutine lifecycle facts are incomplete");
                     break;
                 }
-                seen_generation[shape.producer_operation] = generation;
                 XrStableId owner_identity =
-                    ctx->plan->entities[owner_entities[shape.owner]].id;
+                    ctx->plan->entities[owner_entities[shape->owner]].id;
                 const uint16_t roles[] = {
                     XR_SEM_ENTITY_COROUTINE_LIVE,
                     XR_SEM_ENTITY_COROUTINE_ROOT,
@@ -4715,12 +4707,12 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
                         text_append(&key, ":value-operation=") &&
                         text_append_stable_id(
                             &key,
-                            ctx->plan->operations[shape.producer_operation]
+                            ctx->plan->operations[shape->producer_operation]
                                 .id) &&
                         text_append(&key, ":release=") &&
                         text_append_stable_id(
                             &key,
-                            ctx->plan->operations[shape.release_operation]
+                            ctx->plan->operations[shape->release_operation]
                                 .id) &&
                         text_append(&key, ":owner=") &&
                         text_append_stable_id(&key, owner_identity);
@@ -4728,7 +4720,7 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
                         !append_entity(
                             ctx, roles[role],
                             XR_SEM_ENTITY_SUBJECT_OPERATION,
-                            shape.producer_operation, 0, state_entity, &key,
+                            shape->producer_operation, 0, state_entity, &key,
                             NULL)) {
                         text_dispose(&key);
                         lifecycle_ok = fail(
@@ -4743,14 +4735,16 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
                 membership[touched[i]] = 0;
         }
     }
-    xr_semantic_graph_dispose(&graph);
-
+    if (lifecycle_ok && projection_cursor != projection.count)
+        lifecycle_ok = fail(
+            ctx, "XR_SEM_0019",
+            "owned String coroutine lifecycle state coverage is incomplete");
 lifecycle_cleanup:
-    xr_free(seen_generation);
+    xr_semantic_graph_dispose(&graph);
     xr_free(touched);
     xr_free(membership);
     xr_free(owner_entities);
-    xr_semantic_string_concat_release_index_dispose(&release_index);
+    xr_semantic_coroutine_lifecycle_projection_dispose(&projection);
     xr_free(state_entity_by_operation);
     xr_free(operation_by_value);
     return lifecycle_ok;
