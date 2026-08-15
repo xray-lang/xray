@@ -4,6 +4,9 @@
 
 #include "vm/xr_typed_frame.h"
 #include "vm/xr_typed_dispatch.h"
+#include "vm/debug/xr_vm_materialize.h"
+#include "vm/debug/xr_vm_profile.h"
+#include "vm/debug/xr_vm_trace.h"
 #include <stdio.h>
 
 int main(void) {
@@ -17,6 +20,18 @@ int main(void) {
     XrModuleGenerationIdentity generation = {0};
     uint8_t byte = 0;
     int64_t result = 1;
+    XrTypedDispatchI64Request request = {
+        .required_plan_fingerprint = &fingerprint,
+        .result = &result,
+    };
+    XrVmProfile profile;
+    XrVmProfileSnapshot profile_snapshot;
+    XrVmTraceEvent trace_storage[1];
+    XrVmTraceBuffer trace_buffer;
+    XrVmTraceSink trace_sink;
+    XrVmDebugSession debug_session;
+    XrVmMaterializedEvent materialized;
+    XrVmTraceEvent trace_event = {0};
     if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(32) ||
         XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK != XR_TARGET_REQUIRED_FAMILIES ||
         limits.max_arena_bytes != XR_TYPED_FRAME_MAX_ARENA_BYTES ||
@@ -44,7 +59,17 @@ int main(void) {
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
         xr_typed_frame_unlink_child(NULL, NULL) !=
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
-        xr_typed_dispatch_execute_i64(NULL, &fingerprint, 0, NULL, 0, &result) !=
+        !xr_typed_profile_init(&profile) ||
+        !xr_typed_profile_snapshot(&profile, &profile_snapshot) ||
+        !xr_typed_trace_buffer_init(&trace_buffer, trace_storage, 1) ||
+        (trace_sink = xr_typed_trace_buffer_sink(&trace_buffer)).emit == NULL ||
+        xr_typed_debug_session_init(&fingerprint, NULL, &trace_sink, &profile,
+                                 &debug_session) !=
+            XR_VM_DEBUG_SESSION_PLAN_IDENTITY_MISMATCH ||
+        xr_typed_materialize_event(NULL, &fingerprint, &trace_event,
+                                &materialized) !=
+            XR_VM_MATERIALIZE_INVALID_ARGUMENT ||
+        xr_typed_dispatch_execute_i64(&request) !=
             XR_TYPED_DISPATCH_INVALID_ARGUMENT ||
         result != 0) {
         fputs("runtime-only typed frame boundary failed\n", stderr);

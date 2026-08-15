@@ -10,7 +10,10 @@
 #include "../../../src/plan/target/xr_target_instruction_verify.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/vm/debug/xr_vm_materialize.h"
+#include "../../../src/vm/debug/xr_vm_profile.h"
 #include "../../../src/vm/xr_typed_dispatch.h"
+#include "../../../src/vm/xr_typed_frame.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <limits.h>
 #include <stdio.h>
@@ -49,6 +52,60 @@ static XrType stub_bool = {.kind = XR_KIND_BOOL,
                            .id = 2,
                            .frozen = true,
                            .scalar_rep = XR_SCALAR_REP_NONE};
+
+static XrTypedDispatchStatus execute_request_i64(
+    const XrTargetPlan *plan, const XrFingerprint *fingerprint,
+    uint32_t function, const int64_t *arguments, uint32_t argument_count,
+    int64_t *result) {
+    XrTypedDispatchI64Request request = {
+        .verified_plan = plan,
+        .required_plan_fingerprint = fingerprint,
+        .arguments = arguments,
+        .result = result,
+        .function = function,
+        .argument_count = argument_count,
+    };
+    return xr_typed_dispatch_execute_i64(&request);
+}
+
+static XrTypedDispatchStatus execute_debug_request_i64(
+    const XrTargetPlan *plan, const XrFingerprint *fingerprint,
+    uint32_t function, const int64_t *arguments, uint32_t argument_count,
+    const XrVmDebugSession *debug_session, int64_t *result) {
+    XrTypedDispatchI64Request request = {
+        .verified_plan = plan,
+        .required_plan_fingerprint = fingerprint,
+        .arguments = arguments,
+        .result = result,
+        .debug_session = debug_session,
+        .function = function,
+        .argument_count = argument_count,
+    };
+    return xr_typed_dispatch_execute_i64(&request);
+}
+
+static XrModuleGenerationIdentity debug_generation_identity(
+    const XrTargetPlan *plan, uint8_t generation_byte) {
+    XrModuleGenerationIdentity identity = {
+        .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
+        .target_plan_schema_version = XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION,
+        .generation_number = 7,
+        .completed_family_mask = XR_TARGET_REQUIRED_FAMILIES,
+    };
+    XrFingerprint semantic = xr_target_plan_semantic_fingerprint(plan);
+    XrFingerprint profile =
+        xr_target_profile_fingerprint(xr_target_plan_profile(plan));
+    XrFingerprint target = xr_target_plan_fingerprint(plan);
+    memcpy(identity.semantic_fingerprint, semantic.bytes,
+           sizeof(identity.semantic_fingerprint));
+    memcpy(identity.target_profile_fingerprint, profile.bytes,
+           sizeof(identity.target_profile_fingerprint));
+    memcpy(identity.target_plan_fingerprint, target.bytes,
+           sizeof(identity.target_plan_fingerprint));
+    memset(identity.generation_fingerprint, generation_byte,
+           sizeof(identity.generation_fingerprint));
+    return identity;
+}
 
 static void test_generated_instruction_contract(void) {
     enum {
@@ -565,7 +622,7 @@ static void test_closed_program_and_unavailable_boundary(void) {
         xr_target_plan_fingerprint(fixture.base_plan);
     int64_t result = 7;
     REQUIRE(xr_target_plan_function_execution_family_mask(fixture.base_plan, 0) == 0);
-    REQUIRE(xr_typed_dispatch_execute_i64(fixture.base_plan, &base_fingerprint,
+    REQUIRE(execute_request_i64(fixture.base_plan, &base_fingerprint,
                                           0, NULL, 0, &result) ==
             XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
     REQUIRE(result == 0);
@@ -574,27 +631,27 @@ static void test_closed_program_and_unavailable_boundary(void) {
         xr_target_plan_fingerprint(fixture.program_plan);
     REQUIRE(xr_target_plan_function_execution_family_mask(fixture.program_plan, 0) ==
             XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
-    REQUIRE(xr_typed_dispatch_execute_i64(fixture.program_plan, &fingerprint,
+    REQUIRE(execute_request_i64(fixture.program_plan, &fingerprint,
                                           0, NULL, 0,
                                           &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN);
 
     XrSemanticPlan *retained_semantic = fixture.program_plan->semantic_plan;
     fixture.program_plan->semantic_plan = NULL;
-    REQUIRE(xr_typed_dispatch_execute_i64(fixture.program_plan, &fingerprint,
+    REQUIRE(execute_request_i64(fixture.program_plan, &fingerprint,
                                           0, NULL, 0,
                                           &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN);
     fixture.program_plan->semantic_plan = retained_semantic;
 
     fixture.program_plan->instructions[0].immediate_bits ^= UINT64_C(1);
-    REQUIRE(xr_typed_dispatch_execute_i64(fixture.program_plan, &fingerprint,
+    REQUIRE(execute_request_i64(fixture.program_plan, &fingerprint,
                                           0, NULL, 0, &result) ==
             XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED);
     fixture.program_plan->instructions[0].immediate_bits ^= UINT64_C(1);
 
     fingerprint.bytes[0] ^= 1;
-    REQUIRE(xr_typed_dispatch_execute_i64(fixture.program_plan, &fingerprint,
+    REQUIRE(execute_request_i64(fixture.program_plan, &fingerprint,
                                           0, NULL, 0, &result) ==
             XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH);
     dispose_fixture(&fixture);
@@ -615,7 +672,7 @@ static void test_production_builder_keeps_unsupported_function_unavailable(void)
     REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) == 0);
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
     int64_t result = 7;
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 0,
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 0,
                                           &result) ==
             XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
     REQUIRE(result == 0);
@@ -653,31 +710,31 @@ static void test_parameters_reach_the_executed_program(void) {
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
     const int64_t arguments[2] = {7, 5};
     int64_t result = 0;
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments, 2,
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, arguments, 2,
                                           &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == (arguments[0] - arguments[1]) * arguments[0]);
 
     /* A different argument vector must produce a different result, so the
      * value cannot be coming from a constant folded into the plan. */
     const int64_t swapped[2] = {arguments[1], arguments[0]};
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, swapped, 2,
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, swapped, 2,
                                           &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == (swapped[0] - swapped[1]) * swapped[0]);
 
     /* Argument-count disagreement is refused instead of truncated or zero
      * filled, and the result stays untouched. */
     result = 11;
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments, 1,
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, arguments, 1,
                                           &result) ==
             XR_TYPED_DISPATCH_ARGUMENT_MISMATCH);
     REQUIRE(result == 0);
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments, 3,
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, arguments, 3,
                                           &result) ==
             XR_TYPED_DISPATCH_ARGUMENT_MISMATCH);
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 0,
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 0,
                                           &result) ==
             XR_TYPED_DISPATCH_ARGUMENT_MISMATCH);
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 2,
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 2,
                                           &result) ==
             XR_TYPED_DISPATCH_INVALID_ARGUMENT);
 
@@ -754,7 +811,7 @@ static void test_xtp_exact_roundtrip_executes_same_program(void) {
     REQUIRE(xr_target_plan_instructions(decoded, &instruction_count) != NULL &&
             instruction_count == fixture.row_count);
     int64_t result = 0;
-    REQUIRE(xr_typed_dispatch_execute_i64(decoded, &fingerprint, 0, NULL, 0,
+    REQUIRE(execute_request_i64(decoded, &fingerprint, 0, NULL, 0,
                                           &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN);
     xr_target_plan_free(decoded);
@@ -866,7 +923,7 @@ static void test_shift_rows_execute_with_masked_counts(void) {
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         const int64_t arguments[2] = {cases[i].value, cases[i].count};
         int64_t result = 0;
-        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments,
+        REQUIRE(execute_request_i64(plan, &fingerprint, 0, arguments,
                                               2, &result) ==
                 XR_TYPED_DISPATCH_OK);
         REQUIRE(result == cases[i].expected);
@@ -988,7 +1045,7 @@ static void test_division_rows_take_the_zero_divisor_edge(void) {
             const int64_t arguments[2] = {families[family].cases[i].first,
                                           families[family].cases[i].second};
             int64_t result = 0;
-            REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0,
+            REQUIRE(execute_request_i64(plan, &fingerprint, 0,
                                                   arguments, 2, &result) ==
                     XR_TYPED_DISPATCH_OK);
             REQUIRE(result == families[family].cases[i].expected);
@@ -999,12 +1056,12 @@ static void test_division_rows_take_the_zero_divisor_edge(void) {
         const int64_t divisor_zero[2] = {17, 0};
         const int64_t dividend_zero[2] = {0, 17};
         int64_t result = 11;
-        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0,
+        REQUIRE(execute_request_i64(plan, &fingerprint, 0,
                                               divisor_zero, 2, &result) ==
                 families[family].zero_status);
         REQUIRE(result == 0);
         result = 11;
-        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0,
+        REQUIRE(execute_request_i64(plan, &fingerprint, 0,
                                               dividend_zero, 2, &result) ==
                 families[family].zero_status);
         REQUIRE(result == 0);
@@ -1124,7 +1181,7 @@ static void test_conditional_branch_selects_its_edge(void) {
         const int64_t arguments[3] = {cases[i].selector, cases[i].first,
                                       cases[i].second};
         int64_t result = 0;
-        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments,
+        REQUIRE(execute_request_i64(plan, &fingerprint, 0, arguments,
                                               3, &result) ==
                 XR_TYPED_DISPATCH_OK);
         REQUIRE(result == cases[i].expected);
@@ -1229,11 +1286,11 @@ static void test_unconditional_jumps_chain_blocks(void) {
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
     const int64_t arguments[2] = {7, 5};
     int64_t result = 0;
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments, 2,
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, arguments, 2,
                                           &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == ((arguments[0] - arguments[1]) * arguments[0]) - arguments[1]);
     const int64_t swapped[2] = {arguments[1], arguments[0]};
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, swapped, 2,
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, swapped, 2,
                                           &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == ((swapped[0] - swapped[1]) * swapped[0]) - swapped[1]);
 
@@ -1360,7 +1417,7 @@ static void test_comparison_rows_drive_the_branch(void) {
         XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
         for (size_t i = 0; i < 3; i++) {
             int64_t result = 0;
-            REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, pairs[i],
+            REQUIRE(execute_request_i64(plan, &fingerprint, 0, pairs[i],
                                                   2, &result) ==
                     XR_TYPED_DISPATCH_OK);
             REQUIRE(result == relations[relation].expected[i]);
@@ -1453,7 +1510,7 @@ static void test_direct_local_i64_call_executes_and_rejects_drift(void) {
 
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
     int64_t result = 0;
-    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 0,
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 0,
                                           &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == 42);
 
@@ -1515,7 +1572,7 @@ static void test_direct_local_i64_call_executes_and_rejects_drift(void) {
     XrFingerprint loop_fingerprint =
         xr_target_plan_fingerprint(nested_loop);
     result = 17;
-    REQUIRE(xr_typed_dispatch_execute_i64(nested_loop, &loop_fingerprint, 0,
+    REQUIRE(execute_request_i64(nested_loop, &loop_fingerprint, 0,
                                           NULL, 0, &result) ==
             XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED);
     REQUIRE(result == 0);
@@ -1535,11 +1592,179 @@ static void test_direct_local_i64_call_executes_and_rejects_drift(void) {
     fingerprint = xr_target_plan_fingerprint(plan);
     for (uint32_t attempt = 0; attempt < 2u; attempt++) {
         result = 99;
-        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 0,
+        REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 0,
                                               &result) ==
                 XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
         REQUIRE(result == 0);
     }
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_runtime_only_trace_profile_and_materialization(void) {
+    XrSemanticPlan *semantic = build_direct_i64_call_semantic(false);
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    XrModuleGenerationIdentity generation =
+        debug_generation_identity(plan, UINT8_C(0xa5));
+
+    XrVmTraceEvent first_storage[32];
+    XrVmTraceEvent second_storage[32];
+    XrVmTraceBuffer first;
+    XrVmTraceBuffer second;
+    XrVmProfile first_profile;
+    XrVmProfile second_profile;
+    REQUIRE(xr_typed_trace_buffer_init(&first, first_storage, 32));
+    REQUIRE(xr_typed_trace_buffer_init(&second, second_storage, 32));
+    REQUIRE(xr_typed_profile_init(&first_profile));
+    REQUIRE(xr_typed_profile_init(&second_profile));
+    XrVmTraceSink first_sink = xr_typed_trace_buffer_sink(&first);
+    XrVmTraceSink second_sink = xr_typed_trace_buffer_sink(&second);
+    XrVmDebugSession first_session;
+    XrVmDebugSession second_session;
+    REQUIRE(xr_typed_debug_session_init(&fingerprint, &generation, &first_sink,
+                                     &first_profile, &first_session) ==
+            XR_VM_DEBUG_SESSION_OK);
+    REQUIRE(xr_typed_debug_session_init(&fingerprint, &generation, &second_sink,
+                                     &second_profile, &second_session) ==
+            XR_VM_DEBUG_SESSION_OK);
+    int64_t first_result = 0;
+    int64_t second_result = 0;
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
+                                      &first_session, &first_result) ==
+            XR_TYPED_DISPATCH_OK);
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
+                                      &second_session, &second_result) ==
+            XR_TYPED_DISPATCH_OK);
+    REQUIRE(first_result == 42 && second_result == 42);
+    REQUIRE(first.count == 14 && second.count == first.count);
+    REQUIRE(memcmp(first.events, second.events,
+                   first.count * sizeof(*first.events)) == 0);
+    for (size_t i = 0; i < first.count; i++) {
+        REQUIRE(first.events[i].ordinal == i);
+        REQUIRE(first.events[i].generation_identity_present == 1);
+        REQUIRE(first.events[i].generation_number == 7);
+        REQUIRE(xr_fingerprint_equal(first.events[i].target_plan_fingerprint,
+                                     fingerprint));
+    }
+    REQUIRE(first.events[0].kind == XR_VM_TRACE_FRAME_ENTER &&
+            first.events[0].frame == 0 &&
+            first.events[0].parent_frame == XR_VM_TRACE_ID_NONE);
+    REQUIRE(first.events[4].kind == XR_VM_TRACE_CALL_ENTER &&
+            first.events[4].frame == 0 &&
+            first.events[4].related_frame == 1);
+    REQUIRE(first.events[5].kind == XR_VM_TRACE_FRAME_ENTER &&
+            first.events[5].frame == 1 && first.events[5].parent_frame == 0);
+    REQUIRE(first.events[11].kind == XR_VM_TRACE_CALL_RETURN &&
+            first.events[11].status == XR_TYPED_DISPATCH_OK);
+    REQUIRE(first.events[13].kind == XR_VM_TRACE_FRAME_EXIT &&
+            first.events[13].status == XR_TYPED_DISPATCH_OK);
+
+    XrVmProfileSnapshot snapshot;
+    REQUIRE(xr_typed_profile_snapshot(&first_profile, &snapshot));
+    REQUIRE(snapshot.saturated == 0 && snapshot.max_frame_depth == 1);
+    REQUIRE(snapshot.event_counts[XR_VM_TRACE_FRAME_ENTER] == 2);
+    REQUIRE(snapshot.event_counts[XR_VM_TRACE_INSTRUCTION] == 6);
+    REQUIRE(snapshot.event_counts[XR_VM_TRACE_CALL_ENTER] == 1);
+    REQUIRE(snapshot.event_counts[XR_VM_TRACE_CALL_RETURN] == 1);
+    REQUIRE(snapshot.opcode_counts[XR_TARGET_INSTRUCTION_CALL_DIRECT_I64] == 1);
+
+    XrVmMaterializedEvent materialized;
+    REQUIRE(xr_typed_materialize_event(plan, &fingerprint, &first.events[4],
+                                    &materialized) ==
+            XR_VM_MATERIALIZE_OK);
+    REQUIRE(materialized.function_identity == XR_VM_DEBUG_FACT_AVAILABLE);
+    REQUIRE(materialized.generation_identity == XR_VM_DEBUG_FACT_AVAILABLE);
+    REQUIRE(materialized.call_identity == XR_VM_DEBUG_FACT_AVAILABLE);
+    REQUIRE(materialized.result.availability == XR_VM_DEBUG_FACT_AVAILABLE);
+    REQUIRE(materialized.source_span == XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE);
+    REQUIRE(materialized.owner_identity == XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE);
+    REQUIRE(materialized.layout_identity == XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE);
+
+    int64_t unobserved_result = 0;
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 0,
+                                &unobserved_result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(unobserved_result == first_result);
+
+    XrVmTraceEvent short_storage[4];
+    XrVmTraceBuffer short_buffer;
+    XrVmProfile short_profile;
+    REQUIRE(xr_typed_trace_buffer_init(&short_buffer, short_storage, 4));
+    REQUIRE(xr_typed_profile_init(&short_profile));
+    XrVmTraceSink short_sink = xr_typed_trace_buffer_sink(&short_buffer);
+    XrVmDebugSession short_session;
+    REQUIRE(xr_typed_debug_session_init(&fingerprint, &generation, &short_sink,
+                                     &short_profile, &short_session) ==
+            XR_VM_DEBUG_SESSION_OK);
+    int64_t rejected_result = 99;
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
+                                      &short_session, &rejected_result) ==
+            XR_TYPED_DISPATCH_TRACE_REJECTED);
+    REQUIRE(rejected_result == 0 && short_buffer.count == 4 &&
+            short_buffer.capacity_exceeded);
+    REQUIRE(xr_typed_profile_snapshot(&short_profile, &snapshot));
+    uint64_t accepted_events = 0;
+    for (uint32_t i = 0; i < XR_VM_TRACE_EVENT_KIND_COUNT; i++)
+        accepted_events += snapshot.event_counts[i];
+    REQUIRE(accepted_events == 4);
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+
+    semantic = build_direct_i64_call_semantic(true);
+    profile = xr_test_target_profile_build(false,
+                                           XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    plan = NULL;
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    fingerprint = xr_target_plan_fingerprint(plan);
+    generation = debug_generation_identity(plan, UINT8_C(0x5a));
+    XrVmTraceEvent error_storage[32];
+    XrVmTraceBuffer error_buffer;
+    REQUIRE(xr_typed_trace_buffer_init(&error_buffer, error_storage, 32));
+    XrVmTraceSink error_sink = xr_typed_trace_buffer_sink(&error_buffer);
+    XrVmDebugSession error_session;
+    REQUIRE(xr_typed_debug_session_init(&fingerprint, &generation, &error_sink,
+                                     NULL, &error_session) ==
+            XR_VM_DEBUG_SESSION_OK);
+    int64_t error_result = 88;
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
+                                      &error_session, &error_result) ==
+            XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
+    REQUIRE(error_result == 0);
+    size_t call_enter = SIZE_MAX;
+    size_t child_error = SIZE_MAX;
+    size_t call_return = SIZE_MAX;
+    size_t root_error = SIZE_MAX;
+    for (size_t i = 0; i < error_buffer.count; i++) {
+        const XrVmTraceEvent *event = &error_buffer.events[i];
+        if (event->kind == XR_VM_TRACE_CALL_ENTER)
+            call_enter = i;
+        else if (event->kind == XR_VM_TRACE_ERROR && event->frame == 1)
+            child_error = i;
+        else if (event->kind == XR_VM_TRACE_CALL_RETURN)
+            call_return = i;
+        else if (event->kind == XR_VM_TRACE_ERROR && event->frame == 0)
+            root_error = i;
+    }
+    REQUIRE(call_enter < child_error && child_error < call_return &&
+            call_return < root_error);
+    REQUIRE(error_buffer.events[call_return].status ==
+            XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
+    REQUIRE(error_buffer.events[error_buffer.count - 1u].kind ==
+                XR_VM_TRACE_FRAME_EXIT &&
+            error_buffer.events[error_buffer.count - 1u].status ==
+                XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
+
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
@@ -1557,7 +1782,7 @@ static void test_direct_local_call_depth_is_globally_bounded(void) {
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
     for (uint32_t attempt = 0; attempt < 2u; attempt++) {
         int64_t result = 91;
-        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 0,
+        REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 0,
                                               &result) ==
                 XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED);
         REQUIRE(result == 0);
@@ -1595,7 +1820,7 @@ static void test_backward_jump_stops_at_the_step_budget(void) {
                              sizeof(error)));
     XrFingerprint fingerprint = xr_target_plan_fingerprint(looping);
     int64_t result = 11;
-    REQUIRE(xr_typed_dispatch_execute_i64(looping, &fingerprint, 0, NULL, 0,
+    REQUIRE(execute_request_i64(looping, &fingerprint, 0, NULL, 0,
                                           &result) ==
             XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED);
     REQUIRE(result == 0);
@@ -1616,6 +1841,7 @@ int main(void) {
     test_unconditional_jumps_chain_blocks();
     test_comparison_rows_drive_the_branch();
     test_direct_local_i64_call_executes_and_rejects_drift();
+    test_runtime_only_trace_profile_and_materialization();
     test_direct_local_call_depth_is_globally_bounded();
     test_backward_jump_stops_at_the_step_budget();
     puts("typed dispatch tests passed");

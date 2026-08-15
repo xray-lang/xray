@@ -412,6 +412,11 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status,
         case XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
                         "scalar generation exceeded the executor step budget");
+        case XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
+                        "scalar generation exceeded the executor call-depth budget");
+        case XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH:
+        case XR_TYPED_DISPATCH_TRACE_REJECTED:
         case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
         case XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED:
         case XR_TYPED_DISPATCH_PROGRAM_INVALID:
@@ -504,11 +509,13 @@ XRAY_API bool xr_module_generation_execute_sole_scalar_i64(
     /* This product route carries no argument vector, so a plan whose sole
      * function declares parameters fails closed instead of being executed
      * against implicit zeros. */
+    XrTypedDispatchI64Request request = {
+        .verified_plan = generation->plan,
+        .required_plan_fingerprint = &required_fingerprint,
+        .result = &executed_result,
+    };
     XrTypedDispatchStatus status = eligible
-                                       ? xr_typed_dispatch_execute_i64(
-                                             generation->plan,
-                                             &required_fingerprint, 0, NULL, 0,
-                                             &executed_result)
+                                       ? xr_typed_dispatch_execute_i64(&request)
                                        : XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
     if (!xr_module_generation_pin_release(
             generation, XR_MODULE_GENERATION_INFLIGHT_CALL,

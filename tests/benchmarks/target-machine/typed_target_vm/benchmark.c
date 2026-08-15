@@ -54,6 +54,21 @@ static XrType benchmark_function = {
 };
 static volatile uint64_t benchmark_sink;
 
+static XrTypedDispatchStatus execute_request_i64(
+    const XrTargetPlan *plan, const XrFingerprint *fingerprint,
+    uint32_t function, const int64_t *arguments, uint32_t argument_count,
+    int64_t *result) {
+    XrTypedDispatchI64Request request = {
+        .verified_plan = plan,
+        .required_plan_fingerprint = fingerprint,
+        .arguments = arguments,
+        .result = result,
+        .function = function,
+        .argument_count = argument_count,
+    };
+    return xr_typed_dispatch_execute_i64(&request);
+}
+
 static void fail(const char *message) {
     fprintf(stderr, "typed target VM benchmark: %s\n", message);
     exit(2);
@@ -224,7 +239,7 @@ static uint64_t measure_scalar(const BenchmarkFixture *fixture, uint32_t executi
     uint64_t start = now_ns();
     for (uint32_t i = 0; i < executions; i++) {
         int64_t result = 0;
-        if (xr_typed_dispatch_execute_i64(fixture->plan, &fixture->fingerprint, 0, arguments, 2,
+        if (execute_request_i64(fixture->plan, &fixture->fingerprint, 0, arguments, 2,
                                           &result) != XR_TYPED_DISPATCH_OK ||
             result != expected)
             fail("typed scalar execution produced the wrong result");
@@ -240,7 +255,7 @@ static uint64_t measure_calls(const BenchmarkFixture *fixture, uint32_t executio
     uint64_t start = now_ns();
     for (uint32_t i = 0; i < executions; i++) {
         int64_t result = 0;
-        if (xr_typed_dispatch_execute_i64(fixture->plan, &fixture->fingerprint, 0, NULL, 0,
+        if (execute_request_i64(fixture->plan, &fixture->fingerprint, 0, NULL, 0,
                                           &result) != XR_TYPED_DISPATCH_OK ||
             result != 42)
             fail("typed direct call execution produced the wrong result");

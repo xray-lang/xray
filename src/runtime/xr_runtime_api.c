@@ -351,6 +351,11 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status, char *diagnostic,
         case XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
                         "exported function exceeded the executor step budget");
+        case XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
+                        "exported function exceeded the executor call-depth budget");
+        case XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH:
+        case XR_TYPED_DISPATCH_TRACE_REJECTED:
         case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
         case XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED:
         case XR_TYPED_DISPATCH_PROGRAM_INVALID:

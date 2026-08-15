@@ -471,9 +471,16 @@ XrEntryInvokeStatus xr_entry_cell_invoke_i64(
     XrEntryInvokeStatus outcome = XR_ENTRY_INVOKE_NATIVE_ERROR;
     int64_t executed = 0;
     if (token.executor_kind == XR_ENTRY_EXECUTOR_TYPED_VM) {
-        XrTypedDispatchStatus status = xr_typed_dispatch_execute_i64(
-            token.plan, &token.plan_fingerprint, token.function, arguments,
-            argument_count, &executed);
+        XrTypedDispatchI64Request request = {
+            .verified_plan = token.plan,
+            .required_plan_fingerprint = &token.plan_fingerprint,
+            .arguments = arguments,
+            .result = &executed,
+            .function = token.function,
+            .argument_count = argument_count,
+        };
+        XrTypedDispatchStatus status =
+            xr_typed_dispatch_execute_i64(&request);
         *executor_status = (uint32_t) status;
         outcome = status == XR_TYPED_DISPATCH_OK ? XR_ENTRY_INVOKE_OK
                                                  : XR_ENTRY_INVOKE_VM_ERROR;

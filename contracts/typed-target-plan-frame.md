@@ -170,8 +170,9 @@ Evidence:
   claim production-builder reachability.
 - `test_typed_frame_runtime_archive` proves the public header and symbols link
   from the runtime-only archive without compiler or AOT ownership, proves the
-  footprint and exact slot transport symbols are present there, and proves that
-  the scalar dispatcher is present without activating it.
+  footprint, exact slot transport, trace, profile, and materialization symbols
+  are present there, and proves that the scalar dispatcher is present without
+  activating it.
 - `typed_target_vm_performance_gate` directly times the verified scalar
   dispatcher, one exact adapter-free `CALL_DIRECT_I64`, and packed frame
   allocation on Windows Release. The call fixture proves that argument
@@ -194,10 +195,10 @@ Evidence:
 anchor-sha256: src/plan/target/xr_target_plan.h 75d5c291efec7caafc4c16ec109e80eee8e982310cdefbd3e49ad6d96eac5b05
 anchor-sha256: src/vm/xr_typed_frame.h 43c04fe662cab6f2d79eca9171450d71a43805864af34e90a1f69d11f31427fe
 anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
-anchor-sha256: src/vm/xr_typed_dispatch.c ef9ad355401e587b4d27f3189f01c0b0e7779145e0aa1089a70a3dfca9d9147a
+anchor-sha256: src/vm/xr_typed_dispatch.c a8112d151f6566489cb8c34fc9f295db79d683ee98d34faf14e2f8afdcff8b14
 anchor-sha256: scripts/check_typed_call_staging.py 70224976eb831b98465bd1f719f2e66bd81fdf59503a4c929a2542b2081e8655
-anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c a59c3711715175cbf009341e15720bff4457d8435e37e3252145ef49cc8fe7d1
+anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 55b0266cbe630f2eb3a34b9593a75f337e2ca47bc9862e4da89d5d4f087d36c7
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py e9e057b890df32005e054290a3425f239c1b3c594432a044a04bd6a12dc6dd14
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8f2acc619749a086bf3be97ef9799ea6abef2c45151113b13a87b9a3609f8101
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 0f9fadd7713412a5f7aa808f7461348751270b5210d1feee085b09d5cac47ead
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 2efb2be6dbb4208c607dd07749694e4e210dc223870bd474fc01c92c9f9aa825
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

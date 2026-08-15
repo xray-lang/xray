@@ -12,6 +12,7 @@
 #define XR_TYPED_DISPATCH_H
 
 #include "../plan/target/xr_target_plan.h"
+#include "debug/xr_vm_trace.h"
 
 typedef enum XrTypedDispatchStatus {
     XR_TYPED_DISPATCH_OK = 0,
@@ -35,6 +36,8 @@ typedef enum XrTypedDispatchStatus {
      * that ran it. */
     XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED,
     XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED,
+    XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH,
+    XR_TYPED_DISPATCH_TRACE_REJECTED,
 } XrTypedDispatchStatus;
 
 /*
@@ -47,14 +50,22 @@ typedef enum XrTypedDispatchStatus {
 /* Recursive direct-local execution shares one bounded native call stack. */
 #define XR_TYPED_DISPATCH_MAX_CALL_DEPTH UINT32_C(256)
 
-/*
- * Arguments are positional signed i64 values. The count must equal the
+/* Arguments are positional signed i64 values. The count must equal the
  * parameter count the verified instruction group binds; a shorter, longer, or
- * absent vector is rejected rather than truncated or zero filled.
- */
+ * absent vector is rejected rather than truncated or zero filled. The request
+ * is the one execution boundary: optional runtime services extend it without
+ * growing a positional ABI or introducing alternate entry points. */
+typedef struct XrTypedDispatchI64Request {
+    const XrTargetPlan *verified_plan;
+    const XrFingerprint *required_plan_fingerprint;
+    const int64_t *arguments;
+    int64_t *result;
+    const XrVmDebugSession *debug_session;
+    uint32_t function;
+    uint32_t argument_count;
+} XrTypedDispatchI64Request;
+
 XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
-    const XrTargetPlan *verified_plan,
-    const XrFingerprint *required_plan_fingerprint, uint32_t function,
-    const int64_t *arguments, uint32_t argument_count, int64_t *result);
+    const XrTypedDispatchI64Request *request);
 
 #endif  // XR_TYPED_DISPATCH_H

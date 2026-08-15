@@ -98,6 +98,7 @@ typedef struct XrTypedDispatchRowContext {
     uint64_t *return_bits;
     struct XrTypedDispatchExecution *execution;
     bool parameters_prebound;
+    uint32_t frame_id;
 } XrTypedDispatchRowContext;
 
 typedef struct XrTypedDispatchExecution {
@@ -106,12 +107,47 @@ typedef struct XrTypedDispatchExecution {
     XrTypedFrameLimits limits;
     uint32_t remaining_steps;
     uint32_t call_depth;
+    uint32_t next_frame_id;
+    uint64_t next_event_ordinal;
+    const XrVmDebugSession *debug_session;
 } XrTypedDispatchExecution;
 
 static XrTypedDispatchStatus execute_function(
     XrTypedDispatchExecution *execution, XrTypedFrame *frame,
     uint32_t function, const int64_t *arguments, uint32_t argument_count,
-    bool parameters_prebound, uint64_t *return_bits);
+    bool parameters_prebound, uint32_t frame_id, uint32_t parent_frame_id,
+    uint64_t *return_bits);
+
+static XrVmTraceEvent make_trace_event(XrVmTraceEventKind kind,
+                                       uint32_t function, uint32_t frame,
+                                       uint32_t parent_frame,
+                                       uint32_t frame_depth) {
+    XrVmTraceEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = (uint8_t) kind;
+    event.opcode = XR_TARGET_INSTRUCTION_INVALID;
+    event.function = function;
+    event.related_function = XR_VM_TRACE_ID_NONE;
+    event.instruction = XR_VM_TRACE_ID_NONE;
+    event.block = XR_VM_TRACE_ID_NONE;
+    event.call = XR_VM_TRACE_ID_NONE;
+    event.frame = frame;
+    event.parent_frame = parent_frame;
+    event.related_frame = XR_VM_TRACE_ID_NONE;
+    event.frame_depth = frame_depth;
+    return event;
+}
+
+static XrTypedDispatchStatus emit_trace_event(
+    XrTypedDispatchExecution *execution, XrVmTraceEvent *event) {
+    if (!execution->debug_session)
+        return XR_TYPED_DISPATCH_OK;
+    if (!xr_typed_debug_emit(execution->debug_session,
+                          execution->next_event_ordinal, event))
+        return XR_TYPED_DISPATCH_TRACE_REJECTED;
+    execution->next_event_ordinal++;
+    return XR_TYPED_DISPATCH_OK;
+}
 
 static XrTypedDispatchStatus execute_const(
     XrTypedFrame *frame, const XrTargetInstructionRecord *row,
@@ -392,13 +428,35 @@ static XrTypedDispatchStatus execute_call(
         call->argument_count > argument_count - call->argument_begin)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
 
+    uint32_t child_frame_id = execution->next_frame_id++;
+    XrVmTraceEvent call_enter = make_trace_event(
+        XR_VM_TRACE_CALL_ENTER, row->function, context->frame_id,
+        XR_VM_TRACE_ID_NONE, execution->call_depth - 1u);
+    call_enter.instruction = row->id;
+    call_enter.opcode = row->opcode;
+    call_enter.call = call->id;
+    call_enter.related_function = call->callee_function;
+    call_enter.related_frame = child_frame_id;
+    XrTypedDispatchStatus status =
+        emit_trace_event(execution, &call_enter);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+
     XrTypedFrame *child = NULL;
     bool linked = false;
-    XrTypedDispatchStatus status = XR_TYPED_DISPATCH_FRAME_ERROR;
+    status = XR_TYPED_DISPATCH_FRAME_ERROR;
     if (xr_typed_frame_create(execution->plan, execution->fingerprint,
                               call->callee_function, &execution->limits,
                               &child) != XR_TYPED_FRAME_OK)
-        return status;
+        goto cleanup;
+    if (execution->debug_session &&
+        execution->debug_session->generation_identity_present &&
+        xr_typed_frame_bind_generation_identity(
+            child, &execution->debug_session->generation_identity) !=
+            XR_TYPED_FRAME_OK) {
+        status = XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH;
+        goto cleanup;
+    }
     if (xr_typed_frame_link_child(frame, child) != XR_TYPED_FRAME_OK)
         goto cleanup;
     linked = true;
@@ -412,7 +470,8 @@ static XrTypedDispatchStatus execute_call(
     uint64_t child_result = 0;
     execution->call_depth++;
     status = execute_function(execution, child, call->callee_function, NULL,
-                              call->argument_count, true, &child_result);
+                              call->argument_count, true, child_frame_id,
+                              context->frame_id, &child_result);
     execution->call_depth--;
     if (status == XR_TYPED_DISPATCH_OK)
         status = store_i64_bits(frame, row->result_slot, child_result);
@@ -422,6 +481,21 @@ cleanup:
         status == XR_TYPED_DISPATCH_OK)
         status = XR_TYPED_DISPATCH_FRAME_ERROR;
     xr_typed_frame_free(child);
+    if (status != XR_TYPED_DISPATCH_TRACE_REJECTED) {
+        XrVmTraceEvent call_return = make_trace_event(
+            XR_VM_TRACE_CALL_RETURN, row->function, context->frame_id,
+            XR_VM_TRACE_ID_NONE, execution->call_depth - 1u);
+        call_return.instruction = row->id;
+        call_return.opcode = row->opcode;
+        call_return.call = call->id;
+        call_return.related_function = call->callee_function;
+        call_return.related_frame = child_frame_id;
+        call_return.status = (uint32_t) status;
+        XrTypedDispatchStatus trace_status =
+            emit_trace_event(execution, &call_return);
+        if (trace_status != XR_TYPED_DISPATCH_OK)
+            status = trace_status;
+    }
     return status;
 }
 
@@ -436,14 +510,15 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                                          bool *returned,
                                          uint64_t *return_bits,
                                          XrTypedDispatchExecution *execution,
-                                         bool parameters_prebound) {
+                                         bool parameters_prebound,
+                                         uint32_t frame_id) {
     const XrTargetInstructionContract *contract =
         xr_target_instruction_contract(row->opcode);
     if (!contract)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     XrTypedDispatchRowContext context = {
         arguments, argument_count, row_count, next, returned, return_bits,
-        execution, parameters_prebound,
+        execution, parameters_prebound, frame_id,
     };
     switch ((XrTargetInstructionOpcode) row->opcode) {
 #define XR_VM_OP(symbol, handler, kind, argument)                                                   \
@@ -463,53 +538,146 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
 static XrTypedDispatchStatus execute_function(
     XrTypedDispatchExecution *execution, XrTypedFrame *frame,
     uint32_t function, const int64_t *arguments, uint32_t argument_count,
-    bool parameters_prebound, uint64_t *return_bits) {
+    bool parameters_prebound, uint32_t frame_id, uint32_t parent_frame_id,
+    uint64_t *return_bits) {
+    uint32_t frame_depth = execution->call_depth - 1u;
+    XrVmTraceEvent frame_enter = make_trace_event(
+        XR_VM_TRACE_FRAME_ENTER, function, frame_id, parent_frame_id,
+        frame_depth);
+    XrTypedDispatchStatus status =
+        emit_trace_event(execution, &frame_enter);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+
+    uint32_t current = 0;
+    uint32_t last_block = XR_VM_TRACE_ID_NONE;
+    uint32_t current_instruction = XR_VM_TRACE_ID_NONE;
+    uint16_t current_opcode = XR_TARGET_INSTRUCTION_INVALID;
+    bool returned = false;
     uint32_t instruction_count = 0;
     const XrTargetInstructionRecord *instructions =
         xr_target_plan_function_instructions(execution->plan, function,
                                              &instruction_count);
-    if (!instructions || !instruction_count)
-        return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+    if (!instructions || !instruction_count) {
+        status = XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+        goto finish;
+    }
     uint32_t declared_parameters = 0;
     for (uint32_t i = 0; i < instruction_count; i++)
         declared_parameters +=
             instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64;
-    if (declared_parameters != argument_count)
-        return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
+    if (declared_parameters != argument_count) {
+        status = XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
+        goto finish;
+    }
 
-    uint32_t current = 0;
-    bool returned = false;
     while (!returned) {
-        if (current >= instruction_count)
-            return XR_TYPED_DISPATCH_PROGRAM_INVALID;
-        if (execution->remaining_steps == 0)
-            return XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED;
+        if (current >= instruction_count) {
+            status = XR_TYPED_DISPATCH_PROGRAM_INVALID;
+            goto finish_with_instruction;
+        }
+        if (execution->remaining_steps == 0) {
+            status = XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED;
+            goto finish_with_instruction;
+        }
         execution->remaining_steps--;
+        current_instruction = instructions[current].id;
+        current_opcode = instructions[current].opcode;
         if (xr_typed_frame_enter_instruction(frame,
-                                              instructions[current].id) !=
-            XR_TYPED_FRAME_OK)
-            return XR_TYPED_DISPATCH_FRAME_ERROR;
-        uint32_t next = current + 1u;
-        XrTypedDispatchStatus status = execute_row(
-            frame, &instructions[current], arguments, argument_count,
-            instruction_count, &next, &returned, return_bits, execution,
-            parameters_prebound);
+                                              current_instruction) !=
+            XR_TYPED_FRAME_OK) {
+            status = XR_TYPED_DISPATCH_FRAME_ERROR;
+            goto finish_with_instruction;
+        }
+        XrTypedFrameContext frame_context;
+        if (xr_typed_frame_context(frame, &frame_context) !=
+            XR_TYPED_FRAME_OK) {
+            status = XR_TYPED_DISPATCH_FRAME_ERROR;
+            goto finish_with_instruction;
+        }
+        if (frame_context.block_entry_instruction != last_block) {
+            XrVmTraceEvent block_enter = make_trace_event(
+                XR_VM_TRACE_BLOCK_ENTER, function, frame_id,
+                parent_frame_id, frame_depth);
+            block_enter.instruction = current_instruction;
+            block_enter.block = frame_context.block_entry_instruction;
+            block_enter.opcode = current_opcode;
+            status = emit_trace_event(execution, &block_enter);
+            if (status != XR_TYPED_DISPATCH_OK)
+                return status;
+            last_block = frame_context.block_entry_instruction;
+        }
+        XrVmTraceEvent instruction = make_trace_event(
+            XR_VM_TRACE_INSTRUCTION, function, frame_id, parent_frame_id,
+            frame_depth);
+        instruction.instruction = current_instruction;
+        instruction.block = frame_context.block_entry_instruction;
+        instruction.opcode = current_opcode;
+        status = emit_trace_event(execution, &instruction);
         if (status != XR_TYPED_DISPATCH_OK)
             return status;
+        uint32_t next = current + 1u;
+        status = execute_row(
+            frame, &instructions[current], arguments, argument_count,
+            instruction_count, &next, &returned, return_bits, execution,
+            parameters_prebound, frame_id);
+        if (status != XR_TYPED_DISPATCH_OK)
+            goto finish_with_instruction;
         current = next;
     }
-    return XR_TYPED_DISPATCH_OK;
+    status = XR_TYPED_DISPATCH_OK;
+    goto finish;
+
+finish_with_instruction:
+    if (status != XR_TYPED_DISPATCH_TRACE_REJECTED) {
+        XrVmTraceEvent error = make_trace_event(
+            XR_VM_TRACE_ERROR, function, frame_id, parent_frame_id,
+            frame_depth);
+        error.instruction = current_instruction;
+        error.opcode = current_opcode;
+        error.block = last_block;
+        error.status = (uint32_t) status;
+        XrTypedDispatchStatus trace_status =
+            emit_trace_event(execution, &error);
+        if (trace_status != XR_TYPED_DISPATCH_OK)
+            return trace_status;
+    }
+
+finish:
+    if (status != XR_TYPED_DISPATCH_OK &&
+        status != XR_TYPED_DISPATCH_TRACE_REJECTED &&
+        current_instruction == XR_VM_TRACE_ID_NONE) {
+        XrVmTraceEvent error = make_trace_event(
+            XR_VM_TRACE_ERROR, function, frame_id, parent_frame_id,
+            frame_depth);
+        error.status = (uint32_t) status;
+        XrTypedDispatchStatus trace_status =
+            emit_trace_event(execution, &error);
+        if (trace_status != XR_TYPED_DISPATCH_OK)
+            return trace_status;
+    }
+    if (status == XR_TYPED_DISPATCH_TRACE_REJECTED)
+        return status;
+    XrVmTraceEvent frame_exit = make_trace_event(
+        XR_VM_TRACE_FRAME_EXIT, function, frame_id, parent_frame_id,
+        frame_depth);
+    frame_exit.status = (uint32_t) status;
+    XrTypedDispatchStatus trace_status =
+        emit_trace_event(execution, &frame_exit);
+    return trace_status == XR_TYPED_DISPATCH_OK ? status : trace_status;
 }
 
 XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
-    const XrTargetPlan *verified_plan,
-    const XrFingerprint *required_plan_fingerprint, uint32_t function,
-    const int64_t *arguments, uint32_t argument_count, int64_t *result) {
-    if (result)
-        *result = 0;
-    if (!verified_plan || !required_plan_fingerprint || !result ||
-        (!arguments && argument_count))
+    const XrTypedDispatchI64Request *request) {
+    if (request && request->result)
+        *request->result = 0;
+    if (!request || !request->verified_plan ||
+        !request->required_plan_fingerprint || !request->result ||
+        (!request->arguments && request->argument_count))
         return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
+    const XrTargetPlan *verified_plan = request->verified_plan;
+    const XrFingerprint *required_plan_fingerprint =
+        request->required_plan_fingerprint;
     if (!xr_target_plan_is_verified(verified_plan))
         return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
     if (!xr_fingerprint_equal(xr_target_plan_fingerprint(verified_plan),
@@ -520,16 +688,31 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         !xr_target_instruction_program_verify(verified_plan, error,
                                                sizeof(error)))
         return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
-    if (xr_target_plan_function_execution_family_mask(verified_plan, function) !=
+    if (request->debug_session &&
+        !xr_typed_debug_session_matches_plan(
+            request->debug_session,
+            xr_target_plan_fingerprint(verified_plan)))
+        return XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH;
+    if (xr_target_plan_function_execution_family_mask(
+            verified_plan, request->function) !=
         XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
         return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
 
     XrTypedFrameLimits limits;
     xr_typed_frame_limits_default(&limits);
     XrTypedFrame *frame = NULL;
-    if (xr_typed_frame_create(verified_plan, required_plan_fingerprint, function,
-                              &limits, &frame) != XR_TYPED_FRAME_OK)
+    if (xr_typed_frame_create(verified_plan, required_plan_fingerprint,
+                              request->function, &limits, &frame) !=
+        XR_TYPED_FRAME_OK)
         return XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (request->debug_session &&
+        request->debug_session->generation_identity_present &&
+        xr_typed_frame_bind_generation_identity(
+            frame, &request->debug_session->generation_identity) !=
+            XR_TYPED_FRAME_OK) {
+        xr_typed_frame_free(frame);
+        return XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH;
+    }
 
     uint64_t return_bits = 0;
     XrTypedDispatchExecution execution = {
@@ -538,13 +721,16 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         .limits = limits,
         .remaining_steps = XR_TYPED_DISPATCH_MAX_STEPS,
         .call_depth = 1,
+        .next_frame_id = 1,
+        .debug_session = request->debug_session,
     };
     XrTypedDispatchStatus status = execute_function(
-        &execution, frame, function, arguments, argument_count, false,
+        &execution, frame, request->function, request->arguments,
+        request->argument_count, false, 0, XR_VM_TRACE_ID_NONE,
         &return_bits);
     xr_typed_frame_free(frame);
     if (status != XR_TYPED_DISPATCH_OK)
         return status;
-    memcpy(result, &return_bits, sizeof(*result));
+    memcpy(request->result, &return_bits, sizeof(*request->result));
     return XR_TYPED_DISPATCH_OK;
 }

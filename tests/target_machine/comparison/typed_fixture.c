@@ -49,6 +49,21 @@ static XrType comparison_bool = {
     .scalar_rep = XR_SCALAR_REP_NONE,
 };
 
+static XrTypedDispatchStatus execute_request_i64(
+    const XrTargetPlan *plan, const XrFingerprint *fingerprint,
+    uint32_t function, const int64_t *arguments, uint32_t argument_count,
+    int64_t *result) {
+    XrTypedDispatchI64Request request = {
+        .verified_plan = plan,
+        .required_plan_fingerprint = fingerprint,
+        .arguments = arguments,
+        .result = result,
+        .function = function,
+        .argument_count = argument_count,
+    };
+    return xr_typed_dispatch_execute_i64(&request);
+}
+
 static const ComparisonCase comparison_cases[] = {
     {"add", COMPARISON_BINARY, XI_ADD},
     {"sub", COMPARISON_BINARY, XI_SUB},
@@ -212,7 +227,7 @@ static int execute_case(const ComparisonCase *spec, const int64_t arguments[2]) 
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
     int64_t value = 0;
     XrTypedDispatchStatus status =
-        xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, arguments, 2, &value);
+        execute_request_i64(plan, &fingerprint, 0, arguments, 2, &value);
     const char *execution_error = program_error(status);
     if (status == XR_TYPED_DISPATCH_OK || execution_error)
         print_observation(value, execution_error);

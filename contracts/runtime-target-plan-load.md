@@ -285,7 +285,7 @@ roots, or general module activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt 989526ba9dfad5b70b4385edbd2fef11bdb9b63ed36235d8814e37a13521438f
+anchor-sha256: CMakeLists.txt e1020fb99de6a6d3dd9b6220d2589fab6d79ea08bd235419fd4824c6d205061a
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
@@ -318,4 +318,4 @@ anchor-sha256: tests/unit/plan/test_xtp_format.c 9654ba47989b6b34e4e40f6196a02bb
 anchor-sha256: tests/unit/CMakeLists.txt b036dd12a58625e5d028505afd27ba5ec94dad571b88ea70677daefb62a0970f
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 4426d2d315ef803a8fb71a1539a6a320ab4923db0d1e7c8e7f1cb513d821d30e
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py adbe96cb24fd2da66f8e8c3148d78eab7f59d3b2544ba07a87f41540b6f760cd
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py e6d6038940a3fcff5c8e7f636f64142947b2878151db4ae96823bd67a174017a

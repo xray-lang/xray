@@ -346,6 +346,23 @@ CONTRACT_SPECS = (
         ),
     ),
     ContractSpec(
+        "typed-target-plan-debug.md",
+        (
+            "src/vm/debug/xr_vm_trace.h",
+            "src/vm/debug/xr_vm_trace.c",
+            "src/vm/debug/xr_vm_profile.h",
+            "src/vm/debug/xr_vm_profile.c",
+            "src/vm/debug/xr_vm_materialize.h",
+            "src/vm/debug/xr_vm_materialize.c",
+            "src/vm/xr_typed_dispatch.h",
+            "src/vm/xr_typed_dispatch.c",
+            "tests/unit/vm/test_typed_dispatch.c",
+            "tests/unit/runtime/test_typed_frame_runtime_archive.c",
+            "tests/install/run_installed_runtime_symbol_tests.py",
+            "CMakeLists.txt",
+        ),
+    ),
+    ContractSpec(
         "typed-target-plan-execution.md",
         (
             "src/plan/target/xr_target_plan.h",

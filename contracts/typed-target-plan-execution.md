@@ -103,9 +103,10 @@ allocating.
 
 Instruction rows participate in the TargetPlan fingerprint, the bounded XTP
 section directory, the exact 32-byte row codec, and candidate materialization.
-The internal scalar dispatcher accepts only an immutable verified plan, its
-exact fingerprint, a derived nonzero function execution family, a positional
-signed-`i64` argument vector, and exact typed-frame slot identities. It
+The internal scalar dispatcher accepts one immutable request containing only a
+verified plan, its exact fingerprint, a derived nonzero function execution
+family, a positional signed-`i64` argument vector, exact typed-frame slot
+identities, and an optional runtime-only debug session. It
 independently recomputes the target-content fingerprint and does not inspect
 SemanticPlan or Xi. The verified rows are the only signature it honours: the
 argument count must equal the number of parameter rows, and a shorter,
@@ -340,12 +341,12 @@ anchor-sha256: src/plan/format/xr_xtp_schema.h f215d9df313e413ee1ae701bd8cf787c1
 anchor-sha256: src/plan/format/xr_xtp_rows.c 37ade66cec19c828eefe6ed2066273fe16197b9f7908f2b4977e73eb39851c41
 anchor-sha256: src/plan/format/xr_xtp_encode.c 2f6f1fa32e35fd1681ab07bc8a3808d133f33f27e43139224d3f9e253447bd74
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
-anchor-sha256: src/vm/xr_typed_dispatch.h 1def13ea54294774bb120596f2c640498fc3f92e61d95b17f54ae51a8df0ae3d
-anchor-sha256: src/vm/xr_typed_dispatch.c ef9ad355401e587b4d27f3189f01c0b0e7779145e0aa1089a70a3dfca9d9147a
+anchor-sha256: src/vm/xr_typed_dispatch.h ca0475a9650e79929e6529d10965ab7403815c148d695995e10ada86499257f6
+anchor-sha256: src/vm/xr_typed_dispatch.c a8112d151f6566489cb8c34fc9f295db79d683ee98d34faf14e2f8afdcff8b14
 anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c 584d5aba9f53184225832c619b670d28dfdd8e9afa4587f543dc6771f03d26d3
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 63727b47fb9df9233402f4af919122ac99266bd193f04c6f80893ce2ab4bf69d
 anchor-sha256: tests/unit/plan/test_xtp_format.c 9654ba47989b6b34e4e40f6196a02bb95818fd6f83aa5f4a4f78e6907bf4bd31
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 0f9fadd7713412a5f7aa808f7461348751270b5210d1feee085b09d5cac47ead
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 2efb2be6dbb4208c607dd07749694e4e210dc223870bd474fc01c92c9f9aa825
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
-anchor-sha256: src/runtime/xr_module_generation.c f3fe95413105fbb79fb40b5a0a6f718179b997ad4b823a90baae94a045ba103a
+anchor-sha256: src/runtime/xr_module_generation.c 43a8bf5ff595351f4e4bb2f78e01dd6d5273f2a80a9ad18cabb93f05fb6a64ba
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1
