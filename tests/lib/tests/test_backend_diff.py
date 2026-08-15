@@ -156,6 +156,94 @@ class SidecarTest(unittest.TestCase):
         )
 
 
+class OptimizerPolicyPropagationTest(unittest.TestCase):
+    POLICY = "vm=full,aot=full"
+
+    def _config(self, root: Path) -> rbd.RunnerConfig:
+        return rbd.RunnerConfig(
+            xray=Path(sys.executable),
+            backends=["vm", "aot"],
+            jobs=1,
+            aot_opt="2",
+            aot_cache=root / "objects",
+            aot_bin_cache=root / "binaries",
+            embed_bin_cache=root / "embedded",
+            diff_stderr=False,
+            xi_opt=self.POLICY,
+            case_timeout=30,
+        )
+
+    def test_diff_environment_becomes_the_single_runner_policy(self):
+        case_result = rbd.CaseResult(order=0, status="pass", output="PASS\n")
+        env = {
+            "XRAY_DIFF_SINGLE_CASE": "case.xr",
+            "XRAY_DIFF_XI_OPT": self.POLICY,
+            # This is the compiler's process-level setting, not the runner's
+            # provenance input. A conflicting value must not win.
+            "XRAY_XI_OPT": "vm=none,aot=none",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            with mock.patch.object(rbd, "diff_stable_cache_dir", return_value=Path("cache")):
+                with mock.patch.object(rbd, "run_case", return_value=case_result) as run_case:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        status = rbd.main(["run_backend_diff.py", sys.executable])
+
+        self.assertEqual(status, 0)
+        config = run_case.call_args.args[0]
+        self.assertEqual(config.xi_opt, self.POLICY)
+
+    def test_vm_command_receives_the_runner_policy(self):
+        with tempfile.TemporaryDirectory(prefix="xt_backend_diff_policy_vm.") as tmp:
+            root = Path(tmp)
+            case = root / "case.xr"
+            case.write_text("print(1)\n", encoding="utf-8")
+            result = rbd.proc.ProcResult((), 0, b"1\n", b"", False)
+            with mock.patch.object(rbd.proc, "run", return_value=result) as run:
+                backend = rbd.run_backend(self._config(root), "vm", case, [], b"")
+
+        self.assertEqual(backend.rc, 0)
+        self.assertEqual(
+            run.call_args.args[0],
+            [Path(sys.executable), "run", "--xi-opt", self.POLICY, case],
+        )
+
+    def test_aot_build_command_receives_the_same_runner_policy(self):
+        with tempfile.TemporaryDirectory(prefix="xt_backend_diff_policy_aot.") as tmp:
+            root = Path(tmp)
+            case = root / "case.xr"
+            case.write_text("print(1)\n", encoding="utf-8")
+            calls = []
+
+            def fake_run(argv, **kwargs):
+                calls.append((list(argv), kwargs))
+                output = Path(argv[argv.index("-o") + 1])
+                output.write_bytes(b"binary")
+                return rbd.proc.ProcResult(tuple(argv), 0, b"", b"", False)
+
+            config = self._config(root)
+            with mock.patch.object(rbd.proc, "run", side_effect=fake_run):
+                binary, _ = rbd.build_case_binary(config, "aot", case, "case.xr", "case-key")
+
+        self.assertIsNotNone(binary)
+        self.assertEqual(
+            calls[0][0],
+            [
+                Path(sys.executable),
+                "build",
+                "--xi-opt",
+                self.POLICY,
+                "--native",
+                "-O",
+                "2",
+                "--cache-dir",
+                config.aot_cache,
+                case,
+                "-o",
+                calls[0][0][-1],
+            ],
+        )
+
+
 class RatchetWiringTest(unittest.TestCase):
     """The runner delegates to xraytest.ratchet; verify the wiring, including
     the partial-run suppression of the now-passing check."""

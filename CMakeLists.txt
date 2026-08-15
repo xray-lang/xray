@@ -3631,7 +3631,7 @@ if(BUILD_TESTS)
                 XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/optimizer_cases.txt
                 XRAY_DIFF_EXTRA_CASES_FILE=
                 XRAY_AOT_TEST_OPT=2
-                XRAY_XI_OPT=vm=full,aot=full
+                XRAY_DIFF_XI_OPT=vm=full,aot=full
                 XRAY_DIFF_MAX_AUTO_JOBS=4
                 ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.py
