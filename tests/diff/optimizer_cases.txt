@@ -65,7 +65,6 @@ tests/diff/cases/semantics/optimizer/pass_ivsr_derived_induction.xr
 tests/diff/cases/semantics/optimizer/pass_jump_thread_correlated_branches.xr
 tests/diff/cases/semantics/optimizer/pass_licm_invariant_product.xr
 tests/diff/cases/semantics/optimizer/pass_loop_inv_branch_unswitch.xr
-tests/diff/cases/semantics/optimizer/pass_loop_peel_first_iteration.xr
 tests/diff/cases/semantics/optimizer/pass_loop_rotate_guarded_body.xr
 tests/diff/cases/semantics/optimizer/pass_loop_split_conditional_body.xr
 tests/diff/cases/semantics/optimizer/pass_loop_unroll_small_trip_count.xr

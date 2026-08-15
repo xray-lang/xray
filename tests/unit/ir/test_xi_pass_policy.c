@@ -119,6 +119,12 @@ TEST(refuses_every_unknown_token) {
     ASSERT(rejects("VM=FULL"));              /* names are exact */
 }
 
+TEST(refuses_the_removed_loop_peel_name) {
+    ASSERT(xi_pass_id_by_name("loop_peel") == -1);
+    ASSERT(rejects("vm=full-loop_peel"));
+    ASSERT(rejects("aot=full-loop_peel"));
+}
+
 TEST(refuses_to_withhold_a_required_pass) {
     /* tbaa carries XI_PASS_REQUIRED, so the driver runs it whether or not its
      * bit is set. Accepting the name would hand back a policy that renders as
@@ -208,6 +214,7 @@ int main(void) {
     run_withholds_named_passes_from_a_level();
     run_states_both_pipelines_in_one_spec();
     run_refuses_every_unknown_token();
+    run_refuses_the_removed_loop_peel_name();
     run_refuses_to_withhold_a_required_pass();
     run_a_rejected_spec_changes_nothing();
     run_renders_back_to_a_spec_it_accepts();

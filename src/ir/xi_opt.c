@@ -26,7 +26,6 @@
 #include "xi_opt_strength.h"
 #include "xi_opt_tail_call.h"
 #include "xi_opt_ivsr.h"
-#include "xi_opt_loop_peel.h"
 #include "xi_opt_loop_unroll.h"
 #include "xi_opt_loop_split.h"
 #include "xi_opt_loop_inv_branch.h"
@@ -4408,8 +4407,6 @@ static const XiPassDesc xi_pass_table[] = {
     XI_REWRITE_PASS("licm", xi_opt_licm, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NO_VALUE_COUNTS, XI_EVD_ALIAS),
     XI_REWRITE_PASS("ivsr", xi_opt_ivsr, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
-    XI_REWRITE_PASS("loop_peel", xi_opt_loop_peel, XI_OPT_FULL,
-                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
     XI_REWRITE_PASS("loop_unroll", xi_opt_loop_unroll, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
     XI_REWRITE_PASS("loop_split", xi_opt_loop_split, XI_OPT_FULL,

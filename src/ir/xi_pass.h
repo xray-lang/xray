@@ -111,7 +111,6 @@ typedef enum {
     X(LOOP_ROTATE, "loop_rotate")                                                                  \
     X(LICM, "licm")                                                                                \
     X(IVSR, "ivsr")                                                                                \
-    X(LOOP_PEEL, "loop_peel")                                                                      \
     X(LOOP_UNROLL, "loop_unroll")                                                                  \
     X(LOOP_SPLIT, "loop_split")                                                                    \
     X(LOOP_INV_BRANCH, "loop_inv_branch")                                                          \
@@ -151,7 +150,6 @@ typedef uint32_t XiOptDisableMask;
 #define XI_OPT_DISABLE_LOOP_ROTATE XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_ROTATE)
 #define XI_OPT_DISABLE_LICM XI_OPT_DISABLE_BIT(XI_OPT_PASS_LICM)
 #define XI_OPT_DISABLE_IVSR XI_OPT_DISABLE_BIT(XI_OPT_PASS_IVSR)
-#define XI_OPT_DISABLE_LOOP_PEEL XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_PEEL)
 #define XI_OPT_DISABLE_LOOP_UNROLL XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_UNROLL)
 #define XI_OPT_DISABLE_LOOP_SPLIT XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_SPLIT)
 #define XI_OPT_DISABLE_LOOP_INV_BRANCH XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_INV_BRANCH)
