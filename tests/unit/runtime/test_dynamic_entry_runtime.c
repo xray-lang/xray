@@ -648,6 +648,84 @@ static XrRuntimeEntryHandle *bind_handle(
     return handle;
 }
 
+static void retire_generation(XrLoadedModuleGeneration **generation);
+
+static void test_module_entry_batch_is_atomic(void) {
+    char diagnostic[512] = {0};
+    DynamicFixture fixture;
+    build_dynamic_fixture(DYNAMIC_FIXTURE_ECHO, &fixture);
+    XrRuntimeGenerationBudget budget = make_budget();
+    XrRuntimeGenerationAuthority *authority = NULL;
+    REQUIRE(xr_runtime_generation_authority_create(
+        &budget, &authority, diagnostic, sizeof(diagnostic)));
+    XrLoadedModuleGeneration *generation = activate_generation(
+        authority, fixture.dependency_plan);
+
+    uint32_t function_count = 0;
+    REQUIRE(xr_target_plan_functions(fixture.dependency_plan,
+                                     &function_count) != NULL &&
+            function_count != 0);
+    XrRuntimeEntryHandle **handles =
+        (XrRuntimeEntryHandle **) xr_calloc(function_count,
+                                            sizeof(*handles));
+    REQUIRE(handles);
+    size_t export_count = xr_semantic_plan_source_export_count(
+        fixture.dependency_semantic);
+    REQUIRE(export_count == 2);
+    for (size_t i = 0; i < export_count; i++) {
+        const XrSemanticSourceExportRecord *source_export =
+            xr_semantic_plan_source_export(fixture.dependency_semantic,
+                                           (uint32_t) i);
+        REQUIRE(source_export && source_export->function < function_count);
+        if (!handles[source_export->function])
+            handles[source_export->function] = bind_handle(
+                generation, fixture.dependency_plan,
+                source_export->function);
+    }
+
+    const XrSemanticSourceExportRecord *second =
+        xr_semantic_plan_source_export(fixture.dependency_semantic, 1);
+    REQUIRE(second && xr_runtime_entry_registry_publish(
+                          authority, fixture.dependency_plan, 1,
+                          handles[second->function], diagnostic,
+                          sizeof(diagnostic)));
+    XrRuntimeEntryRegistryStats before;
+    XrRuntimeEntryRegistryStats rejected;
+    REQUIRE(xr_runtime_entry_registry_stats(authority, &before));
+    REQUIRE(before.allocated_rows == 1 && before.active_rows == 1 &&
+            before.mutations == 1);
+    REQUIRE(!xr_runtime_entry_registry_publish_module(
+        authority, generation, fixture.dependency_plan, handles,
+        function_count, diagnostic, sizeof(diagnostic)));
+    REQUIRE(strstr(diagnostic, "XR_EXEC_5005") != NULL);
+    REQUIRE(xr_runtime_entry_registry_stats(authority, &rejected));
+    REQUIRE(memcmp(&before, &rejected, sizeof(before)) == 0);
+
+    REQUIRE(xr_runtime_entry_registry_unpublish(
+        authority, handles[second->function], diagnostic,
+        sizeof(diagnostic)));
+    REQUIRE(xr_runtime_entry_registry_publish_module(
+        authority, generation, fixture.dependency_plan, handles,
+        function_count, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_entry_registry_stats(authority, &rejected));
+    REQUIRE(rejected.allocated_rows == 2 && rejected.active_rows == 2 &&
+            rejected.mutations == 3);
+
+    for (uint32_t i = 0; i < function_count; i++) {
+        if (!handles[i])
+            continue;
+        REQUIRE(xr_runtime_entry_registry_unpublish(
+            authority, handles[i], diagnostic, sizeof(diagnostic)));
+        REQUIRE(xr_runtime_entry_handle_release(
+            &handles[i], diagnostic, sizeof(diagnostic)));
+    }
+    xr_free(handles);
+    retire_generation(&generation);
+    REQUIRE(xr_runtime_generation_authority_destroy(
+        &authority, diagnostic, sizeof(diagnostic)));
+    free_dynamic_fixture(&fixture);
+}
+
 static void *repeat_bind_publish(void *argument) {
     RepeatPublishContext *context = (RepeatPublishContext *) argument;
     char diagnostic[512] = {0};
@@ -1574,6 +1652,7 @@ static void test_dynamic_entry_deferred_retire_is_durable(void) {
 }
 
 int main(void) {
+    test_module_entry_batch_is_atomic();
     test_dynamic_entry_authority_cache_and_lifetime();
     test_dynamic_entry_all_exit_release();
     test_dynamic_entry_deferred_retire_is_durable();

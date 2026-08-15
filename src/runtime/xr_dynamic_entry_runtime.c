@@ -99,6 +99,15 @@ typedef struct XrRuntimeEntryBindingSnapshot {
     uint32_t executor_kind;
 } XrRuntimeEntryBindingSnapshot;
 
+typedef struct XrRuntimeEntryPublicationItem {
+    XrRuntimeEntryRegistryRow *row;
+    XrRuntimeEntryRegistryRow *allocated_row;
+    XrRuntimeEntryHandle *handle;
+    XrRuntimeEntryHandle *retained;
+    bool was_frozen;
+    bool restore_frozen;
+} XrRuntimeEntryPublicationItem;
+
 static bool fail(char *diagnostic, size_t diagnostic_size, const char *code,
                  const char *detail) {
     if (diagnostic && diagnostic_size)
@@ -503,10 +512,208 @@ static uint32_t registry_handle_row_count_locked(
 }
 
 static void handle_restore_frozen(XrRuntimeEntryHandle *handle,
-                                  bool frozen) {
+                                   bool frozen) {
     xr_mutex_lock(&handle->gate);
     handle->frozen = frozen;
     xr_mutex_unlock(&handle->gate);
+}
+
+static bool handle_freeze_exact(
+    XrRuntimeEntryHandle *handle, XrRuntimeGenerationAuthority *authority,
+    XrLoadedModuleGeneration *generation, const XrTargetPlan *plan,
+    const XrSemanticFunctionRecord *function, uint32_t function_index,
+    XrFingerprint semantic_fingerprint, XrFingerprint plan_fingerprint,
+    bool *was_frozen) {
+    if (was_frozen)
+        *was_frozen = false;
+    if (!handle || !authority || !generation || !plan || !function ||
+        !was_frozen)
+        return false;
+    xr_mutex_lock(&handle->gate);
+    bool exact =
+        handle->configured && handle->generation == generation &&
+        handle->generation->authority == authority &&
+        handle->authority == authority && handle->bound_plan == plan &&
+        handle->function == function_index &&
+        handle->executor_kind == XR_ENTRY_EXECUTOR_TYPED_VM &&
+        xr_stable_id_equal(handle->function_identity, function->id) &&
+        fingerprint_matches(handle->semantic_fingerprint,
+                            semantic_fingerprint) &&
+        fingerprint_matches(handle->plan_fingerprint, plan_fingerprint) &&
+        fingerprint_matches(handle->expectation.target_plan_fingerprint,
+                            plan_fingerprint) &&
+        memcmp(handle->generation_identity.target_plan_fingerprint,
+               plan_fingerprint.bytes, sizeof(plan_fingerprint.bytes)) == 0 &&
+        generation_identity_equal(&handle->generation_identity,
+                                  &generation->identity);
+    if (exact) {
+        *was_frozen = handle->frozen;
+        handle->frozen = true;
+    }
+    xr_mutex_unlock(&handle->gate);
+    return exact;
+}
+
+static void publication_items_release(
+    XrRuntimeEntryPublicationItem *items, uint32_t count) {
+    if (!items)
+        return;
+    char ignored[1] = {0};
+    for (uint32_t i = 0; i < count; i++) {
+        if (items[i].retained)
+            xr_runtime_entry_handle_release(&items[i].retained, ignored,
+                                            sizeof(ignored));
+        xr_free(items[i].allocated_row);
+    }
+    for (uint32_t i = count; i > 0; i--) {
+        XrRuntimeEntryPublicationItem *item = &items[i - 1u];
+        if (item->restore_frozen)
+            handle_restore_frozen(item->handle, item->was_frozen);
+    }
+    xr_free(items);
+}
+
+bool xr_runtime_entry_registry_publish_module(
+    XrRuntimeGenerationAuthority *authority,
+    XrLoadedModuleGeneration *generation, const XrTargetPlan *plan,
+    XrRuntimeEntryHandle *const *function_handles,
+    uint32_t function_handle_count, char *diagnostic,
+    size_t diagnostic_size) {
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(plan);
+    char verified[512] = {0};
+    size_t raw_export_count = semantic
+                                  ? xr_semantic_plan_source_export_count(
+                                        semantic)
+                                  : 0;
+    if (!authority || !authority->entry_registry || !generation || !plan ||
+        generation->authority != authority || generation->plan != plan ||
+        !semantic || raw_export_count > XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES ||
+        raw_export_count > UINT32_MAX ||
+        (raw_export_count && !function_handles) ||
+        !xr_target_plan_is_verified(plan) ||
+        !xr_target_plan_fingerprint_is_intact(plan) ||
+        !xr_target_plan_verify(plan, verified, sizeof(verified)) ||
+        !xr_target_instruction_program_verify(plan, verified,
+                                              sizeof(verified)))
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "module entry publication authority is incomplete");
+    uint32_t export_count = (uint32_t) raw_export_count;
+    XrFingerprint semantic_fingerprint =
+        xr_semantic_plan_fingerprint(semantic);
+    XrFingerprint plan_fingerprint = xr_target_plan_fingerprint(plan);
+
+    xr_mutex_lock(&authority->gate);
+    bool active = generation->state == XR_MODULE_GENERATION_ACTIVE &&
+                  !generation->poisoned &&
+                  !generation->rollback_requested;
+    xr_mutex_unlock(&authority->gate);
+    if (!active)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "module entry publication requires a healthy active generation");
+    if (!export_count)
+        return true;
+
+    XrRuntimeEntryPublicationItem *items =
+        (XrRuntimeEntryPublicationItem *) xr_calloc(export_count,
+                                                    sizeof(*items));
+    if (!items)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "module entry publication allocation failed");
+    for (uint32_t i = 0; i < export_count; i++) {
+        const XrSemanticSourceExportRecord *export_record =
+            xr_semantic_plan_source_export(semantic, i);
+        const XrSemanticFunctionRecord *function =
+            export_record
+                ? xr_semantic_plan_function(semantic,
+                                            export_record->function)
+                : NULL;
+        XrRuntimeEntryHandle *handle =
+            export_record && export_record->function < function_handle_count
+                ? function_handles[export_record->function]
+                : NULL;
+        items[i].handle = handle;
+        if (!export_record || !function || !handle ||
+            !handle_freeze_exact(handle, authority, generation, plan,
+                                 function, export_record->function,
+                                 semantic_fingerprint, plan_fingerprint,
+                                 &items[i].was_frozen)) {
+            publication_items_release(items, export_count);
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                        "module entry binding does not match its verified export");
+        }
+        items[i].restore_frozen = true;
+        items[i].allocated_row =
+            (XrRuntimeEntryRegistryRow *) xr_calloc(
+                1, sizeof(*items[i].allocated_row));
+        if (!items[i].allocated_row) {
+            publication_items_release(items, export_count);
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                        "module entry publication allocation failed");
+        }
+        items[i].allocated_row->semantic_fingerprint = semantic_fingerprint;
+        items[i].allocated_row->export_identity = export_record->id;
+        items[i].allocated_row->callee_identity = function->id;
+        atomic_init(&items[i].allocated_row->revision, 1u);
+        if (!xr_runtime_entry_handle_retain(
+                items[i].handle, &items[i].retained, diagnostic,
+                diagnostic_size)) {
+            publication_items_release(items, export_count);
+            return false;
+        }
+    }
+
+    XrRuntimeEntryRegistry *registry = authority->entry_registry;
+    xr_mutex_lock(&registry->mutation_gate);
+    xr_mutex_lock(&authority->gate);
+    active = generation->state == XR_MODULE_GENERATION_ACTIVE &&
+             !generation->poisoned && !generation->rollback_requested &&
+             generation->plan == plan;
+    uint32_t new_rows = 0;
+    for (uint32_t i = 0; active && i < export_count; i++) {
+        XrRuntimeEntryRegistryRow *candidate = items[i].allocated_row;
+        items[i].row = registry_find_locked(
+            registry, candidate->semantic_fingerprint,
+            candidate->export_identity, candidate->callee_identity);
+        if (items[i].row && items[i].row->handle)
+            active = false;
+        else if (!items[i].row)
+            new_rows++;
+    }
+    bool reserved = active &&
+                    registry->count <= XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES &&
+                    new_rows <= XR_RUNTIME_DYNAMIC_ENTRY_MAX_SITES -
+                                    registry->count &&
+                    registry_reserve(registry, registry->count + new_rows);
+    if (reserved) {
+        for (uint32_t i = 0; i < export_count; i++) {
+            XrRuntimeEntryRegistryRow *row = items[i].row;
+            if (!row) {
+                row = items[i].allocated_row;
+                items[i].allocated_row = NULL;
+                registry->rows[registry->count++] = row;
+            }
+            row->handle = items[i].retained;
+            items[i].retained = NULL;
+            registry->active_count++;
+            atomic_fetch_add_explicit(&row->revision, 1u,
+                                      memory_order_release);
+        }
+        atomic_fetch_add_explicit(&registry->mutations, 1u,
+                                  memory_order_relaxed);
+    }
+    xr_mutex_unlock(&authority->gate);
+    xr_mutex_unlock(&registry->mutation_gate);
+    if (!reserved) {
+        publication_items_release(items, export_count);
+        return fail(diagnostic, diagnostic_size,
+                    active ? "XR_EXEC_5003" : "XR_EXEC_5005",
+                    active ? "module entry publication budget is exhausted"
+                           : "module entry publication conflicts with an active export");
+    }
+    for (uint32_t i = 0; i < export_count; i++)
+        xr_free(items[i].allocated_row);
+    xr_free(items);
+    return true;
 }
 
 bool xr_runtime_entry_registry_publish(
@@ -571,6 +778,13 @@ bool xr_runtime_entry_registry_publish(
     if (!exact_binding)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
                     "entry publication binding does not match the export authority");
+    XrRuntimeEntryHandle *retained = NULL;
+    if (!xr_runtime_entry_handle_retain(
+            handle, &retained, diagnostic, diagnostic_size)) {
+        if (!was_frozen)
+            handle_restore_frozen(handle, false);
+        return false;
+    }
     XrRuntimeEntryRegistry *registry = authority->entry_registry;
     xr_mutex_lock(&registry->mutation_gate);
     xr_mutex_lock(&authority->gate);
@@ -585,6 +799,8 @@ bool xr_runtime_entry_registry_publish(
     if (!live_binding) {
         xr_mutex_unlock(&authority->gate);
         xr_mutex_unlock(&registry->mutation_gate);
+        xr_runtime_entry_handle_release(&retained, verified,
+                                        sizeof(verified));
         if (!was_frozen)
             handle_restore_frozen(handle, false);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
@@ -597,6 +813,8 @@ bool xr_runtime_entry_registry_publish(
             !registry_reserve(registry, registry->count + 1u)) {
             xr_mutex_unlock(&authority->gate);
             xr_mutex_unlock(&registry->mutation_gate);
+            xr_runtime_entry_handle_release(&retained, verified,
+                                            sizeof(verified));
             if (!was_frozen)
                 handle_restore_frozen(handle, false);
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
@@ -606,6 +824,8 @@ bool xr_runtime_entry_registry_publish(
         if (!row) {
             xr_mutex_unlock(&authority->gate);
             xr_mutex_unlock(&registry->mutation_gate);
+            xr_runtime_entry_handle_release(&retained, verified,
+                                            sizeof(verified));
             if (!was_frozen)
                 handle_restore_frozen(handle, false);
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
@@ -620,50 +840,45 @@ bool xr_runtime_entry_registry_publish(
     if (row->handle == handle) {
         xr_mutex_unlock(&authority->gate);
         xr_mutex_unlock(&registry->mutation_gate);
+        xr_runtime_entry_handle_release(&retained, verified,
+                                        sizeof(verified));
         return true;
-    }
-    XrRuntimeEntryHandle *retained = NULL;
-    if (!xr_runtime_entry_handle_retain(
-            handle, &retained, diagnostic, diagnostic_size)) {
-        xr_mutex_unlock(&authority->gate);
-        xr_mutex_unlock(&registry->mutation_gate);
-        if (!was_frozen)
-            handle_restore_frozen(handle, false);
-        return false;
     }
     XrRuntimeEntryHandle *replaced = row->handle;
     XrRuntimeEntryHandle *replaced_guard = NULL;
     uint32_t replaced_rows = 0;
     if (replaced) {
         replaced_rows = registry_handle_row_count_locked(registry, replaced);
-        if (!xr_runtime_entry_handle_retain(
-                replaced, &replaced_guard, diagnostic, diagnostic_size)) {
-            xr_runtime_entry_handle_release(&retained, verified,
-                                            sizeof(verified));
-            xr_mutex_unlock(&authority->gate);
-            xr_mutex_unlock(&registry->mutation_gate);
-            if (!was_frozen)
-                handle_restore_frozen(handle, false);
-            return false;
-        }
     }
     xr_mutex_unlock(&authority->gate);
+
+    if (replaced && !xr_runtime_entry_handle_retain(
+                        replaced, &replaced_guard, diagnostic,
+                        diagnostic_size)) {
+        xr_mutex_unlock(&registry->mutation_gate);
+        xr_runtime_entry_handle_release(&retained, verified,
+                                        sizeof(verified));
+        if (!was_frozen)
+            handle_restore_frozen(handle, false);
+        return false;
+    }
 
     if (replaced_rows == 1u &&
         !xr_entry_cell_clear(&replaced->cell, diagnostic,
                              diagnostic_size)) {
+        xr_mutex_unlock(&registry->mutation_gate);
         xr_runtime_entry_handle_release(&retained, verified,
                                         sizeof(verified));
         xr_runtime_entry_handle_release(&replaced_guard, verified,
                                         sizeof(verified));
         if (!was_frozen)
             handle_restore_frozen(handle, false);
-        xr_mutex_unlock(&registry->mutation_gate);
         return false;
     }
 
     xr_mutex_lock(&authority->gate);
     row->handle = retained;
+    retained = NULL;
     if (!replaced)
         registry->active_count++;
     atomic_fetch_add_explicit(&row->revision, 1u, memory_order_release);
@@ -690,6 +905,10 @@ bool xr_runtime_entry_registry_unpublish(
     if (!authority || !authority->entry_registry || !handle)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "entry unpublication authority is incomplete");
+    XrRuntimeEntryHandle *guard = NULL;
+    if (!xr_runtime_entry_handle_retain(
+            handle, &guard, diagnostic, diagnostic_size))
+        return false;
     uint32_t released_count = 0;
     XrRuntimeEntryRegistry *registry = authority->entry_registry;
     xr_mutex_lock(&registry->mutation_gate);
@@ -699,21 +918,15 @@ bool xr_runtime_entry_registry_unpublish(
     if (!released_count) {
         xr_mutex_unlock(&authority->gate);
         xr_mutex_unlock(&registry->mutation_gate);
-        return true;
-    }
-    XrRuntimeEntryHandle *guard = NULL;
-    if (!xr_runtime_entry_handle_retain(
-            handle, &guard, diagnostic, diagnostic_size)) {
-        xr_mutex_unlock(&authority->gate);
-        xr_mutex_unlock(&registry->mutation_gate);
-        return false;
+        return xr_runtime_entry_handle_release(&guard, diagnostic,
+                                               diagnostic_size);
     }
     xr_mutex_unlock(&authority->gate);
 
     if (!xr_entry_cell_clear(&handle->cell, diagnostic, diagnostic_size)) {
         char nested[256] = {0};
-        xr_runtime_entry_handle_release(&guard, nested, sizeof(nested));
         xr_mutex_unlock(&registry->mutation_gate);
+        xr_runtime_entry_handle_release(&guard, nested, sizeof(nested));
         return false;
     }
 
@@ -976,30 +1189,40 @@ static XrRuntimeEntryHandle *registry_lookup(
             : NULL;
     if (!call || !dependency)
         return NULL;
-    XrRuntimeEntryHandle *handle = NULL;
-    xr_mutex_lock(&authority->gate);
     XrRuntimeEntryRegistry *registry = authority->entry_registry;
+    XrRuntimeEntryHandle *candidate = NULL;
+    const XrRuntimeEntryRegistryRow *candidate_row = NULL;
+    uint64_t candidate_revision = 0;
+    xr_mutex_lock(&registry->mutation_gate);
+    xr_mutex_lock(&authority->gate);
     for (uint32_t i = 0; i < registry->count; i++) {
         XrRuntimeEntryRegistryRow *row = registry->rows[i];
         if (registry_key_equal(row, dependency->semantic_fingerprint,
                                call->source_export_identity,
                                call->source_callee_identity) && row->handle) {
-            char diagnostic[128] = {0};
-            if (!xr_runtime_entry_handle_retain(
-                    row->handle, &handle, diagnostic,
-                    sizeof(diagnostic)) && budget_exhausted)
-                *budget_exhausted = true;
-            if (handle) {
-                if (matched_row)
-                    *matched_row = row;
-                if (row_revision)
-                    *row_revision = atomic_load_explicit(
-                        &row->revision, memory_order_acquire);
-            }
+            candidate = row->handle;
+            candidate_row = row;
+            candidate_revision = atomic_load_explicit(
+                &row->revision, memory_order_acquire);
             break;
         }
     }
     xr_mutex_unlock(&authority->gate);
+    XrRuntimeEntryHandle *handle = NULL;
+    if (candidate) {
+        char diagnostic[128] = {0};
+        if (!xr_runtime_entry_handle_retain(
+                candidate, &handle, diagnostic,
+                sizeof(diagnostic)) && budget_exhausted)
+            *budget_exhausted = true;
+        if (handle) {
+            if (matched_row)
+                *matched_row = candidate_row;
+            if (row_revision)
+                *row_revision = candidate_revision;
+        }
+    }
+    xr_mutex_unlock(&registry->mutation_gate);
     return handle;
 }
 

@@ -206,6 +206,59 @@ static XrSemanticPlan *build_semantic_plan(void) {
     return semantic;
 }
 
+static XrSemanticPlan *build_exported_semantic_plan(void) {
+    XiFunc *root = xi_func_new("xtp_export_init", &stub_unit);
+    XiFunc *function = xi_func_new("xtp_probe", &stub_int);
+    REQUIRE(root && function);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *function_entry = xi_block_new(function);
+    REQUIRE(root_entry && function_entry);
+    root_entry->sealed = function_entry->sealed = true;
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children);
+    root->children[0] = function;
+    root->nchildren = root->children_cap = 1;
+    function->parent_func = root;
+    XiValue *closure = xi_value_new(root, root_entry, XI_CLOSURE_NEW,
+                                    &stub_function, 0);
+    XiValue *store = xi_value_new(root, root_entry, XI_SET_SHARED,
+                                  &stub_unit, 1);
+    REQUIRE(closure && store);
+    closure->aux = function;
+    store->args[0] = closure;
+    store->aux_int = 0;
+    root->nshared = 1;
+    xi_block_set_return(root_entry, NULL);
+    XiValue *result = xi_const_int(function, function_entry, 42, &stub_int);
+    REQUIRE(result);
+    xi_block_set_return(function_entry, result);
+    root->stage = function->stage = XI_STAGE_SEMANTIC_LOWERED;
+    root->invariant_mask = function->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(root, NULL));
+    root->stage = function->stage = XI_STAGE_OPTIMIZED;
+    XiModule *module = xi_module_new("fixtures/runtime_export.xr",
+                                    "runtime_export", root);
+    REQUIRE(module);
+    root->module = module;
+    module->nslots = 1;
+    module->nexports = 1;
+    module->exports =
+        (XiModuleExport *) xr_calloc(1, sizeof(*module->exports));
+    REQUIRE(module->exports);
+    module->exports[0] = (XiModuleExport) {
+        .name = "xtp_probe",
+        .shared_slot = 0,
+        .function = function,
+    };
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    XrSemanticPlan *semantic = xr_semantic_plan_retain(root->semantic_plan);
+    REQUIRE(semantic && xr_semantic_plan_source_export_count(semantic) == 1);
+    xi_func_free(root);
+    return semantic;
+}
+
 static XrSemanticPlan *build_direct_call_semantic_plan(void) {
     XiFunc *root = xi_func_new("xtp_direct_call_root", &stub_int);
     XiFunc *child = xi_func_new("xtp_direct_call_child", &stub_int);
@@ -2107,12 +2160,21 @@ static bool write_c_byte_array(FILE *file, const char *name,
 
 static int write_runtime_fixture_header(const char *path) {
     XtpFixture fixture = make_fixture();
+    XtpFixture exported =
+        make_fixture_from_semantic(build_exported_semantic_plan());
     uint8_t *xsm = NULL;
     size_t xsm_size = 0;
+    uint8_t *export_xsm = NULL;
+    size_t export_xsm_size = 0;
     char diagnostic[512] = {0};
     if (!xr_xsm_encode(fixture.semantic, &xsm, &xsm_size, diagnostic,
-                       sizeof(diagnostic))) {
+                       sizeof(diagnostic)) ||
+        !xr_xsm_encode(exported.semantic, &export_xsm, &export_xsm_size,
+                       diagnostic, sizeof(diagnostic))) {
+        xr_free(xsm);
+        xr_free(export_xsm);
         dispose_fixture(&fixture);
+        dispose_fixture(&exported);
         return 1;
     }
     FILE *file = fopen(path, "wb");
@@ -2123,13 +2185,19 @@ static int write_runtime_fixture_header(const char *path) {
                          file) != EOF &&
                    write_c_byte_array(file, "xr_runtime_scalar_xsm", xsm,
                                       xsm_size) &&
-                   write_c_byte_array(file, "xr_runtime_scalar_xtp",
-                                      fixture.bytes, fixture.size) &&
-                   fputs("#endif  // XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n",
-                         file) != EOF;
+                    write_c_byte_array(file, "xr_runtime_scalar_xtp",
+                                       fixture.bytes, fixture.size) &&
+                    write_c_byte_array(file, "xr_runtime_export_xsm",
+                                       export_xsm, export_xsm_size) &&
+                    write_c_byte_array(file, "xr_runtime_export_xtp",
+                                       exported.bytes, exported.size) &&
+                    fputs("#endif  // XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n",
+                          file) != EOF;
     bool closed = file && fclose(file) == 0;
     xr_free(xsm);
+    xr_free(export_xsm);
     dispose_fixture(&fixture);
+    dispose_fixture(&exported);
     return written && closed ? 0 : 1;
 }
 

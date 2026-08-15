@@ -124,11 +124,12 @@ static void discard_partial_module(XrLoadedModuleGeneration *generation,
     xr_runtime_artifact_authority_free(authority);
 }
 
-static bool initialize_exports(XrExport *exports, uint32_t count) {
+static bool initialize_exports(XrExport *exports, uint32_t count,
+                               char *diagnostic,
+                               size_t diagnostic_size) {
     for (uint32_t i = 0; i < count; i++) {
-        char diagnostic[128] = {0};
         if (xr_runtime_entry_handle_create(&exports[i].handle, diagnostic,
-                                           sizeof(diagnostic)))
+                                           diagnostic_size))
             continue;
         char ignored[1] = {0};
         for (uint32_t j = 0; j < i; j++)
@@ -137,6 +138,51 @@ static bool initialize_exports(XrExport *exports, uint32_t count) {
         return false;
     }
     return true;
+}
+
+static bool bind_export_entries(XrLoadedModuleGeneration *generation,
+                                const XrTargetPlan *plan,
+                                XrExport *exports, uint32_t function_count,
+                                char *diagnostic,
+                                size_t diagnostic_size) {
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(plan);
+    size_t export_count = semantic
+                              ? xr_semantic_plan_source_export_count(semantic)
+                              : 0;
+    for (size_t i = 0; i < export_count; i++) {
+        const XrSemanticSourceExportRecord *record =
+            xr_semantic_plan_source_export(semantic, (uint32_t) i);
+        if (!record || record->function >= function_count ||
+            xr_target_plan_function_execution_family_mask(
+                plan, record->function) !=
+                XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                        "module export is outside the installed execution family");
+        XrEntryCellRegistration registration = {
+            .generation = generation,
+            .verified_plan = plan,
+            .function = record->function,
+            .executor_kind = XR_ENTRY_EXECUTOR_TYPED_VM,
+        };
+        bool already_bound = false;
+        if (!xr_runtime_entry_handle_bind(
+                exports[record->function].handle, &registration,
+                &already_bound, diagnostic, diagnostic_size))
+            return false;
+    }
+    XrRuntimeEntryHandle **handles =
+        (XrRuntimeEntryHandle **) xr_calloc(function_count,
+                                            sizeof(*handles));
+    if (!handles)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "module entry publication allocation failed");
+    for (uint32_t i = 0; i < function_count; i++)
+        handles[i] = exports[i].handle;
+    bool published = xr_runtime_entry_registry_publish_module(
+        generation->authority, generation, plan, handles, function_count,
+        diagnostic, diagnostic_size);
+    xr_free(handles);
+    return published;
 }
 
 static bool clear_exports(XrExport *exports, uint32_t count,
@@ -202,15 +248,6 @@ XRAY_API bool xr_module_load_target_plan(
         discard_partial_module(NULL, plan, artifact_authority);
         return false;
     }
-    /* A plan the installed executor does not own is rejected here, not at call
-     * time, so a module handle never denotes a generation that cannot run. */
-    if (!xr_module_generation_prepare(generation, diagnostic,
-                                      diagnostic_size) ||
-        !xr_module_generation_activate(generation, diagnostic,
-                                       diagnostic_size)) {
-        discard_partial_module(generation, plan, artifact_authority);
-        return false;
-    }
 
     uint32_t function_count = 0;
     const XrTargetFunctionRecord *functions =
@@ -221,12 +258,29 @@ XRAY_API bool xr_module_load_target_plan(
                                                 sizeof(*exports))
                        : NULL;
     if (!functions || !function_count || !created || !exports ||
-        !initialize_exports(exports, function_count)) {
+        !initialize_exports(exports, function_count, diagnostic,
+                            diagnostic_size)) {
         xr_free(exports);
         xr_free(created);
         discard_partial_module(generation, plan, artifact_authority);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
                     "module allocation failed or the plan declares no function");
+    }
+    /* A plan the installed executor does not own is rejected here, not at call
+     * time, so a module handle never denotes a generation that cannot run. */
+    if (!xr_module_generation_prepare(generation, diagnostic,
+                                      diagnostic_size) ||
+        !xr_module_generation_activate(generation, diagnostic,
+                                       diagnostic_size) ||
+        !bind_export_entries(generation, plan, exports, function_count,
+                             diagnostic, diagnostic_size)) {
+        char ignored[1] = {0};
+        clear_exports(exports, function_count, ignored, sizeof(ignored));
+        dispose_exports(exports, function_count, ignored, sizeof(ignored));
+        xr_free(exports);
+        xr_free(created);
+        discard_partial_module(generation, plan, artifact_authority);
+        return false;
     }
     created->runtime = runtime;
     created->artifact_authority = artifact_authority;
@@ -285,9 +339,8 @@ XRAY_API bool xr_module_find_export(const XrModule *module,
     if (!semantic)
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
                     "module plan does not retain its verified semantic authority");
-    uint32_t source_export = UINT32_MAX;
     const XrSemanticSourceExportRecord *record =
-        lookup_source_export(semantic, export_name, &source_export);
+        lookup_source_export(semantic, export_name, NULL);
     if (!record)
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
                     "module publishes no export under that exact name");
@@ -309,8 +362,9 @@ XRAY_API bool xr_module_find_export(const XrModule *module,
         XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
                     "exported function is outside the installed scalar i64 execution family");
-    /* Resolution publishes one canonical VM entry registration. The raw-entry
-     * field is absent on this path, so artifact bytes can never inject code. */
+    /* Activation published every source export as one transaction. Lookup is
+     * read-only: a failed or duplicate registration never produced a module
+     * handle that could reach this point. */
     XrExport *slot = &module->exports[record->function];
     xr_mutex_lock(&module->runtime->gate);
     if (module->unloading) {
@@ -318,23 +372,13 @@ XRAY_API bool xr_module_find_export(const XrModule *module,
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "export resolution cannot resurrect a draining module");
     }
-    XrEntryCellRegistration registration = {
-        .generation = module->generation,
-        .verified_plan = module->plan,
-        .function = record->function,
-        .executor_kind = XR_ENTRY_EXECUTOR_TYPED_VM,
-    };
-    bool already_bound = false;
-    bool bound = xr_runtime_entry_handle_bind(
-        slot->handle, &registration, &already_bound, diagnostic,
-        diagnostic_size);
-    if (bound)
-        bound = xr_runtime_entry_registry_publish(
-            module->generation->authority, module->plan, source_export,
-            slot->handle, diagnostic, diagnostic_size);
     xr_mutex_unlock(&module->runtime->gate);
-    if (!bound)
-        return false;
+    const XrEntryCellExpectation *expectation =
+        xr_runtime_entry_handle_expectation(slot->handle);
+    if (!expectation || expectation->abi.schema_version !=
+                            XR_ENTRY_ABI_SCHEMA_VERSION)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "module export registration is unavailable");
     *export_handle = slot;
     return true;
 }

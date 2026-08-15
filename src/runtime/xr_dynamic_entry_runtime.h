@@ -68,6 +68,14 @@ XR_FUNC bool xr_runtime_entry_registry_publish(
     XrRuntimeGenerationAuthority *authority, const XrTargetPlan *plan,
     uint32_t source_export, XrRuntimeEntryHandle *handle, char *diagnostic,
     size_t diagnostic_size);
+/* Publishes every source export of one active generation as one transaction.
+ * Active duplicate keys are rejected; no row becomes visible on failure. */
+XR_FUNC bool xr_runtime_entry_registry_publish_module(
+    XrRuntimeGenerationAuthority *authority,
+    XrLoadedModuleGeneration *generation, const XrTargetPlan *plan,
+    XrRuntimeEntryHandle *const *function_handles,
+    uint32_t function_handle_count, char *diagnostic,
+    size_t diagnostic_size);
 XR_FUNC bool xr_runtime_entry_registry_unpublish(
     XrRuntimeGenerationAuthority *authority, XrRuntimeEntryHandle *handle,
     char *diagnostic, size_t diagnostic_size);

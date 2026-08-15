@@ -8,6 +8,7 @@
 
 #include "xray_runtime_api.h"
 #include "runtime_scalar_artifacts.h"
+#include "../../../src/os/os_thread.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -99,8 +100,21 @@ static void test_load_requires_both_exact_artifacts(void) {
     CHECK(runtime == NULL, "destroy left a runtime handle");
 }
 
-/* The whole product path: create, load an exact verified pair to ACTIVE,
- * observe the export boundary, unload, destroy. */
+static void check_export_result(XrModule *module, int64_t expected,
+                                const char *label) {
+    char diagnostic[512] = {0};
+    const XrExport *found = NULL;
+    CHECK(xr_module_find_export(module, "xtp_probe", &found, diagnostic,
+                                sizeof(diagnostic)), label);
+    XrExportValue result = {0};
+    CHECK(found && xr_export_call(found, NULL, 0, &result, diagnostic,
+                                  sizeof(diagnostic)), label);
+    CHECK(result.kind == XR_EXPORT_VALUE_I64 && result.i64 == expected,
+          label);
+}
+
+/* The whole product path: verify, atomically publish one exact export, execute,
+ * unload, and destroy using only the runtime archive. */
 static void test_loaded_module_lifecycle_and_export_boundary(void) {
     char diagnostic[512] = {0};
     XrRuntimeGenerationBudget budget = make_budget();
@@ -111,8 +125,8 @@ static void test_loaded_module_lifecycle_and_export_boundary(void) {
     if (!runtime)
         return;
     CHECK(xr_module_load_target_plan(
-              runtime, xr_runtime_scalar_xsm, sizeof(xr_runtime_scalar_xsm),
-              xr_runtime_scalar_xtp, sizeof(xr_runtime_scalar_xtp), &module,
+              runtime, xr_runtime_export_xsm, sizeof(xr_runtime_export_xsm),
+              xr_runtime_export_xtp, sizeof(xr_runtime_export_xtp), &module,
               diagnostic, sizeof(diagnostic)),
           "exact artifact pair load");
     CHECK(module != NULL, "successful load produced no module");
@@ -130,19 +144,9 @@ static void test_loaded_module_lifecycle_and_export_boundary(void) {
     CHECK(strstr(diagnostic, "XR_EXEC_5006") != NULL,
           "loaded module destroy diagnostic code");
 
-    /* This module activated, so it carries no source export: publishing one
-     * needs shared storage the activation gate forbids. The lookup reads the
-     * real verified export table and reports exactly that, rather than
-     * resolving an internal function name as though it were published. */
-    const XrExport *found = (const XrExport *) (uintptr_t) 1;
-    CHECK(!xr_module_find_export(module, "xtp_probe", &found, diagnostic,
-                                 sizeof(diagnostic)),
-          "find_export resolved an unpublished internal function name");
-    CHECK(found == NULL, "rejected lookup left an export handle");
-    CHECK(strstr(diagnostic, "XR_ARTIFACT_2004") != NULL,
-          "unpublished name diagnostic code");
+    check_export_result(module, 42, "published export execution");
 
-    found = (const XrExport *) (uintptr_t) 1;
+    const XrExport *found = (const XrExport *) (uintptr_t) 1;
     CHECK(!xr_module_find_export(module, "no_such_export", &found, diagnostic,
                                  sizeof(diagnostic)),
           "find_export resolved an absent name");
@@ -155,8 +159,8 @@ static void test_loaded_module_lifecycle_and_export_boundary(void) {
                                  sizeof(diagnostic)),
           "find_export accepted a missing out parameter");
 
-    /* No handle can be produced, so no call can be made. The call entry still
-     * refuses every unresolved input rather than dereferencing it. */
+    /* The call entry refuses every unresolved input rather than dereferencing
+     * it even though the module owns another valid entry. */
     XrExportValue result;
     memset(&result, 0xAB, sizeof(result));
     CHECK(!xr_export_call(NULL, NULL, 0, &result, diagnostic,
@@ -185,6 +189,105 @@ static void test_loaded_module_lifecycle_and_export_boundary(void) {
     CHECK(xr_runtime_destroy(&runtime, diagnostic, sizeof(diagnostic)),
           "runtime destroy after unload");
     CHECK(runtime == NULL, "destroy left a runtime handle");
+}
+
+/* A duplicate active export key is not a hot-reload guess. The second load
+ * rolls its active-but-unpublished generation back, leaves the first module
+ * callable, and the same key can be published again only after unload. */
+static void test_duplicate_publication_rolls_back(void) {
+    char diagnostic[512] = {0};
+    XrRuntimeGenerationBudget budget = make_budget();
+    XrRuntime *runtime = NULL;
+    XrModule *first = NULL;
+    XrModule *duplicate = (XrModule *) (uintptr_t) 1;
+    CHECK(xr_runtime_create(&budget, &runtime, diagnostic, sizeof(diagnostic)),
+          "duplicate runtime create");
+    uint8_t corrupted[sizeof(xr_runtime_export_xtp)];
+    memcpy(corrupted, xr_runtime_export_xtp, sizeof(corrupted));
+    corrupted[sizeof(corrupted) - 1u] ^= 1u;
+    CHECK(!xr_module_load_target_plan(
+              runtime, xr_runtime_export_xsm, sizeof(xr_runtime_export_xsm),
+              corrupted, sizeof(corrupted), &duplicate, diagnostic,
+              sizeof(diagnostic)),
+          "corrupted plan reached entry publication");
+    CHECK(duplicate == NULL,
+          "corrupted plan left a module or registration owner");
+    CHECK(xr_module_load_target_plan(
+              runtime, xr_runtime_export_xsm, sizeof(xr_runtime_export_xsm),
+              xr_runtime_export_xtp, sizeof(xr_runtime_export_xtp), &first,
+              diagnostic, sizeof(diagnostic)),
+          "first exported module load");
+    CHECK(!xr_module_load_target_plan(
+              runtime, xr_runtime_export_xsm, sizeof(xr_runtime_export_xsm),
+              xr_runtime_export_xtp, sizeof(xr_runtime_export_xtp),
+              &duplicate, diagnostic, sizeof(diagnostic)),
+          "duplicate exported module load");
+    CHECK(duplicate == NULL && strstr(diagnostic, "XR_EXEC_5005") != NULL,
+          "duplicate publication rollback diagnostic");
+    check_export_result(first, 42, "first export survives duplicate rollback");
+    CHECK(xr_module_unload(&first, diagnostic, sizeof(diagnostic)),
+          "first duplicate fixture unload");
+    CHECK(xr_module_load_target_plan(
+              runtime, xr_runtime_export_xsm, sizeof(xr_runtime_export_xsm),
+              xr_runtime_export_xtp, sizeof(xr_runtime_export_xtp),
+              &duplicate, diagnostic, sizeof(diagnostic)),
+          "republish after exact unload");
+    check_export_result(duplicate, 42, "republished export execution");
+    CHECK(xr_module_unload(&duplicate, diagnostic, sizeof(diagnostic)),
+          "republished module unload");
+    CHECK(xr_runtime_destroy(&runtime, diagnostic, sizeof(diagnostic)),
+          "duplicate runtime destroy");
+}
+
+typedef struct ConcurrentLoadContext {
+    XrRuntime *runtime;
+    XrModule *module;
+    bool loaded;
+} ConcurrentLoadContext;
+
+static void *load_exported_module(void *opaque) {
+    ConcurrentLoadContext *context = (ConcurrentLoadContext *) opaque;
+    char diagnostic[512] = {0};
+    context->loaded = xr_module_load_target_plan(
+        context->runtime, xr_runtime_export_xsm,
+        sizeof(xr_runtime_export_xsm), xr_runtime_export_xtp,
+        sizeof(xr_runtime_export_xtp), &context->module, diagnostic,
+        sizeof(diagnostic));
+    return NULL;
+}
+
+static void test_concurrent_duplicate_publication_is_unique(void) {
+    char diagnostic[512] = {0};
+    XrRuntimeGenerationBudget budget = make_budget();
+    XrRuntime *runtime = NULL;
+    ConcurrentLoadContext contexts[2] = {0};
+    xr_thread_t threads[2] = {0};
+    CHECK(xr_runtime_create(&budget, &runtime, diagnostic, sizeof(diagnostic)),
+          "concurrent runtime create");
+    for (uint32_t i = 0; i < 2; i++) {
+        contexts[i].runtime = runtime;
+        CHECK(xr_thread_create(&threads[i], load_exported_module,
+                               &contexts[i]),
+              "concurrent load thread create");
+    }
+    uint32_t loaded = 0;
+    for (uint32_t i = 0; i < 2; i++) {
+        CHECK(xr_thread_join(threads[i], NULL) == 0,
+              "concurrent load thread join");
+        loaded += contexts[i].loaded ? 1u : 0u;
+    }
+    CHECK(loaded == 1, "concurrent duplicate publication count");
+    for (uint32_t i = 0; i < 2; i++) {
+        if (!contexts[i].module)
+            continue;
+        check_export_result(contexts[i].module, 42,
+                            "concurrent winner execution");
+        CHECK(xr_module_unload(&contexts[i].module, diagnostic,
+                               sizeof(diagnostic)),
+              "concurrent winner unload");
+    }
+    CHECK(xr_runtime_destroy(&runtime, diagnostic, sizeof(diagnostic)),
+          "concurrent runtime destroy");
 }
 
 /* Loading twice and unloading in the other order proves the runtime tracks
@@ -239,6 +342,8 @@ int main(void) {
     test_runtime_requires_a_complete_budget();
     test_load_requires_both_exact_artifacts();
     test_loaded_module_lifecycle_and_export_boundary();
+    test_duplicate_publication_rolls_back();
+    test_concurrent_duplicate_publication_is_unique();
     test_two_modules_load_and_unload_out_of_order();
     if (failures) {
         fprintf(stderr, "runtime API archive boundary failures: %d\n", failures);

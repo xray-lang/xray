@@ -21,16 +21,12 @@
  *   verified rows are scalar i64 and its generation reached ACTIVE. Every other
  *   export fails closed with a stable diagnostic instead of executing.
  *
- *   Today those two facts do not overlap, and this header does not pretend
- *   otherwise. Publishing a source export requires source-namespace shared
- *   storage, and the installed activation gate admits only a sole scalar i64
- *   function with no storage authority at all. So a module this runtime can
- *   load publishes no export, and a module that publishes one cannot load.
- *   Lookup and call below are written against the real verified tables and
- *   the runtime's canonical entry cell rather than stubbed. They refuse rather
- *   than fabricate an entry: until the general typed executor is installed,
- *   `xr_module_find_export` reports that the module publishes no such name and
- *   `xr_export_call` remains structurally unreachable.
+ *   Exact scalar i64 source exports are registered as one bounded activation
+ *   transaction after the complete plan and instruction program verify. The
+ *   module becomes visible only after every entry binding is committed; a
+ *   duplicate key or failed binding rolls the generation back. Other export
+ *   representations remain unsupported and fail activation rather than
+ *   reaching lookup or execution through a fallback.
  */
 
 #ifndef XRAY_RUNTIME_API_H
@@ -84,7 +80,9 @@ XRAY_API bool xr_runtime_destroy(XrRuntime **runtime, char *diagnostic,
  * authority the target artifact must bind, so neither is optional and neither
  * is inferred from the other. Success means the generation reached ACTIVE
  * under the installed executor; a plan the executor does not own is rejected
- * here rather than at call time, and no partially loaded module is returned.
+ * here rather than at call time. Every exact source export is registered as
+ * one atomic batch before the module handle is published, and no partially
+ * loaded module or generation remains on any failure.
  */
 XRAY_API bool xr_module_load_target_plan(
     XrRuntime *runtime, const uint8_t *semantic_artifact_bytes,
@@ -97,9 +95,9 @@ XRAY_API bool xr_module_load_target_plan(
  * returned handle is a loan owned by the module: it stays valid until that
  * module is unloaded and must not be freed by the caller. Resolution binds the
  * module's canonical entry cell to its verified TargetPlan and exact generation
- * identity. An unknown name, an export outside the installed execution family,
- * and an export whose generation is not ACTIVE each fail closed and yield no
- * handle.
+ * identity during activation. Lookup performs no registration or mutation. An
+ * unknown name and an export whose generation is not ACTIVE each fail closed
+ * and yield no handle.
  */
 XRAY_API bool xr_module_find_export(const XrModule *module,
                                     const char *export_name,
