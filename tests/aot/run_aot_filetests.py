@@ -149,7 +149,7 @@ def compile_c_syntax(
         obj = ws.path(f"{tag}.syntax.o")
         argv = [zig, "cc", "-target", triple, "-c", "-o", obj, *include_flags, c_out]
     else:
-        cc = toolchain.find_c_compiler()
+        cc = toolchain.find_c_syntax_compiler()
         if cc is None:
             return expectlib.CheckOutcome("C compiler not found for c_syntax")
         obj = ws.path(f"{tag}.syntax.o")

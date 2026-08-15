@@ -230,7 +230,7 @@ unit = "fixture"
 
             # The AArch64 machine outliner is disabled for speed builds and
             # left alone for size builds; both directions are asserted.
-            is_clang = cc is not None and not cc.is_zig
+            is_clang = cc is not None and cc.driver != toolchain.CC_DRIVER_ZIG
             if host_platform.machine() == "arm64" and is_clang:
                 rec.contains(log, "-mno-outline",
                              "AArch64 speed build disables the machine outliner")

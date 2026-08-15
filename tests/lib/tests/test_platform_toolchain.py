@@ -6,6 +6,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from _support import bootstrap_xraytest
 
@@ -74,17 +75,47 @@ class ToolchainProbeTest(unittest.TestCase):
 
     @unittest.skipIf(platform.IS_WINDOWS, "POSIX shell stub")
     def test_zig_compiler_uses_object_compile_for_syntax(self):
-        cc = toolchain.CCompiler(path="/usr/bin/zig", is_zig=True)
+        cc = toolchain.CCompiler(path="/usr/bin/zig", driver=toolchain.CC_DRIVER_ZIG)
         argv = cc.syntax_check_argv(Path("a.c"), ["/inc"], Path("/tmp/a.o"))
         self.assertIn("cc", argv)
+        self.assertIn("-std=c11", argv)
         self.assertIn("-c", argv)
         self.assertNotIn("-fsyntax-only", argv)
 
     def test_normal_compiler_uses_fsyntax_only(self):
-        cc = toolchain.CCompiler(path="/usr/bin/cc", is_zig=False)
+        cc = toolchain.CCompiler(path="/usr/bin/cc", driver=toolchain.CC_DRIVER_GNU)
         argv = cc.syntax_check_argv(Path("a.c"), ["/inc"], Path("/tmp/a.o"))
+        self.assertIn("-std=c11", argv)
         self.assertIn("-fsyntax-only", argv)
         self.assertIn("-I/inc", argv)
+
+    def test_msvc_compiler_uses_c11_syntax_only_contract(self):
+        cc = toolchain.CCompiler(path=r"C:\VC\bin\cl.exe", driver=toolchain.CC_DRIVER_MSVC)
+        argv = cc.syntax_check_argv(Path("a.c"), [r"C:\xray\include"], Path("unused.obj"))
+        self.assertIn("/TC", argv)
+        self.assertIn("/std:c11", argv)
+        self.assertIn("/experimental:c11atomics", argv)
+        self.assertIn("/utf-8", argv)
+        self.assertIn("/Zs", argv)
+        self.assertIn(r"/IC:\xray\include", argv)
+        self.assertNotIn("unused.obj", argv)
+
+    def test_find_c_syntax_compiler_prefers_and_probes_msvc_on_windows(self):
+        cl = r"C:\VC\bin\cl.exe"
+
+        def resolve(name):
+            return cl if name == "cl" else None
+
+        with mock.patch.dict(os.environ, {"CC": ""}), mock.patch.object(
+            toolchain.platform, "IS_WINDOWS", True
+        ), mock.patch.object(toolchain.shutil, "which", side_effect=resolve), mock.patch.object(
+            toolchain.proc, "run", return_value=mock.Mock(ok=True)
+        ) as run:
+            self.assertIsNone(toolchain.find_c_compiler())
+            found = toolchain.find_c_syntax_compiler()
+
+        self.assertEqual(found, toolchain.CCompiler(path=cl, driver=toolchain.CC_DRIVER_MSVC))
+        run.assert_called_once_with([cl, "/nologo", "/?"], timeout=30)
 
 
 if __name__ == "__main__":

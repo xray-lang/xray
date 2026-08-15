@@ -5,8 +5,8 @@
   - A Visual Studio developer prompt puts a `python3` App Execution Alias on
     PATH that exits without executing anything. It "exists" and does nothing.
 
-  - Zig's `cc` rejects `-fsyntax-only`, so a syntax gate that assumes that flag
-    silently degrades on hosts where the chosen compiler is Zig.
+  - C compiler drivers do not share a syntax-only command line. GCC and Clang
+    use `-fsyntax-only`, Zig emits a throwaway object, and MSVC uses `/Zs`.
 
 So every probe here launches the candidate and checks it did the thing. A probe
 result is cached per-process: a suite asks the same question many times.
@@ -22,6 +22,10 @@ from typing import Sequence
 from . import platform, proc
 
 _probe_cache: "dict[str, str | None]" = {}
+
+CC_DRIVER_GNU = "gnu"
+CC_DRIVER_ZIG = "zig"
+CC_DRIVER_MSVC = "msvc"
 
 
 def find_python() -> "str | None":
@@ -61,58 +65,100 @@ def find_python() -> "str | None":
 
 @dataclass(frozen=True)
 class CCompiler:
-    """A usable C compiler and how to ask it for a syntax-only check.
+    """A usable C11 compiler and its syntax-check driver contract.
 
-    Zig cannot do a true syntax-only pass, so `syntax_check_args` compiles to a
-    throwaway object there and to -fsyntax-only everywhere else. The difference
-    is captured once, here, not re-decided in every suite.
+    The driver family is captured during the executable probe, not guessed by
+    each caller. Generated C always gets an explicit C11 language mode.
     """
 
     path: str
-    is_zig: bool
+    driver: str
 
     def syntax_check_argv(self, source: Path, include_dirs: Sequence, out_obj: Path) -> "list[str]":
-        argv = [self.path]
-        if self.is_zig:
-            argv = [self.path, "cc", "-c", "-o", str(out_obj)]
+        if self.driver == CC_DRIVER_ZIG:
+            argv = [self.path, "cc", "-std=c11", "-c", "-o", str(out_obj)]
+        elif self.driver == CC_DRIVER_MSVC:
+            argv = [
+                self.path,
+                "/nologo",
+                "/TC",
+                "/std:c11",
+                "/experimental:c11atomics",
+                "/utf-8",
+                "/Zs",
+            ]
         else:
-            argv = [self.path, "-fsyntax-only"]
+            argv = [self.path, "-std=c11", "-fsyntax-only"]
+        include_prefix = "/I" if self.driver == CC_DRIVER_MSVC else "-I"
         for inc in include_dirs:
-            argv.append(f"-I{inc}")
+            argv.append(f"{include_prefix}{inc}")
         argv.append(str(source))
         return argv
 
 
-def find_c_compiler() -> "CCompiler | None":
-    """The C compiler to use for syntax gates, verified by a trivial compile.
+def _c_compiler_driver(path: str) -> str:
+    name = Path(path).name.lower()
+    if name in ("cl", "cl.exe", "clang-cl", "clang-cl.exe"):
+        return CC_DRIVER_MSVC
+    if "zig" in name:
+        return CC_DRIVER_ZIG
+    return CC_DRIVER_GNU
 
-    Honors CC, then falls back to cc/clang/gcc. Verification matters: a broken
-    or wrong-arch compiler on PATH would otherwise turn every gate red with a
-    misleading message.
-    """
-    if "cc" in _probe_cache:
-        cached = _probe_cache["cc"]
+
+def _c_compiler_probe_argv(path: str, driver: str) -> list[str]:
+    if driver == CC_DRIVER_MSVC:
+        return [path, "/nologo", "/?"]
+    return [path, "--version"]
+
+
+def _find_c_compiler(cache_key: str, candidates: Sequence) -> "CCompiler | None":
+    if cache_key in _probe_cache:
+        cached = _probe_cache[cache_key]
         return _CC_OBJS.get(cached) if cached else None
+
+    for name in candidates:
+        resolved = shutil.which(name)
+        if not resolved:
+            continue
+        driver = _c_compiler_driver(resolved)
+        probe = proc.run(_c_compiler_probe_argv(resolved, driver), timeout=30)
+        if probe.ok:
+            cc = CCompiler(path=resolved, driver=driver)
+            _probe_cache[cache_key] = resolved
+            _CC_OBJS[resolved] = cc
+            return cc
+    _probe_cache[cache_key] = None
+    return None
+
+
+def find_c_compiler() -> "CCompiler | None":
+    """Find the general-purpose C driver used by build-and-run test fixtures."""
     import os
 
     candidates: "list[str]" = []
     if os.environ.get("CC"):
         candidates.append(os.environ["CC"])
     candidates.extend(["cc", "clang", "gcc"])
+    return _find_c_compiler("cc", candidates)
 
-    for name in candidates:
-        resolved = shutil.which(name)
-        if not resolved:
-            continue
-        is_zig = "zig" in Path(resolved).name.lower()
-        probe = proc.run([resolved, "--version"], timeout=30)
-        if probe.ok:
-            cc = CCompiler(path=resolved, is_zig=is_zig)
-            _probe_cache["cc"] = resolved
-            _CC_OBJS[resolved] = cc
-            return cc
-    _probe_cache["cc"] = None
-    return None
+
+def find_c_syntax_compiler() -> "CCompiler | None":
+    """Find a verified driver capable of checking generated hosted C11.
+
+    Windows developer environments expose MSVC as `cl`, not `cc`. Keep this
+    capability separate from build-and-run fixture compilers: syntax-only C11
+    has a precise MSVC contract, while freestanding/shared-library fixture
+    construction requires different driver-specific link capabilities.
+    """
+    import os
+
+    candidates: "list[str]" = []
+    if os.environ.get("CC"):
+        candidates.append(os.environ["CC"])
+    if platform.IS_WINDOWS:
+        candidates.extend(["cl", "clang-cl"])
+    candidates.extend(["cc", "clang", "gcc"])
+    return _find_c_compiler("c_syntax", candidates)
 
 
 _CC_OBJS: "dict[str, CCompiler]" = {}

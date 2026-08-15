@@ -152,6 +152,41 @@ class RunnerHelpersTest(unittest.TestCase):
         # -Iinclude, where xray_value_abi.h lives.
         self.assertIn("include", runner.SYNTAX_INCLUDE_DIRS)
 
+    def test_host_c_syntax_uses_the_syntax_compiler_capability(self):
+        with tempfile.TemporaryDirectory(prefix="xt_filetest_syntax.") as tmp:
+            root = Path(tmp)
+            generated = root / "generated.c"
+            generated.write_text("int value;\n", encoding="utf-8")
+            config = runner.Config(
+                xray=root / "xray",
+                mode="cgen",
+                selected_modes=["cgen"],
+                verbose=False,
+                keep_tmp=False,
+                jobs=1,
+                cache_dir=root / "cache",
+                sanitizer=False,
+                disable_run_cache=True,
+                baseline=root / "baseline.txt",
+                case_timeout=7,
+            )
+            compiler = mock.Mock()
+            compiler.syntax_check_argv.return_value = ["cl", "/Zs", str(generated)]
+            process = mock.Mock(ok=True, timed_out=False)
+            ws = mock.Mock()
+            ws.path.return_value = root / "generated.obj"
+            with mock.patch.object(
+                runner.toolchain, "find_c_syntax_compiler", return_value=compiler
+            ) as find_compiler, mock.patch.object(
+                runner.proc, "run", return_value=process
+            ) as run:
+                outcome = runner.compile_c_syntax(config, generated, [], ws, "generated")
+
+        self.assertTrue(outcome.ok)
+        find_compiler.assert_called_once_with()
+        compiler.syntax_check_argv.assert_called_once()
+        run.assert_called_once_with(["cl", "/Zs", str(generated)], timeout=7)
+
     def test_all_modes_present(self):
         self.assertEqual(runner.ALL_MODES,
                          ["rep", "layout", "abi", "boundary", "container", "link", "cgen"])
