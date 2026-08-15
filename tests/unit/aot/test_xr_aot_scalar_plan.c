@@ -940,7 +940,8 @@ static void test_panic_catch_c_emission_recipe_is_exact(void) {
     register_rep->ownership = saved_ownership;
     XrTargetSlotRecord *slot = &target->slots[binding->slot];
     uint32_t saved_operation = slot->semantic_operation;
-    slot->semantic_operation = saved_operation + 1u;
+    REQUIRE(saved_operation != XR_SEMANTIC_INDEX_NONE);
+    slot->semantic_operation = XR_SEMANTIC_INDEX_NONE;
     REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
     slot->semantic_operation = saved_operation;
     REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
