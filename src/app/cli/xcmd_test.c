@@ -362,6 +362,7 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
     // Create fresh isolate via profile factory
     XrVMConfig params;
     xr_isolate_profile_params(XR_ISOLATE_PROFILE_TEST, &params);
+    params.script_file = filepath;
     XrVMRuntime *X = xr_isolate_profile_create(&params);
     if (!X) {
         result->has_error = true;
@@ -371,7 +372,6 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
     }
     xr_isolate_set_suppress_exception_print(X, true);
     xr_isolate_multicore_init(X, 0);
-    xray_vm_set_script_info(X, filepath, 0, NULL);
     xr_module_system_init_with_script(X, filepath);
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);

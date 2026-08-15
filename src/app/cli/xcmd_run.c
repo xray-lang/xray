@@ -306,13 +306,17 @@ cleanup:
 }
 
 /* Create isolate via profile factory, then apply run-specific overrides */
-static XrVMRuntime *create_run_isolate(const RunOptions *opts) {
+static XrVMRuntime *create_run_isolate(const RunOptions *opts, const char *script_file,
+                                       int script_argc, char **script_argv) {
     XrVMConfig params;
     xr_isolate_profile_params(XR_ISOLATE_PROFILE_RUN, &params);
     params.trace_execution = opts->trace;
     params.dump_bytecode = opts->dump_bytecode;
     params.dump_ic_feedback = opts->dump_ic;
     params.scheduler_workers = opts->num_workers;
+    params.script_file = script_file;
+    params.script_argc = script_argc;
+    params.script_argv = script_argv;
 
     XrVMRuntime *iso = xr_isolate_profile_create(&params);
     if (!iso)
@@ -322,7 +326,7 @@ static XrVMRuntime *create_run_isolate(const RunOptions *opts) {
 
 // Execute code string and cleanup isolate
 static int run_string(const RunOptions *opts, const char *code) {
-    XrVMRuntime *iso = create_run_isolate(opts);
+    XrVMRuntime *iso = create_run_isolate(opts, NULL, 0, NULL);
     if (!iso)
         return 1;
 
@@ -405,12 +409,9 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     char **script_argv = inv->passthrough_argv;
 
     /* Create isolate with runtime */
-    XrVMRuntime *iso = create_run_isolate(&opts);
+    XrVMRuntime *iso = create_run_isolate(&opts, file, script_argc, script_argv);
     if (!iso)
         return XR_CLI_EXIT_INTERNAL;
-
-    /* Set script info (for args/__file__/__dir__) */
-    xray_vm_set_script_info(iso, file, script_argc, script_argv);
 
     /* Re-initialize module system (with script path) */
     xr_module_system_init_with_script(iso, file);

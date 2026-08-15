@@ -328,7 +328,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
 
     register_inheritable_builtin_class(analyzer, "PanicInfo");
 
-    // Runtime global variables (set by xray_vm_set_script_info)
+    // Runtime global variables materialized from the full-runtime configuration.
     register_builtin_var(analyzer, "process", p_any, true);
     register_builtin_var(analyzer, "__file__", t_string, true);
     register_builtin_var(analyzer, "__dir__", t_string, true);

@@ -62,9 +62,6 @@ XRAY_API void xray_vm_delete(XrVMRuntime *vm);
 
 XRAY_API int xray_vm_eval_bundle(XrVMRuntime *vm, const XrBytecodeBundle *bundle);
 
-XRAY_API void xray_vm_set_script_info(XrVMRuntime *vm, const char *script_file, int argc,
-                                      char **argv);
-
 #ifdef __cplusplus
 }
 #endif

@@ -115,6 +115,9 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program, char **ar
     xray_vm_config_init(&params);
     params.trace_execution = false;
     params.userdata = ctrl;
+    params.script_file = program;
+    params.script_argc = arg_count;
+    params.script_argv = args;
 
     ctrl->isolate = xray_vm_new_full(&params);
     if (!ctrl->isolate) {
@@ -123,9 +126,6 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program, char **ar
 
     // Initialize multicore runtime
     xr_isolate_multicore_init(ctrl->isolate, 0);
-
-    // Set script info
-    xray_vm_set_script_info(ctrl->isolate, program, arg_count, args);
 
     // Initialize module system
     xr_module_system_init_with_script(ctrl->isolate, program);

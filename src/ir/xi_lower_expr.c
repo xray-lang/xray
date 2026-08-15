@@ -1304,7 +1304,7 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
             return builtin_class;
 
         /* Builtin instance / value globals (camelCase / dunder) are populated
-         * per script by xray_vm_set_script_info: `process` is the Process
+         * per script by full-runtime construction: `process` is the Process
          * instance carrying argv/cwd/argv0, `__file__` / `__dir__` are the
          * current module's source path and directory. */
         static const struct {

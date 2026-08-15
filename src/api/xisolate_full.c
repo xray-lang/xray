@@ -25,6 +25,10 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 #include "../runtime/class/xclass_system.h"
+#include "../runtime/class/xinstance.h"
+#include "../runtime/object/xarray.h"
+#include "../runtime/object/xstring.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "xglobal_object.h"
 #include "../base/xconfig.h"
 #include "../frontend/parser/xparse.h"
@@ -43,10 +47,66 @@
 #include "../base/xglobal_indices.h"
 #include "../frontend/analyzer/xanalyzer_native_types.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../os/os_fs.h"
 #include <stdio.h>
 #include <string.h>
 
 void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate);
+
+static bool isolate_materialize_script_info(XrVMRuntime *isolate, const char *script_file,
+                                            int argc, char **argv) {
+    if (!isolate || !isolate->core_rt || !isolate->core || !isolate->core->processClass)
+        return false;
+
+    xr_script_info_set(&isolate->core_rt->script_info, script_file, argc, argv);
+
+    char abs_path[XR_PATH_MAX];
+    char dir_path[XR_PATH_MAX];
+    XrString *main_str = NULL;
+    XrString *dir_str = NULL;
+
+    if (script_file && xr_fs_realpath(script_file, abs_path, sizeof(abs_path))) {
+        main_str = xr_string_intern(isolate, abs_path, strlen(abs_path), 0);
+        snprintf(dir_path, sizeof(dir_path), "%s", abs_path);
+        char *last_slash = strrchr(dir_path, '/');
+        if (last_slash) {
+            *last_slash = '\0';
+            dir_str = xr_string_intern(isolate, dir_path, strlen(dir_path), 0);
+        } else if (xr_fs_getcwd(dir_path, sizeof(dir_path))) {
+            dir_str = xr_string_intern(isolate, dir_path, strlen(dir_path), 0);
+        }
+    } else if (script_file) {
+        main_str = xr_string_intern(isolate, script_file, strlen(script_file), 0);
+    }
+    if (script_file && !main_str)
+        return false;
+
+    XrArray *args_array =
+        xr_array_with_capacity_in(&isolate->core_rt->root_alloc, argc, XR_ELEM_ANY);
+    if (!args_array)
+        return false;
+    for (int i = 0; i < argc; i++) {
+        XrString *arg_str = xr_string_intern(isolate, argv[i], strlen(argv[i]), 0);
+        if (!arg_str)
+            return false;
+        xr_array_push(args_array, xr_string_value(arg_str));
+    }
+
+    XrInstance *process = xr_instance_new(isolate, isolate->core->processClass);
+    if (!process)
+        return false;
+    xr_instance_set_field_fast(process, PROCESS_FIELD_FILE,
+                               main_str ? xr_string_value(main_str) : xr_null());
+    xr_instance_set_field_fast(process, PROCESS_FIELD_ARGS, xr_value_from_array(args_array));
+    xr_instance_set_field_fast(process, PROCESS_FIELD_DIR,
+                               dir_str ? xr_string_value(dir_str) : xr_null());
+    isolate->vm.builtins[XR_GLOBAL_VAR_PROCESS] = xr_value_from_instance(process);
+    isolate->vm.builtins[XR_GLOBAL_VAR_FILE] = main_str ? xr_string_value(main_str) : xr_null();
+    isolate->vm.builtins[XR_GLOBAL_VAR_DIR] = dir_str ? xr_string_value(dir_str) : xr_null();
+    if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
+        isolate->vm.builtin_count = XR_USER_GLOBALS_START;
+    return true;
+}
 
 /* ========== Full Init Callback ========== */
 
@@ -238,6 +298,13 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
     XrExecutionContext *previous =
         xr_exec_context_enter(xr_runtime_core_module_exec(isolate->core_rt));
     int init_result = isolate_init_full(isolate);
+    if (init_result == 0 &&
+        (isolate->params.script_file || isolate->params.script_argc != 0 ||
+         isolate->params.script_argv) &&
+        !isolate_materialize_script_info(isolate, isolate->params.script_file,
+                                         isolate->params.script_argc,
+                                         isolate->params.script_argv))
+        init_result = -1;
     xr_exec_context_restore(previous);
     if (init_result != 0) {
         isolate_cleanup_full(isolate);

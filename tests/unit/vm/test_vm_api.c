@@ -18,6 +18,10 @@
 #include "../test_framework.h"
 #include "xray_vm.h"
 #include "runtime/xisolate_api.h"
+#include "runtime/class/xinstance.h"
+#include "runtime/object/xarray.h"
+#include "runtime/object/xstring.h"
+#include "base/xglobal_indices.h"
 #include "vm/xvm.h"
 #include "../test_helper.h"
 
@@ -31,8 +35,12 @@
 /* ========== xr_vm_current_ctx contract ========== */
 
 TEST(vm_current_ctx_returns_elided_root_ctx) {
+    char *script_argv[] = {"alpha", "beta"};
     XrVMConfig params;
     xray_vm_config_init(&params);
+    params.script_file = "script_identity.xr";
+    params.script_argc = 2;
+    params.script_argv = script_argv;
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
@@ -50,8 +58,39 @@ TEST(vm_current_ctx_returns_elided_root_ctx) {
 
     ASSERT_NULL(ctx->current_coro);
     ASSERT_NULL(iso->main_coro);
+    ASSERT_STR_EQ(xr_isolate_get_script_file(iso), "script_identity.xr");
+    ASSERT_EQ_INT(xr_isolate_get_script_argc(iso), 2);
+    ASSERT_EQ_PTR(xr_isolate_get_script_argv(iso), script_argv);
 
+    XrValue file = iso->vm.builtins[XR_GLOBAL_VAR_FILE];
+    ASSERT_TRUE(XR_IS_STRING(file));
+    const char *materialized_file = XR_STRING_CHARS(XR_TO_STRING(file));
+    const char *file_tail = "script_identity.xr";
+    ASSERT_GE(strlen(materialized_file), strlen(file_tail));
+    ASSERT_STR_EQ(materialized_file + strlen(materialized_file) - strlen(file_tail), file_tail);
+
+    XrValue process_value = iso->vm.builtins[XR_GLOBAL_VAR_PROCESS];
+    ASSERT_TRUE(XR_IS_INSTANCE(process_value));
+    XrInstance *process = xr_value_to_instance(process_value);
+    ASSERT_NOT_NULL(process);
+    XrValue process_file = xr_instance_get_field_fast(process, PROCESS_FIELD_FILE);
+    ASSERT_TRUE(XR_IS_STRING(process_file));
+    ASSERT_EQ_PTR(XR_TO_STRING(process_file), XR_TO_STRING(file));
+
+    XrValue process_args = xr_instance_get_field_fast(process, PROCESS_FIELD_ARGS);
+    ASSERT_TRUE(XR_IS_ARRAY(process_args));
+    XrArray *args = XR_TO_ARRAY(process_args);
+    ASSERT_EQ_INT(args->length, 2);
+    XrValue *values = XR_ARRAY_DATA_AS(args, XrValue);
+    ASSERT_TRUE(XR_IS_STRING(values[0]));
+    ASSERT_TRUE(XR_IS_STRING(values[1]));
+    ASSERT_STR_EQ(XR_STRING_CHARS(XR_TO_STRING(values[0])), "alpha");
+    ASSERT_STR_EQ(XR_STRING_CHARS(XR_TO_STRING(values[1])), "beta");
     xray_vm_delete(iso);
+
+    params.script_argc = 1;
+    params.script_argv = NULL;
+    ASSERT_NULL(xray_vm_new_full(&params));
 }
 
 TEST(vm_elided_root_allocates_without_task_identity) {

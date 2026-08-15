@@ -64,9 +64,25 @@ static uint64_t isolate_teardown_elapsed_ms(uint64_t start_ns) {
     return (now_ns >= start_ns) ? (now_ns - start_ns) / 1000000ULL : 0;
 }
 
+static bool isolate_config_is_valid(const XrVMConfig *params) {
+    if (!params)
+        return true;
+    if (params->script_argc < 0 || (params->script_argc > 0 && !params->script_argv))
+        return false;
+    for (int i = 0; i < params->script_argc; i++) {
+        if (!params->script_argv[i])
+            return false;
+    }
+    return true;
+}
+
 /* ========== Isolate Creation ========== */
 
 XrVMRuntime *xray_vm_new(const XrVMConfig *params) {
+    if (!isolate_config_is_valid(params)) {
+        xr_log_warning("isolate", "invalid script identity in VM configuration");
+        return NULL;
+    }
     XrVMRuntime *isolate = (XrVMRuntime *) xr_malloc(sizeof(XrVMRuntime));
     if (!isolate) {
         xr_log_warning("isolate", "failed to allocate isolate");

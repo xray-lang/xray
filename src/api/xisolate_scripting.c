@@ -19,11 +19,7 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../base/xchecks.h"
-#include "../runtime/object/xstring.h"
-#include "../runtime/object/xarray.h"
-#include "../runtime/class/xinstance.h"
 #include "../runtime/class/xclass_system.h"
-#include "../base/xglobal_indices.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../module/xmodule.h"
 #include "../module/xmodule_graph.h"
@@ -35,8 +31,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-
-#include "../os/os_fs.h"
 
 #include "../base/xmalloc.h"
 #include "../vm/xdebug.h"
@@ -396,70 +390,4 @@ int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename, void **o
     xr_free(source);
 
     return result;
-}
-
-/* ========== Script Info ========== */
-
-void xray_vm_set_script_info(XrVMRuntime *isolate, const char *script_file, int argc, char **argv) {
-    if (isolate == NULL)
-        return;
-
-    XrExecutionContext *previous =
-        xr_exec_context_enter(xr_runtime_core_module_exec(isolate->core_rt));
-
-    if (isolate->core_rt) {
-        xr_script_info_set(&isolate->core_rt->script_info, script_file, argc, argv);
-    }
-
-    char abs_path[XR_PATH_MAX];
-    char dir_path[XR_PATH_MAX];
-    XrString *main_str = NULL;
-    XrString *dir_str = NULL;
-
-    if (script_file && xr_fs_realpath(script_file, abs_path, sizeof(abs_path))) {
-        main_str = xr_string_intern(isolate, abs_path, strlen(abs_path), 0);
-
-        snprintf(dir_path, XR_PATH_MAX, "%s", abs_path);
-        char *last_slash = strrchr(dir_path, '/');
-        if (last_slash) {
-            *last_slash = '\0';
-            dir_str = xr_string_intern(isolate, dir_path, strlen(dir_path), 0);
-        } else if (xr_fs_getcwd(dir_path, XR_PATH_MAX)) {
-            dir_str = xr_string_intern(isolate, dir_path, strlen(dir_path), 0);
-        }
-    } else if (script_file) {
-        main_str = xr_string_intern(isolate, script_file, strlen(script_file), 0);
-    }
-
-    XrArray *args_array =
-        xr_array_with_capacity_in(&isolate->core_rt->root_alloc, argc, XR_ELEM_ANY);
-    for (int i = 0; i < argc; i++) {
-        XrString *arg_str = xr_string_intern(isolate, argv[i], strlen(argv[i]), 0);
-        xr_array_push(args_array, xr_string_value(arg_str));
-    }
-
-    // Create process singleton with file, args, dir fields
-    if (isolate->core && isolate->core->processClass) {
-        XrInstance *process = xr_instance_new(isolate, isolate->core->processClass);
-        if (process) {
-            xr_instance_set_field_fast(process, PROCESS_FIELD_FILE,
-                                       main_str ? xr_string_value(main_str) : xr_null());
-            xr_instance_set_field_fast(process, PROCESS_FIELD_ARGS,
-                                       xr_value_from_array(args_array));
-            xr_instance_set_field_fast(process, PROCESS_FIELD_DIR,
-                                       dir_str ? xr_string_value(dir_str) : xr_null());
-
-            isolate->vm.builtins[XR_GLOBAL_VAR_PROCESS] = xr_value_from_instance(process);
-        }
-    }
-
-    // Module-level __file__ and __dir__
-    isolate->vm.builtins[XR_GLOBAL_VAR_FILE] = main_str ? xr_string_value(main_str) : xr_null();
-    isolate->vm.builtins[XR_GLOBAL_VAR_DIR] = dir_str ? xr_string_value(dir_str) : xr_null();
-
-    if (isolate->vm.builtin_count < XR_USER_GLOBALS_START) {
-        isolate->vm.builtin_count = XR_USER_GLOBALS_START;
-    }
-
-    xr_exec_context_restore(previous);
 }
