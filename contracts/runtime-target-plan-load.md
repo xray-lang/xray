@@ -310,7 +310,7 @@ roots, or general module activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt 52120c519042aa84194f877420c808db07fdde1a563f8bdb94e65af9fde9e00b
+anchor-sha256: CMakeLists.txt 3a1431c97e9111b7e3ef6d3c9fe8c01f3ee497bc7b1e83b3bc1a61d2a399e4e2
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
@@ -348,7 +348,7 @@ anchor-sha256: scripts/check_legacy_product_residue.py 4c799985652872c29f3140365
 anchor-sha256: tests/unit/plan/test_target_plan.c 92da0dcc2e874492e608d24f32d16b5313c57e544837d391f7923e03ba741754
 anchor-sha256: tests/unit/plan/test_xtp_format.c 5d2caf3f32b031b6970114123f5ad37fb31961100c6614c7c924456064cc0142
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c cfe41d4e83103cadb5e8eabc7a48aef121b5dc5ebdee14939e5c0f80bf955fff
-anchor-sha256: tests/unit/CMakeLists.txt d73037a0b32f3817fa7edb7286afeba1083e5918c8234f7f19a68d1627163802
+anchor-sha256: tests/unit/CMakeLists.txt 6f771eaf34fed4987a80bbc23ca6d514a1af35fc58d68788eaf38a1e0fd7f241
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py d0cc637c624e2fd8086217cc886ee29d49d8188fb2f7018c25d7798e0c5403fe
 anchor-sha256: tests/cli/run_plan_command_tests.py 44a924d4d39b558c0e53a04080ea3fd42071044039ad3f2de539d9d1e6299f0f

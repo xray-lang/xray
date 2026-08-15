@@ -9,8 +9,10 @@
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
+#include "../../../src/runtime/abi/xr_runtime_target_authority.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/vm/xr_typed_frame.h"
+#include "../../../src/vm/xr_typed_lifecycle.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -229,6 +231,30 @@ static TypedFrameFixture make_fixture_from_semantic(XrSemanticPlan *semantic) {
     return fixture;
 }
 
+static TypedFrameFixture make_native_fixture_from_semantic(
+    XrSemanticPlan *semantic) {
+    TypedFrameFixture fixture = {.semantic = semantic};
+    XrRuntimeTargetAuthority authority;
+    REQUIRE(xr_runtime_target_authority_native_hosted(&authority) ==
+            XR_RUNTIME_ABI_OK);
+    XrTargetProfileBuildInput input = {
+        .machine = authority.machine,
+        .runtime_abi = &authority.runtime_abi,
+        .object_header_materialization =
+            &authority.object_header_materialization,
+        .string_contract = &authority.string_contract,
+        .providers = authority.providers,
+        .provider_count = authority.provider_count,
+    };
+    char error[512] = {0};
+    REQUIRE(xr_target_profile_build(&input, &fixture.profile, error,
+                                    sizeof(error)));
+    REQUIRE(xr_target_plan_build(fixture.semantic, fixture.profile,
+                                 &fixture.plan, error, sizeof(error)));
+    REQUIRE(xr_target_plan_is_verified(fixture.plan));
+    return fixture;
+}
+
 static TypedFrameFixture make_fixture(void) {
     return make_fixture_from_semantic(build_semantic_plan());
 }
@@ -239,6 +265,15 @@ static TypedFrameFixture make_executable_fixture(void) {
 
 static TypedFrameFixture make_lifecycle_fixture(void) {
     return make_fixture_from_semantic(build_lifecycle_semantic_plan());
+}
+
+static TypedFrameFixture make_native_fixture(void) {
+    return make_native_fixture_from_semantic(build_semantic_plan());
+}
+
+static TypedFrameFixture make_native_lifecycle_fixture(void) {
+    return make_native_fixture_from_semantic(
+        build_lifecycle_semantic_plan());
 }
 
 static void append_unrelated_lifecycle_partitions(TypedFrameFixture *fixture,
@@ -1101,10 +1136,430 @@ static void test_owned_string_coroutine_lifecycle(void) {
     dispose_fixture(&fixture);
 }
 
+typedef struct VmLifecycleCoordinates {
+    uint32_t slot;
+    uint32_t state_operation;
+    uint32_t normal_operation;
+} VmLifecycleCoordinates;
+
+typedef struct VmLifecycleProbe {
+    XrString *object;
+    uintptr_t object_address;
+    bool resolve_enabled;
+    uint32_t resolve_calls;
+    uint32_t reclaim_calls;
+    uint32_t event_count;
+    XrTypedLifecycleEvent event;
+} VmLifecycleProbe;
+
+static VmLifecycleCoordinates vm_lifecycle_coordinates(
+    const TypedFrameFixture *fixture) {
+    REQUIRE(fixture && fixture->plan &&
+            fixture->plan->functions_count == 1 &&
+            fixture->plan->root_maps_count == 1 &&
+            fixture->plan->root_slots_count == 1 &&
+            fixture->plan->cleanups_count == 2 &&
+            fixture->plan->coroutines_count == 1);
+    VmLifecycleCoordinates coordinates = {
+        .slot = fixture->plan->root_slots[0],
+        .state_operation =
+            fixture->plan->coroutines[0].semantic_operation,
+        .normal_operation = XR_SEMANTIC_INDEX_NONE,
+    };
+    for (uint32_t i = 0; i < fixture->plan->cleanups_count; i++)
+        if (fixture->plan->cleanups[i].flags == 0)
+            coordinates.normal_operation =
+                fixture->plan->cleanups[i].semantic_operation;
+    REQUIRE(coordinates.normal_operation != XR_SEMANTIC_INDEX_NONE &&
+            coordinates.normal_operation != coordinates.state_operation);
+    return coordinates;
+}
+
+static void vm_lifecycle_probe_allocate(VmLifecycleProbe *probe,
+                                        bool retain_once) {
+    static const char payload[] = "concat";
+    REQUIRE(probe && !probe->object);
+    uint64_t allocation_bytes =
+        xr_runtime_string_object_allocation_bytes(sizeof(payload) - 1u);
+    REQUIRE(allocation_bytes <= SIZE_MAX);
+    XrString *object = (XrString *) xr_malloc((size_t) allocation_bytes);
+    REQUIRE(object != NULL);
+    memset(object, 0, (size_t) allocation_bytes);
+    REQUIRE(xr_runtime_string_object_init(
+                object, XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL,
+                sizeof(payload) - 1u, sizeof(payload) - 1u, 0,
+                XR_RUNTIME_STRING_TRAIT_LOCAL) == XR_RUNTIME_ABI_OK);
+    memcpy(object->data, payload, sizeof(payload));
+    if (retain_once)
+        REQUIRE(xr_runtime_object_header_retain(&object->header) ==
+                XR_RUNTIME_ABI_OK);
+    probe->object = object;
+    probe->object_address = (uintptr_t) object;
+}
+
+static XrRuntimeObjectHeader *vm_lifecycle_resolve_object(
+    void *context, uintptr_t address) {
+    VmLifecycleProbe *probe = (VmLifecycleProbe *) context;
+    REQUIRE(probe != NULL);
+    probe->resolve_calls++;
+    return probe->resolve_enabled && probe->object &&
+                   address == probe->object_address
+               ? &probe->object->header
+               : NULL;
+}
+
+static void vm_lifecycle_reclaim_object(
+    void *context, XrRuntimeObjectHeader *header) {
+    VmLifecycleProbe *probe = (VmLifecycleProbe *) context;
+    REQUIRE(probe && probe->object && header == &probe->object->header);
+    XrString *object = probe->object;
+    probe->object = NULL;
+    probe->reclaim_calls++;
+    xr_free(object);
+}
+
+static void vm_lifecycle_observe(void *context,
+                                 const XrTypedLifecycleEvent *event) {
+    VmLifecycleProbe *probe = (VmLifecycleProbe *) context;
+    REQUIRE(probe && event && probe->event_count == 0);
+    if (event->physical_last_release)
+        REQUIRE(probe->object == NULL && probe->reclaim_calls == 1);
+    else
+        REQUIRE(probe->object != NULL && probe->reclaim_calls == 0);
+    probe->event = *event;
+    probe->event_count++;
+}
+
+static XrTypedLifecycleBindings vm_lifecycle_bindings(
+    VmLifecycleProbe *probe, bool observe) {
+    return (XrTypedLifecycleBindings) {
+        .resolve_object = vm_lifecycle_resolve_object,
+        .reclaim_object = vm_lifecycle_reclaim_object,
+        .allocation_context = probe,
+        .observer = observe ? vm_lifecycle_observe : NULL,
+        .observer_context = probe,
+    };
+}
+
+static void vm_lifecycle_write_field(
+    uint8_t *carrier, size_t carrier_size,
+    const XrRuntimePhysicalFieldAbi *field, uint64_t value) {
+    REQUIRE(carrier && field && field->width != 0 &&
+            field->width <= sizeof(value) && field->offset <= carrier_size &&
+            field->width <= carrier_size - field->offset);
+    memcpy(carrier + field->offset, &value, field->width);
+}
+
+static void vm_lifecycle_make_carrier(
+    XrTypedLifecycleContext *context, uint8_t *carrier,
+    size_t carrier_capacity) {
+    REQUIRE(context && carrier &&
+            context->dynamic_value.size <= carrier_capacity);
+    const XrRuntimeDynamicTagAbiEntry *tag = NULL;
+    for (uint32_t i = 0; i < context->dynamic_value.tag_count; i++)
+        if (context->dynamic_value.tags[i].encoding ==
+            context->dynamic_value.object_reference_tag)
+            tag = &context->dynamic_value.tags[i];
+    REQUIRE(tag && tag->payload_kind ==
+                       XR_RUNTIME_DYN_PAYLOAD_OBJECT_REFERENCE);
+    memset(carrier, 0, carrier_capacity);
+    vm_lifecycle_write_field(
+        carrier, carrier_capacity, &context->dynamic_value.fields[0],
+        context->dynamic_value.object_reference_tag);
+    vm_lifecycle_write_field(
+        carrier, carrier_capacity, &context->dynamic_value.fields[1],
+        tag->required_flags);
+    vm_lifecycle_write_field(
+        carrier, carrier_capacity, &context->dynamic_value.fields[2],
+        (uint64_t) ((VmLifecycleProbe *) context->allocation_context)
+            ->object_address);
+}
+
+static XrTypedSlotAccess vm_lifecycle_store_owner(
+    XrTypedLifecycleContext *context, XrTypedFrame *frame, uint32_t slot,
+    uint8_t *carrier, size_t carrier_capacity) {
+    REQUIRE(context && frame && carrier);
+    XrTypedSlotAccess access = {0};
+    REQUIRE(xr_typed_frame_describe_slot(frame, slot, &access) ==
+                XR_TYPED_FRAME_OK &&
+            access.size == context->dynamic_value.size);
+    vm_lifecycle_make_carrier(context, carrier, carrier_capacity);
+    REQUIRE(xr_typed_frame_store(frame, &access, carrier, access.size) ==
+            XR_TYPED_FRAME_OK);
+    return access;
+}
+
+static XrTypedFrameStatus vm_lifecycle_discard_owner(
+    void *context, uint8_t action, const XrTypedSlotAccess *access,
+    void *bytes) {
+    (void) context;
+    REQUIRE(action == XR_TARGET_CLEANUP_RELEASE && access && bytes);
+    return XR_TYPED_FRAME_OK;
+}
+
+static void vm_lifecycle_finish_frame(XrTypedFrame **frame) {
+    REQUIRE(frame && *frame &&
+            xr_typed_frame_cleanup(*frame) == XR_TYPED_FRAME_OK);
+    free_frame(frame);
+}
+
+static void test_typed_lifecycle_all_exits_and_exact_once(void) {
+    TypedFrameFixture fixture = make_native_lifecycle_fixture();
+    VmLifecycleCoordinates coordinates =
+        vm_lifecycle_coordinates(&fixture);
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(fixture.plan);
+    VmLifecycleProbe probe = {.resolve_enabled = true};
+    XrTypedLifecycleBindings bindings =
+        vm_lifecycle_bindings(&probe, true);
+    XrTypedLifecycleContext context = {0};
+    XrTypedLifecycleStatus init_status = xr_typed_lifecycle_context_init(
+        fixture.plan, &fingerprint, 0, &bindings, &context);
+    REQUIRE(init_status == XR_TYPED_LIFECYCLE_OK);
+
+    XrTypedFrameLimits limits;
+    xr_typed_frame_limits_default(&limits);
+    for (uint32_t exit = XR_TYPED_LIFECYCLE_EXIT_NORMAL;
+         exit < XR_TYPED_LIFECYCLE_EXIT_COUNT; exit++) {
+        memset(&probe, 0, sizeof(probe));
+        probe.resolve_enabled = true;
+        vm_lifecycle_probe_allocate(&probe, false);
+        XrTypedFrame *frame = create_frame(&fixture, &limits);
+        uint8_t carrier[32] = {0};
+        XrTypedSlotAccess access = vm_lifecycle_store_owner(
+            &context, frame, coordinates.slot, carrier,
+            sizeof(carrier));
+        uint32_t operation = coordinates.normal_operation;
+        if (exit != XR_TYPED_LIFECYCLE_EXIT_NORMAL) {
+            operation = coordinates.state_operation;
+            REQUIRE(xr_typed_frame_bind_coroutine_state(frame, 0) ==
+                    XR_TYPED_FRAME_OK);
+        }
+        uint32_t executed = 0;
+        REQUIRE(xr_typed_lifecycle_execute(
+                    &context, frame, operation,
+                    (XrTypedLifecycleExit) exit, &executed) ==
+                    XR_TYPED_LIFECYCLE_OK &&
+                executed == 1 && probe.resolve_calls == 1 &&
+                probe.reclaim_calls == 1 && probe.event_count == 1 &&
+                probe.object == NULL);
+        REQUIRE(xr_stable_id_equal(probe.event.slot_identity,
+                                   access.identity) &&
+                probe.event.function == 0 &&
+                probe.event.semantic_operation == operation &&
+                probe.event.slot == coordinates.slot &&
+                probe.event.physical_rc_before ==
+                    XR_RUNTIME_OBJECT_RC_INITIAL &&
+                probe.event.physical_rc_after ==
+                    XR_RUNTIME_OBJECT_RC_STICKY &&
+                probe.event.action == XR_TARGET_CLEANUP_RELEASE &&
+                probe.event.exit_kind == exit &&
+                probe.event.physical_last_release == 1);
+        executed = UINT32_MAX;
+        REQUIRE(xr_typed_lifecycle_execute(
+                    &context, frame, operation,
+                    (XrTypedLifecycleExit) exit, &executed) ==
+                    XR_TYPED_LIFECYCLE_ALREADY_EXECUTED &&
+                executed == 0 && probe.resolve_calls == 1 &&
+                probe.reclaim_calls == 1 && probe.event_count == 1);
+        vm_lifecycle_finish_frame(&frame);
+    }
+
+    memset(&probe, 0, sizeof(probe));
+    probe.resolve_enabled = true;
+    vm_lifecycle_probe_allocate(&probe, true);
+    XrTypedFrame *frame = create_frame(&fixture, &limits);
+    uint8_t carrier[32] = {0};
+    vm_lifecycle_store_owner(&context, frame, coordinates.slot,
+                             carrier, sizeof(carrier));
+    uint32_t executed = 0;
+    REQUIRE(xr_typed_lifecycle_execute(
+                &context, frame, coordinates.normal_operation,
+                XR_TYPED_LIFECYCLE_EXIT_NORMAL, &executed) ==
+                XR_TYPED_LIFECYCLE_OK &&
+            executed == 1 && probe.object && probe.reclaim_calls == 0 &&
+            probe.event_count == 1 &&
+            probe.event.physical_rc_before == 2 &&
+            probe.event.physical_rc_after == 1 &&
+            probe.event.physical_last_release == 0);
+    REQUIRE(atomic_load_explicit(&probe.object->header.rc,
+                                 memory_order_acquire) == 1);
+    REQUIRE(xr_typed_lifecycle_execute(
+                &context, frame, coordinates.normal_operation,
+                XR_TYPED_LIFECYCLE_EXIT_NORMAL, &executed) ==
+                XR_TYPED_LIFECYCLE_ALREADY_EXECUTED &&
+            executed == 0 && probe.event_count == 1 &&
+            atomic_load_explicit(&probe.object->header.rc,
+                                 memory_order_acquire) == 1);
+    vm_lifecycle_finish_frame(&frame);
+    bool last = false;
+    REQUIRE(xr_runtime_object_header_release(&probe.object->header, &last) ==
+                XR_RUNTIME_ABI_OK &&
+            last);
+    vm_lifecycle_reclaim_object(&probe, &probe.object->header);
+
+    xr_typed_lifecycle_context_dispose(&context);
+    dispose_fixture(&fixture);
+}
+
+static void test_typed_lifecycle_failure_retry_and_defenses(void) {
+    TypedFrameFixture fixture = make_native_lifecycle_fixture();
+    VmLifecycleCoordinates coordinates =
+        vm_lifecycle_coordinates(&fixture);
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(fixture.plan);
+    VmLifecycleProbe probe = {0};
+    XrTypedLifecycleBindings bindings =
+        vm_lifecycle_bindings(&probe, true);
+    XrTypedLifecycleContext context = {0};
+    REQUIRE(xr_typed_lifecycle_context_init(
+                fixture.plan, &fingerprint, 0, &bindings, &context) ==
+            XR_TYPED_LIFECYCLE_OK);
+    XrTypedFrameLimits limits;
+    xr_typed_frame_limits_default(&limits);
+    vm_lifecycle_probe_allocate(&probe, false);
+    XrTypedFrame *frame = create_frame(&fixture, &limits);
+    uint8_t carrier[32] = {0};
+    XrTypedSlotAccess access = vm_lifecycle_store_owner(
+        &context, frame, coordinates.slot, carrier, sizeof(carrier));
+    uint32_t executed = UINT32_MAX;
+    REQUIRE(xr_typed_lifecycle_execute(
+                &context, frame, coordinates.state_operation,
+                XR_TYPED_LIFECYCLE_EXIT_NORMAL, &executed) ==
+                XR_TYPED_LIFECYCLE_CONTRACT_UNAVAILABLE &&
+            executed == 0 && probe.resolve_calls == 0 &&
+            probe.reclaim_calls == 0 && probe.event_count == 0);
+    REQUIRE(xr_typed_lifecycle_execute(
+                &context, frame, coordinates.normal_operation,
+                XR_TYPED_LIFECYCLE_EXIT_NORMAL, &executed) ==
+                XR_TYPED_LIFECYCLE_CARRIER_INVALID &&
+            executed == 0 && probe.resolve_calls == 1 &&
+            probe.reclaim_calls == 0 && probe.event_count == 0 &&
+            atomic_load_explicit(&probe.object->header.rc,
+                                 memory_order_acquire) == 1);
+    uint8_t loaded[32] = {0};
+    REQUIRE(xr_typed_frame_load(frame, &access, loaded, access.size) ==
+                XR_TYPED_FRAME_OK &&
+            memcmp(loaded, carrier, access.size) == 0);
+    XrTypedFrame *active_frame = frame;
+    REQUIRE(xr_typed_frame_free(&frame) ==
+                XR_TYPED_FRAME_LIFECYCLE_ACTIVE &&
+            frame == active_frame);
+    probe.resolve_enabled = true;
+    REQUIRE(xr_typed_lifecycle_execute(
+                &context, frame, coordinates.normal_operation,
+                XR_TYPED_LIFECYCLE_EXIT_NORMAL, &executed) ==
+                XR_TYPED_LIFECYCLE_OK &&
+            executed == 1 && probe.resolve_calls == 2 &&
+            probe.reclaim_calls == 1 && probe.event_count == 1 &&
+            probe.object == NULL);
+    vm_lifecycle_finish_frame(&frame);
+
+    memset(&probe, 0, sizeof(probe));
+    probe.resolve_enabled = true;
+    vm_lifecycle_probe_allocate(&probe, false);
+    frame = create_frame(&fixture, &limits);
+    REQUIRE(xr_typed_frame_describe_slot(frame, coordinates.slot, &access) ==
+                XR_TYPED_FRAME_OK &&
+            access.size == context.dynamic_value.size);
+    vm_lifecycle_make_carrier(&context, carrier, sizeof(carrier));
+    bool covered[32] = {false};
+    REQUIRE(context.dynamic_value.size <= sizeof(covered));
+    for (uint32_t field = 0; field < XR_RUNTIME_DYNAMIC_FIELD_COUNT;
+         field++) {
+        const XrRuntimePhysicalFieldAbi *record =
+            &context.dynamic_value.fields[field];
+        for (uint32_t i = 0; i < record->width; i++)
+            covered[record->offset + i] = true;
+    }
+    uint32_t padding = UINT32_MAX;
+    for (uint32_t i = 0; i < context.dynamic_value.size; i++)
+        if (!covered[i] && padding == UINT32_MAX)
+            padding = i;
+    REQUIRE(padding != UINT32_MAX);
+    carrier[padding] = 1;
+    REQUIRE(xr_typed_frame_store(frame, &access, carrier, access.size) ==
+            XR_TYPED_FRAME_OK);
+    REQUIRE(xr_typed_lifecycle_execute(
+                &context, frame, coordinates.normal_operation,
+                XR_TYPED_LIFECYCLE_EXIT_NORMAL, &executed) ==
+                XR_TYPED_LIFECYCLE_CARRIER_INVALID &&
+            executed == 0 && probe.reclaim_calls == 0 &&
+            probe.event_count == 0);
+    REQUIRE(xr_typed_frame_execute_cleanups(
+                frame, coordinates.normal_operation, 0,
+                vm_lifecycle_discard_owner, NULL, &executed) ==
+                XR_TYPED_FRAME_OK &&
+            executed == 1);
+    vm_lifecycle_finish_frame(&frame);
+    bool last = false;
+    REQUIRE(xr_runtime_object_header_release(&probe.object->header, &last) ==
+                XR_RUNTIME_ABI_OK &&
+            last);
+    vm_lifecycle_reclaim_object(&probe, &probe.object->header);
+
+    xr_typed_lifecycle_context_dispose(&context);
+    dispose_fixture(&fixture);
+
+    TypedFrameFixture duplicate = make_native_lifecycle_fixture();
+    coordinates = vm_lifecycle_coordinates(&duplicate);
+    for (uint32_t i = 0; i < duplicate.plan->cleanups_count; i++)
+        if (duplicate.plan->cleanups[i].flags == 0) {
+            duplicate.plan->cleanups[i].flags =
+                XR_TARGET_CLEANUP_CANCEL | XR_TARGET_CLEANUP_EXIT;
+            duplicate.plan->cleanups[i].semantic_operation =
+                coordinates.state_operation;
+        }
+    xr_target_plan_compute_fingerprint(duplicate.plan,
+                                       &duplicate.plan->fingerprint);
+    fingerprint = xr_target_plan_fingerprint(duplicate.plan);
+    memset(&probe, 0, sizeof(probe));
+    bindings.observer = NULL;
+    REQUIRE(xr_typed_lifecycle_context_init(
+                duplicate.plan, &fingerprint, 0, &bindings, &context) ==
+            XR_TYPED_LIFECYCLE_CONTRACT_UNAVAILABLE);
+    dispose_fixture(&duplicate);
+
+    TypedFrameFixture scalar = make_native_fixture();
+    fingerprint = xr_target_plan_fingerprint(scalar.plan);
+    REQUIRE(xr_typed_lifecycle_context_init(
+                scalar.plan, &fingerprint, 0, &bindings, &context) ==
+            XR_TYPED_LIFECYCLE_CONTRACT_UNAVAILABLE);
+    dispose_fixture(&scalar);
+
+    TypedFrameFixture wrong_profile = make_lifecycle_fixture();
+    fingerprint = xr_target_plan_fingerprint(wrong_profile.plan);
+    REQUIRE(xr_typed_lifecycle_context_init(
+                wrong_profile.plan, &fingerprint, 0, &bindings, &context) ==
+            XR_TYPED_LIFECYCLE_TARGET_PROFILE_MISMATCH);
+    dispose_fixture(&wrong_profile);
+
+    TypedFrameFixture wrong_slot = make_native_lifecycle_fixture();
+    coordinates = vm_lifecycle_coordinates(&wrong_slot);
+    REQUIRE(wrong_slot.plan->functions[0].slot_count > 1);
+    uint32_t alternate_slot = wrong_slot.plan->functions[0].slot_begin;
+    if (alternate_slot == coordinates.slot)
+        alternate_slot++;
+    REQUIRE(alternate_slot != coordinates.slot &&
+            alternate_slot < wrong_slot.plan->slots_count);
+    wrong_slot.plan->root_slots[0] = alternate_slot;
+    xr_target_plan_compute_fingerprint(wrong_slot.plan,
+                                       &wrong_slot.plan->fingerprint);
+    fingerprint = xr_target_plan_fingerprint(wrong_slot.plan);
+    REQUIRE(xr_typed_lifecycle_context_init(
+                wrong_slot.plan, &fingerprint, 0, &bindings, &context) ==
+            XR_TYPED_LIFECYCLE_CONTRACT_UNAVAILABLE);
+    dispose_fixture(&wrong_slot);
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "coroutine-lifecycle") == 0) {
         test_owned_string_coroutine_lifecycle();
         puts("typed frame coroutine lifecycle tests passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "vm-lifecycle") == 0) {
+        test_typed_lifecycle_all_exits_and_exact_once();
+        test_typed_lifecycle_failure_retry_and_defenses();
+        puts("typed VM lifecycle tests passed");
         return 0;
     }
     test_exact_representation_transport_matrix();
@@ -1114,6 +1569,8 @@ int main(int argc, char **argv) {
     test_execution_context_lifecycle();
     test_parent_child_context_links();
     test_owned_string_coroutine_lifecycle();
+    test_typed_lifecycle_all_exits_and_exact_once();
+    test_typed_lifecycle_failure_retry_and_defenses();
     puts("typed frame tests passed");
     return 0;
 }

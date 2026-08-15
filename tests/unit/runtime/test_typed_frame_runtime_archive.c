@@ -4,6 +4,7 @@
 
 #include "vm/xr_typed_frame.h"
 #include "vm/xr_typed_dispatch.h"
+#include "vm/xr_typed_lifecycle.h"
 #include "vm/debug/xr_vm_debug_control.h"
 #include "vm/debug/xr_vm_materialize.h"
 #include "vm/debug/xr_vm_profile.h"
@@ -37,9 +38,11 @@ int main(void) {
     XrVmDebugControl *debug_control = NULL;
     XrVmMaterializedEvent materialized;
     XrRuntimeDynamicEntryLeaseStats lease_stats;
+    XrTypedLifecycleContext lifecycle_context = {0};
     XrVmTraceEvent trace_event = {0};
     uint32_t count = 0;
     if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(39) ||
+        XR_TYPED_LIFECYCLE_CONTEXT_SCHEMA_VERSION != UINT32_C(1) ||
         XR_VM_DYNAMIC_ENTRY_CONTEXT_SCHEMA_VERSION != UINT32_C(3) ||
         XR_VM_TRACE_SCHEMA_VERSION != UINT32_C(3) ||
         XR_VM_DEBUG_CONTROL_SCHEMA_VERSION != UINT32_C(1) ||
@@ -75,6 +78,12 @@ int main(void) {
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
         xr_typed_frame_unlink_child(NULL, NULL) !=
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_lifecycle_context_init(
+            NULL, &fingerprint, 0, NULL, &lifecycle_context) !=
+            XR_TYPED_LIFECYCLE_INVALID_ARGUMENT ||
+        xr_typed_lifecycle_execute(
+            NULL, NULL, 0, XR_TYPED_LIFECYCLE_EXIT_NORMAL, &count) !=
+            XR_TYPED_LIFECYCLE_INVALID_ARGUMENT ||
         !xr_typed_profile_init(&profile) ||
         !xr_typed_profile_snapshot(&profile, &profile_snapshot) ||
         !xr_typed_trace_buffer_init(&trace_buffer, trace_storage, 1) ||
@@ -108,6 +117,7 @@ int main(void) {
         return 1;
     xr_typed_debug_plan_free(NULL);
     xr_typed_debug_session_free(NULL);
+    xr_typed_lifecycle_context_dispose(NULL);
     puts("runtime-only typed frame boundary passed");
     return 0;
 }

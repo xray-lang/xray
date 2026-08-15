@@ -359,6 +359,8 @@ CONTRACT_SPECS = (
             "src/plan/target/xr_target_plan.h",
             "src/vm/xr_typed_frame.h",
             "src/vm/xr_typed_frame.c",
+            "src/vm/xr_typed_lifecycle.h",
+            "src/vm/xr_typed_lifecycle.c",
             "src/vm/xr_typed_dispatch.c",
             "src/vm/xr_vm_dynamic_entry.h",
             "scripts/check_coroutine_lifecycle_projection.py",
