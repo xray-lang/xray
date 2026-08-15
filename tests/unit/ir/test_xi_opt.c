@@ -1870,6 +1870,36 @@ TEST(box_elim_preserves_frozen_semantic_operation_identity) {
     xi_func_free(f);
 }
 
+TEST(box_elim_preserves_backend_adapter_over_frozen_semantic_identity) {
+    XiFunc *f = make_func("frozen_box_backend_unbox", &stub_int);
+    XiBlock *blk = f->entry;
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *box = xi_value_new(f, blk, XI_BOX, &stub_int, 1);
+    assert(x && box);
+    box->args[0] = x;
+    xi_block_set_return(blk, box);
+    f->stage = XI_STAGE_OPTIMIZED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_OPTIMIZED);
+    char error[256] = {0};
+    assert(xr_semantic_plan_build_and_attach(f, error, sizeof(error)));
+
+    XiValue *unbox = xi_value_new(f, blk, XI_UNBOX, &stub_int, 1);
+    assert(unbox);
+    unbox->args[0] = box;
+    unbox->backend_origin = XI_BACKEND_VALUE_REP_UNBOX;
+    xi_block_set_return(blk, unbox);
+
+    xi_opt_box_elim(f);
+
+    assert(unbox->op == XI_UNBOX &&
+           "late cleanup must preserve an adapter over a frozen semantic opcode");
+    assert(unbox->args[0] == box &&
+           "the adapter must retain its exact frozen semantic source");
+    assert(unbox->backend_origin == XI_BACKEND_VALUE_REP_UNBOX &&
+           "the preserved adapter must retain exact backend provenance");
+    xi_func_free(f);
+}
+
 TEST(box_elim_no_false_positive) {
     /* BOX(x) where x is not UNBOX: should NOT be eliminated */
     XiFunc *f = make_func("test", &stub_int);
@@ -2280,6 +2310,7 @@ int main(void) {
     run_box_elim_unbox_of_box();
     run_box_elim_box_of_unbox();
     run_box_elim_preserves_frozen_semantic_operation_identity();
+    run_box_elim_preserves_backend_adapter_over_frozen_semantic_identity();
     run_box_elim_no_false_positive();
 
     /* Block simplify */

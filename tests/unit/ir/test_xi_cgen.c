@@ -1887,6 +1887,32 @@ TEST(cgen_rep_identical_span_box_shares_immutable_c_local) {
     box->args[0] = source;
     xi_block_set_return(entry, box);
 
+    TEST_REQUIRE(test_prepare_backend_ir(ir),
+                 "manual C-span-box backend prepared");
+    XiValue *adapter = entry->control;
+    TEST_REQUIRE(adapter && adapter != box && adapter->op == XI_UNBOX &&
+                     adapter->nargs == 1 && adapter->args[0] == box &&
+                     adapter->backend_origin == XI_BACKEND_VALUE_REP_UNBOX,
+                 "span return retains the exact backend adapter over its frozen BOX");
+
+    XiModule *mutation_module = xi_module_new("span_box_mutation.xr", "test", ir);
+    TEST_REQUIRE(mutation_module != NULL,
+                 "span-box mutation module allocated");
+    XiModule *mutation_modules[] = {mutation_module};
+    TestAotPlan rejected_plan;
+    adapter->backend_origin = XI_BACKEND_VALUE_NONE;
+    TEST_REQUIRE(!test_aot_plan_try_prepare(&rejected_plan, mutation_modules,
+                                            1, 0),
+                 "missing adapter provenance must fail closed");
+    TEST_REQUIRE(rejected_plan.bundle.error_msg &&
+                     strstr(rejected_plan.bundle.error_msg,
+                            "exact TargetPlan semantic identity"),
+                 "mutation rejection must name the missing exact identity");
+    test_aot_plan_free(&rejected_plan);
+    adapter->backend_origin = XI_BACKEND_VALUE_REP_UNBOX;
+    mutation_module->init = NULL;
+    xi_module_free(mutation_module);
+
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL, "manual C-span-box C generation failed");

@@ -4165,7 +4165,15 @@ XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f) {
                 const XrSemanticFunctionRecord *semantic_function =
                     xr_semantic_plan_function(f->semantic_plan,
                                               f->semantic_plan_function_index);
-                if (semantic_function && v->id < semantic_function->value_count)
+                /* A frozen semantic BOX/UNBOX is the prior identity for any
+                 * representation adapter wrapped around it.  Rewriting the
+                 * adapter to COPY would retain its backend provenance while
+                 * erasing the operation that the refinement record names.
+                 * Preserve both sides of a frozen boundary; later consumers
+                 * can then verify the exact semantic value and adapter kind. */
+                if (semantic_function &&
+                    (v->id < semantic_function->value_count ||
+                     inner->id < semantic_function->value_count))
                     elim = false;
             }
             if (elim) {
