@@ -15,7 +15,11 @@
 #include "../test_framework.h"
 
 #include "incremental/xr_cache_invalidate.h"
+#include "incremental/xr_module_task_graph.h"
+#include "os/os_thread.h"
 
+#include <stdio.h>
+#include <stdatomic.h>
 #include <string.h>
 
 typedef struct TestGraphIds {
@@ -1054,6 +1058,361 @@ TEST(delete_rename_add_and_module_resolution_leave_no_ghost_nodes) {
     xr_dependency_graph_finalize(&graph);
 }
 
+typedef struct TaskGraphIds {
+    XrStableId a;
+    XrStableId b;
+    XrStableId c;
+    XrStableId d;
+    XrStableId e;
+    XrStableId f;
+} TaskGraphIds;
+
+static bool build_task_fixture(XrDependencyGraph *graph, TaskGraphIds *ids,
+                               bool reverse) {
+    static const char *keys[] = {
+        "pkg/scc-a", "pkg/scc-b", "pkg/root-c",
+        "pkg/join-d", "pkg/root-e", "pkg/final-f",
+    };
+    XrStableId *slots[] = {
+        &ids->a, &ids->b, &ids->c, &ids->d, &ids->e, &ids->f,
+    };
+    xr_dependency_graph_init(graph);
+    for (size_t cursor = 0; cursor < 6; cursor++) {
+        size_t index = reverse ? 5u - cursor : cursor;
+        if (!add_test_module(graph, keys[index], (uint8_t) (10u + index * 20u),
+                             slots[index])) {
+            xr_dependency_graph_finalize(graph);
+            return false;
+        }
+    }
+
+    typedef struct TaskEdge {
+        XrStableId *consumer;
+        XrStableId *dependency;
+    } TaskEdge;
+    TaskEdge edges[] = {
+        {&ids->a, &ids->b}, {&ids->b, &ids->a},
+        {&ids->d, &ids->a}, {&ids->d, &ids->c},
+        {&ids->f, &ids->d}, {&ids->f, &ids->e},
+    };
+    XrModuleFacetMask relation[XR_MODULE_FACET_COUNT] = {0};
+    relation[XR_MODULE_FACET_BODY_EVIDENCE] =
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE);
+    for (size_t cursor = 0; cursor < 6; cursor++) {
+        size_t index = reverse ? 5u - cursor : cursor;
+        if (!xr_dependency_graph_add_edge(graph, *edges[index].consumer,
+                                          *edges[index].dependency, relation)) {
+            xr_dependency_graph_finalize(graph);
+            return false;
+        }
+    }
+    return xr_dependency_graph_validate(graph);
+}
+
+static uint32_t task_for_module(const XrModuleTaskGraph *graph,
+                                XrStableId module) {
+    uint32_t count = xr_module_task_graph_count(graph);
+    for (uint32_t task = 0; task < count; task++) {
+        XrModuleTaskView view;
+        if (!xr_module_task_graph_task(graph, task, &view))
+            return XR_MODULE_TASK_INDEX_NONE;
+        for (uint32_t member = 0; member < view.member_count; member++)
+            if (xr_stable_id_equal(view.members[member], module))
+                return task;
+    }
+    return XR_MODULE_TASK_INDEX_NONE;
+}
+
+static bool task_depends_on(const XrModuleTaskGraph *graph, uint32_t consumer,
+                            uint32_t dependency) {
+    XrModuleTaskView view;
+    if (!xr_module_task_graph_task(graph, consumer, &view))
+        return false;
+    for (uint32_t i = 0; i < view.dependency_count; i++)
+        if (view.dependencies[i] == dependency)
+            return true;
+    return false;
+}
+
+TEST(scc_task_graph_is_canonical_and_source_exact) {
+    XrDependencyGraph forward;
+    XrDependencyGraph reverse;
+    TaskGraphIds forward_ids;
+    TaskGraphIds reverse_ids;
+    ASSERT_TRUE(build_task_fixture(&forward, &forward_ids, false));
+    ASSERT_TRUE(build_task_fixture(&reverse, &reverse_ids, true));
+
+    char error[512] = {0};
+    XrModuleTaskGraph *forward_tasks = NULL;
+    XrModuleTaskGraph *reverse_tasks = NULL;
+    ASSERT_TRUE(xr_module_task_graph_build(&forward, &forward_tasks, error,
+                                           sizeof(error)));
+    ASSERT_TRUE(xr_module_task_graph_build(&reverse, &reverse_tasks, error,
+                                           sizeof(error)));
+    ASSERT_EQ_UINT(xr_module_task_graph_count(forward_tasks), 5u);
+    ASSERT_TRUE(xr_module_task_graph_verify(&forward, forward_tasks, error,
+                                            sizeof(error)));
+    ASSERT_TRUE(xr_module_task_graph_verify(&reverse, forward_tasks, error,
+                                            sizeof(error)));
+
+    XrFingerprint forward_fingerprint;
+    XrFingerprint reverse_fingerprint;
+    ASSERT_TRUE(xr_module_task_graph_fingerprint(forward_tasks,
+                                                 &forward_fingerprint));
+    ASSERT_TRUE(xr_module_task_graph_fingerprint(reverse_tasks,
+                                                 &reverse_fingerprint));
+    ASSERT_TRUE(xr_fingerprint_equal(forward_fingerprint,
+                                     reverse_fingerprint));
+
+    uint32_t task_ab = task_for_module(forward_tasks, forward_ids.a);
+    uint32_t task_b = task_for_module(forward_tasks, forward_ids.b);
+    uint32_t task_c = task_for_module(forward_tasks, forward_ids.c);
+    uint32_t task_d = task_for_module(forward_tasks, forward_ids.d);
+    uint32_t task_e = task_for_module(forward_tasks, forward_ids.e);
+    uint32_t task_f = task_for_module(forward_tasks, forward_ids.f);
+    ASSERT_EQ_UINT(task_ab, task_b);
+    ASSERT_TRUE(task_ab != XR_MODULE_TASK_INDEX_NONE);
+    ASSERT_TRUE(task_c != task_d && task_d != task_f && task_e != task_f);
+    ASSERT_TRUE(task_depends_on(forward_tasks, task_d, task_ab));
+    ASSERT_TRUE(task_depends_on(forward_tasks, task_d, task_c));
+    ASSERT_TRUE(task_depends_on(forward_tasks, task_f, task_d));
+    ASSERT_TRUE(task_depends_on(forward_tasks, task_f, task_e));
+
+    XrModuleTaskView ab_view;
+    XrModuleTaskView c_view;
+    XrModuleTaskView d_view;
+    XrModuleTaskView e_view;
+    XrModuleTaskView f_view;
+    ASSERT_TRUE(xr_module_task_graph_task(forward_tasks, task_ab, &ab_view));
+    ASSERT_TRUE(xr_module_task_graph_task(forward_tasks, task_c, &c_view));
+    ASSERT_TRUE(xr_module_task_graph_task(forward_tasks, task_d, &d_view));
+    ASSERT_TRUE(xr_module_task_graph_task(forward_tasks, task_e, &e_view));
+    ASSERT_TRUE(xr_module_task_graph_task(forward_tasks, task_f, &f_view));
+    ASSERT_EQ_UINT(ab_view.member_count, 2u);
+    ASSERT_EQ_UINT(ab_view.level, 0u);
+    ASSERT_EQ_UINT(c_view.level, 0u);
+    ASSERT_EQ_UINT(e_view.level, 0u);
+    ASSERT_EQ_UINT(d_view.level, 1u);
+    ASSERT_EQ_UINT(f_view.level, 2u);
+
+    XrModuleFacetMask changed_relation[XR_MODULE_FACET_COUNT] = {0};
+    changed_relation[XR_MODULE_FACET_PUBLIC_SIGNATURE] =
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_PUBLIC_SIGNATURE);
+    ASSERT_TRUE(xr_dependency_graph_add_edge(&reverse, reverse_ids.d,
+                                             reverse_ids.c,
+                                             changed_relation));
+    ASSERT_FALSE(xr_module_task_graph_verify(&reverse, forward_tasks, error,
+                                             sizeof(error)));
+    XrModuleFacetMask body_relation[XR_MODULE_FACET_COUNT] = {0};
+    body_relation[XR_MODULE_FACET_BODY_EVIDENCE] =
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE);
+    ASSERT_TRUE(xr_dependency_graph_add_edge(&reverse, reverse_ids.d,
+                                             reverse_ids.c,
+                                             body_relation));
+    ASSERT_TRUE(xr_module_task_graph_verify(&reverse, forward_tasks, error,
+                                            sizeof(error)));
+
+    const XrModuleSummary *original_c =
+        xr_dependency_graph_find_node(&forward, forward_ids.c);
+    XrModuleSummary changed_c;
+    ASSERT_NOT_NULL(original_c);
+    ASSERT_TRUE(xr_module_summary_copy(&changed_c, original_c));
+    ASSERT_TRUE(xr_module_summary_set_fingerprint(
+        &changed_c, XR_MODULE_FACET_BODY_EVIDENCE,
+        test_fingerprint(UINT8_C(251))));
+    ASSERT_TRUE(xr_dependency_graph_replace_node(&reverse, &changed_c));
+    ASSERT_FALSE(xr_module_task_graph_verify(&reverse, forward_tasks, error,
+                                             sizeof(error)));
+    ASSERT_TRUE(xr_dependency_graph_replace_node(&reverse, original_c));
+    ASSERT_TRUE(xr_module_task_graph_verify(&reverse, forward_tasks, error,
+                                            sizeof(error)));
+    xr_module_summary_finalize(&changed_c);
+
+    ASSERT_TRUE(xr_dependency_graph_remove_edge(&reverse, reverse_ids.d,
+                                                reverse_ids.c));
+    ASSERT_FALSE(xr_module_task_graph_verify(&reverse, forward_tasks, error,
+                                             sizeof(error)));
+
+    xr_module_task_graph_free(reverse_tasks);
+    xr_module_task_graph_free(forward_tasks);
+    xr_dependency_graph_finalize(&reverse);
+    xr_dependency_graph_finalize(&forward);
+}
+
+typedef struct TaskRunContext {
+    uint32_t fail_first;
+    uint32_t fail_second;
+    bool fail;
+    atomic_uint calls;
+} TaskRunContext;
+
+static bool execute_task_fixture(const XrModuleTaskGraph *graph,
+                                 uint32_t task_index,
+                                 XrModuleTaskOutput *output, void *context) {
+    TaskRunContext *run = (TaskRunContext *) context;
+    XrModuleTaskView view;
+    if (!run || !xr_module_task_graph_task(graph, task_index, &view))
+        return false;
+    atomic_fetch_add_explicit(&run->calls, 1u, memory_order_relaxed);
+    xr_thread_sleep_ms((unsigned int) ((3u - (task_index % 3u)) % 3u));
+    output->artifact_fingerprint =
+        test_fingerprint((uint8_t) (40u + task_index + view.level * 11u));
+    (void) snprintf(output->diagnostic, sizeof(output->diagnostic),
+                    "task=%u level=%u members=%u", task_index, view.level,
+                    view.member_count);
+    return !run->fail ||
+           (task_index != run->fail_first && task_index != run->fail_second);
+}
+
+static bool run_task_fixture(const XrDependencyGraph *dependencies,
+                             const XrModuleTaskGraph *tasks,
+                             uint32_t worker_limit, TaskRunContext *context,
+                             XrModuleTaskOutput *outputs,
+                             XrModuleTaskStats *stats, char *diagnostics,
+                             size_t diagnostics_size, char *error,
+                             size_t error_size) {
+    XrModuleTaskBatch batch = {
+        .dependency_graph = dependencies,
+        .task_graph = tasks,
+        .worker_limit = worker_limit,
+        .execute = execute_task_fixture,
+        .context = context,
+        .outputs = outputs,
+        .output_count = xr_module_task_graph_count(tasks),
+    };
+    bool ok = xr_module_task_graph_run(&batch, stats, error, error_size);
+    size_t written = 0;
+    return xr_module_task_graph_format_diagnostics(
+               tasks, outputs, batch.output_count, diagnostics,
+               diagnostics_size, &written) &&
+           written == strlen(diagnostics) && ok;
+}
+
+static void assert_task_outputs_equal(const XrModuleTaskOutput *left,
+                                      const XrModuleTaskOutput *right,
+                                      uint32_t count) {
+    for (uint32_t task = 0; task < count; task++) {
+        ASSERT_EQ_INT(left[task].complete, right[task].complete);
+        ASSERT_EQ_INT(left[task].succeeded, right[task].succeeded);
+        ASSERT_TRUE(xr_fingerprint_equal(left[task].artifact_fingerprint,
+                                         right[task].artifact_fingerprint));
+        ASSERT_TRUE(strcmp(left[task].diagnostic,
+                           right[task].diagnostic) == 0);
+    }
+}
+
+TEST(worker_counts_preserve_artifacts_and_diagnostic_order) {
+    XrDependencyGraph dependencies;
+    TaskGraphIds ids;
+    ASSERT_TRUE(build_task_fixture(&dependencies, &ids, false));
+    XrModuleTaskGraph *tasks = NULL;
+    char error[512] = {0};
+    ASSERT_TRUE(xr_module_task_graph_build(&dependencies, &tasks, error,
+                                           sizeof(error)));
+    uint32_t count = xr_module_task_graph_count(tasks);
+    ASSERT_EQ_UINT(count, 5u);
+
+    XrModuleTaskOutput serial[5];
+    XrModuleTaskOutput dual[5];
+    XrModuleTaskOutput wide[5];
+    XrModuleTaskStats serial_stats;
+    XrModuleTaskStats dual_stats;
+    XrModuleTaskStats wide_stats;
+    char serial_diagnostics[1024];
+    char dual_diagnostics[1024];
+    char wide_diagnostics[1024];
+    TaskRunContext success = {0};
+    ASSERT_TRUE(run_task_fixture(&dependencies, tasks, 1u, &success, serial,
+                                 &serial_stats, serial_diagnostics,
+                                 sizeof(serial_diagnostics), error,
+                                 sizeof(error)));
+    ASSERT_TRUE(run_task_fixture(&dependencies, tasks, 2u, &success, dual,
+                                 &dual_stats, dual_diagnostics,
+                                 sizeof(dual_diagnostics), error,
+                                 sizeof(error)));
+    ASSERT_TRUE(run_task_fixture(&dependencies, tasks, count, &success, wide,
+                                 &wide_stats, wide_diagnostics,
+                                 sizeof(wide_diagnostics), error,
+                                 sizeof(error)));
+    ASSERT_EQ_UINT(serial_stats.worker_count, 1u);
+    ASSERT_EQ_UINT(dual_stats.worker_count, 2u);
+    ASSERT_EQ_UINT(wide_stats.worker_count, 3u);
+    ASSERT_EQ_UINT(serial_stats.completed_count, count);
+    ASSERT_EQ_UINT(dual_stats.completed_count, count);
+    ASSERT_EQ_UINT(wide_stats.completed_count, count);
+    assert_task_outputs_equal(serial, dual, count);
+    assert_task_outputs_equal(serial, wide, count);
+    ASSERT_TRUE(strcmp(serial_diagnostics, dual_diagnostics) == 0);
+    ASSERT_TRUE(strcmp(serial_diagnostics, wide_diagnostics) == 0);
+
+    uint32_t task_c = task_for_module(tasks, ids.c);
+    uint32_t task_e = task_for_module(tasks, ids.e);
+    uint32_t task_d = task_for_module(tasks, ids.d);
+    uint32_t task_f = task_for_module(tasks, ids.f);
+    TaskRunContext failure = {
+        .fail_first = task_c < task_e ? task_c : task_e,
+        .fail_second = task_c < task_e ? task_e : task_c,
+        .fail = true,
+    };
+    char serial_error[512];
+    char dual_error[512];
+    char wide_error[512];
+    ASSERT_FALSE(run_task_fixture(&dependencies, tasks, 1u, &failure, serial,
+                                  &serial_stats, serial_diagnostics,
+                                  sizeof(serial_diagnostics), serial_error,
+                                  sizeof(serial_error)));
+    ASSERT_FALSE(run_task_fixture(&dependencies, tasks, 2u, &failure, dual,
+                                  &dual_stats, dual_diagnostics,
+                                  sizeof(dual_diagnostics), dual_error,
+                                  sizeof(dual_error)));
+    ASSERT_FALSE(run_task_fixture(&dependencies, tasks, count, &failure, wide,
+                                  &wide_stats, wide_diagnostics,
+                                  sizeof(wide_diagnostics), wide_error,
+                                  sizeof(wide_error)));
+    ASSERT_EQ_UINT(serial_stats.first_failed_task, failure.fail_first);
+    ASSERT_EQ_UINT(dual_stats.first_failed_task, failure.fail_first);
+    ASSERT_EQ_UINT(wide_stats.first_failed_task, failure.fail_first);
+    ASSERT_EQ_UINT(serial_stats.completed_count, 3u);
+    ASSERT_EQ_UINT(dual_stats.completed_count, 3u);
+    ASSERT_EQ_UINT(wide_stats.completed_count, 3u);
+    assert_task_outputs_equal(serial, dual, count);
+    assert_task_outputs_equal(serial, wide, count);
+    ASSERT_FALSE(serial[task_d].complete);
+    ASSERT_FALSE(serial[task_f].complete);
+    ASSERT_TRUE(strcmp(serial_diagnostics, dual_diagnostics) == 0);
+    ASSERT_TRUE(strcmp(serial_diagnostics, wide_diagnostics) == 0);
+    ASSERT_TRUE(strcmp(serial_error, dual_error) == 0);
+    ASSERT_TRUE(strcmp(serial_error, wide_error) == 0);
+
+    ASSERT_TRUE(xr_dependency_graph_remove_edge(&dependencies, ids.d, ids.c));
+    memset(serial, UINT8_C(0xA5), sizeof(serial));
+    TaskRunContext rejected = {0};
+    XrModuleTaskBatch rejected_batch = {
+        .dependency_graph = &dependencies,
+        .task_graph = tasks,
+        .worker_limit = count,
+        .execute = execute_task_fixture,
+        .context = &rejected,
+        .outputs = serial,
+        .output_count = count,
+    };
+    ASSERT_FALSE(xr_module_task_graph_run(&rejected_batch, &serial_stats,
+                                          error, sizeof(error)));
+    ASSERT_EQ_UINT(atomic_load_explicit(&rejected.calls,
+                                        memory_order_relaxed), 0u);
+    XrFingerprint zero_fingerprint = {0};
+    for (uint32_t task = 0; task < count; task++) {
+        ASSERT_FALSE(serial[task].complete);
+        ASSERT_FALSE(serial[task].succeeded);
+        ASSERT_TRUE(xr_fingerprint_equal(serial[task].artifact_fingerprint,
+                                         zero_fingerprint));
+        ASSERT_EQ_INT(serial[task].diagnostic[0], '\0');
+    }
+
+    xr_module_task_graph_free(tasks);
+    xr_dependency_graph_finalize(&dependencies);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Module summary and invalidation graph");
 RUN_TEST(module_resolution_fingerprint_is_consumer_exact_and_order_independent);
@@ -1069,4 +1428,6 @@ RUN_TEST(module_resolution_delta_requires_exact_authority_and_is_atomic);
 RUN_TEST(independent_verifier_rejects_result_and_graph_mutations);
 RUN_TEST(delete_rename_add_and_module_resolution_leave_no_ghost_nodes);
 RUN_TEST(reason_explanation_terminates_on_cycles_and_rejects_forged_rows);
+RUN_TEST(scc_task_graph_is_canonical_and_source_exact);
+RUN_TEST(worker_counts_preserve_artifacts_and_diagnostic_order);
 TEST_MAIN_END()

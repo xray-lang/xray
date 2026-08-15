@@ -32,6 +32,25 @@ identity before publication. The independent verifier repeats the same
 transaction. Stale old/new identities, wrong roots or facets, malformed rows,
 and partial authority fail closed without changing the graph or history.
 
+A module task graph is an immutable derivation of one exact verified
+dependency graph. Its source identity binds the complete node summaries, edge
+relations, and topology. Each task is one maximal strongly connected
+component with canonically ordered member identities. Component dependencies
+are deduplicated, dependency-first, and topologically numbered with stable-ID
+tie-breaking, so node and edge insertion order cannot affect task identity.
+The task graph carries a separate structural fingerprint; relation-only,
+summary-only, and topology mutations all reject an older task graph.
+
+The generic module executor runs only one dependency level at a time and joins
+the entire level before exposing the next. Workers write disjoint result rows
+selected by canonical task index. A callback failure does not race downstream
+work into existence: all tasks already started in that level finish, the
+lowest canonical failing task is reported, and later levels remain untouched.
+Artifact fingerprints and diagnostics are consumed only in canonical task
+order, so worker completion order is never observable. Callbacks cannot
+publish shared compiler state; a caller may merge task-local output only after
+the executor reports complete success.
+
 The native build publishes that graph once per build, after every module owns a
 verified SemanticPlan and before target planning. Its nodes are module
 summaries derived from verified authorities alone, and its edges carry the
@@ -103,7 +122,10 @@ artifact authority and operation-local verifier output.
   direct, multi-parent, multi-facet, and cyclic graphs, including rejection of
   forged evidence rows. It also proves consumer-exact module-resolution
   identity, insertion-order independence, exact old/new/facet authority,
-  atomic mutation rejection, and a deterministic downstream explanation.
+  atomic mutation rejection, and a deterministic downstream explanation. It
+  also proves canonical SCC/task identity and byte-identical task outputs and
+  diagnostic order across one, two, and all ready workers, including multiple
+  failures in one level.
 - Runtime-only installed symbol gates must continue excluding compiler-session
   and cache-builder APIs.
 
@@ -111,10 +133,12 @@ artifact authority and operation-local verifier output.
 
 anchor-sha256: src/incremental/xr_dependency_graph.h 549030885cabac77a90280d75cb8b619b52b19c6c4277208330f399ccb471f6c
 anchor-sha256: src/incremental/xr_dependency_graph.c 1148f7a8c0f0621298c6b05afff8ab35e5b99b1af1ee62fd175d302eec2ebedd
+anchor-sha256: src/incremental/xr_module_task_graph.h b51c317d2639574e53bd321b288c56c7af2238f36ae570ad45c181a00f2b07a4
+anchor-sha256: src/incremental/xr_module_task_graph.c 52d8c5a718d19e2e93b4aa5a9d4352a6bd47d1a01294b326aac4707caa21cad9
 anchor-sha256: src/incremental/xr_cache_invalidate.h d546845678f14a1c84a112370380b58f063f2b3a7d859b7c326ebb17c0a81c3c
 anchor-sha256: src/incremental/xr_cache_invalidate.c f134e5e0ea324161a54cf4d9e352faf630ce7c27bb8c3c7aaaa2856d195ef828
 anchor-sha256: src/toolchain/xcompiler_session.h 8dee7c7df5115c2af9f48015dcce11ef6341830de07c06c3b0b5febcce4d8fde
 anchor-sha256: src/toolchain/xcompiler_session.c 5c15ee43fadd472cc0f2e7c577e214f5133360b4930e686b5df29228311ab017
 anchor-sha256: src/api/xrepl.c 2317cdfb203e2c7c57dd9b1b8409fbf434d4d3eadc9386a9f1ad7ed485ade1ab
-anchor-sha256: tests/unit/incremental/test_dependency_graph.c a20526e1a319a99a63518e9d46161da34c194853aa9645cdcfbe2efa92400cc4
+anchor-sha256: tests/unit/incremental/test_dependency_graph.c 49030af2df17db693d6db69e2d064b7eec1b716db47e095b58509c96c6dbf347
 anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c 4b0d4aad37518ed2e90e12ac99df88f6afc7e14c3bf54ac10f5575cc19afffd5
