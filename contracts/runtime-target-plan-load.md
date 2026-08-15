@@ -169,7 +169,7 @@ roots, or general module activation.
    requirements have dense records bound to the same canonical provider kinds.
    Missing, duplicate, additional, or mismatched family,
    capability, or provider records fail before any activation boundary.
-5. Runtime loading accepts only an XTP v20 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v22 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
    independent TargetPlan verification. V20 is a breaking hard cutover from
    v19 and all earlier schemas. It preserves all v19 facts while adding the
@@ -254,31 +254,31 @@ anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b428893718
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
 anchor-sha256: src/plan/format/xr_xsm_decode.c 268dc519387d24839794f2b64cb4a1c7fed2cfff9c72bb6f81485c9561940262
-anchor-sha256: src/plan/format/xr_xtp_schema.h 2d3bc7c371f4b677c61bc455b369bfc1f4fff4e5c0647758512cf74ce6606a67
+anchor-sha256: src/plan/format/xr_xtp_schema.h c1986291cd0a03028136f2ebcf1c2446a03c9ec46073504fd6ea1b956be9598c
 anchor-sha256: src/plan/format/xr_xtp_internal.h 2d1a76e7dd0a7d1f623ce3fc8118c4235d2694e03cceea8db756ec8f67e3a346
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1
 anchor-sha256: src/plan/format/xr_xtp_decode.c debe51ef7fd15e75b2b120642e7d4d69518784bb59b747503ea37f0e3b332d04
-anchor-sha256: src/plan/format/xr_xtp_rows.c 8207bb512de672ad65356c6ad42eee840aedf54639d7904ef4b88ec8e46cc12c
+anchor-sha256: src/plan/format/xr_xtp_rows.c 8a7c5328e94397e581f9c84cb2c6033f31918dc55c9d7404be952c105d736986
 anchor-sha256: src/runtime/abi/xr_target_machine_facts.h 8c8d1c341fb4639bb47c982ac6dfd851571d154823101e00011a63fcb14486d8
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h 5ea9aa4ff63d88b62dbf1f43bea9ab2875d9d63ef2722d73df5a71c59eedda1b
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 6487ae39149a4ea28fab04bdf2ccbf88c0bccaded75cf20376b38c8447dbdd1c
-anchor-sha256: src/plan/target/xr_target_profile.h 00e6a6ae56f6edb2f6bb4c25c441f7a8c9d43748002fd48e68816a65d7086b29
+anchor-sha256: src/plan/target/xr_target_profile.h 5a9f4bc54135f39ee703e872f19267734b54e17f4f3828b62d1d66aab2602cc3
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h e1d1398d2a4e8fddebc83e0444f3d71acd2f5b5548d1339ce85b029060f302f6
-anchor-sha256: src/plan/target/xr_target_plan.c c47eb0c310ae52a3a720449d1a329892fc313a2919340fe9e3c4b7b18c307520
-anchor-sha256: src/plan/target/xr_target_builder.c 67261b4e8f56920f40fd493ba84fe4347b10495749ac9806418d9f93c6864b22
-anchor-sha256: src/plan/target/xr_target_verify.c 6575cc60f42fa68de835ace33e0c813648267a6f931ec68e0944669293b65fae
+anchor-sha256: src/plan/target/xr_target_plan.h 369766845a7ce6af7b1f088673a9c53d44ac63b17900fe473955858d403f0c2a
+anchor-sha256: src/plan/target/xr_target_plan.c f365b531efff6667ec102c8d9b109b7eedd691a930cdd872c39817f02baf7d92
+anchor-sha256: src/plan/target/xr_target_builder.c 814608b061df6f8a06fb19f998c2714632d4742eaf0db50560378a28db17b1ad
+anchor-sha256: src/plan/target/xr_target_verify.c 801f96373c6c33c9ca8596880ec1eb01d8df537188d02fce572fb1423db83892
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
-anchor-sha256: src/runtime/xr_target_plan_load.c e7ff26e61ac4f163b7fac20b5fbef9fc0aaf54fe9aa3c5e2c6d054ca299c4f83
-anchor-sha256: src/app/cli/xcmd_run.c d2b322e5fbb45f85e1fbee30735d44241066965d0f30315e19aaa1853ea2fd1e
+anchor-sha256: src/runtime/xr_target_plan_load.c da3d602f009b2bbe510804b5747cb18fc151af2a4f2cf6ae06388bc54e3ae1de
+anchor-sha256: src/app/cli/xcmd_run.c 31c56191fb19ca2ad6ad27a0d7e272938afaaecab7478648e6903d8f61e243cf
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 577aa49d6502b2b1cf3a88191851bbbc82775fe2e53f51ec7ea83ca58281a548
 anchor-sha256: scripts/check_legacy_product_residue.py d160f8b9ab1d16da893bcc30a7ed90d583dda9e478dd11f67c9ce299629f8d2f
-anchor-sha256: tests/unit/plan/test_target_plan.c f0ececcf09a22c3d3437ee4340a652094a1291a122b1142f5615cbf50e76f670
+anchor-sha256: tests/unit/plan/test_target_plan.c 71fd82f1249830f66fc4d5e00f630f39462af3b9932f0998fbea76ba0a621598
 anchor-sha256: tests/unit/plan/test_xtp_format.c bf52da3e86d5ca64cc07ec66c2cfa0c2a7b65cae83a7899caa066bee9477c35f
 anchor-sha256: tests/unit/CMakeLists.txt d8bedb9c848e0d7a75cd63035487e9e65e3dedf4e28f78225b83a7a6f3c4b440
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
-anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 29bea3f92778b4b38906795661725ece16716575108e1906f57079e1312124c1
+anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 4ba49a1163be1feaf9a2be6b40782e663d9e7e3e890e2b877f84e6da173d1369
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 0ab2232c6731a2366bbd270f838d2a9fd33c1480bfe4d75de8c9ededbadfda51

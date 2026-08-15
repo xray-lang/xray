@@ -1173,7 +1173,7 @@ typedef struct XiValue {
     uint32_t xg_callsite_id;  /* stable XgCallsiteId for evidence-backed calls (0 = none) */
     uint32_t xa_intrinsic_id; /* stable XaIntrinsicId for canonical semantic operations */
     uint8_t array_intrinsic_kind; /* XiArrayIntrinsicKind, or NONE */
-    uint8_t array_element_storage; /* exact XrArrayElemType for an Array intrinsic */
+    uint8_t array_element_storage; /* exact XrArrayElemType for a frozen Array operation */
     uint32_t xg_method_id;    /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
     uint32_t xg_json_codec_id;    /* stable XgJsonCodecId for evidence-backed Json codec calls */

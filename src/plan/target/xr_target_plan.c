@@ -151,7 +151,7 @@ static void hash_layout_base(XrSHA256Context *ctx, const XrTargetLayoutRecord *r
     hash_u64(ctx, record->id);
     hash_u64(ctx, record->semantic_type);
     hash_u64(ctx, record->kind);
-    hash_u64(ctx, record->reserved);
+    hash_u64(ctx, record->array_element_storage);
     hash_u64(ctx, record->align);
     hash_u64(ctx, record->fixed_prefix_size);
     hash_u64(ctx, record->extent);
