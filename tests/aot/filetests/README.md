@@ -25,9 +25,13 @@ Modes:
 Current behavior:
 
 - The runner first probes `xray build --native --dump-xaot-plan`.
-- If that dump hook is not available yet, it prints `SKIP`/`待实现` and exits 0.
+- A missing compiler binary, a failed dump hook probe, or an empty selected mode
+  is an infrastructure failure and exits nonzero; it is never reported as a
+  skipped suite.
 - `_*.xr` files are helper modules and are not collected as tests.
 - `.expect` files with no active directives are treated as pending and skipped.
+- Individual deliberate skips remain visible, but a run with no passing or
+  failing case verdicts exits nonzero because it produced no measurement.
 
 Expectation directives:
 

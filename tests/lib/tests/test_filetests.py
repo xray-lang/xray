@@ -6,10 +6,13 @@ gap that hid behind a warm cache), and the link-mode normalizer must strip the
 hash. Both are testable here without a compiler.
 """
 
+import contextlib
+import io
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from _support import bootstrap_xraytest, load_module
 
@@ -164,6 +167,86 @@ class RunnerHelpersTest(unittest.TestCase):
     def test_configure_jobs_auto_capped(self):
         self.assertGreaterEqual(runner.configure_jobs("auto"), 1)
         self.assertEqual(runner.configure_jobs("3"), 3)
+
+    def test_pre_measurement_failure_is_nonzero(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            status = runner._fail_before_measurement(
+                "dump capability unavailable", 17, reason="unsupported option"
+            )
+        self.assertEqual(status, 1)
+        self.assertIn("ERROR: dump capability unavailable", output.getvalue())
+        self.assertIn("Cases not run: 17", output.getvalue())
+        self.assertIn("0 passed, 1 failed, 0 skipped", output.getvalue())
+
+    def test_main_missing_binary_fails_closed(self):
+        with tempfile.TemporaryDirectory(prefix="xt_filetest_missing.") as tmp:
+            missing = Path(tmp) / "definitely-missing-xray"
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                status = runner.main(["run_aot_filetests.py", "--xray", str(missing)])
+        self.assertEqual(status, 1)
+        self.assertIn("ERROR: xray binary not found or not executable", output.getvalue())
+
+    def test_main_failed_dump_probe_fails_closed(self):
+        with tempfile.TemporaryDirectory(prefix="xt_filetest_probe.") as tmp:
+            fake_xray = Path(tmp) / "xray"
+            fake_xray.write_text("not invoked\n", encoding="utf-8")
+            output = io.StringIO()
+            with mock.patch.object(
+                runner, "probe_dump_support", return_value=(False, "unsupported option\n")
+            ), contextlib.redirect_stdout(output):
+                status = runner.main(["run_aot_filetests.py", "--xray", str(fake_xray)])
+        self.assertEqual(status, 1)
+        self.assertIn("ERROR: xray build --native --dump-xaot-plan probe failed", output.getvalue())
+        self.assertIn("Reason: unsupported option", output.getvalue())
+
+    def test_report_rejects_all_skipped_measurement(self):
+        with tempfile.TemporaryDirectory(prefix="xt_filetest_zero.") as tmp:
+            config = runner.Config(
+                xray=Path(tmp) / "xray",
+                mode="rep",
+                selected_modes=["rep"],
+                verbose=False,
+                keep_tmp=False,
+                jobs=1,
+                cache_dir=Path(tmp) / "cache",
+                sanitizer=False,
+                disable_run_cache=True,
+                baseline=Path(tmp) / "baseline.txt",
+                case_timeout=1,
+            )
+            verdicts = [
+                runner.CaseVerdict("pending.xr", "rep", runner.Status.SKIP.value, "pending")
+            ]
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                status = runner._report_and_ratchet(config, verdicts)
+        self.assertEqual(status, 1)
+        self.assertIn("no measured verdicts", output.getvalue())
+
+    def test_report_accepts_at_least_one_measured_verdict(self):
+        with tempfile.TemporaryDirectory(prefix="xt_filetest_measured.") as tmp:
+            config = runner.Config(
+                xray=Path(tmp) / "xray",
+                mode="rep",
+                selected_modes=["rep"],
+                verbose=False,
+                keep_tmp=False,
+                jobs=1,
+                cache_dir=Path(tmp) / "cache",
+                sanitizer=False,
+                disable_run_cache=True,
+                baseline=Path(tmp) / "baseline.txt",
+                case_timeout=1,
+            )
+            verdicts = [
+                runner.CaseVerdict("measured.xr", "rep", runner.Status.PASS.value),
+                runner.CaseVerdict("pending.xr", "rep", runner.Status.SKIP.value, "pending"),
+            ]
+            with contextlib.redirect_stdout(io.StringIO()):
+                status = runner._report_and_ratchet(config, verdicts)
+        self.assertEqual(status, 0)
 
 
 if __name__ == "__main__":

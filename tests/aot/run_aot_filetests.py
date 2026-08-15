@@ -452,28 +452,44 @@ def main(argv: list[str]) -> int:
     print("")
 
     if shutil.which(str(config.xray)) is None and not (config.xray.is_file() and os.access(config.xray, os.X_OK)):
-        print(f"SKIP: xray binary not found or not executable: {config.xray}")
-        print(f"=== Results: 0 passed, 0 failed, {len(cases)} skipped ===")
-        return 0
+        return _fail_before_measurement(
+            f"xray binary not found or not executable: {config.xray}", len(cases)
+        )
 
     with workspace.Workspace("xray_aot_filetests", keep=config.keep_tmp) as ws:
         ok, probe_log = probe_dump_support(config, ws)
         if not ok:
-            print(f"SKIP: xray build --native --dump-xaot-plan unsupported; {len(cases)} filetest(s) not run")
             reason = next((ln for ln in probe_log.splitlines() if ln.strip()), "")
-            if reason:
-                print(f"Reason: {reason}")
-            print(f"=== Results: 0 passed, 0 failed, {len(cases)} skipped ===")
-            return 0
+            return _fail_before_measurement(
+                "xray build --native --dump-xaot-plan probe failed",
+                len(cases),
+                reason=reason,
+            )
 
         if not cases:
-            print(f"SKIP: no AOT filetests found for mode '{config.mode}'")
-            print("=== Results: 0 passed, 0 failed, 0 skipped ===")
-            return 0
+            return _fail_before_measurement(
+                f"no AOT filetests found for mode '{config.mode}'", 0
+            )
 
         verdicts = _run_cases(config, cases, ws)
 
     return _report_and_ratchet(config, verdicts)
+
+
+def _fail_before_measurement(message: str, case_count: int, *, reason: str = "") -> int:
+    """Fail closed when the runner cannot produce even one case verdict.
+
+    Capability and setup failures are not skips: treating them as such lets a
+    completely unmeasured suite appear green to CTest.  Keep the ordinary
+    result grammar, but count the infrastructure failure explicitly and report
+    how many cases never ran.
+    """
+    print(f"ERROR: {message}")
+    if reason:
+        print(f"Reason: {reason}")
+    print(f"Cases not run: {case_count}")
+    print("=== Results: 0 passed, 1 failed, 0 skipped ===")
+    return 1
 
 
 def _run_cases(config: Config, cases: list[tuple[str, Path]], ws: workspace.Workspace) -> list[CaseVerdict]:
@@ -523,6 +539,11 @@ def _report_and_ratchet(config: Config, verdicts: list[CaseVerdict]) -> int:
 
     print("")
     print(f"=== Results: {passed} passed, {failed} failed, {skipped} skipped ===")
+
+    if passed + failed == 0:
+        print("")
+        print("ERROR: AOT filetests produced no measured verdicts; skips cannot qualify the suite.")
+        return 1
 
     baseline = ratchet.read_baseline(config.baseline)
     failed_names = {v.name for v in verdicts if v.status == Status.FAIL.value}
