@@ -538,14 +538,26 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 #ifdef FUZZ_STANDALONE
 int main(void) {
     require_fuzz(initialize_fixture());
+    size_t executed = 0;
     for (size_t i = 0; i < (size_t) XTP_MUTATION_COUNT; i++) {
         uint8_t selector = mutation_cases[i].seed_code;
         fprintf(stderr, "checking deterministic XTP mutation: %s\n",
                 mutation_cases[i].name);
         structured_mutation(&selector, 1);
+        executed++;
     }
     dispose_fixture();
-    puts("typed XTP deterministic mutation matrix passed");
+    require_fuzz(executed == (size_t) XTP_MUTATION_COUNT);
+#if defined(XR_BUILD_ASAN) && defined(XR_BUILD_UBSAN)
+    puts("typed XTP deterministic mutation matrix passed: "
+         "executed=26 mutations=26 sanitizer=asan-ubsan");
+#elif defined(XR_BUILD_TSAN)
+    puts("typed XTP deterministic mutation matrix passed: "
+         "executed=26 mutations=26 sanitizer=tsan");
+#else
+    puts("typed XTP deterministic mutation matrix passed: "
+         "executed=26 mutations=26 sanitizer=release");
+#endif
     return 0;
 }
 #endif

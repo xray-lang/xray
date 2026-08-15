@@ -413,9 +413,12 @@ static void test_nonempty_extent_and_debug_field_mutations(void) {
     REQUIRE(xr_target_plan_root_maps(fixture.plan, &count) == NULL && count == 0);
     REQUIRE(xr_target_plan_root_slots(fixture.plan, &count) == NULL && count == 0);
     REQUIRE(xr_target_plan_cleanups(fixture.plan, &count) == NULL && count == 0);
-    REQUIRE(XR_XTP_SECTION_COUNT == XR_XTP_SECTION_COROUTINES + 1u);
-    puts("XTP mutation boundary: root/cleanup legal rows and a standalone "
-         "debug section are not present in the current verified schema");
+    REQUIRE(xr_target_plan_entry_expectations(fixture.plan, &count) == NULL &&
+            count == 0);
+    REQUIRE(XR_XTP_SECTION_ENTRY_EXPECTATIONS == XR_XTP_SECTION_COROUTINES + 1u);
+    REQUIRE(XR_XTP_SECTION_COUNT == XR_XTP_SECTION_ENTRY_EXPECTATIONS + 1u);
+    puts("XTP mutation boundary: root, cleanup, and dynamic entry rows are "
+         "absent from the scalar verified fixture");
     dispose_fixture(&fixture);
 }
 

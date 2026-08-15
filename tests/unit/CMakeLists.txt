@@ -497,7 +497,37 @@ add_executable(test_xtp_fuzz_entry ../fuzz/fuzz_xtp_decode.c
 target_compile_definitions(test_xtp_fuzz_entry PRIVATE FUZZ_STANDALONE)
 target_include_directories(test_xtp_fuzz_entry PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(test_xtp_fuzz_entry PRIVATE xray_core)
+add_dependencies(test_xtp_fuzz_entry xray test_xtp_resource_stress)
 add_test(NAME test_xtp_fuzz_entry COMMAND $<TARGET_FILE:test_xtp_fuzz_entry>)
+set(XR_XTP_FUZZ_EVIDENCE_SANITIZER release)
+if(ENABLE_SANITIZERS OR (ENABLE_ASAN AND ENABLE_UBSAN))
+    set(XR_XTP_FUZZ_EVIDENCE_SANITIZER asan-ubsan)
+elseif(ENABLE_TSAN)
+    set(XR_XTP_FUZZ_EVIDENCE_SANITIZER tsan)
+endif()
+add_test(
+    NAME test_xtp_fuzz_evidence_runner
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/tests/fuzz/test_run_xtp_fuzz_evidence.py
+)
+set_tests_properties(test_xtp_fuzz_evidence_runner PROPERTIES
+    LABELS "target-machine;vm;typed-plan;loader;fuzz"
+    PROCESSORS 1
+    TIMEOUT 30)
+add_test(
+    NAME test_xtp_fuzz_evidence
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/tests/fuzz/run_xtp_fuzz_evidence.py
+        --runtime $<TARGET_FILE:xray>
+        --fuzzer $<TARGET_FILE:test_xtp_fuzz_entry>
+        --resource-stress $<TARGET_FILE:test_xtp_resource_stress>
+        --expected-commit ${XRAY_GIT_COMMIT}
+        --sanitizer ${XR_XTP_FUZZ_EVIDENCE_SANITIZER}
+)
+set_tests_properties(test_xtp_fuzz_evidence PROPERTIES
+    LABELS "target-machine;vm;typed-plan;loader;fuzz;stress"
+    PROCESSORS 1
+    TIMEOUT 90)
 add_xray_unit_test(test_xr_aot_scalar_plan aot/test_xr_aot_scalar_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_xaot_scalar_target_cutover aot/test_xaot_scalar_target_cutover.c
