@@ -14,6 +14,10 @@
 #include "../../include/xray_runtime_generation.h"
 #include "../os/os_thread.h"
 #include "../vm/xr_vm_decoded_cache.h"
+#include "../vm/xr_vm_dynamic_entry.h"
+
+typedef struct XrRuntimeEntryRegistry XrRuntimeEntryRegistry;
+typedef struct XrRuntimeDynamicEntryCache XrRuntimeDynamicEntryCache;
 
 typedef enum XrModuleGenerationMutation {
     XR_MODULE_GENERATION_MUTATION_VERIFY = 0,
@@ -34,12 +38,15 @@ struct XrRuntimeGenerationAuthority {
     uint64_t next_generation;
     uint32_t live_generations;
     uint32_t total_pins;
+    XrRuntimeEntryRegistry *entry_registry;
 };
 
 struct XrLoadedModuleGeneration {
     XrRuntimeGenerationAuthority *authority;
     XrTargetPlan *plan;
     XrVmDecodedCache *decoded_cache;
+    XrRuntimeDynamicEntryCache *entry_cache;
+    XrVmDynamicEntryContext dynamic_entries;
     XrModuleGenerationIdentity identity;
     XrModuleGenerationState state;
     uint64_t revision;

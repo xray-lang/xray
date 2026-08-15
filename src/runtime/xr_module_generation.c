@@ -25,6 +25,7 @@
 #include "../vm/xr_typed_frame.h"
 #include "../vm/xr_vm_decoded_cache.h"
 #include "abi/xr_runtime_target_authority.h"
+#include "xr_dynamic_entry_runtime.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -213,6 +214,12 @@ XRAY_API bool xr_runtime_generation_authority_create(
     xr_mutex_init(&created->gate);
     created->budget = *budget;
     created->next_generation = 1;
+    if (!xr_runtime_entry_registry_create(&created->entry_registry,
+                                          diagnostic, diagnostic_size)) {
+        xr_mutex_destroy(&created->gate);
+        xr_free(created);
+        return false;
+    }
     *authority = created;
     return true;
 }
@@ -230,6 +237,9 @@ XRAY_API bool xr_runtime_generation_authority_destroy(
     if (!empty)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
                     "generation authority still owns loaded modules or pins");
+    if (!xr_runtime_entry_registry_destroy(&owned->entry_registry, diagnostic,
+                                           diagnostic_size))
+        return false;
     xr_mutex_destroy(&owned->gate);
     memset(owned, 0, sizeof(*owned));
     xr_free(owned);
@@ -381,6 +391,69 @@ static bool sole_scalar_generation_eligible(
     return plan_has_no_non_scalar_execution_authority(generation->plan);
 }
 
+static bool typed_generation_eligible(
+    const XrLoadedModuleGeneration *generation) {
+    char diagnostic[512] = {0};
+    if (!generation || !generation->plan ||
+        !xr_target_plan_is_verified(generation->plan) ||
+        !xr_target_plan_fingerprint_is_intact(generation->plan) ||
+        !xr_target_plan_verify(generation->plan, diagnostic,
+                               sizeof(diagnostic)) ||
+        xr_target_plan_schema_version(generation->plan) !=
+            XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION ||
+        xr_target_plan_completed_family_mask(generation->plan) !=
+            XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK ||
+        memcmp(generation->identity.target_plan_fingerprint,
+               xr_target_plan_fingerprint(generation->plan).bytes,
+               XR_RUNTIME_GENERATION_FINGERPRINT_SIZE) != 0 ||
+        !xr_target_instruction_program_verify(
+            generation->plan, diagnostic, sizeof(diagnostic)))
+        return false;
+
+    uint32_t count = 0;
+    xr_target_plan_storage(generation->plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_allocations(generation->plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_extent_operands(generation->plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_root_maps(generation->plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_root_slots(generation->plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_cleanups(generation->plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_adapters(generation->plan, &count);
+    if (count != 0)
+        return false;
+    xr_target_plan_coroutines(generation->plan, &count);
+    if (count != 0)
+        return false;
+
+    const XrTargetFunctionRecord *functions =
+        xr_target_plan_functions(generation->plan, &count);
+    if (!functions || count == 0)
+        return false;
+    bool executable = false;
+    for (uint32_t i = 0; i < count; i++) {
+        uint64_t family = xr_target_plan_function_execution_family_mask(
+            generation->plan, i);
+        if (family == 0)
+            continue;
+        if (family != XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
+            family != XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC)
+            return false;
+        executable = true;
+    }
+    return executable;
+}
+
 static bool fail_typed_dispatch(XrTypedDispatchStatus status,
                                 char *diagnostic,
                                 size_t diagnostic_size) {
@@ -416,6 +489,18 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status,
         case XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
                         "scalar generation exceeded the executor call-depth budget");
+        case XR_TYPED_DISPATCH_ENTRY_UNAVAILABLE:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                        "scalar generation dynamic entry is unavailable");
+        case XR_TYPED_DISPATCH_ENTRY_AUTHORITY_MISMATCH:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                        "scalar generation dynamic entry authority changed");
+        case XR_TYPED_DISPATCH_ENTRY_BUDGET_EXCEEDED:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                        "scalar generation dynamic entry budget is exhausted");
+        case XR_TYPED_DISPATCH_ENTRY_RELEASE_FAILED:
+            return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
+                        "scalar generation dynamic entry release failed");
         case XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH:
         case XR_TYPED_DISPATCH_TRACE_REJECTED:
         case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
@@ -490,10 +575,10 @@ XRAY_API bool xr_module_generation_prepare(
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "only a healthy verified generation may become ready");
     }
-    if (!sole_scalar_generation_eligible(generation)) {
+    if (!typed_generation_eligible(generation)) {
         xr_mutex_unlock(&authority->gate);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
-                    "generation lacks the exact sole-function scalar i64 authority");
+                    "generation lacks exact installed scalar i64 authority");
     }
     XrFingerprint fingerprint = generation_plan_fingerprint(generation);
     XrVmDecodedCache *decoded_cache = NULL;
@@ -504,12 +589,28 @@ XRAY_API bool xr_module_generation_prepare(
         return fail_decoded_cache(cache_status, diagnostic, diagnostic_size);
     }
     generation->decoded_cache = decoded_cache;
+    XrRuntimeDynamicEntryCache *entry_cache = NULL;
+    if (!xr_runtime_dynamic_entry_cache_create(
+            generation, &entry_cache, diagnostic, diagnostic_size)) {
+        generation->decoded_cache = NULL;
+        xr_typed_decoded_cache_free(decoded_cache);
+        xr_mutex_unlock(&authority->gate);
+        return false;
+    }
+    generation->entry_cache = entry_cache;
+    xr_runtime_dynamic_entry_context_init(generation,
+                                          &generation->dynamic_entries);
     bool ok = transition_locked(generation, XR_MODULE_GENERATION_VERIFIED,
                                 XR_MODULE_GENERATION_READY,
                                 "only a verified generation may become ready",
                                 diagnostic, diagnostic_size);
     if (!ok) {
         generation->decoded_cache = NULL;
+        generation->entry_cache = NULL;
+        memset(&generation->dynamic_entries, 0,
+               sizeof(generation->dynamic_entries));
+        xr_runtime_dynamic_entry_cache_free(
+            &entry_cache, diagnostic, diagnostic_size);
         xr_typed_decoded_cache_free(decoded_cache);
     }
     xr_mutex_unlock(&authority->gate);
@@ -559,6 +660,14 @@ XRAY_API bool xr_module_generation_execute_sole_scalar_i64(
             diagnostic, diagnostic_size))
         return false;
 
+    if (!sole_scalar_generation_eligible(generation)) {
+        xr_module_generation_pin_release(
+            generation, XR_MODULE_GENERATION_INFLIGHT_CALL,
+            diagnostic, diagnostic_size);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                    "sole-function scalar route requires one closed parameterless function");
+    }
+
     XrVmDecodedCacheStatus cache_status =
         generation_cache_require_exact(generation);
     XrFingerprint required_fingerprint =
@@ -572,7 +681,10 @@ XRAY_API bool xr_module_generation_execute_sole_scalar_i64(
         .required_plan_fingerprint = &required_fingerprint,
         .result = &executed_result,
         .decoded_cache = generation->decoded_cache,
+        .dynamic_entries = NULL,
+        .generation_identity = &generation->identity,
         .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+        .use_dynamic_entry_cache = false,
     };
     XrTypedDispatchStatus status =
         cache_status == XR_VM_DECODED_CACHE_OK
@@ -778,6 +890,18 @@ XRAY_API bool xr_module_generation_unload(
         xr_mutex_unlock(&authority->gate);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
                     "only a zero-pin retired generation may unload");
+    }
+    xr_mutex_unlock(&authority->gate);
+    if (owned->entry_cache &&
+        !xr_runtime_dynamic_entry_cache_free(
+            &owned->entry_cache, diagnostic, diagnostic_size))
+        return false;
+    xr_mutex_lock(&authority->gate);
+    if (owned->state != XR_MODULE_GENERATION_RETIRED ||
+        owned->total_pins != 0 || authority->live_generations == 0) {
+        xr_mutex_unlock(&authority->gate);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
+                    "generation changed while its cache was released");
     }
     owned->state = XR_MODULE_GENERATION_UNLOADED;
     owned->revision++;

@@ -66,6 +66,7 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE (UINT64_C(1) << 32)
 #define XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE (UINT64_C(1) << 33)
 #define XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE (UINT64_C(1) << 34)
+#define XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION (UINT64_C(1) << 35)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -73,6 +74,9 @@ typedef enum XrTargetExecutionFamily {
      * conditional branches, and its control flow is proved from the rows
      * alone rather than assumed from their order. */
     XR_TARGET_EXECUTION_SCALAR_I64_CLOSED = UINT64_C(1) << 0,
+    /* Same exact scalar row family, with one or more SOURCE_EXPORT entry
+     * calls whose persistent expectations are resolved by the runtime. */
+    XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC = UINT64_C(1) << 1,
 } XrTargetExecutionFamily;
 
 #define XR_TARGET_INSTRUCTION_SLOT_NONE UINT32_MAX
@@ -130,7 +134,8 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE |                         \
                  XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE |                     \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE |          \
-                 XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE))
+                 XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE |          \
+                 XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -691,6 +696,39 @@ typedef struct XrTargetCoroutineStateRecord {
     uint16_t flags;
 } XrTargetCoroutineStateRecord;
 
+/* Persistent dynamic-entry authority contains identities and derived ABI
+ * facts only. A process-local entry cell or code pointer is never serializable
+ * and therefore has no field in this row. */
+typedef enum XrTargetEntryValueKind {
+    XR_TARGET_ENTRY_VALUE_INVALID = 0,
+    XR_TARGET_ENTRY_VALUE_EXACT_I64,
+} XrTargetEntryValueKind;
+
+typedef enum XrTargetEntryAdapterKind {
+    XR_TARGET_ENTRY_ADAPTER_INVALID = 0,
+    XR_TARGET_ENTRY_ADAPTER_IDENTITY,
+} XrTargetEntryAdapterKind;
+
+typedef struct XrTargetEntryExpectationRecord {
+    XrStableId identity;
+    uint32_t id;
+    uint32_t call;
+    uint32_t abi_schema_version;
+    uint16_t parameter_count;
+    uint16_t native_abi;
+    uint8_t value_kind;
+    uint8_t adapter_kind;
+    uint16_t flags;
+    uint32_t reserved32;
+    uint64_t target_data_layout;
+    XrFingerprint target_profile_fingerprint;
+    XrFingerprint entry_abi_fingerprint;
+    XrFingerprint adapter_fingerprint;
+} XrTargetEntryExpectationRecord;
+
+XR_STATIC_ASSERT(sizeof(XrTargetEntryExpectationRecord) == 144u,
+                 "dynamic entry expectation wire facts must stay compact");
+
 XR_FUNC XrTargetPlan *xr_target_plan_retain(XrTargetPlan *plan);
 XR_FUNC void xr_target_plan_free(XrTargetPlan *plan);
 XR_FUNC bool xr_target_plan_is_frozen(const XrTargetPlan *plan);
@@ -732,6 +770,7 @@ XR_TARGET_TABLE_ACCESSOR(cleanups, XrTargetCleanupRecord);
 XR_TARGET_TABLE_ACCESSOR(adapters, XrTargetAdapterRecord);
 XR_TARGET_TABLE_ACCESSOR(capabilities, XrTargetCapabilityRecord);
 XR_TARGET_TABLE_ACCESSOR(coroutines, XrTargetCoroutineStateRecord);
+XR_TARGET_TABLE_ACCESSOR(entry_expectations, XrTargetEntryExpectationRecord);
 #undef XR_TARGET_TABLE_ACCESSOR
 
 #endif  // XR_TARGET_PLAN_H

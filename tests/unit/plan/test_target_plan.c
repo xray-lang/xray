@@ -1685,7 +1685,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "af61035d4bbcb6f800a7d6f45a1fc9b4850e792ee4d4003d5484856474a77cb7") == 0);
+                   "785e45711ed49b0a00dcdf7854205e9ac21d3051ce2133145018955b4a32d49b") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2517,6 +2517,7 @@ typedef enum SourceExportArgumentKind {
     SOURCE_EXPORT_ARGUMENT_NONE = 0,
     SOURCE_EXPORT_ARGUMENT_VALUE,
     SOURCE_EXPORT_ARGUMENT_RAW_POINTER_REFERENCE,
+    SOURCE_EXPORT_ARGUMENT_EXACT_I64,
 } SourceExportArgumentKind;
 
 static XrSemanticPlan *build_source_export_semantic(
@@ -2524,8 +2525,10 @@ static XrSemanticPlan *build_source_export_semantic(
     bool with_argument = argument_kind != SOURCE_EXPORT_ARGUMENT_NONE;
     bool reference =
         argument_kind == SOURCE_EXPORT_ARGUMENT_RAW_POINTER_REFERENCE;
+    bool exact_i64 = argument_kind == SOURCE_EXPORT_ARGUMENT_EXACT_I64;
     XiFunc *dependency_root = xi_func_new("net_init", &stub_unit);
-    XiFunc *write_bytes = xi_func_new("writeBytes", &stub_unit);
+    XiFunc *write_bytes = xi_func_new(
+        "writeBytes", exact_i64 ? &stub_int : &stub_unit);
     REQUIRE(dependency_root && write_bytes);
     XiBlock *dependency_entry = xi_block_new(dependency_root);
     XiBlock *write_entry = xi_block_new(write_bytes);
@@ -2543,7 +2546,8 @@ static XrSemanticPlan *build_source_export_semantic(
         REQUIRE(write_bytes->params);
         write_bytes->params[0] = xi_param(
             write_bytes, write_entry, 0,
-            reference ? &stub_raw_pointer : &stub_bool);
+            reference ? &stub_raw_pointer
+                      : (exact_i64 ? &stub_int : &stub_bool));
         REQUIRE(write_bytes->params[0]);
         if (reference) {
             REQUIRE(xi_func_set_param_passing_mode(write_bytes, 0,
@@ -2568,7 +2572,8 @@ static XrSemanticPlan *build_source_export_semantic(
     xi_block_set_return(dependency_entry, NULL);
     if (!with_argument)
         REQUIRE(xi_value_new(write_bytes, write_entry, XI_YIELD, &stub_unit, 0));
-    xi_block_set_return(write_entry, NULL);
+    xi_block_set_return(write_entry,
+                        exact_i64 ? write_bytes->params[0] : NULL);
     dependency_root->stage = write_bytes->stage = XI_STAGE_SEMANTIC_LOWERED;
     dependency_root->invariant_mask = write_bytes->invariant_mask =
         xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
@@ -2591,7 +2596,8 @@ static XrSemanticPlan *build_source_export_semantic(
     REQUIRE(dependency && xr_semantic_plan_source_export_count(dependency) == 1);
 
     XiFunc *caller_root = xi_func_new("http_init", &stub_unit);
-    XiFunc *caller = xi_func_new("_serverWriteAll", &stub_unit);
+    XiFunc *caller = xi_func_new(
+        "_serverWriteAll", exact_i64 ? &stub_int : &stub_unit);
     REQUIRE(caller_root && caller);
     XiBlock *root_entry = xi_block_new(caller_root);
     XiBlock *caller_entry = xi_block_new(caller);
@@ -2630,6 +2636,8 @@ static XrSemanticPlan *build_source_export_semantic(
     XiValue *argument = NULL;
     if (argument_kind == SOURCE_EXPORT_ARGUMENT_VALUE) {
         argument = xi_const_bool(caller, caller_entry, true, &stub_bool);
+    } else if (exact_i64) {
+        argument = xi_const_int(caller, caller_entry, 41, &stub_int);
     } else if (reference) {
         argument_storage = xi_value_new(caller, caller_entry, XI_GET_SHARED,
                                         &stub_raw_pointer, 0);
@@ -2640,7 +2648,9 @@ static XrSemanticPlan *build_source_export_semantic(
         argument->args[0] = argument_storage;
     }
     XiValue *method =
-        xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, with_argument ? 2 : 1);
+        xi_value_new(caller, caller_entry, XI_CALL_METHOD,
+                     exact_i64 ? &stub_int : &stub_unit,
+                     with_argument ? 2 : 1);
     REQUIRE(receiver && receiver_alias && (!with_argument || argument) && method);
     receiver->aux_int = 0;
     receiver_alias->args[0] = receiver;
@@ -3446,6 +3456,65 @@ static void test_source_export_ref_argument_is_not_array_projection(void) {
             strcmp(value.c_type, "const void * *") == 0);
 
     xr_c_emission_plan_free(emission);
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_semantic_plan_free(dependency);
+}
+
+static void test_exact_i64_dynamic_entry_authority(void) {
+    XrSemanticPlan *dependency = NULL;
+    XrSemanticPlan *semantic = build_source_export_semantic(
+        &dependency, SOURCE_EXPORT_ARGUMENT_EXACT_I64);
+    XrTargetProfile *profile = build_profile(0);
+    const XrSemanticPlan *dependencies[] = {dependency};
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build_module_set(
+        semantic, dependencies, 1, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "exact i64 dynamic-entry fixture failed: %s\n",
+                error);
+    REQUIRE(built && plan && xr_target_plan_verify(
+                                    plan, error, sizeof(error)));
+    REQUIRE(plan->entry_expectations_count == 1 && plan->calls_count == 1 &&
+            plan->call_arguments_count == 1 &&
+            plan->entry_expectations[0].id == 0 &&
+            plan->entry_expectations[0].call == 0 &&
+            plan->entry_expectations[0].abi_schema_version == 1 &&
+            plan->entry_expectations[0].parameter_count == 1 &&
+            plan->entry_expectations[0].value_kind ==
+                XR_TARGET_ENTRY_VALUE_EXACT_I64 &&
+            plan->entry_expectations[0].adapter_kind ==
+                XR_TARGET_ENTRY_ADAPTER_IDENTITY);
+    uint32_t entry_rows = 0;
+    uint32_t entry_function = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->instructions_count; i++) {
+        if (plan->instructions[i].opcode !=
+            XR_TARGET_INSTRUCTION_CALL_ENTRY_I64)
+            continue;
+        entry_rows++;
+        entry_function = plan->instructions[i].function;
+        REQUIRE(plan->instructions[i].immediate_bits == 0);
+    }
+    REQUIRE(entry_rows == 1 && entry_function != XR_SEMANTIC_INDEX_NONE &&
+            xr_target_plan_function_execution_family_mask(
+                plan, entry_function) ==
+                XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC);
+    REQUIRE((plan->completed_family_mask &
+             XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION) != 0);
+
+    XrFingerprint saved =
+        plan->entry_expectations[0].entry_abi_fingerprint;
+    plan->entry_expectations[0].entry_abi_fingerprint.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1005");
+    plan->entry_expectations[0].entry_abi_fingerprint = saved;
+    saved = plan->entry_expectations[0].adapter_fingerprint;
+    plan->entry_expectations[0].adapter_fingerprint.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1005");
+    plan->entry_expectations[0].adapter_fingerprint = saved;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
@@ -4959,6 +5028,7 @@ int main(int argc, char **argv) {
     test_source_export_call_authority();
     test_source_export_call_argument_authority();
     test_source_export_ref_argument_is_not_array_projection();
+    test_exact_i64_dynamic_entry_authority();
     test_profile_freeze_and_determinism();
     test_plan_snapshot_and_determinism();
     test_builder_materializes_canonical_scalar_intents();

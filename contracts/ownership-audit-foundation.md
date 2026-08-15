@@ -56,7 +56,7 @@ integration gates; none is implied by this leaf module.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt e582efa7ac94f9388d2a5ef724b81393da4fed1e723e6d0731b99ccb0f8d3d35
+anchor-sha256: CMakeLists.txt 52120c519042aa84194f877420c808db07fdde1a563f8bdb94e65af9fde9e00b
 anchor-sha256: src/shared/xr_ownership_event.h 4ee731782643616d5df34ead901ae39cd995fc91113774eabbe8dd95f982d90d
 anchor-sha256: src/plan/ownership/xr_ownership_certificate.h 33de50d0b6bb3a654628ffee0890fa80476e9d85234d8e751bd952e06ed08d07
 anchor-sha256: src/runtime/ownership/xr_ownership_audit.h 524251f129b91b7f6de71081b9514528748ebab1264e25803b547d12a1c39309
@@ -64,5 +64,5 @@ anchor-sha256: src/runtime/ownership/xr_ownership_audit.c 89516b97cfd7a9109acc8c
 anchor-sha256: scripts/check_ownership_audit_record_no_alloc.py 00f71577e9278988a69467ffb3ef1078618cb3658ba544568742ffc9c1581f63
 anchor-sha256: scripts/check_ownership_audit_release_boundary.py 11d8469ef2af76e09dc03616ed7e70a467e8e16c3e1a3337423ef929cf1701c8
 anchor-sha256: scripts/run_tsan_focused.py dccb149395edccc147de3ff70f4f216967b0063de65fa6d2286f81710fcdfea3
-anchor-sha256: tests/unit/CMakeLists.txt 1f7f1d62fd274f1c276e4c888d2bc2caf5deb209d128ab38cf63a10bda7920a4
+anchor-sha256: tests/unit/CMakeLists.txt 58930b02a448598d32ac4690fcaa8cff3ede37ab60892f68b378204601672158
 anchor-sha256: tests/unit/runtime/test_ownership_audit.c 98c718b64f6b840bee6172c07e0a931178ca4dd237e5bb1a88ff9f03a130f59e

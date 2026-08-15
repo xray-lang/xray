@@ -325,8 +325,35 @@ XRAY_API bool xr_module_generation_verify(
 
 static bool identity_equal(const XrModuleGenerationSnapshot *before,
                            const XrModuleGenerationSnapshot *after) {
-    return memcmp(&before->identity, &after->identity,
-                  sizeof(before->identity)) == 0;
+    const XrModuleGenerationIdentity *left = &before->identity;
+    const XrModuleGenerationIdentity *right = &after->identity;
+    return left->schema_version == right->schema_version &&
+           left->target_plan_schema_version ==
+               right->target_plan_schema_version &&
+           left->generation_number == right->generation_number &&
+           left->completed_family_mask == right->completed_family_mask &&
+           left->required_capability_mask ==
+               right->required_capability_mask &&
+           memcmp(left->semantic_fingerprint, right->semantic_fingerprint,
+                  sizeof(left->semantic_fingerprint)) == 0 &&
+           memcmp(left->target_profile_fingerprint,
+                  right->target_profile_fingerprint,
+                  sizeof(left->target_profile_fingerprint)) == 0 &&
+           memcmp(left->target_plan_fingerprint,
+                  right->target_plan_fingerprint,
+                  sizeof(left->target_plan_fingerprint)) == 0 &&
+           memcmp(left->runtime_abi_fingerprint,
+                  right->runtime_abi_fingerprint,
+                  sizeof(left->runtime_abi_fingerprint)) == 0 &&
+           memcmp(left->provider_set_fingerprint,
+                  right->provider_set_fingerprint,
+                  sizeof(left->provider_set_fingerprint)) == 0 &&
+           memcmp(left->object_header_fingerprint,
+                  right->object_header_fingerprint,
+                  sizeof(left->object_header_fingerprint)) == 0 &&
+           memcmp(left->generation_fingerprint,
+                  right->generation_fingerprint,
+                  sizeof(left->generation_fingerprint)) == 0;
 }
 
 static bool pins_equal(const XrModuleGenerationSnapshot *before,

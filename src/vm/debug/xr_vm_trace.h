@@ -96,8 +96,11 @@ XR_FUNC XrVmDebugSessionStatus xr_typed_debug_session_init(
 XR_FUNC bool xr_typed_debug_session_matches_plan(
     const XrVmDebugSession *session,
     XrFingerprint target_plan_fingerprint);
-XR_FUNC bool xr_typed_debug_emit(const XrVmDebugSession *session,
-                              uint64_t ordinal, XrVmTraceEvent *event);
+XR_FUNC bool xr_typed_debug_emit(
+    const XrVmDebugSession *session,
+    const XrFingerprint *target_plan_fingerprint,
+    const XrModuleGenerationIdentity *generation_identity,
+    uint64_t ordinal, XrVmTraceEvent *event);
 
 XR_FUNC bool xr_typed_trace_buffer_init(XrVmTraceBuffer *buffer,
                                      XrVmTraceEvent *storage,

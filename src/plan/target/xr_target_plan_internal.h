@@ -59,6 +59,8 @@ typedef struct XrTargetPlanDraft {
     uint32_t capabilities_count;
     const XrTargetCoroutineStateRecord *coroutines;
     uint32_t coroutines_count;
+    const XrTargetEntryExpectationRecord *entry_expectations;
+    uint32_t entry_expectations_count;
 } XrTargetPlanDraft;
 
 XR_FUNC bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out,
@@ -98,6 +100,7 @@ struct XrTargetPlan {
     XR_TARGET_TABLE_FIELD(adapters, XrTargetAdapterRecord);
     XR_TARGET_TABLE_FIELD(capabilities, XrTargetCapabilityRecord);
     XR_TARGET_TABLE_FIELD(coroutines, XrTargetCoroutineStateRecord);
+    XR_TARGET_TABLE_FIELD(entry_expectations, XrTargetEntryExpectationRecord);
 #undef XR_TARGET_TABLE_FIELD
 };
 

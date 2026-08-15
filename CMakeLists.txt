@@ -1299,6 +1299,7 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     src/plan/format/xr_xtp_instruction_stream.c
     src/plan/format/xr_xtp_rows.c
     src/plan/target/xr_target_builder.c
+    src/plan/target/xr_target_entry_abi.c
     src/plan/target/xr_target_instruction_verify.c
     src/plan/target/xr_target_plan.c
     src/plan/target/xr_target_profile.c
@@ -1392,6 +1393,7 @@ set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
     src/plan/ownership/xr_ownership_check.c
     src/plan/ownership/xr_ownership_replay.c
     src/plan/target/xr_target_plan.c
+    src/plan/target/xr_target_entry_abi.c
     src/plan/target/xr_target_instruction_verify.c
     src/plan/target/xr_target_profile.c
     src/plan/target/xr_target_verify.c
@@ -1403,6 +1405,7 @@ set(XRAY_VM_RUNTIME_SOURCES
     ${OS_SRC}
     ${RUNTIME_ABI_SRC}
     ${XRAY_VM_TARGET_PLAN_LOAD_SOURCES}
+    src/runtime/xr_dynamic_entry_runtime.c
     src/runtime/xr_entry_cell.c
     src/runtime/xr_module_generation.c
     src/runtime/xr_module_generation_verify.c

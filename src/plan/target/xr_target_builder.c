@@ -15,6 +15,7 @@
 
 #include "xr_target_builder.h"
 #include "xr_target_instruction_verify.h"
+#include "xr_target_entry_abi.h"
 #include "xr_target_plan_internal.h"
 #include "../semantic/xr_semantic_enum_shape.h"
 #include "xr_target_profile_internal.h"
@@ -238,6 +239,8 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t capability_count;
     XrTargetCoroutineStateRecord *coroutines;
     uint32_t coroutine_count;
+    XrTargetEntryExpectationRecord *entry_expectations;
+    uint32_t entry_expectation_count;
 } XrTargetMaterializedPlan;
 
 typedef struct XrTargetPlanBuilder XrTargetPlanBuilder;
@@ -340,6 +343,7 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     xr_free(materialized->adapters);
     xr_free(materialized->capabilities);
     xr_free(materialized->coroutines);
+    xr_free(materialized->entry_expectations);
     memset(materialized, 0, sizeof(*materialized));
 }
 
@@ -8897,6 +8901,17 @@ static bool builder_add_coroutine_state_calls(XrTargetPlanBuilder *builder,
     return true;
 }
 
+static bool builder_add_dynamic_entry_expectations(
+    XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+    if (!builder_begin_family(builder,
+                              XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION,
+                              error, error_size))
+        return false;
+    builder->completed_family_mask |=
+        XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION;
+    return true;
+}
+
 static int find_rep_id(const XrTargetMaterializedPlan *materialized,
                        const XrTargetMachineRepRecord *record) {
     uint32_t low = 0;
@@ -9518,6 +9533,168 @@ static bool materialized_i64_slot(const XrTargetMaterializedPlan *materialized,
                                     XR_TARGET_SCALAR_SLOT_I64, out_slot);
 }
 
+static bool source_entry_call_is_exact(
+    const XrTargetPlanBuilder *builder,
+    const XrTargetMaterializedPlan *materialized, uint32_t call_index) {
+    if (!builder || !materialized || call_index >= materialized->call_count)
+        return false;
+    const XrTargetCallRecord *call = &materialized->calls[call_index];
+    const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(
+        builder->semantic_plan, call->semantic_operation);
+    const XrSemanticPlan *dependency =
+        call->source_dependency < builder->semantic_dependency_count
+            ? builder->semantic_dependencies[call->source_dependency]
+            : NULL;
+    const XrSemanticSourceExportRecord *export_record =
+        dependency && call->source_export <
+                          xr_semantic_plan_source_export_count(dependency)
+            ? xr_semantic_plan_source_export(dependency, call->source_export)
+            : NULL;
+    const XrSemanticFunctionRecord *callee =
+        export_record
+            ? xr_semantic_plan_function(dependency, export_record->function)
+            : NULL;
+    if (!operation || !dependency || !export_record || !callee ||
+        call->id != call_index ||
+        (operation->opcode != XI_CALL &&
+         operation->opcode != XI_CALL_METHOD) ||
+        operation->function != call->caller_function || call->flags != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT ||
+        call->target_kind != XR_TARGET_CALL_TARGET_SOURCE_EXPORT ||
+        call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        call->adapter_count != 0 || call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->result_value != operation->result_value ||
+        operation->operand_count != (uint32_t) call->argument_count + 1u ||
+        call->argument_count != callee->parameter_count ||
+        callee->capture_count != 0 ||
+        !semantic_type_is_exact_i64(builder->semantic_plan,
+                                    operation->result_type) ||
+        !semantic_type_is_exact_i64(dependency, callee->return_type) ||
+        call->result_register_rep >= materialized->machine_rep_count ||
+        call->result_memory_rep >= materialized->machine_rep_count ||
+        !materialized_rep_is_exact(
+            &materialized->machine_reps[call->result_register_rep],
+            XR_TARGET_SCALAR_SLOT_I64) ||
+        !materialized_rep_is_exact(
+            &materialized->machine_reps[call->result_memory_rep],
+            XR_TARGET_SCALAR_SLOT_I64) ||
+        !materialized_i64_slot(materialized, call->caller_function,
+                               operation->result_value, NULL) ||
+        call->argument_begin > materialized->call_argument_count ||
+        call->argument_count >
+            materialized->call_argument_count - call->argument_begin)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(
+        builder->semantic_plan, &operand_count);
+    if (!operands || operation->operand_begin >= operand_count)
+        return false;
+    for (uint16_t ordinal = 0; ordinal < call->argument_count; ordinal++) {
+        const XrTargetCallArgumentRecord *argument =
+            &materialized->call_arguments[call->argument_begin + ordinal];
+        const XrSemanticOperandRecord *operand =
+            &operands[operation->operand_begin + 1u + ordinal];
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(
+            dependency, callee->parameter_begin + ordinal);
+        if (!parameter || parameter->function != export_record->function ||
+            parameter->ordinal != ordinal || parameter->mode != XR_PARAM_READ ||
+            parameter->transfer_mode != XR_TRANSFER_SHARE ||
+            !semantic_type_is_exact_i64(dependency, parameter->type) ||
+            argument->call != call_index || argument->ordinal != ordinal ||
+            argument->semantic_value != operand->value ||
+            argument->mode != XR_TARGET_CALL_VALUE ||
+            (argument->ownership != XR_TARGET_CALL_READ &&
+             argument->ownership != XR_TARGET_CALL_CONSUME) ||
+            argument->transfer_mode != XR_TRANSFER_SHARE ||
+            argument->flags != 0 ||
+            argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+            argument->register_rep >= materialized->machine_rep_count ||
+            argument->memory_rep >= materialized->machine_rep_count ||
+            argument->callee_register_rep >=
+                materialized->machine_rep_count ||
+            argument->callee_memory_rep >= materialized->machine_rep_count ||
+            !materialized_rep_is_exact(
+                &materialized->machine_reps[argument->register_rep],
+                XR_TARGET_SCALAR_SLOT_I64) ||
+            !materialized_rep_is_exact(
+                &materialized->machine_reps[argument->memory_rep],
+                XR_TARGET_SCALAR_SLOT_I64) ||
+            !materialized_rep_is_exact(
+                &materialized->machine_reps[argument->callee_register_rep],
+                XR_TARGET_SCALAR_SLOT_I64) ||
+            !materialized_rep_is_exact(
+                &materialized->machine_reps[argument->callee_memory_rep],
+                XR_TARGET_SCALAR_SLOT_I64) ||
+            !materialized_i64_slot(materialized, call->caller_function,
+                                   operand->value, NULL))
+            return false;
+    }
+    return true;
+}
+
+static bool materialize_entry_expectations(
+    const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
+    char *error, size_t error_size) {
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < materialized->call_count; i++)
+        count += source_entry_call_is_exact(builder, materialized, i);
+    materialized->entry_expectation_count = count;
+    materialized->entry_expectations =
+        (XrTargetEntryExpectationRecord *) allocate_records(
+            count, sizeof(*materialized->entry_expectations));
+    if (count && !materialized->entry_expectations)
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "dynamic entry expectation allocation failed");
+    const XrTargetMachineFacts *machine =
+        xr_target_profile_machine_facts(builder->profile);
+    if (!machine)
+        return fail(error, error_size, "XR_TARGET_1000",
+                    "dynamic entry target profile is missing");
+    uint32_t next = 0;
+    for (uint32_t call_index = 0; call_index < materialized->call_count;
+         call_index++) {
+        if (!source_entry_call_is_exact(builder, materialized, call_index))
+            continue;
+        const XrTargetCallRecord *call = &materialized->calls[call_index];
+        XrTargetEntryExpectationRecord *record =
+            &materialized->entry_expectations[next];
+        XrTargetEntryAbiFacts facts = {0};
+        facts.schema_version = XR_TARGET_ENTRY_ABI_SCHEMA_VERSION;
+        facts.parameter_count = call->argument_count;
+        facts.native_abi = machine->native_abi;
+        facts.value_kind = XR_TARGET_ENTRY_VALUE_EXACT_I64;
+        facts.target_data_layout = machine->data_layout.stable_hash;
+        facts.target_profile_fingerprint =
+            xr_target_profile_fingerprint(builder->profile);
+        *record = (XrTargetEntryExpectationRecord) {
+            .id = next,
+            .call = call_index,
+            .abi_schema_version = facts.schema_version,
+            .parameter_count = facts.parameter_count,
+            .native_abi = facts.native_abi,
+            .value_kind = facts.value_kind,
+            .adapter_kind = XR_TARGET_ENTRY_ADAPTER_IDENTITY,
+            .target_data_layout = facts.target_data_layout,
+            .target_profile_fingerprint = facts.target_profile_fingerprint,
+        };
+        if (!stable_identity_from_pair(
+                "xray-target-entry-expectation-v1", call->identity,
+                call->source_callee_identity, next, &record->identity) ||
+            !xr_target_entry_abi_fingerprint(
+                &facts, &record->entry_abi_fingerprint) ||
+            !xr_target_entry_identity_adapter_fingerprint(
+                &record->entry_abi_fingerprint,
+                &record->adapter_fingerprint))
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "dynamic entry expectation identity is incomplete");
+        next++;
+    }
+    return next == count;
+}
+
 static uint16_t scalar_instruction_opcode(uint16_t semantic_opcode) {
     typedef struct ScalarInstructionBinding {
         uint16_t semantic_opcode;
@@ -9706,6 +9883,7 @@ static bool scalar_block_terminator_row(
 
 typedef struct XrScalarInstructionAnalysis {
     uint32_t *call_by_operation;
+    uint32_t *entry_by_operation;
     uint8_t *elided_operations;
     uint32_t operation_count;
 } XrScalarInstructionAnalysis;
@@ -9715,6 +9893,7 @@ static void scalar_instruction_analysis_dispose(
     if (!analysis)
         return;
     xr_free(analysis->call_by_operation);
+    xr_free(analysis->entry_by_operation);
     xr_free(analysis->elided_operations);
     memset(analysis, 0, sizeof(*analysis));
 }
@@ -9814,18 +9993,24 @@ static bool scalar_instruction_analysis_init(
         (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
     analysis->call_by_operation = (uint32_t *) allocate_records(
         analysis->operation_count, sizeof(*analysis->call_by_operation));
+    analysis->entry_by_operation = (uint32_t *) allocate_records(
+        analysis->operation_count, sizeof(*analysis->entry_by_operation));
     analysis->elided_operations = (uint8_t *) allocate_records(
         analysis->operation_count, sizeof(*analysis->elided_operations));
-    if ((analysis->operation_count && !analysis->call_by_operation) ||
+    if ((analysis->operation_count &&
+         (!analysis->call_by_operation || !analysis->entry_by_operation)) ||
         (analysis->operation_count && !analysis->elided_operations)) {
         scalar_instruction_analysis_dispose(analysis);
         return false;
     }
-    for (uint32_t i = 0; i < analysis->operation_count; i++)
+    for (uint32_t i = 0; i < analysis->operation_count; i++) {
         analysis->call_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
+        analysis->entry_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
+    }
 
     XrTargetValueStorageAnalysis values = {0};
     XrDirectLocalCalleeStorageAnalysis shared = {0};
+    XrSourceNamespaceStorageAnalysis namespaces = {0};
     char ignored[1] = {0};
     if (!value_storage_analysis_init(builder->semantic_plan, &values, ignored,
                                      sizeof(ignored)) ||
@@ -9833,7 +10018,11 @@ static bool scalar_instruction_analysis_init(
                                 sizeof(ignored)) ||
         !direct_local_callee_storage_analysis_init(
             builder->semantic_plan, &values, &shared, ignored,
+            sizeof(ignored)) ||
+        !source_namespace_storage_analysis_init(
+            builder->semantic_plan, &values, &namespaces, ignored,
             sizeof(ignored))) {
+        source_namespace_storage_analysis_dispose(&namespaces);
         direct_local_callee_storage_analysis_dispose(&shared);
         value_storage_analysis_dispose(&values);
         scalar_instruction_analysis_dispose(analysis);
@@ -9842,13 +10031,45 @@ static bool scalar_instruction_analysis_init(
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(
         builder->semantic_plan, &operand_count);
+    uint32_t *entry_by_call = (uint32_t *) allocate_records(
+        materialized->call_count, sizeof(*entry_by_call));
+    if (materialized->call_count && !entry_by_call) {
+        source_namespace_storage_analysis_dispose(&namespaces);
+        direct_local_callee_storage_analysis_dispose(&shared);
+        value_storage_analysis_dispose(&values);
+        scalar_instruction_analysis_dispose(analysis);
+        return false;
+    }
+    for (uint32_t i = 0; i < materialized->call_count; i++)
+        entry_by_call[i] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < materialized->entry_expectation_count; i++) {
+        uint32_t call = materialized->entry_expectations[i].call;
+        if (call >= materialized->call_count ||
+            entry_by_call[call] != XR_SEMANTIC_INDEX_NONE) {
+            xr_free(entry_by_call);
+            source_namespace_storage_analysis_dispose(&namespaces);
+            direct_local_callee_storage_analysis_dispose(&shared);
+            value_storage_analysis_dispose(&values);
+            scalar_instruction_analysis_dispose(analysis);
+            return false;
+        }
+        entry_by_call[call] = i;
+    }
     for (uint32_t call_index = 0; call_index < materialized->call_count;
          call_index++) {
         const XrTargetCallRecord *call = &materialized->calls[call_index];
-        if (!scalar_direct_i64_call_is_exact(builder, materialized, call_index) ||
+        bool direct = scalar_direct_i64_call_is_exact(
+            builder, materialized, call_index);
+        bool dynamic = entry_by_call[call_index] != XR_SEMANTIC_INDEX_NONE &&
+                       source_entry_call_is_exact(builder, materialized,
+                                                  call_index);
+        if ((!direct && !dynamic) ||
             call->semantic_operation >= analysis->operation_count)
             continue;
         analysis->call_by_operation[call->semantic_operation] = call_index;
+        if (dynamic)
+            analysis->entry_by_operation[call->semantic_operation] =
+                entry_by_call[call_index];
         const XrSemanticOperationRecord *call_operation =
             xr_semantic_plan_operation(builder->semantic_plan,
                                        call->semantic_operation);
@@ -9879,6 +10100,13 @@ static bool scalar_instruction_analysis_init(
                 value = operands[producer->operand_begin].value;
                 continue;
             }
+            if (dynamic && value < namespaces.value_count &&
+                namespaces.exact_value[value] &&
+                namespaces.dependency_by_value[value] ==
+                    call->source_dependency) {
+                exact = true;
+                break;
+            }
             bool closure =
                 (producer->opcode == XI_CLOSURE_NEW ||
                  (producer->opcode == XI_STACK_ALLOC &&
@@ -9890,7 +10118,7 @@ static bool scalar_instruction_analysis_init(
                     builder->semantic_plan, &shared, producer) &&
                 shared.target_by_value[producer->result_value] ==
                     call->callee_function;
-            exact = closure || shared_callee;
+            exact = direct && (closure || shared_callee);
             break;
         }
         if (exact)
@@ -9923,10 +10151,16 @@ static bool scalar_instruction_analysis_init(
                 analysis->elided_operations[use_index] &&
                 use->opcode == XI_COPY &&
                 use->semantic_immediate == XI_COPY_KIND_IDENTITY;
+            bool dynamic_receiver =
+                analysis->entry_by_operation[use_index] !=
+                    XR_SEMANTIC_INDEX_NONE &&
+                use->opcode == XI_CALL_METHOD;
             bool callee = ordinal == 0 &&
                 analysis->call_by_operation[use_index] !=
                     XR_SEMANTIC_INDEX_NONE &&
-                operands[use->operand_begin].role == XR_SEM_OPERAND_CALLEE;
+                operands[use->operand_begin].role ==
+                    (dynamic_receiver ? XR_SEM_OPERAND_RECEIVER
+                                      : XR_SEM_OPERAND_CALLEE);
             if (!forwarding && !callee)
                 analysis->elided_operations[producer] = 0;
         }
@@ -9943,6 +10177,8 @@ static bool scalar_instruction_analysis_init(
             analysis->elided_operations[producer] = 0;
     }
     direct_local_callee_storage_analysis_dispose(&shared);
+    source_namespace_storage_analysis_dispose(&namespaces);
+    xr_free(entry_by_call);
     value_storage_analysis_dispose(&values);
     return true;
 }
@@ -10044,11 +10280,21 @@ static bool materialize_scalar_instruction_function(
             uint16_t opcode = operation
                                   ? scalar_instruction_opcode(operation->opcode)
                                   : XR_TARGET_INSTRUCTION_INVALID;
+            uint32_t entry_index =
+                operation_index < analysis->operation_count
+                    ? analysis->entry_by_operation[operation_index]
+                    : XR_SEMANTIC_INDEX_NONE;
+            if (entry_index != XR_SEMANTIC_INDEX_NONE)
+                opcode = XR_TARGET_INSTRUCTION_CALL_ENTRY_I64;
             const XrTargetInstructionContract *contract =
                 xr_target_instruction_contract(opcode);
             uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
-            bool call_dispatch = contract &&
+            bool direct_call_dispatch = contract &&
                 contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_CALL;
+            bool entry_call_dispatch = contract &&
+                contract->dispatch_kind ==
+                    XR_TARGET_INSTRUCTION_DISPATCH_ENTRY_CALL;
+            bool call_dispatch = direct_call_dispatch || entry_call_dispatch;
             uint32_t call_index =
                 operation_index < analysis->operation_count
                     ? analysis->call_by_operation[operation_index]
@@ -10061,11 +10307,18 @@ static bool materialize_scalar_instruction_function(
                 operation->function != function_index ||
                 operation->block != block_index ||
                 (!call_dispatch && operation->effects != 0) ||
-                (call_dispatch && (!call ||
+                (direct_call_dispatch && (!call ||
                     !scalar_direct_i64_call_is_exact(builder, materialized,
                                                      call_index) ||
                     (executable_functions &&
                      !executable_functions[call->callee_function]))) ||
+                (entry_call_dispatch &&
+                 (!call || entry_index >=
+                               materialized->entry_expectation_count ||
+                  materialized->entry_expectations[entry_index].call !=
+                      call_index ||
+                  !source_entry_call_is_exact(builder, materialized,
+                                              call_index))) ||
                 (!call_dispatch && operation->operand_count != contract->arity) ||
                 operation->operand_begin > operand_total ||
                 operation->operand_count > operand_total - operation->operand_begin) {
@@ -10110,7 +10363,7 @@ static bool materialize_scalar_instruction_function(
                     admissible = false;
                     break;
                 }
-                immediate_bits = call_index;
+                immediate_bits = entry_call_dispatch ? entry_index : call_index;
             } else if (operation->opcode == XI_CONST) {
                 const XrSemanticConstantRecord *constant =
                     xr_semantic_plan_constant(semantic, operation->constant);
@@ -10189,7 +10442,9 @@ static bool materialize_scalar_instruction_function(
             materialized->functions[function_index].slot_count,
             materialized->calls, materialized->call_count,
             materialized->call_arguments,
-            materialized->call_argument_count)) {
+            materialized->call_argument_count,
+            materialized->entry_expectations,
+            materialized->entry_expectation_count)) {
         xr_free(group);
         xr_free(block_row);
         return false;
@@ -10860,6 +11115,8 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_string_concat_release_cleanups(builder, materialized,
                                                     error, error_size) ||
         !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
+        !materialize_entry_expectations(builder, materialized, error,
+                                        error_size) ||
         !materialize_scalar_instructions(builder, materialized, error,
                                          error_size) ||
         !materialize_coroutine_state_calls(builder, materialized, error,
@@ -10974,6 +11231,8 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out,
         .capabilities_count = materialized.capability_count,
         .coroutines = materialized.coroutines,
         .coroutines_count = materialized.coroutine_count,
+        .entry_expectations = materialized.entry_expectations,
+        .entry_expectations_count = materialized.entry_expectation_count,
     };
     bool frozen = xr_target_plan_freeze(&draft, out, error, error_size);
     materialized_dispose(&materialized);
@@ -11049,7 +11308,8 @@ bool xr_target_plan_build_module_set(
         !builder_add_native_module_namespace_storage(builder, error, error_size) ||
         !builder_add_aggregates(builder, error, error_size) ||
         !builder_add_calls_and_adapters(builder, error, error_size) ||
-        !builder_add_coroutine_state_calls(builder, error, error_size)) {
+        !builder_add_coroutine_state_calls(builder, error, error_size) ||
+        !builder_add_dynamic_entry_expectations(builder, error, error_size)) {
         builder_free(builder);
         return false;
     }

@@ -42,6 +42,7 @@ typedef struct XrXtpDecodedTables {
     XR_XTP_TABLE_FIELD(adapters, XrTargetAdapterRecord);
     XR_XTP_TABLE_FIELD(capabilities, XrTargetCapabilityRecord);
     XR_XTP_TABLE_FIELD(coroutines, XrTargetCoroutineStateRecord);
+    XR_XTP_TABLE_FIELD(entry_expectations, XrTargetEntryExpectationRecord);
 #undef XR_XTP_TABLE_FIELD
 } XrXtpDecodedTables;
 
@@ -66,6 +67,7 @@ static void dispose_tables(XrXtpDecodedTables *tables) {
     XR_XTP_FREE_TABLE(adapters);
     XR_XTP_FREE_TABLE(capabilities);
     XR_XTP_FREE_TABLE(coroutines);
+    XR_XTP_FREE_TABLE(entry_expectations);
 #undef XR_XTP_FREE_TABLE
     memset(tables, 0, sizeof(*tables));
 }
@@ -181,6 +183,7 @@ static bool decoded_storage_within_budget(const XrXtpCandidate *candidate,
     XR_XTP_ADD_DECODED_BYTES(ADAPTERS, XrTargetAdapterRecord);
     XR_XTP_ADD_DECODED_BYTES(CAPABILITIES, XrTargetCapabilityRecord);
     XR_XTP_ADD_DECODED_BYTES(COROUTINES, XrTargetCoroutineStateRecord);
+    XR_XTP_ADD_DECODED_BYTES(ENTRY_EXPECTATIONS, XrTargetEntryExpectationRecord);
 #undef XR_XTP_ADD_DECODED_BYTES
     *decoded_bytes = total;
     return true;
@@ -252,6 +255,8 @@ static bool decode_tables(const XrXtpCandidate *candidate, XrXtpDecodedTables *t
     XR_XTP_DECODE_TABLE(adapters, XrTargetAdapterRecord, ADAPTERS);
     XR_XTP_DECODE_TABLE(capabilities, XrTargetCapabilityRecord, CAPABILITIES);
     XR_XTP_DECODE_TABLE(coroutines, XrTargetCoroutineStateRecord, COROUTINES);
+    XR_XTP_DECODE_TABLE(entry_expectations, XrTargetEntryExpectationRecord,
+                        ENTRY_EXPECTATIONS);
 #undef XR_XTP_DECODE_TABLE
     return true;
 }
@@ -297,6 +302,7 @@ static XrTargetPlanDraft make_draft(const XrXtpDecodedTables *tables,
         XR_XTP_DRAFT_TABLE(adapters),
         XR_XTP_DRAFT_TABLE(capabilities),
         XR_XTP_DRAFT_TABLE(coroutines),
+        XR_XTP_DRAFT_TABLE(entry_expectations),
 #undef XR_XTP_DRAFT_TABLE
     };
     return draft;

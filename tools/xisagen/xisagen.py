@@ -3653,10 +3653,10 @@ TARGET_REP_FAMILIES = {'none', 'i64', 'bool'}
 TARGET_RESULT_OWNERSHIPS = {'none', 'trivial'}
 TARGET_OPERAND_OWNERSHIPS = {'none', 'borrow'}
 TARGET_EFFECTS = {'control', 'may-error', 'may-suspend'}
-TARGET_ERRORS = {'none', 'divide-by-zero', 'modulo-by-zero'}
+TARGET_ERRORS = {'none', 'divide-by-zero', 'modulo-by-zero', 'entry-call'}
 TARGET_IMMEDIATE_KINDS = {
     'none', 'i64', 'parameter-ordinal', 'jump-target', 'branch-targets',
-    'call-record',
+    'call-record', 'entry-expectation',
 }
 TARGET_CONTROL_KINDS = {'none', 'return', 'jump', 'branch'}
 TARGET_DISPATCH_ARGUMENTS = {
@@ -3671,6 +3671,7 @@ TARGET_DISPATCH_ARGUMENTS = {
     'return': {'none'},
     'branch': {'jump', 'i64', 'bool'},
     'call': {'none'},
+    'entry-call': {'none'},
 }
 
 
@@ -3880,6 +3881,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_ERROR_NONE = 0,',
         '    XR_TARGET_INSTRUCTION_ERROR_DIVIDE_BY_ZERO,',
         '    XR_TARGET_INSTRUCTION_ERROR_MODULO_BY_ZERO,',
+        '    XR_TARGET_INSTRUCTION_ERROR_ENTRY_CALL,',
         '} XrTargetInstructionErrorKind;',
         '',
         'typedef enum XrTargetInstructionImmediateKind {',
@@ -3889,6 +3891,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_JUMP_TARGET,',
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_BRANCH_TARGETS,',
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_CALL_RECORD,',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_ENTRY_EXPECTATION,',
         '} XrTargetInstructionImmediateKind;',
         '',
         'typedef enum XrTargetInstructionControlKind {',
@@ -3910,6 +3913,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_DISPATCH_RETURN,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_BRANCH,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_CALL,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ENTRY_CALL,',
         '} XrTargetInstructionDispatchKind;',
         '',
         'typedef enum XrTargetInstructionDispatchArgument {',
@@ -4008,7 +4012,17 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '}',
         '',
     ])
-    semantic_entries = [entry for entry in entries if entry.semantic != 'none']
+    # This macro is the canonical default lowering map. More specialized
+    # instructions may share the same semantic opcode but are selected only
+    # after their extra TargetPlan authority has been materialized, so the
+    # first stable-ID binding remains the unique default.
+    seen_semantics = set()
+    semantic_entries = []
+    for entry in entries:
+        if entry.semantic == 'none' or entry.semantic in seen_semantics:
+            continue
+        seen_semantics.add(entry.semantic)
+        semantic_entries.append(entry)
     lines.append('#define XR_TARGET_INSTRUCTION_SEMANTIC_BINDINGS(X) \\')
     for index, entry in enumerate(semantic_entries):
         suffix = ' \\' if index + 1 < len(semantic_entries) else ''
@@ -4025,7 +4039,8 @@ def generate_target_vm_ops(entries: list[TargetInstructionDef]) -> str:
         '',
     ]
     for entry in entries:
-        lines.append(f'XR_VM_OP({entry.ident}, {entry.dispatch}, '
+        handler = re.sub(r'[^0-9A-Za-z_]', '_', entry.dispatch).lower()
+        lines.append(f'XR_VM_OP({entry.ident}, {handler}, '
                      f'{_xi_c_ident(entry.dispatch)}, '
                      f'{_xi_c_ident(entry.dispatch_arg)})')
     lines.append('')

@@ -186,3 +186,11 @@
   :result-ownership trivial :operand-ownership none
   :effects () :error none :suspend no :immediate call-record :control none
   :semantic xi.call :dispatch call :dispatch-arg none)
+
+(define-target-instruction call-entry-i64
+  :id 27 :name "call.entry.i64" :arity 0 :terminator no
+  :result-rep i64 :operand-reps ()
+  :result-ownership trivial :operand-ownership none
+  :effects (may-error) :error entry-call :suspend no
+  :immediate entry-expectation :control none
+  :semantic xi.call :dispatch entry-call :dispatch-arg none)

@@ -134,6 +134,59 @@ static bool slot_rep_contract_is_exact(
            slot->ownership == memory_rep->ownership;
 }
 
+/* A source-export call carries namespace-resolution values in the immutable
+ * plan even though the generated CALL_ENTRY instruction consumes only its
+ * scalar argument/result slots. Those resolution-only slots are never
+ * materialized by the typed executor. Keeping them uninitialized is narrower
+ * than pretending the frame owns their roots or cleanup contract. */
+static bool slot_is_executed(const XrTargetPlan *plan, uint32_t function,
+                             uint32_t slot) {
+    uint32_t row_count = 0;
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_function_instructions(plan, function, &row_count);
+    uint32_t call_count = 0;
+    uint32_t argument_count = 0;
+    uint32_t expectation_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(plan, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(plan, &argument_count);
+    const XrTargetEntryExpectationRecord *expectations =
+        xr_target_plan_entry_expectations(plan, &expectation_count);
+    for (uint32_t i = 0; i < row_count; i++) {
+        const XrTargetInstructionRecord *row = &rows[i];
+        const XrTargetInstructionContract *contract =
+            xr_target_instruction_contract(row->opcode);
+        if (!contract)
+            return true;
+        if (row->result_slot == slot)
+            return true;
+        for (uint8_t operand = 0; operand < contract->arity; operand++) {
+            if (row->operand_slots[operand] == slot)
+                return true;
+        }
+        uint32_t call_index = XR_SEMANTIC_INDEX_NONE;
+        if (row->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 &&
+            row->immediate_bits <= UINT32_MAX)
+            call_index = (uint32_t) row->immediate_bits;
+        else if (row->opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64 &&
+                 row->immediate_bits < expectation_count)
+            call_index = expectations[row->immediate_bits].call;
+        if (call_index >= call_count)
+            continue;
+        const XrTargetCallRecord *call = &calls[call_index];
+        if (call->argument_begin > argument_count ||
+            call->argument_count > argument_count - call->argument_begin)
+            return true;
+        for (uint16_t argument = 0; argument < call->argument_count;
+             argument++) {
+            if (arguments[call->argument_begin + argument].caller_slot == slot)
+                return true;
+        }
+    }
+    return false;
+}
+
 static bool limits_are_bounded(const XrTypedFrameLimits *limits) {
     return limits && limits->max_arena_bytes <= XR_TYPED_FRAME_MAX_ARENA_BYTES &&
            limits->max_slot_count <= XR_TYPED_FRAME_MAX_SLOT_COUNT &&
@@ -174,6 +227,9 @@ static XrTypedFrameStatus validate_shape(const XrTargetPlan *plan,
     if (!functions || function_index >= function_count)
         return XR_TYPED_FRAME_FUNCTION_INVALID;
     const XrTargetFunctionRecord *function = &functions[function_index];
+    bool dynamic_entry_function =
+        xr_target_plan_function_execution_family_mask(plan, function_index) ==
+        XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC;
     if (function->id != function_index || function->semantic_function != function_index ||
         function->slot_begin > total_slots ||
         function->slot_count > total_slots - function->slot_begin ||
@@ -210,7 +266,9 @@ static XrTypedFrameStatus validate_shape(const XrTargetPlan *plan,
             slot->align > function->frame_align || slot->offset % slot->align != 0 ||
             slot->offset > function->frame_size ||
             slot->size > function->frame_size - slot->offset ||
-            !slot_rep_contract_is_exact(plan, slot))
+            ((!dynamic_entry_function ||
+              slot_is_executed(plan, function_index, global_slot)) &&
+             !slot_rep_contract_is_exact(plan, slot)))
             return XR_TYPED_FRAME_SLOT_INVALID;
     }
     shape->function = function;

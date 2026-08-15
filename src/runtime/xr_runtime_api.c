@@ -22,6 +22,7 @@
 #include "../plan/target/xr_target_plan.h"
 #include "../vm/xr_typed_dispatch.h"
 #include "xr_entry_cell.h"
+#include "xr_dynamic_entry_runtime.h"
 #include "xr_module_generation_internal.h"
 #include <stdio.h>
 #include <string.h>
@@ -33,8 +34,7 @@
  * cell.
  */
 struct XrExport {
-    XrEntryCell cell;
-    XrEntryCellExpectation expectation;
+    XrRuntimeEntryHandle *handle;
 };
 
 struct XrModule {
@@ -126,11 +126,14 @@ static void discard_partial_module(XrLoadedModuleGeneration *generation,
 
 static bool initialize_exports(XrExport *exports, uint32_t count) {
     for (uint32_t i = 0; i < count; i++) {
-        if (xr_entry_cell_init(&exports[i].cell))
+        char diagnostic[128] = {0};
+        if (xr_runtime_entry_handle_create(&exports[i].handle, diagnostic,
+                                           sizeof(diagnostic)))
             continue;
         char ignored[1] = {0};
         for (uint32_t j = 0; j < i; j++)
-            xr_entry_cell_dispose(&exports[j].cell, ignored, sizeof(ignored));
+            xr_runtime_entry_handle_release(&exports[j].handle, ignored,
+                                            sizeof(ignored));
         return false;
     }
     return true;
@@ -139,11 +142,11 @@ static bool initialize_exports(XrExport *exports, uint32_t count) {
 static bool clear_exports(XrExport *exports, uint32_t count,
                           char *diagnostic, size_t diagnostic_size) {
     for (uint32_t i = 0; i < count; i++) {
-        if (!xr_entry_cell_clear(&exports[i].cell, diagnostic,
+        XrEntryCell *cell =
+            xr_runtime_entry_handle_cell(exports[i].handle);
+        if (!xr_entry_cell_clear(cell, diagnostic,
                                  diagnostic_size))
             return false;
-        memset(&exports[i].expectation, 0,
-               sizeof(exports[i].expectation));
     }
     return true;
 }
@@ -151,8 +154,8 @@ static bool clear_exports(XrExport *exports, uint32_t count,
 static bool dispose_exports(XrExport *exports, uint32_t count,
                             char *diagnostic, size_t diagnostic_size) {
     for (uint32_t i = 0; i < count; i++) {
-        if (!xr_entry_cell_dispose(&exports[i].cell, diagnostic,
-                                   diagnostic_size))
+        if (!xr_runtime_entry_handle_release(&exports[i].handle, diagnostic,
+                                             diagnostic_size))
             return false;
     }
     return true;
@@ -243,7 +246,10 @@ XRAY_API bool xr_module_load_target_plan(
  * both re-derived by the semantic verifier, so an exact match is the only
  * match and a bounded scan finds it. */
 static const XrSemanticSourceExportRecord *lookup_source_export(
-    const XrSemanticPlan *semantic, const char *export_name) {
+    const XrSemanticPlan *semantic, const char *export_name,
+    uint32_t *source_export) {
+    if (source_export)
+        *source_export = UINT32_MAX;
     size_t count = xr_semantic_plan_source_export_count(semantic);
     for (size_t i = 0; i < count; i++) {
         const XrSemanticSourceExportRecord *record =
@@ -251,8 +257,11 @@ static const XrSemanticSourceExportRecord *lookup_source_export(
         if (!record || !record->name)
             return NULL;
         int order = strcmp(record->name, export_name);
-        if (order == 0)
+        if (order == 0) {
+            if (source_export)
+                *source_export = (uint32_t) i;
             return record;
+        }
         if (order > 0)
             return NULL;
     }
@@ -276,8 +285,9 @@ XRAY_API bool xr_module_find_export(const XrModule *module,
     if (!semantic)
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
                     "module plan does not retain its verified semantic authority");
+    uint32_t source_export = UINT32_MAX;
     const XrSemanticSourceExportRecord *record =
-        lookup_source_export(semantic, export_name);
+        lookup_source_export(semantic, export_name, &source_export);
     if (!record)
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
                     "module publishes no export under that exact name");
@@ -314,9 +324,14 @@ XRAY_API bool xr_module_find_export(const XrModule *module,
         .function = record->function,
         .executor_kind = XR_ENTRY_EXECUTOR_TYPED_VM,
     };
-    bool bound = xr_entry_cell_bind(
-        &slot->cell, &registration, &slot->expectation, diagnostic,
+    bool already_bound = false;
+    bool bound = xr_runtime_entry_handle_bind(
+        slot->handle, &registration, &already_bound, diagnostic,
         diagnostic_size);
+    if (bound)
+        bound = xr_runtime_entry_registry_publish(
+            module->generation->authority, module->plan, source_export,
+            slot->handle, diagnostic, diagnostic_size);
     xr_mutex_unlock(&module->runtime->gate);
     if (!bound)
         return false;
@@ -354,6 +369,18 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status, char *diagnostic,
         case XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
                         "exported function exceeded the executor call-depth budget");
+        case XR_TYPED_DISPATCH_ENTRY_UNAVAILABLE:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                        "exported function dynamic entry is unavailable");
+        case XR_TYPED_DISPATCH_ENTRY_AUTHORITY_MISMATCH:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                        "exported function dynamic entry authority changed");
+        case XR_TYPED_DISPATCH_ENTRY_BUDGET_EXCEEDED:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                        "exported function dynamic entry budget is exhausted");
+        case XR_TYPED_DISPATCH_ENTRY_RELEASE_FAILED:
+            return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
+                        "exported function dynamic entry release failed");
         case XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH:
         case XR_TYPED_DISPATCH_TRACE_REJECTED:
         case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
@@ -377,8 +404,13 @@ XRAY_API bool xr_export_call(const XrExport *export_handle,
     if (!export_handle || !result || (argument_count && !arguments))
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
                     "export call requires a resolved handle and a result cell");
-    if (argument_count > XR_TARGET_INSTRUCTION_MAX_PARAMETERS ||
-        argument_count != export_handle->expectation.abi.parameter_count)
+    const XrEntryCellExpectation *expectation =
+        xr_runtime_entry_handle_expectation(export_handle->handle);
+    XrEntryCell *cell =
+        xr_runtime_entry_handle_cell(export_handle->handle);
+    if (!expectation || !cell ||
+        argument_count > XR_TARGET_INSTRUCTION_MAX_PARAMETERS ||
+        argument_count != expectation->abi.parameter_count)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
                     "export argument count does not match the verified signature");
 
@@ -396,7 +428,7 @@ XRAY_API bool xr_export_call(const XrExport *export_handle,
     int64_t executed = 0;
     uint32_t executor_status = 0;
     XrEntryInvokeStatus status = xr_entry_cell_invoke_i64(
-        (XrEntryCell *) &export_handle->cell, &export_handle->expectation,
+        cell, expectation,
         argument_count ? scalars : NULL, argument_count, &executed,
         &executor_status, diagnostic, diagnostic_size);
     if (status == XR_ENTRY_INVOKE_VM_ERROR)
@@ -423,6 +455,12 @@ XRAY_API bool xr_module_unload(XrModule **module, char *diagnostic,
     xr_mutex_lock(&owned->runtime->gate);
     owned->unloading = true;
     xr_mutex_unlock(&owned->runtime->gate);
+    for (uint32_t i = 0; i < owned->function_count; i++) {
+        if (!xr_runtime_entry_registry_unpublish(
+                owned->generation->authority, owned->exports[i].handle,
+                diagnostic, diagnostic_size))
+            return false;
+    }
     /* Clearing every cell first releases the published static-root pins and
      * prevents a new call from starting. An already acquired call keeps its
      * independent in-flight pin, so retirement below refuses until it exits. */

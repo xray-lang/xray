@@ -166,6 +166,11 @@
     F(U32, logical_state) F(U32, suspend_block) F(U32, resume_block)                              \
     F(U32, resume_predecessor) F(U32, direct_call) F(U32, result_slot)                            \
     F(U16, resume_predecessor_ordinal) F(U16, flags)
+#define XR_XTP_TEXT_ENTRY_EXPECTATION_FIELDS(F)                                                         \
+    F(ID, identity) F(U32, id) F(U32, call) F(U32, abi_schema_version)                                 \
+    F(U16, parameter_count) F(U16, native_abi) F(U8, value_kind) F(U8, adapter_kind)                   \
+    F(U16, flags) F(U32, reserved32) F(U64, target_data_layout)                                        \
+    F(FP, target_profile_fingerprint) F(FP, entry_abi_fingerprint) F(FP, adapter_fingerprint)
 
 #define XR_XTP_TEXT_TYPED_ROWS(F)                                                                       \
     F(TARGET_PROFILE, XrTargetProfileDraft, XR_XTP_TEXT_PROFILE_FIELDS)                                \
@@ -186,6 +191,7 @@
     F(CLEANUPS, XrTargetCleanupRecord, XR_XTP_TEXT_CLEANUP_FIELDS)                                    \
     F(ADAPTERS, XrTargetAdapterRecord, XR_XTP_TEXT_ADAPTER_FIELDS)                                    \
     F(CAPABILITIES, XrTargetCapabilityRecord, XR_XTP_TEXT_CAPABILITY_FIELDS)                          \
-    F(COROUTINES, XrTargetCoroutineStateRecord, XR_XTP_TEXT_COROUTINE_FIELDS)
+    F(COROUTINES, XrTargetCoroutineStateRecord, XR_XTP_TEXT_COROUTINE_FIELDS)                           \
+    F(ENTRY_EXPECTATIONS, XrTargetEntryExpectationRecord, XR_XTP_TEXT_ENTRY_EXPECTATION_FIELDS)
 
 #endif  // XR_XTP_ROW_FIELDS_H

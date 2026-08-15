@@ -34,6 +34,8 @@ XR_FUNC bool xr_target_instruction_rows_control_flow_is_exact(
     uint32_t slot_begin, uint32_t slot_count,
     const XrTargetCallRecord *calls, uint32_t call_count,
     const XrTargetCallArgumentRecord *call_arguments,
-    uint32_t call_argument_count);
+    uint32_t call_argument_count,
+    const XrTargetEntryExpectationRecord *entry_expectations,
+    uint32_t entry_expectation_count);
 
 #endif  // XR_TARGET_INSTRUCTION_VERIFY_H

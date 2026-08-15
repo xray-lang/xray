@@ -13,6 +13,7 @@
 
 #include "../plan/target/xr_target_plan.h"
 #include "debug/xr_vm_trace.h"
+#include "xr_vm_dynamic_entry.h"
 
 typedef struct XrVmDecodedCache XrVmDecodedCache;
 
@@ -47,6 +48,10 @@ typedef enum XrTypedDispatchStatus {
     XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED,
     XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH,
     XR_TYPED_DISPATCH_TRACE_REJECTED,
+    XR_TYPED_DISPATCH_ENTRY_UNAVAILABLE,
+    XR_TYPED_DISPATCH_ENTRY_AUTHORITY_MISMATCH,
+    XR_TYPED_DISPATCH_ENTRY_BUDGET_EXCEEDED,
+    XR_TYPED_DISPATCH_ENTRY_RELEASE_FAILED,
 } XrTypedDispatchStatus;
 
 /*
@@ -73,9 +78,12 @@ typedef struct XrTypedDispatchI64Request {
     int64_t *result;
     const XrVmDebugSession *debug_session;
     const XrVmDecodedCache *decoded_cache;
+    const XrVmDynamicEntryContext *dynamic_entries;
+    const XrModuleGenerationIdentity *generation_identity;
     XrTypedDispatchProvider provider;
     uint32_t function;
     uint32_t argument_count;
+    bool use_dynamic_entry_cache;
 } XrTypedDispatchI64Request;
 
 /* Proves that one provider's generated binding exactly matches the canonical

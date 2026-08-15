@@ -1,12 +1,12 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 34 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 35 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
 plan the builder emits.
-Schema 34 is a breaking hard cutover: schema 33 and earlier and a plan missing
+Schema 35 is a breaking hard cutover: schema 34 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
@@ -22,6 +22,13 @@ repeats the stable slot identity, physical size, alignment, register
 representation, and memory representation from the plan, and both
 representations must be storage-compatible with the slot's exact root and
 ownership facts.
+
+A schema-35 dynamic SOURCE_EXPORT function may also retain namespace-resolution
+slots in its verified TargetPlan function layout. Those slots are not operands,
+results, or call arguments of the generated instruction group. The frame keeps
+them uninitialized and refuses every access to them; it does not pretend to
+transport, root, or clean them. Only the exact trivial signed-`i64` slots proved
+reachable from generated rows are materialized by this narrow family.
 
 This byte transport is not a second lifecycle authority. It never forms an
 unaligned typed pointer to arena storage, dereferences a carried reference,
@@ -198,13 +205,15 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h a2835453ea48011c9b5a3c12a31283fb7227d35c9ff1f722f19f24b8fd8fc5fc
-anchor-sha256: src/vm/xr_typed_frame.h 2a66ff7a7601917033f717c794a4c3234534cfe146bd2c9b8067eb3f15b4b48c
-anchor-sha256: src/vm/xr_typed_frame.c 5e5d7615d8dfe580ac8104f6f391219b876f2789335cfa41ea9e122abf45adb1
-anchor-sha256: src/vm/xr_typed_dispatch.c d322275c81f8e833f2f9a850ca8163384e42bb9d703d8a40c16ccb7d711aa9ac
+anchor-sha256: src/plan/target/xr_target_plan.h 8f3b11246167ec7052dbec96cf161018cdaf7f1b4ab2819edf1ffae716d3991b
+anchor-sha256: src/vm/xr_typed_frame.h c3db5918f19e2ff20f481e0b5e5ce116ffc7c6e14c045a579602e12f1551130a
+anchor-sha256: src/vm/xr_typed_frame.c 3afd8fbfa0858e256d0393158b4500ccaa4ef22d5f528c2f75c2d01036633a41
+anchor-sha256: src/vm/xr_typed_dispatch.c 4fde5d036fca17cbe06012ca304a26f8caa6b5165de1149e65081397e281967d
 anchor-sha256: scripts/check_typed_call_staging.py 70224976eb831b98465bd1f719f2e66bd81fdf59503a4c929a2542b2081e8655
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c c3944b969694367aff2ecf8f46ccfbffd9dc4decbb2099d4a572a9989984eac2
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py e9e057b890df32005e054290a3425f239c1b3c594432a044a04bd6a12dc6dd14
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8f2acc619749a086bf3be97ef9799ea6abef2c45151113b13a87b9a3609f8101
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 9a50ffa2574a505c375f372893c8168dc082873b1a11b1d546e377b9424a3031
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 971cf9989386d2c660c828f8e36df295d1ee61fa1458d12b03700e1ecb88f246
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 81aee9edb47c6a5b0c9786ca0d68584b0af4867b6a5cb31d3280239f4c9a75d9
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
+anchor-sha256: src/vm/xr_vm_dynamic_entry.h fda9cca936f9cceaa5c39fb08e4ef525ec29ffa946112e2b8a02106273865395
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 7778b3428bea2edaa5342818dab86f3ff4867f46f0c83a72a489b0328d76356e

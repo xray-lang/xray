@@ -9,10 +9,14 @@ or AOT/CGen fallback. The request's mandatory generated switch or generated
 function-table provider selection does not alter the canonical event stream or
 profile counters; nested direct calls inherit the same provider.
 
-A debug session is bound to one exact TargetPlan fingerprint. When generation
-identity is present, the session copies the complete public generation identity
-and every root and child frame admits it through the existing exact generation
-binding check before execution. The session and every trace event contain only
+A debug session is bound to the root TargetPlan fingerprint. Generation
+identity comes independently from the execution request; when the session also
+records it, the two must match exactly before any frame or event. The session is
+observation only and can never supply execution authority. A dynamic child may
+carry a different exact plan and generation identity acquired from its pinned
+entry token; its events are scoped by those child identities while retaining
+the same session, provider, ordinal stream, and profile. The session and every
+trace event contain only
 copied numeric identities and fingerprints; no plan, frame, slot, or generation
 pointer is retained by trace, profile, or materialization state.
 
@@ -37,7 +41,8 @@ authority. Profile presence or absence cannot make a plan legal, change a slot
 byte, extend a generation pin, or change the program result.
 
 Materialization rechecks the immutable plan and event fingerprint, then copies
-only exact function, instruction, call, and slot rows. TargetPlan schema 34 has
+only exact function, instruction, call, entry-expectation, and slot rows.
+TargetPlan schema 35 has
 no source-span table, stable owner identity, or slot-to-layout identity relation;
 those facts are reported as `XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE` rather than
 guessed from semantic IDs, names, layouts, or compiler structures. Breakpoint,
@@ -56,15 +61,16 @@ Evidence:
 - `test_typed_frame_runtime_archive` proves trace, profile, materialization,
   debug-session, and request-based dispatcher symbols link from `xray_vm`.
 
-anchor-sha256: src/vm/debug/xr_vm_trace.h 7763cd87f285d11f0db3ac32caa235bb40fdb1db2dd4b090b02adac265a2e83f
-anchor-sha256: src/vm/debug/xr_vm_trace.c 117f3c230b90e2bde2817996af8f8108a3e85b6a7f1ed3575d356fc0805ee544
+anchor-sha256: src/vm/debug/xr_vm_trace.h 9f02f234220c04d260ef0754b752fa4daff7f56041732f8be468ac3e45007fd6
+anchor-sha256: src/vm/debug/xr_vm_trace.c 7c14c3d4a06e329d2a79a24f7fe4a978c872d86a0d442930730f234626c57770
 anchor-sha256: src/vm/debug/xr_vm_profile.h 494f41cb32b3b3e48162f2f5b23c78c5e85ec41afaa702b690c8331f94af1892
 anchor-sha256: src/vm/debug/xr_vm_profile.c d4a1cd75c1d520f3a14721e64757559952ffb6c734b62c7a6769d81444ccbda1
 anchor-sha256: src/vm/debug/xr_vm_materialize.h 6e784c930527ea25bee1301db2d16065a11d091e51de5a58316ad36f65a0e9db
 anchor-sha256: src/vm/debug/xr_vm_materialize.c dc70a2881d49cab77a9382a5ae9c88e914be806803105aad55a1667001735c6e
-anchor-sha256: src/vm/xr_typed_dispatch.h 10c108b77e3beff1dfd6c04137ce684a4c8c1d08b3af3a4402dae1443fcff768
-anchor-sha256: src/vm/xr_typed_dispatch.c d322275c81f8e833f2f9a850ca8163384e42bb9d703d8a40c16ccb7d711aa9ac
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c 6759f44e43d36d704cb5d77330dd048f3c699280042eb856877cf5e5239c4bcd
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 9a50ffa2574a505c375f372893c8168dc082873b1a11b1d546e377b9424a3031
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py d68f03a9e2da14514ede7254e10a55b4655c2b250e4a815201bed9480928f4da
-anchor-sha256: CMakeLists.txt e582efa7ac94f9388d2a5ef724b81393da4fed1e723e6d0731b99ccb0f8d3d35
+anchor-sha256: src/vm/xr_typed_dispatch.h afe8997a2272790226f6591615c8721213df06eba476c1c45114cd2208d7c62d
+anchor-sha256: src/vm/xr_typed_dispatch.c 4fde5d036fca17cbe06012ca304a26f8caa6b5165de1149e65081397e281967d
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 58fd921189d8aaecbd5bf02e90ba9bf1bf1861cd1e098f8ba2ef63d78e8a97ea
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 81aee9edb47c6a5b0c9786ca0d68584b0af4867b6a5cb31d3280239f4c9a75d9
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py cb1b4fd056aebee2f73c03d537294df3d8a2dcc8617a55a1a7e25b0e42570228
+anchor-sha256: CMakeLists.txt 52120c519042aa84194f877420c808db07fdde1a563f8bdb94e65af9fde9e00b
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 7778b3428bea2edaa5342818dab86f3ff4867f46f0c83a72a489b0328d76356e

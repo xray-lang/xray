@@ -197,6 +197,11 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U32, logical_state) F(U32, suspend_block) F(U32, resume_block)                              \
     F(U32, resume_predecessor) F(U32, direct_call) F(U32, result_slot)                            \
     F(U16, resume_predecessor_ordinal) F(U16, flags)
+#define XR_XTP_ENTRY_EXPECTATION_FIELDS(F)                                                         \
+    F(ID, identity) F(U32, id) F(U32, call) F(U32, abi_schema_version)                             \
+    F(U16, parameter_count) F(U16, native_abi) F(U8, value_kind) F(U8, adapter_kind)               \
+    F(U16, flags) F(U32, reserved32) F(U64, target_data_layout)                                    \
+    F(FP, target_profile_fingerprint) F(FP, entry_abi_fingerprint) F(FP, adapter_fingerprint)
 
 #define XR_XTP_TYPED_ROWS(F)                                                                       \
     F(TARGET_PROFILE, XrTargetProfileDraft, XR_XTP_PROFILE_FIELDS)                                \
@@ -217,7 +222,8 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(CLEANUPS, XrTargetCleanupRecord, XR_XTP_CLEANUP_FIELDS)                                    \
     F(ADAPTERS, XrTargetAdapterRecord, XR_XTP_ADAPTER_FIELDS)                                    \
     F(CAPABILITIES, XrTargetCapabilityRecord, XR_XTP_CAPABILITY_FIELDS)                          \
-    F(COROUTINES, XrTargetCoroutineStateRecord, XR_XTP_COROUTINE_FIELDS)
+    F(COROUTINES, XrTargetCoroutineStateRecord, XR_XTP_COROUTINE_FIELDS)                            \
+    F(ENTRY_EXPECTATIONS, XrTargetEntryExpectationRecord, XR_XTP_ENTRY_EXPECTATION_FIELDS)
 
 #define XR_XTP_FIELD_SIZE_U8(field) +1u
 #define XR_XTP_FIELD_SIZE_U16(field) +2u
@@ -294,6 +300,7 @@ XR_FUNC uint64_t xr_xtp_table_count_limit(XrXtpSectionKind kind) {
         case XR_XTP_SECTION_ADAPTERS: return 1000000;
         case XR_XTP_SECTION_CAPABILITIES: return 65536;
         case XR_XTP_SECTION_COROUTINES: return 10000000;
+        case XR_XTP_SECTION_ENTRY_EXPECTATIONS: return 10000000;
         default: return 0;
     }
 }

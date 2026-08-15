@@ -66,23 +66,32 @@ bool xr_typed_debug_session_matches_plan(
                                 target_plan_fingerprint);
 }
 
-bool xr_typed_debug_emit(const XrVmDebugSession *session, uint64_t ordinal,
-                      XrVmTraceEvent *event) {
+bool xr_typed_debug_emit(
+    const XrVmDebugSession *session,
+    const XrFingerprint *target_plan_fingerprint,
+    const XrModuleGenerationIdentity *generation_identity,
+    uint64_t ordinal, XrVmTraceEvent *event) {
     if (!session)
         return true;
-    if (!event || !xr_typed_debug_session_matches_plan(
-                      session, session->target_plan_fingerprint))
+    if (!event || !target_plan_fingerprint ||
+        !xr_typed_debug_session_matches_plan(
+            session, session->target_plan_fingerprint) ||
+        (generation_identity &&
+         (generation_identity->schema_version !=
+              XR_RUNTIME_GENERATION_SCHEMA_VERSION ||
+          memcmp(generation_identity->target_plan_fingerprint,
+                 target_plan_fingerprint->bytes,
+                 sizeof(target_plan_fingerprint->bytes)) != 0)))
         return false;
     event->schema_version = XR_VM_TRACE_SCHEMA_VERSION;
     event->ordinal = ordinal;
-    event->target_plan_fingerprint = session->target_plan_fingerprint;
-    event->generation_identity_present =
-        session->generation_identity_present;
-    if (session->generation_identity_present) {
+    event->target_plan_fingerprint = *target_plan_fingerprint;
+    event->generation_identity_present = generation_identity != NULL;
+    if (generation_identity) {
         event->generation_number =
-            session->generation_identity.generation_number;
+            generation_identity->generation_number;
         memcpy(event->generation_fingerprint.bytes,
-               session->generation_identity.generation_fingerprint,
+               generation_identity->generation_fingerprint,
                sizeof(event->generation_fingerprint.bytes));
     }
     if (session->trace.emit &&

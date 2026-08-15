@@ -15,6 +15,7 @@
 
 #include "xr_target_verify.h"
 #include "xr_target_instruction_verify.h"
+#include "xr_target_entry_abi.h"
 #include "xr_target_plan_internal.h"
 #include "xr_target_profile_internal.h"
 #include "../../ir/xi.h"
@@ -297,7 +298,8 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
         plan->call_arguments_count > 40000000u || plan->root_maps_count > 10000000u ||
         plan->root_slots_count > 40000000u || plan->cleanups_count > 40000000u ||
         plan->adapters_count > 1000000u || plan->capabilities_count > 65536u ||
-        plan->coroutines_count > 10000000u)
+        plan->coroutines_count > 10000000u ||
+        plan->entry_expectations_count > 10000000u)
         return report(error, error_size, "XR_EXEC_5003", "TargetPlan exceeds hard budgets");
     size_t total = sizeof(*plan);
 #define XR_ADD_TARGET_BYTES(name)                                                                 \
@@ -325,6 +327,7 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
     XR_ADD_TARGET_BYTES(adapters);
     XR_ADD_TARGET_BYTES(capabilities);
     XR_ADD_TARGET_BYTES(coroutines);
+    XR_ADD_TARGET_BYTES(entry_expectations);
 #undef XR_ADD_TARGET_BYTES
     if (total > (size_t) UINT32_MAX)
         return report(error, error_size, "XR_EXEC_5003", "TargetPlan exceeds total byte budget");
@@ -350,6 +353,7 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
     XR_REQUIRE_TARGET_TABLE(adapters);
     XR_REQUIRE_TARGET_TABLE(capabilities);
     XR_REQUIRE_TARGET_TABLE(coroutines);
+    XR_REQUIRE_TARGET_TABLE(entry_expectations);
 #undef XR_REQUIRE_TARGET_TABLE
     return true;
 }
@@ -6953,6 +6957,163 @@ static bool verify_coroutines(const XrTargetPlan *plan, char *error, size_t erro
                            "coroutine state-call table is not exact");
 }
 
+static bool entry_rep_is_exact_i64(const XrTargetPlan *plan, uint16_t rep) {
+    const XrTargetMachineRepRecord *record =
+        rep < plan->machine_reps_count ? &plan->machine_reps[rep] : NULL;
+    return record && record->kind == XR_MACHINE_REP_I64 &&
+           record->register_bits == 64 && record->memory_size == 8 &&
+           record->memory_align == 8 &&
+           record->signedness == XR_TARGET_SIGN_SIGNED &&
+           record->root_kind == XR_TARGET_ROOT_NONE &&
+           record->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+}
+
+static bool semantic_type_is_exact_signed_i64(
+    const XrSemanticTypeRecord *type) {
+    uint16_t kind = XR_MACHINE_REP_COUNT;
+    return type && semantic_type_expected_rep(type, &kind) == 1 &&
+           kind == XR_MACHINE_REP_I64;
+}
+
+/* The persistent expectation is a caller-site fact, not a cached resolution.
+ * This pass re-derives every byte from the verified dependency export and the
+ * target profile, then proves a one-to-one relation with CALL_ENTRY rows. */
+static bool verify_entry_expectations(const XrTargetPlan *plan, char *error,
+                                      size_t error_size) {
+    const XrTargetMachineFacts *machine =
+        xr_target_profile_machine_facts(plan->profile);
+    uint8_t *seen = plan->entry_expectations_count
+                        ? (uint8_t *) xr_calloc(plan->entry_expectations_count, 1)
+                        : NULL;
+    if (plan->entry_expectations_count && !seen)
+        return report(error, error_size, "XR_EXEC_5003",
+                      "entry expectation verifier budget exhausted");
+    bool valid = machine != NULL;
+    for (uint32_t i = 0; valid && i < plan->entry_expectations_count; i++) {
+        const XrTargetEntryExpectationRecord *record =
+            &plan->entry_expectations[i];
+        const XrTargetCallRecord *call =
+            record->call < plan->calls_count ? &plan->calls[record->call] : NULL;
+        const XrSemanticPlan *dependency =
+            call && call->source_dependency < plan->semantic_dependency_count
+                ? plan->semantic_dependencies[call->source_dependency]
+                : NULL;
+        const XrSemanticSourceExportRecord *export_record =
+            dependency && call->source_export <
+                              xr_semantic_plan_source_export_count(dependency)
+                ? xr_semantic_plan_source_export(dependency,
+                                                 call->source_export)
+                : NULL;
+        const XrSemanticFunctionRecord *callee =
+            export_record
+                ? xr_semantic_plan_function(dependency,
+                                            export_record->function)
+                : NULL;
+        XrStableId expected_identity = {{0}};
+        XrTargetEntryAbiFacts facts = {0};
+        XrFingerprint abi = {{0}};
+        XrFingerprint adapter = {{0}};
+        valid = call && dependency && export_record && callee &&
+                record->id == i && !stable_id_is_zero(record->identity) &&
+                call->id == record->call && call->flags == 0 &&
+                call->calling_convention ==
+                    XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
+                call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
+                call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                call->adapter_count == 0 &&
+                call->result_mode == XR_TARGET_CALL_VALUE &&
+                call->result_ownership == XR_TARGET_CALL_NONE &&
+                entry_rep_is_exact_i64(plan, call->result_register_rep) &&
+                entry_rep_is_exact_i64(plan, call->result_memory_rep) &&
+                call->argument_count == callee->parameter_count &&
+                callee->capture_count == 0 &&
+                semantic_type_is_exact_signed_i64(
+                    xr_semantic_plan_type(dependency, callee->return_type)) &&
+                record->abi_schema_version ==
+                    XR_TARGET_ENTRY_ABI_SCHEMA_VERSION &&
+                record->parameter_count == callee->parameter_count &&
+                record->native_abi == machine->native_abi &&
+                record->value_kind == XR_TARGET_ENTRY_VALUE_EXACT_I64 &&
+                record->adapter_kind == XR_TARGET_ENTRY_ADAPTER_IDENTITY &&
+                record->flags == 0 && record->reserved32 == 0 &&
+                record->target_data_layout ==
+                    machine->data_layout.stable_hash &&
+                xr_fingerprint_equal(record->target_profile_fingerprint,
+                                     xr_target_profile_fingerprint(
+                                         plan->profile)) &&
+                reconstruct_call_identity(
+                    "xray-target-entry-expectation-v1", call->identity,
+                    call->source_callee_identity, i, &expected_identity) &&
+                xr_stable_id_equal(record->identity, expected_identity);
+        for (uint16_t ordinal = 0; valid && ordinal < call->argument_count;
+             ordinal++) {
+            const XrTargetCallArgumentRecord *argument =
+                &plan->call_arguments[call->argument_begin + ordinal];
+            const XrSemanticParameterRecord *parameter =
+                xr_semantic_plan_parameter(dependency,
+                                           callee->parameter_begin + ordinal);
+            valid = parameter && parameter->function == export_record->function &&
+                    parameter->ordinal == ordinal &&
+                    parameter->mode == XR_PARAM_READ &&
+                    parameter->transfer_mode == XR_TRANSFER_SHARE &&
+                    semantic_type_is_exact_signed_i64(
+                        xr_semantic_plan_type(dependency, parameter->type)) &&
+                    argument->call == call->id &&
+                    argument->ordinal == ordinal &&
+                    argument->mode == XR_TARGET_CALL_VALUE &&
+                    (argument->ownership == XR_TARGET_CALL_READ ||
+                     argument->ownership == XR_TARGET_CALL_CONSUME) &&
+                    argument->transfer_mode == XR_TRANSFER_SHARE &&
+                    argument->flags == 0 &&
+                    argument->callee_slot == XR_SEMANTIC_INDEX_NONE &&
+                    entry_rep_is_exact_i64(plan, argument->register_rep) &&
+                    entry_rep_is_exact_i64(plan, argument->memory_rep) &&
+                    entry_rep_is_exact_i64(plan,
+                                           argument->callee_register_rep) &&
+                    entry_rep_is_exact_i64(plan,
+                                           argument->callee_memory_rep);
+        }
+        if (!valid)
+            break;
+        facts.schema_version = record->abi_schema_version;
+        facts.parameter_count = record->parameter_count;
+        facts.native_abi = record->native_abi;
+        facts.value_kind = record->value_kind;
+        facts.target_data_layout = record->target_data_layout;
+        facts.target_profile_fingerprint =
+            record->target_profile_fingerprint;
+        valid = xr_target_entry_abi_fingerprint(&facts, &abi) &&
+                xr_target_entry_identity_adapter_fingerprint(&abi,
+                                                              &adapter) &&
+                xr_fingerprint_equal(abi, record->entry_abi_fingerprint) &&
+                xr_fingerprint_equal(adapter, record->adapter_fingerprint);
+    }
+    for (uint32_t i = 0; valid && i < plan->instructions_count; i++) {
+        const XrTargetInstructionRecord *instruction = &plan->instructions[i];
+        if (instruction->opcode != XR_TARGET_INSTRUCTION_CALL_ENTRY_I64)
+            continue;
+        uint32_t expectation = (uint32_t) instruction->immediate_bits;
+        if (instruction->immediate_bits > UINT32_MAX ||
+            expectation >= plan->entry_expectations_count || seen[expectation]) {
+            valid = false;
+            break;
+        }
+        const XrTargetEntryExpectationRecord *record =
+            &plan->entry_expectations[expectation];
+        valid = record->call < plan->calls_count &&
+                plan->calls[record->call].caller_function ==
+                    instruction->function &&
+                plan->calls[record->call].result_slot ==
+                    instruction->result_slot;
+        seen[expectation] = 1;
+    }
+    for (uint32_t i = 0; valid && i < plan->entry_expectations_count; i++)
+        valid = seen[i] != 0;
+    xr_free(seen);
+    return valid || report(error, error_size, "XR_TARGET_1005",
+                           "dynamic entry expectation table is not exact");
+}
+
 bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_size) {
     if (!plan || !plan->frozen || !plan->semantic_plan || !plan->profile)
         return report(error, error_size, "XR_EXEC_5000",
@@ -7084,7 +7245,8 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
         verify_calls(plan, error, error_size) &&
         verify_roots_and_cleanups(plan, error, error_size) &&
         verify_adapters_and_capabilities(plan, error, error_size) &&
-        verify_coroutines(plan, error, error_size);
+        verify_coroutines(plan, error, error_size) &&
+        verify_entry_expectations(plan, error, error_size);
     xr_free(exact_dynamic_types);
     xr_free(exact_direct_callees);
     xr_free(direct_callee_targets);

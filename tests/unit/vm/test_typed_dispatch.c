@@ -86,6 +86,7 @@ static XrTypedDispatchStatus execute_request_i64(
 static XrTypedDispatchStatus execute_debug_request_i64(
     const XrTargetPlan *plan, const XrFingerprint *fingerprint,
     uint32_t function, const int64_t *arguments, uint32_t argument_count,
+    const XrModuleGenerationIdentity *generation_identity,
     const XrVmDebugSession *debug_session, XrTypedDispatchProvider provider,
     int64_t *result) {
     XrTypedDispatchI64Request request = {
@@ -94,6 +95,7 @@ static XrTypedDispatchStatus execute_debug_request_i64(
         .arguments = arguments,
         .result = result,
         .debug_session = debug_session,
+        .generation_identity = generation_identity,
         .provider = provider,
         .function = function,
         .argument_count = argument_count,
@@ -134,7 +136,8 @@ static void test_generated_instruction_contract(void) {
     REQUIRE(XR_TARGET_INSTRUCTION_CONST_I64 == 1);
     REQUIRE(XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL == 25);
     REQUIRE(XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 == 26);
-    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 26u);
+    REQUIRE(XR_TARGET_INSTRUCTION_CALL_ENTRY_I64 == 27);
+    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 27u);
     REQUIRE(XR_TEST_VM_DISPATCH_COUNT ==
             XR_TARGET_INSTRUCTION_CONTRACT_COUNT);
     static const XrTypedDispatchProvider providers[] = {
@@ -174,7 +177,7 @@ static void test_generated_instruction_contract(void) {
             REQUIRE(strcmp(contract->name,
                            xr_target_instruction_opcode_name(other)) != 0);
     }
-    REQUIRE(semantic_bindings == 22u);
+    REQUIRE(semantic_bindings == 23u);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_INVALID) ==
             NULL);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_COUNT) ==
@@ -1695,12 +1698,12 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
     int64_t first_result = 0;
     int64_t second_result = 0;
     REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                      &first_session,
+                                       &generation, &first_session,
                                       XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
                                       &first_result) ==
             XR_TYPED_DISPATCH_OK);
     REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                      &second_session,
+                                       &generation, &second_session,
                                       XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
                                       &second_result) ==
             XR_TYPED_DISPATCH_OK);
@@ -1769,7 +1772,7 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
             XR_VM_DEBUG_SESSION_OK);
     int64_t rejected_result = 99;
     REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                      &short_session,
+                                       &generation, &short_session,
                                       XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
                                       &rejected_result) ==
             XR_TYPED_DISPATCH_TRACE_REJECTED);
@@ -1804,7 +1807,7 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
             XR_VM_DEBUG_SESSION_OK);
     int64_t error_result = 88;
     REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                      &error_session,
+                                       &generation, &error_session,
                                       XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
                                       &error_result) ==
             XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);

@@ -67,7 +67,8 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
            draft->call_arguments_count <= 40000000u && draft->root_maps_count <= 10000000u &&
            draft->root_slots_count <= 40000000u && draft->cleanups_count <= 40000000u &&
            draft->adapters_count <= 1000000u && draft->capabilities_count <= 65536u &&
-           draft->coroutines_count <= 10000000u))
+           draft->coroutines_count <= 10000000u &&
+           draft->entry_expectations_count <= 10000000u))
         return false;
     size_t total = sizeof(XrTargetPlan);
     if (draft->semantic_dependency_count >
@@ -100,6 +101,7 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
     XR_ADD_DRAFT_BYTES(adapters);
     XR_ADD_DRAFT_BYTES(capabilities);
     XR_ADD_DRAFT_BYTES(coroutines);
+    XR_ADD_DRAFT_BYTES(entry_expectations);
 #undef XR_ADD_DRAFT_BYTES
     return total <= (size_t) UINT32_MAX;
 }
@@ -369,6 +371,24 @@ static void hash_coroutine(XrSHA256Context *ctx,
     hash_u64(ctx, record->flags);
 }
 
+static void hash_entry_expectation(
+    XrSHA256Context *ctx, const XrTargetEntryExpectationRecord *record) {
+    hash_id(ctx, record->identity);
+    hash_u64(ctx, record->id);
+    hash_u64(ctx, record->call);
+    hash_u64(ctx, record->abi_schema_version);
+    hash_u64(ctx, record->parameter_count);
+    hash_u64(ctx, record->native_abi);
+    hash_u64(ctx, record->value_kind);
+    hash_u64(ctx, record->adapter_kind);
+    hash_u64(ctx, record->flags);
+    hash_u64(ctx, record->reserved32);
+    hash_u64(ctx, record->target_data_layout);
+    hash_fingerprint(ctx, record->target_profile_fingerprint);
+    hash_fingerprint(ctx, record->entry_abi_fingerprint);
+    hash_fingerprint(ctx, record->adapter_fingerprint);
+}
+
 void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t layout_index,
                                           XrFingerprint *out) {
     static const uint8_t domain[] = "xray-target-layout-v5\0";
@@ -434,7 +454,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v21\0";
+    static const uint8_t domain[] = "xray-target-plan-v22\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -462,6 +482,7 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
     XR_HASH_TABLE_COUNT(adapters);
     XR_HASH_TABLE_COUNT(capabilities);
     XR_HASH_TABLE_COUNT(coroutines);
+    XR_HASH_TABLE_COUNT(entry_expectations);
 #undef XR_HASH_TABLE_COUNT
     for (uint32_t i = 0; i < plan->machine_reps_count; i++)
         hash_machine_rep(&ctx, &plan->machine_reps[i]);
@@ -505,6 +526,8 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
         hash_capability(&ctx, &plan->capabilities[i]);
     for (uint32_t i = 0; i < plan->coroutines_count; i++)
         hash_coroutine(&ctx, &plan->coroutines[i]);
+    for (uint32_t i = 0; i < plan->entry_expectations_count; i++)
+        hash_entry_expectation(&ctx, &plan->entry_expectations[i]);
     xr_sha256_final(&ctx, out->bytes);
 }
 
@@ -583,6 +606,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
     XR_COPY_DRAFT_TABLE(adapters, XrTargetAdapterRecord);
     XR_COPY_DRAFT_TABLE(capabilities, XrTargetCapabilityRecord);
     XR_COPY_DRAFT_TABLE(coroutines, XrTargetCoroutineStateRecord);
+    XR_COPY_DRAFT_TABLE(entry_expectations, XrTargetEntryExpectationRecord);
     plan->frozen = true;
     for (uint32_t i = 0; i < plan->layouts_count; i++) {
         if (plan->layouts[i].extent >= plan->extents_count ||
@@ -750,6 +774,7 @@ void xr_target_plan_free(XrTargetPlan *plan) {
     XR_FREE_TARGET_TABLE(adapters);
     XR_FREE_TARGET_TABLE(capabilities);
     XR_FREE_TARGET_TABLE(coroutines);
+    XR_FREE_TARGET_TABLE(entry_expectations);
 #undef XR_FREE_TARGET_TABLE
     xr_free(plan);
 }
@@ -846,9 +871,15 @@ const XrTargetInstructionRecord *xr_target_plan_function_instructions(
 uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
                                                        uint32_t function) {
     uint32_t count = 0;
-    return xr_target_plan_function_instructions(plan, function, &count) && count
-               ? (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_CLOSED
-               : 0;
+    if (!xr_target_plan_function_instructions(plan, function, &count) || !count)
+        return 0;
+    for (uint32_t i = 0; i < plan->entry_expectations_count; i++) {
+        uint32_t call = plan->entry_expectations[i].call;
+        if (call < plan->calls_count &&
+            plan->calls[call].caller_function == function)
+            return (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC;
+    }
+    return (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_CLOSED;
 }
 
 #define XR_TARGET_TABLE_ACCESSOR(name, type)                                                       \
@@ -876,4 +907,5 @@ XR_TARGET_TABLE_ACCESSOR(cleanups, XrTargetCleanupRecord)
 XR_TARGET_TABLE_ACCESSOR(adapters, XrTargetAdapterRecord)
 XR_TARGET_TABLE_ACCESSOR(capabilities, XrTargetCapabilityRecord)
 XR_TARGET_TABLE_ACCESSOR(coroutines, XrTargetCoroutineStateRecord)
+XR_TARGET_TABLE_ACCESSOR(entry_expectations, XrTargetEntryExpectationRecord)
 #undef XR_TARGET_TABLE_ACCESSOR

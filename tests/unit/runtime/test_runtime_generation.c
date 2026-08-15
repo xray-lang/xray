@@ -300,6 +300,34 @@ static void test_unsupported_generation_remains_verified(
     REQUIRE(authority == NULL);
 }
 
+static void test_multi_function_generation_is_typed_but_not_sole(
+    XrTargetPlan *plan) {
+    char diagnostic[512] = {0};
+    XrRuntimeGenerationBudget budget = make_budget(2);
+    XrRuntimeGenerationAuthority *authority = NULL;
+    REQUIRE(xr_runtime_generation_authority_create(
+        &budget, &authority, diagnostic, sizeof(diagnostic)));
+    XrLoadedModuleGeneration *generation = NULL;
+    REQUIRE(xr_module_generation_load_verified_target_plan(
+        authority, plan, &generation, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_prepare(generation, diagnostic,
+                                         sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_activate(generation, diagnostic,
+                                          sizeof(diagnostic)));
+    int64_t result = 99;
+    REQUIRE(!xr_module_generation_execute_sole_scalar_i64(
+        generation, &result, diagnostic, sizeof(diagnostic)));
+    REQUIRE(result == 0 && strstr(diagnostic, "XR_EXEC_5004") != NULL);
+    REQUIRE(xr_module_generation_begin_drain(generation, diagnostic,
+                                             sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_retire(generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_unload(&generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_runtime_generation_authority_destroy(
+        &authority, diagnostic, sizeof(diagnostic)));
+}
+
 static void test_divide_by_zero_generation_fails_at_execution(
     XrTargetPlan *plan) {
     char diagnostic[512] = {0};
@@ -569,7 +597,7 @@ int main(void) {
             XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
     test_scalar_generation_lifecycle(plan);
     test_unsupported_generation_remains_verified(unsupported);
-    test_unsupported_generation_remains_verified(multi);
+    test_multi_function_generation_is_typed_but_not_sole(multi);
     test_divide_by_zero_generation_fails_at_execution(zero);
     test_independent_state_machine_verifier();
     test_actual_identity_mutations(plan);

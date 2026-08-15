@@ -12,6 +12,7 @@
 #include "../base/xsha256.h"
 #include "../plan/semantic/xr_semantic_ids.h"
 #include "../plan/target/xr_target_instruction_verify.h"
+#include "../plan/target/xr_target_entry_abi.h"
 #include "../plan/target/xr_target_plan.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../vm/xr_typed_dispatch.h"
@@ -20,10 +21,10 @@
 #include <string.h>
 
 enum {
-    XR_ENTRY_VALUE_EXACT_I64 = 1,
     XR_ENTRY_TOKEN_EMPTY = 0,
     XR_ENTRY_TOKEN_LIVE = 1,
-    XR_ENTRY_TOKEN_RELEASED = 2,
+    XR_ENTRY_TOKEN_RELEASING = 2,
+    XR_ENTRY_TOKEN_RELEASED = 3,
 };
 
 static bool fail(char *diagnostic, size_t diagnostic_size, const char *code,
@@ -40,23 +41,11 @@ static bool bytes_are_zero(const uint8_t *bytes, size_t size) {
     return combined == 0;
 }
 
-static void hash_u16(XrSHA256Context *context, uint16_t value) {
-    uint8_t bytes[2] = {(uint8_t) (value >> 8), (uint8_t) value};
-    xr_sha256_update(context, bytes, sizeof(bytes));
-}
-
 static void hash_u32(XrSHA256Context *context, uint32_t value) {
     uint8_t bytes[4] = {
         (uint8_t) (value >> 24), (uint8_t) (value >> 16),
         (uint8_t) (value >> 8), (uint8_t) value,
     };
-    xr_sha256_update(context, bytes, sizeof(bytes));
-}
-
-static void hash_u64(XrSHA256Context *context, uint64_t value) {
-    uint8_t bytes[8];
-    for (size_t i = 0; i < sizeof(bytes); i++)
-        bytes[i] = (uint8_t) (value >> ((sizeof(bytes) - 1u - i) * 8u));
     xr_sha256_update(context, bytes, sizeof(bytes));
 }
 
@@ -148,34 +137,19 @@ static bool derive_entry_abi(const XrTargetPlan *plan, uint32_t function,
     memset(abi, 0, sizeof(*abi));
     abi->schema_version = XR_ENTRY_ABI_SCHEMA_VERSION;
     abi->parameter_count = (uint16_t) parameter_count;
-    abi->value_kind = XR_ENTRY_VALUE_EXACT_I64;
+    abi->value_kind = XR_TARGET_ENTRY_VALUE_EXACT_I64;
     abi->native_abi = machine->native_abi;
     abi->target_data_layout = machine->data_layout.stable_hash;
     abi->target_profile_fingerprint = xr_target_profile_fingerprint(profile);
-    static const uint8_t domain[] = "xray-entry-abi-v1\0";
-    XrSHA256Context context;
-    xr_sha256_init(&context);
-    xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    hash_u32(&context, abi->schema_version);
-    hash_u16(&context, abi->parameter_count);
-    hash_u16(&context, abi->value_kind);
-    hash_u16(&context, abi->native_abi);
-    hash_u64(&context, abi->target_data_layout);
-    hash_fingerprint(&context, abi->target_profile_fingerprint);
-    xr_sha256_final(&context, abi->fingerprint.bytes);
-    return true;
-}
-
-static XrFingerprint identity_adapter_fingerprint(const XrEntryAbi *abi) {
-    static const uint8_t domain[] = "xray-entry-adapter-identity-v1\0";
-    XrSHA256Context context;
-    XrFingerprint fingerprint;
-    xr_sha256_init(&context);
-    xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    hash_u32(&context, XR_ENTRY_ADAPTER_IDENTITY);
-    hash_fingerprint(&context, abi->fingerprint);
-    xr_sha256_final(&context, fingerprint.bytes);
-    return fingerprint;
+    XrTargetEntryAbiFacts facts = {
+        .schema_version = abi->schema_version,
+        .parameter_count = abi->parameter_count,
+        .native_abi = abi->native_abi,
+        .value_kind = abi->value_kind,
+        .target_data_layout = abi->target_data_layout,
+        .target_profile_fingerprint = abi->target_profile_fingerprint,
+    };
+    return xr_target_entry_abi_fingerprint(&facts, &abi->fingerprint);
 }
 
 static XrFingerprint binding_fingerprint(
@@ -260,8 +234,17 @@ static bool make_binding(const XrEntryCellRegistration *registration,
     binding->expectation.abi = abi;
     binding->expectation.executor_kind = registration->executor_kind;
     binding->expectation.adapter_kind = XR_ENTRY_ADAPTER_IDENTITY;
-    binding->expectation.adapter_fingerprint =
-        identity_adapter_fingerprint(&abi);
+    if (!xr_target_entry_identity_adapter_fingerprint(
+            &abi.fingerprint,
+            &binding->expectation.adapter_fingerprint)) {
+        char nested[256] = {0};
+        xr_module_generation_pin_release(
+            registration->generation, XR_MODULE_GENERATION_STATIC_ROOT,
+            nested, sizeof(nested));
+        memset(binding, 0, sizeof(*binding));
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                    "entry identity adapter fingerprint is unavailable");
+    }
     binding->expectation.target_plan_fingerprint =
         xr_target_plan_fingerprint(registration->verified_plan);
     memcpy(binding->expectation.generation_fingerprint.bytes,
@@ -434,18 +417,25 @@ bool xr_entry_call_release(XrEntryCallToken *token, char *diagnostic,
                     "entry token is missing");
     unsigned int expected = XR_ENTRY_TOKEN_LIVE;
     if (!atomic_compare_exchange_strong_explicit(
-            &token->release_state, &expected, XR_ENTRY_TOKEN_RELEASED,
+            &token->release_state, &expected, XR_ENTRY_TOKEN_RELEASING,
             memory_order_acq_rel, memory_order_acquire))
         return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
                     "entry token was already released or never acquired");
     bool released = xr_module_generation_pin_release(
         token->generation, XR_MODULE_GENERATION_INFLIGHT_CALL,
         diagnostic, diagnostic_size);
+    if (!released) {
+        atomic_store_explicit(&token->release_state, XR_ENTRY_TOKEN_LIVE,
+                              memory_order_release);
+        return false;
+    }
     token->generation = NULL;
     token->plan = NULL;
     token->native_entry = NULL;
     token->native_context = NULL;
-    return released;
+    atomic_store_explicit(&token->release_state, XR_ENTRY_TOKEN_RELEASED,
+                          memory_order_release);
+    return true;
 }
 
 XrEntryInvokeStatus xr_entry_cell_invoke_i64(
@@ -477,10 +467,13 @@ XrEntryInvokeStatus xr_entry_cell_invoke_i64(
             .arguments = arguments,
             .result = &executed,
             .decoded_cache = token.generation->decoded_cache,
+            .dynamic_entries = &token.generation->dynamic_entries,
+            .generation_identity = &token.generation->identity,
             .provider =
                 XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
             .function = token.function,
             .argument_count = argument_count,
+            .use_dynamic_entry_cache = true,
         };
         XrTypedDispatchStatus status =
             xr_typed_dispatch_execute_i64(&request);
