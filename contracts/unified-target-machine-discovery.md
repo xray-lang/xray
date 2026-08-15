@@ -27,6 +27,14 @@ the policy manifest digest are recomputed by the verifier.  A qualifying run
 pins the governed logical CPU, records child-observed or explicitly inherited
 affinity, verifies the active host power policy against the policy-owned GUID,
 and isolates temporary, cache, and user-home state outside the source tree.
+The caller selects one exact build root.  Its physical path is never a policy
+constant: the runner reconfigures and builds that root with the policy-owned
+preset, cache variables, and parallelism, then records `${BUILD_ROOT}` and
+`${SOURCE_ROOT}` placeholders plus the verified configuration digest.  No
+default-directory retry, sibling-directory scan, or alternate reader is
+permitted.  Evidence from the wrong source root, generator, build type,
+compile-command setting, or stdlib fastpath setting is rejected before lanes
+can qualify.
 
 Qualification remains `failed` until a full-scope evidence file and every raw
 log digest pass the independent verifier; manifest verification fails closed
@@ -45,13 +53,13 @@ anchor-sha256: contracts/target-machine/legacy-product-residue.json 85da00bba857
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
 anchor-sha256: contracts/target-machine/object-extent-inventory.json ecda7de3c939467d75b0ec488ef2202123616ac4b65626e0d1f4afb04e4052f0
 anchor-sha256: contracts/target-machine/validation-matrix.json 4b1e53b7ca0f9e5fca572d066c798f2da633d8e4ab2701e8d9c3c47987fb6578
-anchor-sha256: contracts/target-machine/baseline-manifest.json b64bbfa4e667a6446dd2664100a49c7c65f8545d5465f7f5d50cafecd4054302
+anchor-sha256: contracts/target-machine/baseline-manifest.json db89eb653fd5e47fd28bbbded0842ce859fdf58e14bf8140ce3872df9b8d1474
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
 anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
 anchor-sha256: scripts/target_machine_phase0.py a65208f6f98fe27e74b940553378ad2e1a5dd0580e19fe9cb60a84ae55a1e545
 anchor-sha256: scripts/check_legacy_product_residue.py a379df2e059879d825c387779f59a48e2606587607d66c1a5636753c1cdf79b1
 anchor-sha256: scripts/check_runtime_header_dependencies.py 917a82b6ecff974005edfad476b18ed5653be50ccc75952451de5ec2ae9afdd2
-anchor-sha256: tests/target-machine/phase0/run_baseline.py d8ac40519305d9394b1857311eac49599a4532ab44226bc2f4323184047ce195
+anchor-sha256: tests/target-machine/phase0/run_baseline.py 0526f2537b8619ddf28b6cba6e37d99bb9e96785ad021c3413465bb34e4a79c5
 anchor-sha256: tests/benchmarks/target-machine/source_run/main.xr ab5ebc43d7c39edc5e2d3c6cee282e4f103e411b52006d21eef8f4e65e4e1b52
 anchor-sha256: tests/benchmarks/target-machine/source_run/helper.xr b58a381ae7f36b1533178d9debc359d6386a179cacf828445bd7feaa03824995
 anchor-sha256: tests/benchmarks/target-machine/source_run/helper.edited.txt 5e8b2152e52314bf013be19e4c6ebf39051b3dd254301a6df793e9a867d33359

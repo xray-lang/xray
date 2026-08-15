@@ -86,10 +86,12 @@
     "verification_protocol": "Validate policy, runner, and fixture hashes; clean source/binary/build/toolchain identity; raw sample/log digests; lane statistics; residue assertions; and aggregate result before qualification. Manifest verification always requires retained raw logs."
   },
   "identity": {
-    "build_directory": "build",
-    "build_parallelism": 8,
-    "build_preset": "default",
+    "build_parallelism": 4,
     "build_timeout_seconds": 3600,
+    "configure_cache_variables": {
+      "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+      "XRAY_STDLIB_VM_FASTPATHS": "OFF"
+    },
     "build_type": "Release",
     "configure_preset": "default",
     "configure_timeout_seconds": 600,
@@ -428,7 +430,7 @@
     ]
   },
   "runner": "target-machine-baseline/3",
-  "schema": 1,
+  "schema": 2,
   "status_values": [
     "passed",
     "failed"

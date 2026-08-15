@@ -211,9 +211,21 @@ def payload(kind: str, log: str, raw: Path) -> dict[str, Any]:
             },
         }
     if kind == "full-validation":
+        build_identity = {
+            "build_root": "${BUILD_ROOT}",
+            "source_root": "${SOURCE_ROOT}",
+            "generator": "Ninja",
+            "build_type": "Release",
+            "export_compile_commands": "ON",
+            "stdlib_vm_fastpaths": "OFF",
+        }
+        build_identity["sha256"] = hashlib.sha256(json.dumps(
+            build_identity, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")).hexdigest()
         return {
-            "producer": "target-machine-full-validation-evidence/2",
+            "producer": "target-machine-full-validation-evidence/3",
             "baseline_runner": "target-machine-baseline/3",
+            "build_identity": build_identity,
             "baseline_manifest": log,
             "lanes": [],
         }

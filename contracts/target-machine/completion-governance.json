@@ -4,11 +4,12 @@
       "id": "full-validation-evidence-producer",
       "path": "scripts/collect_target_machine_full_validation_evidence.py",
       "required_regex": [
-        "PRODUCER\\s*=\\s*\"target-machine-full-validation-evidence/2\"",
+        "PRODUCER\\s*=\\s*\"target-machine-full-validation-evidence/3\"",
         "LANE_REGEX",
         "BASELINE_RUNNER",
         "parse_ctest_discovery",
         "baseline_lane_statuses",
+        "configured_build_identity",
         "selection_sha256",
         "governed-full-baseline",
         "status\\s*=\\s*\"passed\"\\s+if\\s+all_ok\\s+else\\s+\"failed\"",

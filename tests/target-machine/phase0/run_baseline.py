@@ -39,7 +39,7 @@ if sys.version_info < (3, 11):
 
 
 EVIDENCE_SCHEMA = 2
-POLICY_SCHEMA = 1
+POLICY_SCHEMA = 2
 RUNNER_VERSION = "target-machine-baseline/3"
 DEFAULT_POLICY = Path("contracts/target-machine/baseline-manifest.json")
 
@@ -74,14 +74,19 @@ def captured_text(value: str | bytes | None) -> str:
     return value or ""
 
 
-def command_text(command: list[str], root: Path, output: Path | None = None) -> list[str]:
+def command_text(command: list[str], root: Path, output: Path | None = None,
+                 build: Path | None = None) -> list[str]:
     replacements = [(str(root), "${SOURCE_ROOT}")]
+    if build:
+        replacements.insert(0, (str(build), "${BUILD_ROOT}"))
     if output:
         replacements.insert(0, (str(output), "${EVIDENCE_ROOT}"))
     rendered = []
     for part in command:
         for source, replacement in replacements:
             part = part.replace(source, replacement)
+        if "${" in part:
+            part = part.replace("\\", "/")
         rendered.append(part)
     return rendered
 
@@ -182,6 +187,16 @@ def validate_policy(root: Path, policy: dict[str, Any]) -> list[str]:
         errors.append("a failed qualification must not cite qualifying evidence")
 
     identity = policy.get("identity", {})
+    identity_fields = {
+        "build_parallelism", "build_timeout_seconds", "build_type",
+        "configure_cache_variables", "configure_preset",
+        "configure_timeout_seconds", "generator",
+        "require_binary_commit_match", "require_binary_dirty_match",
+        "require_clean_worktree", "require_cmake_home_match",
+        "require_native_toolchain_probe",
+    }
+    if not isinstance(identity, dict) or set(identity) != identity_fields:
+        errors.append("identity fields must be the exact governed set")
     required_identity = (
         "require_clean_worktree",
         "require_binary_commit_match",
@@ -194,9 +209,14 @@ def validate_policy(root: Path, policy: dict[str, Any]) -> list[str]:
             errors.append(f"identity.{key} must be true")
     if identity.get("generator") != "Ninja" or identity.get("build_type") != "Release":
         errors.append("baseline build identity must require Ninja Release")
-    for key in ("configure_preset", "build_preset", "build_directory"):
-        if not isinstance(identity.get(key), str) or not identity.get(key):
-            errors.append(f"identity.{key} must be a non-empty string")
+    if not isinstance(identity.get("configure_preset"), str) \
+            or not identity["configure_preset"]:
+        errors.append("identity.configure_preset must be a non-empty string")
+    if identity.get("configure_cache_variables") != {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "XRAY_STDLIB_VM_FASTPATHS": "OFF",
+    }:
+        errors.append("identity.configure_cache_variables must be the exact governed set")
     for key in ("configure_timeout_seconds", "build_timeout_seconds", "build_parallelism"):
         if not isinstance(identity.get(key), int) or identity.get(key, 0) < 1:
             errors.append(f"identity.{key} must be a positive integer")
@@ -328,7 +348,7 @@ def clean_source_snapshot(root: Path, policy: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_preflight_step(command: list[str], root: Path, output: Path, name: str,
+def run_preflight_step(command: list[str], root: Path, build: Path, output: Path, name: str,
                        timeout_seconds: int, policy: dict[str, Any]) -> dict[str, Any]:
     started = time.perf_counter()
     timed_out = False
@@ -352,7 +372,7 @@ def run_preflight_step(command: list[str], root: Path, output: Path, name: str,
         "timed_out": timed_out,
         "duration_seconds": round(time.perf_counter() - started, 6),
         "source_root_residue": residue,
-        "command": command_text(command, root, output),
+        "command": command_text(command, root, output, build),
         "log": log.relative_to(output).as_posix(),
         "log_sha256": sha256(log),
     }
@@ -361,19 +381,28 @@ def run_preflight_step(command: list[str], root: Path, output: Path, name: str,
 def run_freshness_preflight(root: Path, build: Path, output: Path,
                             policy: dict[str, Any]) -> list[dict[str, Any]]:
     identity = policy["identity"]
-    expected_build = (root / identity["build_directory"]).resolve()
-    if build != expected_build:
-        raise RuntimeError(f"baseline build directory {build} != governed {expected_build}")
+    resolved_root = root.resolve()
+    resolved_build = build.resolve()
+    if resolved_build == resolved_root or resolved_root.is_relative_to(resolved_build):
+        raise RuntimeError("baseline build directory must not contain the source root")
+    configure_command = [
+        "cmake", "--preset", identity["configure_preset"],
+        "-B", str(resolved_build),
+        *(f"-D{name}={value}" for name, value in sorted(
+            identity["configure_cache_variables"].items()
+        )),
+    ]
     steps = [
         run_preflight_step(
-            ["cmake", "--preset", identity["configure_preset"]], root, output, "configure",
+            configure_command, resolved_root, resolved_build, output, "configure",
             identity["configure_timeout_seconds"], policy,
         )
     ]
     if steps[-1]["status"] == "passed":
         steps.append(run_preflight_step(
-            ["cmake", "--build", "--preset", identity["build_preset"], "--parallel",
-             str(identity["build_parallelism"])], root, output, "build",
+            ["cmake", "--build", str(resolved_build), "--parallel",
+             str(identity["build_parallelism"])],
+            resolved_root, resolved_build, output, "build",
             identity["build_timeout_seconds"], policy,
         ))
     return steps
@@ -408,7 +437,7 @@ def compiler_identity(root: Path, build: Path, policy: dict[str, Any]) -> dict[s
         "git_tree": tree,
         "git_dirty": False,
         "version": version,
-        "binary": file_identity(binary),
+        "binary": file_identity(binary, f"${{BUILD_ROOT}}/{binary.name}"),
     }
 
 
@@ -438,12 +467,12 @@ def cmake_identity_values(build: Path) -> dict[str, str]:
     return values
 
 
-def file_identity(path: Path) -> dict[str, Any]:
+def file_identity(path: Path, canonical_path: str | None = None) -> dict[str, Any]:
     resolved = path.resolve()
     if not resolved.is_file():
         raise RuntimeError(f"identity file missing: {resolved}")
     return {
-        "path": str(resolved),
+        "path": canonical_path or str(resolved),
         "sha256": sha256(resolved),
         "size_bytes": resolved.stat().st_size,
     }
@@ -601,6 +630,9 @@ def host_and_toolchain_info(root: Path, build: Path, binary: Path,
         errors.append(f"CMake generator is {values.get('CMAKE_GENERATOR')!r}")
     if values.get("CMAKE_BUILD_TYPE") != expected["build_type"]:
         errors.append(f"CMake build type is {values.get('CMAKE_BUILD_TYPE')!r}")
+    for name, value in expected["configure_cache_variables"].items():
+        if values.get(name) != value:
+            errors.append(f"CMake cache {name} is {values.get(name)!r}")
     compiler_value = values.get("CMAKE_C_COMPILER", "")
     if not compiler_value:
         errors.append("CMAKE_C_COMPILER is missing")
@@ -646,9 +678,14 @@ def host_and_toolchain_info(root: Path, build: Path, binary: Path,
             "power_policy": power,
         },
         "build": {
-            "cmake_home": str(Path(home).resolve()),
+            "root": "${BUILD_ROOT}",
+            "cmake_home": "${SOURCE_ROOT}",
             "generator": values.get("CMAKE_GENERATOR"),
             "build_type": values.get("CMAKE_BUILD_TYPE"),
+            "configure_cache_variables": {
+                name: values.get(name)
+                for name in sorted(expected["configure_cache_variables"])
+            },
             "c_compiler_id": values.get("CMAKE_C_COMPILER_ID"),
             "c_compiler_version": values.get("CMAKE_C_COMPILER_VERSION"),
             "c_compiler": optional_tool_identity(compiler_value),
@@ -752,7 +789,7 @@ def execute_lane(root: Path, build: Path, output: Path, lane: Lane, iteration: i
         "source_root_residue": residue,
         "log": log.relative_to(output).as_posix(),
         "log_sha256": sha256(log),
-        "command": command_text(command, root, output),
+        "command": command_text(command, root, output, build),
     }
 
 
@@ -929,6 +966,7 @@ def expected_fixture_digest(root: Path, policy: dict[str, Any], variant: str) ->
 def governed_inputs(root: Path, policy: dict[str, Any], policy_path: Path) -> dict[str, str]:
     return {
         "baseline_manifest_sha256": sha256(policy_path),
+        "cmake_presets_sha256": sha256(root / "CMakePresets.json"),
         "runner_sha256": sha256(Path(__file__).resolve()),
         "fixture_sha256": expected_fixture_digest(root, policy, "base"),
     }
@@ -1020,7 +1058,7 @@ def run_performance(root: Path, binary: Path, output: Path,
                 "iteration": index,
                 "variant": variant,
                 "fixture_sha256": fixture_digest(work, policy),
-                "command": command_text(command, root, output),
+                "command": command_text(command, root, output, binary.parent),
             })
             samples.append(row)
             print(
@@ -1197,6 +1235,9 @@ def validate_evidence(manifest: dict[str, Any], policy: dict[str, Any], policy_p
             binary.get("size_bytes"), int
         ) or binary.get("size_bytes", 0) <= 0:
             errors.append("evidence binary identity is incomplete")
+        expected_binary = f"${{BUILD_ROOT}}/{compiler_binary_path(Path()).name}"
+        if binary.get("path") != expected_binary:
+            errors.append("evidence compiler binary path is not canonical")
 
     final_source = manifest.get("final_source", {})
     if strict:
@@ -1208,6 +1249,20 @@ def validate_evidence(manifest: dict[str, Any], policy: dict[str, Any], policy_p
     preflight = manifest.get("freshness_preflight", [])
     if strict and [row.get("name") for row in preflight] != ["configure", "build"]:
         errors.append("passed evidence lacks configure/build freshness preflight")
+    identity_policy = policy["identity"]
+    expected_preflight_commands = {
+        "configure": [
+            "cmake", "--preset", identity_policy["configure_preset"],
+            "-B", "${BUILD_ROOT}",
+            *(f"-D{name}={value}" for name, value in sorted(
+                identity_policy["configure_cache_variables"].items()
+            )),
+        ],
+        "build": [
+            "cmake", "--build", "${BUILD_ROOT}", "--parallel",
+            str(identity_policy["build_parallelism"]),
+        ],
+    }
     for row in preflight:
         expected_status = "passed" if (
             row.get("returncode") == 0
@@ -1216,6 +1271,8 @@ def validate_evidence(manifest: dict[str, Any], policy: dict[str, Any], policy_p
         ) else "failed"
         if row.get("status") != expected_status:
             errors.append(f"freshness preflight {row.get('name')} status is not derived")
+        if row.get("command") != expected_preflight_commands.get(row.get("name")):
+            errors.append(f"freshness preflight {row.get('name')} command is not exact")
 
     environment = manifest.get("environment")
     if strict and not isinstance(environment, dict):
@@ -1223,13 +1280,17 @@ def validate_evidence(manifest: dict[str, Any], policy: dict[str, Any], policy_p
         environment = {}
     if isinstance(environment, dict) and environment:
         build = environment.get("build", {})
+        if build.get("root") != "${BUILD_ROOT}":
+            errors.append("evidence build root is not canonical")
         if build.get("generator") != policy["identity"]["generator"]:
             errors.append("evidence build generator does not match policy")
         if build.get("build_type") != policy["identity"]["build_type"]:
             errors.append("evidence build type does not match policy")
-        expected_root = policy_path.parents[2].resolve()
-        if not build.get("cmake_home") or Path(build["cmake_home"]).resolve() != expected_root:
+        if build.get("cmake_home") != "${SOURCE_ROOT}":
             errors.append("evidence CMake source identity does not match policy root")
+        if build.get("configure_cache_variables") != policy["identity"][
+                "configure_cache_variables"]:
+            errors.append("evidence CMake cache identity does not match policy")
         for key in ("c_compiler", "linker"):
             tool = build.get(key, {})
             if not valid_sha256(tool.get("sha256")) or not isinstance(
@@ -1275,10 +1336,16 @@ def validate_evidence(manifest: dict[str, Any], policy: dict[str, Any], policy_p
         if spec is None:
             errors.append(f"unknown correctness lane {name!r}")
             continue
+        expected_command = [
+            "ctest", "--test-dir", "${BUILD_ROOT}", "--output-on-failure",
+            *spec["ctest_args"],
+        ]
         expected_runs = repeat if spec["repeat"] else 1
         if not isinstance(expected_runs, int) or len(runs) != expected_runs:
             errors.append(f"correctness lane {name} run count drift")
         for row in runs:
+            if row.get("command") != expected_command:
+                errors.append(f"correctness lane {name} command is not exact")
             summary = row.get("ctest", {})
             expected_status = "passed" if (
                 row.get("returncode") == 0
@@ -1331,6 +1398,12 @@ def validate_evidence(manifest: dict[str, Any], policy: dict[str, Any], policy_p
         if variants != {expected_variant}:
             errors.append(f"performance lane {name} sample variant drift")
         for row in samples:
+            expected_command = [
+                f"${{BUILD_ROOT}}/{compiler_binary_path(Path()).name}",
+                "run", policy["performance"]["fixture"]["entry"],
+            ]
+            if row.get("command") != expected_command:
+                errors.append(f"performance lane {name} command is not exact")
             try:
                 expected_fixture = expected_fixture_digest(root, policy, row.get("variant"))
             except (OSError, RuntimeError):
@@ -1544,6 +1617,14 @@ def self_test(root: Path, policy_path: Path) -> int:
             "source_root_residue": [],
             "correctness_lanes": [{"name": "seeded-red", "status": "failed"}],
             "performance_lanes": [],
+            "freshness_preflight": [{
+                "name": "configure",
+                "status": "failed",
+                "returncode": 1,
+                "timed_out": False,
+                "source_root_residue": [],
+                "command": ["cmake", "--preset", "default"],
+            }],
         }
         evidence_errors = validate_evidence(false_pass, policy, policy_path)
         self_check(any("aggregate result" in value for value in evidence_errors), "false pass result")
@@ -1551,6 +1632,10 @@ def self_test(root: Path, policy_path: Path) -> int:
         self_check(
             any("governed input hashes" in value for value in evidence_errors),
             "false pass governed inputs",
+        )
+        self_check(
+            any("command is not exact" in value for value in evidence_errors),
+            "preflight command identity",
         )
         expected_inputs = governed_inputs(root, policy, policy_path)
         for key in expected_inputs:

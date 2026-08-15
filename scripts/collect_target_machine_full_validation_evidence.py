@@ -24,7 +24,7 @@ import assemble_target_machine_completion_evidence as assembler  # noqa: E402
 import check_target_machine_completion as completion  # noqa: E402
 
 
-PRODUCER = "target-machine-full-validation-evidence/2"
+PRODUCER = "target-machine-full-validation-evidence/3"
 KIND = "full-validation"
 BASELINE_RUNNER = "tests/target-machine/phase0/run_baseline.py"
 BASELINE_POLICY = "contracts/target-machine/baseline-manifest.json"
@@ -84,13 +84,56 @@ def platform_identity(build: Path) -> dict[str, str]:
     }
 
 
+def configured_build_identity(root: Path, build: Path) -> dict[str, str]:
+    cache = build / "CMakeCache.txt"
+    if not cache.is_file() or not (build / "build.ninja").is_file():
+        raise CollectionError("full-validation evidence requires a configured Ninja build")
+    required = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_GENERATOR": "Ninja",
+        "XRAY_STDLIB_VM_FASTPATHS": "OFF",
+    }
+    values: dict[str, str] = {}
+    for line in cache.read_text(encoding="utf-8", errors="strict").splitlines():
+        if not line or line.startswith(("#", "//")) or ":" not in line or "=" not in line:
+            continue
+        name, rest = line.split(":", 1)
+        if name not in {*required, "CMAKE_HOME_DIRECTORY"}:
+            continue
+        if name in values:
+            raise CollectionError(f"configured build identity duplicates {name}")
+        values[name] = rest.split("=", 1)[1].strip()
+    home = values.get("CMAKE_HOME_DIRECTORY")
+    if not home or Path(home).resolve() != root.resolve():
+        raise CollectionError("configured build does not belong to the exact source root")
+    for name, expected in required.items():
+        if values.get(name) != expected:
+            raise CollectionError(
+                f"configured build {name} is {values.get(name)!r}, expected {expected!r}"
+            )
+    identity = {
+        "build_root": "${BUILD_ROOT}",
+        "source_root": "${SOURCE_ROOT}",
+        "generator": values["CMAKE_GENERATOR"],
+        "build_type": values["CMAKE_BUILD_TYPE"],
+        "export_compile_commands": values["CMAKE_EXPORT_COMPILE_COMMANDS"],
+        "stdlib_vm_fastpaths": values["XRAY_STDLIB_VM_FASTPATHS"],
+    }
+    identity["sha256"] = hashlib.sha256(json.dumps(
+        identity, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    return identity
+
+
 def canonical_command(root: Path, build: Path, output: Path,
-                      owner: str) -> list[str]:
+                      owner: str, lane_timeout: int) -> list[str]:
     return [
         sys.executable,
         str((root / "scripts/collect_target_machine_full_validation_evidence.py").resolve()),
         "--root", str(root), "--build", str(build),
         "--output-dir", str(output), "--owner", owner,
+        "--lane-timeout", str(lane_timeout),
     ]
 
 
@@ -250,6 +293,7 @@ def collect(root: Path, build: Path, output: Path, owner: str,
         raise CollectionError("full-validation lane authority is not exact")
     if not (build / "CTestTestfile.cmake").is_file():
         raise CollectionError("full-validation evidence requires a configured CTest build")
+    build_identity = configured_build_identity(root, build)
     if output.exists() or output.is_symlink():
         raise CollectionError("raw evidence package already exists; collection never overwrites")
     identity = repository_identity(root)
@@ -328,7 +372,7 @@ def collect(root: Path, build: Path, output: Path, owner: str,
         generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace(
             "+00:00", "Z"
         )
-        collector_command = canonical_command(root, build, output, owner)
+        collector_command = canonical_command(root, build, output, owner, lane_timeout)
         raw_log_sources = [discovery_log, baseline_stdout]
         if baseline_root.is_dir():
             raw_log_sources.extend(sorted(path for path in baseline_root.rglob("*") if path.is_file()))
@@ -360,6 +404,7 @@ def collect(root: Path, build: Path, output: Path, owner: str,
             "payload": {
                 "producer": PRODUCER,
                 "baseline_runner": "target-machine-baseline/3",
+                "build_identity": build_identity,
                 "baseline_manifest": "logs/baseline/baseline-evidence.json",
                 "lanes": lanes,
             },

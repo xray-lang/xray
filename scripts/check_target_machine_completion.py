@@ -846,10 +846,34 @@ def activation_findings(data: dict[str, Any], verified: set[str],
 def full_validation_findings(data: dict[str, Any], verified: set[str],
                              manifest: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
-    if (data.get("producer") != "target-machine-full-validation-evidence/2"
+    if (data.get("producer") != "target-machine-full-validation-evidence/3"
             or data.get("baseline_runner") != "target-machine-baseline/3"):
         findings.append(finding("TM-COMP-VALIDATION-PRODUCER", "full-validation",
                                 "full validation producer/baseline identity is not exact"))
+    build_identity = data.get("build_identity")
+    build_fields = {
+        "build_root", "source_root", "generator", "build_type",
+        "export_compile_commands", "stdlib_vm_fastpaths", "sha256",
+    }
+    expected_build = {
+        "build_root": "${BUILD_ROOT}",
+        "source_root": "${SOURCE_ROOT}",
+        "generator": "Ninja",
+        "build_type": "Release",
+        "export_compile_commands": "ON",
+        "stdlib_vm_fastpaths": "OFF",
+    }
+    if not isinstance(build_identity, dict) or set(build_identity) != build_fields:
+        findings.append(finding("TM-COMP-VALIDATION-BUILD", "full-validation",
+                                "full validation build identity is incomplete"))
+    else:
+        expected_digest = sha256_bytes(json.dumps(
+            expected_build, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8"))
+        if ({key: build_identity.get(key) for key in expected_build} != expected_build
+                or build_identity.get("sha256") != expected_digest):
+            findings.append(finding("TM-COMP-VALIDATION-BUILD", "full-validation",
+                                    "full validation build identity is stale"))
     check_log_reference(findings, "full-validation", verified,
                         data.get("baseline_manifest"), "baseline manifest")
     rows = data.get("lanes")
@@ -1241,9 +1265,25 @@ def self_test(manifest_path: Path) -> int:
             validation = fixture_envelope(evidence_root, "full-validation", identity, input_sha256)
             validation_log = validation["logs"][0]["path"]
             validation.update({
-                "producer": "target-machine-full-validation-evidence/2",
+                "producer": "target-machine-full-validation-evidence/3",
                 "baseline_runner": "target-machine-baseline/3",
                 "baseline_manifest": validation_log,
+                "build_identity": {
+                    "build_root": "${BUILD_ROOT}",
+                    "source_root": "${SOURCE_ROOT}",
+                    "generator": "Ninja",
+                    "build_type": "Release",
+                    "export_compile_commands": "ON",
+                    "stdlib_vm_fastpaths": "OFF",
+                    "sha256": sha256_bytes(json.dumps({
+                        "build_root": "${BUILD_ROOT}",
+                        "source_root": "${SOURCE_ROOT}",
+                        "generator": "Ninja",
+                        "build_type": "Release",
+                        "export_compile_commands": "ON",
+                        "stdlib_vm_fastpaths": "OFF",
+                    }, sort_keys=True, separators=(",", ":")).encode("utf-8")),
+                },
             })
             validation["lanes"] = [{
                 "name": name, "status": "passed", "command": f"run {name}",
@@ -1273,6 +1313,10 @@ def self_test(manifest_path: Path) -> int:
             broken["baseline_runner"] = "ad-hoc"
             expect_mutation(results, "full-validation-producer", full_validation_findings(
                 broken, verified, manifest), "TM-COMP-VALIDATION-PRODUCER")
+            broken = copy.deepcopy(validation)
+            broken["build_identity"]["stdlib_vm_fastpaths"] = "ON"
+            expect_mutation(results, "full-validation-build", full_validation_findings(
+                broken, verified, manifest), "TM-COMP-VALIDATION-BUILD")
 
             owner_root = root / "owner"
             (owner_root / "contracts/target-machine").mkdir(parents=True)
@@ -1327,7 +1371,7 @@ def self_test(manifest_path: Path) -> int:
             "identity-log", "dependency-graph", "symbol", "installed", "installed-sdk", "runtime",
             "matrix", "activation-generation", "full-validation",
             "full-validation-selection", "full-validation-execution",
-            "full-validation-producer", "dual-owner",
+            "full-validation-producer", "full-validation-build", "dual-owner",
             "terminal-inventory",
         }
         observed = {item.split("->", 1)[0] for item in results}
