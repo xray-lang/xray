@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(25)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(26)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -50,6 +50,7 @@
 #define XR_C_ITERATOR_RUNE_NEXT_SYMBOL "xrt_iterator_rune_next"
 #define XR_C_RUNE_TO_UINT32_SYMBOL "xrt_rune_to_uint32"
 #define XR_C_RUNE_IS_WHITESPACE_SYMBOL "xrt_rune_is_whitespace"
+#define XR_C_ARRAY_NEW_SYMBOL "xrt_array_new_typed"
 
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
@@ -720,6 +721,134 @@ static bool c_array_fill_type_is_exact(const XrSemanticTypeRecord *type,
            (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
             type->kind == XR_KIND_BOOL) &&
            c_array_storage_from_type(type, &ignored_storage);
+}
+
+/* A source Array<T>(count) allocation is a distinct family from the compiler
+ * Array intrinsics below.  Its C recipe is admitted only when the ordered
+ * scalar count operand, owned allocation result, Target slot, and the Array
+ * layout's dedicated element-storage byte all agree. */
+static bool exact_array_allocation_recipe(
+    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
+    uint8_t *storage, uint32_t *count_value, const char **symbol) {
+    const XrSemanticPlan *semantic =
+        target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
+    uint32_t child_count = 0;
+    const uint32_t *children = semantic
+        ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
+    const XrSemanticTypeRecord *array = operation && semantic
+        ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
+    const XrSemanticTypeRecord *element =
+        array && children && array->child_count == 1 &&
+                array->child_begin < child_count
+            ? xr_semantic_plan_type(semantic, children[array->child_begin])
+            : NULL;
+    const XrSemanticOperandRecord *count =
+        operation && operands && operation->operand_count == 1 &&
+                operation->operand_begin < operand_count
+            ? &operands[operation->operand_begin] : NULL;
+    const XrSemanticTypeRecord *count_type = count && semantic
+        ? xr_semantic_plan_type(semantic, count->type) : NULL;
+    uint8_t semantic_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t type_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!target_plan || !binding || !semantic || !operation || !operands ||
+        !children || !array || !element || !count || !count_type ||
+        operation->opcode != XI_ARRAY_NEW ||
+        operation->result_value != binding->semantic_value ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->operand_count != 1 ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->metadata_count != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_ARRAY_NEW) ||
+        operation->flags != xi_generated_op_default_flags(XI_ARRAY_NEW) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_ARRAY_NEW) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        !xr_semantic_allocation_identity_is_canonical(operation) ||
+        !c_array_storage_from_semantic(operation->array_element_storage,
+                                       &semantic_storage) ||
+        !c_array_storage_from_type(element, &type_storage) ||
+        semantic_storage != type_storage || array->kind != XR_KIND_ARRAY ||
+        array->builtin_type != XR_TID_NULL ||
+        array->scalar_rep != XR_SCALAR_REP_NONE ||
+        array->aggregate_extent != 0 || array->aggregate_align != 0 ||
+        array->flags !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        count_type->kind != XR_KIND_INT ||
+        count_type->builtin_type != XR_TID_NULL ||
+        count_type->child_count != 0 || count_type->aggregate_extent != 0 ||
+        count_type->aggregate_align != 0 ||
+        count_type->scalar_rep != XR_NATIVE_I64 || count_type->flags != 0 ||
+        count->role != XR_SEM_OPERAND_VALUE || count->parameter != -1 ||
+        count->flags != 0 ||
+        count->ownership_action != XR_SEM_OPERAND_CONSUME)
+        return false;
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    const XrTargetSlotRecord *slot = binding->slot < slot_count
+        ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; layouts && i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!register_rep || !memory_rep || !slot || !layout ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        slot->semantic_value != binding->semantic_value ||
+        slot->semantic_operation >= xr_semantic_plan_operation_count(semantic) ||
+        xr_semantic_plan_operation(semantic, slot->semantic_operation) != operation ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC ||
+        layout->array_element_storage != semantic_storage ||
+        layout->field_count != 0 || layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align)
+        return false;
+    if (storage)
+        *storage = semantic_storage;
+    if (count_value)
+        *count_value = count->value;
+    if (symbol)
+        *symbol = XR_C_ARRAY_NEW_SYMBOL;
+    return true;
 }
 
 /* Frozen Target authority for the two Array allocation recipes.  The recipe
@@ -2660,6 +2789,26 @@ static bool verify_value(const XrCValueEmissionView *value) {
                            XR_TARGET_ARRAY_STORAGE_COUNT &&
                        value->recipe_argument_count == 0 &&
                        value->recipe_arguments == NULL;
+    bool array_allocation =
+        value->materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_NEW;
+    if (array_allocation)
+        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_argument_value == UINT32_MAX &&
+                       value->recipe_layout_id == 0 &&
+                       value->recipe_discriminant >
+                           XR_TARGET_ARRAY_STORAGE_NONE &&
+                       value->recipe_discriminant <
+                           XR_TARGET_ARRAY_STORAGE_COUNT &&
+                       value->recipe_argument_count == 0 &&
+                       value->recipe_arguments == NULL &&
+                       value->recipe_symbol &&
+                       strcmp(value->recipe_symbol,
+                              XR_C_ARRAY_NEW_SYMBOL) == 0 &&
+                       value->recipe_type_name == NULL &&
+                       value->recipe_member_name == NULL;
     bool direct_array_ref_parameter =
         value->materialization ==
         XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER;
@@ -2683,12 +2832,12 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_member_name == NULL;
     if (value->materialization !=
             XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR &&
-        !array_recipe && !direct_array_ref_parameter)
+        !array_recipe && !array_allocation && !direct_array_ref_parameter)
         recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
                        value->recipe_discriminant == 0 &&
                        value->recipe_type_name == NULL &&
                        value->recipe_member_name == NULL;
-    if (array_recipe)
+    if (array_recipe || array_allocation)
         recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
                        value->recipe_type_name == NULL &&
                        value->recipe_member_name == NULL;
@@ -3027,6 +3176,14 @@ bool xr_c_emission_plan_verify(
         uint32_t expected_scalar_source = UINT32_MAX;
         bool expected_scalar_alias = exact_scalar_addressable_alias_recipe(
             target_plan, binding, &expected_scalar_source);
+        uint8_t expected_array_allocation_storage =
+            XR_TARGET_ARRAY_STORAGE_NONE;
+        uint32_t expected_array_allocation_count = UINT32_MAX;
+        const char *expected_array_allocation_symbol = NULL;
+        bool expected_array_allocation = exact_array_allocation_recipe(
+            target_plan, binding, &expected_array_allocation_storage,
+            &expected_array_allocation_count,
+            &expected_array_allocation_symbol);
         uint8_t expected_direct_array_ref_storage =
             XR_TARGET_ARRAY_STORAGE_NONE;
         bool expected_direct_array_ref_parameter =
@@ -3132,6 +3289,10 @@ bool xr_c_emission_plan_verify(
             expected_operand = expected_array_count;
             expected_argument = expected_array_fill;
             expected_symbol = expected_array_symbol;
+        } else if (expected_array_allocation) {
+            expected_recipe = XR_C_VALUE_MATERIALIZATION_ARRAY_NEW;
+            expected_operand = expected_array_allocation_count;
+            expected_symbol = expected_array_allocation_symbol;
         }
         size_t expected_length = expected_literal ? strlen(expected_literal) : 0;
         if (row->materialization != expected_recipe || row->reserved != 0 ||
@@ -3144,6 +3305,8 @@ bool xr_c_emission_plan_verify(
             row->recipe_discriminant !=
                 (expected_adt_enum ? expected_enum.member_ordinal
                                    : expected_array ? expected_array_storage
+                                   : expected_array_allocation
+                                         ? expected_array_allocation_storage
                                    : expected_direct_array_ref_parameter
                                          ? expected_direct_array_ref_storage
                                          : 0) ||
@@ -3580,6 +3743,12 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         uint32_t scalar_alias_source = UINT32_MAX;
         bool scalar_addressable_alias = exact_scalar_addressable_alias_recipe(
             target_plan, binding, &scalar_alias_source);
+        uint8_t array_allocation_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        uint32_t array_allocation_count = UINT32_MAX;
+        const char *array_allocation_symbol = NULL;
+        bool array_allocation = exact_array_allocation_recipe(
+            target_plan, binding, &array_allocation_storage,
+            &array_allocation_count, &array_allocation_symbol);
         uint8_t direct_array_ref_storage = XR_TARGET_ARRAY_STORAGE_NONE;
         bool direct_array_ref_parameter =
             exact_direct_local_array_ref_parameter_recipe(
@@ -3603,6 +3772,16 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             value->recipe_operand_value = array_count;
             value->recipe_argument_value = array_fill;
             value->recipe_discriminant = array_storage;
+        } else if (array_allocation) {
+            value->recipe_symbol = xr_strdup(array_allocation_symbol);
+            if (!value->recipe_symbol) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(error, error_size, "XR_EXEC_5003",
+                                      "Array allocation recipe allocation failed");
+            }
+            value->materialization = XR_C_VALUE_MATERIALIZATION_ARRAY_NEW;
+            value->recipe_operand_value = array_allocation_count;
+            value->recipe_discriminant = array_allocation_storage;
         } else if (adt_enum) {
             if (!enum_payloads ||
                 enum_shape.payload_count >

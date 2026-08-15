@@ -468,7 +468,7 @@ typedef struct XrTargetLayoutRecord {
     uint32_t id;
     uint32_t semantic_type;
     uint8_t kind;
-    uint8_t reserved;
+    uint8_t array_element_storage;
     uint16_t align;
     uint32_t fixed_prefix_size;
     uint32_t extent;

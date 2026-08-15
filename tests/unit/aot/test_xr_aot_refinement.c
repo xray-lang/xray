@@ -727,10 +727,19 @@ static DirectLocalArrayRefFixture direct_local_array_ref_fixture_create(void) {
     fixture.child->arc_borrow_sig->valid = true;
     XiValue *loaded = xi_value_new(fixture.child, child_entry, XI_PLACE_LOAD,
                                    &direct_local_byte_array, 1);
+    XiValue *index = xi_const_int(fixture.child, child_entry, 0,
+                                  &scalar_int);
+    XiValue *element = xi_const_int(fixture.child, child_entry, 7,
+                                    &scalar_byte);
+    XiValue *write = xi_value_new(fixture.child, child_entry, XI_INDEX_SET,
+                                  &scalar_unit, 3);
     XiValue *length = xi_value_new(fixture.child, child_entry, XI_LEN,
                                    &scalar_int, 1);
-    REQUIRE(loaded && length);
+    REQUIRE(loaded && index && element && write && length);
     loaded->args[0] = fixture.parameter;
+    write->args[0] = fixture.parameter;
+    write->args[1] = index;
+    write->args[2] = element;
     length->args[0] = loaded;
     xi_block_set_return(child_entry, length);
 
@@ -2222,7 +2231,31 @@ static void test_direct_local_array_ref_argument_authority_is_exact(void) {
     REQUIRE(parameter_view.rep == XR_C_VALUE_REP_RAW_PTR &&
             parameter_view.materialization ==
                 XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER &&
+            parameter_view.recipe_discriminant ==
+                XR_TARGET_ARRAY_STORAGE_U8 &&
             strcmp(parameter_view.c_type, "XrValue *") == 0);
+
+    uint32_t parameter_emission_index = UINT32_MAX;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == parameter->value) {
+            REQUIRE(parameter_emission_index == UINT32_MAX);
+            parameter_emission_index = i;
+        }
+    REQUIRE(parameter_emission_index != UINT32_MAX);
+    uint32_t saved_parameter_storage =
+        emission->values[parameter_emission_index].recipe_discriminant;
+    emission->values[parameter_emission_index].recipe_discriminant =
+        XR_TARGET_ARRAY_STORAGE_I64;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, target,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    emission->values[parameter_emission_index].recipe_discriminant =
+        saved_parameter_storage;
+    REQUIRE(xr_c_emission_plan_verify(
+        emission, target,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
 
     XrCCallArgumentEmissionView saved_emission_argument =
         emission->call_arguments[0];
@@ -3370,6 +3403,85 @@ static void test_scalar_addressable_alias_recipe_is_exact_and_fail_closed(void) 
     xi_func_free(function);
 }
 
+static void test_direct_local_array_ref_parameter_index_is_exact_and_fail_closed(void) {
+    XiFunc *function = xi_func_new("direct_local_array_ref_parameter_index",
+                                   &scalar_unit);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *parameter =
+        xi_param(function, entry, 0, &direct_local_byte_array);
+    REQUIRE(parameter != NULL);
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = parameter;
+    REQUIRE(xi_func_set_param_passing_mode(function, 0, XR_PARAM_REF));
+    parameter->transfer_mode = XR_TRANSFER_SHARE;
+    function->arc_borrow_sig = (XiBorrowSig *) xi_func_arena_alloc(
+        function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->valid = true;
+
+    XiValue *index = xi_const_int(function, entry, 0, &scalar_int);
+    XiValue *element = xi_const_int(function, entry, 7, &scalar_byte);
+    XiValue *write = xi_value_new(function, entry, XI_INDEX_SET,
+                                  &scalar_unit, 3);
+    REQUIRE(index && element && write);
+    write->args[0] = parameter;
+    write->args[1] = index;
+    write->args[2] = element;
+    xi_block_set_return(entry, NULL);
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    char error[512] = {0};
+    uint32_t ignored_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t parameter_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, parameter, &ignored_function, &parameter_value,
+        error, sizeof(error)));
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target, parameter_value);
+    REQUIRE(binding && binding->slot < target->slots_count &&
+            target->machine_reps[binding->register_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR &&
+            target->machine_reps[binding->memory_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR &&
+            target->slots[binding->slot].role == XR_TARGET_SLOT_PARAMETER &&
+            target->slots[binding->slot].root_kind == XR_TARGET_ROOT_NONE &&
+            target->slots[binding->slot].ownership ==
+                XR_TARGET_OWNERSHIP_BORROWED);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    REQUIRE(plan != NULL &&
+            xr_aot_refinement_plan_view(plan).record_count == 0);
+    xr_aot_refinement_plan_free(plan);
+
+    uint8_t saved_ownership = target->slots[binding->slot].ownership;
+    XrFingerprint saved_fingerprint = target->fingerprint;
+    target->slots[binding->slot].ownership = XR_TARGET_OWNERSHIP_OWNED;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
+    plan = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
+    target->slots[binding->slot].ownership = saved_ownership;
+    target->fingerprint = saved_fingerprint;
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
+
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_enum_descriptor_adapter_refuses_without_layout_family(void) {
     RepresentationFixture fixture = representation_fixture_create();
     XrAotRefinementDiagnostic diag = {0};
@@ -3404,6 +3516,137 @@ static void test_enum_descriptor_adapter_refuses_without_layout_family(void) {
     xr_aot_refinement_builder_free(builder);
     xr_aot_refinement_plan_free(native_plan);
     representation_fixture_free(&fixture);
+}
+
+static void test_scalar_array_allocation_storage_is_exact_and_fail_closed(void) {
+    XiFunc *function =
+        xi_func_new("scalar_array_allocation_storage", &scalar_byte);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *count = xi_const_int(function, entry, 2, &scalar_int);
+    XiValue *array = xi_value_new(function, entry, XI_ARRAY_NEW,
+                                  &direct_local_byte_array, 1);
+    XiValue *index = xi_const_int(function, entry, 0, &scalar_int);
+    XiValue *element = xi_const_int(function, entry, 7, &scalar_byte);
+    XiValue *write = xi_value_new(function, entry, XI_INDEX_SET,
+                                  &scalar_unit, 3);
+    XiValue *read = xi_value_new(function, entry, XI_INDEX_GET,
+                                 &scalar_byte, 2);
+    REQUIRE(count && array && index && element && write && read);
+    array->args[0] = count;
+    array->array_element_storage = XR_ELEM_U8;
+    write->args[0] = array;
+    write->args[1] = index;
+    write->args[2] = element;
+    read->args[0] = array;
+    read->args[1] = index;
+    xi_block_set_return(entry, read);
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t array_value = XR_SEMANTIC_INDEX_NONE;
+    char error[512] = {0};
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, function, array, &semantic_function, &array_value,
+        error, sizeof(error)));
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target, array_value);
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0;
+         i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(semantic, i);
+        if (candidate && candidate->result_value == array_value) {
+            REQUIRE(operation == NULL);
+            operation = candidate;
+            operation_index = i;
+        }
+    }
+    REQUIRE(binding && operation && operation->opcode == XI_ARRAY_NEW &&
+            operation->array_element_storage == XR_ELEM_U8 &&
+            operation->semantic_immediate == 0 &&
+            binding->slot < target->slots_count &&
+            target->slots[binding->slot].semantic_operation == operation_index &&
+            target->slots[binding->slot].ownership ==
+                XR_TARGET_OWNERSHIP_OWNED);
+    uint32_t layout_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < target->layouts_count; i++) {
+        if (target->layouts[i].semantic_type != operation->result_type)
+            continue;
+        REQUIRE(layout_index == XR_SEMANTIC_INDEX_NONE);
+        layout_index = i;
+    }
+    REQUIRE(layout_index != XR_SEMANTIC_INDEX_NONE &&
+            target->layouts[layout_index].kind == XR_TARGET_LAYOUT_DYNAMIC &&
+            target->layouts[layout_index].array_element_storage ==
+                XR_TARGET_ARRAY_STORAGE_U8);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &refinement, &diag));
+    REQUIRE(refinement != NULL &&
+            xr_aot_refinement_plan_view(refinement).record_count == 0);
+    xr_aot_refinement_plan_free(refinement);
+
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(
+        target, xr_target_profile_fingerprint(profile), &emission,
+        error, sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+                emission, array_value, &view, error, sizeof(error)) &&
+            view.rep == XR_C_VALUE_REP_TAGGED &&
+            view.materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_NEW &&
+            view.recipe_operand_value != UINT32_MAX &&
+            view.recipe_argument_value == UINT32_MAX &&
+            view.recipe_discriminant == XR_TARGET_ARRAY_STORAGE_U8 &&
+            view.recipe_symbol &&
+            strcmp(view.recipe_symbol, "xrt_array_new_typed") == 0);
+    uint32_t emission_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == array_value) {
+            REQUIRE(emission_index == XR_SEMANTIC_INDEX_NONE);
+            emission_index = i;
+        }
+    REQUIRE(emission_index != XR_SEMANTIC_INDEX_NONE);
+    emission->values[emission_index].recipe_discriminant =
+        XR_TARGET_ARRAY_STORAGE_I64;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, target, xr_target_profile_fingerprint(profile),
+        error, sizeof(error)));
+    emission->values[emission_index].recipe_discriminant =
+        XR_TARGET_ARRAY_STORAGE_U8;
+    REQUIRE(xr_c_emission_plan_verify(
+        emission, target, xr_target_profile_fingerprint(profile),
+        error, sizeof(error)));
+    xr_c_emission_plan_free(emission);
+
+    XrTargetLayoutRecord saved_layout = target->layouts[layout_index];
+    XrFingerprint saved_plan_fingerprint = target->fingerprint;
+    target->layouts[layout_index].array_element_storage =
+        XR_TARGET_ARRAY_STORAGE_I64;
+    xr_target_layout_compute_fingerprint(
+        target, layout_index, &target->layouts[layout_index].fingerprint);
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)) &&
+            strstr(error, "XR_TARGET_1002") != NULL);
+    refinement = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &refinement, &diag));
+    REQUIRE(refinement == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
+    target->layouts[layout_index] = saved_layout;
+    target->fingerprint = saved_plan_fingerprint;
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
+
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
 }
 
 static void test_array_intrinsic_index_storage_is_exact_and_fail_closed(void) {
@@ -3556,6 +3799,8 @@ int main(void) {
     test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed();
     test_fixed_array_backing_projection_is_exact_and_fail_closed();
     test_scalar_addressable_alias_recipe_is_exact_and_fail_closed();
+    test_direct_local_array_ref_parameter_index_is_exact_and_fail_closed();
+    test_scalar_array_allocation_storage_is_exact_and_fail_closed();
     test_array_intrinsic_index_storage_is_exact_and_fail_closed();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     printf("TargetPlan-native AOT refinement tests passed\n");

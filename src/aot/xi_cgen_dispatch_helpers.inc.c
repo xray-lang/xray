@@ -6364,22 +6364,9 @@ static void xicgen_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         fprintf(out, storage_rep == XR_REP_PTR ? "xrt_array_set_storage_ptr("
                                                : "xrt_array_set_storage(");
     if (storage_rep == XR_REP_PTR) {
-        if (!emit_typed_array_new_ptr_expr(ctx, out, f, v, length)) {
-            fprintf(out, "(xrt_array_t*)xrt_array_new(");
-            if (v->nargs >= 1 && v->args[0] && v->args[0]->op != XI_CONST)
-                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-            else
-                fprintf(out, "%" PRId64, length);
-            fprintf(out, ").ptr");
-        }
-    } else if (!emit_typed_array_new_expr(ctx, out, f, v, length)) {
-        fprintf(out, "xrt_array_new(");
-        if (v->nargs >= 1 && v->args[0] && v->args[0]->op != XI_CONST)
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-        else
-            fprintf(out, "%" PRId64, length);
-        fprintf(out, ")");
-    }
+        (void) emit_typed_array_new_ptr_expr(ctx, out, f, v, length);
+    } else
+        (void) emit_typed_array_new_expr(ctx, out, f, v, length);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, ", %u)", (unsigned) storage_mode);
 }
@@ -15473,6 +15460,18 @@ static void xicgen_place_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, "xr_array_ref((void *)(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
         fprintf(out, "), %u, %u)", (unsigned) fixed.native_type, (unsigned) fixed.count);
+        return;
+    }
+    XrCCallArgumentEmissionView array_ref_place = {0};
+    if (cg_direct_local_array_ref_place_emission(
+            ctx, f, v->args[0], &array_ref_place)) {
+        fprintf(out, "(*(XrValue *)(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, "))");
+        return;
+    }
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
         return;
     }
     XaotValueRep pointee_rep;

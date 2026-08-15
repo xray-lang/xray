@@ -566,8 +566,16 @@ static bool semantic_exact_i64_type(const XrSemanticTypeRecord *type) {
  * The element entry must be an exact signed 64-bit integer, so no element store
  * leaves a reference-count obligation behind and the element carries exactly one
  * native representation. Every other container shape stays fail closed. */
-static bool aot_array_allocation_is_exact(const XrSemanticPlan *semantic,
-                                          const XrSemanticOperationRecord *operation) {
+static bool aot_array_intrinsic_storage_is_exact(
+    const XrSemanticTypeRecord *element, uint8_t semantic_storage,
+    uint8_t *target_storage);
+static bool aot_array_ref_type_is_exact(const XrSemanticPlan *semantic,
+                                        uint32_t type_index,
+                                        uint8_t *storage);
+
+static bool aot_array_allocation_is_exact(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    uint8_t *out_storage) {
     char expected_type_key[96];
     int written = snprintf(expected_type_key, sizeof(expected_type_key),
                            "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:",
@@ -613,14 +621,25 @@ static bool aot_array_allocation_is_exact(const XrSemanticPlan *semantic,
         xr_semantic_plan_type(semantic, capacity->type);
     const XrSemanticFunctionRecord *function =
         xr_semantic_plan_function(semantic, operation->function);
-    return element && capacity_type && function &&
+    uint8_t semantic_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t type_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    bool exact = element && capacity_type && function &&
            (element->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 &&
-           semantic_exact_i64_type(element) && semantic_exact_i64_type(capacity_type) &&
+           aot_array_intrinsic_storage_is_exact(
+               element, operation->array_element_storage,
+               &semantic_storage) &&
+           aot_array_ref_type_is_exact(semantic, operation->result_type,
+                                       &type_storage) &&
+           semantic_storage == type_storage &&
+           semantic_exact_i64_type(capacity_type) &&
            capacity->role == XR_SEM_OPERAND_VALUE && capacity->parameter == -1 &&
            capacity->flags == 0 &&
            capacity->ownership_action == XR_SEM_OPERAND_CONSUME &&
            operation->result_value >= function->value_begin &&
            operation->result_value < function->value_begin + function->value_count;
+    if (exact && out_storage)
+        *out_storage = semantic_storage;
+    return exact;
 }
 
 /* Rebuilt independently of both the TargetPlan collector and its verifier:
@@ -3621,7 +3640,8 @@ static bool oracle_dynamic_string_runes_storage(
         slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
         slot->ownership != XR_TARGET_OWNERSHIP_OWNED || slot->reserved != 0 ||
         slot->debug_variable != XR_SEMANTIC_INDEX_NONE ||
-        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->reserved != 0 ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC ||
+        layout->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
         layout->field_count != 0 ||
         layout->root_field_count != 0 ||
         layout->fixed_prefix_size != memory_rep->memory_size ||
@@ -3982,8 +4002,10 @@ static bool oracle_dynamic_array_allocation_storage(
         operation_index != XR_SEMANTIC_INDEX_NONE
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
+    uint8_t array_storage = XR_TARGET_ARRAY_STORAGE_NONE;
     if (!operation || operation->result_value != semantic_value ||
-        !aot_array_allocation_is_exact(ctx->semantic, operation))
+        !aot_array_allocation_is_exact(ctx->semantic, operation,
+                                       &array_storage))
         return false;
     const XrTargetValueRepRecord *binding =
         xr_target_plan_value_rep(ctx->target_plan, semantic_value);
@@ -4021,7 +4043,9 @@ static bool oracle_dynamic_array_allocation_storage(
         memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
         register_rep->memory_size != memory_rep->memory_size ||
         register_rep->memory_align != memory_rep->memory_align ||
-        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC ||
+        layout->array_element_storage != array_storage ||
+        layout->field_count != 0 ||
         layout->root_field_count != 0 ||
         layout->fixed_prefix_size != memory_rep->memory_size ||
         layout->align != memory_rep->memory_align ||
@@ -4375,7 +4399,8 @@ static bool oracle_u8_slice_parameter_storage(const VerifyAuthority *ctx,
         memory_rep->detail != parameter->type ||
         register_rep->lane_count != 0 || memory_rep->lane_count != 0 ||
         register_rep->reserved != 0 || memory_rep->reserved != 0 ||
-        layout->kind != XR_TARGET_LAYOUT_VIEW || layout->reserved != 0 ||
+        layout->kind != XR_TARGET_LAYOUT_VIEW ||
+        layout->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
         layout->align != 8 || layout->fixed_prefix_size != 16 ||
         layout->field_count != 0 || layout->root_field_count != 0 ||
         slot->semantic_value != semantic_value ||
@@ -4466,6 +4491,10 @@ static bool oracle_dynamic_array_ref_storage(
     const VerifyAuthority *ctx, uint32_t semantic_value,
     XrRep *out_storage, uint16_t *out_machine_kind);
 
+static bool oracle_direct_local_array_ref_parameter_place_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind);
+
 /* An element read or write is admitted only against a container this authority
  * already proved to be an exact array allocation. The index is an exact signed
  * 64-bit integer, the stored element matches the container's own element entry,
@@ -4514,11 +4543,12 @@ static bool oracle_array_element_access_is_exact(const VerifyAuthority *ctx,
         oracle_dynamic_array_intrinsic_storage(ctx, container->value,
                                                &container_storage,
                                                &container_kind);
-    bool borrowed_array =
-        !owned_array &&
-        oracle_dynamic_array_ref_storage(ctx, container->value,
-                                         &container_storage,
-                                         &container_kind);
+    bool borrowed_array = !owned_array &&
+        (oracle_direct_local_array_ref_parameter_place_storage(
+             ctx, container->value, &container_storage, &container_kind) ||
+         oracle_dynamic_array_ref_storage(ctx, container->value,
+                                          &container_storage,
+                                          &container_kind));
     if (container->role != XR_SEM_OPERAND_VALUE || container->parameter != -1 ||
         container->flags != 0 ||
         container->ownership_action != XR_SEM_OPERAND_BORROW ||
@@ -4971,7 +5001,8 @@ static bool oracle_dynamic_json_namespace_value_storage(const VerifyAuthority *c
         slot->semantic_value != semantic_value || slot->semantic_operation != operation_index ||
         slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
         slot->ownership != XR_TARGET_OWNERSHIP_OWNED ||
-        layout->kind != XR_TARGET_LAYOUT_DYNAMIC)
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC ||
+        layout->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE)
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -5062,7 +5093,8 @@ static bool oracle_dynamic_stringbuilder_storage(
         slot->semantic_operation != operation_index ||
         slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
         slot->ownership != XR_TARGET_OWNERSHIP_OWNED ||
-        layout->kind != XR_TARGET_LAYOUT_DYNAMIC)
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC ||
+        layout->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE)
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -5169,7 +5201,8 @@ static bool oracle_dynamic_array_intrinsic_storage(
         slot->semantic_operation != operation_index ||
         slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
         slot->ownership != XR_TARGET_OWNERSHIP_OWNED ||
-        layout->kind != XR_TARGET_LAYOUT_DYNAMIC)
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC ||
+        layout->array_element_storage != storage)
         return false;
     for (uint16_t ordinal = 0; ordinal < call->argument_count; ordinal++) {
         uint32_t semantic_operand = operation->operand_begin + ordinal;
@@ -5361,7 +5394,9 @@ static bool oracle_dynamic_array_ref_storage(
         memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
         register_rep->memory_size != memory_rep->memory_size ||
         register_rep->memory_align != memory_rep->memory_align ||
-        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC ||
+        layout->array_element_storage != storage ||
+        layout->field_count != 0 ||
         layout->root_field_count != 0 ||
         layout->fixed_prefix_size != memory_rep->memory_size ||
         layout->align != memory_rep->memory_align ||
@@ -7090,6 +7125,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 return oracle_dynamic_array_allocation_storage(
                            ctx, source_value, out_storage, &ignored_kind) ||
                        oracle_dynamic_array_intrinsic_storage(
+                           ctx, source_value, out_storage, &ignored_kind) ||
+                       oracle_direct_local_array_ref_parameter_place_storage(
                            ctx, source_value, out_storage, &ignored_kind) ||
                        oracle_dynamic_array_ref_storage(
                            ctx, source_value, out_storage, &ignored_kind);

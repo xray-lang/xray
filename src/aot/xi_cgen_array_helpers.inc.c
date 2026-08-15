@@ -3028,6 +3028,108 @@ static bool cg_array_elem_info_from_cache_plan(const XaotArrayCachePlan *plan,
     return plan && cg_array_elem_info_from_container_plan(&plan->elem, out);
 }
 
+/* Exact Array C recipes carry element storage in the immutable emission row.
+ * Xi's type remains attached to the returned description for downstream
+ * semantic operations, but it never selects the storage lane. */
+static bool cg_array_elem_info_from_emission_recipe(
+    XiCgenCtx *ctx, const XiFunc *f, const XiValue *value,
+    const XrCValueEmissionView *emission, CgArrayElemInfo *out) {
+    if (!ctx || !f || !value || !emission || !out || !value->type ||
+        value->type->kind != XR_KIND_ARRAY ||
+        !value->type->container.element_type)
+        return false;
+    bool direct_ref =
+        emission->materialization ==
+            XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER &&
+        emission->rep == XR_C_VALUE_REP_RAW_PTR &&
+        emission->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
+        emission->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+        emission->recipe_operand_value == UINT32_MAX &&
+        emission->recipe_argument_value == UINT32_MAX &&
+        emission->recipe_symbol == NULL && emission->c_type &&
+        strcmp(emission->c_type, "XrValue *") == 0;
+    bool allocation =
+        emission->materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_NEW &&
+        emission->rep == XR_C_VALUE_REP_TAGGED &&
+        emission->target_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+        emission->target_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
+        emission->recipe_argument_value == UINT32_MAX &&
+        emission->recipe_symbol &&
+        strcmp(emission->recipe_symbol, "xrt_array_new_typed") == 0 &&
+        emission->c_type && strcmp(emission->c_type, "XrValue") == 0;
+    if (!direct_ref && !allocation)
+        return false;
+    if (allocation) {
+        uint32_t count_semantic = XR_SEMANTIC_INDEX_NONE;
+        if (value->op != XI_ARRAY_NEW || value->nargs != 1 || !value->args ||
+            !value->args[0] ||
+            !cg_value_semantic_id(ctx, f, value->args[0], &count_semantic) ||
+            count_semantic != emission->recipe_operand_value)
+            return false;
+    }
+    XaotRep rep = XAOT_REP_COUNT;
+    const char *element_name = NULL;
+    switch (emission->recipe_discriminant) {
+        case XR_TARGET_ARRAY_STORAGE_I8:
+            rep = XAOT_REP_I8; element_name = "XR_ELEM_I8"; break;
+        case XR_TARGET_ARRAY_STORAGE_U8:
+            rep = XAOT_REP_U8; element_name = "XR_ELEM_U8"; break;
+        case XR_TARGET_ARRAY_STORAGE_I16:
+            rep = XAOT_REP_I16; element_name = "XR_ELEM_I16"; break;
+        case XR_TARGET_ARRAY_STORAGE_U16:
+            rep = XAOT_REP_U16; element_name = "XR_ELEM_U16"; break;
+        case XR_TARGET_ARRAY_STORAGE_I32:
+            rep = XAOT_REP_I32; element_name = "XR_ELEM_I32"; break;
+        case XR_TARGET_ARRAY_STORAGE_U32:
+            rep = XAOT_REP_U32; element_name = "XR_ELEM_U32"; break;
+        case XR_TARGET_ARRAY_STORAGE_I64:
+            rep = XAOT_REP_I64; element_name = "XR_ELEM_I64"; break;
+        case XR_TARGET_ARRAY_STORAGE_U64:
+            rep = XAOT_REP_U64; element_name = "XR_ELEM_U64"; break;
+        case XR_TARGET_ARRAY_STORAGE_F32:
+            rep = XAOT_REP_F32; element_name = "XR_ELEM_F32"; break;
+        case XR_TARGET_ARRAY_STORAGE_F64:
+            rep = XAOT_REP_F64; element_name = "XR_ELEM_F64"; break;
+        case XR_TARGET_ARRAY_STORAGE_BOOL:
+            rep = XAOT_REP_BOOL; element_name = "XR_ELEM_BOOL"; break;
+        case XR_TARGET_ARRAY_STORAGE_RUNE:
+            rep = XAOT_REP_RUNE; element_name = "XR_ELEM_RUNE"; break;
+        default:
+            return false;
+    }
+    const XaotRepInfo *rep_info = xaot_rep_info(rep);
+    if (!rep_info || !rep_info->c_type)
+        return false;
+    *out = (CgArrayElemInfo) {
+        value->type->container.element_type,
+        element_name,
+        rep_info->c_type,
+        rep_info->storage_rep,
+    };
+    return true;
+}
+
+static bool cg_array_builtin_tid_from_emission_storage(
+    uint32_t storage, uint8_t *out) {
+    if (!out)
+        return false;
+    switch (storage) {
+        case XR_TARGET_ARRAY_STORAGE_I8: *out = XR_TID_I8; return true;
+        case XR_TARGET_ARRAY_STORAGE_U8: *out = XR_TID_U8; return true;
+        case XR_TARGET_ARRAY_STORAGE_I16: *out = XR_TID_I16; return true;
+        case XR_TARGET_ARRAY_STORAGE_U16: *out = XR_TID_U16; return true;
+        case XR_TARGET_ARRAY_STORAGE_I32: *out = XR_TID_I32; return true;
+        case XR_TARGET_ARRAY_STORAGE_U32: *out = XR_TID_U32; return true;
+        case XR_TARGET_ARRAY_STORAGE_I64: *out = XR_TID_INT; return true;
+        case XR_TARGET_ARRAY_STORAGE_U64: *out = XR_TID_U64; return true;
+        case XR_TARGET_ARRAY_STORAGE_F32: *out = XR_TID_F32; return true;
+        case XR_TARGET_ARRAY_STORAGE_F64: *out = XR_TID_FLOAT; return true;
+        case XR_TARGET_ARRAY_STORAGE_BOOL: *out = XR_TID_BOOL; return true;
+        case XR_TARGET_ARRAY_STORAGE_RUNE: *out = XR_TID_RUNE; return true;
+        default: return false;
+    }
+}
+
 typedef enum CgArrayStorageUse {
     CG_ARRAY_STORAGE_MUTABLE,
     CG_ARRAY_STORAGE_READ
@@ -3041,6 +3143,20 @@ static bool cg_array_value_storage_info(XiCgenCtx *ctx, const XiFunc *f, const X
         use == CG_ARRAY_STORAGE_READ ? XAOT_ARRAY_STORAGE_READ : XAOT_ARRAY_STORAGE_MUTABLE;
     (void) f;
     if (v && v->type && v->type->kind == XR_KIND_FIXED_ARRAY)
+        return false;
+    XrCValueEmissionView emission = {0};
+    CgValueEmissionStatus emission_status =
+        v ? cg_value_emission_view(ctx, f, v, &emission)
+          : CG_VALUE_EMISSION_NOT_COVERED;
+    if (emission_status == CG_VALUE_EMISSION_FOUND &&
+        (emission.materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_NEW ||
+         emission.rep == XR_C_VALUE_REP_RAW_PTR ||
+         emission.materialization ==
+             XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER))
+        return cg_array_elem_info_from_emission_recipe(
+            ctx, f, v, &emission, out);
+    if (emission_status == CG_VALUE_EMISSION_FOUND && v &&
+        v->op == XI_ARRAY_NEW)
         return false;
     plan = xaot_bundle_find_array_storage_plan(cg_ctx_aot_bundle(ctx), v);
     if (plan)
@@ -3062,6 +3178,15 @@ static bool cg_array_value_u8_unchecked_info(XiCgenCtx *ctx, const XiFunc *f,
             *out = info;
         return true;
     }
+    XrCValueEmissionView emission = {0};
+    CgValueEmissionStatus emission_status =
+        v ? cg_value_emission_view(ctx, f, v, &emission)
+          : CG_VALUE_EMISSION_NOT_COVERED;
+    if (emission_status == CG_VALUE_EMISSION_FOUND &&
+        (v->op == XI_ARRAY_NEW ||
+         emission.materialization ==
+             XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER))
+        return false;
     if (v && cg_array_elem_info_from_type_ctx(ctx, v->type, &info) &&
         cg_array_elem_info_is_u8(&info)) {
         if (out)
@@ -3873,6 +3998,14 @@ static bool cg_array_value_uses_native_local(XiCgenCtx *ctx, const XiFunc *f,
      * the function body, which is identical in both passes. */
     if (!ctx || !f || !target || target != value || !cg_array_is_native_local_alloc(target))
         return false;
+    XrCValueEmissionView emission = {0};
+    CgValueEmissionStatus emission_status =
+        cg_value_emission_view(ctx, f, target, &emission);
+    if (emission_status == CG_VALUE_EMISSION_ERROR)
+        return false;
+    if (emission_status == CG_VALUE_EMISSION_FOUND &&
+        emission.materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_NEW)
+        return false;
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -4345,42 +4478,49 @@ static void emit_typed_array_load_value_end(FILE *out, const CgArrayElemInfo *in
 
 static bool emit_typed_array_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                       int64_t cap) {
+    (void) cap;
     CgArrayElemInfo info;
-    if (!cg_array_elem_info_from_type_ctx(ctx, v->type, &info))
-        return false;
-    CgArrayFillLoop fill;
-    if (cg_array_unique_fill_loop_for_origin(ctx, f, v, &fill)) {
-        fprintf(out, "xrt_array_new_typed_uninit(");
-        emit_value_as_rep(out, fill.cap_value, XR_REP_I64);
-        fprintf(out, ", %s)", info.elem_name);
-    } else if (v->nargs >= 1 && v->args[0] && v->args[0]->op != XI_CONST) {
-        fprintf(out, "xrt_array_new_typed(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-        fprintf(out, ", %s, %u)", info.elem_name, (unsigned) xr_type_to_tid(info.type));
-    } else {
-        fprintf(out, "xrt_array_new_typed(%" PRId64 ", %s, %u)", cap, info.elem_name,
-                (unsigned) xr_type_to_tid(info.type));
+    XrCValueEmissionView emission = {0};
+    uint8_t element_tid = XR_TID_NULL;
+    if (!v || cg_value_emission_view(ctx, f, v, &emission) !=
+                  CG_VALUE_EMISSION_FOUND ||
+        !cg_array_elem_info_from_emission_recipe(ctx, f, v, &emission,
+                                                  &info) ||
+        emission.materialization != XR_C_VALUE_MATERIALIZATION_ARRAY_NEW ||
+        !cg_array_builtin_tid_from_emission_storage(
+            emission.recipe_discriminant, &element_tid)) {
+        (void) cg_value_emission_fail(
+            ctx, "Array allocation has no exact immutable C recipe");
+        emit_codegen_abort_expr(out);
+        return true;
     }
+    fprintf(out, "%s(", emission.recipe_symbol);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, ", %s, %u)", info.elem_name, (unsigned) element_tid);
     return true;
 }
 
 static bool emit_typed_array_new_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const XiValue *v, int64_t cap) {
+    (void) cap;
     CgArrayElemInfo info;
-    if (!cg_array_elem_info_from_type_ctx(ctx, v->type, &info))
-        return false;
-    CgArrayFillLoop fill;
-    if (cg_array_unique_fill_loop_for_origin(ctx, f, v, &fill)) {
-        fprintf(out, "xrt_array_new_typed_uninit_ptr(");
-        emit_value_as_rep(out, fill.cap_value, XR_REP_I64);
-        fprintf(out, ", %s)", info.elem_name);
-    } else if (v->nargs >= 1 && v->args[0] && v->args[0]->op != XI_CONST) {
-        fprintf(out, "xrt_array_new_typed_ptr(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-        fprintf(out, ", %s)", info.elem_name);
-    } else {
-        fprintf(out, "xrt_array_new_typed_ptr(%" PRId64 ", %s)", cap, info.elem_name);
+    XrCValueEmissionView emission = {0};
+    uint8_t element_tid = XR_TID_NULL;
+    if (!v || cg_value_emission_view(ctx, f, v, &emission) !=
+                  CG_VALUE_EMISSION_FOUND ||
+        !cg_array_elem_info_from_emission_recipe(ctx, f, v, &emission,
+                                                  &info) ||
+        emission.materialization != XR_C_VALUE_MATERIALIZATION_ARRAY_NEW ||
+        !cg_array_builtin_tid_from_emission_storage(
+            emission.recipe_discriminant, &element_tid)) {
+        (void) cg_value_emission_fail(
+            ctx, "Array allocation pointer has no exact immutable C recipe");
+        emit_codegen_abort_expr(out);
+        return true;
     }
+    fprintf(out, "((xrt_array_t*)%s(", emission.recipe_symbol);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, ", %s, %u).ptr)", info.elem_name, (unsigned) element_tid);
     return true;
 }
 

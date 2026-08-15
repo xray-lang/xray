@@ -1789,6 +1789,68 @@ static bool semantic_array_fill_type_is_exact(
             type->scalar_rep == XR_SCALAR_REP_NONE);
 }
 
+static bool verify_array_allocation_storage(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    char *error, size_t error_size) {
+    if (operation->opcode != XI_ARRAY_NEW)
+        return true;
+    const XrSemanticTypeRecord *array_type =
+        operation->result_type < plan->type_count
+            ? &plan->types[operation->result_type]
+            : NULL;
+    const XrSemanticOperandRecord *capacity =
+        operation->operand_count == 1 &&
+                operation->operand_begin < plan->operand_count
+            ? &plan->operands[operation->operand_begin]
+            : NULL;
+    uint32_t element_index =
+        array_type && array_type->child_count == 1 &&
+                array_type->child_begin < plan->type_child_count
+            ? plan->type_children[array_type->child_begin]
+            : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticTypeRecord *element =
+        element_index < plan->type_count ? &plan->types[element_index] : NULL;
+    const XrSemanticTypeRecord *capacity_type =
+        capacity && capacity->type < plan->type_count
+            ? &plan->types[capacity->type]
+            : NULL;
+    uint8_t expected_storage = semantic_array_element_storage(element);
+    bool candidate = expected_storage > XR_ELEM_ANY &&
+                     expected_storage < XR_ELEM_RAWPTR;
+    if (!candidate)
+        return operation->array_element_storage == XR_ELEM_ANY ||
+               report(error, error_size, "XR_SEM_0019",
+                      "non-scalar Array allocation carries element-storage authority");
+    bool exact = array_type && element && capacity && capacity_type &&
+                 semantic_type_is_exact_member_array(array_type) &&
+                 expected_storage == operation->array_element_storage &&
+                 operation->array_element_storage > XR_ELEM_ANY &&
+                 operation->array_element_storage < XR_ELEM_RAWPTR &&
+                 semantic_type_is_exact_member_i64(capacity_type) &&
+                 capacity->role == XR_SEM_OPERAND_VALUE &&
+                 capacity->parameter == -1 && capacity->flags == 0 &&
+                 capacity->ownership_action == XR_SEM_OPERAND_CONSUME &&
+                 operation->intrinsic_kind == XR_SEM_INTRINSIC_NONE &&
+                 operation->metadata_count == 0 &&
+                 operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                 operation->semantic_immediate == 0 &&
+                 operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                 operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
+                 operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                 operation->effects == xi_generated_op_effects(XI_ARRAY_NEW) &&
+                 operation->flags == xi_generated_op_default_flags(XI_ARRAY_NEW) &&
+                 operation->ownership_use == xi_generated_op_own_use(XI_ARRAY_NEW) &&
+                 operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                 operation->result_alias_operand == -1 &&
+                 operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                 operation->return_parameter == -1 &&
+                 operation->return_complete == 1 &&
+                 xr_semantic_allocation_identity_is_canonical(operation);
+    return exact ||
+           report(error, error_size, "XR_SEM_0019",
+                  "Array allocation element storage is not exact");
+}
+
 /* Independent frozen-row proof for the compiler-owned Array constructors.
  * Neither a metadata spelling nor semantic_immediate participates: the
  * intrinsic variant and scalar storage have dedicated schema fields. */
@@ -1797,10 +1859,14 @@ static bool verify_array_intrinsic(const XrSemanticPlan *plan,
                                    char *error, size_t error_size) {
     bool candidate = operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY ||
                      operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
-    if (!candidate)
+    if (!candidate) {
+        if (operation->opcode == XI_ARRAY_NEW)
+            return verify_array_allocation_storage(
+                plan, operation, error, error_size);
         return operation->array_element_storage == XR_ELEM_ANY ||
                report(error, error_size, "XR_SEM_0019",
                       "non-Array intrinsic carries element-storage authority");
+    }
     uint16_t expected_operands =
         operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY ? 1u : 2u;
     const XrSemanticTypeRecord *array_type =

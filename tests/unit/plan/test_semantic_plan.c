@@ -215,6 +215,7 @@ static XrType stub_array = {
     .kind = XR_KIND_ARRAY,
     .id = 5,
     .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_int},
 };
 static const char *stub_shape_field_names[] = {"count", "label"};
@@ -1670,6 +1671,7 @@ static XrSemanticPlan *build_entity_identity_plan_with_source(uintptr_t *source_
     borrowed_result->line = 15;
     set_source_span(borrowed_result, 15, 3, 15, 12);
     allocation->args[0] = capacity;
+    allocation->array_element_storage = XR_ELEM_I64;
     allocation->flags = xi_op_default_effects(XI_ARRAY_NEW);
     allocation->line = 16;
     set_source_span(allocation, 15, 3, 15, 12);
@@ -4570,6 +4572,7 @@ static void test_loop_redefinition_closes_previous_owner(void) {
     XiValue *array = xi_value_new(function, body, XI_ARRAY_NEW, &stub_array, 1);
     REQUIRE(array != NULL);
     array->args[0] = capacity;
+    array->array_element_storage = XR_ELEM_I64;
     array->flags = xi_op_default_effects(XI_ARRAY_NEW);
     xi_block_set_jump(body, latch);
     XiValue *repeat = xi_const_bool(function, latch, true, &stub_bool);
@@ -4624,6 +4627,7 @@ static void test_owner_forward_creates_a_distinct_loop_owner(void) {
     XiValue *array = xi_value_new(function, body, XI_ARRAY_NEW, &stub_array, 1);
     REQUIRE(array != NULL);
     array->args[0] = capacity;
+    array->array_element_storage = XR_ELEM_I64;
     array->flags = xi_op_default_effects(XI_ARRAY_NEW);
     XiValue *forward = xi_value_new(function, body, XI_OWNER_FORWARD, &stub_array, 1);
     REQUIRE(forward != NULL);
@@ -4697,6 +4701,7 @@ static void test_owner_origin_ignores_preceding_alias_storage_order(void) {
     XiValue *array = xi_value_new(function, definition, XI_ARRAY_NEW, &stub_array, 1);
     REQUIRE(array != NULL);
     array->args[0] = capacity;
+    array->array_element_storage = XR_ELEM_I64;
     array->flags = xi_op_default_effects(XI_ARRAY_NEW);
     xi_block_set_jump(definition, alias_use);
     XiValue *alias = xi_value_new(function, alias_use, XI_COPY, &stub_array, 1);

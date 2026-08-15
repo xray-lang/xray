@@ -93,6 +93,7 @@ typedef struct XrTargetLayoutIntent {
     XrTargetMachineRepRecord memory_rep;
     uint32_t element_count;
     uint8_t kind;
+    uint8_t array_element_storage;
 } XrTargetLayoutIntent;
 
 typedef struct XrTargetValueIntent {
@@ -716,6 +717,7 @@ static bool append_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic
     intent->memory_rep = *memory_rep;
     intent->element_count = element_count;
     intent->kind = kind;
+    intent->array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
     return true;
 }
 
@@ -1661,14 +1663,14 @@ static bool semantic_native_module_namespace_value_is_exact(
     return operation->opcode == XI_IMPORT_REF || consumed;
 }
 
-/* A freshly allocated `Array<T>` carries exactly one storage fact this plan can
- * state: the owned tagged outer value, the same fact a heap closure allocation
- * already states.  The element entry must be an exact signed 64-bit integer: a
- * reference capable element would leave a reference-count obligation on every
- * element store that no frozen row here describes, and a narrower or floating
- * element would carry a second element representation this authority does not
- * state.  The capacity operand is the sole operand and is consumed by value, so
- * the allocation owns no borrow of anything else. */
+static bool target_array_storage_from_semantic(uint8_t storage, uint8_t *out);
+static bool target_array_storage_from_type(const XrSemanticTypeRecord *type,
+                                           uint8_t *out);
+
+/* A freshly allocated `Array<T>` carries an owned tagged outer value plus one
+ * dedicated scalar element-storage identity. Reference-capable elements remain
+ * outside this family because their stores need a separate ownership/drop
+ * contract. The capacity operand is the sole ordered value operand. */
 static bool semantic_array_allocation_is_exact(const XrSemanticPlan *plan,
                                                const XrSemanticOperationRecord *operation) {
     uint32_t operand_count = 0, child_count = 0;
@@ -1698,11 +1700,15 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *plan,
     const XrSemanticTypeRecord *capacity_type = xr_semantic_plan_type(plan, capacity->type);
     const XrSemanticFunctionRecord *function =
         xr_semantic_plan_function(plan, operation->function);
-    uint16_t element_kind = XR_MACHINE_REP_COUNT, capacity_kind = XR_MACHINE_REP_COUNT;
+    uint16_t capacity_kind = XR_MACHINE_REP_COUNT;
+    uint8_t semantic_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t type_storage = XR_TARGET_ARRAY_STORAGE_NONE;
     return element && capacity_type && function &&
            (element->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 &&
-           classify_scalar_type(element, &element_kind) == XR_TARGET_SCALAR_VALUE &&
-           element_kind == XR_MACHINE_REP_I64 &&
+           target_array_storage_from_semantic(
+               operation->array_element_storage, &semantic_storage) &&
+           target_array_storage_from_type(element, &type_storage) &&
+           semantic_storage == type_storage &&
            classify_scalar_type(capacity_type, &capacity_kind) == XR_TARGET_SCALAR_VALUE &&
            capacity_kind == XR_MACHINE_REP_I64 &&
            capacity->role == XR_SEM_OPERAND_VALUE && capacity->parameter == -1 &&
@@ -1777,6 +1783,33 @@ static bool semantic_direct_local_array_ref_type_is_exact(
         return false;
     return target_array_storage_from_type(
         xr_semantic_plan_type(plan, children[array->child_begin]), storage);
+}
+
+static bool append_array_layout_intent(
+    XrTargetPlanBuilder *builder, uint32_t semantic_type, uint8_t storage,
+    const XrTargetMachineRepRecord *memory_rep, char *error,
+    size_t error_size) {
+    uint8_t expected = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!semantic_direct_local_array_ref_type_is_exact(
+            builder ? builder->semantic_plan : NULL, semantic_type,
+            &expected) || expected != storage ||
+        !append_layout_intent(builder, semantic_type,
+                              XR_TARGET_LAYOUT_DYNAMIC, 0, memory_rep,
+                              error, error_size))
+        return false;
+    for (uint32_t i = 0; i < builder->layout_intent_count; i++) {
+        XrTargetLayoutIntent *intent = &builder->layout_intents[i];
+        if (intent->semantic_type != semantic_type)
+            continue;
+        if (intent->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE &&
+            intent->array_element_storage != storage)
+            return fail(error, error_size, "XR_TARGET_1002",
+                        "Array layout has conflicting element storage");
+        intent->array_element_storage = storage;
+        return true;
+    }
+    return fail(error, error_size, "XR_TARGET_1002",
+                "Array layout intent is missing");
 }
 
 static bool semantic_direct_local_array_ref_parameter_is_exact(
@@ -4083,10 +4116,16 @@ static bool note_array_allocation_storage_value(
     const XrSemanticPlan *plan = builder->semantic_plan;
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(plan, semantic_operation);
+    uint8_t array_storage = XR_TARGET_ARRAY_STORAGE_NONE;
     if (!operation || operation->result_value >= analysis->total_values ||
         operation->result_type >= analysis->type_count ||
         operation->function >= xr_semantic_plan_function_count(plan) ||
-        analysis->defined_values[operation->result_value])
+        analysis->defined_values[operation->result_value] ||
+        !((operation->opcode == XI_ARRAY_NEW &&
+           target_array_storage_from_semantic(
+               operation->array_element_storage, &array_storage)) ||
+          semantic_array_intrinsic_is_exact(plan, operation, NULL,
+                                            &array_storage)))
         return fail(error, error_size, "XR_TARGET_1001",
                     "array allocation storage authority is incomplete");
     if (analysis->type_rep_kinds[operation->result_type] != XR_MACHINE_REP_COUNT &&
@@ -4126,9 +4165,9 @@ static bool note_array_allocation_storage_value(
         .has_slot = true,
     };
     if (!append_slot_intent(builder, &slot, error, error_size) ||
-        (!analysis->used_types[operation->result_type] &&
-         !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC,
-                               0, &rep, error, error_size)) ||
+        !append_array_layout_intent(builder, operation->result_type,
+                                    array_storage, &rep, error,
+                                    error_size) ||
         !append_value_intent(builder, &value, error, error_size))
         return false;
     analysis->defined_values[operation->result_value] = 1;
@@ -4278,9 +4317,8 @@ static bool note_direct_local_array_ref_storage(
         .has_slot = true,
     };
     if (!append_slot_intent(builder, &slot, error, error_size) ||
-        !append_layout_intent(builder, semantic_type,
-                              XR_TARGET_LAYOUT_DYNAMIC, 0, &layout_rep, error,
-                              error_size) ||
+        !append_array_layout_intent(builder, semantic_type, storage,
+                                    &layout_rep, error, error_size) ||
         !append_value_intent(builder, &value, error, error_size))
         return false;
     analysis->defined_values[semantic_value] = 1;
@@ -8699,6 +8737,7 @@ static bool materialize_layouts(XrTargetPlanBuilder *builder,
             .id = i,
             .semantic_type = intent->semantic_type,
             .kind = intent->kind,
+            .array_element_storage = intent->array_element_storage,
             .extent = i,
             .field_begin = field_begin,
             .field_count = (uint16_t) intent->element_count,

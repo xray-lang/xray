@@ -3678,6 +3678,18 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
                 : XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
         record->array_element_storage = value->array_element_storage;
     }
+    bool array_allocation_exact =
+        value->op == XI_ARRAY_NEW && value->type &&
+        XR_TYPE_IS_ARRAY(value->type) &&
+        value->type->container.element_type && value->nargs == 1 &&
+        value->args[0] && value->args[0]->type &&
+        XR_TYPE_IS_INT(value->args[0]->type) &&
+        value->array_element_storage > XR_ELEM_ANY &&
+        value->array_element_storage < XR_ELEM_RAWPTR;
+    if (array_allocation_exact) {
+        record->array_element_storage = value->array_element_storage;
+        record->semantic_immediate = 0;
+    }
     bool string_builder_candidate = xi_string_builder_constructor_candidate(value);
     bool string_builder_exact = xi_string_builder_constructor_exact(value);
     if (string_builder_candidate &&

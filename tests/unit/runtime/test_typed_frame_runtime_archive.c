@@ -15,7 +15,7 @@ int main(void) {
     XrTypedFrameMemoryFootprint footprint;
     XrModuleGenerationIdentity generation = {0};
     int64_t result = 1;
-    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(30) ||
+    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(31) ||
         XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK != XR_TARGET_REQUIRED_FAMILIES ||
         limits.max_arena_bytes != XR_TYPED_FRAME_MAX_ARENA_BYTES ||
         xr_typed_frame_create(NULL, &fingerprint, 0, &limits, &frame) !=

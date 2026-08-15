@@ -3293,6 +3293,8 @@ static XiValue *lower_array_literal_spread(XiLower *l, AstNode *node, struct XrT
     if (!arr_val)
         return NULL;
     arr_val->args[0] = cap;
+    arr_val->array_element_storage =
+        xi_array_intrinsic_storage_from_type(result_type);
     arr_val->line = (uint32_t) node->line;
 
     for (int i = 0; i < count; i++) {
@@ -3572,6 +3574,8 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     if (!arr_val)
         return NULL;
     arr_val->args[0] = cap;
+    arr_val->array_element_storage =
+        xi_array_intrinsic_storage_from_type(result_type);
     arr_val->line = (uint32_t) node->line;
 
     /* Populate: INDEX_SET for each element */
@@ -9193,6 +9197,8 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
                 uint8_t tid = xr_type_to_tid(result_type->container.element_type);
                 v->aux_int = (int64_t) (tid << 2);
             }
+            v->array_element_storage =
+                xi_array_intrinsic_storage_from_type(result_type);
             v->line = (uint32_t) node->line;
             return v;
         }
@@ -9212,6 +9218,9 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             if (array_copy)
                 v->aux = (void *) "array_copy_new";
             v->aux_int = xi_array_cfield_from_type(result_type);
+            if (!array_copy)
+                v->array_element_storage =
+                    xi_array_intrinsic_storage_from_type(result_type);
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
             return v;

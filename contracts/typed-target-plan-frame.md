@@ -161,9 +161,9 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h acf4bf939db359fbc6bf2166e0825ae529bf8fc5da019cfeeebe7a0579be03ee
-anchor-sha256: src/vm/xr_typed_frame.h 2efa9df337e0ec2ef5113cc116523c61c595c8b51914c4c3c2b85331d738a022
+anchor-sha256: src/plan/target/xr_target_plan.h d1ed20e9afa4b5c1bb361a939a8c5b627c6d4e814b68f3303b8a05454bfa5c99
+anchor-sha256: src/vm/xr_typed_frame.h d8cebf1c70bfa0066b58a5f6563007afa3c13a63078fa15dc8315212fb7b238b
 anchor-sha256: src/vm/xr_typed_frame.c 97671813b4a933163a75ea55be9e8c65ec295ec05d67ec4fdc682433f420bb4e
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8bb1c1150e0f916b37c21676537fb507f18dec6a10da01b0e6932043d738e1f9
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 6379d9affca2e1b817103b5d54470dc8c08436d85628dc152aa6cbee5713c262
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 60932993669807446d5d1f250fe0daec85207bafaca59cebf3eb55e56144b7d3
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

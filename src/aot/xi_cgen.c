@@ -2820,6 +2820,53 @@ static bool cg_raw_pointer_emission_is_exact(
             strcmp(view->c_type, "void * *") == 0);
 }
 
+/* Reconstruct the pointee carrier for a local Array ref place only from the
+ * immutable direct-call argument row that consumed that exact semantic place.
+ * The PLACE_LOAD after the call must dereference an XrValue slot; consulting
+ * Xi's Array type or the legacy raw-pointer plan would instead read the tag
+ * word as a pointer. */
+static bool cg_direct_local_array_ref_place_emission(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *place,
+    XrCCallArgumentEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !place || !out)
+        return false;
+    XrCCallArgumentEmissionView found = {0};
+    bool have = false;
+    for (uint32_t block = 0; block < function->nblocks; block++) {
+        const XiBlock *candidate_block = function->blocks[block];
+        if (!candidate_block)
+            continue;
+        for (uint32_t value = 0; value < candidate_block->nvalues; value++) {
+            const XiValue *user = candidate_block->values[value];
+            if (!user || !user->args)
+                continue;
+            for (uint16_t ordinal = 0; ordinal < user->nargs; ordinal++) {
+                if (user->args[ordinal] != place)
+                    continue;
+                if (ordinal == 0)
+                    continue;
+                XrCCallArgumentEmissionView candidate = {0};
+                if (!cg_direct_local_array_ref_argument_emission(
+                        ctx, function, user, (uint16_t) (ordinal - 1u),
+                        place, &candidate))
+                    continue;
+                if (have) {
+                    ctx->error = true;
+                    return false;
+                }
+                found = candidate;
+                have = true;
+            }
+        }
+    }
+    if (!have)
+        return false;
+    *out = found;
+    return true;
+}
+
 static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx,
                                         const XrCValueEmissionView *view,
                                         XaotRep *out) {
