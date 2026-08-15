@@ -36,7 +36,7 @@ scalar route remains the only governed product activation path.
    call-argument, root-map, root-slot, cleanup, adapter, or coroutine execution
    authority. Any other verified plan remains VERIFIED and fails PREPARE with
    `XR_EXEC_5004`; it is not partially activated.
-   TargetPlan schema 30 preserves exact SOURCE-import storage and dense
+   TargetPlan schema 31 preserves exact SOURCE-import storage and dense
    SOURCE_EXPORT argument rows together with exact ADT-enum, aggregate
    field-name, Array-intrinsic, String-runes result, and sealed Iterator-rune
    `hasNext`/`next`/`rune.toUInt32`/`rune.isWhitespace` call authority, plus exact direct-local
@@ -109,7 +109,7 @@ scalar route remains the only governed product activation path.
     identity at every call site. `XR_ENTRY_ABI_SCHEMA_VERSION == 1` instead hashes
     the exact signed-i64 parameter/result shape, native ABI, target data-layout
     hash, and target-profile fingerprint under an entry-specific domain. This
-    record is runtime-only and is not serialized into TargetPlan schema 30 or
+    record is runtime-only and is not serialized into TargetPlan schema 31 or
     XTP schema 29. Persisting a dynamic-call expectation later requires an atomic
     schema cutover; no compatibility interpretation is permitted.
 13. Binding requires an immutable verified TargetPlan with an intact plan

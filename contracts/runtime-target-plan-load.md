@@ -273,7 +273,7 @@ roots, or general module activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt b0eee97145678841b07165e9f8e7d76cfd82b7e1c746fddf252c36af9a7ee651
+anchor-sha256: CMakeLists.txt 989526ba9dfad5b70b4385edbd2fef11bdb9b63ed36235d8814e37a13521438f
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
@@ -303,7 +303,7 @@ anchor-sha256: contracts/target-machine/legacy-product-residue.json 577aa49d6502
 anchor-sha256: scripts/check_legacy_product_residue.py d160f8b9ab1d16da893bcc30a7ed90d583dda9e478dd11f67c9ce299629f8d2f
 anchor-sha256: tests/unit/plan/test_target_plan.c 606990c62adcfbc722b9930e05a8ad6919291fd67e864c8a567945d432e9e128
 anchor-sha256: tests/unit/plan/test_xtp_format.c 9654ba47989b6b34e4e40f6196a02bb95818fd6f83aa5f4a4f78e6907bf4bd31
-anchor-sha256: tests/unit/CMakeLists.txt 3c508949a65fdd745d2b3ddb74b4b54ff8fe31b11a862064cbc5ce2995afd0c4
+anchor-sha256: tests/unit/CMakeLists.txt b6b991e6f4791ec8473e9dd26fa3cab4d03f6f9959add218b2db305f100e8a17
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 6df46f3edff17f29786f16df95615187f34b9da5283f79228c06c0cfe3f1598d
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py adbe96cb24fd2da66f8e8c3148d78eab7f59d3b2544ba07a87f41540b6f760cd
