@@ -16,6 +16,7 @@
 #include "../../../src/aot/xaot_struct_name.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
+#include "../../../src/aot/refine/xr_aot_scalar_value.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_arc.h"
@@ -2123,7 +2124,10 @@ TEST(cgen_multi_concat_string_constants_emit_immediate_without_locals) {
 
 TEST(cgen_shared_string_constant_emits_immediate_without_local) {
     XrType null_type = {.kind = XR_KIND_NULL, .id = 938, .frozen = true};
-    XrType string_type = {.kind = XR_KIND_STRING, .id = 939, .frozen = true};
+    XrType string_type = {.kind = XR_KIND_STRING,
+                          .id = 939,
+                          .scalar_rep = XR_SCALAR_REP_NONE,
+                          .frozen = true};
     XrType unit_type = {.kind = XR_KIND_UNIT, .id = 940, .frozen = true};
     XiFunc *ir = xi_func_new("manual_shared_literal", &null_type);
     TEST_REQUIRE(ir != NULL, "manual shared-literal function allocated");
@@ -2147,8 +2151,13 @@ TEST(cgen_shared_string_constant_emits_immediate_without_local) {
     mod->nslots = 1;
     ir->module = mod;
 
+    TEST_REQUIRE(test_prepare_backend_ir(ir),
+                 "shared-literal fixture reached Backend");
+    const char *saved_literal = (const char *) literal->aux;
+    literal->aux = "forged-live-shared";
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
+    literal->aux = (void *) saved_literal;
     TEST_REQUIRE(code != NULL, "shared-literal C generation failed");
     TEST_REQUIRE(!had_error, "shared-literal fixture should generate");
     const char *fn = find_static_function_definition(code, "manual_shared_literal");
@@ -2159,8 +2168,35 @@ TEST(cgen_shared_string_constant_emits_immediate_without_local) {
                  "a shared string literal must not leave a dead C local");
     TEST_REQUIRE(contains_between(fn, fn_end, "xrt_array_ref_ensure_owned(xr_str_lit("),
                  "the portable shared-slot ownership handoff must retain the exact string literal");
+    TEST_REQUIRE(strstr(code, "\"shared\"") != NULL &&
+                     strstr(code, "forged-live-shared") == NULL,
+                 "shared-slot emission must use the immutable literal recipe");
+
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetPlan *target_plan = NULL;
+    char identity_error[512] = {0};
+    TEST_REQUIRE(profile != NULL &&
+                     xr_target_plan_build(ir->semantic_plan, profile, &target_plan,
+                                          identity_error,
+                                          sizeof(identity_error)),
+                 "shared-literal mutation TargetPlan built");
+    uint8_t saved_scalar_rep = string_type.scalar_rep;
+    string_type.scalar_rep = XR_NATIVE_I8;
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    TEST_REQUIRE(!xr_aot_scalar_semantic_value_id(
+                     target_plan, ir, literal, &semantic_function,
+                     &semantic_value, identity_error,
+                     sizeof(identity_error)) &&
+                     strncmp(identity_error, "XR_TARGET_1001",
+                             strlen("XR_TARGET_1001")) == 0,
+                 "live String scalar identity drift must fail closed");
+    string_type.scalar_rep = saved_scalar_rep;
 
     printf("  Generated immediate shared string literal %zu bytes of C code\n", strlen(code));
+    xr_target_plan_free(target_plan);
+    xr_target_profile_free(profile);
     xr_free(code);
     xi_func_free(ir);
 }
