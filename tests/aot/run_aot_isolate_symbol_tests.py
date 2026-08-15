@@ -8,8 +8,8 @@ isolate/VM/parser/analyzer symbols that would mean the whole language runtime
 got dragged along. Some cases additionally assert that eagerly-initialized
 script builtins are absent.
 
-This is a shape contract, not a behavior one -- which is why it checks `nm`
-output and byte sizes rather than program output alone (though cases with an
+This is a shape contract, not a behavior one -- which is why it checks defined
+symbols and byte sizes rather than program output alone (though cases with an
 expected stdout check that too).
 
 Replaces run_aot_isolate_symbol_tests.sh, the last consumer of the shared shell
@@ -33,7 +33,8 @@ def _bootstrap() -> None:
 
 
 _bootstrap()
-from xraytest import cache, platform, proc, progress, report, scheduler, workspace  # noqa: E402
+from xraytest import (cache, platform, proc, progress, report, scheduler,
+                      toolchain, workspace)  # noqa: E402
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
@@ -136,14 +137,11 @@ def build_native(config: Config, source: Path, out_bin: Path) -> tuple[bool, str
 
 
 def dump_symbols(binary: Path) -> tuple[bool, str]:
-    """Symbol table via nm. -U (defined only) where supported, else plain nm."""
-    result = proc.run(["nm", "-U", binary], timeout=120)
-    if result.ok:
-        return True, result.stdout.decode("utf-8", "replace")
-    result = proc.run(["nm", binary], timeout=120)
-    if result.ok:
-        return True, result.stdout.decode("utf-8", "replace")
-    return False, result.combined_text()
+    """Return normalized defined symbols from a verified host capability."""
+    dumper = toolchain.find_symbol_dumper()
+    if dumper is None:
+        return False, "no verified defined-symbol dumper is available"
+    return dumper.dump_defined_symbols(binary)
 
 
 def run_case(config: Config, case: Case, ws: workspace.Workspace) -> list[Check]:
@@ -171,7 +169,7 @@ def run_case(config: Config, case: Case, ws: workspace.Workspace) -> list[Check]
 
     got, symbols = dump_symbols(binary)
     if not got:
-        checks.append(Check(f"{case.name}: nm failed", False, symbols[:200]))
+        checks.append(Check(f"{case.name}: symbol dump failed", False, symbols[:200]))
         return checks
 
     hits = [ln for ln in symbols.splitlines() if FORBIDDEN_SYMBOL_RE.search(ln)]
@@ -210,7 +208,7 @@ def check_runtime_archive(config: Config) -> list[Check]:
         return [Check(f"{label}: archive missing at {archive}", False)]
     got, symbols = dump_symbols(archive)
     if not got:
-        return [Check(f"{label}: nm failed", False, symbols[:200])]
+        return [Check(f"{label}: symbol dump failed", False, symbols[:200])]
     hits = [ln for ln in symbols.splitlines() if FORBIDDEN_SYMBOL_RE.search(ln)]
     return [Check(f"{label}: no forbidden isolate/VM/compiler symbols", not hits,
                   "|".join(hits[:5]) if hits else "")]

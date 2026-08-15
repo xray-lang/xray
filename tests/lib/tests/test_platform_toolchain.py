@@ -11,7 +11,13 @@ from unittest import mock
 from _support import bootstrap_xraytest
 
 bootstrap_xraytest()
-from xraytest import platform, toolchain  # noqa: E402
+from xraytest import platform, proc, toolchain  # noqa: E402
+
+
+def result(*, returncode=0, stdout=b"", stderr=b"", timed_out=False):
+    return proc.ProcResult(
+        argv=(), returncode=returncode, stdout=stdout, stderr=stderr, timed_out=timed_out
+    )
 
 
 class PlatformTest(unittest.TestCase):
@@ -116,6 +122,117 @@ class ToolchainProbeTest(unittest.TestCase):
 
         self.assertEqual(found, toolchain.CCompiler(path=cl, driver=toolchain.CC_DRIVER_MSVC))
         run.assert_called_once_with([cl, "/nologo", "/?"], timeout=30)
+
+    def test_find_symbol_dumper_prefers_and_probes_dumpbin_on_windows(self):
+        dumpbin = r"C:\VC\bin\dumpbin.exe"
+
+        def resolve(name):
+            return dumpbin if name == "dumpbin" else None
+
+        identity = result(
+            stdout=b"Dump of file dumpbin.exe\nPE signature found\nFile Type: EXECUTABLE IMAGE\n"
+        )
+        with mock.patch.object(
+            toolchain.platform, "IS_WINDOWS", True
+        ), mock.patch.object(
+            toolchain.shutil, "which", side_effect=resolve
+        ), mock.patch.object(toolchain.proc, "run", return_value=identity) as run:
+            found = toolchain.find_symbol_dumper()
+
+        self.assertEqual(
+            found,
+            toolchain.SymbolDumper(path=dumpbin, driver=toolchain.SYMBOL_DUMPER_DUMPBIN),
+        )
+        run.assert_called_once_with(
+            [dumpbin, "/nologo", "/headers", dumpbin], timeout=30
+        )
+
+    def test_symbol_dumper_rejects_wrong_identity_even_on_zero_exit(self):
+        dumpbin = r"C:\wrong\dumpbin.exe"
+        with mock.patch.object(
+            toolchain.platform, "IS_WINDOWS", True
+        ), mock.patch.object(
+            toolchain.shutil, "which",
+            side_effect=lambda name: dumpbin if name == "dumpbin" else None,
+        ), mock.patch.object(
+            toolchain.proc, "run", return_value=result(stdout=b"not Microsoft dumpbin\n")
+        ):
+            self.assertIsNone(toolchain.find_symbol_dumper())
+
+    def test_symbol_dumper_rejects_nonzero_identity_probe(self):
+        dumpbin = r"C:\VC\bin\dumpbin.exe"
+        with mock.patch.object(
+            toolchain.platform, "IS_WINDOWS", True
+        ), mock.patch.object(
+            toolchain.shutil, "which",
+            side_effect=lambda name: dumpbin if name == "dumpbin" else None,
+        ), mock.patch.object(
+            toolchain.proc,
+            "run",
+            return_value=result(
+                returncode=1,
+                stdout=b"PE signature found\nFile Type: EXECUTABLE IMAGE\n",
+            ),
+        ):
+            self.assertIsNone(toolchain.find_symbol_dumper())
+
+    def test_dumpbin_normalizes_defined_symbols_and_drops_undefined_rows(self):
+        dumper = toolchain.SymbolDumper(
+            path=r"C:\VC\bin\dumpbin.exe", driver=toolchain.SYMBOL_DUMPER_DUMPBIN
+        )
+        output = (
+            b"001 00000000 UNDEF notype () External | xr_vm_unresolved\n"
+            b"002 00000010 SECT3 notype () External | xr_parse_defined\n"
+            b"003 00000020 ABS notype Static | xr_absolute\n"
+        )
+        with mock.patch.object(toolchain.proc, "run", return_value=result(stdout=output)) as run:
+            ok, symbols = dumper.dump_defined_symbols(Path("artifact.lib"))
+
+        self.assertTrue(ok)
+        self.assertEqual(symbols.splitlines(), ["xr_parse_defined", "xr_absolute"])
+        run.assert_called_once_with(
+            [r"C:\VC\bin\dumpbin.exe", "/nologo", "/symbols", "artifact.lib"],
+            timeout=120,
+        )
+
+    def test_dumpbin_rejects_nonzero_and_malformed_or_empty_output(self):
+        dumper = toolchain.SymbolDumper(
+            path=r"C:\VC\bin\dumpbin.exe", driver=toolchain.SYMBOL_DUMPER_DUMPBIN
+        )
+        mutations = [
+            result(returncode=2, stderr=b"bad image\n"),
+            result(stdout=b"001 malformed | xr_parse_hidden\n"),
+            result(stdout=b"Dump of file stripped.exe\nFile Type: EXECUTABLE IMAGE\n"),
+        ]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), mock.patch.object(
+                toolchain.proc, "run", return_value=mutation
+            ):
+                ok, detail = dumper.dump_defined_symbols(Path("artifact.exe"))
+            self.assertFalse(ok)
+            self.assertTrue("exit 2" in detail or "unrecognized" in detail or
+                            "no defined symbols" in detail)
+
+    def test_llvm_nm_normalizes_posix_defined_symbol_rows(self):
+        dumper = toolchain.SymbolDumper(
+            path="llvm-nm", driver=toolchain.SYMBOL_DUMPER_LLVM_NM
+        )
+        output = b"member.obj:\nxr_clean T 0 10\nxr_data D 10 8\n"
+        with mock.patch.object(toolchain.proc, "run", return_value=result(stdout=output)):
+            ok, symbols = dumper.dump_defined_symbols(Path("artifact.lib"))
+        self.assertTrue(ok)
+        self.assertEqual(symbols.splitlines(), ["xr_clean", "xr_data"])
+
+    def test_llvm_nm_rejects_undefined_rows_in_defined_only_output(self):
+        dumper = toolchain.SymbolDumper(
+            path="llvm-nm", driver=toolchain.SYMBOL_DUMPER_LLVM_NM
+        )
+        with mock.patch.object(
+            toolchain.proc, "run", return_value=result(stdout=b"xr_bad U 0 0\n")
+        ):
+            ok, detail = dumper.dump_defined_symbols(Path("artifact.lib"))
+        self.assertFalse(ok)
+        self.assertIn("undefined symbol", detail)
 
 
 if __name__ == "__main__":
