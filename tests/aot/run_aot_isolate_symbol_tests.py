@@ -115,7 +115,9 @@ def configure_jobs(requested: str) -> int:
     return int(requested) if requested.isdigit() and int(requested) > 0 else 1
 
 
-def build_native(config: Config, source: Path, out_bin: Path) -> tuple[bool, str]:
+def build_native(
+    config: Config, source: Path, out_bin: Path
+) -> "tuple[bool, str, toolchain.MsvcLinkMapEvidence | None, str]":
     """Build with --dump-link-command so the link line can be asserted on."""
     last = ""
     for _ in range(BUILD_ATTEMPTS):
@@ -131,9 +133,23 @@ def build_native(config: Config, source: Path, out_bin: Path) -> tuple[bool, str
         )
         last = result.combined_text()
         if result.ok:
+            evidence = None
+            evidence_error = ""
+            if platform.IS_WINDOWS:
+                compiler = toolchain.find_c_syntax_compiler()
+                if compiler is None or compiler.driver != toolchain.CC_DRIVER_MSVC:
+                    evidence_error = "no verified MSVC driver is available for linker-map evidence"
+                else:
+                    evidence, evidence_error = toolchain.capture_msvc_link_map(
+                        last,
+                        compiler,
+                        tmp,
+                        out_bin.with_name(out_bin.name + ".map"),
+                        timeout=config.case_timeout,
+                    )
             tmp.replace(out_bin)
-            return True, last
-    return False, last
+            return True, last, evidence, evidence_error
+    return False, last, None, ""
 
 
 def dump_symbols(binary: Path) -> tuple[bool, str]:
@@ -144,12 +160,24 @@ def dump_symbols(binary: Path) -> tuple[bool, str]:
     return dumper.dump_defined_symbols(binary)
 
 
+def binary_symbols(
+    binary: Path,
+    evidence: "toolchain.MsvcLinkMapEvidence | None",
+    evidence_error: str,
+) -> tuple[bool, str]:
+    if evidence_error:
+        return False, evidence_error
+    if evidence is not None:
+        return True, evidence.symbols
+    return dump_symbols(binary)
+
+
 def run_case(config: Config, case: Case, ws: workspace.Workspace) -> list[Check]:
     checks: list[Check] = []
     source = PROJECT_DIR / case.source
-    binary = ws.path(case.slug)
+    binary = ws.path(platform.exe_name(case.slug))
 
-    ok, log = build_native(config, source, binary)
+    ok, log, map_evidence, map_error = build_native(config, source, binary)
     if not ok:
         return [Check(f"{case.name}: build failed", False,
                       "|".join(log.splitlines()[-5:]))]
@@ -167,7 +195,7 @@ def run_case(config: Config, case: Case, ws: workspace.Workspace) -> list[Check]
     checks.append(Check(f"{case.name}: does not link xray_core", not linked_core,
                         "link command pulls in -lxray_core" if linked_core else ""))
 
-    got, symbols = dump_symbols(binary)
+    got, symbols = binary_symbols(binary, map_evidence, map_error)
     if not got:
         checks.append(Check(f"{case.name}: symbol dump failed", False, symbols[:200]))
         return checks

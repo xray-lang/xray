@@ -14,8 +14,11 @@ result is cached per-process: a suite asks the same question many times.
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 import shutil
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -31,6 +34,23 @@ CC_DRIVER_MSVC = "msvc"
 SYMBOL_DUMPER_DUMPBIN = "dumpbin"
 SYMBOL_DUMPER_LLVM_NM = "llvm-nm"
 SYMBOL_DUMPER_NM = "nm"
+
+_MSVC_LINK_COMMAND_PREFIX = "Link command: "
+_MSVC_LINK_DRIVER_RE = re.compile(
+    r"^(?P<driver>.+[\\/](?:cl|clang-cl)(?:\.exe)?)\s+(?P<arguments>.+)$",
+    re.IGNORECASE,
+)
+_MSVC_MAP_TIMESTAMP_RE = re.compile(
+    r"^\s*Timestamp is (?P<timestamp>[0-9A-Fa-f]{8})(?:\s+\(.+\))?\s*$"
+)
+_MSVC_MAP_SYMBOL_RE = re.compile(
+    r"^\s*[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}\s+"
+    r"(?P<symbol>\S+)\s+[0-9A-Fa-f]{16}\s+"
+    r"(?:(?:f|i)\s+)*(?P<owner>\S.*)$"
+)
+_MSVC_MAP_ENTRY_RE = re.compile(
+    r"^\s*entry point at\s+[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}\s*$"
+)
 
 
 def find_python() -> "str | None":
@@ -177,6 +197,214 @@ class SymbolDumper:
             suffix = f": {detail}" if detail else ""
             return False, f"{self.path}: {error}{suffix}"
         return True, normalized
+
+
+@dataclass(frozen=True)
+class MsvcLinkMapEvidence:
+    """Defined symbols bound to one exact MSVC link command and PE image."""
+
+    symbols: str
+    symbol_count: int
+    map_path: Path
+    driver: str
+    command_sha256: str
+    binary_sha256: str
+    coff_timestamp: int
+
+
+def _same_path(left: "str | Path", right: "str | Path") -> bool:
+    return os.path.normcase(os.path.abspath(os.fspath(left))) == os.path.normcase(
+        os.path.abspath(os.fspath(right))
+    )
+
+
+def _pe_coff_timestamp(binary: Path) -> "tuple[int | None, str]":
+    try:
+        data = binary.read_bytes()
+    except OSError as exc:
+        return None, f"cannot read linked PE image: {exc}"
+    if len(data) < 0x40 or data[:2] != b"MZ":
+        return None, "linked output is not a PE image"
+    pe_offset = struct.unpack_from("<I", data, 0x3C)[0]
+    if pe_offset > len(data) - 12 or data[pe_offset:pe_offset + 4] != b"PE\0\0":
+        return None, "linked output has no valid PE signature"
+    return struct.unpack_from("<I", data, pe_offset + 8)[0], ""
+
+
+def _parse_msvc_link_command(
+    log: str, compiler: CCompiler, binary: Path
+) -> "tuple[list[str] | None, list[Path], list[Path], str]":
+    lines = [line[len(_MSVC_LINK_COMMAND_PREFIX):].strip()
+             for line in log.splitlines()
+             if line.startswith(_MSVC_LINK_COMMAND_PREFIX)]
+    if len(lines) != 1:
+        return None, [], [], "expected exactly one dumped final link command"
+    match = _MSVC_LINK_DRIVER_RE.match(lines[0])
+    if not match:
+        return None, [], [], "dumped link command has no supported MSVC driver"
+    driver = match.group("driver")
+    if compiler.driver != CC_DRIVER_MSVC or not _same_path(driver, compiler.path):
+        return None, [], [], "dumped link driver does not match the verified MSVC driver"
+
+    arguments = match.group("arguments")
+    if any(char in arguments for char in ('"', "'", "\t", "\r", "\n")):
+        return None, [], [], "dumped link arguments contain ambiguous quoting or control text"
+    argv = [driver, *arguments.split()]
+    link_indexes = [i for i, arg in enumerate(argv) if arg.lower() == "/link"]
+    if len(link_indexes) != 1:
+        return None, [], [], "dumped command has no unique MSVC /link boundary"
+    link_index = link_indexes[0]
+    if any(arg.lower().startswith("/map") for arg in argv[1:]):
+        return None, [], [], "dumped command already contains linker map controls"
+
+    outputs = [arg[3:] for arg in argv[1:link_index]
+               if arg.lower().startswith("/fe") and len(arg) > 3]
+    if len(outputs) != 1 or not _same_path(outputs[0], binary):
+        return None, [], [], "dumped command output does not match the target PE image"
+
+    object_inputs = [Path(arg) for arg in argv[1:link_index]
+                     if arg.lower().endswith(".obj")]
+    if not object_inputs:
+        return None, [], [], "dumped command has no final object input"
+    missing_objects = [path for path in object_inputs if not path.is_file()]
+    if missing_objects:
+        return None, [], [], f"final object input is missing: {missing_objects[0]}"
+
+    archive_inputs = [Path(arg) for arg in argv[1:link_index]
+                      if arg.lower().endswith(".lib") and ("/" in arg or "\\" in arg)]
+    missing_archives = [path for path in archive_inputs if not path.is_file()]
+    if missing_archives:
+        return None, [], [], f"final archive input is missing: {missing_archives[0]}"
+    return argv, object_inputs, archive_inputs, ""
+
+
+def _map_target_name(binary: Path) -> str:
+    name = binary.name
+    if name.lower().endswith(".tmp"):
+        return name[:-4]
+    return binary.stem
+
+
+def _parse_msvc_link_map(
+    text: str,
+    binary: Path,
+    object_inputs: Sequence,
+    archive_inputs: Sequence,
+) -> "tuple[str | None, int | None, str]":
+    lines = text.splitlines()
+    nonempty = [line.strip() for line in lines if line.strip()]
+    if not nonempty or nonempty[0].casefold() != _map_target_name(binary).casefold():
+        return None, None, "linker map target does not match the linked PE image"
+
+    timestamps = [_MSVC_MAP_TIMESTAMP_RE.match(line) for line in lines]
+    timestamp_values = [int(match.group("timestamp"), 16)
+                        for match in timestamps if match]
+    if len(timestamp_values) != 1:
+        return None, None, "linker map has no unique COFF timestamp"
+    pe_timestamp, error = _pe_coff_timestamp(binary)
+    if pe_timestamp is None:
+        return None, None, error
+    if timestamp_values[0] != pe_timestamp:
+        return None, None, "linker map timestamp does not match the linked PE image"
+
+    public_indexes = [i for i, line in enumerate(lines) if "Publics by Value" in line]
+    entry_indexes = [i for i, line in enumerate(lines) if _MSVC_MAP_ENTRY_RE.match(line)]
+    static_indexes = [i for i, line in enumerate(lines) if line.strip() == "Static symbols"]
+    if not (len(public_indexes) == len(entry_indexes) == len(static_indexes) == 1):
+        return None, None, "linker map is missing a unique defined-symbol section"
+    public_index, entry_index, static_index = (
+        public_indexes[0], entry_indexes[0], static_indexes[0]
+    )
+    if not public_index < entry_index < static_index:
+        return None, None, "linker map defined-symbol sections are out of order"
+
+    symbols: "list[str]" = []
+    owners: "list[str]" = []
+    for line in [*lines[public_index + 1:entry_index], *lines[static_index + 1:]]:
+        if not line.strip():
+            continue
+        match = _MSVC_MAP_SYMBOL_RE.match(line)
+        if not match:
+            return None, None, "linker map contains a malformed defined-symbol row"
+        symbols.append(match.group("symbol"))
+        owners.append(match.group("owner"))
+    if not symbols:
+        return None, None, "linker map contains no defined symbols"
+
+    folded_owners = [owner.casefold() for owner in owners]
+    for path in object_inputs:
+        name = Path(path).name.casefold()
+        if not any(owner == name or owner.endswith(":" + name) for owner in folded_owners):
+            return None, None, f"linker map does not cover final object input: {Path(path).name}"
+    for path in archive_inputs:
+        prefix = Path(path).stem.casefold() + ":"
+        if not any(owner.startswith(prefix) for owner in folded_owners):
+            return None, None, f"linker map does not cover final archive input: {Path(path).name}"
+    return "\n".join(symbols), pe_timestamp, ""
+
+
+def capture_msvc_link_map(
+    log: str,
+    compiler: CCompiler,
+    binary: Path,
+    map_path: Path,
+    timeout: float | None = 120,
+) -> "tuple[MsvcLinkMapEvidence | None, str]":
+    """Relink one dumped MSVC command with `/MAP` and bind it to the PE.
+
+    Xray has already selected and successfully invoked the provider command.
+    This function accepts only that exact verified MSVC driver, exact output,
+    and extant final inputs. The generated map must cover both public and static
+    definitions and carry the PE's exact COFF timestamp.
+    """
+    if map_path.parent.resolve() != binary.parent.resolve() or map_path.suffix.lower() != ".map":
+        return None, "linker map path is not owned beside the target PE image"
+    if map_path.is_symlink():
+        return None, "linker map path must not be a symlink"
+    argv, object_inputs, archive_inputs, error = _parse_msvc_link_command(
+        log, compiler, binary
+    )
+    if argv is None:
+        return None, error
+    if not binary.is_file():
+        return None, "target PE image is missing before map relink"
+    if map_path.exists():
+        try:
+            map_path.unlink()
+        except OSError as exc:
+            return None, f"cannot clear stale linker map: {exc}"
+
+    mapped_argv = [*argv, f"/MAP:{map_path}"]
+    result = proc.run(mapped_argv, timeout=timeout)
+    if not result.ok:
+        state = "timed out" if result.timed_out else f"exit {result.returncode}"
+        detail = result.combined_text().strip()
+        return None, f"MSVC map relink {state}" + (f": {detail}" if detail else "")
+    if not binary.is_file():
+        return None, "MSVC map relink produced no target PE image"
+    if not map_path.is_file() or map_path.stat().st_size == 0:
+        return None, "MSVC map relink produced no non-empty linker map"
+    try:
+        map_text = map_path.read_text(encoding="utf-8", errors="strict")
+    except (OSError, UnicodeError) as exc:
+        return None, f"cannot read linker map as strict UTF-8: {exc}"
+    symbols, timestamp, error = _parse_msvc_link_map(
+        map_text, binary, object_inputs, archive_inputs
+    )
+    if symbols is None or timestamp is None:
+        return None, error
+
+    command_bytes = "\0".join(mapped_argv).encode("utf-8", "strict")
+    binary_bytes = binary.read_bytes()
+    return MsvcLinkMapEvidence(
+        symbols=symbols,
+        symbol_count=len(symbols.splitlines()),
+        map_path=map_path.resolve(),
+        driver=os.path.abspath(compiler.path),
+        command_sha256=hashlib.sha256(command_bytes).hexdigest(),
+        binary_sha256=hashlib.sha256(binary_bytes).hexdigest(),
+        coff_timestamp=timestamp,
+    ), ""
 
 
 def _c_compiler_driver(path: str) -> str:

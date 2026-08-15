@@ -40,6 +40,23 @@ class SymbolCapabilityTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("no verified defined-symbol dumper", detail)
 
+    def test_runner_prefers_bound_msvc_link_map_symbols(self):
+        evidence = mock.Mock(symbols="main\nxr_clean")
+        with mock.patch.object(runner, "dump_symbols") as dump:
+            ok, symbols = runner.binary_symbols(Path("artifact.exe"), evidence, "")
+        self.assertTrue(ok)
+        self.assertEqual(symbols, "main\nxr_clean")
+        dump.assert_not_called()
+
+    def test_runner_fails_closed_on_link_map_evidence_error(self):
+        with mock.patch.object(runner, "dump_symbols") as dump:
+            ok, detail = runner.binary_symbols(
+                Path("artifact.exe"), None, "map timestamp mismatch"
+            )
+        self.assertFalse(ok)
+        self.assertIn("timestamp mismatch", detail)
+        dump.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

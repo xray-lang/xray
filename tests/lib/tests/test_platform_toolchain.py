@@ -3,7 +3,9 @@ probe that actually executes a candidate rather than trusting PATH.
 """
 
 import os
+import struct
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -233,6 +235,177 @@ class ToolchainProbeTest(unittest.TestCase):
             ok, detail = dumper.dump_defined_symbols(Path("artifact.lib"))
         self.assertFalse(ok)
         self.assertIn("undefined symbol", detail)
+
+
+class MsvcLinkMapTest(unittest.TestCase):
+    TIMESTAMP = 0x6A801B14
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="xray_msvc_map_test.")
+        self.root = Path(self.temp.name)
+        self.driver = self.root / "cl.exe"
+        self.driver.write_bytes(b"driver")
+        self.binary = self.root / "runtime.exe.tmp"
+        self.object = self.root / "generated.obj"
+        self.archive = self.root / "xray_rt_coro.lib"
+        self.map_path = self.root / "runtime.map"
+        self.object.write_bytes(b"object")
+        self.archive.write_bytes(b"archive")
+        self._write_pe(self.binary, self.TIMESTAMP)
+        self.compiler = toolchain.CCompiler(
+            path=str(self.driver), driver=toolchain.CC_DRIVER_MSVC
+        )
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    @staticmethod
+    def _write_pe(path: Path, timestamp: int):
+        data = bytearray(256)
+        data[:2] = b"MZ"
+        struct.pack_into("<I", data, 0x3C, 0x80)
+        data[0x80:0x84] = b"PE\0\0"
+        struct.pack_into("<I", data, 0x88, timestamp)
+        path.write_bytes(data)
+
+    def _log(self, *, driver: "Path | None" = None, output: "Path | None" = None) -> str:
+        driver = driver or self.driver
+        output = output or self.binary
+        return (
+            f"Link command: {driver} /nologo /Fe{output} {self.object} "
+            f"{self.archive} ws2_32.lib /link /OPT:REF\n"
+        )
+
+    def _map_text(
+        self, *, target: str = "runtime.exe", timestamp: "int | None" = None,
+        public_row: str | None = None, static_row: str | None = None
+    ) -> str:
+        timestamp = self.TIMESTAMP if timestamp is None else timestamp
+        public_row = public_row or (
+            " 0001:00000000       main                       "
+            "0000000140001000 f   generated.obj"
+        )
+        static_row = static_row or (
+            " 0001:00000020       xr_clean                   "
+            "0000000140001020 f   xray_rt_coro:runtime.obj"
+        )
+        return "\n".join([
+            f" {target}",
+            "",
+            f" Timestamp is {timestamp:08x} (test)",
+            "",
+            "  Address         Publics by Value              Rva+Base               Lib:Object",
+            public_row,
+            "",
+            " entry point at        0001:00000000",
+            "",
+            " Static symbols",
+            static_row,
+            "",
+        ])
+
+    def _capture(self, map_text: "str | None", run_result=None):
+        run_result = run_result or result()
+
+        def run(argv, timeout):
+            if map_text is not None:
+                self.map_path.write_text(map_text, encoding="utf-8")
+            return run_result
+
+        with mock.patch.object(toolchain.proc, "run", side_effect=run) as invoked:
+            evidence, error = toolchain.capture_msvc_link_map(
+                self._log(), self.compiler, self.binary, self.map_path, timeout=17
+            )
+        return evidence, error, invoked
+
+    def test_link_map_binds_command_inputs_and_pe_identity(self):
+        evidence, error, invoked = self._capture(self._map_text())
+        self.assertEqual(error, "")
+        self.assertIsNotNone(evidence)
+        self.assertEqual(evidence.symbols.splitlines(), ["main", "xr_clean"])
+        self.assertEqual(evidence.symbol_count, 2)
+        self.assertEqual(evidence.coff_timestamp, self.TIMESTAMP)
+        self.assertEqual(len(evidence.command_sha256), 64)
+        self.assertEqual(len(evidence.binary_sha256), 64)
+        argv = invoked.call_args.args[0]
+        self.assertEqual(argv[0], str(self.driver))
+        self.assertEqual(argv[-1], f"/MAP:{self.map_path}")
+        self.assertEqual(invoked.call_args.kwargs["timeout"], 17)
+
+    def test_link_map_rejects_wrong_driver_before_execution(self):
+        wrong = self.root / "gcc.exe"
+        with mock.patch.object(toolchain.proc, "run") as invoked:
+            evidence, error = toolchain.capture_msvc_link_map(
+                self._log(driver=wrong), self.compiler, self.binary, self.map_path
+            )
+        self.assertIsNone(evidence)
+        self.assertIn("supported MSVC driver", error)
+        invoked.assert_not_called()
+
+    def test_link_map_rejects_nonzero_relink(self):
+        evidence, error, _ = self._capture(None, result(returncode=2, stderr=b"link failed"))
+        self.assertIsNone(evidence)
+        self.assertIn("exit 2", error)
+
+    def test_link_map_rejects_missing_or_empty_output(self):
+        for text in (None, ""):
+            with self.subTest(text=text):
+                evidence, error, _ = self._capture(text)
+                self.assertIsNone(evidence)
+                self.assertIn("non-empty linker map", error)
+
+    def test_link_map_rejects_malformed_symbol_row(self):
+        evidence, error, _ = self._capture(
+            self._map_text(public_row=" 0001 malformed defined symbol")
+        )
+        self.assertIsNone(evidence)
+        self.assertIn("malformed defined-symbol row", error)
+
+    def test_link_map_rejects_wrong_binary_name(self):
+        evidence, error, _ = self._capture(self._map_text(target="other.exe"))
+        self.assertIsNone(evidence)
+        self.assertIn("target does not match", error)
+
+    def test_link_map_rejects_wrong_binary_timestamp(self):
+        evidence, error, _ = self._capture(self._map_text(timestamp=self.TIMESTAMP + 1))
+        self.assertIsNone(evidence)
+        self.assertIn("timestamp does not match", error)
+
+    def test_link_map_rejects_missing_binary_after_relink(self):
+        map_text = self._map_text()
+
+        def run(argv, timeout):
+            self.binary.unlink()
+            self.map_path.write_text(map_text, encoding="utf-8")
+            return result()
+
+        with mock.patch.object(toolchain.proc, "run", side_effect=run):
+            evidence, error = toolchain.capture_msvc_link_map(
+                self._log(), self.compiler, self.binary, self.map_path
+            )
+        self.assertIsNone(evidence)
+        self.assertIn("no target PE image", error)
+
+    def test_link_map_rejects_missing_final_input(self):
+        self.object.unlink()
+        with mock.patch.object(toolchain.proc, "run") as invoked:
+            evidence, error = toolchain.capture_msvc_link_map(
+                self._log(), self.compiler, self.binary, self.map_path
+            )
+        self.assertIsNone(evidence)
+        self.assertIn("final object input is missing", error)
+        invoked.assert_not_called()
+
+    def test_link_map_rejects_uncovered_archive_input(self):
+        text = self._map_text(
+            static_row=(
+                " 0001:00000020       xr_clean                   "
+                "0000000140001020 f   other_runtime:runtime.obj"
+            )
+        )
+        evidence, error, _ = self._capture(text)
+        self.assertIsNone(evidence)
+        self.assertIn("does not cover final archive input", error)
 
 
 if __name__ == "__main__":
