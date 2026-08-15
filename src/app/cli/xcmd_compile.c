@@ -60,21 +60,13 @@ static char *generate_var_name(const char *filename) {
     return name;
 }
 
-// Parse --format argument
-static XrBootstrapEmissionFormat parse_format(const char *fmt) {
-    if (strcmp(fmt, "c") == 0) {
-        return XR_BOOTSTRAP_EMISSION_C_SOURCE;
-    }
-    return XR_BOOTSTRAP_EMISSION_AUTO;
+static bool is_c_source_format(const char *format) {
+    return format && strcmp(format, "c") == 0;
 }
 
-static bool has_legacy_xrc_extension(const char *path) {
-    size_t len = path ? strlen(path) : 0;
-    if (len < 4 || path[len - 4] != '.')
-        return false;
-    return (path[len - 3] == 'x' || path[len - 3] == 'X') &&
-           (path[len - 2] == 'r' || path[len - 2] == 'R') &&
-           (path[len - 1] == 'c' || path[len - 1] == 'C');
+static bool has_c_source_extension(const char *path) {
+    const char *extension = path ? strrchr(path, '.') : NULL;
+    return extension && strcmp(extension, ".c") == 0;
 }
 
 static bool prepare_compile_graph(XrVMRuntime *X, XrCompilerSession *session,
@@ -170,34 +162,17 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     if (xr_cli_opt_present(&inv->options, "strip-source"))
         flags |= XR_BOOTSTRAP_CONTAINER_STRIP_SOURCE;
 
-    /* Parse explicit format */
-    XrBootstrapEmissionFormat explicit_format = XR_BOOTSTRAP_EMISSION_AUTO;
-    if (fmt_str) {
-        explicit_format = parse_format(fmt_str);
-        if (explicit_format == XR_BOOTSTRAP_EMISSION_AUTO) {
-            xr_cli_error("compile", "unknown format '%s'", fmt_str);
-            return XR_CLI_EXIT_USAGE;
-        }
+    if (fmt_str && !is_c_source_format(fmt_str)) {
+        xr_cli_error("compile", "unknown format '%s'", fmt_str);
+        return XR_CLI_EXIT_USAGE;
     }
 
-    /* A C extension is mandatory. There is no executable/container default. */
     if (!output_file) {
-        xr_cli_error("compile",
-                     "XR_ARTIFACT_2000: legacy XRC output is removed; use --output FILE.c");
+        xr_cli_error("compile", "output is required; use --output FILE.c");
         return XR_CLI_EXIT_USAGE;
     }
-    if (has_legacy_xrc_extension(output_file)) {
-        xr_cli_error("compile",
-                     "XR_ARTIFACT_2000: legacy .xrc output is removed; use FILE.c");
-        return XR_CLI_EXIT_USAGE;
-    }
-
-    /* Determine output format */
-    XrBootstrapEmissionFormat format =
-        xr_bootstrap_emission_format_for_path(output_file, explicit_format);
-    if (format == XR_BOOTSTRAP_EMISSION_AUTO) {
-        xr_cli_error("compile",
-                     "XR_ARTIFACT_2000: legacy XRC output is removed; use --format c");
+    if (!has_c_source_extension(output_file)) {
+        xr_cli_error("compile", "output path must use the canonical '.c' extension");
         return XR_CLI_EXIT_USAGE;
     }
 
@@ -213,7 +188,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     XrCompilerSessionOperationScope operation_scope = {0};
 
     /* Generate variable name */
-    if (!var_name && format == XR_BOOTSTRAP_EMISSION_C_SOURCE) {
+    if (!var_name) {
         gen_var_name = generate_var_name(input_file);
         var_name = gen_var_name;
     }
@@ -247,22 +222,10 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
         goto cleanup;
     }
 
-    /* Output */
-    bool success = false;
-
-    switch (format) {
-        case XR_BOOTSTRAP_EMISSION_C_SOURCE:
-            success = xr_bootstrap_container_emit_c_source(
-                X, proto, output_file, var_name, flags);
-            if (success) {
-                printf("Compiled: %s\n", output_file);
-            }
-            break;
-
-        default:
-            xr_cli_error("compile", "unknown output format");
-            break;
-    }
+    bool success =
+        xr_bootstrap_container_emit_c_source(X, proto, output_file, var_name, flags);
+    if (success)
+        printf("Compiled: %s\n", output_file);
 
     if (!success) {
         xr_cli_error("compile", "cannot write to '%s'", output_file);

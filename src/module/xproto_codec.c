@@ -2447,24 +2447,6 @@ XrProto *xr_bootstrap_container_load(XrVMRuntime *X, const uint8_t *data, size_t
     return proto;
 }
 
-/* ========== Output Format ========== */
-
-XrBootstrapEmissionFormat xr_bootstrap_emission_format_for_path(
-    const char *filename, XrBootstrapEmissionFormat explicit_format) {
-    if (explicit_format != XR_BOOTSTRAP_EMISSION_AUTO)
-        return explicit_format;
-    if (!filename)
-        return XR_BOOTSTRAP_EMISSION_AUTO;
-
-    const char *ext = strrchr(filename, '.');
-    if (!ext)
-        return XR_BOOTSTRAP_EMISSION_AUTO;
-
-    if (strcmp(ext, ".c") == 0)
-        return XR_BOOTSTRAP_EMISSION_C_SOURCE;
-    return XR_BOOTSTRAP_EMISSION_AUTO;
-}
-
 bool xr_bootstrap_container_emit_c_source(XrVMRuntime *X, XrProto *proto,
                                           const char *output_file,
                                           const char *var_name, int flags) {

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -161,11 +160,28 @@ def main() -> int:
 
         source = root / "legacy-source.xr"
         source.write_text('print("legacy-route")\n', encoding="utf-8")
-        xrc = root / "legacy.xrc"
-        compiled = run([str(binary), "compile", str(source), "-o", str(xrc)], cwd=root)
-        require_rejection(compiled, "XR_ARTIFACT_2000",
-                          "legacy XRC compilation is removed")
-        require(not xrc.exists(), "legacy XRC rejection leaves no artifact")
+        missing_output = run([str(binary), "compile", str(source)], cwd=root)
+        require_rejection(missing_output, "output is required",
+                          "compile has no implicit artifact output")
+        require("XR_ARTIFACT_2000" not in missing_output.stdout,
+                "missing output has no compatibility diagnostic", missing_output.stdout)
+        for output_name in (
+            "noncanonical-output.bin",
+            "uppercase-output.C",
+            "extensionless-output",
+            "removed-output.xrc",
+        ):
+            noncanonical_output = root / output_name
+            compiled = run([
+                str(binary), "compile", str(source), "-o", str(noncanonical_output),
+            ], cwd=root)
+            require_rejection(compiled, "canonical '.c' extension",
+                              f"compile rejects noncanonical output {output_name}")
+            require("XR_ARTIFACT_2000" not in compiled.stdout,
+                    f"noncanonical output {output_name} has no compatibility diagnostic",
+                    compiled.stdout)
+            require(not noncanonical_output.exists(),
+                    f"noncanonical output {output_name} leaves no artifact")
         retired_output = root / "retired-format-output.c"
         for retired_format in ("bytecode", "bc", "h", "header", "source"):
             rejected_format = run([
@@ -178,11 +194,16 @@ def main() -> int:
                     f"retired {retired_format} spelling has no compatibility diagnostic",
                     rejected_format.stdout)
         require(not retired_output.exists(), "retired format spellings leave no artifact")
-        require_rejection(run([
+        noncanonical_output = root / "explicit-noncanonical-output.bin"
+        explicit_noncanonical = run([
             str(binary), "compile", str(source), "--format", "c",
-            "--output", str(root / "disguised.XRC"),
-        ], cwd=root), "XR_ARTIFACT_2000",
-            "legacy XRC extension cannot disguise a C container")
+            "--output", str(noncanonical_output),
+        ], cwd=root)
+        require_rejection(explicit_noncanonical, "canonical '.c' extension",
+                          "explicit format cannot bypass the output extension identity")
+        require("XR_ARTIFACT_2000" not in explicit_noncanonical.stdout,
+                "explicit noncanonical output has no compatibility diagnostic",
+                explicit_noncanonical.stdout)
         c_container = root / "offline-container.c"
         c_compiled = run([
             str(binary), "compile", str(source), "--format", "c",
@@ -191,10 +212,9 @@ def main() -> int:
         require(c_compiled.returncode == 0 and c_container.is_file(),
                 "the sole offline C container remains available to compiler development",
                 c_compiled.stdout)
-        xrc.write_bytes(b"XRAY\x1e\x00")
-        renamed_xrc = root / "legacy.bin"
-        shutil.copyfile(xrc, renamed_xrc)
-        executed = run([str(binary), "run", str(renamed_xrc)], cwd=root)
+        removed_artifact = root / "removed-artifact.bin"
+        removed_artifact.write_bytes(b"XRAY\x1e\x00")
+        executed = run([str(binary), "run", str(removed_artifact)], cwd=root)
         require_rejection(executed, "XR_ARTIFACT_2000",
                           "legacy XRC magic is rejected before execution")
 

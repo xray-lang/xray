@@ -98,16 +98,6 @@ XR_FUNC bool xr_compile_stdlib_to_file(struct XrCompilerSession *session,
                                        const char *canonical_module, const char *source_file,
                                        const char *output_file, int flags);
 
-/* ========== Output Format (for compile command) ========== */
-
-typedef enum {
-    XR_BOOTSTRAP_EMISSION_AUTO,
-    XR_BOOTSTRAP_EMISSION_C_SOURCE,
-} XrBootstrapEmissionFormat;
-
-XR_FUNC XrBootstrapEmissionFormat xr_bootstrap_emission_format_for_path(
-    const char *filename, XrBootstrapEmissionFormat explicit_format);
-
 /* Emit an internal bootstrap container as a C source array. */
 XR_FUNC bool xr_bootstrap_container_emit_c_source(
     struct XrVMRuntime *X, struct XrProto *proto, const char *output_file,

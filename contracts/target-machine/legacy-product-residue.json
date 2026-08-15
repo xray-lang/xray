@@ -2,7 +2,7 @@
     "counts":  {
                    "api":  38,
                    "build":  56,
-                   "cli":  101,
+                   "cli":  99,
                    "install":  2,
                    "source":  3150
                },
@@ -448,7 +448,7 @@
                                  "xray_vm_new_full",
                                  "xray_vm_set_script_info"
                              ],
-    "owner_count":  672,
+    "owner_count":  671,
     "owners":  [
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
@@ -1219,26 +1219,13 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "376746a206c2fc8187b7351b002e586e1855f3654d0f820660c8faded845829b",
+                       "evidence_sha256":  "f5e7d6d5b6b47e9923774f3eb1499d4268d1448397ec24cd496b362c009206e6",
                        "family":  "xrc-artifact",
                        "hit_count":  1,
-                       "path":  "src/app/cli/xcmd_compile.c",
-                       "status":  "transitional-owner",
-                       "surface":  "cli",
-                       "tokens":  [
-                                      ".xrc"
-                                  ]
-                   },
-                   {
-                       "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "f37cb1d85af8b5acf5e2a883ec1d85256ea070960edfb41ed5e9f1aa44681817",
-                       "family":  "xrc-artifact",
-                       "hit_count":  2,
                        "path":  "tests/cli/run_target_artifact_boundary_tests.py",
                        "status":  "transitional-owner",
                        "surface":  "cli",
                        "tokens":  [
-                                      ".XRC",
                                       ".xrc"
                                   ]
                    },
@@ -8826,6 +8813,6 @@
                    "unclassified_residue":  "error"
                },
     "schema":  2,
-    "source_tree_fingerprint":  "ad5c2fe7f49ddf78a12f459c1502f5d3fae4dea62393a16c2ea50a3fa71ed4a9",
-    "total":  3347
+    "source_tree_fingerprint":  "80257afd29187a6349d70213546c0666e861c91cb533677b3e2fc26a9c99599c",
+    "total":  3345
 }

@@ -311,6 +311,12 @@ def self_test() -> int:
         )
         compile_format_alias_drifted, _ = check(root, collect(root))
         compile_format_owner.write_text('const char *format = "c";\n', encoding="utf-8")
+        compile_format_owner.write_text(
+            'const char *format = "c";\nconst char *retired = ".xrc";\n',
+            encoding="utf-8",
+        )
+        compile_xrc_compatibility_drifted, _ = check(root, collect(root))
+        compile_format_owner.write_text('const char *format = "c";\n', encoding="utf-8")
         bcgen_format_owner.write_text(
             'const char *format = "bytecode";\nconst char *alias = "bc";\n',
             encoding="utf-8",
@@ -648,7 +654,8 @@ def self_test() -> int:
         (root / "src/new_codec.c").unlink()
         zero = collect(root)
         terminal, _ = check(root, zero)
-    if (not clean or compile_format_alias_drifted or bcgen_format_alias_drifted
+    if (not clean or compile_format_alias_drifted or compile_xrc_compatibility_drifted
+            or bcgen_format_alias_drifted
             or backend_drifted or debug_setters_drifted or stats_drifted
             or runtime_constructor_drifted or userdata_api_drifted
             or execution_policy_api_drifted
