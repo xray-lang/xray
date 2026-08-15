@@ -9203,6 +9203,249 @@ static bool scalar_block_terminator_row(
     }
 }
 
+typedef struct XrScalarInstructionAnalysis {
+    uint32_t *call_by_operation;
+    uint8_t *elided_operations;
+    uint32_t operation_count;
+} XrScalarInstructionAnalysis;
+
+static void scalar_instruction_analysis_dispose(
+    XrScalarInstructionAnalysis *analysis) {
+    if (!analysis)
+        return;
+    xr_free(analysis->call_by_operation);
+    xr_free(analysis->elided_operations);
+    memset(analysis, 0, sizeof(*analysis));
+}
+
+static bool scalar_call_rep_is_i64(const XrTargetMaterializedPlan *materialized,
+                                   uint16_t rep) {
+    return materialized && rep < materialized->machine_rep_count &&
+           materialized->machine_reps[rep].kind == XR_MACHINE_REP_I64;
+}
+
+/* This is the builder-side admission boundary for the one executable call
+ * specialization. The independent instruction verifier repeats the judgement
+ * from frozen TargetPlan rows; this copy sees only materialized builder state
+ * and decides whether a semantic XI_CALL may receive a row at all. */
+static bool scalar_direct_i64_call_is_exact(
+    const XrTargetPlanBuilder *builder,
+    const XrTargetMaterializedPlan *materialized, uint32_t call_index) {
+    if (!builder || !materialized || call_index >= materialized->call_count)
+        return false;
+    const XrTargetCallRecord *call = &materialized->calls[call_index];
+    const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(
+        builder->semantic_plan, call->semantic_operation);
+    const XrSemanticFunctionRecord *callee = xr_semantic_plan_function(
+        builder->semantic_plan, call->callee_function);
+    if (!operation || !callee || call->id != call_index ||
+        operation->opcode != XI_CALL ||
+        operation->function != call->caller_function || call->flags != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+        call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        call->adapter_count != 0 || call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL ||
+        call->array_intrinsic_kind != XR_TARGET_ARRAY_INTRINSIC_NONE ||
+        call->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->result_value != operation->result_value ||
+        operation->operand_count != (uint32_t) call->argument_count + 1u ||
+        call->argument_count != callee->parameter_count ||
+        !semantic_type_is_exact_i64(builder->semantic_plan,
+                                    operation->result_type) ||
+        !scalar_call_rep_is_i64(materialized, call->result_register_rep) ||
+        !scalar_call_rep_is_i64(materialized, call->result_memory_rep) ||
+        !materialized_i64_slot(materialized, call->caller_function,
+                               operation->result_value, NULL) ||
+        call->argument_begin > materialized->call_argument_count ||
+        call->argument_count >
+            materialized->call_argument_count - call->argument_begin)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(
+        builder->semantic_plan, &operand_count);
+    if (!operands || operation->operand_begin >= operand_count ||
+        operands[operation->operand_begin].role != XR_SEM_OPERAND_CALLEE)
+        return false;
+    for (uint16_t ordinal = 0; ordinal < call->argument_count; ordinal++) {
+        const XrTargetCallArgumentRecord *argument =
+            &materialized->call_arguments[call->argument_begin + ordinal];
+        const XrSemanticOperandRecord *operand =
+            &operands[operation->operand_begin + 1u + ordinal];
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(
+            builder->semantic_plan, callee->parameter_begin + ordinal);
+        if (!parameter || argument->call != call_index ||
+            argument->ordinal != ordinal ||
+            argument->semantic_operand != operation->operand_begin + 1u + ordinal ||
+            argument->semantic_value != operand->value ||
+            argument->callee_parameter != callee->parameter_begin + ordinal ||
+            argument->mode != XR_TARGET_CALL_VALUE ||
+            (argument->ownership != XR_TARGET_CALL_READ &&
+             argument->ownership != XR_TARGET_CALL_CONSUME) ||
+            argument->transfer_mode != XR_TRANSFER_SHARE || argument->flags != 0 ||
+            argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+            !scalar_call_rep_is_i64(materialized, argument->register_rep) ||
+            !scalar_call_rep_is_i64(materialized, argument->memory_rep) ||
+            !scalar_call_rep_is_i64(materialized,
+                                    argument->callee_register_rep) ||
+            !scalar_call_rep_is_i64(materialized,
+                                    argument->callee_memory_rep) ||
+            !materialized_i64_slot(materialized, call->caller_function,
+                                   operand->value, NULL) ||
+            !materialized_i64_slot(materialized, call->callee_function,
+                                   parameter->value, NULL))
+            return false;
+    }
+    return true;
+}
+
+static bool scalar_instruction_analysis_init(
+    const XrTargetPlanBuilder *builder,
+    const XrTargetMaterializedPlan *materialized,
+    XrScalarInstructionAnalysis *analysis) {
+    if (!builder || !materialized || !analysis ||
+        xr_semantic_plan_operation_count(builder->semantic_plan) > UINT32_MAX)
+        return false;
+    memset(analysis, 0, sizeof(*analysis));
+    analysis->operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    analysis->call_by_operation = (uint32_t *) allocate_records(
+        analysis->operation_count, sizeof(*analysis->call_by_operation));
+    analysis->elided_operations = (uint8_t *) allocate_records(
+        analysis->operation_count, sizeof(*analysis->elided_operations));
+    if ((analysis->operation_count && !analysis->call_by_operation) ||
+        (analysis->operation_count && !analysis->elided_operations)) {
+        scalar_instruction_analysis_dispose(analysis);
+        return false;
+    }
+    for (uint32_t i = 0; i < analysis->operation_count; i++)
+        analysis->call_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
+
+    XrTargetValueStorageAnalysis values = {0};
+    XrDirectLocalCalleeStorageAnalysis shared = {0};
+    char ignored[1] = {0};
+    if (!value_storage_analysis_init(builder->semantic_plan, &values, ignored,
+                                     sizeof(ignored)) ||
+        !index_value_operations(builder->semantic_plan, &values, ignored,
+                                sizeof(ignored)) ||
+        !direct_local_callee_storage_analysis_init(
+            builder->semantic_plan, &values, &shared, ignored,
+            sizeof(ignored))) {
+        direct_local_callee_storage_analysis_dispose(&shared);
+        value_storage_analysis_dispose(&values);
+        scalar_instruction_analysis_dispose(analysis);
+        return false;
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(
+        builder->semantic_plan, &operand_count);
+    for (uint32_t call_index = 0; call_index < materialized->call_count;
+         call_index++) {
+        const XrTargetCallRecord *call = &materialized->calls[call_index];
+        if (!scalar_direct_i64_call_is_exact(builder, materialized, call_index) ||
+            call->semantic_operation >= analysis->operation_count)
+            continue;
+        analysis->call_by_operation[call->semantic_operation] = call_index;
+        const XrSemanticOperationRecord *call_operation =
+            xr_semantic_plan_operation(builder->semantic_plan,
+                                       call->semantic_operation);
+        uint32_t value = operands[call_operation->operand_begin].value;
+        uint32_t *path = (uint32_t *) allocate_records(
+            analysis->operation_count, sizeof(*path));
+        if (!path)
+            continue;
+        uint32_t path_count = 0;
+        bool exact = false;
+        for (uint32_t depth = 0; depth < analysis->operation_count; depth++) {
+            uint32_t producer_index =
+                value < values.total_values
+                    ? values.value_operations[value]
+                    : XR_SEMANTIC_INDEX_NONE;
+            const XrSemanticOperationRecord *producer =
+                producer_index == XR_SEMANTIC_INDEX_NONE
+                    ? NULL
+                    : xr_semantic_plan_operation(builder->semantic_plan,
+                                                 producer_index);
+            if (!producer || producer->function != call->caller_function)
+                break;
+            path[path_count++] = producer_index;
+            if (producer->opcode == XI_COPY &&
+                producer->semantic_immediate == XI_COPY_KIND_IDENTITY &&
+                producer->operand_count == 1 &&
+                producer->operand_begin < operand_count) {
+                value = operands[producer->operand_begin].value;
+                continue;
+            }
+            bool closure =
+                (producer->opcode == XI_CLOSURE_NEW ||
+                 (producer->opcode == XI_STACK_ALLOC &&
+                  producer->semantic_immediate == XI_CLOSURE_NEW)) &&
+                producer->callable_function == call->callee_function;
+            bool shared_callee =
+                producer->opcode == XI_GET_SHARED &&
+                direct_local_callee_storage_value_is_exact(
+                    builder->semantic_plan, &shared, producer) &&
+                shared.target_by_value[producer->result_value] ==
+                    call->callee_function;
+            exact = closure || shared_callee;
+            break;
+        }
+        if (exact)
+            for (uint32_t i = 0; i < path_count; i++)
+                analysis->elided_operations[path[i]] = 1;
+        xr_free(path);
+    }
+    /* A skipped callable chain is compile-time-only only when every use stays
+     * inside another skipped identity edge or is the callee edge of an exact
+     * admitted call. Any ordinary value use leaves its producer in the block,
+     * which makes the whole scalar function unavailable instead of dropping
+     * observable closure or shared-storage behaviour. */
+    for (uint32_t use_index = 0; use_index < analysis->operation_count;
+         use_index++) {
+        const XrSemanticOperationRecord *use =
+            xr_semantic_plan_operation(builder->semantic_plan, use_index);
+        if (!use || use->operand_begin > operand_count ||
+            use->operand_count > operand_count - use->operand_begin)
+            continue;
+        for (uint16_t ordinal = 0; ordinal < use->operand_count; ordinal++) {
+            uint32_t value = operands[use->operand_begin + ordinal].value;
+            uint32_t producer =
+                value < values.total_values
+                    ? values.value_operations[value]
+                    : XR_SEMANTIC_INDEX_NONE;
+            if (producer >= analysis->operation_count ||
+                !analysis->elided_operations[producer])
+                continue;
+            bool forwarding = ordinal == 0 &&
+                analysis->elided_operations[use_index] &&
+                use->opcode == XI_COPY &&
+                use->semantic_immediate == XI_COPY_KIND_IDENTITY;
+            bool callee = ordinal == 0 &&
+                analysis->call_by_operation[use_index] !=
+                    XR_SEMANTIC_INDEX_NONE &&
+                operands[use->operand_begin].role == XR_SEM_OPERAND_CALLEE;
+            if (!forwarding && !callee)
+                analysis->elided_operations[producer] = 0;
+        }
+    }
+    uint32_t block_count =
+        (uint32_t) xr_semantic_plan_block_count(builder->semantic_plan);
+    for (uint32_t i = 0; i < block_count; i++) {
+        const XrSemanticBlockRecord *block =
+            xr_semantic_plan_block(builder->semantic_plan, i);
+        uint32_t producer = block && block->control_value < values.total_values
+                                ? values.value_operations[block->control_value]
+                                : XR_SEMANTIC_INDEX_NONE;
+        if (producer < analysis->operation_count)
+            analysis->elided_operations[producer] = 0;
+    }
+    direct_local_callee_storage_analysis_dispose(&shared);
+    value_storage_analysis_dispose(&values);
+    return true;
+}
+
 /*
  * A function is committed only as one complete instruction group. Structural
  * or semantic facts outside this deliberately small closed family make the
@@ -9211,6 +9454,8 @@ static bool scalar_block_terminator_row(
 static bool materialize_scalar_instruction_function(
     const XrTargetPlanBuilder *builder,
     const XrTargetMaterializedPlan *materialized, uint32_t function_index,
+    const XrScalarInstructionAnalysis *analysis,
+    const uint8_t *executable_functions,
     XrTargetInstructionRecord *rows, uint32_t row_begin,
     uint32_t *out_row_count) {
     if (out_row_count)
@@ -9224,7 +9469,6 @@ static bool materialize_scalar_instruction_function(
         function->parameter_count > XR_TARGET_INSTRUCTION_MAX_PARAMETERS ||
         function->capture_count != 0 || function->block_count == 0 ||
         function->block_count > XR_TARGET_INSTRUCTION_MAX_BLOCKS ||
-        function->semantic_effects != 0 ||
         !semantic_type_is_exact_i64(semantic, function->return_type))
         return false;
     /* Every declared parameter must be exact signed i64 before any row is
@@ -9262,8 +9506,12 @@ static bool materialize_scalar_instruction_function(
                                         &block) ||
             block->operation_count > 40000000u - 1u - group_rows)
             admissible = false;
-        else
-            group_rows += block->operation_count + 1u;
+        else {
+            uint32_t emitted = 0;
+            for (uint32_t i = 0; i < block->operation_count; i++)
+                emitted += !analysis->elided_operations[block->operation_begin + i];
+            group_rows += emitted + 1u;
+        }
     }
     XrTargetInstructionRecord *group =
         admissible ? (XrTargetInstructionRecord *) xr_calloc(
@@ -9288,6 +9536,8 @@ static bool materialize_scalar_instruction_function(
         }
         for (uint32_t ordinal = 0; ordinal < block->operation_count; ordinal++) {
             uint32_t operation_index = block->operation_begin + ordinal;
+            if (analysis->elided_operations[operation_index])
+                continue;
             const XrSemanticOperationRecord *operation =
                 xr_semantic_plan_operation(semantic, operation_index);
             uint16_t opcode = operation
@@ -9296,10 +9546,26 @@ static bool materialize_scalar_instruction_function(
             const XrTargetInstructionContract *contract =
                 xr_target_instruction_contract(opcode);
             uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+            bool call_dispatch = contract &&
+                contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_CALL;
+            uint32_t call_index =
+                operation_index < analysis->operation_count
+                    ? analysis->call_by_operation[operation_index]
+                    : XR_SEMANTIC_INDEX_NONE;
+            const XrTargetCallRecord *call =
+                call_index < materialized->call_count
+                    ? &materialized->calls[call_index]
+                    : NULL;
             if (!operation || !contract ||
                 operation->function != function_index ||
-                operation->block != block_index || operation->effects != 0 ||
-                operation->operand_count != contract->arity ||
+                operation->block != block_index ||
+                (!call_dispatch && operation->effects != 0) ||
+                (call_dispatch && (!call ||
+                    !scalar_direct_i64_call_is_exact(builder, materialized,
+                                                     call_index) ||
+                    (executable_functions &&
+                     !executable_functions[call->callee_function]))) ||
+                (!call_dispatch && operation->operand_count != contract->arity) ||
                 operation->operand_begin > operand_total ||
                 operation->operand_count > operand_total - operation->operand_begin) {
                 admissible = false;
@@ -9326,9 +9592,10 @@ static bool materialize_scalar_instruction_function(
                 admissible = false;
                 break;
             }
-            if ((operation->opcode == XI_COPY &&
+            if ((!call_dispatch && operation->opcode == XI_COPY &&
                  operation->semantic_immediate != XI_COPY_KIND_IDENTITY) ||
-                (operation->opcode != XI_CONST && operation->opcode != XI_COPY &&
+                (!call_dispatch && operation->opcode != XI_CONST &&
+                 operation->opcode != XI_COPY &&
                  operation->opcode != XI_PARAM &&
                  operation->semantic_immediate != 0)) {
                 admissible = false;
@@ -9336,7 +9603,14 @@ static bool materialize_scalar_instruction_function(
             }
 
             uint64_t immediate_bits = 0;
-            if (operation->opcode == XI_CONST) {
+            if (call_dispatch) {
+                if (operation->constant != XR_SEMANTIC_INDEX_NONE ||
+                    call->result_slot != result_slot) {
+                    admissible = false;
+                    break;
+                }
+                immediate_bits = call_index;
+            } else if (operation->opcode == XI_CONST) {
                 const XrSemanticConstantRecord *constant =
                     xr_semantic_plan_constant(semantic, operation->constant);
                 if (!constant || constant->kind != XR_SEM_CONST_INT ||
@@ -9365,7 +9639,7 @@ static bool materialize_scalar_instruction_function(
 
             uint32_t operand_slots[2] = {XR_TARGET_INSTRUCTION_SLOT_NONE,
                                          XR_TARGET_INSTRUCTION_SLOT_NONE};
-            for (uint16_t operand = 0; operand < operation->operand_count;
+            for (uint16_t operand = 0; operand < contract->arity;
                  operand++) {
                 const XrSemanticOperandRecord *semantic_operand =
                     &operands[operation->operand_begin + operand];
@@ -9386,7 +9660,7 @@ static bool materialize_scalar_instruction_function(
                 .operand_slots = {operand_slots[0], operand_slots[1]},
                 .immediate_bits = immediate_bits,
                 .opcode = opcode,
-                .operand_count = (uint8_t) operation->operand_count,
+                .operand_count = contract->arity,
             };
         }
         if (!admissible ||
@@ -9411,7 +9685,10 @@ static bool materialize_scalar_instruction_function(
         bound_parameters != declared_parameters ||
         !xr_target_instruction_rows_control_flow_is_exact(
             group, group_rows, materialized->functions[function_index].slot_begin,
-            materialized->functions[function_index].slot_count)) {
+            materialized->functions[function_index].slot_count,
+            materialized->calls, materialized->call_count,
+            materialized->call_arguments,
+            materialized->call_argument_count)) {
         xr_free(group);
         xr_free(block_row);
         return false;
@@ -9431,39 +9708,96 @@ static bool materialize_scalar_instruction_function(
 static bool materialize_scalar_instructions(
     const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
     char *error, size_t error_size) {
+    XrScalarInstructionAnalysis analysis = {0};
+    if (!scalar_instruction_analysis_init(builder, materialized, &analysis))
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "scalar instruction analysis failed");
+    uint32_t *function_rows = (uint32_t *) allocate_records(
+        materialized->function_count, sizeof(*function_rows));
+    uint8_t *executable = (uint8_t *) allocate_records(
+        materialized->function_count, sizeof(*executable));
+    if (materialized->function_count && (!function_rows || !executable)) {
+        xr_free(function_rows);
+        xr_free(executable);
+        scalar_instruction_analysis_dispose(&analysis);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "scalar instruction eligibility allocation failed");
+    }
     uint32_t instruction_count = 0;
     for (uint32_t function = 0; function < materialized->function_count;
          function++) {
-        uint32_t function_rows = 0;
         if (!materialize_scalar_instruction_function(
-                builder, materialized, function, NULL, 0, &function_rows))
+                builder, materialized, function, &analysis, NULL, NULL, 0,
+                &function_rows[function]))
             continue;
-        if (function_rows > 40000000u - instruction_count)
+        executable[function] = 1;
+    }
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (uint32_t i = 0; i < materialized->call_count; i++) {
+            const XrTargetCallRecord *call = &materialized->calls[i];
+            if (call->semantic_operation < analysis.operation_count &&
+                call->caller_function < materialized->function_count &&
+                call->callee_function < materialized->function_count &&
+                executable[call->caller_function] &&
+                analysis.call_by_operation[call->semantic_operation] == i &&
+                !executable[call->callee_function]) {
+                executable[call->caller_function] = 0;
+                function_rows[call->caller_function] = 0;
+                changed = true;
+            }
+        }
+    }
+    for (uint32_t function = 0; function < materialized->function_count;
+         function++) {
+        if (function_rows[function] > 40000000u - instruction_count) {
+            xr_free(function_rows);
+            xr_free(executable);
+            scalar_instruction_analysis_dispose(&analysis);
             return fail(error, error_size, "XR_EXEC_5003",
                         "scalar instruction budget exhausted");
-        instruction_count += function_rows;
+        }
+        instruction_count += function_rows[function];
     }
     materialized->instruction_count = instruction_count;
     materialized->instructions = (XrTargetInstructionRecord *) allocate_records(
         instruction_count, sizeof(*materialized->instructions));
     if (instruction_count && !materialized->instructions)
-        return fail(error, error_size, "XR_EXEC_5003",
-                    "scalar instruction materialization failed");
+        goto allocation_failed;
 
     uint32_t next_instruction = 0;
     for (uint32_t function = 0; function < materialized->function_count;
          function++) {
-        uint32_t function_rows = 0;
-        if (!materialize_scalar_instruction_function(
-                builder, materialized, function, materialized->instructions,
-                next_instruction, &function_rows))
+        if (!executable[function])
             continue;
-        next_instruction += function_rows;
+        uint32_t emitted_rows = 0;
+        if (!materialize_scalar_instruction_function(
+                builder, materialized, function, &analysis, executable,
+                materialized->instructions, next_instruction, &emitted_rows) ||
+            emitted_rows != function_rows[function]) {
+            xr_free(function_rows);
+            xr_free(executable);
+            scalar_instruction_analysis_dispose(&analysis);
+            return fail(error, error_size, "XR_TARGET_1005",
+                        "scalar instruction eligibility changed during materialization");
+        }
+        next_instruction += emitted_rows;
     }
+    xr_free(function_rows);
+    xr_free(executable);
+    scalar_instruction_analysis_dispose(&analysis);
     if (next_instruction != materialized->instruction_count)
         return fail(error, error_size, "XR_TARGET_1005",
-                    "scalar instruction eligibility changed during materialization");
+                    "scalar instruction row count changed during materialization");
     return true;
+
+allocation_failed:
+    xr_free(function_rows);
+    xr_free(executable);
+    scalar_instruction_analysis_dispose(&analysis);
+    return fail(error, error_size, "XR_EXEC_5003",
+                "scalar instruction materialization failed");
 }
 
 static int find_rep_kind(const XrTargetMaterializedPlan *materialized, uint16_t kind) {
@@ -10017,9 +10351,9 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_field_representations(builder, materialized, error, error_size) ||
         !materialize_functions_and_slots(builder, materialized, error, error_size) ||
         !materialize_values(builder, materialized, error, error_size) ||
+        !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
         !materialize_scalar_instructions(builder, materialized, error,
                                          error_size) ||
-        !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
         !materialize_coroutine_state_calls(builder, materialized, error,
                                            error_size) ||
         !materialize_foundation_capabilities(builder, materialized, error,

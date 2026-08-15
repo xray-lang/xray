@@ -7,6 +7,7 @@
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/plan/target/xr_target_instruction_verify.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/vm/xr_typed_dispatch.h"
@@ -34,6 +35,13 @@ typedef struct TypedDispatchFixture {
 } TypedDispatchFixture;
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_function = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 3,
+    .frozen = true,
+    .function = {.return_type = &stub_int,
+                 .throw_effect = XR_FN_EFFECT_NO_THROW},
+};
 /* The type a comparison answers. It is not an integer with a restricted range:
  * the plan lays a `bool` value out as a one-byte I1 slot, which is exactly why
  * the executable family needs a truth slot beside its signed i64 one. */
@@ -51,7 +59,8 @@ static void test_generated_instruction_contract(void) {
     };
     REQUIRE(XR_TARGET_INSTRUCTION_CONST_I64 == 1);
     REQUIRE(XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL == 25);
-    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 25u);
+    REQUIRE(XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 == 26);
+    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 26u);
     REQUIRE(XR_TEST_VM_DISPATCH_COUNT ==
             XR_TARGET_INSTRUCTION_CONTRACT_COUNT);
     uint32_t semantic_bindings = 0;
@@ -75,7 +84,7 @@ static void test_generated_instruction_contract(void) {
             REQUIRE(strcmp(contract->name,
                            xr_target_instruction_opcode_name(other)) != 0);
     }
-    REQUIRE(semantic_bindings == 21u);
+    REQUIRE(semantic_bindings == 22u);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_INVALID) ==
             NULL);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_COUNT) ==
@@ -107,6 +116,118 @@ static XrSemanticPlan *build_semantic(void) {
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_direct_i64_call_semantic(bool divide_by_zero) {
+    XiFunc *root = xi_func_new("typed_dispatch_call_root", &stub_int);
+    XiFunc *child = xi_func_new("typed_dispatch_call_child", &stub_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+    child->nparams = child->min_params = 1;
+    child->params = (XiValue **) xr_calloc(1, sizeof(*child->params));
+    REQUIRE(child->params != NULL);
+    child->params[0] = xi_param(child, child_entry, 0, &stub_int);
+    REQUIRE(child->params[0] != NULL);
+    XiValue *child_result = NULL;
+    if (divide_by_zero) {
+        XiValue *zero = xi_const_int(child, child_entry, 0, &stub_int);
+        child_result = xi_value_new(child, child_entry, XI_DIV, &stub_int, 2);
+        REQUIRE(zero != NULL && child_result != NULL);
+        child_result->args[0] = child->params[0];
+        child_result->args[1] = zero;
+    } else {
+        child_result = xi_value_new(child, child_entry, XI_ADD, &stub_int, 2);
+        REQUIRE(child_result != NULL);
+        child_result->args[0] = child->params[0];
+        child_result->args[1] = child->params[0];
+    }
+    xi_block_set_return(child_entry, child_result);
+
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+    XiValue *closure =
+        xi_value_new(root, root_entry, XI_STACK_ALLOC, &stub_function, 0);
+    XiValue *alias = xi_value_new(root, root_entry, XI_COPY, &stub_function, 1);
+    XiValue *argument =
+        xi_const_int(root, root_entry, divide_by_zero ? 7 : 21, &stub_int);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 2);
+    REQUIRE(closure != NULL && alias != NULL && argument != NULL && call != NULL);
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = child;
+    alias->args[0] = closure;
+    alias->aux_int = XI_COPY_KIND_IDENTITY;
+    call->args[0] = alias;
+    call->args[1] = argument;
+    xi_block_set_return(root_entry, call);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(root, &semantic, error, sizeof(error)));
+    xi_func_free(root);
+    return semantic;
+}
+
+static XrSemanticPlan *build_deep_direct_i64_call_semantic(void) {
+    const uint32_t function_count = XR_TYPED_DISPATCH_MAX_CALL_DEPTH + 1u;
+    XiFunc **functions =
+        (XiFunc **) xr_calloc(function_count, sizeof(*functions));
+    XiBlock **blocks =
+        (XiBlock **) xr_calloc(function_count, sizeof(*blocks));
+    REQUIRE(functions != NULL && blocks != NULL);
+    for (uint32_t i = 0; i < function_count; i++) {
+        functions[i] = xi_func_new("typed_dispatch_deep_call", &stub_int);
+        REQUIRE(functions[i] != NULL);
+        blocks[i] = xi_block_new(functions[i]);
+        REQUIRE(blocks[i] != NULL);
+        if (i != 0) {
+            functions[i]->nparams = functions[i]->min_params = 1;
+            functions[i]->params =
+                (XiValue **) xr_calloc(1, sizeof(*functions[i]->params));
+            REQUIRE(functions[i]->params != NULL);
+            functions[i]->params[0] =
+                xi_param(functions[i], blocks[i], 0, &stub_int);
+            REQUIRE(functions[i]->params[0] != NULL);
+        }
+        functions[i]->stage = XI_STAGE_OPTIMIZED;
+    }
+    for (uint32_t i = 0; i + 1u < function_count; i++) {
+        functions[i]->children =
+            (XiFunc **) xr_calloc(1, sizeof(*functions[i]->children));
+        REQUIRE(functions[i]->children != NULL);
+        functions[i]->children[0] = functions[i + 1u];
+        functions[i]->nchildren = functions[i]->children_cap = 1;
+        functions[i + 1u]->parent_func = functions[i];
+        XiValue *closure = xi_value_new(functions[i], blocks[i],
+                                        XI_STACK_ALLOC, &stub_function, 0);
+        XiValue *argument = i == 0
+                                ? xi_const_int(functions[i], blocks[i], 1,
+                                               &stub_int)
+                                : functions[i]->params[0];
+        XiValue *call =
+            xi_value_new(functions[i], blocks[i], XI_CALL, &stub_int, 2);
+        REQUIRE(closure != NULL && argument != NULL && call != NULL);
+        closure->aux_int = XI_CLOSURE_NEW;
+        closure->aux = functions[i + 1u];
+        call->args[0] = closure;
+        call->args[1] = argument;
+        xi_block_set_return(blocks[i], call);
+    }
+    xi_block_set_return(blocks[function_count - 1u],
+                        functions[function_count - 1u]->params[0]);
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(functions[0], &semantic, error,
+                                   sizeof(error)));
+    xi_func_free(functions[0]);
+    xr_free(blocks);
+    xr_free(functions);
     return semantic;
 }
 
@@ -642,14 +763,20 @@ static void test_xtp_exact_roundtrip_executes_same_program(void) {
     dispose_fixture(&fixture);
 }
 
-static void expect_rows_rejected(TypedDispatchFixture *fixture,
-                                 XrTargetInstructionRecord *rows) {
+static void expect_rows_rejected_with_code(TypedDispatchFixture *fixture,
+                                           XrTargetInstructionRecord *rows,
+                                           const char *code) {
     XrTargetPlan *plan = (XrTargetPlan *) (uintptr_t) 1;
     char error[512] = {0};
     REQUIRE(!freeze_with_rows(fixture, rows, fixture->row_count, &plan, error,
                               sizeof(error)));
     REQUIRE(plan == NULL);
-    REQUIRE(strncmp(error, "XR_TARGET_1005", strlen("XR_TARGET_1005")) == 0);
+    REQUIRE(strncmp(error, code, strlen(code)) == 0);
+}
+
+static void expect_rows_rejected(TypedDispatchFixture *fixture,
+                                 XrTargetInstructionRecord *rows) {
+    expect_rows_rejected_with_code(fixture, rows, "XR_TARGET_1005");
 }
 
 static void test_instruction_mutations_fail_closed(void) {
@@ -1299,6 +1426,147 @@ static void test_comparison_rows_drive_the_branch(void) {
     }
 }
 
+static void test_direct_local_i64_call_executes_and_rejects_drift(void) {
+    XrSemanticPlan *semantic = build_direct_i64_call_semantic(false);
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    uint32_t root_count = 0;
+    uint32_t child_count = 0;
+    const XrTargetInstructionRecord *root =
+        xr_target_plan_function_instructions(plan, 0, &root_count);
+    const XrTargetInstructionRecord *child =
+        xr_target_plan_function_instructions(plan, 1, &child_count);
+    REQUIRE(root != NULL && root_count == 3u);
+    REQUIRE(child != NULL && child_count == 3u);
+    REQUIRE(root[0].opcode == XR_TARGET_INSTRUCTION_CONST_I64);
+    REQUIRE(root[1].opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 &&
+            root[1].immediate_bits == 0);
+    REQUIRE(root[2].opcode == XR_TARGET_INSTRUCTION_RETURN_I64);
+    REQUIRE(child[0].opcode == XR_TARGET_INSTRUCTION_PARAM_I64 &&
+            child[1].opcode == XR_TARGET_INSTRUCTION_ADD_WRAP_I64 &&
+            child[2].opcode == XR_TARGET_INSTRUCTION_RETURN_I64);
+
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    int64_t result = 0;
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 0,
+                                          &result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(result == 42);
+
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *all =
+        xr_target_plan_instructions(plan, &instruction_count);
+    REQUIRE(all != NULL && instruction_count == root_count + child_count);
+    TypedDispatchFixture source = {.semantic = semantic,
+                                   .profile = profile,
+                                   .program_plan = plan,
+                                   .row_count = instruction_count};
+    XrTargetInstructionRecord mutated[16];
+    REQUIRE(instruction_count <= sizeof(mutated) / sizeof(mutated[0]));
+    memcpy(mutated, all, (size_t) instruction_count * sizeof(*all));
+    mutated[1].immediate_bits = UINT32_MAX;
+    expect_rows_rejected_with_code(&source, mutated, "XR_TARGET_1003");
+
+    memcpy(mutated, all, (size_t) instruction_count * sizeof(*all));
+    mutated[1].result_slot = mutated[0].result_slot;
+    expect_rows_rejected_with_code(&source, mutated, "XR_TARGET_1003");
+
+    /* Removing the callee group cannot leave an executable call whose target
+     * is merely present in the function table. */
+    REQUIRE(!freeze_with_rows(&source, all, root_count, NULL, error,
+                              sizeof(error)));
+
+    XrTargetCallRecord saved_call = plan->calls[0];
+    XrTargetCallArgumentRecord saved_argument = plan->call_arguments[0];
+    plan->calls[0].flags = XR_TARGET_CALL_SUSPEND;
+    REQUIRE(!xr_target_instruction_program_verify(plan, error, sizeof(error)));
+    plan->calls[0] = saved_call;
+    plan->call_arguments[0].ownership = XR_TARGET_CALL_MOVE;
+    REQUIRE(!xr_target_instruction_program_verify(plan, error, sizeof(error)));
+    plan->call_arguments[0] = saved_argument;
+    plan->call_arguments[0].caller_slot = plan->calls[0].result_slot;
+    REQUIRE(!xr_target_instruction_program_verify(plan, error, sizeof(error)));
+    plan->call_arguments[0] = saved_argument;
+    REQUIRE(xr_target_instruction_program_verify(plan, error, sizeof(error)));
+
+    /* A loop inside the child consumes the same entry-call budget as its
+     * caller. If recursion accidentally reset the budget, this execution would
+     * never return. */
+    memcpy(mutated, all, (size_t) instruction_count * sizeof(*all));
+    uint32_t child_last = instruction_count - 1u;
+    REQUIRE(mutated[child_last].function == 1 &&
+            mutated[child_last].opcode == XR_TARGET_INSTRUCTION_RETURN_I64);
+    mutated[child_last] = (XrTargetInstructionRecord) {
+        .id = child_last,
+        .function = 1,
+        .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+        .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                          XR_TARGET_INSTRUCTION_SLOT_NONE},
+        .immediate_bits = XR_TARGET_INSTRUCTION_TARGET_PACK(0, 0),
+        .opcode = XR_TARGET_INSTRUCTION_JUMP,
+    };
+    XrTargetPlan *nested_loop = NULL;
+    REQUIRE(freeze_with_rows(&source, mutated, instruction_count, &nested_loop,
+                             error, sizeof(error)));
+    XrFingerprint loop_fingerprint =
+        xr_target_plan_fingerprint(nested_loop);
+    result = 17;
+    REQUIRE(xr_typed_dispatch_execute_i64(nested_loop, &loop_fingerprint, 0,
+                                          NULL, 0, &result) ==
+            XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED);
+    REQUIRE(result == 0);
+    xr_target_plan_free(nested_loop);
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+
+    semantic = build_direct_i64_call_semantic(true);
+    profile = xr_test_target_profile_build(false,
+                                           XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    plan = NULL;
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    fingerprint = xr_target_plan_fingerprint(plan);
+    for (uint32_t attempt = 0; attempt < 2u; attempt++) {
+        result = 99;
+        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 0,
+                                              &result) ==
+                XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
+        REQUIRE(result == 0);
+    }
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_direct_local_call_depth_is_globally_bounded(void) {
+    XrSemanticPlan *semantic = build_deep_direct_i64_call_semantic();
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    for (uint32_t attempt = 0; attempt < 2u; attempt++) {
+        int64_t result = 91;
+        REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, NULL, 0,
+                                              &result) ==
+                XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED);
+        REQUIRE(result == 0);
+    }
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 /* A verified program may loop forever, and no static proof could forbid that
  * without also forbidding ordinary loops. The executor's step budget is what
  * keeps such a program from hanging its caller. */
@@ -1347,6 +1615,8 @@ int main(void) {
     test_conditional_branch_selects_its_edge();
     test_unconditional_jumps_chain_blocks();
     test_comparison_rows_drive_the_branch();
+    test_direct_local_i64_call_executes_and_rejects_drift();
+    test_direct_local_call_depth_is_globally_bounded();
     test_backward_jump_stops_at_the_step_budget();
     puts("typed dispatch tests passed");
     return 0;

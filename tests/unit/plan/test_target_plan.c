@@ -3281,6 +3281,24 @@ static void test_direct_local_call_adapter_family(void) {
     REQUIRE(xr_target_plan_build(semantic, profile, &second, error, sizeof(error)));
     REQUIRE(first->calls_count == 2 && first->call_arguments_count == 2 &&
             first->adapters_count == 0);
+    uint32_t root_instruction_count = 0;
+    uint32_t child_instruction_count = 0;
+    const XrTargetInstructionRecord *root_instructions =
+        xr_target_plan_function_instructions(first, 0, &root_instruction_count);
+    const XrTargetInstructionRecord *child_instructions =
+        xr_target_plan_function_instructions(first, 1, &child_instruction_count);
+    REQUIRE(root_instructions != NULL && root_instruction_count == 4u &&
+            root_instructions[0].opcode == XR_TARGET_INSTRUCTION_CONST_I64 &&
+            root_instructions[1].opcode ==
+                XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 &&
+            root_instructions[1].immediate_bits == 0 &&
+            root_instructions[2].opcode ==
+                XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 &&
+            root_instructions[2].immediate_bits == 1 &&
+            root_instructions[3].opcode == XR_TARGET_INSTRUCTION_RETURN_I64);
+    REQUIRE(child_instructions != NULL && child_instruction_count == 2u &&
+            child_instructions[0].opcode == XR_TARGET_INSTRUCTION_PARAM_I64 &&
+            child_instructions[1].opcode == XR_TARGET_INSTRUCTION_RETURN_I64);
     REQUIRE(xr_fingerprint_equal(first->fingerprint, second->fingerprint));
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);

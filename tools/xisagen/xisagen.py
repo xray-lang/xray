@@ -3656,6 +3656,7 @@ TARGET_EFFECTS = {'control', 'may-error', 'may-suspend'}
 TARGET_ERRORS = {'none', 'divide-by-zero', 'modulo-by-zero'}
 TARGET_IMMEDIATE_KINDS = {
     'none', 'i64', 'parameter-ordinal', 'jump-target', 'branch-targets',
+    'call-record',
 }
 TARGET_CONTROL_KINDS = {'none', 'return', 'jump', 'branch'}
 TARGET_DISPATCH_ARGUMENTS = {
@@ -3669,6 +3670,7 @@ TARGET_DISPATCH_ARGUMENTS = {
     'compare': {'eq', 'ne', 'lt', 'le', 'gt', 'ge'},
     'return': {'none'},
     'branch': {'jump', 'i64', 'bool'},
+    'call': {'none'},
 }
 
 
@@ -3886,6 +3888,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_PARAMETER_ORDINAL,',
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_JUMP_TARGET,',
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_BRANCH_TARGETS,',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_CALL_RECORD,',
         '} XrTargetInstructionImmediateKind;',
         '',
         'typedef enum XrTargetInstructionControlKind {',
@@ -3906,6 +3909,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_DISPATCH_COMPARE,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_RETURN,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_BRANCH,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_CALL,',
         '} XrTargetInstructionDispatchKind;',
         '',
         'typedef enum XrTargetInstructionDispatchArgument {',

@@ -18,6 +18,7 @@
 
 #include "xr_target_instruction_verify.h"
 #include "../../base/xmalloc.h"
+#include "../../runtime/value/xtransfer_mode.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -133,6 +134,8 @@ static bool row_immediate_is_exact(
             return row->immediate_bits < XR_TARGET_INSTRUCTION_MAX_PARAMETERS;
         case XR_TARGET_INSTRUCTION_IMMEDIATE_JUMP_TARGET:
             return XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(row->immediate_bits) == 0;
+        case XR_TARGET_INSTRUCTION_IMMEDIATE_CALL_RECORD:
+            return row->immediate_bits <= UINT32_MAX;
         default:
             return false;
     }
@@ -268,7 +271,10 @@ static bool control_flow_order_is_total(ControlFlowProof *proof) {
 
 bool xr_target_instruction_rows_control_flow_is_exact(
     const XrTargetInstructionRecord *rows, uint32_t row_count,
-    uint32_t slot_begin, uint32_t slot_count) {
+    uint32_t slot_begin, uint32_t slot_count,
+    const XrTargetCallRecord *calls, uint32_t call_count,
+    const XrTargetCallArgumentRecord *call_arguments,
+    uint32_t call_argument_count) {
     if (!rows || !row_count || !slot_count ||
         slot_count > UINT32_MAX - slot_begin ||
         !xr_target_instruction_is_terminator(rows[row_count - 1u].opcode))
@@ -454,6 +460,31 @@ bool xr_target_instruction_rows_control_flow_is_exact(
                     break;
                 }
             }
+            const XrTargetInstructionContract *contract =
+                xr_target_instruction_contract(row->opcode);
+            if (valid && contract &&
+                contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_CALL) {
+                uint32_t call_index = (uint32_t) row->immediate_bits;
+                const XrTargetCallRecord *call =
+                    calls && call_index < call_count ? &calls[call_index] : NULL;
+                if (!call || call->argument_begin > call_argument_count ||
+                    call->argument_count >
+                        call_argument_count - call->argument_begin) {
+                    valid = false;
+                    break;
+                }
+                for (uint16_t ordinal = 0;
+                     ordinal < call->argument_count && valid; ordinal++) {
+                    uint32_t local = 0;
+                    uint32_t slot = call_arguments[
+                        call->argument_begin + ordinal].caller_slot;
+                    if (!control_flow_slot_local(slot, slot_begin, slot_count,
+                                                 &local) ||
+                        (live[local / 64u] &
+                         (UINT64_C(1) << (local % 64u))) == 0)
+                        valid = false;
+                }
+            }
             uint32_t local = 0;
             if (valid && row->result_slot != XR_TARGET_INSTRUCTION_SLOT_NONE &&
                 control_flow_slot_local(row->result_slot, slot_begin, slot_count,
@@ -465,14 +496,151 @@ bool xr_target_instruction_rows_control_flow_is_exact(
     return valid;
 }
 
+static bool call_rep_is_i64(const XrTargetPlan *plan, uint16_t rep) {
+    const XrTargetMachineRepRecord *record =
+        xr_target_plan_machine_rep(plan, rep);
+    return record && record->kind == XR_MACHINE_REP_I64 &&
+           record->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+}
+
+static bool call_rep_is_void(const XrTargetPlan *plan, uint16_t rep) {
+    const XrTargetMachineRepRecord *record =
+        xr_target_plan_machine_rep(plan, rep);
+    return record && record->kind == XR_MACHINE_REP_VOID;
+}
+
+static bool callee_parameter_slot(const XrTargetPlan *plan, uint32_t function,
+                                  uint16_t ordinal, uint32_t *out_slot) {
+    uint32_t count = 0;
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_instructions(plan, &count);
+    uint32_t matches = 0;
+    uint32_t slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    for (uint32_t i = 0; rows && i < count; i++) {
+        const XrTargetInstructionContract *contract =
+            xr_target_instruction_contract(rows[i].opcode);
+        if (rows[i].function == function && contract &&
+            contract->immediate_kind ==
+                XR_TARGET_INSTRUCTION_IMMEDIATE_PARAMETER_ORDINAL &&
+            rows[i].immediate_bits == ordinal) {
+            matches++;
+            slot = rows[i].result_slot;
+        }
+    }
+    if (matches != 1)
+        return false;
+    if (out_slot)
+        *out_slot = slot;
+    return true;
+}
+
+static uint32_t callee_parameter_count(const XrTargetPlan *plan,
+                                       uint32_t function) {
+    uint32_t count = 0;
+    uint32_t parameter_count = 0;
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_instructions(plan, &count);
+    for (uint32_t i = 0; rows && i < count; i++) {
+        const XrTargetInstructionContract *contract =
+            xr_target_instruction_contract(rows[i].opcode);
+        if (rows[i].function == function && contract &&
+            contract->immediate_kind ==
+                XR_TARGET_INSTRUCTION_IMMEDIATE_PARAMETER_ORDINAL)
+            parameter_count++;
+    }
+    return parameter_count;
+}
+
+static bool direct_i64_call_row_is_exact(
+    const XrTargetPlan *plan, const XrTargetInstructionRecord *row,
+    uint32_t function_index, const uint8_t *executable_functions,
+    uint32_t function_count) {
+    uint32_t call_count = 0;
+    uint32_t argument_count = 0;
+    uint32_t slot_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(plan, &argument_count);
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
+    uint32_t call_index = (uint32_t) row->immediate_bits;
+    const XrTargetCallRecord *call =
+        calls && call_index < call_count ? &calls[call_index] : NULL;
+    if (!call || (!arguments && call->argument_count) || !slots ||
+        call->id != call_index ||
+        call->caller_function != function_index ||
+        call->callee_function >= function_count ||
+        !executable_functions[call->callee_function] || call->flags != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+        call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        call->adapter_begin != 0 || call->adapter_count != 0 ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL ||
+        call->array_intrinsic_kind != XR_TARGET_ARRAY_INTRINSIC_NONE ||
+        call->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        row->result_slot != call->result_slot ||
+        !call_rep_is_i64(plan, call->result_register_rep) ||
+        !call_rep_is_i64(plan, call->result_memory_rep) ||
+        !call_rep_is_void(plan, call->error_register_rep) ||
+        !call_rep_is_void(plan, call->error_memory_rep) ||
+        call->result_slot >= slot_count ||
+        slots[call->result_slot].function != function_index ||
+        slots[call->result_slot].register_rep != call->result_register_rep ||
+        slots[call->result_slot].memory_rep != call->result_memory_rep ||
+        call->argument_begin > argument_count ||
+        call->argument_count > argument_count - call->argument_begin ||
+        callee_parameter_count(plan, call->callee_function) !=
+            call->argument_count)
+        return false;
+    for (uint16_t ordinal = 0; ordinal < call->argument_count; ordinal++) {
+        const XrTargetCallArgumentRecord *argument =
+            &arguments[call->argument_begin + ordinal];
+        uint32_t parameter_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+        if (argument->call != call_index || argument->ordinal != ordinal ||
+            argument->mode != XR_TARGET_CALL_VALUE ||
+            (argument->ownership != XR_TARGET_CALL_READ &&
+             argument->ownership != XR_TARGET_CALL_CONSUME) ||
+            argument->transfer_mode != XR_TRANSFER_SHARE ||
+            argument->flags != 0 ||
+            argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+            argument->reserved8[0] != 0 || argument->reserved8[1] != 0 ||
+            argument->reserved8[2] != 0 ||
+            !call_rep_is_i64(plan, argument->register_rep) ||
+            !call_rep_is_i64(plan, argument->memory_rep) ||
+            !call_rep_is_i64(plan, argument->callee_register_rep) ||
+            !call_rep_is_i64(plan, argument->callee_memory_rep) ||
+            argument->caller_slot >= slot_count ||
+            slots[argument->caller_slot].function != function_index ||
+            argument->callee_slot >= slot_count ||
+            slots[argument->callee_slot].function != call->callee_function ||
+            slots[argument->caller_slot].register_rep !=
+                argument->register_rep ||
+            slots[argument->caller_slot].memory_rep != argument->memory_rep ||
+            slots[argument->callee_slot].register_rep !=
+                argument->callee_register_rep ||
+            slots[argument->callee_slot].memory_rep !=
+                argument->callee_memory_rep ||
+            !callee_parameter_slot(plan, call->callee_function, ordinal,
+                                   &parameter_slot) ||
+            parameter_slot != argument->callee_slot)
+            return false;
+    }
+    return true;
+}
+
 static bool verify_function_group(const XrTargetPlan *plan,
                                   const XrTargetInstructionRecord *rows,
                                   uint32_t row_count, uint32_t function_index,
+                                  const uint8_t *executable_functions,
+                                  uint32_t function_count,
                                   char *error, size_t error_size) {
-    uint32_t function_count = 0;
+    uint32_t plan_function_count = 0;
     const XrTargetFunctionRecord *functions =
-        xr_target_plan_functions(plan, &function_count);
-    if (!functions || function_index >= function_count || !row_count)
+        xr_target_plan_functions(plan, &plan_function_count);
+    if (!functions || plan_function_count != function_count ||
+        function_index >= function_count || !row_count)
         return report(error, error_size, "XR_TARGET_1005",
                       "instruction function identity is invalid");
     const XrTargetFunctionRecord *function = &functions[function_index];
@@ -487,6 +655,7 @@ static bool verify_function_group(const XrTargetPlan *plan,
     uint64_t bound_arguments = 0;
     uint32_t parameter_rows = 0;
     bool valid = true;
+    bool call_invalid = false;
     for (uint32_t i = 0; i < row_count && valid; i++) {
         const XrTargetInstructionRecord *row = &rows[i];
         bool terminal = i + 1u == row_count;
@@ -510,6 +679,15 @@ static bool verify_function_group(const XrTargetPlan *plan,
         }
         if (!valid)
             break;
+
+        if (contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_CALL &&
+            !direct_i64_call_row_is_exact(plan, row, function_index,
+                                          executable_functions,
+                                          function_count)) {
+            valid = false;
+            call_invalid = true;
+            break;
+        }
 
         if (contract->terminator) {
             valid = row->result_slot == XR_TARGET_INSTRUCTION_SLOT_NONE;
@@ -553,10 +731,20 @@ static bool verify_function_group(const XrTargetPlan *plan,
      * block partition, the legality of every jump target, the reachability of
      * every block, and definite assignment on every path are all proved by the
      * one control-flow judgement the production builder admits against. */
+    uint32_t call_count = 0;
+    uint32_t call_argument_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(plan, &call_count);
+    const XrTargetCallArgumentRecord *call_arguments =
+        xr_target_plan_call_arguments(plan, &call_argument_count);
+    if (call_invalid)
+        return report(error, error_size, "XR_TARGET_1003",
+                      "instruction call row does not match its exact call record");
     if (!valid || bound_arguments != dense_arguments ||
         function_parameter_slot_count(plan, function) != parameter_rows ||
         !xr_target_instruction_rows_control_flow_is_exact(
-            rows, row_count, function->slot_begin, function->slot_count))
+            rows, row_count, function->slot_begin, function->slot_count,
+            calls, call_count, call_arguments, call_argument_count))
         return report(error, error_size, "XR_TARGET_1005",
                       "instruction program is not an exact closed i64 program");
     return true;
@@ -576,24 +764,48 @@ bool xr_target_instruction_program_verify(const XrTargetPlan *plan,
         return report(error, error_size, "XR_EXEC_5003",
                       "instruction table storage is missing");
 
+    uint32_t function_count = 0;
+    xr_target_plan_functions(plan, &function_count);
+    uint8_t *executable = (uint8_t *) xr_calloc(function_count, 1);
+    if (function_count && !executable)
+        return report(error, error_size, "XR_EXEC_5003",
+                      "instruction verifier budget exhausted");
     uint32_t begin = 0;
     while (begin < instruction_count) {
         uint32_t function = instructions[begin].function;
         uint32_t end = begin + 1u;
         if (instructions[begin].id != begin ||
             (begin && instructions[begin - 1u].function >= function))
-            return report(error, error_size, "XR_TARGET_1005",
-                          "instruction table order is not canonical");
+            goto invalid_order;
         while (end < instruction_count && instructions[end].function == function) {
             if (instructions[end].id != end)
-                return report(error, error_size, "XR_TARGET_1005",
-                              "instruction identifiers are not dense");
+                goto invalid_order;
             end++;
         }
-        if (!verify_function_group(plan, &instructions[begin], end - begin,
-                                   function, error, error_size))
-            return false;
+        if (function >= function_count || executable[function])
+            goto invalid_order;
+        executable[function] = 1;
         begin = end;
     }
+    begin = 0;
+    while (begin < instruction_count) {
+        uint32_t function = instructions[begin].function;
+        uint32_t end = begin + 1u;
+        while (end < instruction_count && instructions[end].function == function)
+            end++;
+        if (!verify_function_group(plan, &instructions[begin], end - begin,
+                                   function, executable, function_count, error,
+                                   error_size)) {
+            xr_free(executable);
+            return false;
+        }
+        begin = end;
+    }
+    xr_free(executable);
     return true;
+
+invalid_order:
+    xr_free(executable);
+    return report(error, error_size, "XR_TARGET_1005",
+                  "instruction table order is not canonical");
 }

@@ -96,7 +96,22 @@ typedef struct XrTypedDispatchRowContext {
     uint32_t *next;
     bool *returned;
     uint64_t *return_bits;
+    struct XrTypedDispatchExecution *execution;
+    bool parameters_prebound;
 } XrTypedDispatchRowContext;
+
+typedef struct XrTypedDispatchExecution {
+    const XrTargetPlan *plan;
+    const XrFingerprint *fingerprint;
+    XrTypedFrameLimits limits;
+    uint32_t remaining_steps;
+    uint32_t call_depth;
+} XrTypedDispatchExecution;
+
+static XrTypedDispatchStatus execute_function(
+    XrTypedDispatchExecution *execution, XrTypedFrame *frame,
+    uint32_t function, const int64_t *arguments, uint32_t argument_count,
+    bool parameters_prebound, uint64_t *return_bits);
 
 static XrTypedDispatchStatus execute_const(
     XrTypedFrame *frame, const XrTargetInstructionRecord *row,
@@ -112,6 +127,8 @@ static XrTypedDispatchStatus execute_param(
     const XrTargetInstructionContract *contract,
     XrTypedDispatchRowContext *context) {
     (void) contract;
+    if (context->parameters_prebound)
+        return XR_TYPED_DISPATCH_OK;
     if (!context->arguments || row->immediate_bits >= context->argument_count)
         return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
     uint64_t bits = 0;
@@ -338,6 +355,76 @@ static XrTypedDispatchStatus execute_branch(
     return XR_TYPED_DISPATCH_OK;
 }
 
+static XrTypedDispatchStatus copy_call_arguments(
+    XrTypedFrame *parent, XrTypedFrame *child,
+    const XrTargetCallArgumentRecord *arguments, uint16_t argument_count) {
+    for (uint16_t ordinal = 0; ordinal < argument_count; ordinal++) {
+        uint64_t bits = 0;
+        XrTypedDispatchStatus status =
+            load_i64_bits(parent, arguments[ordinal].caller_slot, &bits);
+        if (status != XR_TYPED_DISPATCH_OK)
+            return status;
+        status = store_i64_bits(child, arguments[ordinal].callee_slot, bits);
+        if (status != XR_TYPED_DISPATCH_OK)
+            return status;
+    }
+    return XR_TYPED_DISPATCH_OK;
+}
+
+static XrTypedDispatchStatus execute_call(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) contract;
+    XrTypedDispatchExecution *execution = context->execution;
+    if (!execution || execution->call_depth >= XR_TYPED_DISPATCH_MAX_CALL_DEPTH)
+        return XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED;
+    uint32_t call_count = 0;
+    uint32_t argument_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(execution->plan, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(execution->plan, &argument_count);
+    uint32_t call_index = (uint32_t) row->immediate_bits;
+    const XrTargetCallRecord *call =
+        calls && call_index < call_count ? &calls[call_index] : NULL;
+    if (!call || call->argument_begin > argument_count ||
+        call->argument_count > argument_count - call->argument_begin)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+
+    XrTypedFrame *child = NULL;
+    bool linked = false;
+    XrTypedDispatchStatus status = XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (xr_typed_frame_create(execution->plan, execution->fingerprint,
+                              call->callee_function, &execution->limits,
+                              &child) != XR_TYPED_FRAME_OK)
+        return status;
+    if (xr_typed_frame_link_child(frame, child) != XR_TYPED_FRAME_OK)
+        goto cleanup;
+    linked = true;
+    status = copy_call_arguments(frame, child,
+                                 call->argument_count
+                                     ? &arguments[call->argument_begin]
+                                     : NULL,
+                                 call->argument_count);
+    if (status != XR_TYPED_DISPATCH_OK)
+        goto cleanup;
+    uint64_t child_result = 0;
+    execution->call_depth++;
+    status = execute_function(execution, child, call->callee_function, NULL,
+                              call->argument_count, true, &child_result);
+    execution->call_depth--;
+    if (status == XR_TYPED_DISPATCH_OK)
+        status = store_i64_bits(frame, row->result_slot, child_result);
+
+cleanup:
+    if (linked && xr_typed_frame_unlink_child(frame, child) != XR_TYPED_FRAME_OK &&
+        status == XR_TYPED_DISPATCH_OK)
+        status = XR_TYPED_DISPATCH_FRAME_ERROR;
+    xr_typed_frame_free(child);
+    return status;
+}
+
 /* The generated cases make missing and duplicate opcode handlers compilation
  * errors. The contract repeats the generated handler binding at runtime so a
  * corrupted row cannot select a handler whose metadata disagrees. */
@@ -347,13 +434,16 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                                          uint32_t argument_count,
                                          uint32_t row_count, uint32_t *next,
                                          bool *returned,
-                                         uint64_t *return_bits) {
+                                         uint64_t *return_bits,
+                                         XrTypedDispatchExecution *execution,
+                                         bool parameters_prebound) {
     const XrTargetInstructionContract *contract =
         xr_target_instruction_contract(row->opcode);
     if (!contract)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     XrTypedDispatchRowContext context = {
         arguments, argument_count, row_count, next, returned, return_bits,
+        execution, parameters_prebound,
     };
     switch ((XrTargetInstructionOpcode) row->opcode) {
 #define XR_VM_OP(symbol, handler, kind, argument)                                                   \
@@ -368,6 +458,47 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
         default:
             return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     }
+}
+
+static XrTypedDispatchStatus execute_function(
+    XrTypedDispatchExecution *execution, XrTypedFrame *frame,
+    uint32_t function, const int64_t *arguments, uint32_t argument_count,
+    bool parameters_prebound, uint64_t *return_bits) {
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_function_instructions(execution->plan, function,
+                                             &instruction_count);
+    if (!instructions || !instruction_count)
+        return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+    uint32_t declared_parameters = 0;
+    for (uint32_t i = 0; i < instruction_count; i++)
+        declared_parameters +=
+            instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64;
+    if (declared_parameters != argument_count)
+        return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
+
+    uint32_t current = 0;
+    bool returned = false;
+    while (!returned) {
+        if (current >= instruction_count)
+            return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+        if (execution->remaining_steps == 0)
+            return XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED;
+        execution->remaining_steps--;
+        if (xr_typed_frame_enter_instruction(frame,
+                                              instructions[current].id) !=
+            XR_TYPED_FRAME_OK)
+            return XR_TYPED_DISPATCH_FRAME_ERROR;
+        uint32_t next = current + 1u;
+        XrTypedDispatchStatus status = execute_row(
+            frame, &instructions[current], arguments, argument_count,
+            instruction_count, &next, &returned, return_bits, execution,
+            parameters_prebound);
+        if (status != XR_TYPED_DISPATCH_OK)
+            return status;
+        current = next;
+    }
+    return XR_TYPED_DISPATCH_OK;
 }
 
 XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
@@ -393,22 +524,6 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
         return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
 
-    uint32_t instruction_count = 0;
-    const XrTargetInstructionRecord *instructions =
-        xr_target_plan_function_instructions(verified_plan, function,
-                                             &instruction_count);
-    if (!instructions || !instruction_count)
-        return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
-    /* The verified group is the only declaration of the signature this
-     * executor honours: it binds one dense argument ordinal per parameter
-     * row. A caller vector of any other length is refused before the frame
-     * exists, so no slot is ever filled from a truncated or padded vector. */
-    uint32_t declared_parameters = 0;
-    for (uint32_t i = 0; i < instruction_count; i++)
-        declared_parameters +=
-            instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64;
-    if (declared_parameters != argument_count)
-        return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
     XrTypedFrameLimits limits;
     xr_typed_frame_limits_default(&limits);
     XrTypedFrame *frame = NULL;
@@ -416,30 +531,17 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
                               &limits, &frame) != XR_TYPED_FRAME_OK)
         return XR_TYPED_DISPATCH_FRAME_ERROR;
 
-    /* The instruction pointer starts at the group's first row, which the
-     * verifier proved is the entry block, and moves only where a row says. A
-     * fixed step budget bounds a program the verifier had no reason to refuse
-     * but that loops forever, so the executor returns instead of hanging. */
     uint64_t return_bits = 0;
-    uint32_t row = 0;
-    bool returned = false;
-    XrTypedDispatchStatus status = XR_TYPED_DISPATCH_OK;
-    for (uint32_t step = 0; step < XR_TYPED_DISPATCH_MAX_STEPS && !returned;
-         step++) {
-        if (row >= instruction_count) {
-            status = XR_TYPED_DISPATCH_PROGRAM_INVALID;
-            break;
-        }
-        uint32_t next = row + 1u;
-        status = execute_row(frame, &instructions[row], arguments,
-                             argument_count, instruction_count, &next, &returned,
-                             &return_bits);
-        if (status != XR_TYPED_DISPATCH_OK)
-            break;
-        row = next;
-    }
-    if (status == XR_TYPED_DISPATCH_OK && !returned)
-        status = XR_TYPED_DISPATCH_STEP_LIMIT_EXCEEDED;
+    XrTypedDispatchExecution execution = {
+        .plan = verified_plan,
+        .fingerprint = required_plan_fingerprint,
+        .limits = limits,
+        .remaining_steps = XR_TYPED_DISPATCH_MAX_STEPS,
+        .call_depth = 1,
+    };
+    XrTypedDispatchStatus status = execute_function(
+        &execution, frame, function, arguments, argument_count, false,
+        &return_bits);
     xr_typed_frame_free(frame);
     if (status != XR_TYPED_DISPATCH_OK)
         return status;

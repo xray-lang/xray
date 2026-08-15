@@ -179,3 +179,10 @@
   :result-ownership none :operand-ownership borrow
   :effects (control) :error none :suspend no :immediate branch-targets :control branch
   :semantic none :dispatch branch :dispatch-arg bool)
+
+(define-target-instruction call-direct-i64
+  :id 26 :name "call.direct.i64" :arity 0 :terminator no
+  :result-rep i64 :operand-reps ()
+  :result-ownership trivial :operand-ownership none
+  :effects () :error none :suspend no :immediate call-record :control none
+  :semantic xi.call :dispatch call :dispatch-arg none)
