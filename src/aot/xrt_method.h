@@ -691,6 +691,23 @@ static inline XrValue xrt_str_from_core_slice(XrStringCoreSlice slice) {
     return sv;
 }
 
+/* Dedicated target-plan spelling for the exact rune-indexed range overload.
+ * Generated C supplies native bounds from CEmissionPlan and never selects a
+ * numeric method symbol. */
+static inline XrValue xrt_string_slice_range(XrValue receiver, int64_t start,
+                                             int64_t end) {
+    if (!XR_IS_STR(receiver))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "String.slice receiver is not a string");
+    int64_t count = xr_str_rune_len(receiver);
+    if (start < 0 || end < start || end > count)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        "string.slice rune range out of bounds");
+    XrStringCoreSlice slice = xr_string_core_range_slice(
+        xr_str_data(receiver), (size_t) xr_str_len(receiver), start, end);
+    return xrt_str_from_core_slice(slice);
+}
+
 typedef struct XrtStringSplitCtx {
     XrValue array;
 } XrtStringSplitCtx;
@@ -1104,15 +1121,10 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
             (size_t) xr_str_len(arg0), arg1.i));
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_SLICE) {
-        const char *s = xr_str_data(recv);
-        size_t slen = (size_t) xr_str_len(recv);
         int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
         int64_t count = xr_str_rune_len(recv);
         int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : count;
-        if (start < 0 || end < start || end > count)
-            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "string.slice rune range out of bounds");
-        XrStringCoreSlice slice = xr_string_core_range_slice(s, slen, start, end);
-        return xrt_str_from_core_slice(slice);
+        return xrt_string_slice_range(recv, start, end);
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_SLICE_BYTES) {
         const char *s = xr_str_data(recv);

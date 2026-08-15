@@ -15,6 +15,7 @@
 #include "xr_semantic_iterator_rune_next_shape.h"
 #include "xr_semantic_rune_to_uint32_shape.h"
 #include "xr_semantic_rune_is_whitespace_shape.h"
+#include "xr_semantic_string_slice_shape.h"
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_verify.h"
 #include "../ownership/xr_ownership_obligation.h"
@@ -2888,6 +2889,22 @@ static bool xi_rune_is_whitespace_exact(const XiValue *value) {
            value->type->kind == XR_KIND_BOOL && xi_iterator_rune_next_exact(receiver);
 }
 
+static bool xi_string_slice_range_exact(const XiValue *value) {
+    const XiValue *receiver = value && value->nargs == 3 ? value->args[0] : NULL;
+    const XiValue *start = value && value->nargs == 3 ? value->args[1] : NULL;
+    const XiValue *end = value && value->nargs == 3 ? value->args[2] : NULL;
+    return value && value->op == XI_CALL_METHOD && receiver && start && end &&
+           value->aux && strcmp((const char *) value->aux, "slice") == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
+           (value->aux_int & 1) == 0 && value->type && receiver->type &&
+           value->type == receiver->type && value->type->kind == XR_KIND_STRING &&
+           !value->type->is_nullable && start->type && end->type &&
+           start->type->kind == XR_KIND_INT && end->type->kind == XR_KIND_INT &&
+           !start->type->is_nullable && !end->type->is_nullable &&
+           start->type->scalar_rep == XR_NATIVE_I64 &&
+           end->type->scalar_rep == XR_NATIVE_I64;
+}
+
 static bool xi_string_builder_constructor_candidate(const XiValue *value) {
     if (!value || value->op != XI_CALL_BUILTIN)
         return false;
@@ -3653,6 +3670,12 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         if (!xr_semantic_rune_is_whitespace_is_exact(ctx->plan, record, NULL))
             return fail(ctx, "XR_SEM_0019",
                         "rune.isWhitespace authority is not exact");
+    }
+    if (xi_string_slice_range_exact(value)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_STRING_SLICE_RANGE;
+        if (!xr_semantic_string_slice_range_is_exact(
+                ctx->plan, record, NULL, NULL, NULL))
+            record->intrinsic_kind = XR_SEM_INTRINSIC_NONE;
     }
     if (xi_string_builder_append_rune_exact(value) &&
         semantic_string_builder_append_rune_exact(ctx, record))

@@ -2537,6 +2537,51 @@ TEST(cgen_string_runes_consumes_immutable_emission_recipe) {
     xi_func_free(ir);
 }
 
+TEST(cgen_string_slice_range_consumes_immutable_emission_recipe) {
+    XrType string_type = {.kind = XR_KIND_STRING, .id = 985,
+                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType int_type = {.kind = XR_KIND_INT, .id = 986,
+                       .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XiFunc *ir = xi_func_new("string_slice_range_recipe", &string_type);
+    XiBlock *entry = ir ? xi_block_new(ir) : NULL;
+    TEST_REQUIRE(entry != NULL, "String range-slice recipe fixture allocated");
+    entry->sealed = true;
+    XiValue *source = xi_const_str(ir, entry, "0123456789abcdef", &string_type);
+    XiValue *start = xi_const_int(ir, entry, 1, &int_type);
+    XiValue *end = xi_const_int(ir, entry, 4, &int_type);
+    XiValue *slice = xi_value_new(ir, entry, XI_CALL_METHOD, &string_type, 3);
+    TEST_REQUIRE(source && start && end && slice,
+                 "String range-slice recipe values allocated");
+    slice->args[0] = source;
+    slice->args[1] = start;
+    slice->args[2] = end;
+    slice->aux = (void *) "slice";
+    slice->aux_int = 32;
+    slice->flags |= XI_FLAG_TAIL;
+    slice->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+    slice->call_return_ownership.param_index = -1;
+    slice->call_return_ownership.complete = true;
+    ir->arc_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+    ir->arc_return_ownership.param_index = -1;
+    ir->arc_return_ownership.complete = true;
+    xi_block_set_return(entry, slice);
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "string_slice_range_recipe",
+                                        &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "sealed String range-slice recipe should generate");
+    size_t slice_call_count = count_between(
+        code, code + strlen(code), "xrt_string_slice_range(");
+    TEST_REQUIRE(slice_call_count == 1,
+                 "CGen must consume the exact range-slice recipe once");
+    TEST_REQUIRE(!contains(code, "XRT_SYM_SLICE"),
+                 "CGen must not select String.slice by symbol id");
+    TEST_REQUIRE(contains(code, "xrt_has_pending_error("),
+                 "String.slice must preserve the pending-error poll");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_iterator_rune_has_next_consumes_immutable_emission_recipe) {
     XiFunc *ir = compile_to_ir(
         "var iter = \"0123456789abcdef\".runes()\n"
@@ -13756,6 +13801,7 @@ int main(void) {
     run_cgen_direct_stdlib_import_call_emits_no_function_token_local();
     run_cgen_string_literal_runes_receiver_emits_immediate_without_local();
     run_cgen_string_runes_consumes_immutable_emission_recipe();
+    run_cgen_string_slice_range_consumes_immutable_emission_recipe();
     run_cgen_iterator_rune_has_next_consumes_immutable_emission_recipe();
     run_cgen_iterator_rune_next_consumes_immutable_emission_recipe();
     run_cgen_rune_to_uint32_consumes_immutable_emission_recipe();

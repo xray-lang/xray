@@ -36,11 +36,12 @@ scalar route remains the only governed product activation path.
    call-argument, root-map, root-slot, cleanup, adapter, or coroutine execution
    authority. Any other verified plan remains VERIFIED and fails PREPARE with
    `XR_EXEC_5004`; it is not partially activated.
-   TargetPlan schema 31 preserves exact SOURCE-import storage and dense
+   TargetPlan schema 32 preserves exact SOURCE-import storage and dense
    SOURCE_EXPORT argument rows together with exact ADT-enum, aggregate
    field-name, Array-intrinsic, String-runes result, and sealed Iterator-rune
    `hasNext`/`next`/`rune.toUInt32`/`rune.isWhitespace` call authority, plus exact direct-local
-   borrowed `Array` parameter storage. Those dynamic rows remain
+   borrowed `Array` parameter storage and exact String range-slice call authority.
+   Those dynamic rows remain
    storage/call authority and
    therefore continue to make this sole-scalar PREPARE route fail closed.
    Its sealed StringBuilder constructor call likewise remains non-executable
@@ -144,7 +145,7 @@ anchor-sha256: src/runtime/xr_module_generation.c f3fe95413105fbb79fb40b5a0a6f71
 anchor-sha256: src/runtime/xr_module_generation_verify.c 0f146f9f8526f83d84157febadde7cb92327f24186fb6d8d45138968ecaaf4bd
 anchor-sha256: src/vm/xr_typed_dispatch.h 1def13ea54294774bb120596f2c640498fc3f92e61d95b17f54ae51a8df0ae3d
 anchor-sha256: src/vm/xr_typed_dispatch.c ef9ad355401e587b4d27f3189f01c0b0e7779145e0aa1089a70a3dfca9d9147a
-anchor-sha256: src/vm/xr_typed_frame.h e6331d14764199f4256d2a11acc64f520454bedb50615c4565bf502cdf789033
+anchor-sha256: src/vm/xr_typed_frame.h 43c04fe662cab6f2d79eca9171450d71a43805864af34e90a1f69d11f31427fe
 anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

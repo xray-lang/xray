@@ -1,7 +1,7 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 31 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 32 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
@@ -191,13 +191,13 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h d1ed20e9afa4b5c1bb361a939a8c5b627c6d4e814b68f3303b8a05454bfa5c99
-anchor-sha256: src/vm/xr_typed_frame.h e6331d14764199f4256d2a11acc64f520454bedb50615c4565bf502cdf789033
+anchor-sha256: src/plan/target/xr_target_plan.h 75d5c291efec7caafc4c16ec109e80eee8e982310cdefbd3e49ad6d96eac5b05
+anchor-sha256: src/vm/xr_typed_frame.h 43c04fe662cab6f2d79eca9171450d71a43805864af34e90a1f69d11f31427fe
 anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
 anchor-sha256: src/vm/xr_typed_dispatch.c ef9ad355401e587b4d27f3189f01c0b0e7779145e0aa1089a70a3dfca9d9147a
 anchor-sha256: scripts/check_typed_call_staging.py 70224976eb831b98465bd1f719f2e66bd81fdf59503a4c929a2542b2081e8655
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c a59c3711715175cbf009341e15720bff4457d8435e37e3252145ef49cc8fe7d1
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py e9e057b890df32005e054290a3425f239c1b3c594432a044a04bd6a12dc6dd14
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8f2acc619749a086bf3be97ef9799ea6abef2c45151113b13a87b9a3609f8101
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c e6d70c185c2e7aa8189b8df35b6011596cd5edbb89cd52a20b6cc903e2aab1fd
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 0f9fadd7713412a5f7aa808f7461348751270b5210d1feee085b09d5cac47ead
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 42bfb35e761bf2a0d187e35c1cc28a2173caa43e919bd9cb471a4415896edef1

@@ -34,6 +34,7 @@
 #include "../semantic/xr_semantic_iterator_rune_next_shape.h"
 #include "../semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
+#include "../semantic/xr_semantic_string_slice_shape.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../stdlib/xstdlib_metadata.h"
@@ -3435,6 +3436,75 @@ static bool note_string_runes_storage_value(
     return true;
 }
 
+static bool note_string_slice_range_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    uint32_t start = XR_SEMANTIC_INDEX_NONE;
+    uint32_t end = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_semantic_string_slice_range_is_exact(
+            builder->semantic_plan, operation, &receiver, &start, &end) ||
+        operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >=
+            xr_semantic_plan_function_count(builder->semantic_plan) ||
+        receiver >= analysis->total_values || start >= analysis->total_values ||
+        end >= analysis->total_values ||
+        analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "String.slice(start, end) result authority is incomplete");
+    XrTargetMachineRepRecord rep;
+    if (!make_dynamic_value_rep(
+            xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(
+            error, error_size, "XR_TARGET_1003",
+            "target profile cannot materialize String.slice(start, end) result");
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function,
+                            XR_TARGET_SLOT_TEMPORARY, operation->id,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "String.slice(start, end) result slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_OWNED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[operation->result_type] &&
+         !append_layout_intent(builder, operation->result_type,
+                               XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                               error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    analysis->type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+    analysis->used_types[operation->result_type] = 1;
+    return true;
+}
+
 static bool note_stringbuilder_to_string_storage_value(
     XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
     uint32_t semantic_operation, char *error, size_t error_size) {
@@ -5500,6 +5570,44 @@ static bool builder_add_string_runes_storage(
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE;
+    return true;
+}
+
+static bool builder_add_string_slice_range_storage(
+    XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+    if (!builder_begin_family(
+            builder, XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE,
+            error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis,
+                                             error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values) {
+            analysis.defined_values[value->semantic_value] = 1;
+            analysis.value_types[value->semantic_value] = value->semantic_type;
+            analysis.value_functions[value->semantic_value] = value->semantic_function;
+            analysis.used_types[value->semantic_type] = 1;
+        }
+    }
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (operation && operation->intrinsic_kind ==
+                             XR_SEM_INTRINSIC_STRING_SLICE_RANGE)
+            valid = note_string_slice_range_storage_value(
+                builder, &analysis, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |=
+        XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE;
     return true;
 }
 
@@ -7739,6 +7847,46 @@ static bool collect_rune_is_whitespace_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_string_slice_range_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error,
+    size_t error_size) {
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    uint32_t start = XR_SEMANTIC_INDEX_NONE;
+    uint32_t end = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_semantic_string_slice_range_is_exact(
+            builder->semantic_plan, operation, &receiver, &start, &end))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "String.slice(start, end) dispatch authority is incomplete");
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_RETURN_OWNED,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_STRING_SLICE_RANGE,
+        .target_kind = XR_TARGET_CALL_TARGET_STRING_SLICE_RANGE,
+        .tail = true,
+    };
+    if (!result_type ||
+        !stable_identity_from_pair("xray-target-string-slice-range-v1",
+                                   operation->id, result_type->id, receiver,
+                                   &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "String.slice(start, end) call identity is incomplete");
+    (void) start;
+    (void) end;
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_stringbuilder_to_string_call_intent(
     XrTargetPlanBuilder *builder, uint32_t operation_index,
     const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
@@ -8498,6 +8646,10 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 builder, i, operation, error, error_size);
         } else if (xr_semantic_rune_is_whitespace_is_exact(plan, operation, NULL)) {
             valid = collect_rune_is_whitespace_call_intent(
+                builder, i, operation, error, error_size);
+        } else if (xr_semantic_string_slice_range_is_exact(
+                       plan, operation, NULL, NULL, NULL)) {
+            valid = collect_string_slice_range_call_intent(
                 builder, i, operation, error, error_size);
         } else if (semantic_stringbuilder_to_string_is_exact(plan, operation, NULL)) {
             valid = collect_stringbuilder_to_string_call_intent(builder, i, operation,
@@ -10623,6 +10775,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_panic_catch_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
         !builder_add_string_runes_storage(builder, error, error_size) ||
+        !builder_add_string_slice_range_storage(builder, error, error_size) ||
         !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_append_rune_storage(builder, error, error_size) ||
         !builder_add_stringbuilder_to_string_storage(builder, error, error_size) ||

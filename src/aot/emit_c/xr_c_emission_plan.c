@@ -19,6 +19,7 @@
 #include "../../plan/semantic/xr_semantic_iterator_rune_next_shape.h"
 #include "../../plan/semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../../plan/semantic/xr_semantic_rune_is_whitespace_shape.h"
+#include "../../plan/semantic/xr_semantic_string_slice_shape.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include "../../ir/xi.h"
@@ -30,7 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(26)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(27)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -51,6 +52,7 @@
 #define XR_C_RUNE_TO_UINT32_SYMBOL "xrt_rune_to_uint32"
 #define XR_C_RUNE_IS_WHITESPACE_SYMBOL "xrt_rune_is_whitespace"
 #define XR_C_ARRAY_NEW_SYMBOL "xrt_array_new_typed"
+#define XR_C_STRING_SLICE_RANGE_SYMBOL "xrt_string_slice_range"
 
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
@@ -1979,6 +1981,79 @@ static bool exact_rune_is_whitespace_recipe(
     return true;
 }
 
+static bool exact_string_slice_range_recipe(
+    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
+    uint32_t *receiver_value, uint32_t *start_value, uint32_t *end_value) {
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t receiver = UINT32_MAX;
+    uint32_t start = UINT32_MAX;
+    uint32_t end = UINT32_MAX;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    if (!semantic || !operation || !binding ||
+        operation->result_value != binding->semantic_value ||
+        !xr_semantic_string_slice_range_is_exact(
+            semantic, operation, &receiver, &start, &end))
+        return false;
+    const XrTargetCallRecord *match = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        const XrTargetCallRecord *call = &calls[i];
+        if (call->result_value != binding->semantic_value ||
+            call->calling_convention !=
+                XR_TARGET_CALL_CONVENTION_STRING_SLICE_RANGE)
+            continue;
+        if (match ||
+            call->semantic_operation >=
+                xr_semantic_plan_operation_count(semantic) ||
+            xr_semantic_plan_operation(semantic, call->semantic_operation) !=
+                operation ||
+            call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+            call->caller_function != operation->function ||
+            call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+            call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+            call->source_export != XR_SEMANTIC_INDEX_NONE ||
+            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_callee_identity) ||
+            call->result_slot != binding->slot ||
+            call->result_register_rep != binding->register_rep ||
+            call->result_memory_rep != binding->memory_rep ||
+            call->argument_count != 0 || call->adapter_count != 0 ||
+            call->flags != XR_TARGET_CALL_TAIL ||
+            call->result_mode != XR_TARGET_CALL_VALUE ||
+            call->result_ownership != XR_TARGET_CALL_RETURN_OWNED ||
+            call->target_kind != XR_TARGET_CALL_TARGET_STRING_SLICE_RANGE)
+            return false;
+        match = call;
+    }
+    if (!match)
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver;
+    if (start_value)
+        *start_value = start;
+    if (end_value)
+        *end_value = end;
+    return true;
+}
+
+static bool string_slice_bound_has_exact_projection(
+    const XrTargetPlan *target_plan, uint32_t semantic_value) {
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(target_plan, binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(target_plan, binding->memory_rep)
+                : NULL;
+    return binding && register_rep && memory_rep &&
+           register_rep->kind == XR_MACHINE_REP_I64 &&
+           memory_rep->kind == XR_MACHINE_REP_I64;
+}
+
 static bool exact_stringbuilder_append_string_recipe(
     const XrTargetPlan *target_plan,const XrTargetValueRepRecord *binding,
     uint32_t *receiver_value,uint32_t *argument_value) {
@@ -2684,11 +2759,36 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_symbol &&
                        strcmp(value->recipe_symbol,
                               XR_C_RUNE_IS_WHITESPACE_SYMBOL) == 0;
+    if (value->materialization ==
+        XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE) {
+        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_argument_value == UINT32_MAX &&
+                       value->recipe_argument_count == 2 &&
+                       value->recipe_arguments != NULL && value->recipe_symbol &&
+                       strcmp(value->recipe_symbol,
+                              XR_C_STRING_SLICE_RANGE_SYMBOL) == 0;
+        for (uint16_t i = 0; recipe_valid && i < 2; i++) {
+            const XrCRecipeArgumentView *argument =
+                &value->recipe_arguments[i];
+            recipe_valid = argument->semantic_value != UINT32_MAX &&
+                           argument->kind ==
+                               XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND &&
+                           argument->reserved[0] == 0 &&
+                           argument->reserved[1] == 0 &&
+                           argument->reserved[2] == 0;
+        }
+    }
     if(value->materialization==XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING)
         recipe_valid=value->rep==XR_C_VALUE_REP_TAGGED&&value->recipe_operand_value!=UINT32_MAX&&
             value->recipe_argument_value!=UINT32_MAX&&value->recipe_symbol&&
             strcmp(value->recipe_symbol,XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL)==0;
-    if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRING_CONCAT) {
+    if (value->materialization ==
+        XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE) {
+        /* The complete range recipe was checked above. */
+    } else if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRING_CONCAT) {
         recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED &&
                        value->literal_byte_length == 0 &&
                        value->literal_bytes == NULL &&
@@ -3150,6 +3250,12 @@ bool xr_c_emission_plan_verify(
         uint32_t expected_rune_is_whitespace_receiver = UINT32_MAX;
         bool expected_rune_is_whitespace = exact_rune_is_whitespace_recipe(
             target_plan, binding, &expected_rune_is_whitespace_receiver);
+        uint32_t expected_string_slice_receiver = UINT32_MAX;
+        uint32_t expected_string_slice_start = UINT32_MAX;
+        uint32_t expected_string_slice_end = UINT32_MAX;
+        bool expected_string_slice_range = exact_string_slice_range_recipe(
+            target_plan, binding, &expected_string_slice_receiver,
+            &expected_string_slice_start, &expected_string_slice_end);
         uint32_t expected_append_string_receiver=UINT32_MAX,expected_append_string_argument=UINT32_MAX;
         bool expected_append_string=exact_stringbuilder_append_string_recipe(target_plan,binding,
             &expected_append_string_receiver,&expected_append_string_argument);
@@ -3216,6 +3322,8 @@ bool xr_c_emission_plan_verify(
                                                                           ? XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NEXT
                                                                     : expected_rune_to_uint32
                                                                           ? XR_C_VALUE_MATERIALIZATION_RUNE_TO_UINT32
+                                                                    : expected_string_slice_range
+                                                                          ? XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE
                                                                     : expected_rune_is_whitespace
                                                                           ? XR_C_VALUE_MATERIALIZATION_RUNE_IS_WHITESPACE
                                                                     : expected_string_runes
@@ -3245,6 +3353,8 @@ bool xr_c_emission_plan_verify(
                                                                 ? expected_iterator_rune_next_receiver
                                                           : expected_rune_to_uint32
                                                                 ? expected_rune_to_uint32_receiver
+                                                          : expected_string_slice_range
+                                                                ? expected_string_slice_receiver
                                                           : expected_rune_is_whitespace
                                                                 ? expected_rune_is_whitespace_receiver
                                                           : expected_string_runes
@@ -3273,6 +3383,8 @@ bool xr_c_emission_plan_verify(
                                                                         ? XR_C_ITERATOR_RUNE_NEXT_SYMBOL
                                                                   : expected_rune_to_uint32
                                                                         ? XR_C_RUNE_TO_UINT32_SYMBOL
+                                                                  : expected_string_slice_range
+                                                                        ? XR_C_STRING_SLICE_RANGE_SYMBOL
                                                                   : expected_rune_is_whitespace
                                                                         ? XR_C_RUNE_IS_WHITESPACE_SYMBOL
                                                                   : expected_string_runes
@@ -3331,7 +3443,32 @@ bool xr_c_emission_plan_verify(
                  : row->literal_bytes != NULL))
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "C emission materialization recipe is not exact");
-        if (expected_adt_enum) {
+        if (expected_string_slice_range) {
+            if (row->recipe_argument_count != 2 || !row->recipe_arguments ||
+                2u > plan->recipe_argument_count - projected_recipe_arguments ||
+                row->recipe_arguments !=
+                    &plan->recipe_arguments[projected_recipe_arguments])
+                return emission_error(
+                    error, error_size, "XR_TARGET_1001",
+                    "C emission String.slice bound partition is invalid");
+            const uint32_t expected_bounds[2] = {
+                expected_string_slice_start, expected_string_slice_end};
+            for (uint16_t argument = 0; argument < 2; argument++) {
+                const XrCRecipeArgumentView *actual =
+                    &row->recipe_arguments[argument];
+                if (actual->semantic_value != expected_bounds[argument] ||
+                    !string_slice_bound_has_exact_projection(
+                        target_plan, actual->semantic_value) ||
+                    actual->kind !=
+                        XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND ||
+                    actual->reserved[0] != 0 || actual->reserved[1] != 0 ||
+                    actual->reserved[2] != 0)
+                    return emission_error(
+                        error, error_size, "XR_TARGET_1001",
+                        "C emission String.slice bound is not exact");
+            }
+            projected_recipe_arguments += 2;
+        } else if (expected_adt_enum) {
             if (!expected_enum_payloads ||
                 row->recipe_argument_count != expected_enum.payload_count ||
                 !row->recipe_arguments ||
@@ -3491,6 +3628,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |
         XR_TARGET_FAMILY_PANIC_CATCH_STORAGE |
         XR_TARGET_FAMILY_ADT_ENUM_STORAGE |
+        XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE |
         XR_TARGET_FAMILY_AGGREGATE |
         XR_TARGET_FAMILY_CALL_ADAPTER;
     if ((xr_target_plan_completed_family_mask(target_plan) &
@@ -3565,6 +3703,24 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         uint16_t concat_argument_count = 0;
         XrSemanticAdtEnumConstructorShape enum_shape = {0};
         const XrSemanticOperandRecord *enum_payloads = NULL;
+        uint32_t string_slice_start = UINT32_MAX;
+        uint32_t string_slice_end = UINT32_MAX;
+        if (exact_string_slice_range_recipe(
+                target_plan, binding, NULL,
+                &string_slice_start, &string_slice_end)) {
+            if (!string_slice_bound_has_exact_projection(
+                    target_plan, string_slice_start) ||
+                !string_slice_bound_has_exact_projection(
+                    target_plan, string_slice_end))
+                return emission_error(
+                    error, error_size, "XR_TARGET_1001",
+                    "String.slice bound has no exact C projection");
+            if (recipe_argument_count > UINT32_MAX - 2u)
+                return emission_error(
+                    error, error_size, "XR_EXEC_5003",
+                    "C emission recipe argument budget overflow");
+            recipe_argument_count += 2u;
+        }
         if (exact_adt_enum_constructor_recipe(target_plan, binding,
                                               &enum_shape,
                                               &enum_payloads)) {
@@ -3753,6 +3909,12 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         bool direct_array_ref_parameter =
             exact_direct_local_array_ref_parameter_recipe(
                 target_plan, binding, &direct_array_ref_storage);
+        uint32_t string_slice_receiver = UINT32_MAX;
+        uint32_t string_slice_start = UINT32_MAX;
+        uint32_t string_slice_end = UINT32_MAX;
+        bool string_slice_range = exact_string_slice_range_recipe(
+            target_plan, binding, &string_slice_receiver,
+            &string_slice_start, &string_slice_end);
         if (scalar_addressable_alias) {
             value->materialization =
                 XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS;
@@ -3761,6 +3923,34 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             value->materialization =
                 XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER;
             value->recipe_discriminant = direct_array_ref_storage;
+        } else if (string_slice_range) {
+            if (2u > plan->recipe_argument_count - recipe_argument_index) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(
+                    error, error_size, "XR_TARGET_1001",
+                    "String.slice recipe argument partition is invalid");
+            }
+            value->recipe_symbol = xr_strdup(XR_C_STRING_SLICE_RANGE_SYMBOL);
+            if (!value->recipe_symbol) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(error, error_size, "XR_EXEC_5003",
+                                      "String.slice recipe allocation failed");
+            }
+            value->materialization =
+                XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE;
+            value->recipe_operand_value = string_slice_receiver;
+            value->recipe_argument_count = 2;
+            value->recipe_arguments =
+                &plan->recipe_arguments[recipe_argument_index];
+            const uint32_t bounds[2] = {
+                string_slice_start, string_slice_end};
+            for (uint16_t argument = 0; argument < 2; argument++) {
+                XrCRecipeArgumentView *recipe_argument =
+                    &plan->recipe_arguments[recipe_argument_index++];
+                recipe_argument->semantic_value = bounds[argument];
+                recipe_argument->kind =
+                    XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND;
+            }
         } else if (array_intrinsic) {
             value->recipe_symbol = xr_strdup(array_symbol);
             if (!value->recipe_symbol) {

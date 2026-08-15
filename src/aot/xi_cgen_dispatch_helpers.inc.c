@@ -11296,6 +11296,21 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
 
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
+    XrCValueEmissionView string_slice_range = {0};
+    if (cg_string_slice_range_emission_view(
+            ctx, f, v, &string_slice_range)) {
+        bool discard = cg_unused_call_result_emits_statement(ctx, f, v);
+        if (discard)
+            fprintf(out, "xrt_discard_owned(");
+        fprintf(out, "%s(", string_slice_range.recipe_symbol);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+        fprintf(out, discard ? "))" : ")");
+        return;
+    }
     XrCValueEmissionView rune_is_whitespace = {0};
     if (cg_rune_is_whitespace_emission_view(
             ctx, f, v, &rune_is_whitespace)) {

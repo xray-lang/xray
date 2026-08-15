@@ -19,6 +19,7 @@
 #include "xr_semantic_iterator_rune_next_shape.h"
 #include "xr_semantic_rune_to_uint32_shape.h"
 #include "xr_semantic_rune_is_whitespace_shape.h"
+#include "xr_semantic_string_slice_shape.h"
 #include "../ownership/xr_ownership_check.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
@@ -180,7 +181,7 @@ static bool semantic_source_enum_identity_exact(const XrSemanticTypeRecord *type
                type->enum_layout_id == 0 && type->enum_member_count == 0 &&
                type->enum_flags == 0 && type->reserved_enum == 0;
     const char *cursor = type->source_enum_key;
-    static const char prefix[] = "source-enum-v1:schema=29:owner=";
+    static const char prefix[] = "source-enum-v1:schema=30:owner=";
     if (!cursor || strncmp(cursor, prefix, sizeof(prefix) - 1u) != 0 ||
         !verify_id(cursor, type->source_enum_identity) ||
         type->enum_member_count == 0 || type->enum_layout_id == 0 ||
@@ -1613,6 +1614,17 @@ static bool verify_rune_is_whitespace(
                   "rune.isWhitespace authority is not exact");
 }
 
+static bool verify_string_slice_range(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    char *error, size_t error_size) {
+    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_STRING_SLICE_RANGE)
+        return true;
+    return xr_semantic_string_slice_range_is_exact(
+               plan, operation, NULL, NULL, NULL) ||
+           report(error, error_size, "XR_SEM_0019",
+                  "String.slice(start, end) authority is not exact");
+}
+
 static bool verify_string_builder_to_string(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     char *error, size_t error_size) {
@@ -2348,6 +2360,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_rune_to_uint32(plan, operation, error, error_size))
             return false;
         if (!verify_rune_is_whitespace(plan, operation, error, error_size))
+            return false;
+        if (!verify_string_slice_range(plan, operation, error, error_size))
             return false;
         if (!verify_string_builder_append_rune(plan, operation, error, error_size))
             return false;

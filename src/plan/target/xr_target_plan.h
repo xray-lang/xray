@@ -65,6 +65,7 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE (UINT64_C(1) << 31)
 #define XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE (UINT64_C(1) << 32)
 #define XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE (UINT64_C(1) << 33)
+#define XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE (UINT64_C(1) << 34)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -128,7 +129,8 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_ADT_ENUM_STORAGE |                                \
                  XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE |                         \
                  XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE |                     \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE))
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE |          \
+                 XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -260,6 +262,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_NEXT,
     XR_TARGET_CALL_CONVENTION_RUNE_TO_UINT32,
     XR_TARGET_CALL_CONVENTION_RUNE_IS_WHITESPACE,
+    XR_TARGET_CALL_CONVENTION_STRING_SLICE_RANGE,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -306,6 +309,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NEXT,
     XR_TARGET_CALL_TARGET_RUNE_TO_UINT32,
     XR_TARGET_CALL_TARGET_RUNE_IS_WHITESPACE,
+    XR_TARGET_CALL_TARGET_STRING_SLICE_RANGE,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetArrayIntrinsicKind {

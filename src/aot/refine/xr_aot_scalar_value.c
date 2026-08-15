@@ -11,6 +11,7 @@
 #include "xr_aot_scalar_value.h"
 #include "../../plan/semantic/xr_semantic_enum_shape.h"
 #include "../../plan/semantic/xr_semantic_string_shape.h"
+#include "../../plan/semantic/xr_semantic_string_slice_shape.h"
 #include "../../ir/xi_own.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
@@ -277,7 +278,8 @@ static const XrSemanticTypeRecord *semantic_value_type(
 
 static bool adapter_source_rep_is_exact(
     const XrTargetPlan *target_plan,
-    const XrTargetValueRepRecord *binding, const XiValue *value) {
+    const XrTargetValueRepRecord *binding, const XiValue *value,
+    bool exact_string_slice_result) {
     const XiValue *source = value && value->nargs == 1 && value->args
                                 ? value->args[0]
                                 : NULL;
@@ -292,6 +294,9 @@ static bool adapter_source_rep_is_exact(
         xr_target_plan_machine_rep(target_plan, binding->memory_rep);
     if (!machine)
         return false;
+    if (value->op == XI_BOX && exact_string_slice_result &&
+        machine->kind == XR_MACHINE_REP_DYN_VALUE)
+        return source->rep == XR_REP_PTR;
     switch ((XrMachineRepKind) machine->kind) {
         case XR_MACHINE_REP_F32:
         case XR_MACHINE_REP_F64: return source->rep == XR_REP_F64;
@@ -369,7 +374,24 @@ XR_FUNC bool xr_aot_rep_adapter_value_is_exact(
             return fail(error, error_size,
                         "backend representation adapter source has no exact authority family");
     }
-    if (!adapter_source_rep_is_exact(target_plan, binding, value))
+    bool exact_string_slice_result = false;
+    uint32_t semantic_operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic_plan);
+    for (uint32_t i = 0; i < semantic_operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic_plan, i);
+        if (!operation || operation->result_value != source_value)
+            continue;
+        if (!xr_semantic_string_slice_range_is_exact(
+                semantic_plan, operation, NULL, NULL, NULL))
+            continue;
+        if (exact_string_slice_result)
+            return fail(error, error_size,
+                        "backend String.slice result identity is ambiguous");
+        exact_string_slice_result = true;
+    }
+    if (!adapter_source_rep_is_exact(target_plan, binding, value,
+                                     exact_string_slice_result))
         return fail(error, error_size,
                     "backend representation adapter source rep is inconsistent");
     if ((value->op == XI_ENUM_DESCRIPTOR_BOX ||

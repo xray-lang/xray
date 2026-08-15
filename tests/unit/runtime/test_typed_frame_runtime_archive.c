@@ -17,7 +17,7 @@ int main(void) {
     XrModuleGenerationIdentity generation = {0};
     uint8_t byte = 0;
     int64_t result = 1;
-    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(31) ||
+    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(32) ||
         XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK != XR_TARGET_REQUIRED_FAMILIES ||
         limits.max_arena_bytes != XR_TYPED_FRAME_MAX_ARENA_BYTES ||
         xr_typed_frame_create(NULL, &fingerprint, 0, &limits, &frame) !=

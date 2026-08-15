@@ -625,6 +625,33 @@ static XrSemanticPlan *build_string_runes_semantic(void) {
     return finish_stringbuilder_semantic(function, entry, "String.runes");
 }
 
+static XrSemanticPlan *build_string_slice_range_semantic(void) {
+    XiFunc *function = xi_func_new("target_string_slice_range", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *source = xi_const_str(function, entry, "target-slice", &stub_exact_string);
+    XiValue *start = xi_const_int(function, entry, 1, &stub_int);
+    XiValue *end = xi_const_int(function, entry, 4, &stub_int);
+    XiValue *slice = xi_value_new(function, entry, XI_CALL_METHOD,
+                                  &stub_exact_string, 3);
+    REQUIRE(source && start && end && slice);
+    slice->args[0] = source;
+    slice->args[1] = start;
+    slice->args[2] = end;
+    slice->aux = (void *) "slice";
+    slice->aux_int = 32;
+    slice->flags |= XI_FLAG_TAIL;
+    slice->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+    slice->call_return_ownership.param_index = -1;
+    slice->call_return_ownership.complete = true;
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = slice;
+    return finish_stringbuilder_semantic(function, entry,
+                                         "String.slice(start, end)");
+}
+
 static XrSemanticPlan *build_iterator_rune_has_next_semantic(void) {
     XiFunc *function = xi_func_new("target_iterator_rune_has_next", &stub_int);
     REQUIRE(function != NULL);
@@ -1658,7 +1685,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "5b7d8acb4dd269cce20480f1a66febbfcc16b35068fa9fab24ab7b80cdf8a700") == 0);
+                   "21746b94b1f37dd8d8483fa52d82b749ba58846a2cb69cfed2418651567f4f17") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2752,7 +2779,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "056f77a2e7eea7e17325e2aae74113bf39a9189b46f117531ed8799d1a86c193") == 0);
+                   "d78f1e2deee40814943e571e2f821d63072fb3d02413b6cb2d24de38d9f7d068") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
         XrTargetCallArgumentRecord fabricated_argument = {0};
@@ -2936,7 +2963,7 @@ static XrSemanticPlan *build_lowered_tail_coroutine_chain(void) {
     leaf->parent_func = wrapper;
 
     /* Seed XiCoroLower so it materializes the caller state CFG.  The seed is
-     * rewritten below before SemanticPlan is frozen: schema 29 must then
+     * rewritten below before SemanticPlan is frozen: schema 30 must then
      * derive wrapper
      * suspendability solely through the DIRECT_LOCAL tail edge, while the wrapper itself has no
      * state row. */
@@ -3338,7 +3365,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "9f400d8697367d34487eab48e2b121d33abe565bad843e369bcdfae435755b1e") == 0);
+                   "738e47ab41434cdc9612949a5844b85cbef4f30873df6d5f9053ec012a98c164") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -3627,7 +3654,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "c2470b8063a95c334bb7d050b1304d5d1a9680f7891d27dbff02ceb9016b08d8") == 0);
+                   "ea1fe61173aef2b5476871dbd48bd0e452919fe0110e0a28d73e607baad32ba7") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");
@@ -4063,6 +4090,72 @@ static void test_string_runes_call_authority(void) {
     expect_verify_failure(plan, "XR_TARGET_1001");
     plan->slots[result->slot].ownership = saved_slot_ownership;
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
+static void test_string_slice_range_call_authority(void) {
+    XrSemanticPlan *semantic = build_string_slice_range_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)) && plan);
+    REQUIRE((plan->completed_family_mask &
+             XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE) != 0);
+    XrTargetCallRecord *call = find_call_by_convention(
+        plan, XR_TARGET_CALL_CONVENTION_STRING_SLICE_RANGE);
+    const XrSemanticOperationRecord *operation =
+        call ? xr_semantic_plan_operation(semantic, call->semantic_operation) : NULL;
+    const XrTargetValueRepRecord *result =
+        operation ? xr_target_plan_value_rep(plan, operation->result_value) : NULL;
+    REQUIRE(operation &&
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_STRING_SLICE_RANGE &&
+            call->target_kind == XR_TARGET_CALL_TARGET_STRING_SLICE_RANGE &&
+            call->flags == XR_TARGET_CALL_TAIL &&
+            call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+            call->result_mode == XR_TARGET_CALL_VALUE && call->argument_count == 0 &&
+            plan->call_arguments_count == 0 && result &&
+            plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[result->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+
+    XrStableId saved_identity = call->identity;
+    call->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->identity = saved_identity;
+    uint8_t saved_kind = call->target_kind;
+    call->target_kind = XR_TARGET_CALL_TARGET_STRING_RUNES;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->target_kind = saved_kind;
+    uint8_t saved_convention = call->calling_convention;
+    call->calling_convention = XR_TARGET_CALL_CONVENTION_STRING_RUNES;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->calling_convention = saved_convention;
+    uint16_t saved_flags = call->flags;
+    call->flags = 0;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->flags = saved_flags;
+    uint8_t saved_ownership = call->result_ownership;
+    call->result_ownership = XR_TARGET_CALL_BORROW;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_ownership = saved_ownership;
+    uint8_t saved_root = plan->slots[result->slot].root_kind;
+    plan->slots[result->slot].root_kind = XR_TARGET_ROOT_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->slots[result->slot].root_kind = saved_root;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    XrSemanticOperationRecord *slice_operation =
+        &semantic->operations[call->semantic_operation];
+    uint8_t saved_intrinsic = slice_operation->intrinsic_kind;
+    slice_operation->intrinsic_kind = XR_SEM_INTRINSIC_NONE;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    slice_operation->intrinsic_kind = saved_intrinsic;
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
 
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
@@ -4716,6 +4809,11 @@ int main(int argc, char **argv) {
         puts("Array intrinsic TargetPlan authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "string-slice-range-authority") == 0) {
+        test_string_slice_range_call_authority();
+        puts("String range-slice TargetPlan authority tests passed");
+        return 0;
+    }
     test_direct_local_raw_pointer_call_authority();
     test_unit_enum_target_rep_mutations();
     test_array_intrinsic_call_authority();
@@ -4725,6 +4823,7 @@ int main(int argc, char **argv) {
     test_stringbuilder_to_string_call_authority();
     test_stringbuilder_append_string_call_authority();
     test_string_runes_call_authority();
+    test_string_slice_range_call_authority();
     test_iterator_rune_has_next_call_authority();
     test_iterator_rune_next_call_authority();
     test_rune_to_uint32_call_authority();

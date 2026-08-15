@@ -33,6 +33,7 @@
 #include "../semantic/xr_semantic_iterator_rune_next_shape.h"
 #include "../semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
+#include "../semantic/xr_semantic_string_slice_shape.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../../base/xmalloc.h"
@@ -3242,6 +3243,8 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
             xr_semantic_iterator_rune_next_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_rune_to_uint32_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_rune_is_whitespace_is_exact(plan->semantic_plan, operation, NULL) ||
+            xr_semantic_string_slice_range_is_exact(
+                plan->semantic_plan, operation, NULL, NULL, NULL) ||
             operation_is_exact_json_namespace_value(plan->semantic_plan, operation, NULL) ||
             exact_array_member_result ||
             (exact_direct_callees &&
@@ -3384,6 +3387,9 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         plan->semantic_plan, operation, NULL);
     bool exact_string_runes =
         xr_semantic_string_runes_is_exact(plan->semantic_plan, operation, NULL);
+    bool exact_string_slice_range =
+        xr_semantic_string_slice_range_is_exact(
+            plan->semantic_plan, operation, NULL, NULL, NULL);
     bool exact_json_namespace_value =
         operation_is_exact_json_namespace_value(plan->semantic_plan, operation, NULL);
     /* An array member that hands back its receiver binds a dynamic result of
@@ -3493,6 +3499,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                               exact_stringbuilder_to_string ||
                               exact_stringbuilder_append_string ||
                               exact_string_runes ||
+                              exact_string_slice_range ||
                               exact_json_namespace_value || exact_array_member_result ||
                               exact_direct_callee || exact_go_callee ||
                               exact_go_task ||
@@ -3529,6 +3536,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         exact_stringbuilder_to_string ||
         exact_stringbuilder_append_string ||
         exact_string_runes ||
+        exact_string_slice_range ||
         exact_json_namespace_value ||
         exact_array_member_result ||
         exact_direct_callee ||
@@ -5152,6 +5160,14 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             }
             expected_calls++;
         }
+        if (xr_semantic_string_slice_range_is_exact(
+                semantic, operation, NULL, NULL, NULL)) {
+            if (expected_calls == UINT32_MAX) {
+                valid = false;
+                break;
+            }
+            expected_calls++;
+        }
         if (operation_is_exact_stringbuilder_to_string(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) { valid = false; break; }
             expected_calls++;
@@ -5332,6 +5348,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         bool rune_is_whitespace = !semantic_target &&
             xr_semantic_rune_is_whitespace_is_exact(
                 semantic, operation, &rune_is_whitespace_receiver);
+        uint32_t string_slice_receiver = XR_SEMANTIC_INDEX_NONE;
+        uint32_t string_slice_start = XR_SEMANTIC_INDEX_NONE;
+        uint32_t string_slice_end = XR_SEMANTIC_INDEX_NONE;
+        bool string_slice_range = !semantic_target &&
+            xr_semantic_string_slice_range_is_exact(
+                semantic, operation, &string_slice_receiver,
+                &string_slice_start, &string_slice_end);
         uint32_t to_string_receiver = XR_SEMANTIC_INDEX_NONE;
         bool stringbuilder_to_string = !semantic_target &&
             operation_is_exact_stringbuilder_to_string(semantic, operation, &to_string_receiver);
@@ -5394,7 +5417,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_VIEW;
         }
-        if (stringbuilder_append_rune || string_runes) {
+        if (stringbuilder_append_rune || string_runes || string_slice_range) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -5455,6 +5478,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                              direct_adt_enum_result ||
                              stringbuilder_append_rune ||
                              string_runes ||
+                             string_slice_range ||
                              stringbuilder_to_string ||
                              stringbuilder_append_string ||
                              json_namespace_value || class_construction ||
@@ -6206,6 +6230,33 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     result->slot < plan->slots_count &&
                     plan->slots[result->slot].root_kind == XR_TARGET_ROOT_NONE &&
                     plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+            if (!valid)
+                break;
+        } else if (string_slice_range) {
+            valid = result_type && !suspends &&
+                    reconstruct_call_identity(
+                        "xray-target-string-slice-range-v1", operation->id,
+                        result_type->id, string_slice_receiver,
+                        &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    call->argument_count == 0 &&
+                    call->flags == XR_TARGET_CALL_TAIL &&
+                    call->calling_convention ==
+                        XR_TARGET_CALL_CONVENTION_STRING_SLICE_RANGE &&
+                    call->target_kind ==
+                        XR_TARGET_CALL_TARGET_STRING_SLICE_RANGE &&
+                    call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+                    result && result->slot < plan->slots_count &&
+                    plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                    plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
+            (void) string_slice_start;
+            (void) string_slice_end;
             if (!valid)
                 break;
         } else if (stringbuilder_to_string) {

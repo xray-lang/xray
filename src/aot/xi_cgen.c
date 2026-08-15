@@ -3286,6 +3286,50 @@ static bool cg_rune_is_whitespace_emission_view(
     return true;
 }
 
+static bool cg_string_slice_range_emission_view(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    XrCValueEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !value || !out)
+        return false;
+    CgValueEmissionStatus status =
+        cg_value_emission_view(ctx, function, value, out);
+    if (status != CG_VALUE_EMISSION_FOUND ||
+        out->materialization !=
+            XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE)
+        return false;
+    if (value->nargs != 3 || !value->args || !value->args[0] ||
+        !value->args[1] || !value->args[2] ||
+        out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol ||
+        !out->recipe_symbol[0] || out->recipe_argument_count != 2 ||
+        !out->recipe_arguments) {
+        (void) cg_value_emission_fail(
+            ctx, "String.slice has no exact immutable C recipe");
+        return false;
+    }
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    if (!cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
+        receiver != out->recipe_operand_value) {
+        (void) cg_value_emission_fail(
+            ctx, "String.slice receiver identity changed");
+        return false;
+    }
+    for (uint16_t i = 0; i < 2; i++) {
+        uint32_t bound = XR_SEMANTIC_INDEX_NONE;
+        if (out->recipe_arguments[i].kind !=
+                XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND ||
+            !cg_value_semantic_id(ctx, function, value->args[i + 1u],
+                                  &bound) ||
+            bound != out->recipe_arguments[i].semantic_value) {
+            (void) cg_value_emission_fail(
+                ctx, "String.slice bound identity changed");
+            return false;
+        }
+    }
+    return true;
+}
+
 static void cg_emit_channel_receive_payload_expression(
     FILE *out, const XrCValueEmissionView *view, uint32_t value_id,
     bool coroutine) {
@@ -8451,12 +8495,17 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
             XrCValueEmissionView runes = {0};
             if (cg_string_runes_emission_view(ctx, f, user, &runes))
                 return arg_index == 0;
+            XrCValueEmissionView string_slice = {0};
+            if (cg_string_slice_range_emission_view(
+                    ctx, f, user, &string_slice))
+                return arg_index < 3;
             /* The runtime string-slice helper and float formatting helper
              * render their scalar arguments with emit_value_as_rep_ctx(). */
-            if (arg_index >= 1 && user->args[0] && user->args[0]->type && user->aux &&
+            if (arg_index == 1 && user->nargs == 2 && user->args[0] &&
+                user->args[0]->type && user->aux &&
                 (user->args[0]->type->kind == XR_KIND_STRING ||
                  user->args[0]->type->kind == XR_KIND_UNKNOWN) &&
-                strcmp((const char *) user->aux, "slice") == 0 && user->nargs <= 3)
+                strcmp((const char *) user->aux, "slice") == 0)
                 return true;
             if (arg_index == 1 && user->nargs == 2 && user->args[0] && user->args[0]->type &&
                 user->args[0]->type->kind == XR_KIND_FLOAT && user->aux &&
@@ -8594,6 +8643,11 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
                     XrCValueEmissionView runes = {0};
                     if (!allowed_string_use &&
                         cg_string_runes_emission_view(ctx, f, user, &runes))
+                        allowed_string_use = a == 0;
+                    XrCValueEmissionView string_slice = {0};
+                    if (!allowed_string_use &&
+                        cg_string_slice_range_emission_view(
+                            ctx, f, user, &string_slice))
                         allowed_string_use = a == 0;
                     if (!allowed_string_use)
                         return false;
