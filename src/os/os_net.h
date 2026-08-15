@@ -44,7 +44,11 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #include <process.h>
 
 #if defined(_MSC_VER)

@@ -37,7 +37,11 @@
 
 #ifdef _WIN32
 #include <fcntl.h>
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 
 static inline int xr_cluster_pipe(int fds[2]) {
     return _pipe(fds, 4096, _O_BINARY);

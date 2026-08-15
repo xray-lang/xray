@@ -33,7 +33,11 @@
 #endif
 #include <direct.h>
 #include <fcntl.h>
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #include <sys/stat.h>
 #include <sys/utime.h>
 #include <windows.h>

@@ -5,6 +5,16 @@
 # Macro for adding unit tests that link to xray_core
 # ============================================================================
 
+# Clang's Windows ASan instrumentation expands analyzer/VM recursion far
+# beyond the PE default stack.  Keep the sanitizer lane representative by
+# reserving the same explicit stack budget for every unit-test executable;
+# otherwise unrelated deep-path tests die in __chkstk before ASan can report
+# a memory violation.  Directory link options also cover the few standalone
+# unit-test targets that do not use add_xray_unit_test().
+if(ENABLE_ASAN AND (MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC"))
+    add_link_options("LINKER:/STACK:16777216")
+endif()
+
 macro(add_xray_unit_test name source)
     add_executable(${name} ${source} ${ARGN})
     target_compile_definitions(${name} PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
@@ -299,10 +309,10 @@ target_sources(test_xi_cgen PRIVATE plan/target_profile_test_fixture.c)
 target_compile_definitions(test_xi_cgen PRIVATE
     XRAY_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
-if(MSVC)
+if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
     # This exhaustive generator test recursively lowers hundreds of fixtures.
     # MSVC ASan expands the call frames beyond PE/COFF's 1 MiB default stack.
-    target_link_options(test_xi_cgen PRIVATE "/STACK:8388608")
+    target_link_options(test_xi_cgen PRIVATE "LINKER:/STACK:8388608")
 endif()
 add_xray_unit_test(test_xi_lower_hardfail ir/test_xi_lower_hardfail.c)
 add_xray_unit_test(test_xi_stage ir/test_xi_stage.c)
@@ -627,7 +637,7 @@ add_xray_unit_test(test_scope_wait coro/test_scope_wait.c)
 add_xray_unit_test(test_work_queue_wait coro/test_work_queue_wait.c)
 add_xray_unit_test(test_result_group coro/test_result_group.c)
 add_xray_unit_test(test_native_backend coro/test_native_backend.c)
-if(MSVC)
+if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
     # These white-box scheduler fixtures embed the complete isolate/runtime
     # state and exceed the PE default 1 MiB stack before the first assertion.
     foreach(target IN ITEMS
@@ -637,7 +647,7 @@ if(MSVC)
             test_work_queue_wait
             test_result_group
             test_native_backend)
-        target_link_options(${target} PRIVATE "/STACK:16777216")
+        target_link_options(${target} PRIVATE "LINKER:/STACK:16777216")
     endforeach()
 endif()
 

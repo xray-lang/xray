@@ -61,6 +61,13 @@ class CacheInspectionTest(unittest.TestCase):
         self._cache("CMAKE_BUILD_TYPE:STRING=Debug\n")
         self.assertIsNotNone(sanitizer.verify_configured(self.build, "ENABLE_ASAN=ON"))
 
+    def test_non_bool_cache_identity_is_verified(self):
+        self._cache("CMAKE_MSVC_RUNTIME_LIBRARY:UNINITIALIZED=MultiThreadedDLL\n")
+        self.assertIsNone(sanitizer.verify_configured(
+            self.build, "CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL"))
+        self.assertIsNotNone(sanitizer.verify_configured(
+            self.build, "CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDebugDLL"))
+
     def test_unconfigured_tree_is_not_an_error(self):
         # Nothing to contradict yet; configure() will create it.
         self.assertIsNone(sanitizer.verify_configured(self.build, "ENABLE_ASAN=ON"))
@@ -204,22 +211,22 @@ class ReuseGuardTest(unittest.TestCase):
 
 
 class BuildSpecTest(unittest.TestCase):
-    def test_lanes_do_not_disable_stdlib_fastpaths(self):
-        # Turning XRAY_STDLIB_VM_FASTPATHS off looks like a free saving --
-        # generating them is unrelated to memory safety -- but
-        # test_stdlib_vm_fastpath_abi is registered under
-        # if(XRAY_STDLIB_VM_FASTPATHS), so disabling it does not make that test
-        # cheaper, it removes it from the lane. This pins the decision: a gate
-        # may not trade coverage for speed.
-        import re
-
+    def test_lanes_pin_supported_stdlib_bootstrap_shape(self):
+        # Sanitizer evidence must use the same bootstrap contract as every
+        # target-machine build. Inheriting the ON default would run a native AOT
+        # generator before the compiler under test has proved the required
+        # target families and can hang before sanitizer tests start.
         root = Path(__file__).resolve().parents[3]
         for name in ("run_asan_focused.py", "run_lsan_strict.py", "run_tsan_focused.py"):
             text = (root / "scripts" / name).read_text(encoding="utf-8")
-            self.assertNotIn(
+            self.assertIn(
                 'XRAY_STDLIB_VM_FASTPATHS=OFF', text,
-                f"{name} disables the stdlib fastpaths, which drops "
-                "test_stdlib_vm_fastpath_abi from the lane")
+                f"{name} does not pin the supported stdlib bootstrap shape")
+
+    def test_asan_pins_supported_windows_crt_identity(self):
+        root = Path(__file__).resolve().parents[3]
+        text = (root / "scripts" / "run_asan_focused.py").read_text(encoding="utf-8")
+        self.assertIn("CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL", text)
 
     def test_defaults(self):
         spec = sanitizer.BuildSpec(build_dir=Path("/tmp/x"),
@@ -245,6 +252,22 @@ class DefaultJobsTest(unittest.TestCase):
     def test_garbage_falls_back(self):
         os.environ["XT_JOBS_PROBE"] = "not-a-number"
         self.assertGreaterEqual(sanitizer.default_jobs("XT_JOBS_PROBE"), 1)
+
+
+class ConsoleOutputTest(unittest.TestCase):
+    def test_narrow_console_escapes_unrepresentable_diagnostics(self):
+        class NarrowStream:
+            encoding = "ascii"
+
+            def __init__(self):
+                self.text = ""
+
+            def write(self, value):
+                self.text += value
+
+        stream = NarrowStream()
+        sanitizer.write_console(stream, "PASS \u2713\n")
+        self.assertEqual(stream.text, "PASS \\u2713\n")
 
 
 if __name__ == "__main__":

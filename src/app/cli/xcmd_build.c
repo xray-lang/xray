@@ -46,7 +46,11 @@
 #include "../../os/os_fs.h"
 #include "../../os/os_proc.h"
 #ifdef XR_OS_WINDOWS
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #define XR_CLI_CHMOD _chmod
 #else
 #include <sys/stat.h>

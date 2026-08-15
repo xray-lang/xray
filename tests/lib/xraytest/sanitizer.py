@@ -36,6 +36,19 @@ from . import platform, proc
 SOURCE_ROOTS = ("src", "include", "stdlib", "tests", "CMakeLists.txt")
 
 
+def write_console(stream, text: str) -> None:
+    """Write subprocess output without crashing on a narrow console codec.
+
+    Windows may expose a GBK stdout even when test programs emit UTF-8 symbols.
+    Preserve the diagnostic as an ASCII escape when the active stream encoding
+    cannot represent a character; the sanitizer verdict must never be hidden by
+    the reporting path itself.
+    """
+    encoding = getattr(stream, "encoding", None) or "utf-8"
+    safe = text.encode(encoding, errors="backslashreplace").decode(encoding)
+    stream.write(safe)
+
+
 @dataclass
 class BuildSpec:
     """How to configure one sanitizer build tree."""
@@ -93,7 +106,8 @@ def verify_configured(build_dir: Path, required_flag: str) -> str | None:
     # (e.g. "-fsanitize=thread") that must occur somewhere in the cache.
     if "=" in required_flag and not required_flag.startswith("-"):
         name, value = required_flag.split("=", 1)
-        if f"{name}:BOOL={value}" not in text:
+        if not any(line.startswith(f"{name}:") and line.endswith(f"={value}")
+                   for line in text.splitlines()):
             return f"{build_dir} is configured without {required_flag}"
         return None
 

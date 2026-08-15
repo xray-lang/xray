@@ -59,7 +59,11 @@ def main(argv: list[str]) -> int:
 
     spec = sanitizer.BuildSpec(
         build_dir=build_dir,
-        sanitizer_flags=("ENABLE_ASAN=ON", "ENABLE_UBSAN=ON"),
+        sanitizer_flags=(
+            "ENABLE_ASAN=ON",
+            "ENABLE_UBSAN=ON",
+            "XRAY_STDLIB_VM_FASTPATHS=OFF",
+        ),
     )
 
     log(f"configuring {build_dir.name} (ASan+UBSan, detect_leaks=1)")
@@ -69,7 +73,14 @@ def main(argv: list[str]) -> int:
     if not sanitizer.build(spec, jobs, timeout, log):
         return 1
 
-    problem = sanitizer.verify_configured(build_dir, "ENABLE_ASAN=ON")
+    problem = next(
+        (
+            candidate
+            for flag in spec.verification_targets()
+            if (candidate := sanitizer.verify_configured(build_dir, flag))
+        ),
+        None,
+    )
     if problem:
         log(problem, error=True)
         return 1
@@ -78,7 +89,7 @@ def main(argv: list[str]) -> int:
     result = sanitizer.ctest(build_dir, include=ctest_regex, jobs=jobs,
                              timeout_each=300, timeout=timeout)
     if not result.ok:
-        sys.stdout.write(result.combined_text())
+        sanitizer.write_console(sys.stdout, result.combined_text())
         return 1
 
     log("PASS")

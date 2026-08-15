@@ -19,7 +19,11 @@
 #include <string.h>
 #include <sys/stat.h>
 #ifdef _WIN32
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #include <direct.h>
 #include <windows.h>
 #define test_mkdir(p) _mkdir(p)

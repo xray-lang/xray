@@ -132,9 +132,9 @@ static __forceinline int __builtin_mul_overflow(int64_t a, int64_t b, int64_t *r
 }
 #endif  // XR_COMPILER_MSVC builtins
 
-/* ========== MSVC POSIX Function Shims ========== */
+/* ========== Windows CRT POSIX Function Shims ========== */
 
-#if defined(XR_COMPILER_MSVC)
+#if defined(_MSC_VER)
 #include <string.h>
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp

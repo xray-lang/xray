@@ -203,7 +203,11 @@ static XrProto *compile_xi(const char *source) {
  * payload, then restore. tmpfile() handles platform tempdir lookup
  * and auto-deletes on fclose. */
 #ifdef _WIN32
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #define xi_cmp_dup _dup
 #define xi_cmp_dup2 _dup2
 #define xi_cmp_close _close

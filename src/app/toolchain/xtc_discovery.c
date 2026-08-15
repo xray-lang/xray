@@ -19,7 +19,11 @@
 #include <string.h>
 #ifdef XR_OS_WINDOWS
 #include "../../shared/xr_win_utf.h"
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #else
 #include <unistd.h>
 #endif

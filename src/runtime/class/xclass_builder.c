@@ -391,11 +391,11 @@ int xr_class_builder_add_static_method_closure(XrClassBuilder *builder, const ch
 
 /* ========== Interface Operations ========== */
 
-int xr_class_builder_add_interface(XrClassBuilder *builder, XrClass *interface) {
+int xr_class_builder_add_interface(XrClassBuilder *builder, XrClass *interface_class) {
     XR_DCHECK(builder != NULL, "add_interface: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
 
-    if (interface == NULL) {
+    if (interface_class == NULL) {
         xr_log_warning("class", "add_interface: invalid interface");
         return -1;
     }
@@ -407,7 +407,7 @@ int xr_class_builder_add_interface(XrClassBuilder *builder, XrClass *interface) 
             return -1;
     }
 
-    builder->interfaces[builder->interface_count] = interface;
+    builder->interfaces[builder->interface_count] = interface_class;
     builder->interface_count++;
 
     return 0;

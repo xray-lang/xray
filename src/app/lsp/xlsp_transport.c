@@ -32,7 +32,11 @@
 #include "../../os/os_fd.h"
 #include "../../os/os_net.h"
 #ifdef XR_OS_WINDOWS
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #endif
 
 #define INITIAL_BUF_SIZE 4096

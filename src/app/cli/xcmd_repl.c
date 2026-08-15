@@ -32,7 +32,11 @@
 #include <stdbool.h>
 #include <signal.h>
 #ifdef XR_OS_WINDOWS
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #else
 #include <unistd.h>
 #endif

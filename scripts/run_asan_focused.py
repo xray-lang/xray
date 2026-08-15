@@ -97,7 +97,7 @@ def compile_workload(log, xray: Path, main: Path, label: str,
                           cwd=project, timeout=timeout)
         if not result.ok:
             log(f"{label} AOT emit failed", error=True)
-            sys.stderr.write(result.combined_text()[-8000:])
+            sanitizer.write_console(sys.stderr, result.combined_text()[-8000:])
             return False
         log(f"{label} AOT emit OK: {out.stat().st_size} bytes")
         return True
@@ -129,15 +129,31 @@ def main(argv: list[str]) -> int:
     log(f"ROOT={PROJECT_DIR}")
     log(f"build dir={build_dir.name} jobs={jobs}")
 
-    # The stdlib VM fastpaths stay ON. Turning them off looked like a free
-    # saving -- they are unrelated to compiler memory safety -- but
-    # test_stdlib_vm_fastpath_abi is registered under
-    # if(XRAY_STDLIB_VM_FASTPATHS), so disabling the option does not make that
-    # test cheaper, it makes it *disappear* from the lane. Coverage is the one
-    # thing a gate may not trade for speed.
+    # The unified target-machine line has one supported bootstrap shape: the
+    # optional generated stdlib VM fastpaths are disabled. Their generator is
+    # itself a native AOT consumer, so enabling it makes the sanitizer build
+    # depend on target families that this lane is meant to validate. Pin the
+    # option instead of inheriting a cache/default and accidentally measuring a
+    # different compiler.
     spec = sanitizer.BuildSpec(
         build_dir=build_dir,
-        sanitizer_flags=("ENABLE_ASAN=ON", "ENABLE_UBSAN=ON"),
+        sanitizer_flags=(
+            "ENABLE_ASAN=ON",
+            "ENABLE_UBSAN=ON",
+            "XRAY_STDLIB_VM_FASTPATHS=OFF",
+        ),
+        # clang-cl's ASan runtime interposes the release UCRT allocator.  A
+        # Debug-profile build that links ucrtbased.dll instead reports false
+        # cross-allocator bad-free failures from _putenv_s before reaching the
+        # code under test.  Keep Debug code generation while selecting the
+        # supported dynamic release CRT explicitly.
+        extra_cache=("CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",),
+        verify_cache_contains=(
+            "ENABLE_ASAN=ON",
+            "ENABLE_UBSAN=ON",
+            "XRAY_STDLIB_VM_FASTPATHS=OFF",
+            "CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
+        ),
     )
 
     xray = build_dir / platform.exe_name("xray")
@@ -155,7 +171,14 @@ def main(argv: list[str]) -> int:
         log(f"ASan xray binary not found at {xray}", error=True)
         return 1
 
-    problem = sanitizer.verify_configured(build_dir, "ENABLE_ASAN=ON")
+    problem = next(
+        (
+            candidate
+            for flag in spec.verification_targets()
+            if (candidate := sanitizer.verify_configured(build_dir, flag))
+        ),
+        None,
+    )
     if problem:
         log(problem, error=True)
         return 1
@@ -164,7 +187,7 @@ def main(argv: list[str]) -> int:
     result = sanitizer.ctest(build_dir, include=ctest_regex, exclude=ctest_exclude,
                             jobs=jobs, timeout_each=300, timeout=timeout)
     if not result.ok:
-        sys.stdout.write(result.combined_text())
+        sanitizer.write_console(sys.stdout, result.combined_text())
         return 1
 
     log(f"running subprocess-sensitive unit tests serially (regex: {serial_regex})")
@@ -172,7 +195,7 @@ def main(argv: list[str]) -> int:
         result = sanitizer.ctest(build_dir, include=serial_regex, jobs=1,
                                  timeout_each=300, timeout=timeout)
         if not result.ok:
-            sys.stdout.write(result.combined_text())
+            sanitizer.write_console(sys.stdout, result.combined_text())
             return 1
     else:
         log(f"no serial unit tests matched {serial_regex}; skipping")
@@ -182,7 +205,7 @@ def main(argv: list[str]) -> int:
         result = sanitizer.ctest(build_dir, include=diff_regex, jobs=jobs,
                                  timeout_each=600, timeout=timeout)
         if not result.ok:
-            sys.stdout.write(result.combined_text())
+            sanitizer.write_console(sys.stdout, result.combined_text())
             return 1
     else:
         log(f"no backend-diff tests matched {diff_regex}; skipping")

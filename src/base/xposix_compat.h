@@ -9,9 +9,8 @@
  *
  * KEY CONCEPT:
  *   Provides inline implementations of common POSIX functions that
- *   MSVC does not ship. Include this header where needed; on
- *   non-MSVC compilers all definitions are no-ops (the real
- *   functions are already available via libc).
+ *   the MSVC ABI does not ship. Include this header where needed; compilers
+ *   targeting another C runtime use the real functions from that runtime.
  */
 
 #ifndef XPOSIX_COMPAT_H
@@ -19,7 +18,7 @@
 
 #include "xplatform.h"
 
-#if defined(XR_COMPILER_MSVC)
+#if defined(_MSC_VER)
 
 #include <stdlib.h>
 #include <string.h>
@@ -136,17 +135,23 @@ static inline time_t timegm(struct tm *tm) {
 /* ========== poll (minimal: writable check for connect) ========== */
 
 #include <winsock2.h>
+/* rpcndr.h, pulled in by the Windows networking headers, exposes `small` as
+ * a preprocessor alias for an RPC wire type.  Do not leak that SDK-private
+ * spelling through Xray's lowest-level portability header. */
+#ifdef small
+#undef small
+#endif
 
 static inline int poll(struct pollfd *fds, unsigned long nfds, int timeout) {
     return WSAPoll(fds, nfds, timeout);
 }
 
-#endif  // XR_COMPILER_MSVC
+#endif  // _MSC_VER
 
 /* MinGW/UCRT does not provide GNU memmem. Keep the shim separate from the
  * wider MSVC compatibility block because MinGW already supplies most of the
  * other POSIX helpers above. */
-#if defined(XR_OS_WINDOWS) && !defined(XR_COMPILER_MSVC)
+#if defined(XR_OS_WINDOWS) && !defined(_MSC_VER)
 #include <string.h>
 static inline void *xr_windows_memmem(const void *haystack, size_t haystacklen, const void *needle,
                                       size_t needlelen) {

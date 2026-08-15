@@ -926,8 +926,8 @@ void http2_conn_free(XrH2Conn *conn) {
 // from any HTTPS peer because the server's TLS state machine treats the
 // stray bytes as a malformed TLS record.
 //
-// Loop until all `len` bytes are delivered: both SSL_write and POSIX
-// write() are permitted to perform short writes, so a single call is
+// Loop until all `len` bytes are delivered: both SSL_write and the socket
+// transport are permitted to perform short writes, so a single call is
 // insufficient when the kernel send buffer is full or OpenSSL needs to
 // split the data across multiple TLS records.
 static int h2_send(XrH2Conn *conn, const void *buf, size_t len) {
@@ -938,7 +938,7 @@ static int h2_send(XrH2Conn *conn, const void *buf, size_t len) {
         if (conn->tls_conn) {
             n = xr_tls_conn_write(conn->isolate, conn->tls_conn, p + total, len - total);
         } else {
-            n = (int) write(conn->fd, p + total, len - total);
+            n = (int) xr_socket_send((xr_socket_t) conn->fd, p + total, len - total);
         }
         if (n <= 0)
             return -1;
@@ -1249,7 +1249,7 @@ static XrH2Stream *http2_get_stream(XrH2Conn *conn, uint32_t stream_id) {
 // coroutine-aware wait path as HTTP/1.1 pooled connections.
 //
 // Loop until we've drained the requested length: both OpenSSL's SSL_read
-// and POSIX read() are permitted to return fewer bytes than asked for,
+// and the socket transport are permitted to return fewer bytes than asked for,
 // even when more data is available on the wire. The frame parser above
 // (http2_recv) expects an exact-length read for the 9-byte frame header
 // and for the payload, so a short read was silently mis-classified as
@@ -1264,7 +1264,7 @@ static int h2_recv(XrH2Conn *conn, void *buf, size_t len) {
         if (conn->tls_conn) {
             n = xr_tls_conn_read(conn->isolate, conn->tls_conn, p + total, len - total);
         } else {
-            n = (int) read(conn->fd, p + total, len - total);
+            n = (int) xr_socket_recv((xr_socket_t) conn->fd, p + total, len - total);
         }
         if (n <= 0) {
             return total > 0 ? (int) total : n;

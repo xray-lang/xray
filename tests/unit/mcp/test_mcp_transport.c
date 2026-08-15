@@ -17,7 +17,11 @@
 
 #ifdef XR_OS_WINDOWS
 #include <fcntl.h>
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #define test_pipe(fds) _pipe((fds), 4096, _O_BINARY)
 #define test_close(fd) _close((fd))
 #define test_read(fd, buf, len) _read((fd), (buf), (unsigned int) (len))

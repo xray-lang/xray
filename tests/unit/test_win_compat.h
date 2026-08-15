@@ -23,11 +23,19 @@
 #include <sys/stat.h>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
 #include <Windows.h>
 #include <crtdbg.h>
 #include <direct.h>
 #include <fcntl.h>
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #include <malloc.h>
 #include <process.h>
 #include <sys/stat.h>

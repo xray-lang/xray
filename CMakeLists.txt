@@ -1610,12 +1610,12 @@ target_include_directories(xray_stdlib_bcgen PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
-if(MSVC)
+if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
     # The bootstrap compiler runs the same recursive parser/lowering passes as
     # xray.  ASan inflates those frames enough to overflow PE/COFF's default
     # 1 MiB stack while compiling the embedded stdlib, so give both compiler
     # executables the same Unix-like main-thread allowance.
-    target_link_options(xray_stdlib_bcgen PRIVATE "/STACK:8388608")
+    target_link_options(xray_stdlib_bcgen PRIVATE "LINKER:/STACK:8388608")
 endif()
 
 # The stage-1 compiler links the same module factory registry as the final runtime but
@@ -1879,8 +1879,8 @@ add_dependencies(xray xray_aot_core xray_rt_coro xray_vm)
 # The compiler's recursive IR/AOT passes can exceed the PE/COFF default 1 MiB
 # stack on larger programs. Match the usual Unix main-thread allowance so
 # native Windows builds do not fail with STATUS_STACK_OVERFLOW.
-if(MSVC)
-    target_link_options(xray PRIVATE "/STACK:8388608")
+if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
+    target_link_options(xray PRIVATE "LINKER:/STACK:8388608")
 endif()
 
 target_link_libraries(xray PRIVATE xray_core)

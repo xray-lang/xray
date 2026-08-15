@@ -12,7 +12,11 @@
 #include "module/xlockfile.h"
 #include "base/xmalloc.h"
 #ifdef _WIN32
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #include <windows.h>
 #else
 #include <unistd.h>

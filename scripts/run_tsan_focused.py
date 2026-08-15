@@ -82,11 +82,12 @@ def main(argv: list[str]) -> int:
         sanitizer_flags=(
             'CMAKE_C_FLAGS=-fsanitize=thread -fno-omit-frame-pointer',
             'CMAKE_EXE_LINKER_FLAGS=-fsanitize=thread',
+            'XRAY_STDLIB_VM_FASTPATHS=OFF',
         ),
         targets=("xray", "test_ownership_audit"),
         # No ENABLE_* BOOL exists here, so reuse is verified by looking for the
         # instrumentation flag itself in the cache.
-        verify_cache_contains=("-fsanitize=thread",),
+        verify_cache_contains=("-fsanitize=thread", "XRAY_STDLIB_VM_FASTPATHS=OFF"),
     )
 
     xray = build_dir / platform.exe_name("xray")

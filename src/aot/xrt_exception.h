@@ -45,12 +45,10 @@
 #include <stdlib.h>
 #include <string.h>
 #if defined(_WIN32)
+#if defined(_MSC_VER)
+#include <corecrt_io.h> /* _isatty/_fileno for the panic report's TTY colour gate */
+#else
 #include <io.h> /* _isatty/_fileno for the panic report's TTY colour gate */
-#if defined(__MINGW32__)
-/* The generated-C include path also contains the language's net/io.h.  Some
- * MinGW drivers resolve that project header before the CRT's <io.h>, so keep
- * the one CRT declaration used here explicit and provider-independent. */
-int __cdecl _isatty(int fd);
 #endif
 #else
 #include <unistd.h> /* isatty for the panic report's TTY colour gate */

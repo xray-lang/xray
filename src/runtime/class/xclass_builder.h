@@ -65,7 +65,7 @@ XR_FUNC int xr_class_builder_add_static_method_closure(XrClassBuilder *builder, 
                                                        XrClosure *closure, int param_count,
                                                        uint32_t flags);
 
-XR_FUNC int xr_class_builder_add_interface(XrClassBuilder *builder, XrClass *interface);
+XR_FUNC int xr_class_builder_add_interface(XrClassBuilder *builder, XrClass *interface_class);
 
 XR_FUNC void xr_class_builder_set_flags(XrClassBuilder *builder, uint32_t flags);
 

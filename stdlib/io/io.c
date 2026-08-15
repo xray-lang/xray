@@ -44,7 +44,11 @@
 
 #ifdef XR_OS_WINDOWS
 #include <fcntl.h>
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #include <direct.h>
 #include <sys/types.h>
 #include <sys/stat.h>

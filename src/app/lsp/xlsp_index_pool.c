@@ -23,7 +23,11 @@
 #include <errno.h>
 
 #ifdef XR_OS_WINDOWS
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
 #include <io.h>
+#endif
 #include <fcntl.h>
 #define xr_pipe(fds) _pipe((fds), 4096, _O_BINARY)
 #define xr_pipe_read(fd, buf, n) _read((fd), (buf), (unsigned) (n))
