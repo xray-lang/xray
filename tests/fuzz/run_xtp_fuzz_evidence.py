@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -21,6 +22,11 @@ FUZZ_RE = re.compile(
     r"sanitizer=(?P<sanitizer>[a-z0-9-]+)"
 )
 RESOURCE_RE = re.compile(r"^XTP resource ladder:", re.MULTILINE)
+RESOURCE_METRICS_RE = re.compile(
+    r"^XTP resource ladder:.*wall-ms=(?P<wall>[0-9]+(?:\.[0-9]+)?) "
+    r"peak-bytes=(?P<rss>[0-9]+)$",
+    re.MULTILINE,
+)
 
 
 def fail(message: str) -> int:
@@ -33,11 +39,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--runtime", type=Path, required=True)
     parser.add_argument("--fuzzer", type=Path, required=True)
     parser.add_argument("--resource-stress", type=Path, required=True)
+    parser.add_argument("--corpus", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument(
         "--sanitizer", choices=("release", "asan-ubsan", "tsan"), required=True
     )
     parser.add_argument("--timeout", type=float, default=90.0)
+    parser.add_argument("--max-resource-wall-ms", type=float, default=30000.0)
+    parser.add_argument("--max-resource-rss-bytes", type=int, default=536870912)
     parser.add_argument("--host-os", default=platform.system().lower())
     return parser.parse_args(argv)
 
@@ -103,7 +112,27 @@ def verify_fuzzer_output(output: str, sanitizer: str) -> str | None:
     return None
 
 
-def verify_resource_output(output: str) -> str | None:
+def corpus_identity(corpus: Path) -> tuple[str, int] | str:
+    if not corpus.is_dir():
+        return f"missing corpus directory: {corpus}"
+    files = sorted(path for path in corpus.rglob("*") if path.is_file())
+    if not files:
+        return f"corpus has zero inputs: {corpus}"
+    digest = hashlib.sha256()
+    for path in files:
+        relative = path.relative_to(corpus).as_posix().encode("utf-8")
+        content = path.read_bytes()
+        if not content:
+            return f"corpus contains an empty input: {path}"
+        digest.update(len(relative).to_bytes(4, "little"))
+        digest.update(relative)
+        digest.update(len(content).to_bytes(8, "little"))
+        digest.update(content)
+    return digest.hexdigest(), len(files)
+
+
+def verify_resource_output(output: str, max_wall_ms: float,
+                           max_rss_bytes: int) -> str | None:
     ladders = len(RESOURCE_RE.findall(output))
     if ladders == 0:
         return "resource stress executed zero size-ladder cases"
@@ -111,6 +140,14 @@ def verify_resource_output(output: str) -> str | None:
         return f"resource stress must report four size-ladder cases, got {ladders}"
     if "XTP resource stress tests passed" not in output:
         return "resource stress did not report a complete bounded run"
+    metrics = list(RESOURCE_METRICS_RE.finditer(output))
+    if len(metrics) != 4:
+        return "resource stress omitted wall/RSS metrics for a size-ladder case"
+    for match in metrics:
+        if float(match.group("wall")) > max_wall_ms:
+            return f"resource ladder wall time exceeds {max_wall_ms:.3f}ms"
+        if int(match.group("rss")) > max_rss_bytes:
+            return f"resource ladder RSS exceeds {max_rss_bytes} bytes"
     return None
 
 
@@ -120,6 +157,8 @@ def run_evidence(args: argparse.Namespace) -> int:
         return fail("expected commit must be a 40-character lowercase SHA-1")
     if args.timeout <= 0:
         return fail("timeout must be positive")
+    if args.max_resource_wall_ms <= 0 or args.max_resource_rss_bytes <= 0:
+        return fail("resource budgets must be positive")
     if args.sanitizer == "tsan" and args.host_os.lower().startswith("windows"):
         return fail("ThreadSanitizer is unsupported on Windows; this lane is red, not skipped")
 
@@ -131,6 +170,11 @@ def run_evidence(args: argparse.Namespace) -> int:
         error = validate_executable(path, label)
         if error is not None:
             return fail(error)
+
+    corpus = corpus_identity(args.corpus)
+    if isinstance(corpus, str):
+        return fail(corpus)
+    corpus_digest, corpus_inputs = corpus
 
     error = verify_runtime_identity(args.runtime, expected_commit, args.timeout)
     if error is not None:
@@ -157,7 +201,8 @@ def run_evidence(args: argparse.Namespace) -> int:
     resource_seconds = time.monotonic() - resource_started
     if resource.returncode != 0:
         return fail(f"resource stress exited {resource.returncode}: {resource.stderr.strip()}")
-    error = verify_resource_output(resource.stdout)
+    error = verify_resource_output(resource.stdout, args.max_resource_wall_ms,
+                                   args.max_resource_rss_bytes)
     if error is not None:
         return fail(error)
 
@@ -165,7 +210,8 @@ def run_evidence(args: argparse.Namespace) -> int:
         "PASS: XTP fuzz evidence "
         f"commit={expected_commit} sanitizer={args.sanitizer} "
         f"mutations=26 resource_ladders=4 fuzzer_seconds={fuzzer_seconds:.3f} "
-        f"resource_seconds={resource_seconds:.3f}"
+        f"resource_seconds={resource_seconds:.3f} corpus_inputs={corpus_inputs} "
+        f"corpus_sha256={corpus_digest}"
     )
     return 0
 
