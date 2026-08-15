@@ -18,13 +18,6 @@
 
 #include "xr_vm_trace.h"
 
-typedef enum XrVmDebugFactAvailability {
-    XR_VM_DEBUG_FACT_AVAILABLE = 0,
-    XR_VM_DEBUG_FACT_NOT_APPLICABLE,
-    XR_VM_DEBUG_FACT_CONTEXT_UNAVAILABLE,
-    XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE,
-} XrVmDebugFactAvailability;
-
 typedef enum XrVmMaterializeStatus {
     XR_VM_MATERIALIZE_OK = 0,
     XR_VM_MATERIALIZE_INVALID_ARGUMENT,
@@ -57,6 +50,17 @@ typedef struct XrVmMaterializedEvent {
     uint8_t layout_identity;
     uint8_t reserved8[3];
     uint32_t semantic_function;
+    uint32_t semantic_operation;
+    uint32_t coroutine_state;
+    uint32_t source_start_line;
+    uint32_t source_start_column;
+    uint32_t source_end_line;
+    uint32_t source_end_column;
+    XrStableId semantic_operation_identity;
+    XrStableId source_span_identity;
+    XrStableId owner_stable_identity;
+    XrStableId coroutine_state_stable_identity;
+    XrFingerprint layout_fingerprint;
     XrVmMaterializedSlot result;
     XrVmMaterializedSlot operands[2];
     uint8_t call_identity;

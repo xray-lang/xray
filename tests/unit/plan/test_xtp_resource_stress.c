@@ -415,10 +415,19 @@ static void test_nonempty_extent_and_debug_field_mutations(void) {
     REQUIRE(xr_target_plan_cleanups(fixture.plan, &count) == NULL && count == 0);
     REQUIRE(xr_target_plan_entry_expectations(fixture.plan, &count) == NULL &&
             count == 0);
+    REQUIRE(xr_target_plan_debug_facts(fixture.plan, &count) != NULL && count > 0);
+    copy = copy_artifact(&fixture);
+    uint8_t *debug_facts = directory_entry(copy, XR_XTP_SECTION_DEBUG_FACTS);
+    size_t debug_offset = (size_t) xr_xtp_take_u64(debug_facts + 8);
+    copy[debug_offset + 20] ^= 1u; /* semantic_operation */
+    resign_section(copy, XR_XTP_SECTION_DEBUG_FACTS);
+    resign_artifact(copy, fixture.size);
+    expect_deterministic_materialize_failure(&fixture, copy);
+    xr_free(copy);
     REQUIRE(XR_XTP_SECTION_ENTRY_EXPECTATIONS == XR_XTP_SECTION_COROUTINES + 1u);
-    REQUIRE(XR_XTP_SECTION_COUNT == XR_XTP_SECTION_ENTRY_EXPECTATIONS + 1u);
-    puts("XTP mutation boundary: root, cleanup, and dynamic entry rows are "
-         "absent from the scalar verified fixture");
+    REQUIRE(XR_XTP_SECTION_DEBUG_FACTS == XR_XTP_SECTION_ENTRY_EXPECTATIONS + 1u);
+    REQUIRE(XR_XTP_SECTION_COUNT == XR_XTP_SECTION_DEBUG_FACTS + 1u);
+    puts("XTP mutation boundary: debug facts are source-backed and verified");
     dispose_fixture(&fixture);
 }
 

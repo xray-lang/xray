@@ -268,6 +268,8 @@ static XrTypedDispatchStatus emit_trace_event(
     XrTypedDispatchExecution *execution, XrVmTraceEvent *event) {
     if (!execution->debug_session)
         return XR_TYPED_DISPATCH_OK;
+    if (!xr_typed_debug_attach_event_facts(execution->plan, event))
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     if (!xr_typed_debug_emit(
             execution->debug_session, execution->fingerprint,
             execution->generation_identity_present

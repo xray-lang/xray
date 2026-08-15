@@ -202,6 +202,12 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U16, parameter_count) F(U16, native_abi) F(U8, value_kind) F(U8, adapter_kind)               \
     F(U16, flags) F(U32, reserved32) F(U64, target_data_layout)                                    \
     F(FP, target_profile_fingerprint) F(FP, entry_abi_fingerprint) F(FP, adapter_fingerprint)
+#define XR_XTP_DEBUG_FACT_FIELDS(F)                                                               \
+    F(U32, id) F(U32, instruction) F(U32, function) F(U32, semantic_operation)                  \
+    F(U32, coroutine_state) F(U32, source_start_line) F(U32, source_start_column)                \
+    F(U32, source_end_line) F(U32, source_end_column) F(ID, semantic_operation_identity)         \
+    F(ID, source_span_identity) F(ID, owner_identity) F(ID, coroutine_state_identity)            \
+    F(FP, layout_fingerprint)
 
 #define XR_XTP_TYPED_ROWS(F)                                                                       \
     F(TARGET_PROFILE, XrTargetProfileDraft, XR_XTP_PROFILE_FIELDS)                                \
@@ -222,8 +228,9 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(CLEANUPS, XrTargetCleanupRecord, XR_XTP_CLEANUP_FIELDS)                                    \
     F(ADAPTERS, XrTargetAdapterRecord, XR_XTP_ADAPTER_FIELDS)                                    \
     F(CAPABILITIES, XrTargetCapabilityRecord, XR_XTP_CAPABILITY_FIELDS)                          \
-    F(COROUTINES, XrTargetCoroutineStateRecord, XR_XTP_COROUTINE_FIELDS)                            \
-    F(ENTRY_EXPECTATIONS, XrTargetEntryExpectationRecord, XR_XTP_ENTRY_EXPECTATION_FIELDS)
+    F(COROUTINES, XrTargetCoroutineStateRecord, XR_XTP_COROUTINE_FIELDS)                          \
+    F(ENTRY_EXPECTATIONS, XrTargetEntryExpectationRecord, XR_XTP_ENTRY_EXPECTATION_FIELDS)        \
+    F(DEBUG_FACTS, XrTargetDebugFactRecord, XR_XTP_DEBUG_FACT_FIELDS)
 
 #define XR_XTP_FIELD_SIZE_U8(field) +1u
 #define XR_XTP_FIELD_SIZE_U16(field) +2u
@@ -301,6 +308,7 @@ XR_FUNC uint64_t xr_xtp_table_count_limit(XrXtpSectionKind kind) {
         case XR_XTP_SECTION_CAPABILITIES: return 65536;
         case XR_XTP_SECTION_COROUTINES: return 10000000;
         case XR_XTP_SECTION_ENTRY_EXPECTATIONS: return 10000000;
+        case XR_XTP_SECTION_DEBUG_FACTS: return 40000000;
         default: return 0;
     }
 }

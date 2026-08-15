@@ -38,6 +38,7 @@
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
+#include "../ownership/xr_ownership_certificate.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
@@ -300,7 +301,8 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
         plan->root_slots_count > 40000000u || plan->cleanups_count > 40000000u ||
         plan->adapters_count > 1000000u || plan->capabilities_count > 65536u ||
         plan->coroutines_count > 10000000u ||
-        plan->entry_expectations_count > 10000000u)
+        plan->entry_expectations_count > 10000000u ||
+        plan->debug_facts_count > 40000000u)
         return report(error, error_size, "XR_EXEC_5003", "TargetPlan exceeds hard budgets");
     size_t total = sizeof(*plan);
 #define XR_ADD_TARGET_BYTES(name)                                                                 \
@@ -329,6 +331,7 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
     XR_ADD_TARGET_BYTES(capabilities);
     XR_ADD_TARGET_BYTES(coroutines);
     XR_ADD_TARGET_BYTES(entry_expectations);
+    XR_ADD_TARGET_BYTES(debug_facts);
 #undef XR_ADD_TARGET_BYTES
     if (total > (size_t) UINT32_MAX)
         return report(error, error_size, "XR_EXEC_5003", "TargetPlan exceeds total byte budget");
@@ -355,6 +358,7 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
     XR_REQUIRE_TARGET_TABLE(capabilities);
     XR_REQUIRE_TARGET_TABLE(coroutines);
     XR_REQUIRE_TARGET_TABLE(entry_expectations);
+    XR_REQUIRE_TARGET_TABLE(debug_facts);
 #undef XR_REQUIRE_TARGET_TABLE
     return true;
 }
@@ -7337,6 +7341,177 @@ static bool verify_entry_expectations(const XrTargetPlan *plan, char *error,
                            "dynamic entry expectation table is not exact");
 }
 
+static const XrSemanticEntityRecord *debug_entity_for(
+    const XrSemanticPlan *semantic, uint16_t kind, uint8_t subject_kind,
+    uint32_t subject) {
+    const XrSemanticEntityRecord *match = NULL;
+    uint32_t count = (uint32_t) xr_semantic_plan_entity_count(semantic);
+    for (uint32_t i = 0; i < count; i++) {
+        const XrSemanticEntityRecord *candidate =
+            xr_semantic_plan_entity(semantic, i);
+        if (!candidate || candidate->kind != kind ||
+            candidate->subject_kind != subject_kind ||
+            candidate->subject != subject)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static uint32_t debug_operation_for_instruction(
+    const XrTargetPlan *plan, const XrTargetInstructionRecord *instruction) {
+    if (!plan || !instruction)
+        return XR_SEMANTIC_INDEX_NONE;
+    if (instruction->result_slot < plan->slots_count) {
+        const XrTargetSlotRecord *slot = &plan->slots[instruction->result_slot];
+        if (slot->id == instruction->result_slot &&
+            slot->function == instruction->function &&
+            slot->semantic_operation != XR_SEMANTIC_INDEX_NONE)
+            return slot->semantic_operation;
+    }
+    if ((instruction->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
+         instruction->opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64) &&
+        instruction->immediate_bits <= UINT32_MAX) {
+        uint32_t call = instruction->opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64
+                            ? (instruction->immediate_bits <
+                                       plan->entry_expectations_count
+                                   ? plan->entry_expectations[
+                                         (uint32_t) instruction->immediate_bits]
+                                         .call
+                                   : XR_SEMANTIC_INDEX_NONE)
+                            : (uint32_t) instruction->immediate_bits;
+        if (call < plan->calls_count && plan->calls[call].id == call &&
+            plan->calls[call].caller_function == instruction->function)
+            return plan->calls[call].semantic_operation;
+    }
+    if (instruction->operand_slots[0] < plan->slots_count) {
+        const XrTargetSlotRecord *slot = &plan->slots[instruction->operand_slots[0]];
+        if (slot->id == instruction->operand_slots[0] &&
+            slot->function == instruction->function)
+            return slot->semantic_operation;
+    }
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
+static bool verify_debug_facts(const XrTargetPlan *plan, char *error,
+                               size_t error_size) {
+    const XrSemanticPlan *semantic = plan->semantic_plan;
+    const XrOwnershipCertificate *ownership = xr_semantic_plan_ownership(semantic);
+    const XrFingerprint zero_fingerprint = {{0}};
+    if (plan->debug_facts_count != plan->instructions_count)
+        return report(error, error_size, "XR_TARGET_1005",
+                      "target debug facts do not cover every instruction");
+    for (uint32_t i = 0; i < plan->debug_facts_count; i++) {
+        const XrTargetDebugFactRecord *fact = &plan->debug_facts[i];
+        const XrTargetInstructionRecord *instruction = &plan->instructions[i];
+        uint32_t operation = debug_operation_for_instruction(plan, instruction);
+        if (fact->id != instruction->id || fact->instruction != instruction->id ||
+            fact->function != instruction->function ||
+            (fact->coroutine_state != XR_SEMANTIC_INDEX_NONE &&
+             fact->coroutine_state >= plan->coroutines_count))
+            return report(error, error_size, "XR_TARGET_1005",
+                          "target debug fact row identity is invalid");
+        if (operation == XR_SEMANTIC_INDEX_NONE) {
+            if (fact->semantic_operation != XR_SEMANTIC_INDEX_NONE ||
+                !stable_id_is_zero(fact->semantic_operation_identity) ||
+                !stable_id_is_zero(fact->source_span_identity) ||
+                !stable_id_is_zero(fact->owner_identity) ||
+                !stable_id_is_zero(fact->coroutine_state_identity) ||
+                !fingerprint_is_zero(fact->layout_fingerprint) ||
+                fact->source_start_line || fact->source_start_column ||
+                fact->source_end_line || fact->source_end_column ||
+                fact->coroutine_state != XR_SEMANTIC_INDEX_NONE)
+                return report(error, error_size, "XR_TARGET_1005",
+                              "target debug fact invented a synthetic relation");
+            continue;
+        }
+        const XrSemanticOperationRecord *semantic_operation =
+            xr_semantic_plan_operation(semantic, operation);
+        if (!semantic_operation || operation != fact->semantic_operation ||
+            semantic_operation->function != instruction->function ||
+            !xr_stable_id_equal(fact->semantic_operation_identity,
+                                semantic_operation->id))
+            return report(error, error_size, "XR_TARGET_1005",
+                          "target debug semantic operation relation is invalid");
+        if (semantic_operation->source_file) {
+            const XrSemanticEntityRecord *span = debug_entity_for(
+                semantic, XR_SEM_ENTITY_DEBUG_SPAN,
+                XR_SEM_ENTITY_SUBJECT_OPERATION, operation);
+            if (!span || !xr_stable_id_equal(fact->source_span_identity, span->id) ||
+                fact->source_start_line != semantic_operation->source_start_line ||
+                fact->source_start_column != semantic_operation->source_start_column ||
+                fact->source_end_line != semantic_operation->source_end_line ||
+                fact->source_end_column != semantic_operation->source_end_column)
+                return report(error, error_size, "XR_TARGET_1005",
+                              "target debug source span relation is invalid");
+        } else if (!stable_id_is_zero(fact->source_span_identity) ||
+                   fact->source_start_line || fact->source_start_column ||
+                   fact->source_end_line || fact->source_end_column) {
+            return report(error, error_size, "XR_TARGET_1005",
+                          "target debug source span was guessed");
+        }
+        XrFingerprint expected_layout = zero_fingerprint;
+        for (uint32_t layout = 0; layout < plan->layouts_count; layout++) {
+            if (plan->layouts[layout].semantic_type != semantic_operation->result_type)
+                continue;
+            if (!fingerprint_is_zero(expected_layout))
+                return report(error, error_size, "XR_TARGET_1005",
+                              "target debug layout relation is ambiguous");
+            expected_layout = plan->layouts[layout].fingerprint;
+        }
+        if (!xr_fingerprint_equal(fact->layout_fingerprint, expected_layout))
+            return report(error, error_size, "XR_TARGET_1005",
+                          "target debug layout relation is invalid");
+        XrStableId expected_owner = {{0}};
+        if (ownership && semantic_operation->result_value != XR_SEMANTIC_INDEX_NONE) {
+            for (uint32_t owner = 0;
+                 owner < xr_ownership_certificate_owner_count(ownership); owner++) {
+                const XrOwnershipOwnerRecord *record =
+                    xr_ownership_certificate_owner(ownership, owner);
+                if (!record)
+                    return report(error, error_size, "XR_TARGET_1005",
+                                  "target debug ownership certificate is invalid");
+                if (record->function != instruction->function ||
+                    record->origin_value != semantic_operation->result_value)
+                    continue;
+                const XrSemanticEntityRecord *entity = debug_entity_for(
+                    semantic, XR_SEM_ENTITY_OWNER, XR_SEM_ENTITY_SUBJECT_OWNER, owner);
+                if (!entity || !stable_id_is_zero(expected_owner))
+                    return report(error, error_size, "XR_TARGET_1005",
+                                  "target debug owner relation is ambiguous");
+                expected_owner = entity->id;
+            }
+        }
+        if (!xr_stable_id_equal(fact->owner_identity, expected_owner))
+            return report(error, error_size, "XR_TARGET_1005",
+                          "target debug owner relation is invalid");
+        uint32_t expected_state = XR_SEMANTIC_INDEX_NONE;
+        XrStableId expected_state_identity = {{0}};
+        for (uint32_t state = 0; state < plan->coroutines_count; state++) {
+            const XrTargetCoroutineStateRecord *candidate = &plan->coroutines[state];
+            if (candidate->semantic_operation != operation)
+                continue;
+            const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(
+                semantic, candidate->semantic_entity);
+            if (expected_state != XR_SEMANTIC_INDEX_NONE || !entity ||
+                entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
+                entity->subject != operation)
+                return report(error, error_size, "XR_TARGET_1005",
+                              "target debug coroutine relation is ambiguous");
+            expected_state = candidate->id;
+            expected_state_identity = entity->id;
+        }
+        if (fact->coroutine_state != expected_state ||
+            !xr_stable_id_equal(fact->coroutine_state_identity,
+                                expected_state_identity))
+            return report(error, error_size, "XR_TARGET_1005",
+                          "target debug coroutine relation is invalid");
+    }
+    return true;
+}
+
 bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_size) {
     if (!plan || !plan->frozen || !plan->semantic_plan || !plan->profile)
         return report(error, error_size, "XR_EXEC_5000",
@@ -7469,7 +7644,8 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
         verify_roots_and_cleanups(plan, error, error_size) &&
         verify_adapters_and_capabilities(plan, error, error_size) &&
         verify_coroutines(plan, error, error_size) &&
-        verify_entry_expectations(plan, error, error_size);
+        verify_entry_expectations(plan, error, error_size) &&
+        verify_debug_facts(plan, error, error_size);
     xr_free(exact_dynamic_types);
     xr_free(exact_direct_callees);
     xr_free(direct_callee_targets);

@@ -66,6 +66,73 @@ bool xr_typed_debug_session_matches_plan(
                                 target_plan_fingerprint);
 }
 
+bool xr_typed_debug_attach_event_facts(
+    const XrTargetPlan *verified_plan, XrVmTraceEvent *event) {
+    if (!verified_plan || !event || !xr_target_plan_is_verified(verified_plan) ||
+        !xr_target_plan_fingerprint_is_intact(verified_plan) ||
+        event->function == XR_VM_TRACE_ID_NONE)
+        return false;
+    event->debug_fact = XR_VM_TRACE_ID_NONE;
+    event->semantic_operation = XR_VM_TRACE_ID_NONE;
+    event->coroutine_state = XR_VM_TRACE_ID_NONE;
+    event->source_span_availability = XR_VM_DEBUG_FACT_NOT_APPLICABLE;
+    event->owner_availability = XR_VM_DEBUG_FACT_NOT_APPLICABLE;
+    event->layout_availability = XR_VM_DEBUG_FACT_NOT_APPLICABLE;
+    event->coroutine_availability = XR_VM_DEBUG_FACT_NOT_APPLICABLE;
+    if (event->instruction == XR_VM_TRACE_ID_NONE)
+        return true;
+    uint32_t instruction_count = 0;
+    uint32_t fact_count = 0;
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_instructions(verified_plan, &instruction_count);
+    const XrTargetDebugFactRecord *facts =
+        xr_target_plan_debug_facts(verified_plan, &fact_count);
+    if (!instructions || !facts || fact_count != instruction_count ||
+        event->instruction >= instruction_count)
+        return false;
+    const XrTargetInstructionRecord *instruction = &instructions[event->instruction];
+    const XrTargetDebugFactRecord *fact = &facts[event->instruction];
+    if (instruction->id != event->instruction ||
+        instruction->function != event->function || fact->id != event->instruction ||
+        fact->instruction != event->instruction || fact->function != event->function ||
+        (event->opcode != XR_TARGET_INSTRUCTION_INVALID &&
+         instruction->opcode != event->opcode))
+        return false;
+    event->debug_fact = fact->id;
+    event->semantic_operation = fact->semantic_operation;
+    event->coroutine_state = fact->coroutine_state;
+    event->semantic_operation_identity = fact->semantic_operation_identity;
+    event->source_span_identity = fact->source_span_identity;
+    event->owner_identity = fact->owner_identity;
+    event->coroutine_state_identity = fact->coroutine_state_identity;
+    event->layout_fingerprint = fact->layout_fingerprint;
+    event->source_start_line = fact->source_start_line;
+    event->source_start_column = fact->source_start_column;
+    event->source_end_line = fact->source_end_line;
+    event->source_end_column = fact->source_end_column;
+    if (fact->semantic_operation == XR_VM_TRACE_ID_NONE)
+        return true;
+    event->source_span_availability =
+        bytes_are_zero(fact->source_span_identity.bytes,
+                       sizeof(fact->source_span_identity.bytes))
+            ? XR_VM_DEBUG_FACT_CONTEXT_UNAVAILABLE
+            : XR_VM_DEBUG_FACT_AVAILABLE;
+    event->owner_availability =
+        bytes_are_zero(fact->owner_identity.bytes, sizeof(fact->owner_identity.bytes))
+            ? XR_VM_DEBUG_FACT_NOT_APPLICABLE
+            : XR_VM_DEBUG_FACT_AVAILABLE;
+    event->layout_availability =
+        bytes_are_zero(fact->layout_fingerprint.bytes,
+                       sizeof(fact->layout_fingerprint.bytes))
+            ? XR_VM_DEBUG_FACT_NOT_APPLICABLE
+            : XR_VM_DEBUG_FACT_AVAILABLE;
+    event->coroutine_availability =
+        fact->coroutine_state == XR_VM_TRACE_ID_NONE
+            ? XR_VM_DEBUG_FACT_NOT_APPLICABLE
+            : XR_VM_DEBUG_FACT_AVAILABLE;
+    return true;
+}
+
 bool xr_typed_debug_emit(
     const XrVmDebugSession *session,
     const XrFingerprint *target_plan_fingerprint,

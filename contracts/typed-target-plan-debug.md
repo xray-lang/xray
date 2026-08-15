@@ -41,11 +41,16 @@ authority. Profile presence or absence cannot make a plan legal, change a slot
 byte, extend a generation pin, or change the program result.
 
 Materialization rechecks the immutable plan and event fingerprint, then copies
-only exact function, instruction, call, entry-expectation, and slot rows.
-TargetPlan schema 36 has
-no source-span table, stable owner identity, or slot-to-layout identity relation;
-those facts are reported as `XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE` rather than
-guessed from semantic IDs, names, layouts, or compiler structures. Breakpoint,
+only exact function, instruction, call, entry-expectation, slot, and immutable
+debug-fact rows. TargetPlan schema 37 carries one debug fact for every target
+instruction. It names the exact SemanticPlan operation and its stable ID; when
+the operation has a verified source span it carries the source-span stable ID
+and coordinates, otherwise it reports context unavailable. It also carries the
+exact coroutine-state and owner stable IDs when applicable and the verified
+layout fingerprint when the operation result has an exact target layout. The
+runtime only attaches these frozen rows; it never derives them from a legacy
+bytecode offset, name lookup, SemanticPlan walk, or a guessed relation. A
+fabricated, stale, or mutated fact is rejected before materialization. Breakpoint,
 step, arbitrary locals/stack, VM/AOT first-divergence, allocation/RC/suspend,
 mailbox, provider-cost, and source-span debugging remain unavailable and are
 not claimed by this runtime slice.
@@ -56,20 +61,20 @@ Evidence:
   runs produce byte-identical canonical trace events and profile snapshots,
   proves exact direct-call nesting and return/error
   order, exact generation binding, fixed-capacity sink refusal, profile-disabled
-  parity, instruction/call/slot materialization, and explicit unavailable
-  source/owner/layout facts.
+  parity, instruction/call/slot materialization, source-backed stable facts,
+  and source-fact mutation rejection.
 - `test_typed_frame_runtime_archive` proves trace, profile, materialization,
   debug-session, and request-based dispatcher symbols link from `xray_vm`.
 
-anchor-sha256: src/vm/debug/xr_vm_trace.h 9f02f234220c04d260ef0754b752fa4daff7f56041732f8be468ac3e45007fd6
-anchor-sha256: src/vm/debug/xr_vm_trace.c 7c14c3d4a06e329d2a79a24f7fe4a978c872d86a0d442930730f234626c57770
+anchor-sha256: src/vm/debug/xr_vm_trace.h a8a281dad51876c63ff9ba6d8bd52e63a8e52f8ff29fbf683aca3323f4f6f924
+anchor-sha256: src/vm/debug/xr_vm_trace.c c61c7b755f761d24a4f5c721b09502c7afdba32ed4a7c11acedba802c995a7cc
 anchor-sha256: src/vm/debug/xr_vm_profile.h 494f41cb32b3b3e48162f2f5b23c78c5e85ec41afaa702b690c8331f94af1892
 anchor-sha256: src/vm/debug/xr_vm_profile.c d4a1cd75c1d520f3a14721e64757559952ffb6c734b62c7a6769d81444ccbda1
-anchor-sha256: src/vm/debug/xr_vm_materialize.h 6e784c930527ea25bee1301db2d16065a11d091e51de5a58316ad36f65a0e9db
-anchor-sha256: src/vm/debug/xr_vm_materialize.c dc70a2881d49cab77a9382a5ae9c88e914be806803105aad55a1667001735c6e
+anchor-sha256: src/vm/debug/xr_vm_materialize.h d87726c0853aafe634f6888fb242167be4bac256ab117f24a58df5aa711ccb8f
+anchor-sha256: src/vm/debug/xr_vm_materialize.c b86beab806b748e1eced0aa4c04c2a87da11f5e774289227fa4d144320195d2a
 anchor-sha256: src/vm/xr_typed_dispatch.h afe8997a2272790226f6591615c8721213df06eba476c1c45114cd2208d7c62d
-anchor-sha256: src/vm/xr_typed_dispatch.c d7177d939e0fa7fa59bc88972fb3f6e077b2bbc0e045c35cf500ba4393093f66
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c 74e13773e2b235e1dfa4083868e305587bb95604c3445b62bd847c5b3faddbd5
+anchor-sha256: src/vm/xr_typed_dispatch.c e6ebb68b8b0ad43adee0a5a3aa968b1189b977edbc9284516fab394168693a53
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 4ee42945143fe224e5125e36e1a795ec1b2c88c9af09912ba948758a7c36c5ca
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c a9ad2e8e56efcc61782c7d5965a3d05b8ada650e671e0f92205afccedcca22e2
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py cb1b4fd056aebee2f73c03d537294df3d8a2dcc8617a55a1a7e25b0e42570228
 anchor-sha256: CMakeLists.txt 52120c519042aa84194f877420c808db07fdde1a563f8bdb94e65af9fde9e00b

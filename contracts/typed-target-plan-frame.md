@@ -237,10 +237,10 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 8f3b11246167ec7052dbec96cf161018cdaf7f1b4ab2819edf1ffae716d3991b
-anchor-sha256: src/vm/xr_typed_frame.h 0d22797468943e5f5ed4876563b1e93827cad42b936cbf92b24c59c8579465e7
+anchor-sha256: src/plan/target/xr_target_plan.h bca30e98e3d1fc20115edc79565910976d46e79dbcecaed7fc0e1e7bfaadfda9
+anchor-sha256: src/vm/xr_typed_frame.h a77910e1b039f5f335cd00af727dc0b46f7b8ec58c846ebc033437572b6aab3c
 anchor-sha256: src/vm/xr_typed_frame.c 80ac935291096963179c8f6c58b3105835426c87b2b693d2a62e1d5c16fc913b
-anchor-sha256: src/vm/xr_typed_dispatch.c d7177d939e0fa7fa59bc88972fb3f6e077b2bbc0e045c35cf500ba4393093f66
+anchor-sha256: src/vm/xr_typed_dispatch.c e6ebb68b8b0ad43adee0a5a3aa968b1189b977edbc9284516fab394168693a53
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 3fd550a0cfcdee2b28a631ef1ef6ae56c5a776c4d380a508d78e6d307bbf1b20
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041
