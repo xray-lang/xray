@@ -33,7 +33,8 @@ int main(void) {
     XrVmDebugSession debug_session;
     XrVmMaterializedEvent materialized;
     XrVmTraceEvent trace_event = {0};
-    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(35) ||
+    uint32_t count = 0;
+    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(36) ||
         XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK != XR_TARGET_REQUIRED_FAMILIES ||
         limits.max_arena_bytes != XR_TYPED_FRAME_MAX_ARENA_BYTES ||
         xr_typed_frame_create(NULL, &fingerprint, 0, &limits, &frame) !=
@@ -53,6 +54,12 @@ int main(void) {
         xr_typed_frame_enter_instruction(NULL, 0) !=
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
         xr_typed_frame_bind_coroutine_state(NULL, 0) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_visit_coroutine_roots(NULL, 0, NULL, NULL, &count) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_resume_coroutine_state(NULL, 0) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_execute_cleanups(NULL, 0, 0, NULL, NULL, &count) !=
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
         xr_typed_frame_bind_generation_identity(NULL, &generation) !=
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
@@ -76,7 +83,8 @@ int main(void) {
         fputs("runtime-only typed frame boundary failed\n", stderr);
         return 1;
     }
-    xr_typed_frame_free(NULL);
+    if (xr_typed_frame_free(NULL) != XR_TYPED_FRAME_INVALID_ARGUMENT)
+        return 1;
     puts("runtime-only typed frame boundary passed");
     return 0;
 }

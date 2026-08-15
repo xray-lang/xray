@@ -28,6 +28,7 @@
 #include "../semantic/xr_semantic_verify.h"
 #include "../semantic/xr_semantic_allocation_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
+#include "../semantic/xr_semantic_coroutine_lifecycle_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_cleanup_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
@@ -231,6 +232,10 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t call_count;
     XrTargetCallArgumentRecord *call_arguments;
     uint32_t call_argument_count;
+    XrTargetRootMapRecord *root_maps;
+    uint32_t root_map_count;
+    uint32_t *root_slots;
+    uint32_t root_slot_count;
     XrTargetCleanupRecord *cleanups;
     uint32_t cleanup_count;
     XrTargetAdapterRecord *adapters;
@@ -339,6 +344,8 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     xr_free(materialized->instructions);
     xr_free(materialized->calls);
     xr_free(materialized->call_arguments);
+    xr_free(materialized->root_maps);
+    xr_free(materialized->root_slots);
     xr_free(materialized->cleanups);
     xr_free(materialized->adapters);
     xr_free(materialized->capabilities);
@@ -9360,39 +9367,217 @@ static const XrTargetValueRepRecord *find_materialized_value(
                : NULL;
 }
 
-static bool materialize_string_concat_release_cleanups(
+static int compare_u32_value(const void *left, const void *right) {
+    uint32_t a = *(const uint32_t *) left;
+    uint32_t b = *(const uint32_t *) right;
+    return a < b ? -1 : a != b;
+}
+
+typedef struct XrTargetLifecycleProjection {
+    uint32_t function;
+    uint32_t state_operation;
+    uint32_t producer_operation;
+    uint32_t producer_value;
+    uint16_t kind;
+} XrTargetLifecycleProjection;
+
+static int compare_target_lifecycle_projection(const void *left,
+                                               const void *right) {
+    const XrTargetLifecycleProjection *a =
+        (const XrTargetLifecycleProjection *) left;
+    const XrTargetLifecycleProjection *b =
+        (const XrTargetLifecycleProjection *) right;
+    if (a->function != b->function)
+        return a->function < b->function ? -1 : 1;
+    if (a->state_operation != b->state_operation)
+        return a->state_operation < b->state_operation ? -1 : 1;
+    if (a->kind != b->kind)
+        return a->kind < b->kind ? -1 : 1;
+    if (a->producer_operation != b->producer_operation)
+        return a->producer_operation < b->producer_operation ? -1 : 1;
+    return 0;
+}
+
+static bool exact_owned_string_lifecycle_slot(
+    const XrTargetMaterializedPlan *materialized,
+    const XrSemanticCoroutineLifecycleShape *shape, uint32_t function,
+    uint32_t *slot_out) {
+    const XrTargetValueRepRecord *binding =
+        shape ? find_materialized_value(materialized, shape->producer_value)
+              : NULL;
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < materialized->slot_count
+            ? &materialized->slots[binding->slot]
+            : NULL;
+    const XrTargetMachineRepRecord *register_rep =
+        binding && binding->register_rep < materialized->machine_rep_count
+            ? &materialized->machine_reps[binding->register_rep]
+            : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding && binding->memory_rep < materialized->machine_rep_count
+            ? &materialized->machine_reps[binding->memory_rep]
+            : NULL;
+    if (!slot || !register_rep || !memory_rep ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        slot->function != function ||
+        slot->semantic_value != shape->producer_value ||
+        slot->semantic_operation != shape->producer_operation ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+    if (slot_out)
+        *slot_out = binding->slot;
+    return true;
+}
+
+static bool materialize_coroutine_roots_and_string_cleanups(
     XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
     char *error, size_t error_size) {
     const XrSemanticPlan *semantic = builder->semantic_plan;
+    uint32_t entity_count =
+        (uint32_t) xr_semantic_plan_entity_count(semantic);
     uint32_t operation_count =
         (uint32_t) xr_semantic_plan_operation_count(semantic);
-    for (uint32_t operation = 0; operation < operation_count; operation++) {
-        if (xr_semantic_string_concat_release_is_exact(semantic, operation,
-                                                       NULL))
-            materialized->cleanup_count++;
+    uint32_t root_entity_count = 0;
+    uint32_t drop_entity_count = 0;
+    for (uint32_t entity = 0; entity < entity_count; entity++) {
+        const XrSemanticEntityRecord *record =
+            xr_semantic_plan_entity(semantic, entity);
+        root_entity_count +=
+            record && record->kind == XR_SEM_ENTITY_COROUTINE_ROOT;
+        drop_entity_count +=
+            record && record->kind == XR_SEM_ENTITY_COROUTINE_DROP;
     }
+    XrSemanticStringConcatReleaseIndex release_index = {0};
+    XrSemanticStringConcatReleaseIndexStatus release_status =
+        xr_semantic_string_concat_release_index_build(semantic,
+                                                      &release_index);
+    if (release_status != XR_SEMANTIC_RELEASE_INDEX_OK)
+        return fail(error, error_size,
+                    release_status == XR_SEMANTIC_RELEASE_INDEX_INVALID
+                        ? "XR_TARGET_1001"
+                        : "XR_EXEC_5003",
+                    "cleanup release projection is unavailable");
+    if (release_index.count > UINT32_MAX - drop_entity_count) {
+        xr_semantic_string_concat_release_index_dispose(&release_index);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "cleanup materialization budget exhausted");
+    }
+    materialized->cleanup_count = release_index.count + drop_entity_count;
+    uint32_t projection_count = root_entity_count + drop_entity_count;
+    if (!xr_semantic_lifecycle_work_charge_product(
+            &release_index.linear_work, entity_count, 2u) ||
+        !xr_semantic_lifecycle_work_charge(
+            &release_index.linear_work, operation_count) ||
+        !xr_semantic_lifecycle_work_charge(
+            &release_index.linear_work, materialized->function_count) ||
+        !xr_semantic_lifecycle_work_charge(
+            &release_index.linear_work,
+            xr_semantic_plan_block_count(semantic)) ||
+        !xr_semantic_lifecycle_work_charge_product(
+            &release_index.linear_work, projection_count,
+            (uint64_t) xr_semantic_lifecycle_sort_height(projection_count) *
+                2u)) {
+        xr_semantic_string_concat_release_index_dispose(&release_index);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "coroutine lifecycle projection budget exhausted");
+    }
+    XrTargetLifecycleProjection *projection = projection_count
+        ? (XrTargetLifecycleProjection *) allocate_records(
+              projection_count, sizeof(*projection))
+        : NULL;
+    uint32_t projection_cursor = 0;
+    for (uint32_t entity = 0; entity < entity_count; entity++) {
+        const XrSemanticEntityRecord *record =
+            xr_semantic_plan_entity(semantic, entity);
+        if (!record || (record->kind != XR_SEM_ENTITY_COROUTINE_ROOT &&
+                        record->kind != XR_SEM_ENTITY_COROUTINE_DROP))
+            continue;
+        const XrSemanticEntityRecord *state =
+            xr_semantic_plan_entity(semantic, record->parent);
+        const XrSemanticOperationRecord *state_operation =
+            state ? xr_semantic_plan_operation(semantic, state->subject) : NULL;
+        const XrSemanticOperationRecord *producer =
+            xr_semantic_plan_operation(semantic, record->subject);
+        if (!projection || projection_cursor >= projection_count || !state ||
+            !state_operation || !producer ||
+            state->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
+            state->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION ||
+            producer->function != state_operation->function ||
+            producer->result_value == XR_SEMANTIC_INDEX_NONE) {
+            xr_free(projection);
+            xr_semantic_string_concat_release_index_dispose(&release_index);
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "coroutine lifecycle projection is invalid");
+        }
+        projection[projection_cursor++] = (XrTargetLifecycleProjection) {
+            .function = producer->function,
+            .state_operation = state->subject,
+            .producer_operation = record->subject,
+            .producer_value = producer->result_value,
+            .kind = record->kind,
+        };
+    }
+    if (projection_cursor != projection_count) {
+        xr_free(projection);
+        xr_semantic_string_concat_release_index_dispose(&release_index);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "coroutine lifecycle projection budget exhausted");
+    }
+    qsort(projection, projection_count, sizeof(*projection),
+          compare_target_lifecycle_projection);
+    materialized->root_maps = (XrTargetRootMapRecord *) allocate_records(
+        root_entity_count, sizeof(*materialized->root_maps));
+    materialized->root_slots = (uint32_t *) allocate_records(
+        root_entity_count, sizeof(*materialized->root_slots));
+    materialized->root_slot_count = root_entity_count;
     materialized->cleanups = (XrTargetCleanupRecord *) allocate_records(
         materialized->cleanup_count, sizeof(*materialized->cleanups));
-    if (materialized->cleanup_count && !materialized->cleanups)
+    uint32_t candidate_capacity =
+        root_entity_count > drop_entity_count ? root_entity_count
+                                              : drop_entity_count;
+    uint32_t *candidate_slots = (uint32_t *) allocate_records(
+        candidate_capacity, sizeof(*candidate_slots));
+    if ((root_entity_count &&
+         (!materialized->root_maps || !materialized->root_slots)) ||
+        (materialized->cleanup_count && !materialized->cleanups) ||
+        (candidate_capacity && !candidate_slots)) {
+        xr_free(candidate_slots);
+        xr_free(projection);
+        xr_semantic_string_concat_release_index_dispose(&release_index);
         return fail(error, error_size, "XR_EXEC_5003",
-                    "cleanup materialization allocation failed");
+                    "root and cleanup materialization allocation failed");
+    }
 
-    uint32_t next = 0;
+    uint32_t next_root = 0;
+    uint32_t next_root_slot = 0;
+    uint32_t next_cleanup = 0;
+    uint32_t next_projection = 0;
+    uint32_t next_release = 0;
     for (uint32_t function = 0; function < materialized->function_count;
          function++) {
         const XrSemanticFunctionRecord *semantic_function =
             xr_semantic_plan_function(semantic, function);
         XrTargetFunctionRecord *target_function =
             &materialized->functions[function];
-        target_function->cleanup_begin = next;
+        target_function->root_begin = next_root;
+        target_function->cleanup_begin = next_cleanup;
         if (!semantic_function ||
             semantic_function->block_begin >
                 xr_semantic_plan_block_count(semantic) ||
             semantic_function->block_count >
                 xr_semantic_plan_block_count(semantic) -
                     semantic_function->block_begin)
+        {
+            xr_free(candidate_slots);
+            xr_free(projection);
+            xr_semantic_string_concat_release_index_dispose(&release_index);
             return fail(error, error_size, "XR_TARGET_1001",
                         "cleanup function partition is invalid");
+        }
         for (uint32_t block_offset = 0;
              block_offset < semantic_function->block_count; block_offset++) {
             const XrSemanticBlockRecord *block = xr_semantic_plan_block(
@@ -9400,15 +9585,109 @@ static bool materialize_string_concat_release_cleanups(
             if (!block || block->function != function ||
                 block->operation_begin > operation_count ||
                 block->operation_count > operation_count - block->operation_begin)
+            {
+                xr_free(candidate_slots);
+                xr_free(projection);
+                xr_semantic_string_concat_release_index_dispose(&release_index);
                 return fail(error, error_size, "XR_TARGET_1001",
                             "cleanup block partition is invalid");
+            }
             for (uint32_t operation = block->operation_begin;
                  operation < block->operation_begin + block->operation_count;
                  operation++) {
-                XrSemanticStringConcatReleaseShape shape = {0};
-                if (!xr_semantic_string_concat_release_is_exact(
-                        semantic, operation, &shape))
+                uint32_t root_count = 0;
+                uint32_t drop_count = 0;
+                while (next_projection < projection_count &&
+                       projection[next_projection].function == function &&
+                       projection[next_projection].state_operation == operation) {
+                    const XrTargetLifecycleProjection *record =
+                        &projection[next_projection++];
+                    XrSemanticCoroutineLifecycleShape lifecycle = {
+                        .function = record->function,
+                        .state_operation = record->state_operation,
+                        .producer_operation = record->producer_operation,
+                        .producer_value = record->producer_value,
+                    };
+                    uint32_t slot = XR_SEMANTIC_INDEX_NONE;
+                    if (!exact_owned_string_lifecycle_slot(
+                            materialized, &lifecycle, function, &slot)) {
+                        xr_free(candidate_slots);
+                        xr_free(projection);
+                        xr_semantic_string_concat_release_index_dispose(
+                            &release_index);
+                        return fail(error, error_size, "XR_TARGET_1001",
+                                    "coroutine lifecycle has no exact owned String slot");
+                    }
+                    if (record->kind == XR_SEM_ENTITY_COROUTINE_ROOT)
+                        materialized->root_slots[next_root_slot + root_count++] = slot;
+                    else
+                        candidate_slots[drop_count++] = slot;
+                }
+                if (root_count) {
+                    if (root_count > UINT16_MAX) {
+                        xr_free(candidate_slots);
+                        xr_free(projection);
+                        xr_semantic_string_concat_release_index_dispose(
+                            &release_index);
+                        return fail(error, error_size, "XR_EXEC_5003",
+                                    "coroutine root map exceeds exact row width");
+                    }
+                    qsort(materialized->root_slots + next_root_slot, root_count,
+                          sizeof(*materialized->root_slots), compare_u32_value);
+                    for (uint32_t i = 1; i < root_count; i++)
+                        if (materialized->root_slots[next_root_slot + i - 1u] ==
+                            materialized->root_slots[next_root_slot + i]) {
+                            xr_free(candidate_slots);
+                            xr_free(projection);
+                            xr_semantic_string_concat_release_index_dispose(
+                                &release_index);
+                            return fail(error, error_size, "XR_TARGET_1002",
+                                        "coroutine root slot is duplicated");
+                        }
+                    materialized->root_maps[next_root] =
+                        (XrTargetRootMapRecord) {
+                            .id = next_root,
+                            .function = function,
+                            .semantic_operation = operation,
+                            .slot_begin = next_root_slot,
+                            .slot_count = (uint16_t) root_count,
+                            .flags = XR_TARGET_ROOT_SUSPEND |
+                                     XR_TARGET_ROOT_CANCEL |
+                                     XR_TARGET_ROOT_EXIT,
+                        };
+                    next_root++;
+                    next_root_slot += root_count;
+                }
+                if (drop_count) {
+                    qsort(candidate_slots, drop_count, sizeof(*candidate_slots),
+                          compare_u32_value);
+                    for (uint32_t i = 0; i < drop_count; i++) {
+                        if (i && candidate_slots[i - 1u] == candidate_slots[i]) {
+                            xr_free(candidate_slots);
+                            xr_free(projection);
+                            xr_semantic_string_concat_release_index_dispose(
+                                &release_index);
+                            return fail(error, error_size, "XR_TARGET_1002",
+                                        "coroutine cleanup slot is duplicated");
+                        }
+                        materialized->cleanups[next_cleanup] =
+                            (XrTargetCleanupRecord) {
+                                .id = next_cleanup,
+                                .function = function,
+                                .semantic_operation = operation,
+                                .slot = candidate_slots[i],
+                                .action = XR_TARGET_CLEANUP_RELEASE,
+                                .flags = XR_TARGET_CLEANUP_CANCEL |
+                                         XR_TARGET_CLEANUP_EXIT,
+                            };
+                        next_cleanup++;
+                    }
+                }
+                if (next_release >= release_index.count ||
+                    release_index.rows[next_release].operation != operation)
                     continue;
+                const XrSemanticStringConcatReleaseShape shape =
+                    release_index.rows[next_release++];
                 const XrTargetValueRepRecord *binding =
                     find_materialized_value(materialized,
                                             shape.released_value);
@@ -9426,7 +9705,7 @@ static bool materialize_string_concat_release_cleanups(
                                    materialized->machine_rep_count
                         ? &materialized->machine_reps[binding->memory_rep]
                         : NULL;
-                if (next >= materialized->cleanup_count || !slot ||
+                if (next_cleanup >= materialized->cleanup_count || !slot ||
                     !register_rep || !memory_rep ||
                     register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
                     memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
@@ -9437,24 +9716,40 @@ static bool materialize_string_concat_release_cleanups(
                     slot->memory_rep != binding->memory_rep ||
                     slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
                     slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+                {
+                    xr_free(candidate_slots);
+                    xr_free(projection);
+                    xr_semantic_string_concat_release_index_dispose(
+                        &release_index);
                     return fail(error, error_size, "XR_TARGET_1001",
                                 "cleanup owner has no exact owned String slot");
-                materialized->cleanups[next] = (XrTargetCleanupRecord) {
-                    .id = next,
+                }
+                materialized->cleanups[next_cleanup] = (XrTargetCleanupRecord) {
+                    .id = next_cleanup,
                     .function = function,
                     .semantic_operation = operation,
                     .slot = binding->slot,
                     .action = XR_TARGET_CLEANUP_RELEASE,
                 };
-                next++;
+                next_cleanup++;
             }
         }
+        target_function->root_count = next_root - target_function->root_begin;
         target_function->cleanup_count =
-            next - target_function->cleanup_begin;
+            next_cleanup - target_function->cleanup_begin;
     }
-    return next == materialized->cleanup_count ||
-           fail(error, error_size, "XR_TARGET_1001",
-                "cleanup materialization is incomplete");
+    bool complete = next_root_slot == materialized->root_slot_count &&
+                    next_cleanup == materialized->cleanup_count &&
+                    next_projection == projection_count &&
+                    next_release == release_index.count;
+    xr_free(candidate_slots);
+    xr_free(projection);
+    xr_semantic_string_concat_release_index_dispose(&release_index);
+    materialized->root_map_count = next_root;
+    if (!complete)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "root and cleanup materialization is incomplete");
+    return true;
 }
 
 static bool semantic_type_is_exact_i64(const XrSemanticPlan *plan,
@@ -11112,8 +11407,8 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_field_representations(builder, materialized, error, error_size) ||
         !materialize_functions_and_slots(builder, materialized, error, error_size) ||
         !materialize_values(builder, materialized, error, error_size) ||
-        !materialize_string_concat_release_cleanups(builder, materialized,
-                                                    error, error_size) ||
+        !materialize_coroutine_roots_and_string_cleanups(builder, materialized,
+                                                         error, error_size) ||
         !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
         !materialize_entry_expectations(builder, materialized, error,
                                         error_size) ||
@@ -11223,6 +11518,10 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out,
         .calls_count = materialized.call_count,
         .call_arguments = materialized.call_arguments,
         .call_arguments_count = materialized.call_argument_count,
+        .root_maps = materialized.root_maps,
+        .root_maps_count = materialized.root_map_count,
+        .root_slots = materialized.root_slots,
+        .root_slots_count = materialized.root_slot_count,
         .cleanups = materialized.cleanups,
         .cleanups_count = materialized.cleanup_count,
         .adapters = materialized.adapters,

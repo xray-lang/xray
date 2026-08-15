@@ -442,6 +442,22 @@ add_test(NAME typed_target_vm_call_staging_contract
         --root ${CMAKE_SOURCE_DIR})
 set_tests_properties(typed_target_vm_call_staging_contract PROPERTIES
     LABELS "performance;target-machine;typed-plan;vm")
+add_test(NAME coroutine_lifecycle_projection_contract
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_coroutine_lifecycle_projection.py
+        --root ${CMAKE_SOURCE_DIR})
+set_tests_properties(coroutine_lifecycle_projection_contract PROPERTIES
+    LABELS "performance;semantic-plan;target-machine;typed-plan;vm"
+    PROCESSORS 1
+    TIMEOUT 30)
+add_test(NAME coroutine_lifecycle_projection_self_test
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_coroutine_lifecycle_projection.py
+        --self-test)
+set_tests_properties(coroutine_lifecycle_projection_self_test PROPERTIES
+    LABELS "semantic-plan;target-machine;typed-plan;vm;self-test"
+    PROCESSORS 1
+    TIMEOUT 30)
 add_executable(test_target_machine_comparison_fixture
     ../target_machine/comparison/typed_fixture.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})

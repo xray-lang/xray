@@ -9,7 +9,7 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 31 preserves exact `String.runes()` builtin-member identity
+SemanticPlan schema 32 preserves exact `String.runes()` builtin-member identity
 and the sealed `Iterator<rune>.next()` result reached directly from it as frozen
 intrinsics. The latter requires one unique same-function `String.runes()` result;
 an Iterator type or selector alone is not authority. The schema also retains the
@@ -30,7 +30,23 @@ The schema additionally freezes only the exact two-operand scalar
 fill argument, receiver-alias result, ownership, effects, and selector metadata
 are canonical facts. Range overloads, non-scalar elements, live Xi types, and
 selector spelling alone remain unavailable rather than falling through to the
-scalar authority. The schema also retains the
+scalar authority. The schema additionally freezes the first complete
+coroutine-owned value lifecycle. Only an exact fresh owned String concat whose
+producer dominates one frozen suspension state and whose unique exact release
+post-dominates that state qualifies. Three canonical entities record LIVE,
+ROOT, and DROP with the same state, producer, owner, and release identities.
+The producer and independent verifier each rebuild CFG dominance/
+post-dominance, String concat and release ownership, exact entity keys,
+uniqueness, and complete triple coverage from their own dense release, state,
+owner, and lifecycle projections. Every operation, operand, ownership event,
+entity, state-by-release pair, sort bound, and indexed lookup is charged
+through checked arithmetic against one 100,000,000-work ceiling before the
+corresponding projection allocation or sort. A plan with no state and many
+release-shaped operations stays linear, while the exact maximum-plus-one
+preflight fails before touching its intentionally absent operation table. The
+registered mutation gate refuses restored per-row release/owner scans in the
+Semantic producer, Semantic verifier, or either Target consumer. Types, opcode
+spelling, or backend liveness are not fallback authority. The schema also retains the
 pointer-free `DIRECT_LOCAL` call-target
 authority to lexical shared slots. Direct SSA callees still resolve only
 through exact identity copies to a closure/function binding. A shared callee
@@ -427,10 +443,13 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 9e978d76154d505d5f9d37d49550062509f59888032f49791e7389e2767f446e
 anchor-sha256: src/plan/format/xr_xsm_encode.c 9b66a6e25f0bd3557a005617fce7ce569a5d00a38475bcdbdd484225392f5bae
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 6970a9ec48e6794e9f4aa09ed3e090c1822c44d6c281667253da61a85ffd7b5f
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h cbfb671b39e3c250fd801fc90dc9f2f5763ca638d1770e973edb560c2da288ff
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 06852bd0f49e54f503e56c627fc2247b0d3c85b5e9f23a69f7309717b7f8db8c
+anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
+anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 44065fd059c341f5d835d56adf080a2a5620ca5bb2706642c66aa88582208725
+anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h 12526191d35217290e842084d392c935de65ecc7b62addc93851c095040bdd87
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h 63a8de5dc62e926c008accf1e67fd591b7ec271c37c4ea3de2980ddd789f5d5d
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 90528b2d34429cb148751cdac7479de616c18c43280f0248f77070b454e28257
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 10c4de98795f21aa7391669aa54bba735b1541f60fe076448c57580f4ca33dcd
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 16ed335e32c8b0d2b104713abaa08ff678a906cb3bfc9ca3e6935b953e7eb9bc
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h bbcaf57e24a92de079a0cefa2bdf5c753327b3c737d656cb57fbe2b6a648616c
 anchor-sha256: src/plan/semantic/xr_semantic_string_slice_shape.h d183211f5001d7cc418b0e95c3d2b7576404593ad454b9d4f777d7cfb57f1ff9
@@ -438,6 +457,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d190
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h d2dff7451f5eb731348efec9541a2b8cbbfbc879e049d163ed46479352a62a1e
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 0bd5c319832db3c5c1067e5ee364135923a15b1e488b5f9ab4fe5fa7bc8e9310
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h ee7409a02d228f10ed8c812c9b9d7f835106067e37d12bc6ed50c6fa48f93e27
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c ed73a877381a45a229896a77c93648e9796c64e7a2dcdaa0bb1dc46ad9987f08
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c a963e73dc572d2c47582ab0e949f10e3787b36eda4069c89465fd21cad3c12b6
+anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 9f04a1db2a48200e33e3d491ebf2377461d8bdc55c62ad12c71f69a2378ceb28
 anchor-sha256: src/stdlib/xstdlib_metadata.h fea5c1b87e5cf4650f62720540f9728ac71dc475fdab683ba30b6458d3e3902b
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 895bf86f656c0ecb1953e4a5cd889e16f3a434bbf50306a7d9cba32faa14d555
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 5c501923454ac9b4198026ec1c316e5f061ee1410cb43fde4d2ade45f6016162

@@ -148,7 +148,8 @@ def validate_footprint(probe: dict[str, Any]) -> tuple[dict[str, Any], list[str]
     footprint = probe.get("footprint", {})
     keys = (
         "fixed_frame_bytes", "arena_allocation_bytes",
-        "alignment_padding_bytes", "slot_state_metadata_bytes", "total_bytes",
+        "alignment_padding_bytes", "slot_state_metadata_bytes",
+        "lifecycle_state_metadata_bytes", "total_bytes",
         "slot_count", "plan_frame_bytes", "frame_alignment",
         "max_total_bytes",
     )
@@ -157,7 +158,8 @@ def validate_footprint(probe: dict[str, Any]) -> tuple[dict[str, Any], list[str]
     components = (
         footprint["fixed_frame_bytes"] + footprint["arena_allocation_bytes"] +
         footprint["alignment_padding_bytes"] +
-        footprint["slot_state_metadata_bytes"]
+        footprint["slot_state_metadata_bytes"] +
+        footprint["lifecycle_state_metadata_bytes"]
     )
     if components != footprint["total_bytes"]:
         errors.append("frame total is not the exact sum of its payload components")
@@ -178,7 +180,8 @@ def validate_footprint(probe: dict[str, Any]) -> tuple[dict[str, Any], list[str]
         "bounded_metadata_bytes": (
             footprint["fixed_frame_bytes"] +
             footprint["alignment_padding_bytes"] +
-            footprint["slot_state_metadata_bytes"]
+            footprint["slot_state_metadata_bytes"] +
+            footprint["lifecycle_state_metadata_bytes"]
         ),
         "external_allocator_overhead_included": False,
     }
@@ -309,6 +312,7 @@ def self_test() -> None:
         "footprint": {
             "fixed_frame_bytes": 64, "arena_allocation_bytes": 32,
             "alignment_padding_bytes": 7, "slot_state_metadata_bytes": 0,
+            "lifecycle_state_metadata_bytes": 0,
             "total_bytes": 103, "slot_count": 4, "frame_alignment": 8,
             "plan_frame_bytes": 32, "max_total_bytes": 128,
         },

@@ -961,6 +961,72 @@ static XiFunc *compile_to_ir(const char *source) {
     return compile_to_ir_with_config(source, cfg);
 }
 
+TEST(target_plan_owned_string_lifecycle_from_source) {
+    const char *source = "fn probe() -> int {\n"
+                         "    var text = string(7) + \"-frame\"\n"
+                         "    Coro.yield()\n"
+                         "    return len(text)\n"
+                         "}\n"
+                         "print(probe())\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir && ir->semantic_plan,
+                 "source lifecycle fixture froze SemanticPlan authority");
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    TEST_REQUIRE(profile && xr_target_plan_build(
+                                ir->semantic_plan, profile, &plan, error,
+                                sizeof(error)),
+                 "source lifecycle fixture built exact TargetPlan authority");
+
+    uint32_t root_count = 0;
+    uint32_t root_slot_count = 0;
+    uint32_t cleanup_count = 0;
+    const XrTargetRootMapRecord *roots =
+        xr_target_plan_root_maps(plan, &root_count);
+    const uint32_t *root_slots =
+        xr_target_plan_root_slots(plan, &root_slot_count);
+    const XrTargetCleanupRecord *cleanups =
+        xr_target_plan_cleanups(plan, &cleanup_count);
+    TEST_REQUIRE(roots && root_slots && cleanups && root_count == 1 &&
+                     root_slot_count == 1 && cleanup_count == 2 &&
+                     roots[0].flags ==
+                         (XR_TARGET_ROOT_SUSPEND | XR_TARGET_ROOT_CANCEL |
+                          XR_TARGET_ROOT_EXIT) &&
+                     roots[0].slot_begin == 0 && roots[0].slot_count == 1,
+                 "source lifecycle fixture froze one exact root set");
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        slots && root_slots[0] < slot_count ? &slots[root_slots[0]] : NULL;
+    const XrTargetMachineRepRecord *rep = slot
+        ? xr_target_plan_machine_rep(plan, slot->memory_rep)
+        : NULL;
+    TEST_REQUIRE(slot && rep && rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+                     rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                     rep->ownership == XR_TARGET_OWNERSHIP_OWNED,
+                 "source lifecycle root names exact owned String storage");
+    uint32_t normal = 0;
+    uint32_t terminal = 0;
+    for (uint32_t i = 0; i < cleanup_count; i++) {
+        TEST_REQUIRE(cleanups[i].slot == slot->id &&
+                         cleanups[i].action == XR_TARGET_CLEANUP_RELEASE &&
+                         cleanups[i].provider == 0,
+                     "source lifecycle cleanup names the exact rooted slot");
+        normal += cleanups[i].flags == 0;
+        terminal += cleanups[i].flags ==
+                    (XR_TARGET_CLEANUP_CANCEL | XR_TARGET_CLEANUP_EXIT);
+    }
+    TEST_REQUIRE(normal == 1 && terminal == 1,
+                 "source lifecycle freezes normal and terminal release");
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xi_func_free(ir);
+}
+
 /* Selective imports are resolved from the source module's semantic export
  * table. Keep graph-sensitive tests on the same single-source-of-truth path as
  * production compilation instead of duplicating .xr declarations as analyzer
@@ -2376,8 +2442,8 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
                        semantic_hex);
     TEST_REQUIRE(strcmp(
                      semantic_hex,
-                     "e1724a08afa7260b38108a23352f7c5b5575662470b682f2e9fdc95a18ee7af1") == 0,
-                 "native unsigned interpolation preserves the frozen SemanticPlan v31 KAT");
+                     "49e57df0df435d7495bd7cd9654d491d2cb18d3464e7be3f64ef0529bda1df59") == 0,
+                 "native unsigned interpolation preserves the frozen SemanticPlan v32 KAT");
 
     XiFunc *label = NULL;
     for (uint16_t i = 0; i < ir->nchildren; i++) {
@@ -13952,6 +14018,7 @@ int main(void) {
     run_aot_type_fingerprint_separates_error_recovery();
     run_aot_extern_registry_deduplicates_and_rejects_conflicts();
     run_aot_semantic_snapshot_survives_analyzer_pool_churn();
+    run_target_plan_owned_string_lifecycle_from_source();
     run_cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action();
     run_cgen_restricted_c90_header_is_explicit_and_minimal();
     run_cgen_simple_arith();

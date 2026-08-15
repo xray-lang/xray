@@ -3,6 +3,9 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_coro_lower.h"
+#include "../../../src/ir/xi_stage.h"
+#include "../../../src/base/xmalloc.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
@@ -28,6 +31,18 @@ typedef struct TypedFrameFixture {
 } TypedFrameFixture;
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_owned_string = {
+    .kind = XR_KIND_STRING,
+    .id = 22,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+static XrType stub_unit = {
+    .kind = XR_KIND_UNIT,
+    .id = 23,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 
 typedef struct TypedRepCase {
     uint16_t kind;
@@ -157,6 +172,50 @@ static XrSemanticPlan *build_executable_semantic_plan(void) {
     return semantic;
 }
 
+static XrSemanticPlan *build_lifecycle_semantic_plan(void) {
+    XiFunc *function = xi_func_new("typed_frame_lifecycle_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    entry->sealed = true;
+    XiValue *prefix = xi_param(function, entry, 0, &stub_int);
+    REQUIRE(prefix != NULL);
+    function->nparams = 1;
+    function->params =
+        (XiValue **) xr_malloc(sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = prefix;
+    XiValue *left = xi_const_str(function, entry, "typed", &stub_owned_string);
+    XiValue *right = xi_const_str(function, entry, "-frame", &stub_owned_string);
+    XiValue *text =
+        xi_value_new(function, entry, XI_STR_CONCAT, &stub_owned_string, 2);
+    XiValue *yield = xi_value_new(function, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *length = xi_value_new(function, entry, XI_LEN, &stub_int, 1);
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(left && right && text && yield && length && release);
+    text->args[0] = left;
+    text->args[1] = right;
+    length->args[0] = text;
+    release->args[0] = text;
+    for (int64_t value = 0; value < 8; value++)
+        REQUIRE(xi_const_int(function, entry, value, &stub_int) != NULL);
+    xi_block_set_return(entry, length);
+    function->stage = XI_STAGE_SEMANTIC_LOWERED;
+    function->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(function, NULL));
+    REQUIRE(function->coro_plan && function->coro_plan->nstates == 1 &&
+            function->coro_plan->points[0].nroots == 1 &&
+            function->coro_plan->points[0].ndrops == 1);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error,
+                                   sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
+
 static TypedFrameFixture make_fixture_from_semantic(XrSemanticPlan *semantic) {
     TypedFrameFixture fixture = {0};
     fixture.semantic = semantic;
@@ -176,6 +235,71 @@ static TypedFrameFixture make_fixture(void) {
 
 static TypedFrameFixture make_executable_fixture(void) {
     return make_fixture_from_semantic(build_executable_semantic_plan());
+}
+
+static TypedFrameFixture make_lifecycle_fixture(void) {
+    return make_fixture_from_semantic(build_lifecycle_semantic_plan());
+}
+
+static void append_unrelated_lifecycle_partitions(TypedFrameFixture *fixture,
+                                                  uint32_t row_count) {
+    REQUIRE(fixture && fixture->plan &&
+            fixture->plan->functions_count == 1 && row_count != 0);
+    XrTargetPlan *plan = fixture->plan;
+    uint32_t original_root_count = plan->root_maps_count;
+    uint32_t original_cleanup_count = plan->cleanups_count;
+    XrTargetFunctionRecord *next_functions =
+        (XrTargetFunctionRecord *) xr_realloc(
+            plan->functions, 2u * sizeof(*plan->functions));
+    XrTargetCleanupRecord *next_cleanups =
+        (XrTargetCleanupRecord *) xr_realloc(
+            plan->cleanups,
+            (size_t) (original_cleanup_count + row_count) *
+                sizeof(*plan->cleanups));
+    XrTargetRootMapRecord *next_roots =
+        (XrTargetRootMapRecord *) xr_realloc(
+            plan->root_maps,
+            (size_t) (original_root_count + row_count) *
+                sizeof(*plan->root_maps));
+    REQUIRE(next_functions && next_cleanups && next_roots);
+    plan->functions = next_functions;
+    plan->cleanups = next_cleanups;
+    plan->root_maps = next_roots;
+    plan->functions_count = 2;
+    plan->functions[1] = (XrTargetFunctionRecord) {
+        .id = 1,
+        .semantic_function = 1,
+        .slot_begin = plan->slots_count,
+        .frame_align = 1,
+        .root_begin = original_root_count,
+        .root_count = row_count,
+        .cleanup_begin = original_cleanup_count,
+        .cleanup_count = row_count,
+        .coroutine_begin = plan->coroutines_count,
+    };
+    for (uint32_t i = 0; i < row_count; i++) {
+        plan->root_maps[original_root_count + i] =
+            (XrTargetRootMapRecord) {
+                .id = original_root_count + i,
+                .function = 1,
+                .semantic_operation = i,
+                .slot_begin = plan->root_slots_count,
+                .flags = XR_TARGET_ROOT_SUSPEND | XR_TARGET_ROOT_CANCEL |
+                         XR_TARGET_ROOT_EXIT,
+            };
+        plan->cleanups[original_cleanup_count + i] =
+            (XrTargetCleanupRecord) {
+                .id = original_cleanup_count + i,
+                .function = 1,
+                .semantic_operation = i,
+                .slot = i,
+                .action = XR_TARGET_CLEANUP_RELEASE,
+            };
+    }
+    plan->root_maps_count = original_root_count + row_count;
+    plan->cleanups_count = original_cleanup_count + row_count;
+    xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
+    REQUIRE(xr_target_plan_fingerprint_is_intact(plan));
 }
 
 static void dispose_fixture(TypedFrameFixture *fixture) {
@@ -264,10 +388,16 @@ static XrTypedFrame *create_frame(const TypedFrameFixture *fixture,
                                   const XrTypedFrameLimits *limits) {
     XrFingerprint fingerprint = xr_target_plan_fingerprint(fixture->plan);
     XrTypedFrame *frame = NULL;
-    REQUIRE(xr_typed_frame_create(fixture->plan, &fingerprint, 0, limits,
-                                  &frame) == XR_TYPED_FRAME_OK);
+    XrTypedFrameStatus status = xr_typed_frame_create(
+        fixture->plan, &fingerprint, 0, limits, &frame);
+    REQUIRE(status == XR_TYPED_FRAME_OK);
     REQUIRE(frame != NULL);
     return frame;
+}
+
+static void free_frame(XrTypedFrame **frame) {
+    REQUIRE(xr_typed_frame_free(frame) == XR_TYPED_FRAME_OK);
+    REQUIRE(frame && *frame == NULL);
 }
 
 static void test_exact_representation_transport_matrix(void) {
@@ -310,7 +440,7 @@ static void test_exact_representation_transport_matrix(void) {
         REQUIRE(destination[0] == 0xcc &&
                 destination[access.size + 1u] == 0xcc &&
                 memcmp(source + 1, destination + 1, access.size) == 0);
-        xr_typed_frame_free(frame);
+        free_frame(&frame);
         dispose_fixture(&fixture);
     }
 }
@@ -402,10 +532,12 @@ static void test_exact_slot_access_and_states(void) {
 #else
     REQUIRE(footprint.slot_state_metadata_bytes == 0);
 #endif
+    REQUIRE(footprint.lifecycle_state_metadata_bytes == 0);
     REQUIRE(footprint.total_bytes ==
             footprint.fixed_frame_bytes + footprint.arena_allocation_bytes +
                 footprint.alignment_padding_bytes +
-                footprint.slot_state_metadata_bytes);
+                footprint.slot_state_metadata_bytes +
+                footprint.lifecycle_state_metadata_bytes);
 
     XrTypedSlotAccess access;
     REQUIRE(xr_typed_frame_describe_slot(frame, functions[0].slot_begin,
@@ -500,7 +632,7 @@ static void test_exact_slot_access_and_states(void) {
                    sizeof(footprint)) == 0);
     REQUIRE(xr_typed_frame_load(frame, &access, loaded, access.size) ==
             XR_TYPED_FRAME_CLEANED);
-    xr_typed_frame_free(frame);
+    free_frame(&frame);
     dispose_fixture(&fixture);
 }
 
@@ -557,8 +689,7 @@ static void test_plan_identity_shape_and_budgets(void) {
     XrTypedFrameMemoryFootprint footprint;
     REQUIRE(xr_typed_frame_memory_footprint(frame, &footprint) ==
             XR_TYPED_FRAME_OK);
-    xr_typed_frame_free(frame);
-    frame = NULL;
+    free_frame(&frame);
 
     XrTypedFrameLimits small = limits;
     REQUIRE(fixture.plan->functions[0].frame_size > 0);
@@ -577,8 +708,7 @@ static void test_plan_identity_shape_and_budgets(void) {
     small.max_total_bytes = footprint.total_bytes;
     REQUIRE(xr_typed_frame_create(fixture.plan, &fingerprint, 0, &small,
                                   &frame) == XR_TYPED_FRAME_OK);
-    xr_typed_frame_free(frame);
-    frame = NULL;
+    free_frame(&frame);
     small = limits;
     small.max_arena_bytes = XR_TYPED_FRAME_MAX_ARENA_BYTES + 1u;
     REQUIRE(xr_typed_frame_create(fixture.plan, &fingerprint, 0, &small,
@@ -625,7 +755,7 @@ static void test_plan_ownership_and_void_binding(void) {
     REQUIRE(xr_typed_frame_load(frame, &access, loaded, access.size) ==
             XR_TYPED_FRAME_OK);
     REQUIRE(memcmp(payload, loaded, access.size) == 0);
-    xr_typed_frame_free(frame);
+    free_frame(&frame);
     dispose_fixture(&fixture);
 }
 
@@ -716,7 +846,7 @@ static void test_execution_context_lifecycle(void) {
             XR_TYPED_FRAME_CLEANED);
     REQUIRE(xr_typed_frame_bind_generation_identity(frame, &generation) ==
             XR_TYPED_FRAME_CLEANED);
-    xr_typed_frame_free(frame);
+    free_frame(&frame);
     dispose_fixture(&fixture);
 }
 
@@ -761,7 +891,7 @@ static void test_parent_child_context_links(void) {
     REQUIRE(xr_typed_frame_context(parent, &parent_context) == XR_TYPED_FRAME_OK);
     REQUIRE(!parent_context.has_child);
     REQUIRE(xr_typed_frame_link_child(parent, child) == XR_TYPED_FRAME_CLEANED);
-    xr_typed_frame_free(child);
+    free_frame(&child);
 
     child = create_frame(&fixture, &limits);
     XrModuleGenerationIdentity first = generation_identity(&fixture, 1, 1);
@@ -772,28 +902,218 @@ static void test_parent_child_context_links(void) {
             XR_TYPED_FRAME_OK);
     REQUIRE(xr_typed_frame_link_child(parent, child) ==
             XR_TYPED_FRAME_CALL_LINK_INVALID);
-    xr_typed_frame_free(child);
+    free_frame(&child);
 
     child = create_frame(&fixture, &limits);
     REQUIRE(xr_typed_frame_bind_generation_identity(child, &first) ==
             XR_TYPED_FRAME_OK);
     REQUIRE(xr_typed_frame_link_child(parent, child) == XR_TYPED_FRAME_OK);
-    REQUIRE(xr_typed_frame_cleanup(parent) == XR_TYPED_FRAME_OK);
+    REQUIRE(xr_typed_frame_cleanup(parent) == XR_TYPED_FRAME_CHILD_ACTIVE);
     REQUIRE(xr_typed_frame_context(child, &child_context) == XR_TYPED_FRAME_OK);
-    REQUIRE(!child_context.has_parent);
-    xr_typed_frame_free(parent);
-    xr_typed_frame_free(child);
-    xr_typed_frame_free(other);
+    REQUIRE(child_context.has_parent);
+    free_frame(&child);
+    REQUIRE(xr_typed_frame_context(parent, &parent_context) == XR_TYPED_FRAME_OK);
+    REQUIRE(!parent_context.has_child);
+    free_frame(&parent);
+    free_frame(&other);
     dispose_fixture(&fixture);
 }
 
-int main(void) {
+typedef struct LifecycleCallbackProbe {
+    uint8_t expected[32];
+    uint32_t expected_size;
+    uint32_t root_visits;
+    uint32_t cleanup_calls;
+    uint8_t cleanup_action;
+    XrTypedFrameStatus cleanup_result;
+} LifecycleCallbackProbe;
+
+static void visit_lifecycle_root(void *context,
+                                 const XrTypedSlotAccess *access,
+                                 const void *bytes) {
+    LifecycleCallbackProbe *probe = (LifecycleCallbackProbe *) context;
+    REQUIRE(probe && access && bytes && access->size == probe->expected_size &&
+            memcmp(bytes, probe->expected, access->size) == 0);
+    probe->root_visits++;
+}
+
+static XrTypedFrameStatus execute_lifecycle_cleanup(
+    void *context, uint8_t action, const XrTypedSlotAccess *access,
+    void *bytes) {
+    LifecycleCallbackProbe *probe = (LifecycleCallbackProbe *) context;
+    REQUIRE(probe && access && bytes && access->size == probe->expected_size &&
+            memcmp(bytes, probe->expected, access->size) == 0);
+    probe->cleanup_calls++;
+    probe->cleanup_action = action;
+    return probe->cleanup_result;
+}
+
+static void test_owned_string_coroutine_lifecycle(void) {
+    TypedFrameFixture fixture = make_lifecycle_fixture();
+    REQUIRE(fixture.plan->root_maps_count == 1 &&
+            fixture.plan->root_slots_count == 1 &&
+            fixture.plan->cleanups_count == 2 &&
+            fixture.plan->coroutines_count == 1);
+    append_unrelated_lifecycle_partitions(&fixture, 8192);
+    REQUIRE(fixture.plan->functions[0].cleanup_count == 2 &&
+            fixture.plan->functions[0].root_count == 1 &&
+            fixture.plan->functions[1].cleanup_count == 8192 &&
+            fixture.plan->functions[1].root_count == 8192);
+    uint32_t owned_slot = fixture.plan->root_slots[0];
+    uint32_t state_operation =
+        fixture.plan->coroutines[0].semantic_operation;
+    uint32_t normal_operation = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = fixture.plan->functions[0].cleanup_begin;
+         i < fixture.plan->functions[0].cleanup_begin +
+                 fixture.plan->functions[0].cleanup_count;
+         i++)
+        if (fixture.plan->cleanups[i].flags == 0)
+            normal_operation = fixture.plan->cleanups[i].semantic_operation;
+    REQUIRE(normal_operation != XR_SEMANTIC_INDEX_NONE &&
+            normal_operation != state_operation &&
+            owned_slot > fixture.plan->functions[0].slot_begin &&
+            owned_slot + 1u < fixture.plan->functions[0].slot_begin +
+                                  fixture.plan->functions[0].slot_count);
+    const XrTargetFunctionRecord *function = &fixture.plan->functions[0];
+    uint32_t scalar_before = UINT32_MAX;
+    uint32_t scalar_after = UINT32_MAX;
+    for (uint32_t slot = function->slot_begin;
+         slot < function->slot_begin + function->slot_count; slot++) {
+        const XrTargetSlotRecord *record = &fixture.plan->slots[slot];
+        const XrTargetMachineRepRecord *rep =
+            &fixture.plan->machine_reps[record->memory_rep];
+        if (rep->kind < XR_MACHINE_REP_I1 || rep->kind > XR_MACHINE_REP_RUNE ||
+            rep->root_kind != XR_TARGET_ROOT_NONE ||
+            rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+            continue;
+        if (slot < owned_slot)
+            scalar_before = slot;
+        else if (slot > owned_slot && scalar_after == UINT32_MAX)
+            scalar_after = slot;
+    }
+    REQUIRE(scalar_before != UINT32_MAX && scalar_after != UINT32_MAX);
+
+    XrTypedFrameLimits limits;
+    xr_typed_frame_limits_default(&limits);
+    XrTypedFrame *frame = create_frame(&fixture, &limits);
+    XrTypedFrameMemoryFootprint lifecycle_footprint = {0};
+    REQUIRE(xr_typed_frame_memory_footprint(frame, &lifecycle_footprint) ==
+                XR_TYPED_FRAME_OK &&
+            lifecycle_footprint.lifecycle_state_metadata_bytes ==
+                sizeof(uint32_t) + sizeof(uint8_t));
+    XrTypedSlotAccess access = {0};
+    REQUIRE(xr_typed_frame_describe_slot(frame, owned_slot, &access) ==
+            XR_TYPED_FRAME_OK);
+    REQUIRE(access.size <= 32);
+    LifecycleCallbackProbe probe = {.expected_size = access.size};
+    for (uint32_t i = 0; i < access.size; i++)
+        probe.expected[i] = (uint8_t) (0x40u + i);
+    REQUIRE(xr_typed_frame_store(frame, &access, probe.expected, access.size) ==
+            XR_TYPED_FRAME_OK);
+    XrTypedFrame *active_owner = frame;
+    REQUIRE(xr_typed_frame_free(&frame) == XR_TYPED_FRAME_LIFECYCLE_ACTIVE &&
+            frame == active_owner);
+    uint32_t scalar_slots[] = {scalar_before, scalar_after};
+    for (uint32_t i = 0; i < 2; i++) {
+        XrTypedSlotAccess scalar_access = {0};
+        uint8_t scalar_source[32] = {0};
+        uint8_t scalar_loaded[32] = {0};
+        REQUIRE(xr_typed_frame_describe_slot(frame, scalar_slots[i],
+                                             &scalar_access) ==
+                    XR_TYPED_FRAME_OK &&
+                scalar_access.size <= sizeof(scalar_source));
+        memset(scalar_source, (int) (0x20u + i), scalar_access.size);
+        REQUIRE(xr_typed_frame_store(frame, &scalar_access, scalar_source,
+                                     scalar_access.size) == XR_TYPED_FRAME_OK);
+        REQUIRE(xr_typed_frame_load(frame, &scalar_access, scalar_loaded,
+                                    scalar_access.size) == XR_TYPED_FRAME_OK &&
+                memcmp(scalar_source, scalar_loaded, scalar_access.size) == 0);
+    }
+    REQUIRE(xr_typed_frame_store(frame, &access, probe.expected, access.size) ==
+            XR_TYPED_FRAME_LIFECYCLE_ACTIVE);
+    REQUIRE(xr_typed_frame_cleanup(frame) == XR_TYPED_FRAME_LIFECYCLE_ACTIVE);
+    REQUIRE(xr_typed_frame_bind_coroutine_state(frame, 0) == XR_TYPED_FRAME_OK);
+    uint32_t visited = 0;
+    REQUIRE(xr_typed_frame_visit_coroutine_roots(
+                frame, 0, visit_lifecycle_root, &probe, &visited) ==
+            XR_TYPED_FRAME_OK);
+    REQUIRE(visited == 1 && probe.root_visits == 1);
+    REQUIRE(xr_typed_frame_resume_coroutine_state(frame, 0) ==
+            XR_TYPED_FRAME_OK);
+    uint8_t loaded[32] = {0};
+    REQUIRE(xr_typed_frame_load(frame, &access, loaded, access.size) ==
+                XR_TYPED_FRAME_OK &&
+            memcmp(loaded, probe.expected, access.size) == 0);
+    uint32_t executed = 0;
+    probe.cleanup_result = XR_TYPED_FRAME_ALLOCATION_FAILED;
+    REQUIRE(xr_typed_frame_execute_cleanups(
+                frame, normal_operation, 0, execute_lifecycle_cleanup,
+                &probe, &executed) == XR_TYPED_FRAME_ALLOCATION_FAILED);
+    REQUIRE(executed == 0 && probe.cleanup_calls == 1 &&
+            probe.cleanup_action == XR_TARGET_CLEANUP_RELEASE);
+    memset(loaded, 0, sizeof(loaded));
+    REQUIRE(xr_typed_frame_load(frame, &access, loaded, access.size) ==
+                XR_TYPED_FRAME_OK &&
+            memcmp(loaded, probe.expected, access.size) == 0);
+    REQUIRE(xr_typed_frame_free(&frame) == XR_TYPED_FRAME_LIFECYCLE_ACTIVE &&
+            frame == active_owner);
+    probe.cleanup_result = XR_TYPED_FRAME_OK;
+    REQUIRE(xr_typed_frame_execute_cleanups(
+                frame, normal_operation, 0, execute_lifecycle_cleanup,
+                &probe, &executed) == XR_TYPED_FRAME_OK);
+    REQUIRE(executed == 1 && probe.cleanup_calls == 2 &&
+            probe.cleanup_action == XR_TARGET_CLEANUP_RELEASE);
+    REQUIRE(xr_typed_frame_execute_cleanups(
+                frame, normal_operation, 0, execute_lifecycle_cleanup,
+                &probe, &executed) == XR_TYPED_FRAME_LIFECYCLE_INACTIVE);
+    REQUIRE(probe.cleanup_calls == 2);
+    REQUIRE(xr_typed_frame_load(frame, &access, loaded, access.size) ==
+            XR_TYPED_FRAME_LIFECYCLE_INACTIVE);
+    REQUIRE(xr_typed_frame_cleanup(frame) == XR_TYPED_FRAME_OK);
+    free_frame(&frame);
+
+    frame = create_frame(&fixture, &limits);
+    memset(&probe, 0, sizeof(probe));
+    probe.expected_size = access.size;
+    for (uint32_t i = 0; i < access.size; i++)
+        probe.expected[i] = (uint8_t) (0x80u + i);
+    REQUIRE(xr_typed_frame_describe_slot(frame, owned_slot, &access) ==
+            XR_TYPED_FRAME_OK);
+    REQUIRE(xr_typed_frame_store(frame, &access, probe.expected, access.size) ==
+            XR_TYPED_FRAME_OK);
+    REQUIRE(xr_typed_frame_bind_coroutine_state(frame, 0) == XR_TYPED_FRAME_OK);
+    REQUIRE(xr_typed_frame_execute_cleanups(
+                frame, state_operation, XR_TARGET_CLEANUP_CANCEL,
+                execute_lifecycle_cleanup, &probe, &executed) ==
+            XR_TYPED_FRAME_OK);
+    REQUIRE(executed == 1 && probe.cleanup_calls == 1 &&
+            probe.cleanup_action == XR_TARGET_CLEANUP_RELEASE);
+    XrTypedFrameContext frame_context = {0};
+    REQUIRE(xr_typed_frame_context(frame, &frame_context) == XR_TYPED_FRAME_OK &&
+            frame_context.terminal);
+    REQUIRE(xr_typed_frame_resume_coroutine_state(frame, 0) ==
+            XR_TYPED_FRAME_TERMINAL);
+    REQUIRE(xr_typed_frame_visit_coroutine_roots(
+                frame, 0, visit_lifecycle_root, &probe, &visited) ==
+            XR_TYPED_FRAME_TERMINAL);
+    REQUIRE(xr_typed_frame_cleanup(frame) == XR_TYPED_FRAME_OK);
+    free_frame(&frame);
+    dispose_fixture(&fixture);
+}
+
+int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "coroutine-lifecycle") == 0) {
+        test_owned_string_coroutine_lifecycle();
+        puts("typed frame coroutine lifecycle tests passed");
+        return 0;
+    }
     test_exact_representation_transport_matrix();
     test_exact_slot_access_and_states();
     test_plan_identity_shape_and_budgets();
     test_plan_ownership_and_void_binding();
     test_execution_context_lifecycle();
     test_parent_child_context_links();
+    test_owned_string_coroutine_lifecycle();
     puts("typed frame tests passed");
     return 0;
 }

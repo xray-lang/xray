@@ -277,7 +277,8 @@ static uint64_t measure_frames(const BenchmarkFixture *fixture, const XrTypedFra
             XR_TYPED_FRAME_OK)
             fail("typed frame creation failed");
         checksum += xr_typed_frame_arena_size(frame);
-        xr_typed_frame_free(frame);
+        if (xr_typed_frame_free(&frame) != XR_TYPED_FRAME_OK)
+            fail("typed frame destruction failed");
     }
     uint64_t elapsed = now_ns() - start;
     benchmark_sink ^= checksum;
@@ -302,7 +303,8 @@ measure_footprint(const BenchmarkFixture *fixture, const XrTypedFrameLimits *lim
         fail("benchmark TargetPlan function table is not exact");
     *plan_frame_bytes = functions[0].frame_size;
     *frame_alignment = functions[0].frame_align;
-    xr_typed_frame_free(frame);
+    if (xr_typed_frame_free(&frame) != XR_TYPED_FRAME_OK)
+        fail("cannot destroy footprint probe frame");
     return footprint;
 }
 
@@ -378,13 +380,15 @@ int main(int argc, char **argv) {
     printf("},\"footprint\":{\"fixed_frame_bytes\":%zu,"
            "\"arena_allocation_bytes\":%zu,"
            "\"alignment_padding_bytes\":%zu,"
-           "\"slot_state_metadata_bytes\":%zu,\"total_bytes\":%zu,"
+           "\"slot_state_metadata_bytes\":%zu,"
+           "\"lifecycle_state_metadata_bytes\":%zu,\"total_bytes\":%zu,"
            "\"slot_count\":%u,\"plan_frame_bytes\":%u,"
            "\"frame_alignment\":%u,"
            "\"max_total_bytes\":%zu},\"checksum\":%" PRIu64 "}\n",
            footprint.fixed_frame_bytes, footprint.arena_allocation_bytes,
            footprint.alignment_padding_bytes, footprint.slot_state_metadata_bytes,
-           footprint.total_bytes, slot_count, plan_frame_bytes, frame_alignment,
+           footprint.lifecycle_state_metadata_bytes, footprint.total_bytes,
+           slot_count, plan_frame_bytes, frame_alignment,
            limits.max_total_bytes, benchmark_sink);
     dispose_fixture(&call_fixture);
     dispose_fixture(&scalar_fixture);

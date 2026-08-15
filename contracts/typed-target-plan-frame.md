@@ -1,12 +1,12 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 35 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 36 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
 plan the builder emits.
-Schema 35 is a breaking hard cutover: schema 34 and earlier and a plan missing
+Schema 36 is a breaking hard cutover: schema 35 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
@@ -16,14 +16,17 @@ The frame allocator validates only the selected function's packed slots; an
 unrelated representation in another function cannot make an otherwise exact
 frame unavailable. It transports complete object representations for every
 scalar width, floating-point value, Rune, unit-enum ordinal, trivial aggregate,
-and trivial raw pointer. Rooted, owned, borrowed, View, object-reference,
-code-reference, dynamic, and vector slots remain fail closed. Every access
+and trivial raw pointer. It also accepts an exact immutable String literal as
+a no-lifecycle prerequisite carrier, and one exact owned dynamic String whose
+coroutine root and release lifecycle is complete. Every other rooted, owned,
+borrowed, View, object-reference, code-reference, dynamic, and vector slot
+remains fail closed. Every access
 repeats the stable slot identity, physical size, alignment, register
 representation, and memory representation from the plan, and both
 representations must be storage-compatible with the slot's exact root and
 ownership facts.
 
-A schema-35 dynamic SOURCE_EXPORT function may also retain namespace-resolution
+A schema-36 dynamic SOURCE_EXPORT function may also retain namespace-resolution
 slots in its verified TargetPlan function layout. Those slots are not operands,
 results, or call arguments of the generated instruction group. The frame keeps
 them uninitialized and refuses every access to them; it does not pretend to
@@ -45,9 +48,10 @@ outside this trivial frame allocator; Semantic ownership and the existing AOT
 closure lifetime path retain those responsibilities.
 The String-literal-storage family likewise describes only a dynamic/owned/
 tagged outer value backed by the separate runtime String-literal
-materialization contract. It adds no object body, allocation, root-map,
-root-slot, cleanup, tuple, or general owned-String authority and remains
-outside the trivial frame allocator.
+materialization contract. An exact String constant with complete
+`BORROWED_STATIC` return provenance may be copied as an immutable prerequisite
+carrier without lifecycle metadata. It adds no object body, allocation,
+root-map, root-slot, cleanup, tuple, or general owned-String authority.
 The array-member-result-storage family describes only the dynamic/owned/tagged
 outer value of an array member that hands back its own receiver. That result is
 a second name for a container the array-allocation family already describes, so
@@ -138,12 +142,30 @@ frame context; it cannot build a cache, choose a successor, or make an invalid
 plan executable. The frame's supported family mask is the exact
 completed closure the production builder emits, so a plan built for any other
 closure is refused rather than executed against a frame that never saw one of
-its families. The coroutine
-state-call family proves only frozen state/resume/direct-call/result
-relations; it contains no child-frame, spill, root, cleanup, drop, cancel, or
-action authority. Aggregate, rooted, owned, caller-storage, coroutine, and
-adapter execution is not implemented here and remains fail closed;
-representation transport alone does not grant any such execution family.
+its families. Scalar dispatch independently requires zero root-map, cleanup,
+and coroutine rows for the selected function before frame creation, and repeats
+zero lifecycle bytes before every destruction. The coroutine state-call family
+itself still proves only frozen state/resume/direct-call/result relations. A
+separate exact lifecycle relation may additionally name one String-concat
+producer, suspend state, owner, root, and normal release. TargetPlan reconstructs
+that relation as one root map/root slot plus normal and `CANCEL|EXIT` release
+cleanups. The frame accepts such a managed slot only when the complete relation
+is present: store activates ownership, state bind and root visit require it,
+resume clears the bound state, and a status-returning cleanup executor must
+succeed before bytes are zeroed and ownership becomes released. Executor
+failure preserves the active bytes for retry. Destruction takes an owning
+pointer and refuses an active slot without changing or losing that pointer.
+It also refuses to clean or free a parent while a child remains linked; only
+successful child cleanup severs that link, so no live child is silently
+detached and made unreachable.
+Lifecycle admission, state binding, root visitation, and cleanup execution
+consume only the selected verified function's `root_begin/root_count` or
+`cleanup_begin/cleanup_count` partition with checked bounds. They never scan
+another function's rows; the regression fixture adds 8,192 unrelated root and
+cleanup rows while preserving the target function's exact result. The
+registered mutation gate rejects a return to either global-table scan.
+This grants no child continuation, scheduler, arbitrary owned type,
+error/panic cleanup, or general coroutine instruction execution.
 
 The plan also admits one sealed non-static call descriptor: an exact,
 non-super, non-suspending `Channel.close()` operation reconstructed from
@@ -167,7 +189,11 @@ size, and copies through `memcpy`. No runtime type tag, source type inference,
 legacy bytecode frame, or AOT value-plan fallback may authorize an access.
 The read-only memory-footprint query reports the fixed frame object, the exact
 packed-plan arena allocation, its bounded alignment padding, optional audit
-slot-state bytes, and their checked exact total. A Release frame carries zero
+slot-state bytes, sparse lifecycle metadata, and their checked exact total.
+Lifecycle metadata contains only sorted global slot IDs and states for slots
+with the complete managed contract. A function with no such slot allocates no
+lifecycle arrays, reports zero lifecycle bytes, and its scalar load/store path
+does not read lifecycle state. A Release frame also carries zero audit
 slot-state metadata bytes. The report does not estimate allocator bookkeeping,
 fragmentation, or any storage outside the frame allocation it owns.
 
@@ -179,8 +205,14 @@ Evidence:
   borrowed, View, object/code-reference, dynamic, and vector slots,
   frozen-arena rejection after retained-plan geometry corruption,
   initialization/poison/cleanup state, allocation budgets, the exact footprint
-  sum, and its total-limit boundary. Schema-only representation fixtures do not
-  claim production-builder reachability.
+  sum, and its total-limit boundary. It also proves an exact managed slot at a
+  nonzero local index with ordinary scalar slots on both sides; sparse lookup,
+  root visitation, resume, normal release, cancel release, failed-cleanup retry,
+  exact-once success, active-owner destruction refusal, and zero lifecycle
+  metadata for ordinary scalar frames. The same fixture proves that 8,192
+  root and cleanup rows belonging to another function do not enter target
+  bind, visit, or cleanup work. Schema-only representation fixtures do
+  not claim production-builder reachability.
 - `test_typed_frame_runtime_archive` proves the public header and symbols link
   from the runtime-only archive without compiler or AOT ownership, proves the
   footprint, exact slot transport, trace, profile, and materialization symbols
@@ -206,14 +238,15 @@ Evidence:
   the exact XSM/XTP sole-function generation route.
 
 anchor-sha256: src/plan/target/xr_target_plan.h 8f3b11246167ec7052dbec96cf161018cdaf7f1b4ab2819edf1ffae716d3991b
-anchor-sha256: src/vm/xr_typed_frame.h c3db5918f19e2ff20f481e0b5e5ce116ffc7c6e14c045a579602e12f1551130a
-anchor-sha256: src/vm/xr_typed_frame.c 3afd8fbfa0858e256d0393158b4500ccaa4ef22d5f528c2f75c2d01036633a41
-anchor-sha256: src/vm/xr_typed_dispatch.c 4fde5d036fca17cbe06012ca304a26f8caa6b5165de1149e65081397e281967d
-anchor-sha256: scripts/check_typed_call_staging.py 70224976eb831b98465bd1f719f2e66bd81fdf59503a4c929a2542b2081e8655
-anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c c3944b969694367aff2ecf8f46ccfbffd9dc4decbb2099d4a572a9989984eac2
-anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py e9e057b890df32005e054290a3425f239c1b3c594432a044a04bd6a12dc6dd14
-anchor-sha256: tests/unit/vm/test_typed_frame.c 8f2acc619749a086bf3be97ef9799ea6abef2c45151113b13a87b9a3609f8101
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 81aee9edb47c6a5b0c9786ca0d68584b0af4867b6a5cb31d3280239f4c9a75d9
+anchor-sha256: src/vm/xr_typed_frame.h 0d22797468943e5f5ed4876563b1e93827cad42b936cbf92b24c59c8579465e7
+anchor-sha256: src/vm/xr_typed_frame.c 80ac935291096963179c8f6c58b3105835426c87b2b693d2a62e1d5c16fc913b
+anchor-sha256: src/vm/xr_typed_dispatch.c d7177d939e0fa7fa59bc88972fb3f6e077b2bbc0e045c35cf500ba4393093f66
+anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
+anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 3fd550a0cfcdee2b28a631ef1ef6ae56c5a776c4d380a508d78e6d307bbf1b20
+anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041
+anchor-sha256: tests/unit/vm/test_typed_frame.c 75452812609284831f6246434ec67d9fa085618f8ef993ab80f968940064ad70
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c a9ad2e8e56efcc61782c7d5965a3d05b8ada650e671e0f92205afccedcca22e2
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h fda9cca936f9cceaa5c39fb08e4ef525ec29ffa946112e2b8a02106273865395
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 7778b3428bea2edaa5342818dab86f3ff4867f46f0c83a72a489b0328d76356e
+anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 9f04a1db2a48200e33e3d491ebf2377461d8bdc55c62ad12c71f69a2378ceb28

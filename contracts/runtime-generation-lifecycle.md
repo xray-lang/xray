@@ -38,7 +38,12 @@ authority.
    authority. Every nonzero family must be one of those two exact families.
    Any other verified plan remains VERIFIED and fails PREPARE with
    `XR_EXEC_5004`; it is not partially activated.
-   TargetPlan schema 35 preserves exact SOURCE-import storage and dense
+   Scalar dispatch independently repeats the selected function's zero
+   root-map, cleanup, and coroutine condition before frame creation, and
+   requires zero sparse lifecycle bytes before its status-returning frame
+   destruction succeeds. Managed coroutine frames are owned by their explicit
+   lifecycle consumer and cannot enter this generation route.
+   TargetPlan schema 36 preserves exact SOURCE-import storage and dense
    SOURCE_EXPORT argument rows together with exact ADT-enum, aggregate
    field-name, Array-intrinsic, String-runes result, and sealed Iterator-rune
    `hasNext`/`next`/`rune.toUInt32`/`rune.isWhitespace` call authority, plus exact direct-local
@@ -121,7 +126,7 @@ authority.
     identity at every call site. `XR_ENTRY_ABI_SCHEMA_VERSION == 1` instead hashes
     the exact signed-i64 parameter/result shape, native ABI, target data-layout
     hash, and target-profile fingerprint under an entry-specific domain. This
-    TargetPlan schema 35 and XTP schema 35 persist that ABI fingerprint in a
+    TargetPlan schema 36 and XTP schema 36 persist that ABI fingerprint in a
     dedicated entry-expectation row together with the identity-adapter and
     target-profile fingerprints. The artifact never persists an entry cell,
     handle, generation pointer, or code pointer. No earlier schema is accepted.
@@ -177,11 +182,12 @@ anchor-sha256: src/runtime/xr_module_generation_internal.h 1e6c5914a7d290d7d8a8a
 anchor-sha256: src/runtime/xr_module_generation.c 28cecd15918252d54876ce4c33eb5dfd9613a0021daf29e3c1095bce47c90aa7
 anchor-sha256: src/runtime/xr_module_generation_verify.c d954584f4235e75773790b7a0415c6613ba81e09ed7507338d0021893f7b722a
 anchor-sha256: src/vm/xr_typed_dispatch.h afe8997a2272790226f6591615c8721213df06eba476c1c45114cd2208d7c62d
-anchor-sha256: src/vm/xr_typed_dispatch.c 4fde5d036fca17cbe06012ca304a26f8caa6b5165de1149e65081397e281967d
+anchor-sha256: src/vm/xr_typed_dispatch.c d7177d939e0fa7fa59bc88972fb3f6e077b2bbc0e045c35cf500ba4393093f66
 anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
 anchor-sha256: src/vm/xr_vm_decoded_cache.c 2d4f14d54740e6aac0cdfb23fc7b90b075725c479751ba52a1948a658f91fa77
-anchor-sha256: src/vm/xr_typed_frame.h c3db5918f19e2ff20f481e0b5e5ce116ffc7c6e14c045a579602e12f1551130a
-anchor-sha256: src/vm/xr_typed_frame.c 3afd8fbfa0858e256d0393158b4500ccaa4ef22d5f528c2f75c2d01036633a41
+anchor-sha256: src/vm/xr_typed_frame.h 0d22797468943e5f5ed4876563b1e93827cad42b936cbf92b24c59c8579465e7
+anchor-sha256: src/vm/xr_typed_frame.c 80ac935291096963179c8f6c58b3105835426c87b2b693d2a62e1d5c16fc913b
+anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 9f04a1db2a48200e33e3d491ebf2377461d8bdc55c62ad12c71f69a2378ceb28
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b

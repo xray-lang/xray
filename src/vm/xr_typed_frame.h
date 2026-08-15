@@ -25,7 +25,7 @@
 #define XR_TYPED_FRAME_MAX_SLOT_COUNT UINT32_C(1048576)
 #define XR_TYPED_FRAME_MAX_ALIGNMENT ((size_t) 4096u)
 #define XR_TYPED_FRAME_MAX_TOTAL_BYTES ((size_t) 80u * 1024u * 1024u)
-#define XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION UINT32_C(35)
+#define XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION UINT32_C(36)
 #define XR_TYPED_FRAME_CONTEXT_INDEX_NONE UINT32_MAX
 #define XR_TYPED_FRAME_MAX_PARENT_DEPTH UINT32_C(4096)
 
@@ -63,6 +63,9 @@ typedef enum XrTypedFrameStatus {
     XR_TYPED_FRAME_GENERATION_IDENTITY_MISMATCH,
     XR_TYPED_FRAME_CALL_LINK_INVALID,
     XR_TYPED_FRAME_CHILD_ACTIVE,
+    XR_TYPED_FRAME_LIFECYCLE_INACTIVE,
+    XR_TYPED_FRAME_LIFECYCLE_ACTIVE,
+    XR_TYPED_FRAME_TERMINAL,
 } XrTypedFrameStatus;
 
 typedef enum XrTypedSlotState {
@@ -91,9 +94,9 @@ typedef struct XrTypedSlotAccess {
 /* Load and store copy exactly one verified slot's complete object
  * representation. They never form a typed pointer to arena storage, infer a
  * representation from the caller's buffer, dereference carried references,
- * or perform retain/release. Only representations with no frame-local
- * lifecycle work are accepted; rooted, owned, and borrowed representations
- * remain fail closed until exact executor lifecycle operations exist. */
+ * or perform retain/release. Rooted or owned storage is accepted only for the
+ * exact frozen coroutine lifecycle below; every other nontrivial ownership
+ * shape remains fail closed. */
 
 /* Payload bytes requested from the allocator for one live frame. Allocator
  * bookkeeping and heap fragmentation are deliberately outside this contract:
@@ -103,6 +106,7 @@ typedef struct XrTypedFrameMemoryFootprint {
     size_t arena_allocation_bytes;
     size_t alignment_padding_bytes;
     size_t slot_state_metadata_bytes;
+    size_t lifecycle_state_metadata_bytes;
     size_t total_bytes;
 } XrTypedFrameMemoryFootprint;
 
@@ -133,10 +137,17 @@ typedef struct XrTypedFrameContext {
     bool generation_bound;
     bool has_parent;
     bool has_child;
-    bool reserved8;
+    bool terminal;
 } XrTypedFrameContext;
 
 typedef struct XrTypedFrame XrTypedFrame;
+
+typedef void (*XrTypedFrameRootVisitor)(void *context,
+                                        const XrTypedSlotAccess *access,
+                                        const void *bytes);
+typedef XrTypedFrameStatus (*XrTypedFrameCleanupExecutor)(
+    void *context, uint8_t action, const XrTypedSlotAccess *access,
+    void *bytes);
 
 XR_FUNC void xr_typed_frame_limits_default(XrTypedFrameLimits *limits);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_create(
@@ -166,6 +177,14 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_enter_decoded_instruction(
     uint32_t block_entry_instruction);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_bind_coroutine_state(
     XrTypedFrame *frame, uint32_t coroutine_state);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_visit_coroutine_roots(
+    XrTypedFrame *frame, uint32_t coroutine_state,
+    XrTypedFrameRootVisitor visitor, void *context, uint32_t *visited);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_resume_coroutine_state(
+    XrTypedFrame *frame, uint32_t coroutine_state);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_execute_cleanups(
+    XrTypedFrame *frame, uint32_t semantic_operation, uint8_t event_flags,
+    XrTypedFrameCleanupExecutor executor, void *context, uint32_t *executed);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_bind_generation_identity(
     XrTypedFrame *frame, const XrModuleGenerationIdentity *identity);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_link_child(
@@ -177,6 +196,6 @@ XR_FUNC uint32_t xr_typed_frame_slot_count(const XrTypedFrame *frame);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_memory_footprint(
     const XrTypedFrame *frame, XrTypedFrameMemoryFootprint *footprint);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_cleanup(XrTypedFrame *frame);
-XR_FUNC void xr_typed_frame_free(XrTypedFrame *frame);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_free(XrTypedFrame **frame);
 
 #endif  // XR_TYPED_FRAME_H

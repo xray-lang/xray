@@ -110,6 +110,41 @@ static XrSemanticPlan *build_string_concat_release_semantic_plan(void) {
     return semantic;
 }
 
+static XrSemanticPlan *build_string_coroutine_lifecycle_semantic_plan(void) {
+    XiFunc *function = xi_func_new("xtp_string_coroutine_lifecycle", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    entry->sealed = true;
+    XiValue *left = xi_const_str(function, entry, "xtp", &stub_string);
+    XiValue *right = xi_const_str(function, entry, "-lifecycle", &stub_string);
+    XiValue *text =
+        xi_value_new(function, entry, XI_STR_CONCAT, &stub_string, 2);
+    XiValue *yield = xi_value_new(function, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *length = xi_value_new(function, entry, XI_LEN, &stub_int, 1);
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(left && right && text && yield && length && release);
+    text->args[0] = left;
+    text->args[1] = right;
+    length->args[0] = text;
+    release->args[0] = text;
+    xi_block_set_return(entry, length);
+    function->stage = XI_STAGE_SEMANTIC_LOWERED;
+    function->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(function, NULL));
+    REQUIRE(function->coro_plan && function->coro_plan->nstates == 1 &&
+            function->coro_plan->points[0].nroots == 1 &&
+            function->coro_plan->points[0].ndrops == 1);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error,
+                                   sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
+
 static XrSemanticPlan *build_stringbuilder_semantic_plan(void) {
     XiFunc *function = xi_func_new("xtp_stringbuilder", &stub_int);
     REQUIRE(function != NULL);
@@ -633,6 +668,11 @@ static XtpFixture make_string_concat_release_fixture(void) {
         build_string_concat_release_semantic_plan());
 }
 
+static XtpFixture make_string_coroutine_lifecycle_fixture(void) {
+    return make_fixture_from_semantic(
+        build_string_coroutine_lifecycle_semantic_plan());
+}
+
 static XtpFixture make_source_export_fixture(void) {
     XtpFixture fixture = {0};
     fixture.semantic =
@@ -1075,6 +1115,66 @@ static void test_cleanup_row_roundtrip_and_mutate(void) {
         size_t offset = (size_t) xr_xtp_take_u64(entry + 8);
         copy[offset + mutations[i]] ^= 1;
         resign_section(copy, XR_XTP_SECTION_CLEANUPS);
+        resign_artifact(copy, fixture.size);
+        expect_materialize_failure(&fixture, copy);
+        xr_free(copy);
+    }
+    dispose_fixture(&fixture);
+}
+
+static void test_coroutine_lifecycle_rows_roundtrip_and_mutate(void) {
+    XtpFixture fixture = make_string_coroutine_lifecycle_fixture();
+    uint32_t count = 0;
+    const XrTargetRootMapRecord *roots =
+        xr_target_plan_root_maps(fixture.plan, &count);
+    REQUIRE(roots && count == 1 && roots[0].slot_count == 1 &&
+            roots[0].flags == (XR_TARGET_ROOT_SUSPEND |
+                               XR_TARGET_ROOT_CANCEL |
+                               XR_TARGET_ROOT_EXIT));
+    const uint32_t *root_slots =
+        xr_target_plan_root_slots(fixture.plan, &count);
+    REQUIRE(root_slots && count == 1);
+    const XrTargetCleanupRecord *cleanups =
+        xr_target_plan_cleanups(fixture.plan, &count);
+    REQUIRE(cleanups && count == 2 &&
+            cleanups[0].semantic_operation == roots[0].semantic_operation &&
+            cleanups[0].slot == root_slots[0] &&
+            cleanups[0].flags ==
+                (XR_TARGET_CLEANUP_CANCEL | XR_TARGET_CLEANUP_EXIT) &&
+            cleanups[1].flags == 0);
+
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *decoded = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
+                                    error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
+                                            fixture.profile, &decoded, error,
+                                            sizeof(error)));
+    const XrTargetRootMapRecord *decoded_roots =
+        xr_target_plan_root_maps(decoded, &count);
+    REQUIRE(decoded_roots && count == 1 &&
+            decoded_roots[0].semantic_operation == roots[0].semantic_operation &&
+            decoded_roots[0].flags == roots[0].flags &&
+            xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
+                                 xr_target_plan_fingerprint(fixture.plan)));
+    xr_target_plan_free(decoded);
+    xr_xtp_candidate_release(candidate);
+
+    const struct {
+        XrXtpSectionKind section;
+        size_t byte;
+    } mutations[] = {
+        {XR_XTP_SECTION_ROOT_MAPS, 18},
+        {XR_XTP_SECTION_ROOT_SLOTS, 0},
+        {XR_XTP_SECTION_CLEANUPS, 17},
+    };
+    for (uint32_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
+        uint8_t *copy = copy_artifact(&fixture);
+        uint8_t *entry = directory_entry(copy, mutations[i].section);
+        size_t offset = (size_t) xr_xtp_take_u64(entry + 8);
+        copy[offset + mutations[i].byte] ^= 1;
+        resign_section(copy, mutations[i].section);
         resign_artifact(copy, fixture.size);
         expect_materialize_failure(&fixture, copy);
         xr_free(copy);
@@ -2050,6 +2150,7 @@ int main(int argc, char **argv) {
     test_channel_close_row_roundtrip_and_mutate();
     test_stringbuilder_row_roundtrip_and_mutate();
     test_cleanup_row_roundtrip_and_mutate();
+    test_coroutine_lifecycle_rows_roundtrip_and_mutate();
     test_source_export_row_roundtrip_and_mutate();
     test_coroutine_rows_roundtrip_and_mutate();
     test_header_and_directory_mutations();

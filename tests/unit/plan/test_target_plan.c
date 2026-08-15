@@ -1685,7 +1685,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "785e45711ed49b0a00dcdf7854205e9ac21d3051ce2133145018955b4a32d49b") == 0);
+                   "87848682bde91edea9203181f08c172a66ceb7da304e35c4dd734cd585d7343e") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2853,7 +2853,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "0abb2682ea0b0a30392232be644e86970edff798d6e0851f8ee695c00302c4fe") == 0);
+                   "75f0b90027e8afebc6881fc472af8c4a3460daaf333568e91f37c5d79ee1c8f2") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
         XrTargetCallArgumentRecord fabricated_argument = {0};
@@ -3554,7 +3554,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "572337bb170658e27ecd84052ebd5e718ef8e0cab938d1a22f250aa4dc56a4f7") == 0);
+                   "2be601ee771bd17e23eb3c2723675567b3d89d4e87736649b745da288d34f49b") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -3843,7 +3843,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "100620ac16c508583f961396ad12d668441509b7de746b0ae8900cc237cdf41a") == 0);
+                   "473da709167a49e547c99ddf14cc4b9b7d99120fb758d90ffa0ed4cfff3d2647") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");
@@ -4987,7 +4987,200 @@ static void test_bool_and_nullable_scalar_boundary(void) {
     xr_target_profile_free(profile);
 }
 
+static XrSemanticPlan *build_owned_string_coroutine_lifecycle_semantic(void) {
+    XiFunc *function =
+        xi_func_new("target_owned_string_coroutine_lifecycle", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    entry->sealed = true;
+    XiValue *left = xi_const_str(function, entry, "target", &stub_exact_string);
+    XiValue *right = xi_const_str(function, entry, "-frame", &stub_exact_string);
+    XiValue *text =
+        xi_value_new(function, entry, XI_STR_CONCAT, &stub_exact_string, 2);
+    XiValue *yield = xi_value_new(function, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *length = xi_value_new(function, entry, XI_LEN, &stub_int, 1);
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(left && right && text && yield && length && release);
+    text->args[0] = left;
+    text->args[1] = right;
+    length->args[0] = text;
+    release->args[0] = text;
+    xi_block_set_return(entry, length);
+    function->stage = XI_STAGE_SEMANTIC_LOWERED;
+    function->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(function, NULL));
+    REQUIRE(function->coro_plan && function->coro_plan->nstates == 1 &&
+            function->coro_plan->points[0].nroots == 1 &&
+            function->coro_plan->points[0].ndrops == 1);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &semantic, error,
+                                        sizeof(error));
+    if (!built)
+        fprintf(stderr, "owned String coroutine SemanticPlan failed: %s\n",
+                error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_many_owned_string_coroutine_lifecycles(
+    uint32_t owner_count) {
+    XiFunc *function =
+        xi_func_new("target_many_owned_string_lifecycles", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    entry->sealed = true;
+    XiValue **owners = (XiValue **) xr_calloc(owner_count, sizeof(*owners));
+    REQUIRE(owners != NULL);
+    for (uint32_t i = 0; i < owner_count; i++) {
+        XiValue *left = xi_const_str(function, entry, "target",
+                                     &stub_exact_string);
+        XiValue *right = xi_const_str(function, entry, "-projection",
+                                      &stub_exact_string);
+        owners[i] = xi_value_new(function, entry, XI_STR_CONCAT,
+                                 &stub_exact_string, 2);
+        REQUIRE(left && right && owners[i]);
+        owners[i]->args[0] = left;
+        owners[i]->args[1] = right;
+    }
+    XiValue *yield = xi_value_new(function, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *sum = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(yield && sum);
+    for (uint32_t i = 0; i < owner_count; i++) {
+        XiValue *length = xi_value_new(function, entry, XI_LEN, &stub_int, 1);
+        XiValue *next = xi_value_new(function, entry, XI_ADD, &stub_int, 2);
+        XiValue *release = xi_value_new(function, entry, XI_RELEASE,
+                                        &stub_unit, 1);
+        REQUIRE(length && next && release);
+        length->args[0] = owners[i];
+        next->args[0] = sum;
+        next->args[1] = length;
+        release->args[0] = owners[i];
+        sum = next;
+    }
+    xr_free(owners);
+    xi_block_set_return(entry, sum);
+    function->stage = XI_STAGE_SEMANTIC_LOWERED;
+    function->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(function, NULL));
+    REQUIRE(function->coro_plan && function->coro_plan->nstates == 1 &&
+            function->coro_plan->points[0].nroots >= owner_count &&
+            function->coro_plan->points[0].ndrops >= owner_count);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &semantic, error,
+                                        sizeof(error));
+    if (!built)
+        fprintf(stderr, "many lifecycle SemanticPlan failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
+}
+
+static void test_large_coroutine_lifecycle_projection_is_bounded(void) {
+    const uint32_t owner_count = 64;
+    XrSemanticPlan *semantic =
+        build_many_owned_string_coroutine_lifecycles(owner_count);
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error,
+                                      sizeof(error));
+    if (!built)
+        fprintf(stderr, "large lifecycle TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    REQUIRE(plan->root_maps_count == 1 &&
+            plan->root_slots_count == owner_count &&
+            plan->cleanups_count == owner_count * 2u);
+    REQUIRE(xr_target_plan_verify(plan, NULL, 0));
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_owned_string_coroutine_lifecycle_authority(void) {
+    XrSemanticPlan *semantic =
+        build_owned_string_coroutine_lifecycle_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error,
+                                      sizeof(error));
+    if (!built)
+        fprintf(stderr, "owned String coroutine TargetPlan failed: %s\n",
+                error);
+    REQUIRE(built && plan != NULL);
+    REQUIRE(plan->root_maps_count == 1 && plan->root_slots_count == 1 &&
+            plan->cleanups_count == 2 && plan->coroutines_count == 1);
+    XrTargetRootMapRecord *root = &plan->root_maps[0];
+    REQUIRE(root->id == 0 && root->function == 0 && root->slot_begin == 0 &&
+            root->slot_count == 1 &&
+            root->semantic_operation ==
+                plan->coroutines[0].semantic_operation &&
+            root->flags == (XR_TARGET_ROOT_SUSPEND | XR_TARGET_ROOT_CANCEL |
+                            XR_TARGET_ROOT_EXIT));
+    uint32_t owned_slot = plan->root_slots[0];
+    REQUIRE(owned_slot < plan->slots_count &&
+            plan->slots[owned_slot].function == 0 &&
+            plan->slots[owned_slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[owned_slot].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            plan->machine_reps[plan->slots[owned_slot].memory_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE);
+    XrTargetCleanupRecord *terminal = NULL;
+    XrTargetCleanupRecord *normal = NULL;
+    for (uint32_t i = 0; i < plan->cleanups_count; i++) {
+        XrTargetCleanupRecord *cleanup = &plan->cleanups[i];
+        REQUIRE(cleanup->id == i && cleanup->function == 0 &&
+                cleanup->slot == owned_slot &&
+                cleanup->action == XR_TARGET_CLEANUP_RELEASE &&
+                cleanup->provider == 0);
+        if (cleanup->flags ==
+            (XR_TARGET_CLEANUP_CANCEL | XR_TARGET_CLEANUP_EXIT))
+            terminal = cleanup;
+        else if (cleanup->flags == 0)
+            normal = cleanup;
+    }
+    REQUIRE(terminal && normal &&
+            terminal->semantic_operation == root->semantic_operation &&
+            normal->semantic_operation != root->semantic_operation);
+
+    uint16_t saved_root_flags = root->flags;
+    root->flags &= (uint16_t) ~XR_TARGET_ROOT_CANCEL;
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    root->flags = saved_root_flags;
+    uint32_t saved_root_slot = plan->root_slots[0];
+    plan->root_slots[0] = UINT32_MAX;
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    plan->root_slots[0] = saved_root_slot;
+    uint8_t saved_terminal_flags = terminal->flags;
+    terminal->flags = XR_TARGET_CLEANUP_CANCEL;
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    terminal->flags = saved_terminal_flags;
+    uint32_t saved_normal_operation = normal->semantic_operation;
+    normal->semantic_operation = terminal->semantic_operation;
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    normal->semantic_operation = saved_normal_operation;
+    REQUIRE(xr_target_plan_verify(plan, NULL, 0));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "coroutine-lifecycle-authority") == 0) {
+        test_owned_string_coroutine_lifecycle_authority();
+        test_large_coroutine_lifecycle_projection_is_bounded();
+        puts("Coroutine lifecycle TargetPlan authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "array-reserve-authority") == 0) {
         test_array_reserve_call_authority();
         puts("Array.reserve TargetPlan authority tests passed");
@@ -5047,6 +5240,8 @@ int main(int argc, char **argv) {
     test_value_rep_mutations_fail_closed();
     test_freeze_rejects_invalid_draft();
     test_bool_and_nullable_scalar_boundary();
+    test_owned_string_coroutine_lifecycle_authority();
+    test_large_coroutine_lifecycle_projection_is_bounded();
     printf("TargetProfile/TargetPlan tests passed\n");
     return 0;
 }

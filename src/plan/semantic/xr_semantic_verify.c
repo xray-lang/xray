@@ -11,6 +11,7 @@
 #include "xr_semantic_verify.h"
 #include "xr_semantic_allocation_shape.h"
 #include "xr_semantic_class_shape.h"
+#include "xr_semantic_coroutine_lifecycle_shape.h"
 #include "xr_semantic_graph.h"
 #include "xr_semantic_ops.h"
 #include "xr_semantic_plan_internal.h"
@@ -181,7 +182,7 @@ static bool semantic_source_enum_identity_exact(const XrSemanticTypeRecord *type
                type->enum_layout_id == 0 && type->enum_member_count == 0 &&
                type->enum_flags == 0 && type->reserved_enum == 0;
     const char *cursor = type->source_enum_key;
-    static const char prefix[] = "source-enum-v1:schema=31:owner=";
+    static const char prefix[] = "source-enum-v1:schema=32:owner=";
     if (!cursor || strncmp(cursor, prefix, sizeof(prefix) - 1u) != 0 ||
         !verify_id(cursor, type->source_enum_identity) ||
         type->enum_member_count == 0 || type->enum_layout_id == 0 ||
@@ -568,6 +569,16 @@ static bool verify_entity_record(const XrSemanticPlan *plan, const XrSemanticEnt
                    parent->subject == plan->operations[entity->subject].function &&
                    entity->ordinal != 0 &&
                    mark_entity(coverage->coroutine_states, plan->operation_count, entity->subject);
+        case XR_SEM_ENTITY_COROUTINE_LIVE:
+        case XR_SEM_ENTITY_COROUTINE_ROOT:
+        case XR_SEM_ENTITY_COROUTINE_DROP:
+            return parent && parent->kind == XR_SEM_ENTITY_COROUTINE_STATE &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
+                   entity->subject < plan->operation_count &&
+                   parent->subject < plan->operation_count &&
+                   entity->ordinal == 0 &&
+                   plan->operations[entity->subject].function ==
+                       plan->operations[parent->subject].function;
         case XR_SEM_ENTITY_DEBUG_SPAN:
             return parent && parent->kind == XR_SEM_ENTITY_OPERATION &&
                    entity->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
@@ -676,6 +687,253 @@ static bool verify_coroutine_entity_sequence(const XrSemanticPlan *plan) {
     }
     xr_free(keys);
     return valid;
+}
+
+typedef struct XrExpectedCoroutineLifecycle {
+    XrSemanticCoroutineLifecycleShape shape;
+    uint32_t owner_entity;
+    uint8_t role_mask;
+} XrExpectedCoroutineLifecycle;
+
+static int compare_expected_coroutine_lifecycle(const void *left,
+                                                const void *right) {
+    const XrExpectedCoroutineLifecycle *a =
+        (const XrExpectedCoroutineLifecycle *) left;
+    const XrExpectedCoroutineLifecycle *b =
+        (const XrExpectedCoroutineLifecycle *) right;
+    if (a->shape.state_entity != b->shape.state_entity)
+        return a->shape.state_entity < b->shape.state_entity ? -1 : 1;
+    if (a->shape.producer_operation != b->shape.producer_operation)
+        return a->shape.producer_operation < b->shape.producer_operation ? -1
+                                                                         : 1;
+    return 0;
+}
+
+static XrExpectedCoroutineLifecycle *find_expected_coroutine_lifecycle(
+    XrExpectedCoroutineLifecycle *rows, uint32_t count, uint32_t state_entity,
+    uint32_t producer_operation) {
+    uint32_t low = 0;
+    uint32_t high = count;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2u;
+        XrExpectedCoroutineLifecycle *candidate = &rows[middle];
+        if (candidate->shape.state_entity < state_entity ||
+            (candidate->shape.state_entity == state_entity &&
+             candidate->shape.producer_operation < producer_operation))
+            low = middle + 1u;
+        else
+            high = middle;
+    }
+    return low < count && rows[low].shape.state_entity == state_entity &&
+                   rows[low].shape.producer_operation == producer_operation
+               ? &rows[low]
+               : NULL;
+}
+
+static bool coroutine_lifecycle_entity_key_is_exact(
+    const XrSemanticPlan *plan,
+    const XrExpectedCoroutineLifecycle *expected,
+    const XrSemanticEntityRecord *entity) {
+    if (!expected || !entity || entity->parent >= plan->entity_count ||
+        (entity->kind != XR_SEM_ENTITY_COROUTINE_LIVE &&
+         entity->kind != XR_SEM_ENTITY_COROUTINE_ROOT &&
+         entity->kind != XR_SEM_ENTITY_COROUTINE_DROP) ||
+        expected->owner_entity >= plan->entity_count)
+        return false;
+    const XrSemanticCoroutineLifecycleShape *shape = &expected->shape;
+    const XrSemanticEntityRecord *owner =
+        &plan->entities[expected->owner_entity];
+    if (owner->kind != XR_SEM_ENTITY_OWNER ||
+        owner->subject_kind != XR_SEM_ENTITY_SUBJECT_OWNER ||
+        owner->subject != shape->owner)
+        return false;
+    char parent_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char producer_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char release_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char owner_id[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(plan->entities[entity->parent].id, parent_id);
+    xr_stable_id_hex(plan->operations[shape->producer_operation].id,
+                     producer_id);
+    xr_stable_id_hex(plan->operations[shape->release_operation].id, release_id);
+    xr_stable_id_hex(owner->id, owner_id);
+    char expected_key[512];
+    int length = snprintf(
+        expected_key, sizeof(expected_key),
+        "entity-v1:schema=%u:kind=%u:parent=%s:value-operation=%s:release=%s:owner=%s",
+        XR_SEMANTIC_SCHEMA_VERSION, (unsigned) entity->kind, parent_id,
+        producer_id, release_id, owner_id);
+    return length > 0 && (size_t) length < sizeof(expected_key) &&
+           strcmp(entity->canonical_key, expected_key) == 0;
+}
+
+static bool verify_coroutine_lifecycle_entities(
+    const XrSemanticPlan *plan, const XrSemanticGraph *graph, char *error,
+    size_t error_size) {
+    uint32_t state_count = 0;
+    uint32_t lifecycle_count = 0;
+    for (uint32_t entity = 0; entity < plan->entity_count; entity++) {
+        uint16_t kind = plan->entities[entity].kind;
+        state_count += kind == XR_SEM_ENTITY_COROUTINE_STATE;
+        if (kind == XR_SEM_ENTITY_COROUTINE_LIVE ||
+            kind == XR_SEM_ENTITY_COROUTINE_ROOT ||
+            kind == XR_SEM_ENTITY_COROUTINE_DROP)
+            lifecycle_count++;
+    }
+    if (lifecycle_count % 3u != 0)
+        return report(error, error_size, "XR_SEM_0019",
+                      "coroutine lifecycle identity coverage is incomplete");
+    XrSemanticStringConcatReleaseIndex release_index = {0};
+    XrSemanticStringConcatReleaseIndexStatus release_status =
+        xr_semantic_string_concat_release_index_build(plan, &release_index);
+    if (release_status != XR_SEMANTIC_RELEASE_INDEX_OK)
+        return report(error, error_size,
+                      release_status == XR_SEMANTIC_RELEASE_INDEX_INVALID
+                          ? "XR_SEM_0019"
+                          : "XR_EXEC_5003",
+                      release_status == XR_SEMANTIC_RELEASE_INDEX_INVALID
+                          ? "coroutine lifecycle release identity is invalid"
+                          : "coroutine lifecycle release index budget exhausted");
+    size_t owner_count_size = xr_ownership_certificate_owner_count(
+        xr_semantic_plan_ownership(plan));
+    if (owner_count_size > UINT32_MAX) {
+        xr_semantic_string_concat_release_index_dispose(&release_index);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "coroutine lifecycle owner index exceeds row width");
+    }
+    uint32_t owner_count = (uint32_t) owner_count_size;
+    uint32_t expected_capacity = lifecycle_count / 3u;
+    uint32_t sort_height =
+        xr_semantic_lifecycle_sort_height(expected_capacity);
+    uint32_t search_height = sort_height + 1u;
+    if (!xr_semantic_coroutine_lifecycle_work_budget_is_valid(
+            state_count, release_index.count) ||
+        !xr_semantic_lifecycle_work_charge_product(
+            &release_index.linear_work, state_count, release_index.count) ||
+        !xr_semantic_lifecycle_work_charge_product(
+            &release_index.linear_work, expected_capacity, sort_height) ||
+        !xr_semantic_lifecycle_work_charge(
+            &release_index.linear_work, owner_count) ||
+        !xr_semantic_lifecycle_work_charge_product(
+            &release_index.linear_work, plan->entity_count, 4u) ||
+        !xr_semantic_lifecycle_work_charge_product(
+            &release_index.linear_work, expected_capacity, 3u) ||
+        !xr_semantic_lifecycle_work_charge_product(
+            &release_index.linear_work, lifecycle_count, search_height)) {
+        xr_semantic_string_concat_release_index_dispose(&release_index);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "coroutine lifecycle verifier budget exhausted");
+    }
+    XrExpectedCoroutineLifecycle *expected = expected_capacity
+        ? (XrExpectedCoroutineLifecycle *) xr_calloc(
+              expected_capacity, sizeof(*expected))
+        : NULL;
+    if (expected_capacity && !expected) {
+        xr_semantic_string_concat_release_index_dispose(&release_index);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "coroutine lifecycle projection allocation failed");
+    }
+    uint32_t expected_count = 0;
+    for (uint32_t entity = 0; entity < plan->entity_count; entity++) {
+        if (plan->entities[entity].kind != XR_SEM_ENTITY_COROUTINE_STATE)
+            continue;
+        for (uint32_t release = 0; release < release_index.count; release++) {
+            XrSemanticCoroutineLifecycleShape shape = {0};
+            if (!xr_semantic_owned_string_coroutine_lifecycle_from_release_is_exact(
+                    plan, graph, entity, &release_index.rows[release], &shape))
+                continue;
+            if (expected_count >= expected_capacity) {
+                xr_free(expected);
+                xr_semantic_string_concat_release_index_dispose(&release_index);
+                return report(error, error_size, "XR_SEM_0019",
+                              "coroutine lifecycle identity coverage is incomplete");
+            }
+            expected[expected_count++].shape = shape;
+        }
+    }
+    qsort(expected, expected_count, sizeof(*expected),
+          compare_expected_coroutine_lifecycle);
+    for (uint32_t i = 1; i < expected_count; i++) {
+        if (expected[i - 1u].shape.state_entity ==
+                expected[i].shape.state_entity &&
+            expected[i - 1u].shape.producer_operation ==
+                expected[i].shape.producer_operation) {
+            xr_free(expected);
+            xr_semantic_string_concat_release_index_dispose(&release_index);
+            return report(error, error_size, "XR_SEM_0019",
+                          "coroutine lifecycle release is not unique");
+        }
+    }
+    uint32_t *owner_entities = owner_count
+        ? (uint32_t *) xr_malloc((size_t) owner_count *
+                                 sizeof(*owner_entities))
+        : NULL;
+    if (owner_count && !owner_entities) {
+        xr_free(expected);
+        xr_semantic_string_concat_release_index_dispose(&release_index);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "coroutine lifecycle owner index allocation failed");
+    }
+    for (uint32_t owner = 0; owner < owner_count; owner++)
+        owner_entities[owner] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t entity = 0; entity < plan->entity_count; entity++) {
+        const XrSemanticEntityRecord *record = &plan->entities[entity];
+        if (record->kind != XR_SEM_ENTITY_OWNER)
+            continue;
+        if (record->subject_kind != XR_SEM_ENTITY_SUBJECT_OWNER ||
+            record->subject >= owner_count ||
+            owner_entities[record->subject] != XR_SEMANTIC_INDEX_NONE) {
+            xr_free(owner_entities);
+            xr_free(expected);
+            xr_semantic_string_concat_release_index_dispose(&release_index);
+            return report(error, error_size, "XR_SEM_0019",
+                          "coroutine lifecycle owner identity is not exact");
+        }
+        owner_entities[record->subject] = entity;
+    }
+    for (uint32_t i = 0; i < expected_count; i++) {
+        uint32_t owner = expected[i].shape.owner;
+        if (owner >= owner_count ||
+            owner_entities[owner] == XR_SEMANTIC_INDEX_NONE) {
+            xr_free(owner_entities);
+            xr_free(expected);
+            xr_semantic_string_concat_release_index_dispose(&release_index);
+            return report(error, error_size, "XR_SEM_0019",
+                          "coroutine lifecycle owner identity is missing");
+        }
+        expected[i].owner_entity = owner_entities[owner];
+    }
+    for (uint32_t entity = 0; entity < plan->entity_count; entity++) {
+        const XrSemanticEntityRecord *record = &plan->entities[entity];
+        if (record->kind != XR_SEM_ENTITY_COROUTINE_LIVE &&
+            record->kind != XR_SEM_ENTITY_COROUTINE_ROOT &&
+            record->kind != XR_SEM_ENTITY_COROUTINE_DROP)
+            continue;
+        XrExpectedCoroutineLifecycle *matched =
+            find_expected_coroutine_lifecycle(
+                expected, expected_count, record->parent, record->subject);
+        uint8_t role = (uint8_t) (record->kind -
+                                  XR_SEM_ENTITY_COROUTINE_LIVE);
+        uint8_t bit = (uint8_t) (1u << role);
+        if (!matched || (matched->role_mask & bit) != 0 ||
+            !coroutine_lifecycle_entity_key_is_exact(plan, matched, record)) {
+            xr_free(owner_entities);
+            xr_free(expected);
+            xr_semantic_string_concat_release_index_dispose(&release_index);
+            return report(error, error_size, "XR_SEM_0019",
+                          "coroutine lifecycle identity is not exact");
+        }
+        matched->role_mask |= bit;
+    }
+    bool complete = lifecycle_count == expected_count * 3u;
+    for (uint32_t i = 0; complete && i < expected_count; i++)
+        complete = expected[i].role_mask == 0x7u;
+    xr_free(owner_entities);
+    xr_free(expected);
+    xr_semantic_string_concat_release_index_dispose(&release_index);
+    if (!complete)
+        return report(error, error_size, "XR_SEM_0019",
+                      "coroutine lifecycle identity coverage is incomplete");
+    return true;
 }
 
 static bool verify_entities(const XrSemanticPlan *plan, char *error, size_t error_size) {
@@ -4254,7 +4512,9 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
                     verify_coroutine_authority(plan, error, error_size) &&
                     verify_dependency_rows(plan, error, error_size) &&
                     verify_constants(plan, error, error_size) &&
-                    xr_ownership_certificate_check(plan, &graph, error, error_size);
+                    xr_ownership_certificate_check(plan, &graph, error, error_size) &&
+                    verify_coroutine_lifecycle_entities(plan, &graph, error,
+                                                        error_size);
     xr_semantic_graph_dispose(&graph);
     xr_free(block_edge_mask);
     xr_free(operation_edge_mask);

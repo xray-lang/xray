@@ -24,6 +24,49 @@
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include <string.h>
 
+/* Scalar dispatch owns no lifecycle executor.  Prove that boundary from the
+ * verified plan before a frame exists, then repeat it from the allocated
+ * frame's exact footprint before destruction. */
+static bool function_has_zero_lifecycle(const XrTargetPlan *plan,
+                                        uint32_t function) {
+    uint32_t function_count = 0;
+    uint32_t root_count = 0;
+    uint32_t cleanup_count = 0;
+    uint32_t coroutine_count = 0;
+    const XrTargetFunctionRecord *functions =
+        xr_target_plan_functions(plan, &function_count);
+    (void) xr_target_plan_root_maps(plan, &root_count);
+    (void) xr_target_plan_cleanups(plan, &cleanup_count);
+    (void) xr_target_plan_coroutines(plan, &coroutine_count);
+    const XrTargetFunctionRecord *record =
+        functions && function < function_count ? &functions[function] : NULL;
+    return record && record->id == function &&
+           record->root_begin <= root_count &&
+           record->root_count <= root_count - record->root_begin &&
+           record->cleanup_begin <= cleanup_count &&
+           record->cleanup_count <= cleanup_count - record->cleanup_begin &&
+           record->coroutine_begin <= coroutine_count &&
+           record->coroutine_count <=
+               coroutine_count - record->coroutine_begin &&
+           record->root_count == 0 && record->cleanup_count == 0 &&
+           record->coroutine_count == 0;
+}
+
+static XrTypedDispatchStatus free_scalar_frame(XrTypedFrame **frame) {
+    if (!frame)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (!*frame)
+        return XR_TYPED_DISPATCH_OK;
+    XrTypedFrameMemoryFootprint footprint = {0};
+    if (xr_typed_frame_memory_footprint(*frame, &footprint) !=
+            XR_TYPED_FRAME_OK ||
+        footprint.lifecycle_state_metadata_bytes != 0)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    return xr_typed_frame_free(frame) == XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
 static XrTypedDispatchStatus describe_i64(XrTypedFrame *frame, uint32_t slot,
                                           XrTypedSlotAccess *access) {
     if (xr_typed_frame_describe_slot(frame, slot, access) != XR_TYPED_FRAME_OK ||
@@ -538,8 +581,10 @@ static XrTypedDispatchStatus execute_call(
         return status;
 
     XrTypedFrame *child = NULL;
-    bool linked = false;
     status = XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (!function_has_zero_lifecycle(execution->plan,
+                                     call->callee_function))
+        goto cleanup;
     if (xr_typed_frame_create(execution->plan, execution->fingerprint,
                               call->callee_function, &execution->limits,
                               &child) != XR_TYPED_FRAME_OK)
@@ -553,7 +598,6 @@ static XrTypedDispatchStatus execute_call(
     }
     if (xr_typed_frame_link_child(frame, child) != XR_TYPED_FRAME_OK)
         goto cleanup;
-    linked = true;
     status = copy_call_arguments(frame, child,
                                  call->argument_count
                                      ? &arguments[call->argument_begin]
@@ -571,10 +615,10 @@ static XrTypedDispatchStatus execute_call(
         status = store_i64_bits(frame, row->result_slot, child_result);
 
 cleanup:
-    if (linked && xr_typed_frame_unlink_child(frame, child) != XR_TYPED_FRAME_OK &&
-        status == XR_TYPED_DISPATCH_OK)
+    /* Successful frame cleanup severs the parent link.  A lifecycle refusal
+     * leaves the child linked and therefore reachable from its owner. */
+    if (free_scalar_frame(&child) != XR_TYPED_DISPATCH_OK)
         status = XR_TYPED_DISPATCH_FRAME_ERROR;
-    xr_typed_frame_free(child);
     if (status != XR_TYPED_DISPATCH_TRACE_REJECTED) {
         XrVmTraceEvent call_return = make_trace_event(
             XR_VM_TRACE_CALL_RETURN, row->function, context->frame_id,
@@ -676,6 +720,8 @@ static XrTypedDispatchStatus execute_entry_call(
         !xr_target_plan_fingerprint_is_intact(resolution.plan) ||
         (family != XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
          family != XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC) ||
+        !function_has_zero_lifecycle(resolution.plan,
+                                     resolution.function) ||
         !resolution.dynamic_entries ||
         resolution.dynamic_entries->schema_version !=
             XR_VM_DYNAMIC_ENTRY_CONTEXT_SCHEMA_VERSION ||
@@ -739,9 +785,12 @@ static XrTypedDispatchStatus execute_entry_call(
     if (status == XR_TYPED_DISPATCH_OK)
         status = store_i64_bits(frame, row->result_slot, child_result);
 
-cleanup:
-    xr_typed_frame_free(child);
-    if (acquired) {
+cleanup:;
+    bool child_released =
+        free_scalar_frame(&child) == XR_TYPED_DISPATCH_OK;
+    if (!child_released)
+        status = XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (acquired && child_released) {
         XrVmDynamicEntryStatus released =
             release_context->release(release_context, &resolution);
         if (released != XR_VM_DYNAMIC_ENTRY_OK &&
@@ -1127,6 +1176,7 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
             verified_plan, request->function);
     if ((execution_family != XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
          execution_family != XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC) ||
+        !function_has_zero_lifecycle(verified_plan, request->function) ||
         (execution_family == XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC &&
          (!request->generation_identity ||
           !request->dynamic_entries ||
@@ -1167,8 +1217,9 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         xr_typed_frame_bind_generation_identity(
             frame, request->generation_identity) !=
             XR_TYPED_FRAME_OK) {
-        xr_typed_frame_free(frame);
-        return XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
+        return free_scalar_frame(&frame) == XR_TYPED_DISPATCH_OK
+                   ? XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH
+                   : XR_TYPED_DISPATCH_FRAME_ERROR;
     }
 
     uint64_t return_bits = 0;
@@ -1193,7 +1244,8 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         &execution, frame, request->function, request->arguments,
         request->argument_count, false, 0, XR_VM_TRACE_ID_NONE,
         &return_bits);
-    xr_typed_frame_free(frame);
+    if (free_scalar_frame(&frame) != XR_TYPED_DISPATCH_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
     if (status != XR_TYPED_DISPATCH_OK)
         return status;
     memcpy(request->result, &return_bits, sizeof(*request->result));

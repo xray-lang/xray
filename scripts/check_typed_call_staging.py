@@ -37,11 +37,33 @@ def extract_function(source: str, name: str) -> str:
     raise ValueError(f"unterminated {name} body")
 
 
+def extract_bool_function(source: str, name: str) -> str:
+    signature = re.search(
+        rf"static\s+bool\s+{re.escape(name)}\s*\(", source
+    )
+    if not signature:
+        raise ValueError(f"missing {name} function")
+    opening = source.find("{", signature.end())
+    if opening < 0:
+        raise ValueError(f"missing {name} body")
+    depth = 0
+    for offset in range(opening, len(source)):
+        character = source[offset]
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                return source[signature.start():offset + 1]
+    raise ValueError(f"unterminated {name} body")
+
+
 def verify(source: str) -> list[str]:
     errors: list[str] = []
     try:
         body = extract_function(source, FUNCTION)
         caller = extract_function(source, "execute_call")
+        lifecycle = extract_bool_function(source, "function_has_zero_lifecycle")
     except ValueError as error:
         return [str(error)]
     required = (
@@ -66,6 +88,19 @@ def verify(source: str) -> list[str]:
         caller,
     ):
         errors.append("execute_call does not pass the verified plan-row slice directly")
+    lifecycle_required = (
+        r"xr_target_plan_functions\s*\(",
+        r"record->root_count\s*==\s*0",
+        r"record->cleanup_count\s*==\s*0",
+        r"record->coroutine_count\s*==\s*0",
+    )
+    for pattern in lifecycle_required:
+        if not re.search(pattern, lifecycle):
+            errors.append(
+                "function_has_zero_lifecycle lacks O(1) partition proof: " + pattern
+            )
+    if re.search(r"\b(?:for|while)\s*\(", lifecycle):
+        errors.append("function_has_zero_lifecycle must not scan lifecycle tables")
     return errors
 
 
@@ -84,6 +119,13 @@ static XrTypedDispatchStatus execute_call(void) {
     copy_call_arguments(frame, child,
         call->argument_count ? &arguments[call->argument_begin] : NULL,
         call->argument_count);
+}
+static bool function_has_zero_lifecycle(const XrTargetPlan *plan,
+                                        uint32_t function) {
+    const XrTargetFunctionRecord *functions = xr_target_plan_functions(plan, &count);
+    const XrTargetFunctionRecord *record = &functions[function];
+    return record->root_count == 0 && record->cleanup_count == 0 &&
+           record->coroutine_count == 0;
 }
 """
     if verify(valid):

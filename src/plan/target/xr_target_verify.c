@@ -26,6 +26,7 @@
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_semantic_allocation_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
+#include "../semantic/xr_semantic_coroutine_lifecycle_shape.h"
 #include "../semantic/xr_semantic_enum_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_cleanup_shape.h"
@@ -6586,71 +6587,293 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                            "call/adapter tables do not exactly cover target authority");
 }
 
-static bool verify_roots_and_cleanups(const XrTargetPlan *plan, char *error, size_t error_size) {
-    uint32_t next_root_slot = 0;
-    for (uint32_t i = 0; i < plan->root_maps_count; i++) {
-        const XrTargetRootMapRecord *root = &plan->root_maps[i];
-        if (root->slot_begin != next_root_slot ||
-            !range_valid(root->slot_begin, root->slot_count, plan->root_slots_count) ||
-            !checked_u32_add(next_root_slot, root->slot_count, &next_root_slot))
-            return report(error, error_size, "XR_TARGET_1002",
-                          "root slot ranges do not exactly partition their table");
-    }
-    if (next_root_slot != plan->root_slots_count || plan->root_maps_count ||
-        plan->root_slots_count)
-        return report(error, error_size, "XR_TARGET_1002",
-                      "root tables require semantic liveness facts");
+static int verify_compare_u32(const void *left, const void *right) {
+    uint32_t a = *(const uint32_t *) left;
+    uint32_t b = *(const uint32_t *) right;
+    return a < b ? -1 : a != b;
+}
 
-    uint32_t expected_cleanup = 0;
-    uint32_t operation_count =
-        (uint32_t) xr_semantic_plan_operation_count(plan->semantic_plan);
-    for (uint32_t operation = 0; operation < operation_count; operation++) {
-        XrSemanticStringConcatReleaseShape shape = {0};
-        if (!xr_semantic_string_concat_release_is_exact(
-                plan->semantic_plan, operation, &shape))
-            continue;
-        if (expected_cleanup >= plan->cleanups_count)
-            return report(error, error_size, "XR_TARGET_1002",
-                          "String cleanup table is missing a release");
-        const XrTargetCleanupRecord *cleanup =
-            &plan->cleanups[expected_cleanup];
-        const XrTargetValueRepRecord *binding =
-            xr_target_plan_value_rep(plan, shape.released_value);
-        const XrTargetSlotRecord *slot =
-            binding && binding->slot < plan->slots_count
-                ? &plan->slots[binding->slot]
-                : NULL;
-        const XrTargetMachineRepRecord *register_rep =
-            binding ? xr_target_plan_machine_rep(plan,
-                                                 binding->register_rep)
-                    : NULL;
-        const XrTargetMachineRepRecord *memory_rep =
-            binding ? xr_target_plan_machine_rep(plan, binding->memory_rep)
-                    : NULL;
-        if (!slot || !register_rep || !memory_rep ||
-            cleanup->id != expected_cleanup ||
-            cleanup->function != shape.function ||
-            cleanup->semantic_operation != operation ||
-            cleanup->slot != binding->slot ||
-            cleanup->action != XR_TARGET_CLEANUP_RELEASE ||
-            cleanup->flags != 0 || cleanup->provider != 0 ||
-            register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
-            memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
-            slot->function != shape.function ||
-            slot->semantic_value != shape.released_value ||
-            slot->semantic_operation != shape.producer_operation ||
-            slot->register_rep != binding->register_rep ||
-            slot->memory_rep != binding->memory_rep ||
-            slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-            slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
-            return report(error, error_size, "XR_TARGET_1002",
-                          "String cleanup row is not exact");
-        expected_cleanup++;
-    }
-    if (expected_cleanup != plan->cleanups_count)
-        return report(error, error_size, "XR_TARGET_1002",
-                      "String cleanup table has an extra release");
+typedef struct XrVerifyLifecycleProjection {
+    uint32_t function;
+    uint32_t state_operation;
+    uint32_t producer_operation;
+    uint32_t producer_value;
+    uint16_t kind;
+} XrVerifyLifecycleProjection;
+
+static int verify_compare_lifecycle_projection(const void *left,
+                                               const void *right) {
+    const XrVerifyLifecycleProjection *a =
+        (const XrVerifyLifecycleProjection *) left;
+    const XrVerifyLifecycleProjection *b =
+        (const XrVerifyLifecycleProjection *) right;
+    if (a->function != b->function)
+        return a->function < b->function ? -1 : 1;
+    if (a->state_operation != b->state_operation)
+        return a->state_operation < b->state_operation ? -1 : 1;
+    if (a->kind != b->kind)
+        return a->kind < b->kind ? -1 : 1;
+    if (a->producer_operation != b->producer_operation)
+        return a->producer_operation < b->producer_operation ? -1 : 1;
+    return 0;
+}
+
+static bool verify_exact_owned_string_slot(
+    const XrTargetPlan *plan, uint32_t function, uint32_t semantic_value,
+    uint32_t semantic_operation, uint32_t *slot_out) {
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(plan, semantic_value);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < plan->slots_count
+            ? &plan->slots[binding->slot]
+            : NULL;
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(plan, binding->register_rep) : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(plan, binding->memory_rep) : NULL;
+    if (!slot || !register_rep || !memory_rep ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        slot->function != function || slot->semantic_value != semantic_value ||
+        slot->semantic_operation != semantic_operation ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+    if (slot_out)
+        *slot_out = binding->slot;
     return true;
+}
+
+static bool verify_roots_and_cleanups(const XrTargetPlan *plan, char *error,
+                                      size_t error_size) {
+    const XrSemanticPlan *semantic = plan->semantic_plan;
+    uint32_t entity_count =
+        (uint32_t) xr_semantic_plan_entity_count(semantic);
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    uint32_t projection_count = 0;
+    for (uint32_t entity = 0; entity < entity_count; entity++) {
+        const XrSemanticEntityRecord *record =
+            xr_semantic_plan_entity(semantic, entity);
+        projection_count += record &&
+                            (record->kind == XR_SEM_ENTITY_COROUTINE_ROOT ||
+                             record->kind == XR_SEM_ENTITY_COROUTINE_DROP);
+    }
+    XrSemanticStringConcatReleaseIndex release_index = {0};
+    XrSemanticStringConcatReleaseIndexStatus release_status =
+        xr_semantic_string_concat_release_index_build(semantic,
+                                                      &release_index);
+    if (release_status != XR_SEMANTIC_RELEASE_INDEX_OK ||
+        !xr_semantic_lifecycle_work_charge_product(
+            &release_index.linear_work, entity_count, 2u) ||
+        !xr_semantic_lifecycle_work_charge(
+            &release_index.linear_work, operation_count) ||
+        !xr_semantic_lifecycle_work_charge(
+            &release_index.linear_work, plan->functions_count) ||
+        !xr_semantic_lifecycle_work_charge(
+            &release_index.linear_work,
+            xr_semantic_plan_block_count(semantic)) ||
+        !xr_semantic_lifecycle_work_charge_product(
+            &release_index.linear_work, projection_count,
+            (uint64_t) xr_semantic_lifecycle_sort_height(projection_count) *
+                2u)) {
+        xr_semantic_string_concat_release_index_dispose(&release_index);
+        return report(error, error_size,
+                      release_status == XR_SEMANTIC_RELEASE_INDEX_INVALID
+                          ? "XR_TARGET_1002"
+                          : "XR_EXEC_5003",
+                      "root lifecycle projection is unavailable");
+    }
+    XrVerifyLifecycleProjection *projection = projection_count
+        ? (XrVerifyLifecycleProjection *) xr_calloc(
+              projection_count, sizeof(*projection))
+        : NULL;
+    uint32_t *candidates = entity_count
+                               ? (uint32_t *) xr_malloc(
+                                     (size_t) entity_count * sizeof(*candidates))
+                               : NULL;
+    if ((entity_count && !candidates) || (projection_count && !projection)) {
+        xr_free(projection);
+        xr_free(candidates);
+        xr_semantic_string_concat_release_index_dispose(&release_index);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "root verifier budget exhausted");
+    }
+    uint32_t projection_cursor = 0;
+    for (uint32_t entity = 0; entity < entity_count; entity++) {
+        const XrSemanticEntityRecord *record =
+            xr_semantic_plan_entity(semantic, entity);
+        if (!record || (record->kind != XR_SEM_ENTITY_COROUTINE_ROOT &&
+                        record->kind != XR_SEM_ENTITY_COROUTINE_DROP))
+            continue;
+        const XrSemanticEntityRecord *state =
+            xr_semantic_plan_entity(semantic, record->parent);
+        const XrSemanticOperationRecord *state_operation =
+            state ? xr_semantic_plan_operation(semantic, state->subject) : NULL;
+        const XrSemanticOperationRecord *producer =
+            xr_semantic_plan_operation(semantic, record->subject);
+        if (!state || !state_operation || !producer ||
+            state->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
+            state->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION ||
+            producer->function != state_operation->function ||
+            producer->result_value == XR_SEMANTIC_INDEX_NONE) {
+            xr_free(projection);
+            xr_free(candidates);
+            return report(error, error_size, "XR_TARGET_1002",
+                          "root lifecycle projection is invalid");
+        }
+        projection[projection_cursor++] = (XrVerifyLifecycleProjection) {
+            .function = producer->function,
+            .state_operation = state->subject,
+            .producer_operation = record->subject,
+            .producer_value = producer->result_value,
+            .kind = record->kind,
+        };
+    }
+    if (projection_cursor != projection_count) {
+        xr_semantic_string_concat_release_index_dispose(&release_index);
+        xr_free(projection);
+        xr_free(candidates);
+        return report(error, error_size,
+                      release_status == XR_SEMANTIC_RELEASE_INDEX_INVALID
+                          ? "XR_TARGET_1002"
+                          : "XR_EXEC_5003",
+                      "root lifecycle projection is unavailable");
+    }
+    qsort(projection, projection_count, sizeof(*projection),
+          verify_compare_lifecycle_projection);
+    uint32_t next_root = 0;
+    uint32_t next_root_slot = 0;
+    uint32_t next_cleanup = 0;
+    uint32_t next_projection = 0;
+    uint32_t next_release = 0;
+    bool valid = true;
+    for (uint32_t function = 0; valid && function < plan->functions_count;
+         function++) {
+        const XrSemanticFunctionRecord *semantic_function =
+            xr_semantic_plan_function(semantic, function);
+        const XrTargetFunctionRecord *target_function =
+            &plan->functions[function];
+        valid = semantic_function && target_function->root_begin == next_root &&
+                target_function->cleanup_begin == next_cleanup;
+        for (uint32_t block_offset = 0;
+             valid && block_offset < semantic_function->block_count;
+             block_offset++) {
+            const XrSemanticBlockRecord *block = xr_semantic_plan_block(
+                semantic, semantic_function->block_begin + block_offset);
+            valid = block && block->function == function &&
+                    range_valid(block->operation_begin, block->operation_count,
+                                operation_count);
+            for (uint32_t operation = block ? block->operation_begin : 0;
+                 valid && operation <
+                                  block->operation_begin + block->operation_count;
+                 operation++) {
+                uint32_t root_count = 0;
+                uint32_t drop_count = 0;
+                while (next_projection < projection_count &&
+                       projection[next_projection].function == function &&
+                       projection[next_projection].state_operation == operation) {
+                    const XrVerifyLifecycleProjection *record =
+                        &projection[next_projection++];
+                    uint32_t slot = XR_SEMANTIC_INDEX_NONE;
+                    valid = verify_exact_owned_string_slot(
+                        plan, function, record->producer_value,
+                        record->producer_operation, &slot);
+                    if (!valid)
+                        break;
+                    if (record->kind == XR_SEM_ENTITY_COROUTINE_ROOT)
+                        candidates[root_count++] = slot;
+                    else
+                        candidates[entity_count - 1u - drop_count++] = slot;
+                }
+                if (!valid)
+                    break;
+                if (root_count) {
+                    qsort(candidates, root_count, sizeof(*candidates),
+                          verify_compare_u32);
+                    if (next_root >= plan->root_maps_count)
+                        valid = false;
+                    const XrTargetRootMapRecord *root =
+                        valid ? &plan->root_maps[next_root] : NULL;
+                    valid = valid && root->id == next_root &&
+                            root->function == function &&
+                            root->semantic_operation == operation &&
+                            root->slot_begin == next_root_slot &&
+                            root->slot_count == root_count &&
+                            root->flags ==
+                                (XR_TARGET_ROOT_SUSPEND |
+                                 XR_TARGET_ROOT_CANCEL | XR_TARGET_ROOT_EXIT) &&
+                            range_valid(root->slot_begin, root->slot_count,
+                                        plan->root_slots_count);
+                    for (uint32_t i = 0; valid && i < root_count; i++)
+                        valid = plan->root_slots[next_root_slot + i] ==
+                                    candidates[i] &&
+                                (i == 0 || candidates[i - 1u] < candidates[i]);
+                    next_root++;
+                    next_root_slot += root_count;
+                }
+                if (drop_count) {
+                    uint32_t *drops = candidates + entity_count - drop_count;
+                    qsort(drops, drop_count, sizeof(*drops), verify_compare_u32);
+                    for (uint32_t i = 0; valid && i < drop_count; i++) {
+                        if (next_cleanup >= plan->cleanups_count)
+                            valid = false;
+                        const XrTargetCleanupRecord *cleanup =
+                            valid ? &plan->cleanups[next_cleanup] : NULL;
+                        valid = valid && (i == 0 || drops[i - 1u] < drops[i]) &&
+                                cleanup->id == next_cleanup &&
+                                cleanup->function == function &&
+                                cleanup->semantic_operation == operation &&
+                                cleanup->slot == drops[i] &&
+                                cleanup->action == XR_TARGET_CLEANUP_RELEASE &&
+                                cleanup->flags ==
+                                    (XR_TARGET_CLEANUP_CANCEL |
+                                     XR_TARGET_CLEANUP_EXIT) &&
+                                cleanup->provider == 0;
+                        next_cleanup++;
+                    }
+                }
+                if (next_release >= release_index.count ||
+                    release_index.rows[next_release].operation != operation)
+                    continue;
+                const XrSemanticStringConcatReleaseShape release =
+                    release_index.rows[next_release++];
+                uint32_t slot = XR_SEMANTIC_INDEX_NONE;
+                valid = verify_exact_owned_string_slot(
+                    plan, function, release.released_value,
+                    release.producer_operation, &slot);
+                if (!valid || next_cleanup >= plan->cleanups_count) {
+                    valid = false;
+                    break;
+                }
+                const XrTargetCleanupRecord *cleanup =
+                    &plan->cleanups[next_cleanup];
+                valid = cleanup->id == next_cleanup &&
+                        cleanup->function == function &&
+                        cleanup->semantic_operation == operation &&
+                        cleanup->slot == slot &&
+                        cleanup->action == XR_TARGET_CLEANUP_RELEASE &&
+                        cleanup->flags == 0 && cleanup->provider == 0;
+                next_cleanup++;
+            }
+        }
+        valid = valid && target_function->root_count ==
+                              next_root - target_function->root_begin &&
+                target_function->cleanup_count ==
+                    next_cleanup - target_function->cleanup_begin;
+    }
+    valid = valid && next_root == plan->root_maps_count &&
+            next_root_slot == plan->root_slots_count &&
+            next_cleanup == plan->cleanups_count &&
+            next_projection == projection_count &&
+            next_release == release_index.count;
+    xr_semantic_string_concat_release_index_dispose(&release_index);
+    xr_free(projection);
+    xr_free(candidates);
+    return valid || report(error, error_size, "XR_TARGET_1002",
+                           "root and cleanup rows are not exact");
 }
 
 static bool verify_adapters_and_capabilities(const XrTargetPlan *plan, char *error,

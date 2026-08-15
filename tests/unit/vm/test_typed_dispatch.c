@@ -362,6 +362,36 @@ static XrSemanticPlan *build_unsupported_semantic(void) {
     return semantic;
 }
 
+static XrSemanticPlan *build_scalar_with_unused_child_semantic(void) {
+    XiFunc *root = xi_func_new("typed_dispatch_partition_root", &stub_int);
+    XiFunc *child = xi_func_new("typed_dispatch_partition_child", &stub_int);
+    REQUIRE(root && child);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry && child_entry);
+    XiValue *root_result = xi_const_int(root, root_entry, 42, &stub_int);
+    XiValue *left = xi_const_int(child, child_entry, 8, &stub_int);
+    XiValue *right = xi_const_int(child, child_entry, 2, &stub_int);
+    XiValue *rotate = xi_value_new(child, child_entry, XI_BIT_ROTL,
+                                   &stub_int, 2);
+    REQUIRE(root_result && left && right && rotate);
+    rotate->args[0] = left;
+    rotate->args[1] = right;
+    xi_block_set_return(root_entry, root_result);
+    xi_block_set_return(child_entry, rotate);
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(root, &semantic, error, sizeof(error)));
+    xi_func_free(root);
+    return semantic;
+}
+
 /* fn(first, second) -> (first - second) * first: the operand order and the
  * argument order are both asymmetric, so a swapped or zero-filled argument
  * vector cannot reach the expected result by accident. */
@@ -696,6 +726,50 @@ static void test_closed_program_and_unavailable_boundary(void) {
                                           &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN);
 
+    REQUIRE(fixture.program_plan->root_maps_count == 0 &&
+            fixture.program_plan->root_slots_count == 0);
+    fixture.program_plan->root_maps =
+        (XrTargetRootMapRecord *) xr_calloc(
+            1, sizeof(*fixture.program_plan->root_maps));
+    fixture.program_plan->root_slots =
+        (uint32_t *) xr_calloc(1, sizeof(*fixture.program_plan->root_slots));
+    REQUIRE(fixture.program_plan->root_maps &&
+            fixture.program_plan->root_slots);
+    fixture.program_plan->root_maps_count = 1;
+    fixture.program_plan->root_slots_count = 1;
+    fixture.program_plan->functions[0].root_begin = 0;
+    fixture.program_plan->functions[0].root_count = 1;
+    fixture.program_plan->root_maps[0] = (XrTargetRootMapRecord) {
+        .id = 0,
+        .function = 0,
+        .semantic_operation = 0,
+        .slot_begin = 0,
+        .slot_count = 1,
+        .flags = XR_TARGET_ROOT_SUSPEND | XR_TARGET_ROOT_CANCEL |
+                 XR_TARGET_ROOT_EXIT,
+    };
+    fixture.program_plan->root_slots[0] =
+        fixture.program_plan->functions[0].slot_begin;
+    xr_target_plan_compute_fingerprint(fixture.program_plan,
+                                       &fixture.program_plan->fingerprint);
+    fingerprint = xr_target_plan_fingerprint(fixture.program_plan);
+    result = 7;
+    REQUIRE(execute_request_i64(fixture.program_plan, &fingerprint,
+                                0, NULL, 0, &result) ==
+            XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
+    REQUIRE(result == 0);
+    xr_free(fixture.program_plan->root_maps);
+    xr_free(fixture.program_plan->root_slots);
+    fixture.program_plan->root_maps = NULL;
+    fixture.program_plan->root_slots = NULL;
+    fixture.program_plan->root_maps_count = 0;
+    fixture.program_plan->root_slots_count = 0;
+    fixture.program_plan->functions[0].root_begin = 0;
+    fixture.program_plan->functions[0].root_count = 0;
+    xr_target_plan_compute_fingerprint(fixture.program_plan,
+                                       &fixture.program_plan->fingerprint);
+    fingerprint = xr_target_plan_fingerprint(fixture.program_plan);
+
     XrSemanticPlan *retained_semantic = fixture.program_plan->semantic_plan;
     fixture.program_plan->semantic_plan = NULL;
     REQUIRE(execute_request_i64(fixture.program_plan, &fingerprint,
@@ -736,6 +810,56 @@ static void test_production_builder_keeps_unsupported_function_unavailable(void)
                                           &result) ==
             XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
     REQUIRE(result == 0);
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_other_function_lifecycle_partitions_do_not_scan_selected_scalar(void) {
+    enum { OTHER_LIFECYCLE_ROWS = 8192 };
+    XrSemanticPlan *semantic = build_scalar_with_unused_child_semantic();
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    REQUIRE(plan->functions_count == 2 && plan->root_maps_count == 0 &&
+            plan->cleanups_count == 0 && plan->coroutines_count == 0 &&
+            xr_target_plan_function_execution_family_mask(plan, 0) ==
+                XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
+            xr_target_plan_function_execution_family_mask(plan, 1) == 0);
+    plan->root_maps = (XrTargetRootMapRecord *) xr_calloc(
+        OTHER_LIFECYCLE_ROWS, sizeof(*plan->root_maps));
+    plan->cleanups = (XrTargetCleanupRecord *) xr_calloc(
+        OTHER_LIFECYCLE_ROWS, sizeof(*plan->cleanups));
+    plan->coroutines = (XrTargetCoroutineStateRecord *) xr_calloc(
+        OTHER_LIFECYCLE_ROWS, sizeof(*plan->coroutines));
+    REQUIRE(plan->root_maps && plan->cleanups && plan->coroutines);
+    plan->root_maps_count = OTHER_LIFECYCLE_ROWS;
+    plan->cleanups_count = OTHER_LIFECYCLE_ROWS;
+    plan->coroutines_count = OTHER_LIFECYCLE_ROWS;
+    plan->functions[1].root_begin = 0;
+    plan->functions[1].root_count = OTHER_LIFECYCLE_ROWS;
+    plan->functions[1].cleanup_begin = 0;
+    plan->functions[1].cleanup_count = OTHER_LIFECYCLE_ROWS;
+    plan->functions[1].coroutine_begin = 0;
+    plan->functions[1].coroutine_count = OTHER_LIFECYCLE_ROWS;
+    for (uint32_t i = 0; i < OTHER_LIFECYCLE_ROWS; i++) {
+        plan->root_maps[i].id = i;
+        plan->root_maps[i].function = 1;
+        plan->cleanups[i].id = i;
+        plan->cleanups[i].function = 1;
+        plan->coroutines[i].id = i;
+        plan->coroutines[i].function = 1;
+    }
+    xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    int64_t result = 0;
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 0, &result) ==
+                XR_TYPED_DISPATCH_OK &&
+            result == 42);
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
@@ -1903,6 +2027,7 @@ int main(void) {
     test_generated_instruction_contract();
     test_closed_program_and_unavailable_boundary();
     test_production_builder_keeps_unsupported_function_unavailable();
+    test_other_function_lifecycle_partitions_do_not_scan_selected_scalar();
     test_parameters_reach_the_executed_program();
     test_xtp_exact_roundtrip_executes_same_program();
     test_instruction_mutations_fail_closed();
