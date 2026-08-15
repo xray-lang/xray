@@ -81,8 +81,17 @@ typedef enum XrSemanticIntrinsicKind {
     XR_SEM_INTRINSIC_RUNE_IS_WHITESPACE = 14,
     XR_SEM_INTRINSIC_STRING_SLICE_RANGE = 15,
     XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR = 16,
+    XR_SEM_INTRINSIC_ARRAY_HOF = 17,
     XR_SEM_INTRINSIC_COUNT,
 } XrSemanticIntrinsicKind;
+
+typedef enum XrSemanticArrayHofKind {
+    XR_SEM_ARRAY_HOF_NONE = 0,
+    XR_SEM_ARRAY_HOF_MAP,
+    XR_SEM_ARRAY_HOF_FILTER,
+    XR_SEM_ARRAY_HOF_REDUCE,
+    XR_SEM_ARRAY_HOF_COUNT,
+} XrSemanticArrayHofKind;
 
 typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_DIRECT_LOCAL = 1,
@@ -406,6 +415,8 @@ typedef struct XrSemanticOperationRecord {
     uint8_t view_complete;
     uint8_t array_element_storage;
     uint8_t reserved_view[2];
+    uint8_t array_hof_kind;
+    uint8_t array_result_element_storage;
 } XrSemanticOperationRecord;
 
 typedef struct XrSemanticEdgeRecord {

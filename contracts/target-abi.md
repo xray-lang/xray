@@ -438,6 +438,19 @@ emission rather than falling back to compiler-host layout.
   remains `XrValue`, but index and address lowering consume the immutable lane
   identity directly. A missing, stale, renamed, type-guessed, or non-scalar
   projection fails closed and cannot enter the named-aggregate path.
+- T16: direct `Array.map`, `Array.filter`, and `Array.reduce` C lowering is
+  authorized only by one verified SemanticPlan HOF operation, its exact
+  TargetPlan call/result/storage rows, and one CEmission recipe naming the
+  same-module uncaptured pure callback function and complete native callback
+  ABI. Representation selection preserves tagged map/filter results and the
+  tagged callback operand, while reduce keeps its accumulator and seed in the
+  frozen scalar representation; no compensating BOX/UNBOX adapter is valid.
+  CGen consumes the verified direct-symbol closure plan and emits portable C11
+  statement loops. Missing, duplicate, suspendable, unreachable, captured,
+  cross-module, extra-use, noncanonical-ABI, or incomplete recipe authority
+  fails closed and cannot fall back to selector dispatch or the legacy runtime
+  map/filter/reduce helpers. An unused reduce still executes every callback;
+  only storing its result may be elided.
 
 The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
@@ -469,13 +482,15 @@ the compiler core does not download a provider.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de082761402165a3c36919
-anchor-sha256: src/aot/xaot_prepare.c fcaf520ec438ea18141e33f3dd64c35a1ebc44f5f7942afdb3042aac20131a12
+anchor-sha256: src/aot/xaot_callable.c 13d17addb6fe4492d78a2b010bc8329c2bc2bc912a9cd7e7cd8be59269c56d6a
+anchor-sha256: src/aot/xaot_prepare.c fd956dd138562ffb9817f580cb0621759966629d04fcee04eb5804a381dc4fc4
+anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
-anchor-sha256: src/aot/xaot_verify.c f0012f689493caba9ca93f2dadeb527e56ea4cd35b8d96b68ba563c68ba31033
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 343bb87909f105d3a365f6b4ea39f231f5ddce2e7dfea216932a1bb8132a42be
+anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 83b1ff01635b685413b1d7cefaec4eaf9e6b8a188186177525f83d28321e5dc1
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c d916f37caa6c7b39245526529555728e551048af64fb559cf10a71b49c439ff7
-anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 4122c66aeae7fc8649c12ae1169610f98cdc4cfb0dc1ddd0ee9608ae6e012684
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 71906ce45e351727fb653a334dcc460e1a02a772fb43fa6096bb2dd586239dbb
+anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 1edbcf73bdd062623c15231d9c7312b025e773b112f9d38483904d61c79064d9
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 27cea072c712ee697f358004e0d726bd75f675b14608271f08a88f1447a7558d
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c ad0d4582896dde9d9f6e82301d349d8b4deb7079764a7ba5dfa9c7ef2f8c6bef
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h 1f1ad5d586e66259ba51249f3829ed83cdeac5a0d5d23e5d7152dc9d5c009b29
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c b323399b0e904047af88cd4224b5281a043dcf75774e0b5a4bf7399712edbc9b
@@ -489,10 +504,12 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 0bd5c319832d
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h ee7409a02d228f10ed8c812c9b9d7f835106067e37d12bc6ed50c6fa48f93e27
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 3a13654d7f163e3dd653e5f497209224b2a0aa77af2de4b21cccaffa47bd0cd1
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c f0110919fa8e0b939577fa1ce860249510c887a428bd16b561f4a00b883b1974
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 63c00018e985518631ca9ef31601370379bf8c74267659bd9aae64dd964905bf
+anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c 24b1741a0e00064a3cae08d7ed59f71e6bd884a40b5982ea752230ee22111cea
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ef5c234df65d6153474a894ed295719935e32a0e9228c1370e43eb1c1c3abbc5
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 375af2e4b45271d06e6ce6ed798be2e6f9f8786c25e68d38ea3f4ca6f41160c6
-anchor-sha256: src/aot/xi_cgen.c 3eb34cf31a7e4252bbfd9b9741be2ed87459c28ae2d7feb2e5abf533d2c343ff
+anchor-sha256: src/aot/xi_cgen.c 6792ca08b6332dc98cd716273c848a2fdce26b8b718a37a86ddf26b701c8cbc1
+anchor-sha256: src/ir/xi_opt.c b17721f994411444335e8912dcc8550b8a857f6a31e2ce2b6ed70b25ffe72b2a
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
 anchor-sha256: src/aot/xrt_core_freestanding.h 4637d9be259b16363f74d330ad0bc3d016c71f588d418e71ed9a57cffcf6ecfb
 anchor-sha256: src/aot/xrt_method.h 49b124e154a48bc0401fe67e6e3feba34ec57d7791dfb0f8afbc56a3aa9ca06e
@@ -501,7 +518,7 @@ anchor-sha256: include/xray_hosted_fragment_abi.h bcf50466f8320c265a49c6776f6699
 anchor-sha256: src/app/cli/xcmd_build.c cf2112486eb8f7534da0587e83e46ad7ddbb6dc84083b89deee43c516ec76f09
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 8d1cb7212b432a7cefe7e3e3d202509c75dd84190e084c3e7d2a88af62ca4eb1
-anchor-sha256: src/ir/xi.h f87e2e4899f8672e84a88fd397a2e351a70b3bf224324669cd9a813d7403e8d0
+anchor-sha256: src/ir/xi.h 95906db980e5746e8be5cdee5bec348482ad87fdbf5e037b064f06e1ee977579
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24
 anchor-sha256: src/aot/xaot_coro.h 51edaa56bb72326f5bacd0998b00d505e0c0533190f4ba0289c10ee954049995
 anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 495a6b15c1a963c95bc26d98f4791adf0b6d16c1b33660900587a07bf738d7a1

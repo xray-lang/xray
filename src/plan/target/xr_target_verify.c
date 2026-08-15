@@ -1302,6 +1302,186 @@ static bool semantic_array_fill_scalar_is_exact_verify(
     return true;
 }
 
+/* Independent frozen-row reconstruction for Array.map/filter/reduce. No
+ * selector spelling, live Xi type, or argument-count inference is consulted. */
+static bool semantic_array_hof_is_exact_verify(
+    const XrSemanticPlan *semantic,
+    const XrSemanticOperationRecord *operation, uint8_t *target_kind,
+    uint8_t *receiver_storage, uint8_t *result_storage,
+    uint32_t *receiver_value, uint32_t *callback_value,
+    uint32_t *initial_value) {
+    uint32_t operand_count = 0, child_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_count);
+    (void) xr_semantic_plan_metadata(semantic, &metadata_count);
+    uint8_t kind = XR_TARGET_ARRAY_HOF_NONE;
+    if (operation) {
+        if (operation->array_hof_kind == XR_SEM_ARRAY_HOF_MAP)
+            kind = XR_TARGET_ARRAY_HOF_MAP;
+        else if (operation->array_hof_kind == XR_SEM_ARRAY_HOF_FILTER)
+            kind = XR_TARGET_ARRAY_HOF_FILTER;
+        else if (operation->array_hof_kind == XR_SEM_ARRAY_HOF_REDUCE)
+            kind = XR_TARGET_ARRAY_HOF_REDUCE;
+    }
+    uint16_t expected_operands = kind == XR_TARGET_ARRAY_HOF_REDUCE ? 3u : 2u;
+    if (!semantic || !operation || !operands || !children ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_HOF ||
+        kind == XR_TARGET_ARRAY_HOF_NONE || operation->opcode != XI_CALL_METHOD ||
+        operation->operand_count != expected_operands ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        operation->semantic_immediate != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function >= xr_semantic_plan_function_count(semantic) ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1)
+        return false;
+    const XrSemanticOperandRecord *rows = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *array =
+        xr_semantic_plan_type(semantic, rows[0].type);
+    if (!semantic_array_allocation_type_is_exact(array) ||
+        array->child_begin >= child_count)
+        return false;
+    uint32_t source_element = children[array->child_begin];
+    const XrSemanticTypeRecord *source_type =
+        xr_semantic_plan_type(semantic, source_element);
+    uint8_t source = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t frozen_source = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!verify_array_intrinsic_storage_type(source_type, &source) ||
+        !verify_array_intrinsic_storage(operation->array_element_storage,
+                                        &frozen_source) ||
+        source != frozen_source)
+        return false;
+    uint32_t result_element = operation->result_type;
+    if (kind != XR_TARGET_ARRAY_HOF_REDUCE) {
+        const XrSemanticTypeRecord *result_array =
+            xr_semantic_plan_type(semantic, operation->result_type);
+        if (!semantic_array_allocation_type_is_exact(result_array) ||
+            result_array->child_begin >= child_count)
+            return false;
+        result_element = children[result_array->child_begin];
+        if (kind == XR_TARGET_ARRAY_HOF_FILTER &&
+            (operation->result_type != rows[0].type || result_element != source_element))
+            return false;
+    } else if (rows[2].type != operation->result_type) {
+        return false;
+    }
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(semantic, result_element);
+    uint8_t result = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t frozen_result = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!verify_array_intrinsic_storage_type(result_type, &result) ||
+        !verify_array_intrinsic_storage(
+            operation->array_result_element_storage, &frozen_result) ||
+        result != frozen_result)
+        return false;
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(semantic, operation->callable_function);
+    uint16_t expected_parameters = kind == XR_TARGET_ARRAY_HOF_REDUCE ? 2u : 1u;
+    if (!callee || callee->parent != operation->function || callee->capture_count != 0 ||
+        callee->parameter_count != expected_parameters ||
+        (callee->semantic_effects & (XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE |
+                                     XI_EFFECT_MAY_THROW | XI_EFFECT_MAY_SUSPEND)) != 0 ||
+        callee->parameter_begin > xr_semantic_plan_parameter_count(semantic) ||
+        callee->parameter_count > xr_semantic_plan_parameter_count(semantic) -
+                                      callee->parameter_begin)
+        return false;
+    const XrSemanticParameterRecord *first =
+        xr_semantic_plan_parameter(semantic, callee->parameter_begin);
+    const XrSemanticParameterRecord *second = expected_parameters == 2u
+        ? xr_semantic_plan_parameter(semantic, callee->parameter_begin + 1u)
+        : NULL;
+    if (!first || first->function != operation->callable_function || first->ordinal != 0 ||
+        first->type != (kind == XR_TARGET_ARRAY_HOF_REDUCE ? result_element
+                                                            : source_element) ||
+        (second && (second->function != operation->callable_function ||
+                    second->ordinal != 1 || second->type != source_element)))
+        return false;
+    if (kind == XR_TARGET_ARRAY_HOF_FILTER) {
+        uint16_t rep = XR_MACHINE_REP_COUNT;
+        const XrSemanticTypeRecord *return_type =
+            xr_semantic_plan_type(semantic, callee->return_type);
+        if (!return_type || semantic_type_expected_rep(return_type, &rep) != 1 ||
+            rep != XR_MACHINE_REP_I1)
+            return false;
+    } else if (callee->return_type != result_element) {
+        return false;
+    }
+    const XrSemanticTypeRecord *callback_type =
+        xr_semantic_plan_type(semantic, rows[1].type);
+    if (!callback_type || callback_type->kind != XR_KIND_FUNCTION ||
+        callback_type->child_count != (uint32_t) expected_parameters + 1u ||
+        callback_type->child_begin > child_count ||
+        callback_type->child_count > child_count - callback_type->child_begin)
+        return false;
+    for (uint16_t i = 0; i < expected_parameters; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(semantic, callee->parameter_begin + i);
+        if (!parameter || children[callback_type->child_begin + i] != parameter->type)
+            return false;
+    }
+    if (children[callback_type->child_begin + expected_parameters] != callee->return_type ||
+        rows[0].role != XR_SEM_OPERAND_RECEIVER || rows[0].parameter != -1 ||
+        rows[0].flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        rows[1].role != XR_SEM_OPERAND_ARGUMENT || rows[1].parameter != 0 ||
+        rows[1].flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        (kind == XR_TARGET_ARRAY_HOF_REDUCE &&
+         (rows[2].role != XR_SEM_OPERAND_ARGUMENT || rows[2].parameter != 1 ||
+          rows[2].flags != XR_SEM_OPERAND_CALL_CONTRACT)))
+        return false;
+    bool result_exact = kind == XR_TARGET_ARRAY_HOF_REDUCE
+        ? operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+              operation->return_provenance == XR_SEM_RETURN_NONE &&
+              operation->return_complete == 0
+        : operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+              operation->return_provenance == XR_SEM_RETURN_OWNED &&
+              operation->return_complete == 1;
+    const XrSemanticOperationRecord *producer = NULL;
+    uint32_t uses = 0;
+    for (uint32_t i = 0; result_exact &&
+                         i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(semantic, i);
+        if (candidate && candidate->function == operation->function &&
+            candidate->result_value == rows[1].value) {
+            if (producer)
+                return false;
+            producer = candidate;
+        }
+    }
+    for (uint32_t i = 0; result_exact && i < operand_count; i++)
+        uses += operands[i].value == rows[1].value;
+    if (!result_exact || !producer || producer >= operation || uses != 1 ||
+        (producer->opcode != XI_CLOSURE_NEW &&
+         (producer->opcode != XI_STACK_ALLOC ||
+          producer->semantic_immediate != XI_CLOSURE_NEW)) ||
+        producer->callable_function != operation->callable_function ||
+        producer->result_type != rows[1].type)
+        return false;
+    if (target_kind)
+        *target_kind = kind;
+    if (receiver_storage)
+        *receiver_storage = source;
+    if (result_storage)
+        *result_storage = result;
+    if (receiver_value)
+        *receiver_value = rows[0].value;
+    if (callback_value)
+        *callback_value = rows[1].value;
+    if (initial_value)
+        *initial_value = kind == XR_TARGET_ARRAY_HOF_REDUCE
+                             ? rows[2].value
+                             : XR_SEMANTIC_INDEX_NONE;
+    return true;
+}
+
 /* Rebuilt here from the frozen semantic rows, not read back from the builder.
  * `T?` is `T | null`, and the language surface requires the nullable primitives
  * to carry `null` in the tagged representation so a null renders as "null" and
@@ -3284,6 +3464,12 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
                           "dynamic-type verification input is invalid");
         }
         bool exact_array_member_result = false;
+        uint8_t array_hof_kind = XR_TARGET_ARRAY_HOF_NONE;
+        bool exact_array_hof_result =
+            semantic_array_hof_is_exact_verify(
+                plan->semantic_plan, operation, &array_hof_kind, NULL, NULL,
+                NULL, NULL, NULL) &&
+            array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE;
         if (!operation_is_exact_array_member_scalar(
                 plan->semantic_plan, operation, NULL, NULL,
                 &exact_array_member_result))
@@ -3293,6 +3479,7 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
             semantic_array_allocation_is_exact(plan->semantic_plan, operation) ||
             semantic_array_intrinsic_is_exact_verify(plan->semantic_plan, operation,
                                                      NULL, NULL) ||
+            exact_array_hof_result ||
             semantic_array_fill_scalar_is_exact_verify(
                 plan->semantic_plan, operation, NULL, NULL, NULL) ||
             semantic_direct_local_array_ref_shared_value_is_exact_verify(
@@ -3416,6 +3603,12 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     bool exact_array_intrinsic =
         semantic_array_intrinsic_is_exact_verify(plan->semantic_plan, operation,
                                                  NULL, NULL);
+    uint8_t array_hof_kind = XR_TARGET_ARRAY_HOF_NONE;
+    bool exact_array_hof_result =
+        semantic_array_hof_is_exact_verify(
+            plan->semantic_plan, operation, &array_hof_kind, NULL, NULL,
+            NULL, NULL, NULL) &&
+        array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE;
     bool exact_array_fill = semantic_array_fill_scalar_is_exact_verify(
         plan->semantic_plan, operation, NULL, NULL, NULL);
     bool exact_array_ref_shared_value =
@@ -3572,6 +3765,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     int eligibility = operation_result_void || exact_heap_closure ||
                               exact_panic_catch ||
                               exact_array_allocation || exact_array_intrinsic ||
+                              exact_array_hof_result ||
                               exact_array_fill ||
                               exact_array_ref_shared_value ||
                               exact_array_ref_place_load || exact_class_object ||
@@ -3611,6 +3805,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     int expected_layout = -1;
     if (exact_heap_closure || exact_panic_catch || exact_array_allocation ||
         exact_class_object || exact_array_intrinsic ||
+        exact_array_hof_result ||
         exact_array_ref_shared_value || exact_array_ref_place_load ||
         exact_array_fill ||
         exact_class_instance || exact_class_receiver ||
@@ -5204,6 +5399,14 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             }
             expected_calls++;
         }
+        if (semantic_array_hof_is_exact_verify(
+                semantic, operation, NULL, NULL, NULL, NULL, NULL, NULL)) {
+            if (expected_calls == UINT32_MAX) {
+                valid = false;
+                break;
+            }
+            expected_calls++;
+        }
         if (semantic_string_byte_slice_view_is_exact(semantic, operation)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
@@ -5488,6 +5691,19 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             !semantic_target && semantic_array_fill_scalar_is_exact_verify(
                                     semantic, operation, &array_fill_receiver,
                                     &array_fill_value, &array_fill_storage);
+        uint8_t array_hof_kind = XR_TARGET_ARRAY_HOF_NONE;
+        uint8_t array_hof_source_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        uint8_t array_hof_result_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        uint32_t array_hof_receiver = XR_SEMANTIC_INDEX_NONE;
+        uint32_t array_hof_callback = XR_SEMANTIC_INDEX_NONE;
+        uint32_t array_hof_initial = XR_SEMANTIC_INDEX_NONE;
+        bool array_hof =
+            !semantic_target && semantic_array_hof_is_exact_verify(
+                                    semantic, operation, &array_hof_kind,
+                                    &array_hof_source_storage,
+                                    &array_hof_result_storage,
+                                    &array_hof_receiver, &array_hof_callback,
+                                    &array_hof_initial);
         uint16_t result_kind = XR_MACHINE_REP_COUNT;
         const XrSemanticTypeRecord *result_type = operation
                                                        ? xr_semantic_plan_type(
@@ -5510,6 +5726,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             direct_string_result || direct_adt_enum_result ||
             json_namespace_value || class_construction ||
             adt_enum_constructor || array_intrinsic || array_fill) {
+            result_scalar = 1;
+            result_kind = XR_MACHINE_REP_DYN_VALUE;
+        }
+        if (array_hof && array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -5582,7 +5802,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                              stringbuilder_to_string ||
                              stringbuilder_append_string ||
                              json_namespace_value || class_construction ||
-                             adt_enum_constructor || array_intrinsic
+                             adt_enum_constructor || array_intrinsic ||
+                             (array_hof &&
+                              array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE)
                          ? XR_TARGET_CALL_RETURN_OWNED
                      : string_byte_slice_view ? XR_TARGET_CALL_BORROW
                                               : XR_TARGET_CALL_NONE) &&
@@ -5594,8 +5816,16 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                      ? call->array_intrinsic_kind ==
                                XR_TARGET_ARRAY_INTRINSIC_NONE &&
                            call->array_element_storage == array_fill_storage
+                 : array_hof
+                     ? call->array_intrinsic_kind == XR_TARGET_ARRAY_INTRINSIC_NONE &&
+                           call->array_element_storage == array_hof_source_storage &&
+                           call->array_hof_kind == array_hof_kind &&
+                           call->array_result_element_storage == array_hof_result_storage
                      : call->array_intrinsic_kind == XR_TARGET_ARRAY_INTRINSIC_NONE &&
-                           call->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE) &&
+                           call->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+                           call->array_hof_kind == XR_TARGET_ARRAY_HOF_NONE &&
+                           call->array_result_element_storage ==
+                               XR_TARGET_ARRAY_STORAGE_NONE) &&
                 call->reserved8[0] == 0 && call->reserved8[1] == 0 &&
                 call->reserved8[2] == 0;
         if (!valid)
@@ -6047,6 +6277,98 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         argument->ordinal == ordinal &&
                         argument->mode == XR_TARGET_CALL_VALUE &&
                         argument->ownership == ownership &&
+                        argument->transfer_mode == operand->transfer_mode &&
+                        argument->flags == 0 &&
+                        argument->array_element_storage ==
+                            XR_TARGET_ARRAY_STORAGE_NONE &&
+                        argument->reserved8[0] == 0 &&
+                        argument->reserved8[1] == 0 &&
+                        argument->reserved8[2] == 0;
+                next_argument++;
+            }
+            if (!valid)
+                break;
+        } else if (array_hof) {
+            const XrSemanticFunctionRecord *callee =
+                xr_semantic_plan_function(semantic,
+                                          operation->callable_function);
+            uint32_t discriminator = ((uint32_t) array_hof_kind << 16) |
+                                     ((uint32_t) array_hof_source_storage << 8) |
+                                     array_hof_result_storage;
+            valid = callee && !suspends &&
+                    reconstruct_call_identity(
+                        "xray-target-array-hof-v1", operation->id,
+                        callee->id, discriminator, &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                    call->callee_function == operation->callable_function &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    call->argument_count == operation->operand_count &&
+                    call->flags == 0 &&
+                    call->calling_convention ==
+                        XR_TARGET_CALL_CONVENTION_ARRAY_HOF &&
+                    call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_HOF &&
+                    call->result_ownership ==
+                        (array_hof_kind == XR_TARGET_ARRAY_HOF_REDUCE
+                             ? XR_TARGET_CALL_NONE
+                             : XR_TARGET_CALL_RETURN_OWNED) &&
+                    result && result->slot < plan->slots_count &&
+                    (array_hof_kind == XR_TARGET_ARRAY_HOF_REDUCE
+                         ? plan->slots[result->slot].root_kind ==
+                                   XR_TARGET_ROOT_NONE &&
+                               plan->slots[result->slot].ownership ==
+                                   XR_TARGET_OWNERSHIP_TRIVIAL
+                         : plan->slots[result->slot].root_kind ==
+                                   XR_TARGET_ROOT_DYNAMIC &&
+                               plan->slots[result->slot].ownership ==
+                                   XR_TARGET_OWNERSHIP_OWNED);
+            for (uint16_t ordinal = 0;
+                 valid && ordinal < call->argument_count; ordinal++) {
+                uint32_t semantic_operand =
+                    operation->operand_begin + ordinal;
+                const XrSemanticOperandRecord *operand =
+                    &operands[semantic_operand];
+                const XrSemanticTypeRecord *operand_type =
+                    xr_semantic_plan_type(semantic, operand->type);
+                const XrTargetValueRepRecord *caller_value =
+                    xr_target_plan_value_rep(plan, operand->value);
+                const XrTargetCallArgumentRecord *argument =
+                    &plan->call_arguments[next_argument];
+                uint32_t expected_value =
+                    ordinal == 0 ? array_hof_receiver
+                    : ordinal == 1 ? array_hof_callback
+                                   : array_hof_initial;
+                XrStableId argument_identity;
+                valid = operand_type && caller_value &&
+                        operand->value == expected_value &&
+                        slot_binds_value_in_function(
+                            plan, caller_value, operation->function) &&
+                        reconstruct_call_identity(
+                            "xray-target-array-hof-argument-v1",
+                            operation->id, operand_type->id, ordinal,
+                            &argument_identity) &&
+                        xr_stable_id_equal(argument->identity,
+                                           argument_identity) &&
+                        argument->call == i &&
+                        argument->semantic_operand == semantic_operand &&
+                        argument->semantic_value == expected_value &&
+                        argument->callee_parameter == XR_SEMANTIC_INDEX_NONE &&
+                        argument->caller_slot == caller_value->slot &&
+                        argument->callee_slot == XR_SEMANTIC_INDEX_NONE &&
+                        argument->register_rep == caller_value->register_rep &&
+                        argument->memory_rep == caller_value->memory_rep &&
+                        argument->callee_register_rep ==
+                            caller_value->register_rep &&
+                        argument->callee_memory_rep ==
+                            caller_value->memory_rep &&
+                        argument->ordinal == ordinal &&
+                        argument->mode == XR_TARGET_CALL_VALUE &&
+                        argument->ownership ==
+                            (ordinal == 0 ? XR_TARGET_CALL_BORROW
+                                          : XR_TARGET_CALL_CONSUME) &&
                         argument->transfer_mode == operand->transfer_mode &&
                         argument->flags == 0 &&
                         argument->array_element_storage ==

@@ -39,7 +39,7 @@ int main(void) {
     XrRuntimeDynamicEntryLeaseStats lease_stats;
     XrVmTraceEvent trace_event = {0};
     uint32_t count = 0;
-    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(38) ||
+    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(39) ||
         XR_VM_DYNAMIC_ENTRY_CONTEXT_SCHEMA_VERSION != UINT32_C(3) ||
         XR_VM_TRACE_SCHEMA_VERSION != UINT32_C(3) ||
         XR_VM_DEBUG_CONTROL_SCHEMA_VERSION != UINT32_C(1) ||

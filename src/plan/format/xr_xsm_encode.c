@@ -253,6 +253,8 @@ static void encode_operations(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u8(writer, record->view_complete);
         xr_xsm_put_u8(writer, record->array_element_storage);
         xr_xsm_put_bytes(writer, record->reserved_view, sizeof(record->reserved_view));
+        xr_xsm_put_u8(writer, record->array_hof_kind);
+        xr_xsm_put_u8(writer, record->array_result_element_storage);
     }
     for (uint32_t i = 0; i < plan->operand_count; i++) {
         const XrSemanticOperandRecord *record = &plan->operands[i];

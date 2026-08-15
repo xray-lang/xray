@@ -43,7 +43,7 @@ authority.
    requires zero sparse lifecycle bytes before its status-returning frame
    destruction succeeds. Managed coroutine frames are owned by their explicit
    lifecycle consumer and cannot enter this generation route.
-   TargetPlan schema 38 preserves exact SOURCE-import storage and dense
+   TargetPlan schema 39 preserves exact SOURCE-import storage and dense
    SOURCE_EXPORT argument rows together with exact ADT-enum, aggregate
    field-name, Array-intrinsic, String-runes result, and sealed Iterator-rune
    `hasNext`/`next`/`rune.toUInt32`/`rune.isWhitespace` call authority, plus exact direct-local
@@ -126,7 +126,7 @@ authority.
     identity at every call site. `XR_ENTRY_ABI_SCHEMA_VERSION == 1` instead hashes
     the exact signed-i64 parameter/result shape, native ABI, target data-layout
     hash, and target-profile fingerprint under an entry-specific domain. This
-    TargetPlan schema 38 and XTP schema 38 persist that ABI fingerprint in a
+    TargetPlan schema 39 and XTP schema 39 persist that ABI fingerprint in a
     dedicated entry-expectation row together with the identity-adapter and
     target-profile fingerprints. The artifact never persists an entry cell,
     handle, generation pointer, or code pointer. No earlier schema is accepted.
@@ -195,7 +195,7 @@ anchor-sha256: src/vm/xr_typed_dispatch.h 8c764cfb9f22e8c58ea75b0862b496996cd09b
 anchor-sha256: src/vm/xr_typed_dispatch.c c79296a7d62cd0ae42f41e36e67dead23ac3b24095504cbba7ed52fe2a60fe9c
 anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
 anchor-sha256: src/vm/xr_vm_decoded_cache.c 2d4f14d54740e6aac0cdfb23fc7b90b075725c479751ba52a1948a658f91fa77
-anchor-sha256: src/vm/xr_typed_frame.h 4737b4ddb1415a875031ac2298910b86e09fa6b7253ab3c2bb771e71169fd2e2
+anchor-sha256: src/vm/xr_typed_frame.h 4d6f311477b86539dd14fba88834a89ebc87fced5f031726bc442bf69bc51d06
 anchor-sha256: src/vm/xr_typed_frame.c 80ac935291096963179c8f6c58b3105835426c87b2b693d2a62e1d5c16fc913b
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a

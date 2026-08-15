@@ -46,8 +46,10 @@ XR_FUNC uint32_t xaot_prepare_array_cache_alias_evidence(const XaotBundle *bundl
  * representation, target/capture evidence, and any unproven reason; the
  * closure-plan pass records one row for every closure allocation and the
  * verifier re-derives the same row. */
-XR_FUNC bool xaot_prepare_closure_plan_for_value(const XiFunc *func, const XiValue *value,
-                                                 XaotClosurePlan *out);
+XR_FUNC bool xaot_prepare_closure_plan_for_value(const XaotBundle *bundle,
+                                                  const XiFunc *func,
+                                                  const XiValue *value,
+                                                  XaotClosurePlan *out);
 
 /* Coroutine/thread/channel transfer evidence. `transfer_index` is the
  * boundary payload slot: go/thread args start at 0 after the callee; channel

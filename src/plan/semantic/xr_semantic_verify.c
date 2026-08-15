@@ -182,7 +182,7 @@ static bool semantic_source_enum_identity_exact(const XrSemanticTypeRecord *type
                type->enum_layout_id == 0 && type->enum_member_count == 0 &&
                type->enum_flags == 0 && type->reserved_enum == 0;
     const char *cursor = type->source_enum_key;
-    static const char prefix[] = "source-enum-v1:schema=33:owner=";
+    static const char prefix[] = "source-enum-v1:schema=34:owner=";
     if (!cursor || strncmp(cursor, prefix, sizeof(prefix) - 1u) != 0 ||
         !verify_id(cursor, type->source_enum_identity) ||
         type->enum_member_count == 0 || type->enum_layout_id == 0 ||
@@ -2099,6 +2099,169 @@ static bool verify_array_fill_scalar(
                   "Array.fill scalar authority is not exact");
 }
 
+static bool verify_array_hof(const XrSemanticPlan *plan,
+                             const XrSemanticOperationRecord *operation,
+                             char *error, size_t error_size) {
+    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_HOF)
+        return operation->array_hof_kind == XR_SEM_ARRAY_HOF_NONE &&
+                       operation->array_result_element_storage == XR_ELEM_ANY
+                   ? true
+                   : report(error, error_size, "XR_SEM_0019",
+                            "non-Array HOF carries higher-order authority");
+    uint16_t expected_operands =
+        operation->array_hof_kind == XR_SEM_ARRAY_HOF_REDUCE ? 3u : 2u;
+    const XrSemanticOperandRecord *operands =
+        operation->array_hof_kind > XR_SEM_ARRAY_HOF_NONE &&
+                operation->array_hof_kind < XR_SEM_ARRAY_HOF_COUNT &&
+                operation->operand_count == expected_operands &&
+                operation->operand_begin <= plan->operand_count &&
+                operation->operand_count <= plan->operand_count - operation->operand_begin
+            ? &plan->operands[operation->operand_begin]
+            : NULL;
+    const XrSemanticTypeRecord *receiver_type =
+        operands && operands[0].type < plan->type_count
+            ? &plan->types[operands[0].type]
+            : NULL;
+    uint32_t receiver_element =
+        receiver_type && semantic_type_is_exact_member_array(receiver_type) &&
+                receiver_type->child_begin < plan->type_child_count
+            ? plan->type_children[receiver_type->child_begin]
+            : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticTypeRecord *receiver_element_type =
+        receiver_element < plan->type_count ? &plan->types[receiver_element] : NULL;
+    const XrSemanticFunctionRecord *callee =
+        operation->callable_function < plan->function_count
+            ? &plan->functions[operation->callable_function]
+            : NULL;
+    uint16_t minimum_parameters =
+        operation->array_hof_kind == XR_SEM_ARRAY_HOF_REDUCE ? 2u : 1u;
+    bool exact = operation->opcode == XI_CALL_METHOD && operands && callee &&
+                 operation->function < plan->function_count &&
+                 callee->parent == operation->function && callee->capture_count == 0 &&
+                 callee->parameter_count == minimum_parameters &&
+                 (callee->semantic_effects &
+                  (XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE |
+                   XI_EFFECT_MAY_THROW | XI_EFFECT_MAY_SUSPEND)) == 0 &&
+                 callee->parameter_begin <= plan->parameter_count &&
+                 callee->parameter_count <= plan->parameter_count - callee->parameter_begin &&
+                 receiver_element_type &&
+                 semantic_array_element_storage(receiver_element_type) ==
+                     operation->array_element_storage &&
+                 operation->array_element_storage > XR_ELEM_ANY &&
+                 operation->array_element_storage < XR_ELEM_RAWPTR &&
+                 operation->array_result_element_storage > XR_ELEM_ANY &&
+                 operation->array_result_element_storage < XR_ELEM_RAWPTR &&
+                 operation->metadata_count == 1 &&
+                 operation->metadata_begin < plan->metadata_count &&
+                 operation->semantic_immediate == 0 &&
+                 operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                 operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                 operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                 operation->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
+                 operation->ownership_use == xi_generated_op_own_use(XI_CALL_METHOD) &&
+                 operation->result_alias_operand == -1 &&
+                 operation->return_parameter == -1 &&
+                 (operation->array_hof_kind == XR_SEM_ARRAY_HOF_REDUCE
+                      ? operation->result_ownership ==
+                                XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+                            operation->return_provenance == XR_SEM_RETURN_NONE &&
+                            operation->return_complete == 0
+                      : operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                            operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                            operation->return_complete == 1) &&
+                 operands[0].role == XR_SEM_OPERAND_RECEIVER &&
+                 operands[0].parameter == -1 &&
+                 operands[0].flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 operands[1].role == XR_SEM_OPERAND_ARGUMENT &&
+                 operands[1].parameter == 0 &&
+                 operands[1].flags == XR_SEM_OPERAND_CALL_CONTRACT;
+    uint32_t result_element = operation->result_type;
+    if (exact && operation->array_hof_kind != XR_SEM_ARRAY_HOF_REDUCE) {
+        const XrSemanticTypeRecord *result_array =
+            operation->result_type < plan->type_count
+                ? &plan->types[operation->result_type]
+                : NULL;
+        exact = semantic_type_is_exact_member_array(result_array) &&
+                result_array->child_begin < plan->type_child_count;
+        if (exact)
+            result_element = plan->type_children[result_array->child_begin];
+        if (exact && operation->array_hof_kind == XR_SEM_ARRAY_HOF_FILTER)
+            exact = operation->result_type == operands[0].type &&
+                    result_element == receiver_element;
+    } else if (exact) {
+        exact = operands[2].role == XR_SEM_OPERAND_ARGUMENT &&
+                operands[2].parameter == 1 &&
+                operands[2].flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                operands[2].type == operation->result_type;
+    }
+    const XrSemanticTypeRecord *result_element_type =
+        result_element < plan->type_count ? &plan->types[result_element] : NULL;
+    if (exact)
+        exact = result_element_type &&
+                semantic_array_element_storage(result_element_type) ==
+                    operation->array_result_element_storage;
+    if (exact && operation->array_hof_kind == XR_SEM_ARRAY_HOF_FILTER)
+        exact = callee->return_type < plan->type_count &&
+                semantic_type_is_exact_member_bool(&plan->types[callee->return_type]);
+    else if (exact)
+        exact = callee->return_type == result_element;
+    const XrSemanticParameterRecord *parameters =
+        exact ? &plan->parameters[callee->parameter_begin] : NULL;
+    if (exact)
+        exact = parameters[0].function == operation->callable_function &&
+                parameters[0].ordinal == 0 &&
+                parameters[0].type ==
+                    (operation->array_hof_kind == XR_SEM_ARRAY_HOF_REDUCE
+                         ? result_element
+                         : receiver_element);
+    if (exact && operation->array_hof_kind == XR_SEM_ARRAY_HOF_REDUCE)
+        exact = parameters[1].function == operation->callable_function &&
+                parameters[1].ordinal == 1 && parameters[1].type == receiver_element;
+    const XrSemanticTypeRecord *callback_type =
+        exact && operands[1].type < plan->type_count
+            ? &plan->types[operands[1].type]
+            : NULL;
+    if (exact)
+        exact = callback_type && callback_type->kind == XR_KIND_FUNCTION &&
+                callback_type->child_count == (uint32_t) callee->parameter_count + 1u &&
+                callback_type->child_begin <= plan->type_child_count &&
+                callback_type->child_count <=
+                    plan->type_child_count - callback_type->child_begin;
+    for (uint16_t i = 0; exact && i < callee->parameter_count; i++)
+        exact = plan->type_children[callback_type->child_begin + i] == parameters[i].type;
+    if (exact)
+        exact = plan->type_children[callback_type->child_begin + callee->parameter_count] ==
+                callee->return_type;
+    const XrSemanticOperationRecord *producer = NULL;
+    for (uint32_t i = 0; exact && i < plan->operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = &plan->operations[i];
+        if (candidate->function != operation->function ||
+            candidate->result_value != operands[1].value)
+            continue;
+        if (producer) {
+            exact = false;
+            break;
+        }
+        producer = candidate;
+    }
+    if (exact)
+        exact = producer && producer < operation &&
+                (producer->opcode == XI_CLOSURE_NEW ||
+                 (producer->opcode == XI_STACK_ALLOC &&
+                  producer->semantic_immediate == XI_CLOSURE_NEW)) &&
+                producer->callable_function == operation->callable_function &&
+                producer->result_type == operands[1].type;
+    uint32_t callback_uses = 0;
+    for (uint32_t i = 0; exact && i < plan->operand_count; i++)
+        callback_uses += plan->operands[i].value == operands[1].value;
+    for (uint32_t i = 0; exact && i < plan->block_count; i++)
+        if (plan->blocks[i].control_value == operands[1].value)
+            exact = false;
+    exact = exact && callback_uses == 1;
+    return exact || report(error, error_size, "XR_SEM_0019",
+                           "Array higher-order authority is not exact");
+}
+
 static bool verify_array_allocation_storage(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     char *error, size_t error_size) {
@@ -2169,6 +2332,10 @@ static bool verify_array_allocation_storage(
 static bool verify_array_intrinsic(const XrSemanticPlan *plan,
                                    const XrSemanticOperationRecord *operation,
                                    char *error, size_t error_size) {
+    if (!verify_array_hof(plan, operation, error, error_size))
+        return false;
+    if (operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF)
+        return true;
     bool candidate = operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY ||
                      operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
     if (!candidate) {
@@ -2564,6 +2731,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         bool closure_binding = operation->opcode == XI_CLOSURE_NEW ||
                                (operation->opcode == XI_STACK_ALLOC &&
                                 operation->semantic_immediate == XI_CLOSURE_NEW);
+        bool array_hof_binding =
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF;
         bool import_ref = operation->opcode == XI_IMPORT_REF;
         bool import_resolution_valid =
             operation->import_resolution < XR_SEM_IMPORT_RESOLUTION_COUNT &&
@@ -2599,8 +2768,9 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
                          plan->metadata_count) ||
             (operation->constant != XR_SEMANTIC_INDEX_NONE &&
              operation->constant >= plan->constant_count) ||
-            (closure_binding != (operation->callable_function != XR_SEMANTIC_INDEX_NONE)) ||
-            (closure_binding &&
+            ((closure_binding || array_hof_binding) !=
+             (operation->callable_function != XR_SEMANTIC_INDEX_NONE)) ||
+            ((closure_binding || array_hof_binding) &&
              (operation->callable_function >= plan->function_count ||
               plan->functions[operation->callable_function].parent != operation->function))) {
             return report(error, error_size, "XR_SEM_0015", "operation record is invalid");

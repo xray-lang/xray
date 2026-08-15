@@ -1,0 +1,11 @@
+c_syntax=pass
+c_contains=xrt_array_new_typed_uninit(
+c_contains=for (int64_t _i = 0; _i < _n; _i++)
+c_contains=int64_t _acc
+c_contains=_out->length = _out_len
+c_not_contains=({
+c_not_contains=xrt_array_map_typed(
+c_not_contains=xrt_array_filter_typed(
+c_not_contains=xrt_array_reduce_typed(
+c_not_contains=xrt_method_1(
+c_not_contains=xrt_method_2(

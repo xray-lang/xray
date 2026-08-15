@@ -7629,15 +7629,15 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
     if (v && v->array_member_kind == XI_ARRAY_MEMBER_FILL &&
         emit_typed_array_fill_expr(ctx, out, f, prefix, v))
         return true;
+    if (cg_array_hof_is_marked_operation(v) ||
+        cg_array_hof_is_frozen_operation(ctx, f, v)) {
+        (void) cg_value_emission_fail(
+            ctx, "Array HOF reached generic method emission without exact recipe");
+        return true;
+    }
     if (!method)
         return false;
-    return (nargs == 1 && strcmp(method, "map") == 0 &&
-            emit_typed_array_map_expr(ctx, out, f, prefix, v)) ||
-           (nargs == 1 && strcmp(method, "filter") == 0 &&
-            emit_typed_array_filter_expr(ctx, out, f, prefix, v)) ||
-           (nargs == 2 && strcmp(method, "reduce") == 0 &&
-            emit_typed_array_reduce_expr(ctx, out, f, prefix, v)) ||
-           (nargs == 1 && strcmp(method, "forEach") == 0 &&
+    return (nargs == 1 && strcmp(method, "forEach") == 0 &&
             emit_typed_array_for_each_expr(ctx, out, f, prefix, v)) ||
            (nargs == 1 && strcmp(method, "find") == 0 &&
             emit_typed_array_predicate_hof_expr(ctx, out, f, prefix, v, "xrt_array_find_typed")) ||

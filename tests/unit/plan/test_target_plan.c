@@ -10,6 +10,7 @@
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/base/xsha256.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
@@ -19,6 +20,7 @@
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
+#include "../../../src/plan/target/xr_target_instruction_verify.h"
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #include "../../../src/runtime/class/xclass_info.h"
@@ -29,6 +31,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Complete the opaque type only to exercise fail-closed verifier mutations. */
+struct XrCEmissionPlan {
+    XrCValueEmissionView *values;
+    uint32_t value_count;
+    XrCCallArgumentEmissionView *call_arguments;
+    uint32_t call_argument_count;
+    XrCRecipeArgumentView *recipe_arguments;
+    uint32_t recipe_argument_count;
+    XrCCleanupEmissionView *cleanups;
+    uint32_t cleanup_count;
+    uint32_t schema_version;
+    XrFingerprint target_fingerprint;
+    XrFingerprint profile_fingerprint;
+    XrFingerprint fingerprint;
+    bool verified;
+};
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -181,6 +200,59 @@ static XrType stub_target_u8_array = {
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_target_u8},
+};
+static XrFunctionParam stub_array_hof_unary_params[] = {
+    {.type = &stub_int, .mode = XR_PARAM_READ},
+};
+static XrType stub_array_hof_callback = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 123,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function = {
+        .params = stub_array_hof_unary_params,
+        .param_count = 1,
+        .min_params = 1,
+        .return_type = &stub_int,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
+};
+static XrType stub_array_hof_filter_callback = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 125,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function = {
+        .params = stub_array_hof_unary_params,
+        .param_count = 1,
+        .min_params = 1,
+        .return_type = &stub_bool,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
+};
+static XrFunctionParam stub_array_hof_reduce_params[] = {
+    {.type = &stub_int, .mode = XR_PARAM_READ},
+    {.type = &stub_int, .mode = XR_PARAM_READ},
+};
+static XrType stub_array_hof_reduce_callback = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 126,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function = {
+        .params = stub_array_hof_reduce_params,
+        .param_count = 2,
+        .min_params = 2,
+        .return_type = &stub_int,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
+};
+static XrType stub_array_hof_int_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 124,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_int},
 };
 static XrType stub_target_u8_slice = {
     .kind = XR_KIND_SLICE,
@@ -483,6 +555,100 @@ static XrSemanticPlan *build_array_intrinsic_semantic(void) {
         fprintf(stderr, "Array intrinsic semantic failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
     xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_array_hof_semantic(uint8_t hof_kind) {
+    bool is_filter = hof_kind == XI_ARRAY_HOF_FILTER;
+    bool is_reduce = hof_kind == XI_ARRAY_HOF_REDUCE;
+    uint16_t callback_parameter_count = is_reduce ? 2 : 1;
+    XrType *callback_return_type = is_filter ? &stub_bool : &stub_int;
+    XrType *callback_type = is_filter ? &stub_array_hof_filter_callback
+                                      : is_reduce
+                                            ? &stub_array_hof_reduce_callback
+                                            : &stub_array_hof_callback;
+    XrType *result_type = is_reduce ? &stub_int
+                                    : &stub_array_hof_int_array;
+    uint16_t operand_count = is_reduce ? 3 : 2;
+    const char *selector = is_filter ? "filter" : is_reduce ? "reduce" : "map";
+    XiFunc *root = xi_func_new("target_array_hof", &stub_int);
+    XiFunc *callback = xi_func_new("target_array_hof_callback",
+                                   callback_return_type);
+    REQUIRE(root != NULL && callback != NULL);
+    XiBlock *entry = xi_block_new(root);
+    XiBlock *callback_entry = xi_block_new(callback);
+    REQUIRE(entry != NULL && callback_entry != NULL);
+
+    callback->nparams = callback->min_params = callback_parameter_count;
+    callback->params = (XiValue **) xr_calloc(callback_parameter_count,
+                                               sizeof(*callback->params));
+    REQUIRE(callback->params != NULL);
+    callback->params[0] = xi_param(callback, callback_entry, 0, &stub_int);
+    REQUIRE(callback->params[0] != NULL);
+    if (is_reduce) {
+        callback->params[1] = xi_param(callback, callback_entry, 1, &stub_int);
+        REQUIRE(callback->params[1] != NULL);
+    }
+    XiValue *callback_result = is_filter
+                                   ? xi_const_bool(callback, callback_entry,
+                                                   true, &stub_bool)
+                                   : callback->params[0];
+    REQUIRE(callback_result != NULL);
+    xi_block_set_return(callback_entry, callback_result);
+
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = callback;
+    root->nchildren = root->children_cap = 1;
+    callback->parent_func = root;
+
+    XiValue *capacity = xi_const_int(root, entry, 4, &stub_int);
+    XiValue *array = xi_value_new(root, entry, XI_ARRAY_NEW,
+                                  &stub_array_hof_int_array, 1);
+    XiValue *closure = xi_value_new(root, entry, XI_CLOSURE_NEW,
+                                    callback_type, 0);
+    XiValue *seed = is_reduce ? xi_const_int(root, entry, 0, &stub_int) : NULL;
+    XiValue *hof = xi_value_new(root, entry, XI_CALL_METHOD, result_type,
+                                operand_count);
+    REQUIRE(capacity != NULL && array != NULL && closure != NULL && hof != NULL &&
+            (!is_reduce || seed != NULL));
+    array->args[0] = capacity;
+    array->array_element_storage = XR_ELEM_I64;
+    closure->aux = callback;
+    hof->args[0] = array;
+    hof->args[1] = closure;
+    if (is_reduce)
+        hof->args[2] = seed;
+    hof->aux = (void *) selector;
+    hof->array_hof_kind = hof_kind;
+    hof->array_element_storage = XR_ELEM_I64;
+    hof->array_result_element_storage = XR_ELEM_I64;
+    XiValue *release_hof = NULL;
+    if (!is_reduce) {
+        hof->call_return_ownership = (XiReturnOwnership) {
+            .kind = XI_RETURN_OWNERSHIP_OWNED,
+            .param_index = -1,
+            .complete = true,
+        };
+        release_hof = xi_value_new(root, entry, XI_RELEASE, &stub_unit, 1);
+        REQUIRE(release_hof != NULL);
+        release_hof->args[0] = hof;
+    }
+    XiValue *release_array = xi_value_new(root, entry, XI_RELEASE,
+                                          &stub_unit, 1);
+    XiValue *result = xi_const_int(root, entry, 0, &stub_int);
+    REQUIRE(release_array != NULL && result != NULL);
+    release_array->args[0] = array;
+    xi_block_set_return(entry, result);
+    root->stage = callback->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "Array HOF semantic failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(root);
     return semantic;
 }
 
@@ -1518,6 +1684,32 @@ static void expect_verify_failure_at(XrTargetPlan *plan, const char *code, uint3
 #define expect_verify_failure(plan, code) expect_verify_failure_at((plan), (code), __LINE__)
 #define expect_verify_failure_raw(plan, code) expect_verify_failure_raw_at((plan), (code), __LINE__)
 
+static uint8_t *target_test_xtp_directory_entry(uint8_t *bytes,
+                                                XrXtpSectionKind kind) {
+    return bytes + XR_XTP_HEADER_SIZE +
+           ((size_t) kind - 1u) * XR_XTP_DIRECTORY_ENTRY_SIZE;
+}
+
+static void target_test_xtp_resign_section(uint8_t *bytes,
+                                           XrXtpSectionKind kind) {
+    uint8_t *entry = target_test_xtp_directory_entry(bytes, kind);
+    size_t offset = (size_t) xr_xtp_take_u64(entry + 8);
+    size_t length = (size_t) xr_xtp_take_u64(entry + 16);
+    xr_sha256(bytes + offset, length, entry + 40);
+}
+
+static void target_test_xtp_resign_artifact(uint8_t *bytes, size_t size) {
+    static const uint8_t zero[XR_FINGERPRINT_BYTES] = {0};
+    XrSHA256Context context;
+    xr_sha256_init(&context);
+    xr_sha256_update(&context, bytes, XR_XTP_FULL_DIGEST_OFFSET);
+    xr_sha256_update(&context, zero, sizeof(zero));
+    xr_sha256_update(&context,
+                     bytes + XR_XTP_FULL_DIGEST_OFFSET + sizeof(zero),
+                     size - XR_XTP_FULL_DIGEST_OFFSET - sizeof(zero));
+    xr_sha256_final(&context, bytes + XR_XTP_FULL_DIGEST_OFFSET);
+}
+
 static XrSemanticPlan *build_unit_enum_semantic(XrEnumLayout **out_layout) {
     static const char *members[] = {"Standard", "UrlSafe"};
     XrEnumLayout *layout =
@@ -1685,7 +1877,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "20183af2e375f0a5e7be49319dab5964ffe509ecb51dbc670b6369dd310b61c0") == 0);
+                   "1a523ee345298c52eae45d4f89d2a1c737d6b31449a802f1f199ea065d219f32") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2853,7 +3045,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "3b9a26050832edafbfabbf4c8ea3d94868a8a5af570753c01e35cf633082a50b") == 0);
+                   "2a9ea9c8d1b50cf5959b8e4346af668ecc60bee73305189898c239490b7cb6ae") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
         XrTargetCallArgumentRecord fabricated_argument = {0};
@@ -3554,7 +3746,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "c2ff9a050597c7ec17bd9405f0a20e67ab6632786bfc380671651283dbc79fc6") == 0);
+                   "6c597eb7699c2e06af39dc00a3e46243548b1d8c5c6d4fc25e2cc03932d94907") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -3843,7 +4035,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "83377cbd11268ff22a9bddf380ccfd95cb839ff8470ca5383b52bf8d6034bbd2") == 0);
+                   "ad76effeb1b53a7022468b7f830a516ec9e036d180dc38e54455629c1bd60806") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");
@@ -4051,6 +4243,432 @@ static void test_array_intrinsic_call_authority(void) {
 
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
+typedef struct ArrayHofExpectation {
+    uint8_t xi_kind;
+    uint8_t semantic_kind;
+    uint8_t target_kind;
+    uint8_t c_kind;
+    uint8_t c_result_rep;
+    uint8_t callback_parameter_reps[2];
+    uint8_t callback_return_rep;
+    uint8_t result_ownership;
+    uint16_t operand_count;
+} ArrayHofExpectation;
+
+static const ArrayHofExpectation array_hof_expectations[] = {
+    {XI_ARRAY_HOF_MAP, XR_SEM_ARRAY_HOF_MAP, XR_TARGET_ARRAY_HOF_MAP,
+     XR_C_ARRAY_HOF_MAP, XR_C_VALUE_REP_TAGGED,
+     {XR_C_VALUE_REP_I64, XR_C_VALUE_REP_VOID}, XR_C_VALUE_REP_I64,
+     XR_TARGET_CALL_RETURN_OWNED, 2},
+    {XI_ARRAY_HOF_FILTER, XR_SEM_ARRAY_HOF_FILTER,
+     XR_TARGET_ARRAY_HOF_FILTER, XR_C_ARRAY_HOF_FILTER,
+     XR_C_VALUE_REP_TAGGED,
+     {XR_C_VALUE_REP_I64, XR_C_VALUE_REP_VOID}, XR_C_VALUE_REP_BOOL,
+     XR_TARGET_CALL_RETURN_OWNED, 2},
+    {XI_ARRAY_HOF_REDUCE, XR_SEM_ARRAY_HOF_REDUCE,
+     XR_TARGET_ARRAY_HOF_REDUCE, XR_C_ARRAY_HOF_REDUCE,
+     XR_C_VALUE_REP_I64,
+     {XR_C_VALUE_REP_I64, XR_C_VALUE_REP_I64}, XR_C_VALUE_REP_I64,
+     XR_TARGET_CALL_NONE, 3},
+};
+
+static void test_array_hof_call_authority_case(
+    const ArrayHofExpectation *expected) {
+    XrSemanticPlan *semantic = build_array_hof_semantic(expected->xi_kind);
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    XrSemanticOperationRecord *operation = NULL;
+    for (uint32_t i = 0; i < semantic->operation_count; i++)
+        if (semantic->operations[i].intrinsic_kind ==
+            XR_SEM_INTRINSIC_ARRAY_HOF)
+            operation = &semantic->operations[i];
+    REQUIRE(operation != NULL &&
+            operation->array_hof_kind == expected->semantic_kind &&
+            operation->array_element_storage == XR_ELEM_I64 &&
+            operation->array_result_element_storage == XR_ELEM_I64 &&
+            operation->callable_function < semantic->function_count &&
+            operation->operand_count == expected->operand_count);
+    XrSemanticOperandRecord *operands =
+        &semantic->operands[operation->operand_begin];
+    REQUIRE(operands[0].role == XR_SEM_OPERAND_RECEIVER &&
+            operands[0].parameter == -1 &&
+            operands[1].role == XR_SEM_OPERAND_ARGUMENT &&
+            operands[1].parameter == 0 &&
+            (expected->operand_count == 2 ||
+             (operands[2].role == XR_SEM_OPERAND_ARGUMENT &&
+              operands[2].parameter == 1)));
+
+    uint8_t saved_u8 = operation->array_hof_kind;
+    operation->array_hof_kind = expected->semantic_kind == XR_SEM_ARRAY_HOF_MAP
+                                    ? XR_SEM_ARRAY_HOF_FILTER
+                                    : XR_SEM_ARRAY_HOF_MAP;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    operation->array_hof_kind = saved_u8;
+    saved_u8 = operation->array_result_element_storage;
+    operation->array_result_element_storage = XR_ELEM_U8;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    operation->array_result_element_storage = saved_u8;
+    uint32_t saved_u32 = operation->callable_function;
+    operation->callable_function = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    operation->callable_function = saved_u32;
+    int16_t saved_i16 = operands[1].parameter;
+    operands[1].parameter = 1;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    operands[1].parameter = saved_i16;
+    XrSemanticFunctionRecord *callee =
+        &semantic->functions[operation->callable_function];
+    uint32_t saved_effects = callee->semantic_effects;
+    callee->semantic_effects |= XI_EFFECT_MAY_THROW;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    callee->semantic_effects = saved_effects;
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    bool built = xr_target_plan_build(semantic, profile, &plan, error,
+                                      sizeof(error));
+    if (!built)
+        fprintf(stderr, "Array HOF TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL && plan->calls_count == 1 &&
+            plan->call_arguments_count == expected->operand_count &&
+            (plan->completed_family_mask &
+             XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE) != 0);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    XrTargetCallRecord *call = &plan->calls[0];
+    REQUIRE(call->semantic_operation ==
+                (uint32_t) (operation - semantic->operations) &&
+            call->callee_function == operation->callable_function &&
+            call->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_HOF &&
+            call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_HOF &&
+            call->array_hof_kind == expected->target_kind &&
+            call->array_element_storage == XR_TARGET_ARRAY_STORAGE_I64 &&
+            call->array_result_element_storage ==
+                XR_TARGET_ARRAY_STORAGE_I64 &&
+            call->result_ownership == expected->result_ownership &&
+            call->argument_count == expected->operand_count);
+    XrTargetCallArgumentRecord *arguments =
+        &plan->call_arguments[call->argument_begin];
+    for (uint16_t i = 0; i < expected->operand_count; i++) {
+        REQUIRE(arguments[i].semantic_value == operands[i].value &&
+                arguments[i].ordinal == i &&
+                arguments[i].ownership ==
+                    (i == 0 ? XR_TARGET_CALL_BORROW
+                            : XR_TARGET_CALL_CONSUME) &&
+                arguments[i].callee_parameter == XR_SEMANTIC_INDEX_NONE);
+    }
+    XrTargetValueRepRecord *result = &plan->value_reps[call->result_value];
+    REQUIRE(result->slot == call->result_slot);
+    if (expected->target_kind == XR_TARGET_ARRAY_HOF_REDUCE) {
+        REQUIRE(plan->machine_reps[result->register_rep].kind ==
+                    XR_MACHINE_REP_I64 &&
+                plan->slots[result->slot].root_kind == XR_TARGET_ROOT_NONE &&
+                plan->slots[result->slot].ownership ==
+                    XR_TARGET_OWNERSHIP_TRIVIAL);
+    } else {
+        REQUIRE(plan->machine_reps[result->register_rep].kind ==
+                    XR_MACHINE_REP_DYN_VALUE &&
+                plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                plan->slots[result->slot].ownership ==
+                    XR_TARGET_OWNERSHIP_OWNED);
+    }
+
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(plan, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+    XrCValueEmissionView hof_view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+                emission, call->result_value, &hof_view, error,
+                sizeof(error)) &&
+            hof_view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_ARRAY_HOF_DIRECT &&
+            hof_view.rep == expected->c_result_rep &&
+            hof_view.recipe_callee_function == call->callee_function &&
+            hof_view.recipe_hof_kind == expected->c_kind &&
+            hof_view.recipe_hof_source_storage ==
+                XR_TARGET_ARRAY_STORAGE_I64 &&
+            hof_view.recipe_hof_result_storage ==
+                XR_TARGET_ARRAY_STORAGE_I64 &&
+            hof_view.recipe_hof_callback_parameter_reps[0] ==
+                expected->callback_parameter_reps[0] &&
+            hof_view.recipe_hof_callback_parameter_reps[1] ==
+                expected->callback_parameter_reps[1] &&
+            hof_view.recipe_hof_callback_return_rep ==
+                expected->callback_return_rep &&
+            hof_view.recipe_hof_reserved == 0 &&
+            hof_view.recipe_argument_count == expected->operand_count &&
+            hof_view.recipe_arguments == emission->recipe_arguments &&
+            emission->recipe_argument_count == expected->operand_count &&
+            xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                      error, sizeof(error)));
+    const uint8_t expected_argument_kinds[3] = {
+        XR_C_RECIPE_ARGUMENT_ARRAY_HOF_RECEIVER,
+        XR_C_RECIPE_ARGUMENT_ARRAY_HOF_CALLBACK,
+        XR_C_RECIPE_ARGUMENT_ARRAY_HOF_SEED,
+    };
+    XrCRecipeArgumentView *hof_arguments =
+        (XrCRecipeArgumentView *) hof_view.recipe_arguments;
+    for (uint16_t i = 0; i < expected->operand_count; i++) {
+        REQUIRE(hof_arguments[i].kind == expected_argument_kinds[i] &&
+                hof_arguments[i].semantic_value == operands[i].value &&
+                hof_arguments[i].source_semantic_value == operands[i].value &&
+                hof_arguments[i].reserved[0] == 0 &&
+                hof_arguments[i].reserved[1] == 0 &&
+                hof_arguments[i].reserved[2] == 0);
+    }
+
+    XrCValueEmissionView *mutable_hof = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == call->result_value)
+            mutable_hof = &emission->values[i];
+    REQUIRE(mutable_hof != NULL);
+    saved_u32 = mutable_hof->recipe_callee_function;
+    mutable_hof->recipe_callee_function ^= 1u;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_callee_function = saved_u32;
+    saved_u8 = mutable_hof->recipe_hof_kind;
+    mutable_hof->recipe_hof_kind = saved_u8 == XR_C_ARRAY_HOF_MAP
+                                       ? XR_C_ARRAY_HOF_FILTER
+                                       : XR_C_ARRAY_HOF_MAP;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_hof_kind = saved_u8;
+    saved_u8 = mutable_hof->recipe_hof_source_storage;
+    mutable_hof->recipe_hof_source_storage = XR_TARGET_ARRAY_STORAGE_U8;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_hof_source_storage = saved_u8;
+    saved_u8 = mutable_hof->recipe_hof_result_storage;
+    mutable_hof->recipe_hof_result_storage = XR_TARGET_ARRAY_STORAGE_U8;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_hof_result_storage = saved_u8;
+    saved_u8 = mutable_hof->recipe_hof_callback_parameter_reps[0];
+    mutable_hof->recipe_hof_callback_parameter_reps[0] = XR_C_VALUE_REP_BOOL;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_hof_callback_parameter_reps[0] = saved_u8;
+    saved_u8 = mutable_hof->recipe_hof_callback_parameter_reps[1];
+    mutable_hof->recipe_hof_callback_parameter_reps[1] =
+        saved_u8 == XR_C_VALUE_REP_VOID ? XR_C_VALUE_REP_I64
+                                        : XR_C_VALUE_REP_VOID;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_hof_callback_parameter_reps[1] = saved_u8;
+    saved_u8 = mutable_hof->recipe_hof_callback_return_rep;
+    mutable_hof->recipe_hof_callback_return_rep =
+        saved_u8 == XR_C_VALUE_REP_BOOL ? XR_C_VALUE_REP_I64
+                                        : XR_C_VALUE_REP_BOOL;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_hof_callback_return_rep = saved_u8;
+    mutable_hof->recipe_hof_reserved = 1;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_hof_reserved = 0;
+    uint16_t saved_u16 = mutable_hof->recipe_argument_count;
+    mutable_hof->recipe_argument_count = 0;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_argument_count = saved_u16;
+    const XrCRecipeArgumentView *saved_recipe_arguments =
+        mutable_hof->recipe_arguments;
+    mutable_hof->recipe_arguments = NULL;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_arguments = saved_recipe_arguments;
+    mutable_hof->recipe_arguments = saved_recipe_arguments + 1;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    mutable_hof->recipe_arguments = saved_recipe_arguments;
+    saved_u32 = emission->recipe_argument_count;
+    emission->recipe_argument_count--;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    emission->recipe_argument_count = saved_u32 + 1;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    emission->recipe_argument_count = saved_u32;
+    for (uint16_t i = 0; i < expected->operand_count; i++) {
+        saved_u8 = hof_arguments[i].kind;
+        hof_arguments[i].kind = XR_C_RECIPE_ARGUMENT_INVALID;
+        REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                           error, sizeof(error)));
+        hof_arguments[i].kind = saved_u8;
+        saved_u32 = hof_arguments[i].semantic_value;
+        hof_arguments[i].semantic_value = UINT32_MAX;
+        REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                           error, sizeof(error)));
+        hof_arguments[i].semantic_value = saved_u32;
+        saved_u32 = hof_arguments[i].source_semantic_value;
+        hof_arguments[i].source_semantic_value = UINT32_MAX;
+        REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                           error, sizeof(error)));
+        hof_arguments[i].source_semantic_value = saved_u32;
+        for (uint8_t reserved = 0; reserved < 3; reserved++) {
+            hof_arguments[i].reserved[reserved] = 1;
+            REQUIRE(!xr_c_emission_plan_verify(
+                emission, plan, profile_fingerprint, error, sizeof(error)));
+            hof_arguments[i].reserved[reserved] = 0;
+        }
+    }
+    XrFingerprint saved_fingerprint = emission->fingerprint;
+    emission->fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    emission->fingerprint = saved_fingerprint;
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                      error, sizeof(error)));
+
+    XrCEmissionPlan *same_emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(plan, profile_fingerprint, &same_emission,
+                                     error, sizeof(error)) &&
+            xr_fingerprint_equal(xr_c_emission_plan_fingerprint(emission),
+                                 xr_c_emission_plan_fingerprint(same_emission)));
+    XrCValueEmissionView same_view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+                same_emission, call->result_value, &same_view, error,
+                sizeof(error)) &&
+            same_view.recipe_callee_function == hof_view.recipe_callee_function &&
+            same_view.recipe_hof_kind == hof_view.recipe_hof_kind &&
+            same_view.recipe_hof_source_storage ==
+                hof_view.recipe_hof_source_storage &&
+            same_view.recipe_hof_result_storage ==
+                hof_view.recipe_hof_result_storage &&
+            same_view.recipe_hof_callback_parameter_reps[0] ==
+                hof_view.recipe_hof_callback_parameter_reps[0] &&
+            same_view.recipe_hof_callback_parameter_reps[1] ==
+                hof_view.recipe_hof_callback_parameter_reps[1] &&
+            same_view.recipe_hof_callback_return_rep ==
+                hof_view.recipe_hof_callback_return_rep &&
+            same_view.recipe_hof_reserved == 0 &&
+            same_view.recipe_argument_count == expected->operand_count);
+    for (uint16_t i = 0; i < expected->operand_count; i++)
+        REQUIRE(memcmp(&same_view.recipe_arguments[i], &hof_arguments[i],
+                       sizeof(hof_arguments[i])) == 0);
+    xr_c_emission_plan_free(same_emission);
+
+    saved_u8 = call->array_hof_kind;
+    call->array_hof_kind = saved_u8 == XR_TARGET_ARRAY_HOF_MAP
+                               ? XR_TARGET_ARRAY_HOF_FILTER
+                               : XR_TARGET_ARRAY_HOF_MAP;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                       error, sizeof(error)));
+    call->array_hof_kind = saved_u8;
+    saved_u8 = call->array_element_storage;
+    call->array_element_storage = XR_TARGET_ARRAY_STORAGE_U8;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->array_element_storage = saved_u8;
+    saved_u8 = call->array_result_element_storage;
+    call->array_result_element_storage = XR_TARGET_ARRAY_STORAGE_U8;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->array_result_element_storage = saved_u8;
+    saved_u32 = call->callee_function;
+    call->callee_function = XR_SEMANTIC_INDEX_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->callee_function = saved_u32;
+    saved_u16 = arguments[0].ordinal;
+    arguments[0].ordinal = 1;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    arguments[0].ordinal = saved_u16;
+    saved_u8 = arguments[1].ownership;
+    arguments[1].ownership = XR_TARGET_CALL_READ;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    arguments[1].ownership = saved_u8;
+    XrStableId saved_identity = call->identity;
+    call->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->identity = saved_identity;
+    uint64_t saved_mask = plan->completed_family_mask;
+    plan->completed_family_mask &=
+        ~XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->completed_family_mask = saved_mask;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)) &&
+            xr_c_emission_plan_verify(emission, plan, profile_fingerprint,
+                                      error, sizeof(error)));
+
+    uint8_t *encoded = NULL;
+    size_t encoded_size = 0;
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *decoded = NULL;
+    REQUIRE(xr_xtp_encode_plan(plan, &encoded, &encoded_size, error,
+                               sizeof(error)));
+    uint8_t *call_entry = target_test_xtp_directory_entry(
+        encoded, XR_XTP_SECTION_CALLS);
+    size_t call_offset = (size_t) xr_xtp_take_u64(call_entry + 8);
+    REQUIRE(encoded[call_offset + 122] == XR_TARGET_ARRAY_STORAGE_I64 &&
+            encoded[call_offset + 123] == expected->target_kind &&
+            encoded[call_offset + 124] == XR_TARGET_ARRAY_STORAGE_I64);
+    REQUIRE(xr_xtp_decode_candidate(encoded, encoded_size, &candidate, error,
+                                    sizeof(error)) &&
+            xr_xtp_materialize_target_plan(candidate, semantic, profile,
+                                           &decoded, error, sizeof(error)));
+    REQUIRE(decoded->calls_count == 1 &&
+            decoded->calls[0].array_hof_kind == expected->target_kind &&
+            decoded->calls[0].array_element_storage ==
+                XR_TARGET_ARRAY_STORAGE_I64 &&
+            decoded->calls[0].array_result_element_storage ==
+                XR_TARGET_ARRAY_STORAGE_I64 &&
+            xr_fingerprint_equal(decoded->fingerprint, plan->fingerprint));
+    xr_target_plan_free(decoded);
+    xr_xtp_candidate_release(candidate);
+
+    encoded[call_offset + 123] =
+        expected->target_kind == XR_TARGET_ARRAY_HOF_MAP
+            ? XR_TARGET_ARRAY_HOF_FILTER
+            : XR_TARGET_ARRAY_HOF_MAP;
+    target_test_xtp_resign_section(encoded, XR_XTP_SECTION_CALLS);
+    target_test_xtp_resign_artifact(encoded, encoded_size);
+    candidate = NULL;
+    decoded = NULL;
+    REQUIRE(xr_xtp_decode_candidate(encoded, encoded_size, &candidate, error,
+                                    sizeof(error)));
+    REQUIRE(!xr_xtp_materialize_target_plan(candidate, semantic, profile,
+                                            &decoded, error, sizeof(error)) &&
+            decoded == NULL);
+    xr_xtp_candidate_release(candidate);
+    xr_xtp_encoded_free(encoded);
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_array_hof_call_authority(void) {
+    for (size_t i = 0; i < sizeof(array_hof_expectations) /
+                                   sizeof(array_hof_expectations[0]); i++)
+        test_array_hof_call_authority_case(&array_hof_expectations[i]);
+
+    char error[512] = {0};
+    XrTargetProfile *profile = build_profile(0);
+    XrSemanticPlan *direct_semantic =
+        build_direct_local_scalar_calls(XI_CALL, &stub_int, &stub_function);
+    XrTargetPlan *direct = NULL;
+    REQUIRE(xr_target_plan_build(direct_semantic, profile, &direct, error,
+                                 sizeof(error)) &&
+            xr_target_instruction_program_verify(direct, error,
+                                                 sizeof(error)));
+    XrTargetCallRecord *direct_call = &direct->calls[0];
+    direct_call->array_hof_kind = XR_TARGET_ARRAY_HOF_MAP;
+    REQUIRE(!xr_target_instruction_program_verify(direct, error,
+                                                  sizeof(error)));
+    direct_call->array_hof_kind = XR_TARGET_ARRAY_HOF_NONE;
+    direct_call->array_result_element_storage = XR_TARGET_ARRAY_STORAGE_I64;
+    REQUIRE(!xr_target_instruction_program_verify(direct, error,
+                                                  sizeof(error)));
+    direct_call->array_result_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    REQUIRE(xr_target_instruction_program_verify(direct, error,
+                                                 sizeof(error)));
+    xr_target_plan_free(direct);
+    xr_semantic_plan_free(direct_semantic);
     xr_target_profile_free(profile);
 }
 
@@ -5191,6 +5809,11 @@ int main(int argc, char **argv) {
         puts("Array intrinsic TargetPlan authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "array-hof-authority") == 0) {
+        test_array_hof_call_authority();
+        puts("Array HOF TargetPlan authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "string-slice-range-authority") == 0) {
         test_string_slice_range_call_authority();
         puts("String range-slice TargetPlan authority tests passed");
@@ -5204,6 +5827,7 @@ int main(int argc, char **argv) {
     test_direct_local_raw_pointer_call_authority();
     test_unit_enum_target_rep_mutations();
     test_array_intrinsic_call_authority();
+    test_array_hof_call_authority();
     test_array_reserve_call_authority();
     test_stringbuilder_constructor_call_authority();
     test_stringbuilder_append_rune_call_authority();

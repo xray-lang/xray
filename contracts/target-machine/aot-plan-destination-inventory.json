@@ -364,7 +364,7 @@
       "c_coupling_fields": [],
       "category": "target",
       "consumers": [
-        "none-current-gap"
+        "src/aot/xi_cgen_array_helpers.inc.c"
       ],
       "current_fallback": "none-declared",
       "current_type": "XaotClosurePlan",
@@ -381,7 +381,8 @@
         "src/aot/xaot_bundle.h",
         "src/aot/xaot_prepare.c",
         "src/aot/xaot_prepare.h",
-        "src/aot/xaot_verify.c"
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_array_helpers.inc.c"
       ],
       "verifier": "src/aot/xaot_verify.c"
     },
@@ -541,6 +542,7 @@
       "consumers": [
         "src/aot/xi_cgen.c",
         "src/aot/xi_cgen_abi_helpers.inc.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
         "src/aot/xi_cgen_class_native_helpers.inc.c",
         "src/aot/xi_cgen_coro_resolver.inc.c",
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
@@ -565,6 +567,7 @@
         "src/aot/xaot_verify.c",
         "src/aot/xi_cgen.c",
         "src/aot/xi_cgen_abi_helpers.inc.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
         "src/aot/xi_cgen_class_native_helpers.inc.c",
         "src/aot/xi_cgen_coro_resolver.inc.c",
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
@@ -1119,5 +1122,5 @@
     }
   ],
   "schema": 1,
-  "source_tree_fingerprint": "4629d6dd0fdeff3204b504dee3355d7b6ded3da43c1a7960e131c3bb726b1deb"
+  "source_tree_fingerprint": "62515ede6af97d7ca6ddfaf06f5ec3e8db6a7be5912132c14585124b98902c88"
 }

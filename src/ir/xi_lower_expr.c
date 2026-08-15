@@ -7468,6 +7468,30 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->array_element_storage =
                 xi_array_intrinsic_storage_from_type(recv->type);
         }
+        if (n == 1 && xi_lower_receiver_method_call_matches(
+                          recv->type, ma->name, n,
+                          XA_BUILTIN_RECEIVER_METHOD_ARRAY_MAP)) {
+            v->array_hof_kind = XI_ARRAY_HOF_MAP;
+        } else if (n == 1 && xi_lower_receiver_method_call_matches(
+                                 recv->type, ma->name, n,
+                                 XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILTER)) {
+            v->array_hof_kind = XI_ARRAY_HOF_FILTER;
+        } else if (n == 2 && xi_lower_receiver_method_call_matches(
+                                 recv->type, ma->name, n,
+                                 XA_BUILTIN_RECEIVER_METHOD_ARRAY_REDUCE)) {
+            v->array_hof_kind = XI_ARRAY_HOF_REDUCE;
+        }
+        if (v->array_hof_kind != XI_ARRAY_HOF_NONE) {
+            v->array_element_storage =
+                xi_array_intrinsic_storage_from_type(recv->type);
+            struct XrType *stored_result =
+                XR_TYPE_IS_ARRAY(result_type) ? result_type->container.element_type
+                                              : result_type;
+            v->array_result_element_storage = stored_result
+                                                  ? (uint8_t) xr_tid_to_elem_type(
+                                                        xr_type_to_tid(stored_result))
+                                                  : XR_ELEM_ANY;
+        }
         if (is_time_sleep)
             v->lowering_flags |= XI_LOWERING_FLAG_TIME_SLEEP;
         lower_instantiate_call_view_evidence(v, NULL, method_type, true);

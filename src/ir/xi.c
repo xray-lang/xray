@@ -398,7 +398,9 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->xa_intrinsic_id = 0;
     v->array_intrinsic_kind = XI_ARRAY_INTRINSIC_NONE;
     v->array_member_kind = XI_ARRAY_MEMBER_NONE;
+    v->array_hof_kind = XI_ARRAY_HOF_NONE;
     v->array_element_storage = XR_ELEM_ANY;
+    v->array_result_element_storage = XR_ELEM_ANY;
     v->xg_method_id = 0;
     v->xg_interface_dispatch_slot = UINT32_MAX;
     v->xg_json_codec_id = 0;

@@ -3743,16 +3743,21 @@ static bool cg_array_fill_loop_match(XiCgenCtx *ctx, const XiFunc *f, const XiVa
     return true;
 }
 
-static bool cg_array_value_mutates_origin_directly(const XiValue *v, const XiValue *origin) {
+static bool cg_array_hof_is_frozen_operation(XiCgenCtx *ctx,
+                                              const XiFunc *current,
+                                              const XiValue *value);
+
+static bool cg_array_value_mutates_origin_directly(XiCgenCtx *ctx,
+                                                    const XiFunc *current,
+                                                    const XiValue *v,
+                                                    const XiValue *origin) {
     if (!v || !origin)
         return false;
     if (v->op == XI_INDEX_SET && v->nargs >= 1 && cg_array_single_origin(v->args[0], 0) == origin)
         return true;
     if (v->op == XI_CALL_METHOD && v->nargs >= 1 &&
         cg_array_single_origin(v->args[0], 0) == origin) {
-        const char *method = (const char *) v->aux;
-        if (method && (strcmp(method, "map") == 0 || strcmp(method, "filter") == 0 ||
-                       strcmp(method, "reduce") == 0))
+        if (cg_array_hof_is_frozen_operation(ctx, current, v))
             return false;
         if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM))
             return true;
@@ -3760,7 +3765,8 @@ static bool cg_array_value_mutates_origin_directly(const XiValue *v, const XiVal
     return false;
 }
 
-static bool cg_array_origin_has_only_fill_mutation(const XiFunc *f, const XiValue *origin,
+static bool cg_array_origin_has_only_fill_mutation(XiCgenCtx *ctx, const XiFunc *f,
+                                                   const XiValue *origin,
                                                    const XiValue *fill_push) {
     if (!f || !origin || !fill_push)
         return false;
@@ -3772,7 +3778,7 @@ static bool cg_array_origin_has_only_fill_mutation(const XiFunc *f, const XiValu
             const XiValue *v = blk->values[vi];
             if (v == fill_push)
                 continue;
-            if (cg_array_value_mutates_origin_directly(v, origin))
+            if (cg_array_value_mutates_origin_directly(ctx, f, v, origin))
                 return false;
         }
     }
@@ -3802,7 +3808,7 @@ static bool cg_array_unique_fill_loop_for_origin(XiCgenCtx *ctx, const XiFunc *f
             have = true;
         }
     }
-    if (!have || !cg_array_origin_has_only_fill_mutation(f, origin, found.push))
+    if (!have || !cg_array_origin_has_only_fill_mutation(ctx, f, origin, found.push))
         return false;
     if (out)
         *out = found;
@@ -5698,7 +5704,7 @@ static bool cg_array_fill_value_is_zero_bits_literal(const XiValue *value) {
     return false;
 }
 
-static bool cg_array_fill_elem_info_from_recipe_storage(
+static bool cg_array_elem_info_from_recipe_storage(
     uint32_t storage, CgArrayElemInfo *out) {
     XaotRep rep = XAOT_REP_COUNT;
     const char *element_name = NULL;
@@ -5784,7 +5790,7 @@ static bool cg_array_fill_emission_authority(
            cg_value_semantic_id(ctx, f, call->args[1], &fill_semantic) &&
            receiver_semantic == out->recipe_operand_value &&
            fill_semantic == out->recipe_argument_value &&
-           cg_array_fill_elem_info_from_recipe_storage(expected_storage, info);
+           cg_array_elem_info_from_recipe_storage(expected_storage, info);
 }
 
 static bool emit_typed_array_fill_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -6017,10 +6023,10 @@ static bool cg_array_class_field_value_is_elided(XiCgenCtx *ctx, const XiFunc *f
                         return false;
                     case XI_CALL_METHOD: {
                         const char *method = (const char *) v->aux;
-                        if (ai == 0 && method &&
-                            (strcmp(method, "length") == 0 || strcmp(method, "push") == 0 ||
-                             strcmp(method, "map") == 0 || strcmp(method, "filter") == 0 ||
-                             strcmp(method, "reduce") == 0))
+                        if (ai == 0 &&
+                            ((method && (strcmp(method, "length") == 0 ||
+                                         strcmp(method, "push") == 0)) ||
+                             cg_array_hof_is_frozen_operation(ctx, f, v)))
                             continue;
                         return false;
                     }
@@ -6052,514 +6058,381 @@ static bool emit_typed_array_length_expr(XiCgenCtx *ctx, FILE *out, const XiFunc
     return true;
 }
 
-static bool cg_array_func_is_inline_pure(const XiFunc *f) {
-    if (!f)
-        return false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (!v)
-                continue;
-            if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM))
-                return false;
-        }
-    }
-    return true;
-}
 
-typedef struct CgArrayInlineMap {
-    CgArrayElemInfo src_info;
-    CgArrayElemInfo dst_info;
-    const XiFunc *target;
-    const char *target_prefix; /* owned: XiModule C-name prefix (Xi arena)/NULL; local emit info */
-    XrRep param_rep;
-    XrRep return_rep;
-} CgArrayInlineMap;
 
-static bool cg_array_call_method_is(const XiValue *v, const char *name) {
-    return v && v->op == XI_CALL_METHOD && v->aux && name &&
-           strcmp((const char *) v->aux, name) == 0;
-}
 
-static bool cg_array_inline_map_info(XiCgenCtx *ctx, const XiFunc *current, const char *prefix,
-                                     const XiValue *v, CgArrayInlineMap *out) {
-    CgArrayInlineMap info;
-    if (!ctx || !cg_array_call_method_is(v, "map") || v->nargs != 2 || !out ||
-        !cg_array_elem_info_from_type_ctx(ctx, v->type, &info.dst_info) ||
-        !cg_array_value_storage_info(ctx, current, v->args[0], &info.src_info,
-                                     CG_ARRAY_STORAGE_READ))
-        return false;
 
-    CgStaticFunctionCall cb = cg_resolve_static_function_call(ctx, current, v->args[1]);
-    info.target = cb.func;
-    if (!info.target || info.target->ncaptures != 0 || info.target->nparams != 1 ||
-        !cg_func_uses_typed_abi(ctx, info.target) || !cg_array_func_is_inline_pure(info.target))
-        return false;
 
-    info.target_prefix = cb.prefix ? cb.prefix : prefix;
-    info.param_rep = cg_func_param_abi_rep(ctx, info.target, 0);
-    info.return_rep = cg_func_return_abi_rep(ctx, info.target);
-    if ((info.param_rep != XR_REP_I64 && info.param_rep != XR_REP_F64) ||
-        info.return_rep != XR_REP_I64)
-        return false;
-    *out = info;
-    return true;
-}
 
-static bool emit_typed_array_map_inline_expr_cached(XiCgenCtx *ctx, FILE *out,
-                                                    const XiFunc *current, const char *prefix,
-                                                    const XiValue *v, const XiValue *cache_value) {
-    CgArrayInlineMap map;
-    if (!cg_array_inline_map_info(ctx, current, prefix, v, &map))
-        return false;
-    const XiValue *cached_origin = NULL;
-    bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
-    fprintf(out, "({ xrt_array_t *_src = (xrt_array_t*)");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ".ptr; int64_t _n = _src->length; XrValue _outv = ");
-    fprintf(out, "xrt_array_new_typed_uninit(_n, %s); ", map.dst_info.elem_name);
-    fprintf(out, "xrt_array_t *_out = (xrt_array_t*)_outv.ptr; ");
-    fprintf(out, "%s *_srcd = ", map.src_info.ctype);
-    if (use_cache) {
-        emit_typed_array_data_cache_ref(out, cached_origin);
-        fprintf(out, "; ");
-    } else {
-        fprintf(out, "(%s*)_src->data; ", map.src_info.ctype);
-    }
-    fprintf(out, "%s *_dstd = (%s*)_out->data; ", map.dst_info.ctype, map.dst_info.ctype);
-    if (cache_value) {
-        emit_typed_array_data_cache_ref(out, cache_value);
-        fprintf(out, " = _dstd; ");
-    }
-    fprintf(out, "for (int64_t _i = 0; _i < _n; _i++) { _dstd[_i] = (%s)", map.dst_info.ctype);
-    emit_fname(ctx, out, map.target_prefix, map.target);
-    /* Yield the result array in the destination value's representation: a
-     * bare pointer when select_rep chose PTR for this value, otherwise the
-     * tagged XrValue. Without this the statement-expression always produced
-     * an XrValue and `void *vN = (XrValue)` failed to compile. */
-    /* An inlined map/filter builds a fresh array, so a result nobody consumes
-     * has to be released rather than cast away.  Same ownership rule as the
-     * symbol dispatchers; see xrt_method_0. */
-    const char *yield = cg_unused_call_result_emits_statement(ctx, current, v)
-                            ? "xrt_discard_owned(_outv)"
-                            : (cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
-    fprintf(out, "(NULL, (%s)_srcd[_i]); } _out->length = _n; %s; })", ctype_str(map.param_rep),
-            yield);
-    return true;
-}
 
-static bool emit_typed_array_map_inline_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
-                                             const char *prefix, const XiValue *v) {
-    return emit_typed_array_map_inline_expr_cached(ctx, out, current, prefix, v, NULL);
-}
 
-static bool emit_typed_array_map_inline_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
-                                             const char *prefix, const XiValue *v) {
-    CgArrayInlineMap map;
-    if (!cg_array_inline_map_info(ctx, current, prefix, v, &map) ||
-        !cg_array_can_cache_data_for_value(ctx, v, NULL))
-        return false;
-    fprintf(out, "    %s *", map.dst_info.ctype);
-    emit_typed_array_data_cache_ref(out, v);
-    fprintf(out, " = NULL;\n");
-    if (!ctx->pre_decl_all) {
-        fprintf(out, "    %s ", ctype_str(cg_rep(v)));
-        emit_vref(out, v);
-        fprintf(out, ";\n");
-    }
-    const XiValue *cached_origin = NULL;
-    bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
-    fprintf(out, "    {\n        xrt_array_t *_src = (xrt_array_t*)");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out,
-            ".ptr;\n        int64_t _n = _src->length;\n        XrValue _outv = "
-            "xrt_array_new_typed_uninit(_n, %s);\n        "
-            "xrt_array_t *_out = (xrt_array_t*)_outv.ptr;\n        %s *_srcd = ",
-            map.dst_info.elem_name, map.src_info.ctype);
-    if (use_cache)
-        emit_typed_array_data_cache_ref(out, cached_origin);
-    else
-        fprintf(out, "(%s*)_src->data", map.src_info.ctype);
-    fprintf(out, ";\n        %s *_dstd = (%s*)_out->data;\n        ", map.dst_info.ctype,
-            map.dst_info.ctype);
-    emit_typed_array_data_cache_ref(out, v);
-    fprintf(out,
-            " = _dstd;\n        for (int64_t _i = 0; _i < _n; _i++) {\n            "
-            "_dstd[_i] = (%s)",
-            map.dst_info.ctype);
-    emit_fname(ctx, out, map.target_prefix, map.target);
-    fprintf(out, "(NULL, (%s)_srcd[_i]);\n        }\n        _out->length = _n;\n        ",
-            ctype_str(map.param_rep));
-    emit_vref(out, v);
-    fprintf(out, " = %s;\n    }\n", cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
-    emit_value_generated_line_reset(ctx, out, v);
-    emit_debug_source_var_sync(ctx, out, current, v);
-    return true;
-}
 
-static bool cg_array_inline_filter_info(XiCgenCtx *ctx, const XiFunc *current, const char *prefix,
-                                        const XiValue *v, CgArrayInlineMap *out) {
-    CgArrayInlineMap info;
-    if (!ctx || !cg_array_call_method_is(v, "filter") || v->nargs != 2 || !out ||
-        !cg_array_elem_info_from_type_ctx(ctx, v->type, &info.dst_info) ||
-        !cg_array_value_storage_info(ctx, current, v->args[0], &info.src_info,
-                                     CG_ARRAY_STORAGE_READ))
-        return false;
-    if (strcmp(info.src_info.elem_name, info.dst_info.elem_name) != 0)
-        return false;
 
-    CgStaticFunctionCall cb = cg_resolve_static_function_call(ctx, current, v->args[1]);
-    info.target = cb.func;
-    if (!info.target || info.target->ncaptures != 0 || info.target->nparams != 1 ||
-        !cg_func_uses_typed_abi(ctx, info.target) || !cg_array_func_is_inline_pure(info.target))
-        return false;
 
-    info.target_prefix = cb.prefix ? cb.prefix : prefix;
-    info.param_rep = cg_func_param_abi_rep(ctx, info.target, 0);
-    info.return_rep = cg_func_return_abi_rep(ctx, info.target);
-    if ((info.param_rep != XR_REP_I64 && info.param_rep != XR_REP_F64) ||
-        info.return_rep != XR_REP_I64)
-        return false;
-    *out = info;
-    return true;
-}
 
-static bool emit_typed_array_filter_inline_expr_cached(XiCgenCtx *ctx, FILE *out,
-                                                       const XiFunc *current, const char *prefix,
-                                                       const XiValue *v,
-                                                       const XiValue *cache_value) {
-    CgArrayInlineMap filter;
-    if (!cg_array_inline_filter_info(ctx, current, prefix, v, &filter))
-        return false;
-    const XiValue *cached_origin = NULL;
-    bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
-    fprintf(out, "({ xrt_array_t *_src = (xrt_array_t*)");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ".ptr; int64_t _n = _src->length; XrValue _outv = ");
-    fprintf(out, "xrt_array_new_typed_uninit(_n, %s); ", filter.dst_info.elem_name);
-    fprintf(out, "xrt_array_t *_out = (xrt_array_t*)_outv.ptr; ");
-    fprintf(out, "%s *_srcd = ", filter.src_info.ctype);
-    if (use_cache) {
-        emit_typed_array_data_cache_ref(out, cached_origin);
-        fprintf(out, "; ");
-    } else {
-        fprintf(out, "(%s*)_src->data; ", filter.src_info.ctype);
-    }
-    fprintf(out, "%s *_dstd = (%s*)_out->data; int64_t _out_len = 0; ", filter.dst_info.ctype,
-            filter.dst_info.ctype);
-    if (cache_value) {
-        emit_typed_array_data_cache_ref(out, cache_value);
-        fprintf(out, " = _dstd; ");
-    }
-    fprintf(out, "for (int64_t _i = 0; _i < _n; _i++) { %s _x = _srcd[_i]; if (",
-            filter.src_info.ctype);
-    emit_fname(ctx, out, filter.target_prefix, filter.target);
-    fprintf(out, "(NULL, (%s)_x) != 0) { _dstd[_out_len++] = (%s)_x; } } ",
-            ctype_str(filter.param_rep), filter.dst_info.ctype);
-    /* Yield in the destination value's representation (PTR -> bare pointer,
-     * else tagged XrValue); matches the `<ctype> vN =` declaration site. */
-    /* An inlined map/filter builds a fresh array, so a result nobody consumes
-     * has to be released rather than cast away.  Same ownership rule as the
-     * symbol dispatchers; see xrt_method_0. */
-    const char *yield = cg_unused_call_result_emits_statement(ctx, current, v)
-                            ? "xrt_discard_owned(_outv)"
-                            : (cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
-    fprintf(out, "_out->length = _out_len; %s; })", yield);
-    return true;
-}
 
-static bool emit_typed_array_filter_inline_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
-                                                const char *prefix, const XiValue *v) {
-    return emit_typed_array_filter_inline_expr_cached(ctx, out, current, prefix, v, NULL);
-}
 
-static bool emit_typed_array_filter_inline_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
-                                                const char *prefix, const XiValue *v) {
-    CgArrayInlineMap filter;
-    if (!cg_array_inline_filter_info(ctx, current, prefix, v, &filter) ||
-        !cg_array_can_cache_data_for_value(ctx, v, NULL))
-        return false;
-    fprintf(out, "    %s *", filter.dst_info.ctype);
-    emit_typed_array_data_cache_ref(out, v);
-    fprintf(out, " = NULL;\n");
-    if (!ctx->pre_decl_all) {
-        fprintf(out, "    %s ", ctype_str(cg_rep(v)));
-        emit_vref(out, v);
-        fprintf(out, ";\n");
-    }
-    const XiValue *cached_origin = NULL;
-    bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
-    fprintf(out, "    {\n        xrt_array_t *_src = (xrt_array_t*)");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out,
-            ".ptr;\n        int64_t _n = _src->length;\n        XrValue _outv = "
-            "xrt_array_new_typed_uninit(_n, %s);\n        "
-            "xrt_array_t *_out = (xrt_array_t*)_outv.ptr;\n        %s *_srcd = ",
-            filter.dst_info.elem_name, filter.src_info.ctype);
-    if (use_cache)
-        emit_typed_array_data_cache_ref(out, cached_origin);
-    else
-        fprintf(out, "(%s*)_src->data", filter.src_info.ctype);
-    fprintf(out, ";\n        %s *_dstd = (%s*)_out->data;\n        int64_t _out_len = 0;\n        ",
-            filter.dst_info.ctype, filter.dst_info.ctype);
-    emit_typed_array_data_cache_ref(out, v);
-    fprintf(out,
-            " = _dstd;\n        for (int64_t _i = 0; _i < _n; _i++) {\n            "
-            "%s _x = _srcd[_i];\n            if (",
-            filter.src_info.ctype);
-    emit_fname(ctx, out, filter.target_prefix, filter.target);
-    fprintf(out,
-            "(NULL, (%s)_x) != 0) {\n                _dstd[_out_len++] = (%s)_x;\n"
-            "            }\n        }\n        _out->length = _out_len;\n        ",
-            ctype_str(filter.param_rep), filter.dst_info.ctype);
-    emit_vref(out, v);
-    fprintf(out, " = %s;\n    }\n", cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
-    emit_value_generated_line_reset(ctx, out, v);
-    emit_debug_source_var_sync(ctx, out, current, v);
-    return true;
-}
 
-typedef struct CgArrayInlineReduce {
-    CgArrayElemInfo src_info;
-    const XiFunc *target;
-    const char *target_prefix; /* owned: XiModule C-name prefix (Xi arena)/NULL; local emit info */
-    XrRep acc_rep;
-    XrRep elem_param_rep;
-} CgArrayInlineReduce;
 
-static bool cg_array_inline_reduce_info(XiCgenCtx *ctx, const XiFunc *current, const char *prefix,
-                                        const XiValue *v, CgArrayInlineReduce *out) {
-    CgArrayInlineReduce info;
-    memset(&info, 0, sizeof(info));
-    if (!ctx || !cg_array_call_method_is(v, "reduce") || v->nargs != 3 || !out ||
-        !cg_array_value_storage_info(ctx, current, v->args[0], &info.src_info,
-                                     CG_ARRAY_STORAGE_READ))
-        return false;
 
-    CgStaticFunctionCall cb = cg_resolve_static_function_call(ctx, current, v->args[1]);
-    info.target = cb.func;
-    if (!info.target || info.target->ncaptures != 0 || info.target->nparams != 2 ||
-        !cg_func_uses_typed_abi(ctx, info.target) || !cg_array_func_is_inline_pure(info.target))
-        return false;
 
-    info.target_prefix = cb.prefix ? cb.prefix : prefix;
-    info.acc_rep = cg_rep(v);
-    info.elem_param_rep = cg_func_param_abi_rep(ctx, info.target, 1);
-    if ((info.acc_rep != XR_REP_I64 && info.acc_rep != XR_REP_F64) ||
-        cg_func_param_abi_rep(ctx, info.target, 0) != info.acc_rep ||
-        (info.elem_param_rep != XR_REP_I64 && info.elem_param_rep != XR_REP_F64) ||
-        info.elem_param_rep != info.src_info.rep ||
-        cg_func_return_abi_rep(ctx, info.target) != info.acc_rep)
-        return false;
-    *out = info;
-    return true;
-}
-
-static bool emit_typed_array_reduce_inline_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
-                                                const char *prefix, const XiValue *v) {
-    CgArrayInlineReduce reduce;
-    if (!cg_array_inline_reduce_info(ctx, current, prefix, v, &reduce))
-        return false;
-    const XiValue *cached_origin = NULL;
-    bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
-    fprintf(out, "({ xrt_array_t *_src = (xrt_array_t*)");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ".ptr; int64_t _n = _src->length; %s _acc = (%s)", ctype_str(reduce.acc_rep),
-            ctype_str(reduce.acc_rep));
-    emit_value_as_rep(out, v->args[2], reduce.acc_rep);
-    fprintf(out, "; %s *_srcd = ", reduce.src_info.ctype);
-    if (use_cache) {
-        emit_typed_array_data_cache_ref(out, cached_origin);
-        fprintf(out, "; ");
-    } else {
-        fprintf(out, "(%s*)_src->data; ", reduce.src_info.ctype);
-    }
-    fprintf(out, "for (int64_t _i = 0; _i < _n; _i++) { _acc = (%s)", ctype_str(reduce.acc_rep));
-    emit_fname(ctx, out, reduce.target_prefix, reduce.target);
-    fprintf(out, "(NULL, (%s)_acc, (%s)_srcd[_i]); } _acc; })", ctype_str(reduce.acc_rep),
-            ctype_str(reduce.elem_param_rep));
-    return true;
-}
-
-static bool cg_array_func_has_error_flow(const XiFunc *f) {
-    if (!f)
-        return true;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (v && (v->flags & (XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND)))
-                return true;
-        }
-    }
-    return false;
-}
-
-static bool cg_array_call_is_inline_hof(XiCgenCtx *ctx, const XiFunc *current, const char *prefix,
-                                        const XiValue *call) {
-    const char *method = (call && call->op == XI_CALL_METHOD) ? (const char *) call->aux : NULL;
-    CgArrayInlineMap map;
-    CgArrayInlineReduce reduce;
-    if (!method)
-        return false;
-    if (strcmp(method, "map") == 0 && cg_array_inline_map_info(ctx, current, prefix, call, &map))
-        return !cg_array_func_has_error_flow(map.target);
-    if (strcmp(method, "filter") == 0 &&
-        cg_array_inline_filter_info(ctx, current, prefix, call, &map))
-        return !cg_array_func_has_error_flow(map.target);
-    if (strcmp(method, "reduce") == 0 &&
-        cg_array_inline_reduce_info(ctx, current, prefix, call, &reduce))
-        return !cg_array_func_has_error_flow(reduce.target);
-    return false;
-}
-
-static bool cg_array_err_check_after_inline_hof(XiCgenCtx *ctx, const XiFunc *current,
-                                                const char *prefix, const XiValue *check) {
-    if (!check || check->op != XI_ERR_CHECK || !check->block)
-        return false;
-    const XiValue *prev = NULL;
-    for (uint32_t i = 0; i < check->block->nvalues; i++) {
-        const XiValue *cur = check->block->values[i];
-        if (cur == check)
-            break;
-        if (cur)
-            prev = cur;
-    }
-    return cg_array_call_is_inline_hof(ctx, current, prefix, prev);
-}
-
-static bool cg_array_value_wraps_closure_new(const XiValue *value) {
-    const XiValue *v = cg_unwrap_identity_value(value);
-    return v && v->op == XI_CLOSURE_NEW;
-}
-
-static bool cg_array_value_only_feeds_inline_map(XiCgenCtx *ctx, const XiFunc *current,
-                                                 const char *prefix, const XiValue *target,
-                                                 uint8_t depth, bool *used) {
-    const XiFunc *f = (target && target->block) ? target->block->func : NULL;
-    if (!ctx || !f || !target || depth > 8 || !used)
-        return false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *cur = blk->values[vi];
-            if (!cur || cur == target)
-                continue;
-            for (uint16_t ai = 0; ai < cur->nargs; ai++) {
-                if (cur->args[ai] != target)
-                    continue;
-                const char *method = (const char *) cur->aux;
-                if ((cur->op == XI_BOX || cur->op == XI_UNBOX || cur->op == XI_COPY ||
-                     xi_op_is_identity_forward(cur->op)) &&
-                    ai == 0 && cg_array_value_wraps_closure_new(cur)) {
-                    if (!cg_array_value_only_feeds_inline_map(ctx, current, prefix, cur, depth + 1,
-                                                              used))
-                        return false;
-                    continue;
-                }
-                if (cur->op != XI_CALL_METHOD || ai != 1 || !method ||
-                    ((strcmp(method, "map") != 0 ||
-                      !cg_array_inline_map_info(ctx, current, prefix, cur,
-                                                &(CgArrayInlineMap) {0})) &&
-                     (strcmp(method, "filter") != 0 ||
-                      !cg_array_inline_filter_info(ctx, current, prefix, cur,
-                                                   &(CgArrayInlineMap) {0})) &&
-                     (strcmp(method, "reduce") != 0 ||
-                      !cg_array_inline_reduce_info(ctx, current, prefix, cur,
-                                                   &(CgArrayInlineReduce) {0}))))
-                    return false;
-                *used = true;
-            }
-        }
-    }
-    return true;
-}
-
-static bool cg_array_closure_value_only_used_by_inline_map(XiCgenCtx *ctx, const XiFunc *current,
-                                                           const char *prefix,
-                                                           const XiValue *value) {
-    bool used = false;
-    return cg_array_value_wraps_closure_new(value) &&
-           cg_array_value_only_feeds_inline_map(ctx, current, prefix, value, 0, &used) && used;
-}
-
-/* A HOF callback that declares more than its base parameters (the element for
- * map/filter/forEach, accumulator+element for reduce) opts into the trailing
- * index parameter, so codegen must call the indexed runtime helper. The static
- * callback type is authoritative here; the AOT callable descriptor carries no
- * arity, so this decision has to be made at generation time. */
+/* forEach remains a runtime HOF and uses the callback's declared arity to
+ * select its indexed helper.  Direct map/filter/reduce never consult this
+ * live-type path: their exact callback ABI is frozen in CEmission. */
 static bool cg_array_hof_callback_wants_index(const XiValue *callback, int base_arity) {
     return callback && callback->type && callback->type->kind == XR_KIND_FUNCTION &&
            callback->type->function.param_count > base_arity;
 }
 
-static bool emit_typed_array_map_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
-                                      const char *prefix, const XiValue *v) {
-    CgArrayElemInfo info;
-    if (!v || v->nargs != 2 || !cg_array_elem_info_from_type_ctx(ctx, v->type, &info))
-        return false;
-    if (emit_typed_array_map_inline_expr(ctx, out, current, prefix, v))
-        return true;
+typedef struct CgArrayHofDirectPlan {
+    XrCValueEmissionView emission;
+    CgArrayElemInfo source;
+    CgArrayElemInfo result;
+    const XaotFuncPlan *callee_plan;
+} CgArrayHofDirectPlan;
 
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-    fprintf(out, cg_array_hof_callback_wants_index(v->args[1], 1) ? "xrt_array_map_indexed_typed("
-                                                                  : "xrt_array_map_typed(");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-    fprintf(out, ", %s)", info.elem_name);
-    emit_conversion_suffix(out, conv_suffix);
+static bool cg_array_hof_c_rep_to_xaot_rep(uint8_t c_rep, XaotRep *out) {
+    if (!out)
+        return false;
+    switch ((XrCValueRep) c_rep) {
+        case XR_C_VALUE_REP_I8: *out = XAOT_REP_I8; return true;
+        case XR_C_VALUE_REP_U8: *out = XAOT_REP_U8; return true;
+        case XR_C_VALUE_REP_I16: *out = XAOT_REP_I16; return true;
+        case XR_C_VALUE_REP_U16: *out = XAOT_REP_U16; return true;
+        case XR_C_VALUE_REP_I32: *out = XAOT_REP_I32; return true;
+        case XR_C_VALUE_REP_U32: *out = XAOT_REP_U32; return true;
+        case XR_C_VALUE_REP_I64: *out = XAOT_REP_I64; return true;
+        case XR_C_VALUE_REP_U64: *out = XAOT_REP_U64; return true;
+        case XR_C_VALUE_REP_ISIZE: *out = XAOT_REP_ISIZE; return true;
+        case XR_C_VALUE_REP_USIZE: *out = XAOT_REP_USIZE; return true;
+        case XR_C_VALUE_REP_F32: *out = XAOT_REP_F32; return true;
+        case XR_C_VALUE_REP_F64: *out = XAOT_REP_F64; return true;
+        case XR_C_VALUE_REP_BOOL: *out = XAOT_REP_BOOL; return true;
+        case XR_C_VALUE_REP_RUNE: *out = XAOT_REP_RUNE; return true;
+        case XR_C_VALUE_REP_VOID:
+        case XR_C_VALUE_REP_TAGGED:
+        case XR_C_VALUE_REP_VIEW:
+        case XR_C_VALUE_REP_AGGREGATE:
+        case XR_C_VALUE_REP_RAW_PTR:
+        case XR_C_VALUE_REP_COUNT:
+            return false;
+    }
+    return false;
+}
+
+static bool cg_array_hof_abi_slot_is_exact(const XaotAbiSlot *slot,
+                                            uint8_t expected_c_rep) {
+    XaotRep expected = XAOT_REP_COUNT;
+    XaotValueRep actual;
+    const XaotRepInfo *info;
+    if (!slot || !cg_array_hof_c_rep_to_xaot_rep(expected_c_rep, &expected))
+        return false;
+    info = xaot_rep_info(expected);
+    if (!info || !info->c_type || slot->cls != XAOT_ARG_SCALAR ||
+        slot->flags != 0 || !slot->c_type ||
+        strcmp(slot->c_type, info->c_type) != 0 ||
+        slot->pointee_rep.kind != XAOT_VALUE_VOID ||
+        slot->pointee_rep.rep != XAOT_REP_I8 ||
+        slot->pointee_rep.type != NULL ||
+        slot->pointee_rep.c_type != NULL || slot->pointee_rep.flags != 0 ||
+        slot->pointee_rep.vector_native_type != 0 ||
+        slot->pointee_rep.vector_lanes != 0 ||
+        slot->pointee_rep.vector_width_bytes != 0)
+        return false;
+    actual = xaot_abi_slot_value_rep(slot);
+    return actual.kind == XAOT_VALUE_SCALAR && actual.rep == expected &&
+           actual.type != NULL && actual.c_type != NULL &&
+           strcmp(actual.c_type, info->c_type) == 0 && actual.flags == 0 &&
+           actual.vector_native_type == 0 && actual.vector_lanes == 0 &&
+           actual.vector_width_bytes == 0;
+}
+
+/* Resolve one immutable HOF recipe to one prepared native callee.  Semantic
+ * numeric identities, not Xi selector/type/arity state, bind the live values
+ * to the plan. */
+static bool cg_array_hof_direct_plan(XiCgenCtx *ctx, const XiFunc *current,
+                                     const XiValue *value,
+                                     CgArrayHofDirectPlan *out) {
+    if (!ctx || !current || !value || !out || !ctx->aot_bundle ||
+        !current->semantic_plan)
+        return false;
+    XrCValueEmissionView emission = {0};
+    if (cg_value_emission_view(ctx, current, value, &emission) !=
+            CG_VALUE_EMISSION_FOUND ||
+        emission.materialization !=
+            XR_C_VALUE_MATERIALIZATION_ARRAY_HOF_DIRECT ||
+        emission.recipe_hof_kind <= XR_C_ARRAY_HOF_NONE ||
+        emission.recipe_hof_kind >= XR_C_ARRAY_HOF_COUNT ||
+        emission.recipe_callee_function == XR_SEMANTIC_INDEX_NONE ||
+        emission.recipe_hof_reserved != 0)
+        return false;
+    uint16_t expected_arguments =
+        emission.recipe_hof_kind == XR_C_ARRAY_HOF_REDUCE ? 3u : 2u;
+    if (value->op != XI_CALL_METHOD || value->nargs != expected_arguments ||
+        !value->args || emission.recipe_argument_count != expected_arguments ||
+        !emission.recipe_arguments)
+        return false;
+    uint8_t xi_kind = value->array_hof_kind == XI_ARRAY_HOF_MAP
+        ? XR_C_ARRAY_HOF_MAP
+        : value->array_hof_kind == XI_ARRAY_HOF_FILTER
+              ? XR_C_ARRAY_HOF_FILTER
+              : value->array_hof_kind == XI_ARRAY_HOF_REDUCE
+                    ? XR_C_ARRAY_HOF_REDUCE
+                    : XR_C_ARRAY_HOF_NONE;
+    if (xi_kind != emission.recipe_hof_kind)
+        return false;
+    const uint8_t expected_argument_kinds[3] = {
+        XR_C_RECIPE_ARGUMENT_ARRAY_HOF_RECEIVER,
+        XR_C_RECIPE_ARGUMENT_ARRAY_HOF_CALLBACK,
+        XR_C_RECIPE_ARGUMENT_ARRAY_HOF_SEED};
+    for (uint16_t i = 0; i < expected_arguments; i++) {
+        uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+        if (!value->args[i] ||
+            !cg_value_semantic_id(ctx, current, value->args[i],
+                                  &semantic_value) ||
+            semantic_value != emission.recipe_arguments[i].semantic_value ||
+            semantic_value !=
+                emission.recipe_arguments[i].source_semantic_value ||
+            emission.recipe_arguments[i].kind != expected_argument_kinds[i] ||
+            emission.recipe_arguments[i].reserved[0] != 0 ||
+            emission.recipe_arguments[i].reserved[1] != 0 ||
+            emission.recipe_arguments[i].reserved[2] != 0)
+            return false;
+    }
+    CgArrayElemInfo source;
+    CgArrayElemInfo result;
+    if (!cg_array_elem_info_from_recipe_storage(
+            emission.recipe_hof_source_storage, &source) ||
+        !cg_array_elem_info_from_recipe_storage(
+            emission.recipe_hof_result_storage, &result))
+        return false;
+    const XaotFuncPlan *current_plan =
+        xaot_bundle_find_func_plan(ctx->aot_bundle, current);
+    const XaotFuncPlan *callee_plan = NULL;
+    for (uint32_t i = 0; i < ctx->aot_bundle->nfunc_plans; i++) {
+        const XaotFuncPlan *candidate = &ctx->aot_bundle->func_plans[i];
+        if (!candidate->func ||
+            candidate->func->semantic_plan != current->semantic_plan ||
+            candidate->func->semantic_plan_function_index !=
+                emission.recipe_callee_function)
+            continue;
+        if (callee_plan)
+            return false;
+        callee_plan = candidate;
+    }
+    if (!current_plan || !callee_plan || !callee_plan->func ||
+        callee_plan->module_index != current_plan->module_index ||
+        !callee_plan->reachable || callee_plan->may_suspend ||
+        callee_plan->abi.kind != XAOT_ABI_NATIVE ||
+        callee_plan->abi.nparams !=
+            (emission.recipe_hof_kind == XR_C_ARRAY_HOF_REDUCE ? 2u : 1u) ||
+        !callee_plan->abi.params ||
+        !cg_array_hof_abi_slot_is_exact(
+            &callee_plan->abi.params[0],
+            emission.recipe_hof_callback_parameter_reps[0]) ||
+        (emission.recipe_hof_kind == XR_C_ARRAY_HOF_REDUCE &&
+         !cg_array_hof_abi_slot_is_exact(
+             &callee_plan->abi.params[1],
+             emission.recipe_hof_callback_parameter_reps[1])) ||
+        !cg_array_hof_abi_slot_is_exact(
+            &callee_plan->abi.ret, emission.recipe_hof_callback_return_rep))
+        return false;
+    if (emission.recipe_hof_kind != XR_C_ARRAY_HOF_REDUCE &&
+        emission.recipe_hof_callback_parameter_reps[1] != XR_C_VALUE_REP_VOID)
+        return false;
+    *out = (CgArrayHofDirectPlan) {
+        .emission = emission,
+        .source = source,
+        .result = result,
+        .callee_plan = callee_plan,
+    };
     return true;
 }
 
-static bool emit_typed_array_filter_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
-                                         const char *prefix, const XiValue *v) {
-    CgArrayElemInfo info;
-    if (!v || v->nargs != 2 || !cg_array_elem_info_from_type_ctx(ctx, v->type, &info))
+static bool cg_array_hof_is_frozen_operation(XiCgenCtx *ctx,
+                                              const XiFunc *current,
+                                              const XiValue *value) {
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    if (!ctx || !current || !value || !current->semantic_plan ||
+        !cg_value_semantic_id(ctx, current, value, &semantic_value))
         return false;
-    if (emit_typed_array_filter_inline_expr(ctx, out, current, prefix, v))
-        return true;
+    const XrSemanticOperationRecord *match = NULL;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(current->semantic_plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(current->semantic_plan, i);
+        if (!candidate ||
+            candidate->function != current->semantic_plan_function_index ||
+            candidate->result_value != semantic_value)
+            continue;
+        if (match)
+            return false;
+        match = candidate;
+    }
+    return match && match->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF;
+}
 
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-    fprintf(out, cg_array_hof_callback_wants_index(v->args[1], 1)
-                     ? "xrt_array_filter_indexed_typed("
-                     : "xrt_array_filter_typed(");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-    fprintf(out, ")");
-    emit_conversion_suffix(out, conv_suffix);
+static bool cg_array_hof_is_marked_operation(const XiValue *value) {
+    return value && value->op == XI_CALL_METHOD &&
+           value->array_hof_kind > XI_ARRAY_HOF_NONE &&
+           value->array_hof_kind < XI_ARRAY_HOF_COUNT;
+}
+
+static bool emit_array_hof_direct_stmt(XiCgenCtx *ctx, FILE *out,
+                                       const XiFunc *current,
+                                       const char *prefix,
+                                       const XiValue *value) {
+    if (!cg_array_hof_is_marked_operation(value))
+        return false;
+    if (!cg_array_hof_is_frozen_operation(ctx, current, value)) {
+        (void) cg_value_emission_fail(
+            ctx, "Array HOF marker has no exact frozen semantic authority");
+        return true;
+    }
+    CgArrayHofDirectPlan plan;
+    if (!cg_array_hof_direct_plan(ctx, current, value, &plan)) {
+        (void) cg_value_emission_fail(
+            ctx, "Array HOF operation has no exact direct C emission recipe");
+        return true;
+    }
+    bool unused = cg_unused_call_result_emits_statement(ctx, current, value);
+    if (!unused && !ctx->pre_decl_all) {
+        fprintf(out, "    %s ", plan.emission.c_type);
+        emit_vref(out, value);
+        fprintf(out, ";\n");
+    }
+    fprintf(out, "    {\n        xrt_array_t *_src = (xrt_array_t*)");
+    emit_value_as_rep(out, value->args[0], XR_REP_TAGGED);
+    fprintf(out, ".ptr;\n        int64_t _n = _src->length;\n");
+    if (plan.emission.recipe_hof_kind == XR_C_ARRAY_HOF_REDUCE) {
+        fprintf(out, "        %s _acc = (%s)", plan.result.ctype,
+                plan.result.ctype);
+        emit_value_as_rep(out, value->args[2], plan.result.rep);
+        fprintf(out, ";\n        %s *_srcd = (%s*)_src->data;\n",
+                plan.source.ctype, plan.source.ctype);
+        fprintf(out,
+                "        for (int64_t _i = 0; _i < _n; _i++) {\n"
+                "            _acc = (%s)",
+                plan.result.ctype);
+        emit_fname(ctx, out, prefix, plan.callee_plan->func);
+        fprintf(out, "(NULL, (%s)_acc, (%s)_srcd[_i]);\n        }\n",
+                plan.result.ctype, plan.source.ctype);
+        if (!unused) {
+            fprintf(out, "        ");
+            emit_vref(out, value);
+            fprintf(out, " = _acc;\n");
+        }
+        fprintf(out, "    }\n");
+    } else {
+        fprintf(out,
+                "        XrValue _outv = xrt_array_new_typed_uninit(_n, %s);\n"
+                "        xrt_array_t *_out = (xrt_array_t*)_outv.ptr;\n"
+                "        %s *_srcd = (%s*)_src->data;\n"
+                "        %s *_dstd = (%s*)_out->data;\n",
+                plan.result.elem_name, plan.source.ctype, plan.source.ctype,
+                plan.result.ctype, plan.result.ctype);
+        if (plan.emission.recipe_hof_kind == XR_C_ARRAY_HOF_MAP) {
+            fprintf(out,
+                    "        for (int64_t _i = 0; _i < _n; _i++) {\n"
+                    "            _dstd[_i] = (%s)",
+                    plan.result.ctype);
+            emit_fname(ctx, out, prefix, plan.callee_plan->func);
+            fprintf(out, "(NULL, (%s)_srcd[_i]);\n        }\n"
+                         "        _out->length = _n;\n",
+                    plan.source.ctype);
+        } else {
+            fprintf(out,
+                    "        int64_t _out_len = 0;\n"
+                    "        for (int64_t _i = 0; _i < _n; _i++) {\n"
+                    "            %s _x = _srcd[_i];\n"
+                    "            if (",
+                    plan.source.ctype);
+            emit_fname(ctx, out, prefix, plan.callee_plan->func);
+            fprintf(out,
+                    "(NULL, (%s)_x) != 0) {\n"
+                    "                _dstd[_out_len++] = (%s)_x;\n"
+                    "            }\n        }\n"
+                    "        _out->length = _out_len;\n",
+                    plan.source.ctype, plan.result.ctype);
+        }
+        if (unused) {
+            fprintf(out, "        xrt_discard_owned(_outv);\n");
+        } else {
+            fprintf(out, "        ");
+            emit_vref(out, value);
+            fprintf(out, " = _outv;\n");
+        }
+        fprintf(out, "    }\n");
+        if (!unused)
+            (void) emit_typed_array_data_cache_decl(ctx, out, value);
+    }
+    emit_value_generated_line_reset(ctx, out, value);
+    if (!unused)
+        emit_debug_source_var_sync(ctx, out, current, value);
     return true;
 }
 
-static bool emit_typed_array_reduce_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
-                                         const char *prefix, const XiValue *v) {
-    CgArrayElemInfo info;
-    if (!v || v->nargs != 3 ||
-        !cg_array_value_storage_info(ctx, current, v->args[0], &info, CG_ARRAY_STORAGE_READ))
+static bool cg_array_hof_callback_is_elided(XiCgenCtx *ctx,
+                                             const XiFunc *current,
+                                             const XiValue *value) {
+    uint32_t callback_semantic = XR_SEMANTIC_INDEX_NONE;
+    if (!ctx || !current || !value || !current->semantic_plan ||
+        !cg_value_semantic_id(ctx, current, value, &callback_semantic))
         return false;
-    if (emit_typed_array_reduce_inline_expr(ctx, out, current, prefix, v))
-        return true;
-
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-    fprintf(out, cg_array_hof_callback_wants_index(v->args[1], 2)
-                     ? "xrt_array_reduce_indexed_typed("
-                     : "xrt_array_reduce_typed(");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-    fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
-    fprintf(out, ")");
-    emit_conversion_suffix(out, conv_suffix);
-    return true;
+    const XaotClosurePlan *closure = ctx->aot_bundle
+        ? xaot_bundle_find_closure_plan(ctx->aot_bundle, value) : NULL;
+    if (!closure || closure->func != current || closure->value != value ||
+        !closure->target_func || closure->capture_count != 0 ||
+        closure->representation != XAOT_CLOSURE_DIRECT_SYMBOL ||
+        closure->unproven_reason != XAOT_CLOSURE_UNPROVEN_NONE ||
+        (closure->evidence &
+         (XAOT_CLOSURE_EV_XI_VALUE | XAOT_CLOSURE_EV_TARGET_FUNC |
+          XAOT_CLOSURE_EV_CAPTURE_ARITY | XAOT_CLOSURE_EV_DIRECT_SYMBOL)) !=
+            (XAOT_CLOSURE_EV_XI_VALUE | XAOT_CLOSURE_EV_TARGET_FUNC |
+             XAOT_CLOSURE_EV_CAPTURE_ARITY | XAOT_CLOSURE_EV_DIRECT_SYMBOL) ||
+        closure->target_func->semantic_plan != current->semantic_plan ||
+        closure->target_func->semantic_plan_function_index ==
+            XR_SEMANTIC_INDEX_NONE)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(
+        current->semantic_plan, &operand_count);
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(current->semantic_plan);
+    bool matched = false;
+    for (uint32_t i = 0; operands && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(current->semantic_plan, i);
+        if (!operation || operation->function !=
+                              current->semantic_plan_function_index ||
+            operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_HOF ||
+            operation->operand_count < 2 ||
+            operation->operand_begin > operand_count ||
+            operation->operand_count > operand_count - operation->operand_begin ||
+            operands[operation->operand_begin + 1u].value != callback_semantic)
+            continue;
+        XrCValueEmissionView emission = {0};
+        char error[192];
+        const XrCEmissionPlan *emission_plan =
+            cg_function_c_emission_plan(ctx, current);
+        if (matched || !emission_plan ||
+            !xr_c_emission_plan_value_view(emission_plan,
+                                           operation->result_value, &emission,
+                                           error, sizeof(error)) ||
+            emission.materialization !=
+                XR_C_VALUE_MATERIALIZATION_ARRAY_HOF_DIRECT ||
+            emission.recipe_callee_function !=
+                closure->target_func->semantic_plan_function_index ||
+            emission.recipe_argument_count < 2 ||
+            !emission.recipe_arguments ||
+            emission.recipe_arguments[1].semantic_value != callback_semantic ||
+            emission.recipe_arguments[1].kind !=
+                XR_C_RECIPE_ARGUMENT_ARRAY_HOF_CALLBACK)
+            return false;
+        matched = true;
+    }
+    return matched;
 }
 
 /* forEach returns unit and, unlike map/filter, has no inline fast path; it still

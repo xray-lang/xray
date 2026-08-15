@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(30)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(31)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -705,6 +705,86 @@ static bool c_array_storage_from_semantic(uint8_t semantic_storage,
     }
 }
 
+static bool c_array_storage_projection(uint8_t storage,
+                                       uint16_t *machine_kind,
+                                       XrCValueRep *c_rep,
+                                       const char **c_type) {
+    uint16_t kind = XR_MACHINE_REP_COUNT;
+    XrCValueRep rep = XR_C_VALUE_REP_COUNT;
+    const char *type = NULL;
+    switch (storage) {
+        case XR_TARGET_ARRAY_STORAGE_I8:
+            kind = XR_MACHINE_REP_I8;
+            rep = XR_C_VALUE_REP_I8;
+            type = "int8_t";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_U8:
+            kind = XR_MACHINE_REP_U8;
+            rep = XR_C_VALUE_REP_U8;
+            type = "uint8_t";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_I16:
+            kind = XR_MACHINE_REP_I16;
+            rep = XR_C_VALUE_REP_I16;
+            type = "int16_t";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_U16:
+            kind = XR_MACHINE_REP_U16;
+            rep = XR_C_VALUE_REP_U16;
+            type = "uint16_t";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_I32:
+            kind = XR_MACHINE_REP_I32;
+            rep = XR_C_VALUE_REP_I32;
+            type = "int32_t";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_U32:
+            kind = XR_MACHINE_REP_U32;
+            rep = XR_C_VALUE_REP_U32;
+            type = "uint32_t";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_I64:
+            kind = XR_MACHINE_REP_I64;
+            rep = XR_C_VALUE_REP_I64;
+            type = "int64_t";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_U64:
+            kind = XR_MACHINE_REP_U64;
+            rep = XR_C_VALUE_REP_U64;
+            type = "uint64_t";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_F32:
+            kind = XR_MACHINE_REP_F32;
+            rep = XR_C_VALUE_REP_F32;
+            type = "float";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_F64:
+            kind = XR_MACHINE_REP_F64;
+            rep = XR_C_VALUE_REP_F64;
+            type = "double";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_BOOL:
+            kind = XR_MACHINE_REP_I1;
+            rep = XR_C_VALUE_REP_BOOL;
+            type = "uint8_t";
+            break;
+        case XR_TARGET_ARRAY_STORAGE_RUNE:
+            kind = XR_MACHINE_REP_RUNE;
+            rep = XR_C_VALUE_REP_RUNE;
+            type = "uint32_t";
+            break;
+        default:
+            return false;
+    }
+    if (machine_kind)
+        *machine_kind = kind;
+    if (c_rep)
+        *c_rep = rep;
+    if (c_type)
+        *c_type = type;
+    return true;
+}
+
 static bool c_array_storage_from_type(const XrSemanticTypeRecord *type,
                                       uint8_t *target_storage) {
     if (!type || !target_storage || type->builtin_type != XR_TID_NULL ||
@@ -1228,6 +1308,383 @@ static bool exact_array_fill_scalar_recipe(
         *receiver_value = receiver->value;
     if (fill_value)
         *fill_value = fill->value;
+    return true;
+}
+
+typedef struct XrCArrayHofDirectRecipe {
+    uint32_t callee_function;
+    uint32_t receiver_value;
+    uint32_t callback_value;
+    uint32_t seed_value;
+    uint8_t kind;
+    uint8_t source_storage;
+    uint8_t result_storage;
+    uint8_t parameter_reps[2];
+    uint8_t return_rep;
+} XrCArrayHofDirectRecipe;
+
+/* A direct Array HOF recipe is admitted only after independently rebuilding
+ * the complete SemanticPlan -> TargetPlan identity.  The callback remains an
+ * ordinary tagged closure in the VM-facing IR; CGen may elide that object only
+ * because this row freezes one same-module, uncaptured, pure native callee. */
+static bool exact_array_hof_direct_recipe(
+    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
+    XrCArrayHofDirectRecipe *out) {
+    XrCArrayHofDirectRecipe recipe = {
+        .callee_function = UINT32_MAX,
+        .receiver_value = UINT32_MAX,
+        .callback_value = UINT32_MAX,
+        .seed_value = UINT32_MAX,
+        .kind = XR_C_ARRAY_HOF_NONE,
+        .source_storage = XR_TARGET_ARRAY_STORAGE_NONE,
+        .result_storage = XR_TARGET_ARRAY_STORAGE_NONE,
+        .parameter_reps = {XR_C_VALUE_REP_VOID, XR_C_VALUE_REP_VOID},
+        .return_rep = XR_C_VALUE_REP_VOID,
+    };
+    const XrSemanticPlan *semantic =
+        target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t operand_count = 0, child_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands = semantic
+        ? xr_semantic_plan_operands(semantic, &operand_count)
+        : NULL;
+    const uint32_t *children = semantic
+        ? xr_semantic_plan_type_children(semantic, &child_count)
+        : NULL;
+    if (semantic)
+        (void) xr_semantic_plan_metadata(semantic, &metadata_count);
+    uint8_t kind = XR_C_ARRAY_HOF_NONE;
+    if (operation) {
+        switch (operation->array_hof_kind) {
+            case XR_SEM_ARRAY_HOF_MAP: kind = XR_C_ARRAY_HOF_MAP; break;
+            case XR_SEM_ARRAY_HOF_FILTER: kind = XR_C_ARRAY_HOF_FILTER; break;
+            case XR_SEM_ARRAY_HOF_REDUCE: kind = XR_C_ARRAY_HOF_REDUCE; break;
+            default: break;
+        }
+    }
+    uint16_t expected_operands = kind == XR_C_ARRAY_HOF_REDUCE ? 3u : 2u;
+    if (!target_plan || !binding || !semantic || !operation || !operands ||
+        !children || operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_HOF ||
+        kind == XR_C_ARRAY_HOF_NONE || operation->opcode != XI_CALL_METHOD ||
+        operation->result_value != binding->semantic_value ||
+        operation->operand_count != expected_operands ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 1 ||
+        operation->metadata_begin >= metadata_count ||
+        operation->semantic_immediate != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function >= xr_semantic_plan_function_count(semantic) ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1)
+        return false;
+
+    const XrSemanticOperandRecord *rows =
+        &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *source_array =
+        xr_semantic_plan_type(semantic, rows[0].type);
+    if (!source_array || source_array->kind != XR_KIND_ARRAY ||
+        source_array->builtin_type != XR_TID_NULL ||
+        source_array->child_count != 1 ||
+        source_array->child_begin >= child_count ||
+        source_array->scalar_rep != XR_SCALAR_REP_NONE ||
+        source_array->aggregate_extent != 0 || source_array->aggregate_align != 0 ||
+        source_array->flags !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    uint32_t source_element = children[source_array->child_begin];
+    const XrSemanticTypeRecord *source_type =
+        xr_semantic_plan_type(semantic, source_element);
+    uint8_t source_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t frozen_source = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!source_type ||
+        !c_array_storage_from_type(source_type, &source_storage) ||
+        !c_array_storage_from_semantic(operation->array_element_storage,
+                                       &frozen_source) ||
+        source_storage != frozen_source)
+        return false;
+
+    uint32_t result_element = operation->result_type;
+    if (kind != XR_C_ARRAY_HOF_REDUCE) {
+        const XrSemanticTypeRecord *result_array =
+            xr_semantic_plan_type(semantic, operation->result_type);
+        if (!result_array || result_array->kind != XR_KIND_ARRAY ||
+            result_array->builtin_type != XR_TID_NULL ||
+            result_array->child_count != 1 ||
+            result_array->child_begin >= child_count ||
+            result_array->scalar_rep != XR_SCALAR_REP_NONE ||
+            result_array->aggregate_extent != 0 ||
+            result_array->aggregate_align != 0 ||
+            result_array->flags !=
+                (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+            return false;
+        result_element = children[result_array->child_begin];
+        if (kind == XR_C_ARRAY_HOF_FILTER &&
+            (operation->result_type != rows[0].type ||
+             result_element != source_element))
+            return false;
+    } else if (rows[2].type != operation->result_type) {
+        return false;
+    }
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(semantic, result_element);
+    uint8_t result_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t frozen_result = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!result_type ||
+        !c_array_storage_from_type(result_type, &result_storage) ||
+        !c_array_storage_from_semantic(operation->array_result_element_storage,
+                                       &frozen_result) ||
+        result_storage != frozen_result)
+        return false;
+
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(semantic, operation->callable_function);
+    uint16_t expected_parameters = kind == XR_C_ARRAY_HOF_REDUCE ? 2u : 1u;
+    if (!callee || callee->parent != operation->function ||
+        callee->capture_count != 0 ||
+        callee->parameter_count != expected_parameters ||
+        (callee->semantic_effects &
+         (XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_MAY_THROW |
+          XI_EFFECT_MAY_SUSPEND)) != 0 ||
+        callee->parameter_begin > xr_semantic_plan_parameter_count(semantic) ||
+        callee->parameter_count >
+            xr_semantic_plan_parameter_count(semantic) - callee->parameter_begin)
+        return false;
+    const XrSemanticParameterRecord *first =
+        xr_semantic_plan_parameter(semantic, callee->parameter_begin);
+    const XrSemanticParameterRecord *second = expected_parameters == 2u
+        ? xr_semantic_plan_parameter(semantic, callee->parameter_begin + 1u)
+        : NULL;
+    if (!first || first->function != operation->callable_function ||
+        first->ordinal != 0 ||
+        first->type !=
+            (kind == XR_C_ARRAY_HOF_REDUCE ? result_element : source_element) ||
+        (second && (second->function != operation->callable_function ||
+                    second->ordinal != 1 || second->type != source_element)))
+        return false;
+    if (kind == XR_C_ARRAY_HOF_FILTER) {
+        const XrSemanticTypeRecord *return_type =
+            xr_semantic_plan_type(semantic, callee->return_type);
+        uint16_t return_kind = XR_MACHINE_REP_COUNT;
+        XrCValueRep return_c_rep = XR_C_VALUE_REP_COUNT;
+        const char *return_c_type = NULL;
+        if (!return_type || return_type->kind != XR_KIND_BOOL ||
+            return_type->scalar_rep != XR_SCALAR_REP_NONE ||
+            !c_array_storage_projection(XR_TARGET_ARRAY_STORAGE_BOOL,
+                                        &return_kind, &return_c_rep,
+                                        &return_c_type) ||
+            return_kind != XR_MACHINE_REP_I1 ||
+            return_c_rep != XR_C_VALUE_REP_BOOL)
+            return false;
+    } else if (callee->return_type != result_element) {
+        return false;
+    }
+    const XrSemanticTypeRecord *callback_type =
+        xr_semantic_plan_type(semantic, rows[1].type);
+    if (!callback_type || callback_type->kind != XR_KIND_FUNCTION ||
+        callback_type->child_count != (uint32_t) expected_parameters + 1u ||
+        callback_type->child_begin > child_count ||
+        callback_type->child_count > child_count - callback_type->child_begin)
+        return false;
+    for (uint16_t i = 0; i < expected_parameters; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(semantic, callee->parameter_begin + i);
+        if (!parameter ||
+            children[callback_type->child_begin + i] != parameter->type)
+            return false;
+    }
+    if (children[callback_type->child_begin + expected_parameters] !=
+            callee->return_type ||
+        rows[0].role != XR_SEM_OPERAND_RECEIVER || rows[0].parameter != -1 ||
+        rows[0].flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        rows[0].ownership_action != XR_SEM_OPERAND_BORROW ||
+        rows[1].role != XR_SEM_OPERAND_ARGUMENT || rows[1].parameter != 0 ||
+        rows[1].flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        rows[1].ownership_action != XR_SEM_OPERAND_CONSUME ||
+        (kind == XR_C_ARRAY_HOF_REDUCE &&
+         (rows[2].role != XR_SEM_OPERAND_ARGUMENT || rows[2].parameter != 1 ||
+          rows[2].flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+          rows[2].ownership_action != XR_SEM_OPERAND_CONSUME)))
+        return false;
+    bool result_exact = kind == XR_C_ARRAY_HOF_REDUCE
+        ? operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+              operation->return_provenance == XR_SEM_RETURN_NONE &&
+              operation->return_complete == 0
+        : operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+              operation->return_provenance == XR_SEM_RETURN_OWNED &&
+              operation->return_complete == 1;
+    const XrSemanticOperationRecord *producer = NULL;
+    uint32_t callback_uses = 0;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; result_exact && i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->function != operation->function ||
+            candidate->result_value != rows[1].value)
+            continue;
+        if (producer)
+            return false;
+        producer = candidate;
+    }
+    for (uint32_t i = 0; result_exact && i < operand_count; i++) {
+        if (operands[i].value == rows[1].value && callback_uses != UINT32_MAX)
+            callback_uses++;
+    }
+    if (!result_exact || !producer || producer >= operation || callback_uses != 1 ||
+        (producer->opcode != XI_CLOSURE_NEW &&
+         (producer->opcode != XI_STACK_ALLOC ||
+          producer->semantic_immediate != XI_CLOSURE_NEW)) ||
+        producer->callable_function != operation->callable_function ||
+        producer->result_type != rows[1].type)
+        return false;
+
+    uint32_t call_count = 0, argument_count = 0, slot_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(target_plan, &argument_count);
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (xr_semantic_plan_operation(semantic, calls[i].semantic_operation) !=
+            operation)
+            continue;
+        if (call)
+            return false;
+        call = &calls[i];
+    }
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    const XrTargetSlotRecord *result_slot =
+        slots && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    XrStableId expected_call;
+    uint32_t discriminator = ((uint32_t) kind << 16) |
+                             ((uint32_t) source_storage << 8) |
+                             result_storage;
+    uint8_t target_kind = kind == XR_C_ARRAY_HOF_MAP
+        ? XR_TARGET_ARRAY_HOF_MAP
+        : kind == XR_C_ARRAY_HOF_FILTER ? XR_TARGET_ARRAY_HOF_FILTER
+                                         : XR_TARGET_ARRAY_HOF_REDUCE;
+    if (!call || !arguments || !slots || !register_rep || !memory_rep ||
+        !result_slot ||
+        !emission_identity_from_pair("xray-target-array-hof-v1", operation->id,
+                                     callee->id, discriminator,
+                                     &expected_call) ||
+        !xr_stable_id_equal(call->identity, expected_call) ||
+        call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->caller_function != operation->function ||
+        call->callee_function != operation->callable_function ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !emission_stable_id_is_zero(call->source_export_identity) ||
+        !emission_stable_id_is_zero(call->source_callee_identity) ||
+        call->result_value != binding->semantic_value ||
+        call->result_slot != binding->slot ||
+        call->result_register_rep != binding->register_rep ||
+        call->result_memory_rep != binding->memory_rep ||
+        call->argument_count != expected_operands ||
+        call->argument_begin > argument_count ||
+        call->argument_count > argument_count - call->argument_begin ||
+        call->adapter_count != 0 || call->flags != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_ARRAY_HOF ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ARRAY_HOF ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership !=
+            (kind == XR_C_ARRAY_HOF_REDUCE ? XR_TARGET_CALL_NONE
+                                           : XR_TARGET_CALL_RETURN_OWNED) ||
+        call->array_intrinsic_kind != XR_TARGET_ARRAY_INTRINSIC_NONE ||
+        call->array_element_storage != source_storage ||
+        call->array_hof_kind != target_kind ||
+        call->array_result_element_storage != result_storage ||
+        call->reserved8[0] != 0 || call->reserved8[1] != 0 ||
+        call->reserved8[2] != 0 || result_slot->semantic_value != binding->semantic_value ||
+        result_slot->function != operation->function ||
+        (kind == XR_C_ARRAY_HOF_REDUCE
+             ? register_rep->kind == XR_MACHINE_REP_DYN_VALUE ||
+                   memory_rep->kind == XR_MACHINE_REP_DYN_VALUE ||
+                   result_slot->root_kind != XR_TARGET_ROOT_NONE ||
+                   result_slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL
+             : register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+                   memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+                   result_slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+                   result_slot->ownership != XR_TARGET_OWNERSHIP_OWNED))
+        return false;
+    for (uint16_t ordinal = 0; ordinal < expected_operands; ordinal++) {
+        uint32_t semantic_operand = operation->operand_begin + ordinal;
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        const XrSemanticTypeRecord *operand_type =
+            xr_semantic_plan_type(semantic, operand->type);
+        const XrTargetValueRepRecord *caller =
+            xr_target_plan_value_rep(target_plan, operand->value);
+        const XrTargetCallArgumentRecord *argument =
+            &arguments[call->argument_begin + ordinal];
+        XrStableId expected_argument;
+        if (!operand_type || !caller ||
+            !emission_identity_from_pair("xray-target-array-hof-argument-v1",
+                                         operation->id, operand_type->id,
+                                         ordinal, &expected_argument) ||
+            !xr_stable_id_equal(argument->identity, expected_argument) ||
+            argument->call != call->id ||
+            argument->semantic_operand != semantic_operand ||
+            argument->semantic_value != operand->value ||
+            argument->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
+            argument->caller_slot != caller->slot ||
+            argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+            argument->register_rep != caller->register_rep ||
+            argument->memory_rep != caller->memory_rep ||
+            argument->callee_register_rep != caller->register_rep ||
+            argument->callee_memory_rep != caller->memory_rep ||
+            argument->ordinal != ordinal ||
+            argument->mode != XR_TARGET_CALL_VALUE ||
+            argument->ownership !=
+                (ordinal == 0 ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_CONSUME) ||
+            argument->transfer_mode != operand->transfer_mode ||
+            argument->flags != 0 ||
+            argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+            argument->reserved8[0] != 0 || argument->reserved8[1] != 0 ||
+            argument->reserved8[2] != 0)
+            return false;
+    }
+
+    uint16_t source_machine_kind = XR_MACHINE_REP_COUNT;
+    uint16_t result_machine_kind = XR_MACHINE_REP_COUNT;
+    XrCValueRep source_rep = XR_C_VALUE_REP_COUNT;
+    XrCValueRep result_rep = XR_C_VALUE_REP_COUNT;
+    const char *ignored_type = NULL;
+    if (!c_array_storage_projection(source_storage, &source_machine_kind,
+                                    &source_rep, &ignored_type) ||
+        !c_array_storage_projection(result_storage, &result_machine_kind,
+                                    &result_rep, &ignored_type))
+        return false;
+    recipe.callee_function = operation->callable_function;
+    recipe.receiver_value = rows[0].value;
+    recipe.callback_value = rows[1].value;
+    recipe.seed_value = kind == XR_C_ARRAY_HOF_REDUCE
+        ? rows[2].value
+        : UINT32_MAX;
+    recipe.kind = kind;
+    recipe.source_storage = source_storage;
+    recipe.result_storage = result_storage;
+    recipe.parameter_reps[0] = kind == XR_C_ARRAY_HOF_REDUCE
+        ? (uint8_t) result_rep
+        : (uint8_t) source_rep;
+    recipe.parameter_reps[1] = kind == XR_C_ARRAY_HOF_REDUCE
+        ? (uint8_t) source_rep
+        : (uint8_t) XR_C_VALUE_REP_VOID;
+    recipe.return_rep = kind == XR_C_ARRAY_HOF_FILTER
+        ? (uint8_t) XR_C_VALUE_REP_BOOL
+        : (uint8_t) result_rep;
+    if (out)
+        *out = recipe;
     return true;
 }
 
@@ -2698,7 +3155,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v22\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v23\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -2731,6 +3188,14 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
         hash_u64(&ctx, value->recipe_discriminant);
         hash_u64(&ctx, value->recipe_argument_count);
         hash_u64(&ctx, value->recipe_reserved);
+        hash_u64(&ctx, value->recipe_callee_function);
+        hash_u64(&ctx, value->recipe_hof_kind);
+        hash_u64(&ctx, value->recipe_hof_source_storage);
+        hash_u64(&ctx, value->recipe_hof_result_storage);
+        hash_u64(&ctx, value->recipe_hof_callback_parameter_reps[0]);
+        hash_u64(&ctx, value->recipe_hof_callback_parameter_reps[1]);
+        hash_u64(&ctx, value->recipe_hof_callback_return_rep);
+        hash_u64(&ctx, value->recipe_hof_reserved);
         hash_u64(&ctx, value->backing_value);
         hash_u64(&ctx, value->backing_element_count);
         hash_u64(&ctx, value->address_projection);
@@ -3262,10 +3727,78 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_symbol == NULL &&
                        value->recipe_type_name == NULL &&
                        value->recipe_member_name == NULL;
+    bool array_hof_direct =
+        value->materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_HOF_DIRECT;
+    if (array_hof_direct) {
+        uint16_t source_machine_kind = XR_MACHINE_REP_COUNT;
+        uint16_t result_machine_kind = XR_MACHINE_REP_COUNT;
+        XrCValueRep source_rep = XR_C_VALUE_REP_COUNT;
+        XrCValueRep result_rep = XR_C_VALUE_REP_COUNT;
+        const char *ignored_type = NULL;
+        bool storage_exact = c_array_storage_projection(
+                                 value->recipe_hof_source_storage,
+                                 &source_machine_kind, &source_rep,
+                                 &ignored_type) &&
+                             c_array_storage_projection(
+                                 value->recipe_hof_result_storage,
+                                 &result_machine_kind, &result_rep,
+                                 &ignored_type);
+        uint16_t expected_arguments =
+            value->recipe_hof_kind == XR_C_ARRAY_HOF_REDUCE ? 3u : 2u;
+        uint8_t expected_parameter0 =
+            value->recipe_hof_kind == XR_C_ARRAY_HOF_REDUCE
+                ? (uint8_t) result_rep
+                : (uint8_t) source_rep;
+        uint8_t expected_parameter1 =
+            value->recipe_hof_kind == XR_C_ARRAY_HOF_REDUCE
+                ? (uint8_t) source_rep
+                : (uint8_t) XR_C_VALUE_REP_VOID;
+        uint8_t expected_return =
+            value->recipe_hof_kind == XR_C_ARRAY_HOF_FILTER
+                ? (uint8_t) XR_C_VALUE_REP_BOOL
+                : (uint8_t) result_rep;
+        recipe_valid =
+            storage_exact && value->recipe_callee_function != UINT32_MAX &&
+            value->recipe_hof_kind > XR_C_ARRAY_HOF_NONE &&
+            value->recipe_hof_kind < XR_C_ARRAY_HOF_COUNT &&
+            value->recipe_hof_reserved == 0 &&
+            value->rep ==
+                (value->recipe_hof_kind == XR_C_ARRAY_HOF_REDUCE
+                     ? result_rep
+                     : XR_C_VALUE_REP_TAGGED) &&
+            value->literal_byte_length == 0 && value->literal_bytes == NULL &&
+            value->recipe_operand_value == UINT32_MAX &&
+            value->recipe_argument_value == UINT32_MAX &&
+            value->recipe_layout_id == 0 &&
+            value->recipe_discriminant == 0 && value->recipe_symbol == NULL &&
+            value->recipe_type_name == NULL && value->recipe_member_name == NULL &&
+            value->recipe_hof_callback_parameter_reps[0] ==
+                expected_parameter0 &&
+            value->recipe_hof_callback_parameter_reps[1] ==
+                expected_parameter1 &&
+            value->recipe_hof_callback_return_rep == expected_return &&
+            value->recipe_argument_count == expected_arguments &&
+            value->recipe_arguments != NULL;
+        for (uint16_t i = 0; recipe_valid && i < expected_arguments; i++) {
+            const XrCRecipeArgumentView *argument =
+                &value->recipe_arguments[i];
+            uint8_t expected_kind = i == 0
+                ? XR_C_RECIPE_ARGUMENT_ARRAY_HOF_RECEIVER
+                : i == 1 ? XR_C_RECIPE_ARGUMENT_ARRAY_HOF_CALLBACK
+                         : XR_C_RECIPE_ARGUMENT_ARRAY_HOF_SEED;
+            recipe_valid = argument->semantic_value != UINT32_MAX &&
+                           argument->source_semantic_value ==
+                               argument->semantic_value &&
+                           argument->kind == expected_kind &&
+                           argument->reserved[0] == 0 &&
+                           argument->reserved[1] == 0 &&
+                           argument->reserved[2] == 0;
+        }
+    }
     if (value->materialization !=
             XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR &&
         !array_recipe && !array_fill_member && !array_allocation &&
-        !direct_array_ref_parameter)
+        !direct_array_ref_parameter && !array_hof_direct)
         recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
                        value->recipe_discriminant == 0 &&
                        value->recipe_type_name == NULL &&
@@ -3274,6 +3807,20 @@ static bool verify_value(const XrCValueEmissionView *value) {
         recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
                        value->recipe_type_name == NULL &&
                        value->recipe_member_name == NULL;
+    if (value->materialization !=
+        XR_C_VALUE_MATERIALIZATION_ARRAY_HOF_DIRECT)
+        recipe_valid = recipe_valid &&
+                       value->recipe_callee_function == UINT32_MAX &&
+                       value->recipe_hof_kind == XR_C_ARRAY_HOF_NONE &&
+                       value->recipe_hof_source_storage == 0 &&
+                       value->recipe_hof_result_storage == 0 &&
+                       value->recipe_hof_callback_parameter_reps[0] ==
+                           XR_C_VALUE_REP_VOID &&
+                       value->recipe_hof_callback_parameter_reps[1] ==
+                           XR_C_VALUE_REP_VOID &&
+                       value->recipe_hof_callback_return_rep ==
+                           XR_C_VALUE_REP_VOID &&
+                       value->recipe_hof_reserved == 0;
     return expected_rep == (XrCValueRep) value->rep && value->c_type &&
            value->reserved == 0 && value->recipe_reserved == 0 && recipe_valid &&
            strcmp(value->c_type, expected_c_type) == 0 &&
@@ -3653,6 +4200,9 @@ bool xr_c_emission_plan_verify(
             exact_direct_local_array_ref_parameter_recipe(
                 target_plan, binding,
                 &expected_direct_array_ref_storage);
+        XrCArrayHofDirectRecipe expected_array_hof = {0};
+        bool expected_array_hof_direct = exact_array_hof_direct_recipe(
+            target_plan, binding, &expected_array_hof);
         uint8_t expected_recipe = expected_scalar_alias
                                       ? XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS
                                   : expected_direct_array_ref_parameter
@@ -3768,6 +4318,11 @@ bool xr_c_emission_plan_verify(
             expected_recipe = XR_C_VALUE_MATERIALIZATION_ARRAY_NEW;
             expected_operand = expected_array_allocation_count;
             expected_symbol = expected_array_allocation_symbol;
+        } else if (expected_array_hof_direct) {
+            expected_recipe = XR_C_VALUE_MATERIALIZATION_ARRAY_HOF_DIRECT;
+            expected_operand = UINT32_MAX;
+            expected_argument = UINT32_MAX;
+            expected_symbol = NULL;
         }
         size_t expected_length = expected_literal ? strlen(expected_literal) : 0;
         if (row->materialization != expected_recipe || row->reserved != 0 ||
@@ -3805,9 +4360,70 @@ bool xr_c_emission_plan_verify(
                  ? (!row->literal_bytes ||
                     memcmp(row->literal_bytes, expected_literal,
                            expected_length + 1u) != 0)
-                 : row->literal_bytes != NULL))
+                  : row->literal_bytes != NULL))
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "C emission materialization recipe is not exact");
+        if (expected_array_hof_direct) {
+            uint16_t expected_count =
+                expected_array_hof.kind == XR_C_ARRAY_HOF_REDUCE ? 3u : 2u;
+            if (row->recipe_callee_function !=
+                    expected_array_hof.callee_function ||
+                row->recipe_hof_kind != expected_array_hof.kind ||
+                row->recipe_hof_source_storage !=
+                    expected_array_hof.source_storage ||
+                row->recipe_hof_result_storage !=
+                    expected_array_hof.result_storage ||
+                row->recipe_hof_callback_parameter_reps[0] !=
+                    expected_array_hof.parameter_reps[0] ||
+                row->recipe_hof_callback_parameter_reps[1] !=
+                    expected_array_hof.parameter_reps[1] ||
+                row->recipe_hof_callback_return_rep !=
+                    expected_array_hof.return_rep ||
+                row->recipe_hof_reserved != 0 ||
+                row->recipe_argument_count != expected_count ||
+                !row->recipe_arguments ||
+                expected_count >
+                    plan->recipe_argument_count - projected_recipe_arguments ||
+                row->recipe_arguments !=
+                    &plan->recipe_arguments[projected_recipe_arguments])
+                return emission_error(
+                    error, error_size, "XR_TARGET_1001",
+                    "C emission Array HOF recipe is not exact");
+            const uint32_t expected_values[3] = {
+                expected_array_hof.receiver_value,
+                expected_array_hof.callback_value,
+                expected_array_hof.seed_value};
+            const uint8_t expected_kinds[3] = {
+                XR_C_RECIPE_ARGUMENT_ARRAY_HOF_RECEIVER,
+                XR_C_RECIPE_ARGUMENT_ARRAY_HOF_CALLBACK,
+                XR_C_RECIPE_ARGUMENT_ARRAY_HOF_SEED};
+            for (uint16_t argument = 0; argument < expected_count; argument++) {
+                const XrCRecipeArgumentView *actual =
+                    &row->recipe_arguments[argument];
+                if (actual->semantic_value != expected_values[argument] ||
+                    actual->source_semantic_value != expected_values[argument] ||
+                    actual->kind != expected_kinds[argument] ||
+                    actual->reserved[0] != 0 || actual->reserved[1] != 0 ||
+                    actual->reserved[2] != 0)
+                    return emission_error(
+                        error, error_size, "XR_TARGET_1001",
+                        "C emission Array HOF argument is not exact");
+            }
+            projected_recipe_arguments += expected_count;
+        } else if (row->recipe_callee_function != UINT32_MAX ||
+                   row->recipe_hof_kind != XR_C_ARRAY_HOF_NONE ||
+                   row->recipe_hof_source_storage != 0 ||
+                   row->recipe_hof_result_storage != 0 ||
+                   row->recipe_hof_callback_parameter_reps[0] !=
+                       XR_C_VALUE_REP_VOID ||
+                   row->recipe_hof_callback_parameter_reps[1] !=
+                       XR_C_VALUE_REP_VOID ||
+                   row->recipe_hof_callback_return_rep !=
+                       XR_C_VALUE_REP_VOID ||
+                   row->recipe_hof_reserved != 0) {
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "C emission row has unexpected Array HOF authority");
+        }
         if (expected_string_slice_range) {
             if (row->recipe_argument_count != 2 || !row->recipe_arguments ||
                 2u > plan->recipe_argument_count - projected_recipe_arguments ||
@@ -3896,6 +4512,8 @@ bool xr_c_emission_plan_verify(
                         "C emission string concat argument is not exact");
             }
             projected_recipe_arguments += expected_concat_argument_count;
+        } else if (expected_array_hof_direct) {
+            /* The exact HOF partition was checked with its ABI fields above. */
         } else if (row->recipe_argument_count != 0 ||
                    row->recipe_arguments != NULL) {
             return emission_error(error, error_size, "XR_TARGET_1001",
@@ -4033,6 +4651,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_PANIC_CATCH_STORAGE |
         XR_TARGET_FAMILY_ADT_ENUM_STORAGE |
         XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE |
+        XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE |
         XR_TARGET_FAMILY_AGGREGATE |
         XR_TARGET_FAMILY_CALL_ADAPTER;
     if ((xr_target_plan_completed_family_mask(target_plan) &
@@ -4173,6 +4792,16 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             }
             recipe_argument_count += concat_argument_count;
         }
+        XrCArrayHofDirectRecipe array_hof = {0};
+        if (exact_array_hof_direct_recipe(target_plan, binding, &array_hof)) {
+            uint32_t argument_count =
+                array_hof.kind == XR_C_ARRAY_HOF_REDUCE ? 3u : 2u;
+            if (argument_count > UINT32_MAX - recipe_argument_count)
+                return emission_error(
+                    error, error_size, "XR_EXEC_5003",
+                    "Array HOF recipe argument budget overflow");
+            recipe_argument_count += argument_count;
+        }
         emission_value_count++;
     }
     for (uint32_t i = 0; i < target_call_argument_count; i++) {
@@ -4291,6 +4920,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         value->rep = (uint8_t) c_rep;
         value->recipe_operand_value = UINT32_MAX;
         value->recipe_argument_value = UINT32_MAX;
+        value->recipe_callee_function = UINT32_MAX;
         value->c_type = aggregate_supported ? xr_strdup(c_type) : c_type;
         if (aggregate_supported) {
             value->address_projection = aggregate.kind;
@@ -4344,6 +4974,9 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         bool direct_array_ref_parameter =
             exact_direct_local_array_ref_parameter_recipe(
                 target_plan, binding, &direct_array_ref_storage);
+        XrCArrayHofDirectRecipe array_hof = {0};
+        bool array_hof_direct = exact_array_hof_direct_recipe(
+            target_plan, binding, &array_hof);
         uint32_t string_slice_receiver = UINT32_MAX;
         uint32_t string_slice_start = UINT32_MAX;
         uint32_t string_slice_end = UINT32_MAX;
@@ -4358,6 +4991,45 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             value->materialization =
                 XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER;
             value->recipe_discriminant = direct_array_ref_storage;
+        } else if (array_hof_direct) {
+            uint16_t argument_count =
+                array_hof.kind == XR_C_ARRAY_HOF_REDUCE ? 3u : 2u;
+            if (argument_count >
+                plan->recipe_argument_count - recipe_argument_index) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(
+                    error, error_size, "XR_TARGET_1001",
+                    "Array HOF recipe argument partition is invalid");
+            }
+            value->materialization =
+                XR_C_VALUE_MATERIALIZATION_ARRAY_HOF_DIRECT;
+            value->recipe_callee_function = array_hof.callee_function;
+            value->recipe_hof_kind = array_hof.kind;
+            value->recipe_hof_source_storage = array_hof.source_storage;
+            value->recipe_hof_result_storage = array_hof.result_storage;
+            value->recipe_hof_callback_parameter_reps[0] =
+                array_hof.parameter_reps[0];
+            value->recipe_hof_callback_parameter_reps[1] =
+                array_hof.parameter_reps[1];
+            value->recipe_hof_callback_return_rep = array_hof.return_rep;
+            value->recipe_argument_count = argument_count;
+            value->recipe_arguments =
+                &plan->recipe_arguments[recipe_argument_index];
+            const uint32_t semantic_values[3] = {
+                array_hof.receiver_value, array_hof.callback_value,
+                array_hof.seed_value};
+            const uint8_t kinds[3] = {
+                XR_C_RECIPE_ARGUMENT_ARRAY_HOF_RECEIVER,
+                XR_C_RECIPE_ARGUMENT_ARRAY_HOF_CALLBACK,
+                XR_C_RECIPE_ARGUMENT_ARRAY_HOF_SEED};
+            for (uint16_t argument = 0; argument < argument_count; argument++) {
+                XrCRecipeArgumentView *recipe_argument =
+                    &plan->recipe_arguments[recipe_argument_index++];
+                recipe_argument->semantic_value = semantic_values[argument];
+                recipe_argument->source_semantic_value =
+                    semantic_values[argument];
+                recipe_argument->kind = kinds[argument];
+            }
         } else if (string_slice_range) {
             if (2u > plan->recipe_argument_count - recipe_argument_index) {
                 xr_c_emission_plan_free(plan);

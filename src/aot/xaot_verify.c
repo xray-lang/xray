@@ -1065,7 +1065,8 @@ static bool verify_closure_plan(const XaotBundle *bundle, const XaotClosurePlan 
         return false;
     if (xaot_bundle_find_closure_plan(bundle, plan->value) != plan)
         return set_error(errbuf, errbuf_len, "AOT closure plan index mismatch");
-    if (!xaot_prepare_closure_plan_for_value(plan->func, plan->value, &derived))
+    if (!xaot_prepare_closure_plan_for_value(bundle, plan->func, plan->value,
+                                             &derived))
         return set_error(errbuf, errbuf_len, "AOT closure plan value no longer re-derives");
     if (plan->target_func != derived.target_func)
         return set_error(errbuf, errbuf_len, "AOT closure plan target does not re-derive");
@@ -7696,7 +7697,8 @@ static bool verify_func_closure_plans_recursive(const XaotBundle *bundle, const 
         for (vi = 0; vi < blk->nvalues; vi++) {
             XaotClosurePlan derived;
             const XiValue *value = blk->values[vi];
-            if (!xaot_prepare_closure_plan_for_value(func, value, &derived))
+            if (!xaot_prepare_closure_plan_for_value(bundle, func, value,
+                                                     &derived))
                 continue;
             if (out_count)
                 (*out_count)++;

@@ -67,6 +67,7 @@ typedef enum XrCValueMaterializationRecipe {
     XR_C_VALUE_MATERIALIZATION_ARRAY_NEW = 21,
     XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE = 22,
     XR_C_VALUE_MATERIALIZATION_ARRAY_FILL_SCALAR = 23,
+    XR_C_VALUE_MATERIALIZATION_ARRAY_HOF_DIRECT = 24,
     XR_C_VALUE_MATERIALIZATION_COUNT,
 } XrCValueMaterializationRecipe;
 
@@ -76,7 +77,18 @@ typedef enum XrCRecipeArgumentKind {
     XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD = 2,
     XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND = 3,
     XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64 = 4,
+    XR_C_RECIPE_ARGUMENT_ARRAY_HOF_RECEIVER = 5,
+    XR_C_RECIPE_ARGUMENT_ARRAY_HOF_CALLBACK = 6,
+    XR_C_RECIPE_ARGUMENT_ARRAY_HOF_SEED = 7,
 } XrCRecipeArgumentKind;
+
+typedef enum XrCArrayHofKind {
+    XR_C_ARRAY_HOF_NONE = 0,
+    XR_C_ARRAY_HOF_MAP,
+    XR_C_ARRAY_HOF_FILTER,
+    XR_C_ARRAY_HOF_REDUCE,
+    XR_C_ARRAY_HOF_COUNT,
+} XrCArrayHofKind;
 
 typedef enum XrCAddressProjection {
     XR_C_ADDRESS_PROJECTION_NONE = 0,
@@ -118,6 +130,13 @@ typedef struct XrCValueEmissionView {
     uint32_t recipe_discriminant;
     uint16_t recipe_argument_count;
     uint16_t recipe_reserved;
+    uint32_t recipe_callee_function;
+    uint8_t recipe_hof_kind;
+    uint8_t recipe_hof_source_storage;
+    uint8_t recipe_hof_result_storage;
+    uint8_t recipe_hof_callback_parameter_reps[2];
+    uint8_t recipe_hof_callback_return_rep;
+    uint8_t recipe_hof_reserved;
     uint32_t backing_value;
     uint32_t backing_element_count;
     uint8_t address_projection;

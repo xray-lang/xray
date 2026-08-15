@@ -82,7 +82,7 @@ over-budget breakpoint plan or stop fails closed without invoking the callback.
 
 Materialization rechecks the immutable plan and event fingerprint, then copies
 only exact function, instruction, call, entry-expectation, slot, and immutable
-debug-fact rows. TargetPlan schema 38 carries one debug fact for every target
+debug-fact rows. TargetPlan schema 39 carries one debug fact for every target
 instruction. It names the exact SemanticPlan operation and its stable ID; when
 the operation has a verified source span it carries the source-span stable ID
 and coordinates, otherwise it reports context unavailable. It also carries the
@@ -149,7 +149,7 @@ anchor-sha256: src/vm/debug/xr_vm_materialize.c b86beab806b748e1eced0aa4c04c2a87
 anchor-sha256: src/vm/xr_typed_dispatch.h 8c764cfb9f22e8c58ea75b0862b496996cd09bc6fc1e86d6fcc1ef5f6398cdb4
 anchor-sha256: src/vm/xr_typed_dispatch.c c79296a7d62cd0ae42f41e36e67dead23ac3b24095504cbba7ed52fe2a60fe9c
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 0c6753b95b6a07f1bfff18d3294f1cc76348f60252663feb11aef72ddcf52a1a
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c e5b77b5780812f5a514e0657e10a5452968cd5f4cf66bc551955de1f636d41da
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 918a564cdb4c4d009db7c701d540353175161d21f8604e1df02d876dae4042c5
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 2f3570bbfb67a0a73e7d0b2aea41ef422fbf096eac0cc42b1821993d5da4a19b
 anchor-sha256: CMakeLists.txt 52120c519042aa84194f877420c808db07fdde1a563f8bdb94e65af9fde9e00b
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 06262827b3a5f4b46765af60a45192a6ac8427c21a8c8b63ff9870728bab7f1a

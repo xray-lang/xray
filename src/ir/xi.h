@@ -84,6 +84,17 @@ typedef enum XiArrayMemberKind {
     XI_ARRAY_MEMBER_COUNT,
 } XiArrayMemberKind;
 
+/* Exact analyzer-registry identity for the three Array higher-order methods.
+ * The callback and storage facts are stamped beside this discriminant during
+ * lowering; frozen-plan consumers never recover authority from a selector. */
+typedef enum XiArrayHofKind {
+    XI_ARRAY_HOF_NONE = 0,
+    XI_ARRAY_HOF_MAP,
+    XI_ARRAY_HOF_FILTER,
+    XI_ARRAY_HOF_REDUCE,
+    XI_ARRAY_HOF_COUNT,
+} XiArrayHofKind;
+
 /* ========== IR Stage ========== */
 
 /*
@@ -1179,7 +1190,9 @@ typedef struct XiValue {
     uint32_t xa_intrinsic_id; /* stable XaIntrinsicId for canonical semantic operations */
     uint8_t array_intrinsic_kind; /* XiArrayIntrinsicKind, or NONE */
     uint8_t array_member_kind; /* XiArrayMemberKind, or NONE */
+    uint8_t array_hof_kind; /* XiArrayHofKind, or NONE */
     uint8_t array_element_storage; /* exact XrArrayElemType for a frozen Array operation */
+    uint8_t array_result_element_storage; /* exact scalar storage returned by an Array HOF */
     uint32_t xg_method_id;    /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
     uint32_t xg_json_codec_id;    /* stable XgJsonCodecId for evidence-backed Json codec calls */
@@ -1281,7 +1294,9 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
     dst->array_intrinsic_kind = src->array_intrinsic_kind;
     dst->array_member_kind = src->array_member_kind;
+    dst->array_hof_kind = src->array_hof_kind;
     dst->array_element_storage = src->array_element_storage;
+    dst->array_result_element_storage = src->array_result_element_storage;
     dst->xg_method_id = src->xg_method_id;
     dst->move_evidence_id = src->move_evidence_id;
     dst->move_source_root_id = src->move_source_root_id;

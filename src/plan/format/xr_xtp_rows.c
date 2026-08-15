@@ -171,7 +171,8 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U16, error_memory_rep) F(U16, argument_count) F(U16, adapter_count) F(U16, native_abi)     \
     F(U16, flags) F(U8, calling_convention) F(U8, target_kind) F(U8, result_mode)                \
     F(U8, result_ownership) F(U8, error_mode) F(U8, array_intrinsic_kind)                       \
-    F(U8, array_element_storage) F(U8, reserved8[0]) F(U8, reserved8[1])                       \
+    F(U8, array_element_storage) F(U8, array_hof_kind) F(U8, array_result_element_storage)     \
+    F(U8, reserved8[0]) F(U8, reserved8[1])                                                    \
     F(U8, reserved8[2]) F(FP, fingerprint)
 #define XR_XTP_CALL_ARGUMENT_FIELDS(F)                                                             \
     F(ID, identity) F(U32, call) F(U32, semantic_operand) F(U32, semantic_value)                  \

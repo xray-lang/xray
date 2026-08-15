@@ -345,6 +345,8 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, op->view_lifetime);
         hash_u64(&ctx, op->view_complete);
         hash_u64(&ctx, op->array_element_storage);
+        hash_u64(&ctx, op->array_hof_kind);
+        hash_u64(&ctx, op->array_result_element_storage);
     }
     for (uint32_t i = 0; i < plan->call_target_count; i++) {
         const XrSemanticCallTargetRecord *target = &plan->call_targets[i];

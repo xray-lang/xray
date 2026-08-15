@@ -2442,8 +2442,8 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
                        semantic_hex);
     TEST_REQUIRE(strcmp(
                      semantic_hex,
-                     "49e57df0df435d7495bd7cd9654d491d2cb18d3464e7be3f64ef0529bda1df59") == 0,
-                 "native unsigned interpolation preserves the frozen SemanticPlan v32 KAT");
+                     "6c151e049402b107324bfaa00cf0ce032dd6f0fbd9ef2b35e4a2e677a763531d") == 0,
+                 "native unsigned interpolation preserves the frozen SemanticPlan v34 KAT");
 
     XiFunc *label = NULL;
     for (uint16_t i = 0; i < ir->nchildren; i++) {
@@ -9267,6 +9267,8 @@ TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
            "Array<u8> filter result reads and writes must access raw byte storage");
     assert(!contains(code, "xrt_method_1(") &&
            "Array<u8>.filter must not fall back to dynamic method dispatch");
+    assert(!contains(code, "({") &&
+           "Array<u8>.filter must emit portable C11 statements");
     assert(!contains(code, "xrt_index_get(") &&
            "Array<u8> filter result index read must not fall back to runtime index dispatch");
     assert(!contains(code, "xrt_getprop(") &&
@@ -9317,6 +9319,8 @@ TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
            "Array<int>.map result reads and writes must access raw i64 storage");
     assert(!contains(code, "xrt_method_1(") &&
            "Array<int>.map must not fall back to dynamic method dispatch");
+    assert(!contains(code, "({") &&
+           "Array<int>.map must emit portable C11 statements");
     assert(!contains(code, "xrt_index_get(") &&
            "Array<int>.map result index read must not fall back to runtime index dispatch");
     assert(!contains(code, "xrt_getprop(") &&
@@ -9369,13 +9373,15 @@ TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
            "read-only map result scan must use the cached data pointer");
     assert(!contains(code, "xrt_index_get(") &&
            "read-only map result scan must not fall back to runtime index dispatch");
+    assert(!contains(code, "({") &&
+           "read-only Array<int>.map must emit portable C11 statements");
 
     printf("  Generated read-only typed array map scan %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_typed_array_map_captured_callback_uses_runtime_helper) {
+TEST(cgen_typed_array_map_captured_callback_fails_closed) {
     const char *src = "fn sum() -> int {\n"
                       "    var values: Array<int> = []\n"
                       "    values.push(1)\n"
@@ -9387,24 +9393,22 @@ TEST(cgen_typed_array_map_captured_callback_uses_runtime_helper) {
                       "print(sum())\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
+    assert(ir == NULL &&
+           "captured Array.map must fail closed before C generation until a frozen runtime adapter exists");
+}
 
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "captured typed array map should generate");
-    assert(contains(code, "xrt_array_map_typed(") &&
-           "captured Array<int>.map callback must keep the closure helper path");
-    assert(contains(code, "xrt_closure_new(&_xr_callable_") &&
-           "captured Array<int>.map callback must still allocate a closure env");
-    assert(contains(code, "XR_ELEM_I64") &&
-           "captured Array<int>.map result must preserve typed storage");
-    assert(!contains(code, "xrt_method_1(") &&
-           "captured Array<int>.map must not fall back to dynamic method dispatch");
+TEST(cgen_typed_array_direct_hof_callback_extra_use_fails_closed) {
+    const char *src = "fn run() -> int {\n"
+                      "    var values = [1, 2]\n"
+                      "    var callback = fn(x: int) -> int { return x + 1 }\n"
+                      "    var mapped = values.map(callback)\n"
+                      "    return mapped[0] + callback(3)\n"
+                      "}\n"
+                      "print(run())\n";
 
-    printf("  Generated captured typed array map helper path %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir == NULL &&
+           "a callback with an extra use must not receive direct-symbol HOF authority");
 }
 
 TEST(cgen_dynamic_uncaptured_callback_keeps_boxed_adapter) {
@@ -9459,7 +9463,7 @@ TEST(aot_closure_direct_symbol_requires_frozen_coroutine_plan) {
     xi_block_set_return(owner_entry, call);
 
     XaotClosurePlan plan = {0};
-    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(owner, closure, &plan),
+    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(NULL, owner, closure, &plan),
                  "closure plan rederived without coroutine proof");
     TEST_REQUIRE(plan.representation == XAOT_CLOSURE_RUNTIME,
                  "missing coroutine plan must reject direct symbol lowering");
@@ -9467,7 +9471,7 @@ TEST(aot_closure_direct_symbol_requires_frozen_coroutine_plan) {
     sync_target->stage = XI_STAGE_SEMANTIC_LOWERED;
     sync_target->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
     TEST_REQUIRE(xi_coro_lower(sync_target, NULL), "synchronous coroutine plan frozen");
-    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(owner, closure, &plan),
+    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(NULL, owner, closure, &plan),
                  "closure plan rederived from synchronous coroutine proof");
     TEST_REQUIRE(plan.representation == XAOT_CLOSURE_DIRECT_SYMBOL,
                  "fresh non-coroutine plan must permit direct symbol lowering");
@@ -9475,7 +9479,7 @@ TEST(aot_closure_direct_symbol_requires_frozen_coroutine_plan) {
     xi_cfg_invalidate(sync_target);
     TEST_REQUIRE(!xi_coro_plan_is_current(sync_target, sync_target->coro_plan),
                  "CFG mutation invalidates the synchronous coroutine plan");
-    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(owner, closure, &plan),
+    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(NULL, owner, closure, &plan),
                  "closure plan rederived after coroutine proof becomes stale");
     TEST_REQUIRE(plan.representation == XAOT_CLOSURE_RUNTIME,
                  "stale coroutine plan must reject direct symbol lowering");
@@ -9492,7 +9496,7 @@ TEST(aot_closure_direct_symbol_requires_frozen_coroutine_plan) {
     coro_target->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
     TEST_REQUIRE(xi_coro_lower(coro_target, NULL), "suspendable coroutine plan frozen");
     closure->aux = coro_target;
-    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(owner, closure, &plan),
+    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(NULL, owner, closure, &plan),
                  "closure plan rederived from suspendable coroutine proof");
     TEST_REQUIRE(plan.representation == XAOT_CLOSURE_RUNTIME,
                  "suspendable coroutine plan must reject direct symbol lowering");
@@ -9800,13 +9804,15 @@ TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
            "read-only filter result scan must use the cached data pointer");
     assert(!contains(code, "xrt_index_get(") &&
            "read-only filter result scan must not fall back to runtime index dispatch");
+    assert(!contains(code, "({") &&
+           "read-only Array<u8>.filter must emit portable C11 statements");
 
     printf("  Generated read-only typed array filter scan %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_typed_array_filter_captured_callback_uses_runtime_helper) {
+TEST(cgen_typed_array_filter_captured_callback_fails_closed) {
     const char *src = "fn sum() -> int {\n"
                       "    var values: Array<int> = []\n"
                       "    values.push(1)\n"
@@ -9818,25 +9824,8 @@ TEST(cgen_typed_array_filter_captured_callback_uses_runtime_helper) {
                       "print(sum())\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "captured typed array filter should generate");
-    assert(contains(code, "xrt_array_filter_typed(") &&
-           "captured Array<int>.filter callback must keep the closure helper path");
-    assert(contains(code, "xrt_closure_new(&_xr_callable_") &&
-           "captured Array<int>.filter callback must still allocate a closure env");
-    assert(contains(code, "XR_ELEM_I64") &&
-           "captured Array<int>.filter result must preserve typed storage");
-    assert(!contains(code, "xrt_method_1(") &&
-           "captured Array<int>.filter must not fall back to dynamic method dispatch");
-
-    printf("  Generated captured typed array filter helper path %zu bytes of C code\n",
-           strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
+    assert(ir == NULL &&
+           "captured Array.filter must fail closed before C generation until a frozen runtime adapter exists");
 }
 
 TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
@@ -9871,13 +9860,222 @@ TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
            "inlined Array<int>.reduce must call the callback's native function");
     assert(!contains(code, "xrt_method_2(") &&
            "Array<int>.reduce must not fall back to dynamic method dispatch");
+    assert(!contains(code, "({") &&
+           "Array<int>.reduce must emit portable C11 statements");
 
     printf("  Generated typed array reduce fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_typed_array_reduce_captured_callback_uses_runtime_helper) {
+TEST(cgen_typed_array_unused_reduce_still_executes_callback_loop) {
+    const char *src =
+        "fn run() -> int {\n"
+        "    var values: Array<int> = []\n"
+        "    values.push(1)\n"
+        "    values.push(2)\n"
+        "    values.reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)\n"
+        "    return 7\n"
+        "}\n"
+        "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "unused typed array reduce should generate");
+    assert(contains(code, "for (int64_t _i = 0; _i < _n; _i++)") &&
+           contains(code, "test___anonymous__") &&
+           "unused reduce must still execute every callback invocation");
+    assert(!contains(code, "xrt_array_reduce_typed(") &&
+           !contains(code, "xrt_method_2(") &&
+           "unused reduce must consume the direct frozen recipe");
+    assert(!contains(code, "({") &&
+           "unused reduce must remain portable C11");
+
+    printf("  Generated unused typed array reduce loop %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+static bool cgen_array_hof_emit_with_prepared_plan(TestAotPlan *plan,
+                                                    XiModule *module) {
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL, "Array HOF mutation CGen context allocated");
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan->bundle);
+    TestCEmissionRegistry emission_registry;
+    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx,
+                                                  &plan->bundle),
+                 "Array HOF mutation C emission registry installed");
+    char *buf = NULL;
+    size_t bufsz = 0;
+    FILE *mem = xr_open_memstream(&buf, &bufsz);
+    TEST_REQUIRE(mem != NULL, "Array HOF mutation stream opened");
+    xi_cgen_program(ctx, mem, module);
+    TEST_REQUIRE(xr_close_memstream(mem, &buf, &bufsz) == 0,
+                 "Array HOF mutation stream closed");
+    bool ok = !xi_cgen_has_error(ctx);
+    xr_free(buf);
+    test_c_emission_registry_free(&emission_registry);
+    xi_cgen_ctx_free(ctx);
+    return ok;
+}
+
+TEST(cgen_typed_array_direct_hof_requires_exact_callback_abi_plan) {
+    const char *src =
+        "fn run() -> int {\n"
+        "    var values: Array<int> = []\n"
+        "    values.push(1)\n"
+        "    var mapped = values.map(fn(x: int) -> int { return x + 1 })\n"
+        "    return mapped[0]\n"
+        "}\n"
+        "print(run())\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL && test_prepare_backend_ir(ir),
+                 "Array HOF ABI mutation fixture reached Backend");
+    XiModule *module = ir->module;
+    bool own_module = false;
+    if (!module) {
+        module = xi_module_new("array_hof_abi.xr", "test", ir);
+        TEST_REQUIRE(module != NULL, "Array HOF ABI mutation module allocated");
+        own_module = true;
+    }
+    XiModule *modules[] = {module};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 1, 0);
+
+    uint32_t callable_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(ir->semantic_plan);
+    for (uint32_t i = 0; i < semantic_operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (!operation ||
+            operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_HOF)
+            continue;
+        TEST_REQUIRE(callable_function == XR_SEMANTIC_INDEX_NONE,
+                     "Array HOF ABI mutation has one semantic callback");
+        callable_function = operation->callable_function;
+    }
+    TEST_REQUIRE(callable_function != XR_SEMANTIC_INDEX_NONE,
+                 "Array HOF ABI mutation semantic callback found");
+    uint32_t callee_index = UINT32_MAX;
+    for (uint32_t i = 0; i < plan.bundle.nfunc_plans; i++) {
+        XaotFuncPlan *candidate = &plan.bundle.func_plans[i];
+        if (!candidate->func ||
+            candidate->func->semantic_plan != ir->semantic_plan ||
+            candidate->func->semantic_plan_function_index !=
+                callable_function)
+            continue;
+        TEST_REQUIRE(callee_index == UINT32_MAX,
+                     "Array HOF ABI mutation has one callback plan");
+        callee_index = i;
+    }
+    TEST_REQUIRE(callee_index != UINT32_MAX,
+                 "Array HOF ABI mutation callback plan found");
+    XaotFuncPlan *callee = &plan.bundle.func_plans[callee_index];
+    TEST_REQUIRE(callee->reachable && !callee->may_suspend &&
+                     callee->abi.kind == XAOT_ABI_NATIVE &&
+                     callee->abi.nparams == 1 && callee->abi.params,
+                 "Array HOF callback has exact native ABI prerequisite");
+    TEST_REQUIRE(cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "exact Array HOF callback ABI generates");
+
+    uint8_t saved_reachable = callee->reachable;
+    callee->reachable = 0;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "unreachable Array HOF callback plan fails closed");
+    callee->reachable = saved_reachable;
+    uint8_t saved_suspend = callee->may_suspend;
+    callee->may_suspend = 1;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "suspendable Array HOF callback plan fails closed");
+    callee->may_suspend = saved_suspend;
+    XaotAbiKind saved_kind = callee->abi.kind;
+    callee->abi.kind = XAOT_ABI_TAGGED;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "tagged Array HOF callback ABI fails closed");
+    callee->abi.kind = saved_kind;
+    uint16_t saved_nparams = callee->abi.nparams;
+    callee->abi.nparams = 0;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "wrong Array HOF callback arity fails closed");
+    callee->abi.nparams = saved_nparams;
+
+    XaotAbiSlot saved_param = callee->abi.params[0];
+    callee->abi.params[0].cls = XAOT_ARG_PTR;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "non-scalar Array HOF callback parameter fails closed");
+    callee->abi.params[0] = saved_param;
+    callee->abi.params[0].flags = XAOT_ABI_SLOT_BORROWED_PLACE;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "borrowed-place Array HOF callback parameter fails closed");
+    callee->abi.params[0] = saved_param;
+    callee->abi.params[0].c_type = "forged_hof_param_t";
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "noncanonical Array HOF callback parameter C type fails closed");
+    callee->abi.params[0] = saved_param;
+    callee->abi.params[0].pointee_rep.kind = XAOT_VALUE_SCALAR;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "forged Array HOF callback pointee representation fails closed");
+    callee->abi.params[0] = saved_param;
+    callee->abi.params[0].rep.rep = XAOT_REP_U64;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "wrong Array HOF callback parameter scalar rep fails closed");
+    callee->abi.params[0] = saved_param;
+    callee->abi.params[0].rep.flags = XAOT_VALUE_FLAG_DYNAMIC_C_TYPE;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "flagged Array HOF callback parameter rep fails closed");
+    callee->abi.params[0] = saved_param;
+
+    XaotAbiSlot saved_ret = callee->abi.ret;
+    callee->abi.ret.cls = XAOT_ARG_TAGGED;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "non-scalar Array HOF callback return fails closed");
+    callee->abi.ret = saved_ret;
+    callee->abi.ret.c_type = "forged_hof_return_t";
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "noncanonical Array HOF callback return C type fails closed");
+    callee->abi.ret = saved_ret;
+    callee->abi.ret.rep.rep = XAOT_REP_U64;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "wrong Array HOF callback return scalar rep fails closed");
+    callee->abi.ret = saved_ret;
+
+    TEST_REQUIRE(plan.bundle.nfunc_plans < plan.bundle.func_plan_cap,
+                 "Array HOF callback duplicate mutation has spare capacity");
+    plan.bundle.func_plans[plan.bundle.nfunc_plans++] = *callee;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "duplicate Array HOF callback function plan fails closed");
+    plan.bundle.nfunc_plans--;
+
+    uint32_t saved_count = plan.bundle.nfunc_plans;
+    XaotFuncPlan saved_callee = *callee;
+    plan.bundle.func_plans[callee_index] =
+        plan.bundle.func_plans[saved_count - 1u];
+    plan.bundle.nfunc_plans--;
+    TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "missing Array HOF callback function plan fails closed");
+    plan.bundle.nfunc_plans = saved_count;
+    plan.bundle.func_plans[saved_count - 1u] =
+        plan.bundle.func_plans[callee_index];
+    plan.bundle.func_plans[callee_index] = saved_callee;
+    callee = &plan.bundle.func_plans[callee_index];
+    TEST_REQUIRE(cgen_array_hof_emit_with_prepared_plan(&plan, module),
+                 "restored Array HOF callback ABI generates");
+
+    test_aot_plan_free(&plan);
+    if (own_module) {
+        module->init = NULL;
+        xi_module_free(module);
+    }
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_reduce_captured_callback_fails_closed) {
     const char *src =
         "fn sum() -> int {\n"
         "    var values: Array<int> = []\n"
@@ -9889,23 +10087,8 @@ TEST(cgen_typed_array_reduce_captured_callback_uses_runtime_helper) {
         "print(sum())\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "captured typed array reduce should generate");
-    assert(contains(code, "xrt_array_reduce_typed(") &&
-           "captured Array<int>.reduce callback must keep the closure helper path");
-    assert(contains(code, "xrt_closure_new(&_xr_callable_") &&
-           "captured Array<int>.reduce callback must still allocate a closure env");
-    assert(!contains(code, "xrt_method_2(") &&
-           "captured Array<int>.reduce must not fall back to dynamic method dispatch");
-
-    printf("  Generated captured typed array reduce helper path %zu bytes of C code\n",
-           strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
+    assert(ir == NULL &&
+           "captured Array.reduce must fail closed before C generation until a frozen runtime adapter exists");
 }
 
 TEST(cgen_int_const_div_mod_uses_native_ops) {
@@ -14257,7 +14440,8 @@ int main(void) {
     run_cgen_typed_array_filter_preserves_raw_storage_fast_path();
     run_cgen_typed_array_map_uses_typed_result_storage_fast_path();
     run_cgen_typed_array_map_readonly_result_caches_data_pointer();
-    run_cgen_typed_array_map_captured_callback_uses_runtime_helper();
+    run_cgen_typed_array_map_captured_callback_fails_closed();
+    run_cgen_typed_array_direct_hof_callback_extra_use_fails_closed();
     run_cgen_typed_array_rune_uses_scalar_storage_with_rune_boxing();
     run_cgen_dynamic_uncaptured_callback_keeps_boxed_adapter();
     run_aot_closure_direct_symbol_requires_frozen_coroutine_plan();
@@ -14265,9 +14449,11 @@ int main(void) {
     run_cgen_stack_alloc_direct_closure_uses_stack_runtime();
     run_cgen_stack_alloc_closure_preserves_cell_capture();
     run_cgen_typed_array_filter_readonly_result_caches_data_pointer();
-    run_cgen_typed_array_filter_captured_callback_uses_runtime_helper();
+    run_cgen_typed_array_filter_captured_callback_fails_closed();
     run_cgen_typed_array_reduce_uses_native_accumulator_fast_path();
-    run_cgen_typed_array_reduce_captured_callback_uses_runtime_helper();
+    run_cgen_typed_array_unused_reduce_still_executes_callback_loop();
+    run_cgen_typed_array_direct_hof_requires_exact_callback_abi_plan();
+    run_cgen_typed_array_reduce_captured_callback_fails_closed();
     run_cgen_int_const_div_mod_uses_native_ops();
     run_cgen_shift_uses_stable_owner_adapter();
     run_cgen_unsigned_shift_uses_stable_owner_adapter();

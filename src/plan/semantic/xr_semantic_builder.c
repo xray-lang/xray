@@ -3196,6 +3196,174 @@ static uint8_t semantic_array_member_scalar_storage(
     }
 }
 
+static uint8_t semantic_array_hof_kind_from_xi(uint8_t kind) {
+    switch (kind) {
+        case XI_ARRAY_HOF_MAP: return XR_SEM_ARRAY_HOF_MAP;
+        case XI_ARRAY_HOF_FILTER: return XR_SEM_ARRAY_HOF_FILTER;
+        case XI_ARRAY_HOF_REDUCE: return XR_SEM_ARRAY_HOF_REDUCE;
+        default: return XR_SEM_ARRAY_HOF_NONE;
+    }
+}
+
+/* The lowering discriminant is the only dispatch identity admitted here. The
+ * selector stays debug metadata. This proof binds the callback directly to a
+ * noncapturing child of the caller and freezes both sides of its scalar
+ * signature before Xi is discarded. */
+static bool semantic_array_hof_exact(
+    const XrSemanticBuildContext *ctx, const XiFunc *owner,
+    const XiValue *value, const XrSemanticOperationRecord *record,
+    uint32_t *callback_function) {
+    uint8_t kind = semantic_array_hof_kind_from_xi(value ? value->array_hof_kind : 0);
+    uint16_t expected_operands = kind == XR_SEM_ARRAY_HOF_REDUCE ? 3u : 2u;
+    if (!ctx || !owner || !value || !record || kind == XR_SEM_ARRAY_HOF_NONE ||
+        value->op != XI_CALL_METHOD || value->nargs != expected_operands ||
+        record->operand_count != expected_operands ||
+        record->operand_begin > ctx->plan->operand_count ||
+        record->operand_count > ctx->plan->operand_count - record->operand_begin ||
+        record->metadata_count != 1 || record->metadata_begin >= ctx->plan->metadata_count ||
+        value->array_element_storage <= XR_ELEM_ANY ||
+        value->array_element_storage >= XR_ELEM_RAWPTR ||
+        value->array_result_element_storage <= XR_ELEM_ANY ||
+        value->array_result_element_storage >= XR_ELEM_RAWPTR ||
+        !value->args[0] || !value->args[1])
+        return false;
+    int callback = resolve_closure_binding(ctx, owner, value->args[1]);
+    if (callback < 0 || (uint32_t) callback >= ctx->plan->function_count)
+        return false;
+    const XrSemanticFunctionRecord *callee = &ctx->plan->functions[callback];
+    uint32_t owner_index = record->function;
+    uint16_t minimum_parameters = kind == XR_SEM_ARRAY_HOF_REDUCE ? 2u : 1u;
+    if (callee->parent != owner_index || callee->capture_count != 0 ||
+        callee->parameter_count != minimum_parameters ||
+        (callee->semantic_effects & (XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE |
+                                     XI_EFFECT_MAY_THROW | XI_EFFECT_MAY_SUSPEND)) != 0 ||
+        callee->parameter_begin > ctx->plan->parameter_count ||
+        callee->parameter_count > ctx->plan->parameter_count - callee->parameter_begin)
+        return false;
+    const XrSemanticOperandRecord *operands =
+        &ctx->plan->operands[record->operand_begin];
+    const XrSemanticTypeRecord *receiver_type =
+        operands[0].type < ctx->plan->type_count
+            ? &ctx->plan->types[operands[0].type]
+            : NULL;
+    if (!semantic_array_member_receiver_type_exact(receiver_type) ||
+        receiver_type->child_begin >= ctx->plan->type_child_count)
+        return false;
+    uint32_t receiver_element = ctx->plan->type_children[receiver_type->child_begin];
+    const XrSemanticTypeRecord *receiver_element_type =
+        receiver_element < ctx->plan->type_count
+            ? &ctx->plan->types[receiver_element]
+            : NULL;
+    if (!receiver_element_type ||
+        semantic_array_member_scalar_storage(receiver_element_type) !=
+            value->array_element_storage)
+        return false;
+    uint32_t result_element = record->result_type;
+    if (kind != XR_SEM_ARRAY_HOF_REDUCE) {
+        const XrSemanticTypeRecord *result_array =
+            record->result_type < ctx->plan->type_count
+                ? &ctx->plan->types[record->result_type]
+                : NULL;
+        if (!semantic_array_member_receiver_type_exact(result_array) ||
+            result_array->child_begin >= ctx->plan->type_child_count)
+            return false;
+        result_element = ctx->plan->type_children[result_array->child_begin];
+        if (kind == XR_SEM_ARRAY_HOF_FILTER &&
+            (record->result_type != operands[0].type || result_element != receiver_element))
+            return false;
+    } else if (operands[2].type != record->result_type) {
+        return false;
+    }
+    const XrSemanticTypeRecord *result_element_type =
+        result_element < ctx->plan->type_count ? &ctx->plan->types[result_element] : NULL;
+    if (!result_element_type ||
+        semantic_array_member_scalar_storage(result_element_type) !=
+            value->array_result_element_storage)
+        return false;
+    if (kind == XR_SEM_ARRAY_HOF_FILTER) {
+        if (callee->return_type >= ctx->plan->type_count ||
+            !semantic_array_member_bool_type_exact(
+                &ctx->plan->types[callee->return_type]))
+            return false;
+    } else if (callee->return_type != result_element) {
+        return false;
+    }
+    const XrSemanticParameterRecord *parameters =
+        &ctx->plan->parameters[callee->parameter_begin];
+    if (parameters[0].function != (uint32_t) callback || parameters[0].ordinal != 0 ||
+        parameters[0].type != (kind == XR_SEM_ARRAY_HOF_REDUCE
+                                   ? result_element
+                                   : receiver_element))
+        return false;
+    if (kind == XR_SEM_ARRAY_HOF_REDUCE &&
+        (parameters[1].function != (uint32_t) callback || parameters[1].ordinal != 1 ||
+         parameters[1].type != receiver_element))
+        return false;
+    const XrSemanticTypeRecord *callback_type =
+        operands[1].type < ctx->plan->type_count
+            ? &ctx->plan->types[operands[1].type]
+            : NULL;
+    if (!callback_type || callback_type->kind != XR_KIND_FUNCTION ||
+        callback_type->child_count != (uint32_t) callee->parameter_count + 1u ||
+        callback_type->child_begin > ctx->plan->type_child_count ||
+        callback_type->child_count >
+            ctx->plan->type_child_count - callback_type->child_begin)
+        return false;
+    for (uint16_t i = 0; i < callee->parameter_count; i++)
+        if (ctx->plan->type_children[callback_type->child_begin + i] != parameters[i].type)
+            return false;
+    if (ctx->plan->type_children[callback_type->child_begin + callee->parameter_count] !=
+        callee->return_type)
+        return false;
+    const XiValue *callback_value = value->args[1];
+    if (!callback_value->block || callback_value->block->func != owner ||
+        !callback_value->aux ||
+        (callback_value->op != XI_CLOSURE_NEW &&
+         !(callback_value->op == XI_STACK_ALLOC &&
+           callback_value->aux_int == XI_CLOSURE_NEW)))
+        return false;
+    uint32_t uses = 0;
+    for (uint16_t b = 0; b < owner->nblocks; b++) {
+        const XiBlock *block = owner->blocks[b];
+        if (!block)
+            return false;
+        for (uint32_t v = 0; v < block->nvalues; v++) {
+            const XiValue *use = block->values[v];
+            if (!use)
+                return false;
+            for (uint16_t a = 0; a < use->nargs; a++)
+                uses += use->args[a] == callback_value;
+        }
+        if (block->control == callback_value)
+            uses++;
+    }
+    if (uses != 1)
+        return false;
+    if (record->semantic_immediate != 0 || record->auxiliary_kind != XI_AUX_KIND_NONE ||
+        record->constant != XR_SEMANTIC_INDEX_NONE ||
+        record->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        record->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        record->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
+        record->result_alias_operand != -1 || record->return_parameter != -1 ||
+        (kind == XR_SEM_ARRAY_HOF_REDUCE
+             ? record->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
+                   record->return_provenance != XR_SEM_RETURN_NONE ||
+                   record->return_complete != 0
+             : record->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+                   record->return_provenance != XR_SEM_RETURN_OWNED ||
+                   record->return_complete != 1) ||
+        operands[0].role != XR_SEM_OPERAND_RECEIVER || operands[0].parameter != -1 ||
+        operands[0].flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        operands[1].role != XR_SEM_OPERAND_ARGUMENT || operands[1].parameter != 0 ||
+        operands[1].flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        (kind == XR_SEM_ARRAY_HOF_REDUCE &&
+         (operands[2].role != XR_SEM_OPERAND_ARGUMENT || operands[2].parameter != 1 ||
+          operands[2].flags != XR_SEM_OPERAND_CALL_CONTRACT)))
+        return false;
+    *callback_function = (uint32_t) callback;
+    return true;
+}
+
 /* The selector is deliberately absent from this proof. Lowering already
  * stamped XI_ARRAY_MEMBER_FILL after the analyzer-backed builtin receiver
  * registry selected the member. These frozen rows independently re-prove the
@@ -3660,7 +3828,8 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     }
     record->semantic_immediate =
         value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_NONE ||
-                value->array_member_kind != XI_ARRAY_MEMBER_NONE
+                value->array_member_kind != XI_ARRAY_MEMBER_NONE ||
+                value->array_hof_kind != XI_ARRAY_HOF_NONE
             ? 0
             : value->aux_int;
     record->evidence[0] = value->xg_callsite_id;
@@ -3778,6 +3947,29 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     if (value->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE &&
         semantic_array_reserve_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR;
+    if (value->array_hof_kind != XI_ARRAY_HOF_NONE) {
+        uint32_t callback = XR_SEMANTIC_INDEX_NONE;
+        if (!semantic_array_hof_exact(ctx, function, value, record, &callback)) {
+            if (ctx->error && ctx->error_size)
+                snprintf(ctx->error, ctx->error_size,
+                         "XR_SEM_0019: Array higher-order authority is not exact "
+                         "kind=%u source-storage=%u result-storage=%u operands=%u "
+                         "result-type=%u ownership=%u return=%u/%u alias=%d callback=%u",
+                         value->array_hof_kind, value->array_element_storage,
+                         value->array_result_element_storage, record->operand_count,
+                         record->result_type, record->result_ownership,
+                         record->return_provenance, record->return_complete,
+                         record->result_alias_operand, callback);
+            return false;
+        }
+        record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_HOF;
+        record->array_hof_kind =
+            semantic_array_hof_kind_from_xi(value->array_hof_kind);
+        record->array_element_storage = value->array_element_storage;
+        record->array_result_element_storage =
+            value->array_result_element_storage;
+        record->callable_function = callback;
+    }
     if (value->array_member_kind == XI_ARRAY_MEMBER_FILL &&
         semantic_array_fill_scalar_exact(ctx, record,
                                          value->array_element_storage)) {

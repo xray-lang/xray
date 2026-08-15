@@ -2739,6 +2739,91 @@ static bool sr_op_has_arith_native_result(uint16_t op) {
     }
 }
 
+typedef struct SrArrayHofIdentity {
+    uint8_t kind;
+    uint16_t operand_count;
+} SrArrayHofIdentity;
+
+/* Representation selection consumes the already verified SemanticPlan HOF
+ * identity.  The analyzer marker is only a live consistency check: no method
+ * selector, live type, or argument count can create this authority. */
+static bool sr_array_hof_identity_is_exact(const XiValue *value,
+                                           SrArrayHofIdentity *out) {
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    const XrSemanticPlan *plan = function ? function->semantic_plan : NULL;
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!function || !plan || !xr_semantic_plan_is_verified(plan) ||
+        function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE ||
+        value->op != XI_CALL_METHOD)
+        return false;
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(plan,
+                                  function->semantic_plan_function_index);
+    if (!semantic_function || value->id >= semantic_function->value_count ||
+        semantic_function->value_begin > UINT32_MAX - value->id)
+        return false;
+    uint32_t semantic_value = semantic_function->value_begin + value->id;
+    const XrSemanticOperationRecord *match = NULL;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->function !=
+                              function->semantic_plan_function_index ||
+            candidate->result_value != semantic_value)
+            continue;
+        if (match)
+            return false;
+        match = candidate;
+    }
+    uint8_t live_kind = XI_ARRAY_HOF_NONE;
+    uint16_t expected_operands = 0;
+    if (match && match->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF) {
+        switch (match->array_hof_kind) {
+            case XR_SEM_ARRAY_HOF_MAP:
+                live_kind = XI_ARRAY_HOF_MAP;
+                expected_operands = 2;
+                break;
+            case XR_SEM_ARRAY_HOF_FILTER:
+                live_kind = XI_ARRAY_HOF_FILTER;
+                expected_operands = 2;
+                break;
+            case XR_SEM_ARRAY_HOF_REDUCE:
+                live_kind = XI_ARRAY_HOF_REDUCE;
+                expected_operands = 3;
+                break;
+            default: break;
+        }
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan, &operand_count);
+    if (!match || live_kind == XI_ARRAY_HOF_NONE ||
+        value->array_hof_kind != live_kind ||
+        match->opcode != XI_CALL_METHOD ||
+        match->operand_count != expected_operands ||
+        match->operand_begin > operand_count ||
+        expected_operands > operand_count - match->operand_begin ||
+        value->nargs != expected_operands || !value->args || !operands)
+        return false;
+    for (uint16_t i = 0; i < expected_operands; i++) {
+        const XiValue *argument = value->args[i];
+        if (!argument || !argument->block || argument->block->func != function ||
+            argument->id >= semantic_function->value_count ||
+            semantic_function->value_begin > UINT32_MAX - argument->id ||
+            operands[match->operand_begin + i].value !=
+                semantic_function->value_begin + argument->id)
+            return false;
+    }
+    if (out) {
+        out->kind = live_kind;
+        out->operand_count = expected_operands;
+    }
+    return true;
+}
+
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
     if (!v || !v->type)
         return XR_REP_TAGGED;
@@ -2820,6 +2905,13 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_OWNER_FORWARD:
             return sr_type_native_boundary_rep(v->type);
         case XI_CALL_METHOD: {
+            SrArrayHofIdentity hof = {0};
+            if (sr_array_hof_identity_is_exact(v, &hof)) {
+                if (hof.kind == XI_ARRAY_HOF_MAP ||
+                    hof.kind == XI_ARRAY_HOF_FILTER)
+                    return XR_REP_TAGGED;
+                return sr_type_native_boundary_rep(v->type);
+            }
             XrRep atomic_rep = XR_REP_TAGGED;
             if (sr_atomic_method_return_rep(v, &atomic_rep))
                 return atomic_rep;
@@ -3248,6 +3340,18 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         }
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
+            if (user->op == XI_CALL_METHOD) {
+                SrArrayHofIdentity hof = {0};
+                if (sr_array_hof_identity_is_exact(user, &hof)) {
+                    if (arg_idx < 2)
+                        return XR_REP_TAGGED;
+                    return arg_idx == 2 && hof.kind == XI_ARRAY_HOF_REDUCE &&
+                                   user->args[arg_idx]
+                               ? sr_type_native_boundary_rep(
+                                     user->args[arg_idx]->type)
+                               : XR_REP_TAGGED;
+                }
+            }
             if (arg_idx < user->nargs && user->args[arg_idx] &&
                 (user->args[arg_idx]->op == XI_LOCAL_ADDR ||
                  sr_param_is_call_bound_place(user->args[arg_idx])))

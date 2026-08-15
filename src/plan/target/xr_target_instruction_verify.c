@@ -592,6 +592,8 @@ static bool direct_i64_call_row_is_exact(
         call->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL ||
         call->array_intrinsic_kind != XR_TARGET_ARRAY_INTRINSIC_NONE ||
         call->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->array_hof_kind != XR_TARGET_ARRAY_HOF_NONE ||
+        call->array_result_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
         row->result_slot != call->result_slot ||
         !call_rep_is_i64(plan, call->result_register_rep) ||
         !call_rep_is_i64(plan, call->result_memory_rep) ||

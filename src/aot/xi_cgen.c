@@ -3123,6 +3123,17 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
         left->recipe_discriminant != right->recipe_discriminant ||
         left->recipe_argument_count != right->recipe_argument_count ||
         left->recipe_reserved != right->recipe_reserved ||
+        left->recipe_callee_function != right->recipe_callee_function ||
+        left->recipe_hof_kind != right->recipe_hof_kind ||
+        left->recipe_hof_source_storage != right->recipe_hof_source_storage ||
+        left->recipe_hof_result_storage != right->recipe_hof_result_storage ||
+        left->recipe_hof_callback_parameter_reps[0] !=
+            right->recipe_hof_callback_parameter_reps[0] ||
+        left->recipe_hof_callback_parameter_reps[1] !=
+            right->recipe_hof_callback_parameter_reps[1] ||
+        left->recipe_hof_callback_return_rep !=
+            right->recipe_hof_callback_return_rep ||
+        left->recipe_hof_reserved != right->recipe_hof_reserved ||
         left->backing_value != right->backing_value ||
         left->backing_element_count != right->backing_element_count ||
         left->address_projection != right->address_projection ||
@@ -9852,7 +9863,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         cg_value_is_elided_heap_struct_alias(ctx, f, v))
         return;
 
-    if (cg_array_closure_value_only_used_by_inline_map(ctx, f, prefix, v) ||
+    if (cg_array_hof_callback_is_elided(ctx, f, v) ||
         xicgen_par_for_stack_closure_value_is_elided(ctx, f, v) ||
         cg_value_is_dead_aot_marker(ctx, f, v))
         return;
@@ -9885,6 +9896,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
 
     if (emit_str_concat_value_stmt(ctx, out, f, v, false))
+        return;
+
+    if (emit_array_hof_direct_stmt(ctx, out, f, prefix, v))
         return;
 
     if (emit_closure_new_value_stmt(ctx, out, f, prefix, v, false))
@@ -9928,9 +9942,6 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
-    if (emit_typed_array_map_inline_stmt(ctx, out, f, prefix, v) ||
-        emit_typed_array_filter_inline_stmt(ctx, out, f, prefix, v))
-        return;
     if (ctx->pre_decl_all && !debug_only_value) {
         /* Variable already declared at function top — emit assignment */
         fprintf(out, "    ");
@@ -11588,7 +11599,7 @@ static bool cg_func_has_unelided_closure_value_use(XiCgenCtx *ctx, const XiFunc 
             if (!cg_func_needs_aot_coro_ctx(ctx, owner) &&
                 cg_static_function_value_uses_are_parallel_callbacks(owner, v, target))
                 continue;
-            if (!cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v)) {
+            if (!cg_array_hof_callback_is_elided(ctx, owner, v)) {
                 if (dbg) {
                     fprintf(stderr,
                             "[xi_cgen][boxed] unelided closure target=%s owner=%s v%u op=%s "
@@ -11598,7 +11609,7 @@ static bool cg_func_has_unelided_closure_value_use(XiCgenCtx *ctx, const XiFunc 
                             cg_func_needs_aot_coro_ctx(ctx, owner) ? 1 : 0,
                             cg_shared_static_function_closure_is_elided(ctx, owner, v) ? 1 : 0,
                             xicgen_par_for_stack_closure_value_is_elided(ctx, owner, v) ? 1 : 0,
-                            cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v)
+                            cg_array_hof_callback_is_elided(ctx, owner, v)
                                 ? 1
                                 : 0);
                 }
@@ -11731,7 +11742,7 @@ static bool cg_func_has_native_receiver_boxed_use(XiCgenCtx *ctx, const XiFunc *
             if (cg_value_allocates_closure_for_func(v, target) &&
                 (cg_func_needs_aot_coro_ctx(ctx, owner) ||
                  !cg_shared_static_function_closure_is_elided(ctx, owner, v)) &&
-                !cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v))
+                !cg_array_hof_callback_is_elided(ctx, owner, v))
                 return true;
             if (cg_native_receiver_dispatch_plan_needs_boxed_adapter(ctx, owner, v, target) ||
                 cg_native_receiver_method_call_needs_boxed_adapter(ctx, owner, v, target) ||

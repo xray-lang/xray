@@ -147,6 +147,8 @@ typedef struct XrTargetCallIntent {
     uint8_t target_kind;
     uint8_t array_intrinsic_kind;
     uint8_t array_element_storage;
+    uint8_t array_hof_kind;
+    uint8_t array_result_element_storage;
     bool suspends;
     bool tail;
 } XrTargetCallIntent;
@@ -2116,6 +2118,182 @@ static bool semantic_array_fill_scalar_is_exact(
         *fill_value = fill->value;
     if (target_storage)
         *target_storage = storage;
+    return true;
+}
+
+static bool semantic_array_hof_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint8_t *target_kind, uint8_t *receiver_storage,
+    uint8_t *result_storage, uint32_t *receiver_value,
+    uint32_t *callback_value, uint32_t *initial_value) {
+    uint32_t operand_count = 0, child_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan, &operand_count);
+    const uint32_t *children =
+        xr_semantic_plan_type_children(plan, &child_count);
+    (void) xr_semantic_plan_metadata(plan, &metadata_count);
+    uint8_t kind = XR_TARGET_ARRAY_HOF_NONE;
+    if (operation) {
+        switch (operation->array_hof_kind) {
+            case XR_SEM_ARRAY_HOF_MAP: kind = XR_TARGET_ARRAY_HOF_MAP; break;
+            case XR_SEM_ARRAY_HOF_FILTER: kind = XR_TARGET_ARRAY_HOF_FILTER; break;
+            case XR_SEM_ARRAY_HOF_REDUCE: kind = XR_TARGET_ARRAY_HOF_REDUCE; break;
+            default: break;
+        }
+    }
+    uint16_t expected_operands = kind == XR_TARGET_ARRAY_HOF_REDUCE ? 3u : 2u;
+    if (!plan || !operation || !operands || !children ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_HOF ||
+        kind == XR_TARGET_ARRAY_HOF_NONE || operation->opcode != XI_CALL_METHOD ||
+        operation->operand_count != expected_operands ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        operation->semantic_immediate != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function >= xr_semantic_plan_function_count(plan) ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1)
+        return false;
+    const XrSemanticOperandRecord *rows = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *array = xr_semantic_plan_type(plan, rows[0].type);
+    if (!semantic_array_member_receiver_type_is_exact(array) ||
+        array->child_begin >= child_count)
+        return false;
+    uint32_t source_element = children[array->child_begin];
+    const XrSemanticTypeRecord *source_type =
+        xr_semantic_plan_type(plan, source_element);
+    uint8_t source = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t frozen_source = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!target_array_storage_from_type(source_type, &source) ||
+        !target_array_storage_from_semantic(operation->array_element_storage,
+                                            &frozen_source) ||
+        source != frozen_source)
+        return false;
+    uint32_t result_element = operation->result_type;
+    if (kind != XR_TARGET_ARRAY_HOF_REDUCE) {
+        const XrSemanticTypeRecord *result_array =
+            xr_semantic_plan_type(plan, operation->result_type);
+        if (!semantic_array_member_receiver_type_is_exact(result_array) ||
+            result_array->child_begin >= child_count)
+            return false;
+        result_element = children[result_array->child_begin];
+        if (kind == XR_TARGET_ARRAY_HOF_FILTER &&
+            (operation->result_type != rows[0].type || result_element != source_element))
+            return false;
+    } else if (rows[2].type != operation->result_type) {
+        return false;
+    }
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(plan, result_element);
+    uint8_t result = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t frozen_result = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!target_array_storage_from_type(result_type, &result) ||
+        !target_array_storage_from_semantic(
+            operation->array_result_element_storage, &frozen_result) ||
+        result != frozen_result)
+        return false;
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(plan, operation->callable_function);
+    uint16_t expected_parameters = kind == XR_TARGET_ARRAY_HOF_REDUCE ? 2u : 1u;
+    if (!callee || callee->parent != operation->function || callee->capture_count != 0 ||
+        callee->parameter_count != expected_parameters ||
+        (callee->semantic_effects & (XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE |
+                                     XI_EFFECT_MAY_THROW | XI_EFFECT_MAY_SUSPEND)) != 0 ||
+        callee->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
+        callee->parameter_count > xr_semantic_plan_parameter_count(plan) -
+                                      callee->parameter_begin)
+        return false;
+    const XrSemanticParameterRecord *first =
+        xr_semantic_plan_parameter(plan, callee->parameter_begin);
+    const XrSemanticParameterRecord *second =
+        expected_parameters == 2u
+            ? xr_semantic_plan_parameter(plan, callee->parameter_begin + 1u)
+            : NULL;
+    if (!first || first->function != operation->callable_function || first->ordinal != 0 ||
+        first->type != (kind == XR_TARGET_ARRAY_HOF_REDUCE ? result_element
+                                                            : source_element) ||
+        (second && (second->function != operation->callable_function ||
+                    second->ordinal != 1 || second->type != source_element)))
+        return false;
+    if (kind == XR_TARGET_ARRAY_HOF_FILTER) {
+        const XrSemanticTypeRecord *return_type =
+            xr_semantic_plan_type(plan, callee->return_type);
+        uint16_t rep = XR_MACHINE_REP_COUNT;
+        if (!return_type || classify_scalar_type(return_type, &rep) != XR_TARGET_SCALAR_VALUE ||
+            rep != XR_MACHINE_REP_I1)
+            return false;
+    } else if (callee->return_type != result_element) {
+        return false;
+    }
+    const XrSemanticTypeRecord *callback_type =
+        xr_semantic_plan_type(plan, rows[1].type);
+    if (!callback_type || callback_type->kind != XR_KIND_FUNCTION ||
+        callback_type->child_count != (uint32_t) expected_parameters + 1u ||
+        callback_type->child_begin > child_count ||
+        callback_type->child_count > child_count - callback_type->child_begin)
+        return false;
+    for (uint16_t i = 0; i < expected_parameters; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan, callee->parameter_begin + i);
+        if (!parameter || children[callback_type->child_begin + i] != parameter->type)
+            return false;
+    }
+    if (children[callback_type->child_begin + expected_parameters] != callee->return_type ||
+        rows[0].role != XR_SEM_OPERAND_RECEIVER || rows[0].parameter != -1 ||
+        rows[0].flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        rows[1].role != XR_SEM_OPERAND_ARGUMENT || rows[1].parameter != 0 ||
+        rows[1].flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        (kind == XR_TARGET_ARRAY_HOF_REDUCE &&
+         (rows[2].role != XR_SEM_OPERAND_ARGUMENT || rows[2].parameter != 1 ||
+          rows[2].flags != XR_SEM_OPERAND_CALL_CONTRACT)))
+        return false;
+    bool result_exact = kind == XR_TARGET_ARRAY_HOF_REDUCE
+                            ? operation->result_ownership ==
+                                      XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+                                  operation->return_provenance == XR_SEM_RETURN_NONE &&
+                                  operation->return_complete == 0
+                            : operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                                  operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                                  operation->return_complete == 1;
+    const XrSemanticOperationRecord *producer = NULL;
+    uint32_t uses = 0;
+    for (uint32_t i = 0; result_exact && i < xr_semantic_plan_operation_count(plan); i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (candidate && candidate->function == operation->function &&
+            candidate->result_value == rows[1].value) {
+            if (producer)
+                return false;
+            producer = candidate;
+        }
+    }
+    for (uint32_t i = 0; result_exact && i < operand_count; i++)
+        uses += operands[i].value == rows[1].value;
+    if (!result_exact || !producer || producer >= operation || uses != 1 ||
+        (producer->opcode != XI_CLOSURE_NEW &&
+         (producer->opcode != XI_STACK_ALLOC ||
+          producer->semantic_immediate != XI_CLOSURE_NEW)) ||
+        producer->callable_function != operation->callable_function ||
+        producer->result_type != rows[1].type)
+        return false;
+    if (target_kind)
+        *target_kind = kind;
+    if (receiver_storage)
+        *receiver_storage = source;
+    if (result_storage)
+        *result_storage = result;
+    if (receiver_value)
+        *receiver_value = rows[0].value;
+    if (callback_value)
+        *callback_value = rows[1].value;
+    if (initial_value)
+        *initial_value = kind == XR_TARGET_ARRAY_HOF_REDUCE
+                             ? rows[2].value
+                             : XR_SEMANTIC_INDEX_NONE;
     return true;
 }
 
@@ -4332,6 +4510,7 @@ static bool note_array_allocation_storage_value(
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(plan, semantic_operation);
     uint8_t array_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t hof_kind = XR_TARGET_ARRAY_HOF_NONE;
     if (!operation || operation->result_value >= analysis->total_values ||
         operation->result_type >= analysis->type_count ||
         operation->function >= xr_semantic_plan_function_count(plan) ||
@@ -4340,7 +4519,10 @@ static bool note_array_allocation_storage_value(
            target_array_storage_from_semantic(
                operation->array_element_storage, &array_storage)) ||
           semantic_array_intrinsic_is_exact(plan, operation, NULL,
-                                            &array_storage)))
+                                            &array_storage) ||
+          (semantic_array_hof_is_exact(plan, operation, &hof_kind, NULL,
+                                       &array_storage, NULL, NULL, NULL) &&
+           hof_kind != XR_TARGET_ARRAY_HOF_REDUCE)))
         return fail(error, error_size, "XR_TARGET_1001",
                     "array allocation storage authority is incomplete");
     if (analysis->type_rep_kinds[operation->result_type] != XR_MACHINE_REP_COUNT &&
@@ -4464,6 +4646,46 @@ static bool builder_add_array_intrinsic_storage(
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE;
+    return true;
+}
+
+static bool builder_add_array_hof_result_storage(
+    XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis,
+                                              error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values)
+            analysis.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        uint8_t kind = XR_TARGET_ARRAY_HOF_NONE;
+        if (!operation) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "semantic operation is missing");
+            break;
+        }
+        if (!semantic_array_hof_is_exact(builder->semantic_plan, operation,
+                                         &kind, NULL, NULL, NULL, NULL, NULL) ||
+            kind == XR_TARGET_ARRAY_HOF_REDUCE)
+            continue;
+        valid = note_array_allocation_storage_value(builder, &analysis, i,
+                                                    error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE;
     return true;
 }
 
@@ -7770,6 +7992,90 @@ static bool collect_array_fill_scalar_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_array_hof_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error,
+    size_t error_size) {
+    uint8_t kind = XR_TARGET_ARRAY_HOF_NONE;
+    uint8_t source_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t result_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    uint32_t callback = XR_SEMANTIC_INDEX_NONE;
+    uint32_t initial = XR_SEMANTIC_INDEX_NONE;
+    if (!semantic_array_hof_is_exact(
+            builder->semantic_plan, operation, &kind, &source_storage,
+            &result_storage, &receiver, &callback, &initial))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Array higher-order dispatch authority is incomplete");
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(builder->semantic_plan,
+                                  operation->callable_function);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = operation->callable_function,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = operation->operand_count,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = kind == XR_TARGET_ARRAY_HOF_REDUCE
+                                ? XR_TARGET_CALL_NONE
+                                : XR_TARGET_CALL_RETURN_OWNED,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_ARRAY_HOF,
+        .target_kind = XR_TARGET_CALL_TARGET_ARRAY_HOF,
+        .array_intrinsic_kind = XR_TARGET_ARRAY_INTRINSIC_NONE,
+        .array_element_storage = source_storage,
+        .array_hof_kind = kind,
+        .array_result_element_storage = result_storage,
+    };
+    uint32_t discriminator = ((uint32_t) kind << 16) |
+                             ((uint32_t) source_storage << 8) |
+                             result_storage;
+    if (!callee ||
+        !stable_identity_from_pair("xray-target-array-hof-v1", operation->id,
+                                   callee->id, discriminator, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Array higher-order call identity is incomplete");
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(builder->semantic_plan, &operand_count);
+    uint32_t call_intent = builder->call_intent_count;
+    for (uint16_t ordinal = 0; ordinal < operation->operand_count; ordinal++) {
+        uint32_t semantic_operand = operation->operand_begin + ordinal;
+        if (!operands || semantic_operand >= operand_count)
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "Array higher-order operand authority is incomplete");
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        const XrSemanticTypeRecord *type =
+            xr_semantic_plan_type(builder->semantic_plan, operand->type);
+        uint32_t expected_value = ordinal == 0 ? receiver
+                                  : ordinal == 1 ? callback
+                                                 : initial;
+        XrTargetCallArgumentIntent argument = {
+            .call_intent = call_intent,
+            .semantic_operand = semantic_operand,
+            .semantic_value = expected_value,
+            .caller_storage_value = expected_value,
+            .callee_parameter = XR_SEMANTIC_INDEX_NONE,
+            .ordinal = ordinal,
+            .mode = XR_TARGET_CALL_VALUE,
+            .ownership = ordinal == 0 ? XR_TARGET_CALL_BORROW
+                                      : XR_TARGET_CALL_CONSUME,
+            .transfer_mode = operand->transfer_mode,
+        };
+        if (!type || operand->value != expected_value ||
+            !stable_identity_from_pair("xray-target-array-hof-argument-v1",
+                                       operation->id, type->id, ordinal,
+                                       &argument.identity) ||
+            !append_call_argument_intent(builder, &argument, error, error_size))
+            return false;
+    }
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_string_byte_slice_view_call_intent(
     XrTargetPlanBuilder *builder, uint32_t operation_index,
     const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
@@ -8788,6 +9094,10 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_array_intrinsic_is_exact(plan, operation, NULL, NULL)) {
             valid = collect_array_intrinsic_call_intent(builder, i, operation,
                                                         error, error_size);
+        } else if (semantic_array_hof_is_exact(plan, operation, NULL, NULL, NULL,
+                                               NULL, NULL, NULL)) {
+            valid = collect_array_hof_call_intent(builder, i, operation,
+                                                  error, error_size);
         } else if (semantic_array_fill_scalar_is_exact(plan, operation, NULL,
                                                        NULL, NULL)) {
             valid = collect_array_fill_scalar_call_intent(
@@ -10947,6 +11257,9 @@ static bool materialize_calls_and_adapters(
             .error_mode = XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL,
             .array_intrinsic_kind = intent->array_intrinsic_kind,
             .array_element_storage = intent->array_element_storage,
+            .array_hof_kind = intent->array_hof_kind,
+            .array_result_element_storage =
+                intent->array_result_element_storage,
         };
         for (uint32_t ordinal = 0; ordinal < intent->argument_count; ordinal++) {
             const XrTargetCallArgumentIntent *argument_intent =
@@ -10965,8 +11278,11 @@ static bool materialize_calls_and_adapters(
                 intent->calling_convention ==
                     XR_TARGET_CALL_CONVENTION_ARRAY_FILL_SCALAR &&
                 intent->target_kind == XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR;
+            bool array_hof =
+                intent->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_HOF &&
+                intent->target_kind == XR_TARGET_CALL_TARGET_ARRAY_HOF;
             const XrSemanticParameterRecord *parameter =
-                array_intrinsic || array_fill
+                array_intrinsic || array_fill || array_hof
                 ? NULL
                 : xr_semantic_plan_parameter(callee_semantic,
                                              argument_intent->callee_parameter);
@@ -11031,7 +11347,7 @@ static bool materialize_calls_and_adapters(
                     XR_TARGET_OWNERSHIP_BORROWED &&
                 materialized->machine_reps[callee->memory_rep].ownership ==
                     XR_TARGET_OWNERSHIP_BORROWED;
-            if (array_intrinsic || array_fill) {
+            if (array_intrinsic || array_fill || array_hof) {
                 if (argument_intent->call_intent != i ||
                     argument_intent->ordinal != ordinal || !caller ||
                     argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE)
@@ -11743,6 +12059,7 @@ bool xr_target_plan_build_module_set(
         !builder_add_closure_storage(builder, error, error_size) ||
         !builder_add_array_allocation_storage(builder, error, error_size) ||
         !builder_add_array_intrinsic_storage(builder, error, error_size) ||
+        !builder_add_array_hof_result_storage(builder, error, error_size) ||
         !builder_add_direct_local_array_ref_argument_storage(
             builder, error, error_size) ||
         !builder_add_nullable_scalar_storage(builder, error, error_size) ||

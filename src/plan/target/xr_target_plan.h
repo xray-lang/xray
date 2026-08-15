@@ -67,6 +67,7 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE (UINT64_C(1) << 33)
 #define XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE (UINT64_C(1) << 34)
 #define XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION (UINT64_C(1) << 35)
+#define XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE (UINT64_C(1) << 36)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -135,7 +136,8 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE |                     \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE |          \
                  XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE |          \
-                 XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION))
+                 XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION |                  \
+                 XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -269,6 +271,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_RUNE_IS_WHITESPACE,
     XR_TARGET_CALL_CONVENTION_STRING_SLICE_RANGE,
     XR_TARGET_CALL_CONVENTION_ARRAY_FILL_SCALAR,
+    XR_TARGET_CALL_CONVENTION_ARRAY_HOF,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -317,7 +320,16 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_RUNE_IS_WHITESPACE,
     XR_TARGET_CALL_TARGET_STRING_SLICE_RANGE,
     XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR,
+    XR_TARGET_CALL_TARGET_ARRAY_HOF,
 } XrTargetCallTargetKind;
+
+typedef enum XrTargetArrayHofKind {
+    XR_TARGET_ARRAY_HOF_NONE = 0,
+    XR_TARGET_ARRAY_HOF_MAP,
+    XR_TARGET_ARRAY_HOF_FILTER,
+    XR_TARGET_ARRAY_HOF_REDUCE,
+    XR_TARGET_ARRAY_HOF_COUNT,
+} XrTargetArrayHofKind;
 
 typedef enum XrTargetArrayIntrinsicKind {
     XR_TARGET_ARRAY_INTRINSIC_NONE = 0,
@@ -636,6 +648,8 @@ typedef struct XrTargetCallRecord {
     uint8_t error_mode;
     uint8_t array_intrinsic_kind;
     uint8_t array_element_storage;
+    uint8_t array_hof_kind;
+    uint8_t array_result_element_storage;
     uint8_t reserved8[3];
     XrFingerprint fingerprint;
 } XrTargetCallRecord;

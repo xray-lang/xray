@@ -11,6 +11,7 @@
 #include "xaot_callable.h"
 #include "xaot_boundary.h"
 #include "xaot_struct_name.h"
+#include "refine/xr_aot_scalar_value.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../ir/xi_coro_analyze.h"
@@ -877,6 +878,99 @@ static bool callable_func_is_generated_generic_specialization(const XaotBundle *
     return false;
 }
 
+static const XiFunc *callable_array_hof_target_is_exact(
+    const CallableAnalysis *analysis, const XiFunc *owner,
+    const XiValue *value) {
+    const XaotBundle *bundle = analysis ? analysis->bundle : NULL;
+    const XrTargetPlan *target = bundle && owner
+        ? xaot_bundle_target_plan_for_func(bundle, owner) : NULL;
+    const XrSemanticPlan *semantic = target
+        ? xr_target_plan_semantic_plan(target) : NULL;
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    char error[192] = {0};
+    if (!analysis || !bundle || !owner || !value || !target || !semantic ||
+        !xr_target_plan_is_verified(target) ||
+        (xr_target_plan_completed_family_mask(target) &
+         XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE) == 0 ||
+        !xr_aot_scalar_semantic_value_id(target, owner, value,
+                                         &semantic_function, &semantic_value,
+                                         error, sizeof(error)))
+        return NULL;
+
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->function != semantic_function ||
+            candidate->result_value != semantic_value)
+            continue;
+        if (operation)
+            return NULL;
+        operation = candidate;
+        operation_index = i;
+    }
+    uint8_t expected_target_kind = XR_TARGET_ARRAY_HOF_NONE;
+    uint8_t expected_live_kind = XI_ARRAY_HOF_NONE;
+    if (operation && operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF) {
+        switch (operation->array_hof_kind) {
+            case XR_SEM_ARRAY_HOF_MAP:
+                expected_target_kind = XR_TARGET_ARRAY_HOF_MAP;
+                expected_live_kind = XI_ARRAY_HOF_MAP;
+                break;
+            case XR_SEM_ARRAY_HOF_FILTER:
+                expected_target_kind = XR_TARGET_ARRAY_HOF_FILTER;
+                expected_live_kind = XI_ARRAY_HOF_FILTER;
+                break;
+            case XR_SEM_ARRAY_HOF_REDUCE:
+                expected_target_kind = XR_TARGET_ARRAY_HOF_REDUCE;
+                expected_live_kind = XI_ARRAY_HOF_REDUCE;
+                break;
+            default: break;
+        }
+    }
+    if (!operation || expected_target_kind == XR_TARGET_ARRAY_HOF_NONE ||
+        value->array_hof_kind != expected_live_kind)
+        return NULL;
+
+    const XrTargetCallRecord *call = NULL;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (call)
+            return NULL;
+        call = &calls[i];
+    }
+    if (!call || call->caller_function != semantic_function ||
+        call->callee_function != operation->callable_function ||
+        call->result_value != semantic_value ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_ARRAY_HOF ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ARRAY_HOF ||
+        call->array_hof_kind != expected_target_kind ||
+        call->argument_count !=
+            (expected_target_kind == XR_TARGET_ARRAY_HOF_REDUCE ? 3u : 2u) ||
+        call->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->array_result_element_storage == XR_TARGET_ARRAY_STORAGE_NONE)
+        return NULL;
+
+    const XiFunc *callee = NULL;
+    for (uint32_t i = 0; i < bundle->nfunc_plans; i++) {
+        const XiFunc *candidate = bundle->func_plans[i].func;
+        if (!candidate || candidate->semantic_plan != semantic ||
+            candidate->semantic_plan_function_index != call->callee_function)
+            continue;
+        if (callee)
+            return NULL;
+        callee = candidate;
+    }
+    return callee;
+}
+
 static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
     const XaotBundle *bundle = a ? a->bundle : NULL;
     bool changed = false;
@@ -942,6 +1036,11 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
                      * function-value target sets below add the real edge. */
                     const XiFunc *direct = callable_resolve_direct_target(a->bundle, func, call);
                     if (direct && !callable_mark_reachable_func(a, direct, &changed))
+                        return false;
+                    const XiFunc *hof_target =
+                        callable_array_hof_target_is_exact(a, func, call);
+                    if (hof_target &&
+                        !callable_mark_reachable_func(a, hof_target, &changed))
                         return false;
                     if (call->op == XI_GEN_CALL) {
                         const CallableSet *targets = callable_generator_targets(a, func, call);

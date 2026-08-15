@@ -887,13 +887,107 @@ static bool array_builtin_forwards_storage(const XiValue *value) {
     return strcmp(name, "array_resize") == 0;
 }
 
-static bool array_method_is_hof_result(const XiValue *value) {
-    const char *method;
-
-    if (!value || value->op != XI_CALL_METHOD || !value->aux || value->nargs < 1)
+static bool array_hof_call_is_exact(XaotBundle *bundle,
+                                    const XiValue *value,
+                                    bool require_owned_array_result) {
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    const XrTargetValueRepRecord *binding = NULL;
+    if (!bundle || !function || !value ||
+        !prepare_target_value_binding(bundle, function, value, &binding) ||
+        !binding)
         return false;
-    method = (const char *) value->aux;
-    return strcmp(method, "map") == 0 || strcmp(method, "filter") == 0;
+    const XrTargetPlan *target =
+        xaot_bundle_target_plan_for_func(bundle, function);
+    const XrSemanticPlan *semantic = target
+        ? xr_target_plan_semantic_plan(target) : NULL;
+    if (!target || !semantic || !xr_target_plan_is_verified(target) ||
+        (xr_target_plan_completed_family_mask(target) &
+         XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE) == 0)
+        return false;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(semantic, i);
+        if (!candidate ||
+            candidate->function != function->semantic_plan_function_index ||
+            candidate->result_value != binding->semantic_value)
+            continue;
+        if (operation)
+            return false;
+        operation = candidate;
+        operation_index = i;
+    }
+    uint8_t expected_semantic = operation
+        ? operation->array_hof_kind : XR_SEM_ARRAY_HOF_NONE;
+    uint8_t expected_target = expected_semantic == XR_SEM_ARRAY_HOF_MAP
+        ? XR_TARGET_ARRAY_HOF_MAP
+        : expected_semantic == XR_SEM_ARRAY_HOF_FILTER
+              ? XR_TARGET_ARRAY_HOF_FILTER
+              : expected_semantic == XR_SEM_ARRAY_HOF_REDUCE
+                    ? XR_TARGET_ARRAY_HOF_REDUCE
+                    : XR_TARGET_ARRAY_HOF_NONE;
+    uint8_t expected_live = expected_target == XR_TARGET_ARRAY_HOF_MAP
+        ? XI_ARRAY_HOF_MAP
+        : expected_target == XR_TARGET_ARRAY_HOF_FILTER
+              ? XI_ARRAY_HOF_FILTER
+              : expected_target == XR_TARGET_ARRAY_HOF_REDUCE
+                    ? XI_ARRAY_HOF_REDUCE
+                    : XI_ARRAY_HOF_NONE;
+    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_HOF ||
+        expected_target == XR_TARGET_ARRAY_HOF_NONE ||
+        value->op != XI_CALL_METHOD || value->array_hof_kind != expected_live)
+        return false;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target, &call_count);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (call)
+            return false;
+        call = &calls[i];
+    }
+    uint16_t expected_arguments =
+        expected_target == XR_TARGET_ARRAY_HOF_REDUCE ? 3u : 2u;
+    if (!call || call->caller_function !=
+                     function->semantic_plan_function_index ||
+        call->callee_function != operation->callable_function ||
+        call->result_value != binding->semantic_value ||
+        call->argument_count != expected_arguments ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_ARRAY_HOF ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ARRAY_HOF ||
+        call->array_hof_kind != expected_target ||
+        call->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->array_result_element_storage == XR_TARGET_ARRAY_STORAGE_NONE)
+        return false;
+    if (!require_owned_array_result)
+        return true;
+    if (expected_target != XR_TARGET_ARRAY_HOF_MAP &&
+        expected_target != XR_TARGET_ARRAY_HOF_FILTER)
+        return false;
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target, binding->memory_rep);
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target, &slot_count);
+    const XrTargetSlotRecord *slot =
+        slots && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    return register_rep && memory_rep && slot &&
+           register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+           memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+           slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+           slot->ownership == XR_TARGET_OWNERSHIP_OWNED;
+}
+
+static bool array_hof_result_is_exact(XaotBundle *bundle,
+                                      const XiValue *value) {
+    return array_hof_call_is_exact(bundle, value, true);
 }
 
 static bool prepare_target_binding_has_machine_kind(
@@ -1052,7 +1146,7 @@ static bool derive_array_storage_plan(XaotBundle *bundle, const XiValue *array_v
                                          out_origin, (uint8_t) (depth + 1));
     }
 
-    if (array_method_is_hof_result(value)) {
+    if (array_hof_result_is_exact(bundle, value)) {
         if (out_elem)
             *out_elem = self_elem;
         if (out_origin)
@@ -1150,6 +1244,27 @@ static bool array_value_has_uncacheable_use(const XiValue *value) {
             switch ((XiOp) cur->op) {
                 case XI_INDEX_GET:
                 case XI_LOAD_FIELD:
+                case XI_LEN:
+                    break;
+                case XI_RETAIN:
+                case XI_RELEASE:
+                    /* Reference-count bookkeeping never replaces or mutates
+                     * the Array payload.  A verified cache remains live until
+                     * the ownership operation itself executes. */
+                    if (!value_arg_matches(cur, target, 0))
+                        break;
+                    if (cur->nargs != 1 || !same_value(cur->args[0], target))
+                        return true;
+                    break;
+                case XI_ERR_CHECK:
+                    /* Cleanup operands are consumed only on the cold error
+                     * edge.  They release the owner but do not mutate its
+                     * element storage before any cached access. */
+                    for (uint16_t arg = 0; arg < cur->nargs; arg++) {
+                        if (same_value(cur->args[arg], target) &&
+                            arg < XI_ERR_CHECK_CLEANUP_ARG_BASE)
+                            return true;
+                    }
                     break;
                 case XI_INDEX_SET:
                 case XI_STORE_FIELD:
@@ -1695,7 +1810,8 @@ static bool prepare_array_fill_loop_match(const XaotBundle *bundle, const XiFunc
     return true;
 }
 
-static bool prepare_array_value_mutates_origin_directly(const XiValue *value,
+static bool prepare_array_value_mutates_origin_directly(XaotBundle *bundle,
+                                                        const XiValue *value,
                                                         const XiValue *origin) {
     if (!value || !origin)
         return false;
@@ -1704,9 +1820,7 @@ static bool prepare_array_value_mutates_origin_directly(const XiValue *value,
         return true;
     if (value->op == XI_CALL_METHOD && value->nargs >= 1 &&
         prepare_array_single_origin(value->args[0], 0) == origin) {
-        const char *method = (const char *) value->aux;
-        if (method && (strcmp(method, "map") == 0 || strcmp(method, "filter") == 0 ||
-                       strcmp(method, "reduce") == 0))
+        if (array_hof_call_is_exact(bundle, value, false))
             return false;
         if (value->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM))
             return true;
@@ -1714,7 +1828,9 @@ static bool prepare_array_value_mutates_origin_directly(const XiValue *value,
     return false;
 }
 
-static bool prepare_array_origin_has_only_fill_mutation(const XiFunc *func, const XiValue *origin,
+static bool prepare_array_origin_has_only_fill_mutation(XaotBundle *bundle,
+                                                        const XiFunc *func,
+                                                        const XiValue *origin,
                                                         const XiValue *fill_push) {
     if (!func || !origin || !fill_push)
         return false;
@@ -1726,7 +1842,8 @@ static bool prepare_array_origin_has_only_fill_mutation(const XiFunc *func, cons
             const XiValue *value = blk->values[vi];
             if (value == fill_push)
                 continue;
-            if (prepare_array_value_mutates_origin_directly(value, origin))
+            if (prepare_array_value_mutates_origin_directly(bundle, value,
+                                                            origin))
                 return false;
         }
     }
@@ -1757,7 +1874,8 @@ static bool prepare_array_unique_fill_loop_for_origin(const XaotBundle *bundle, 
             have = true;
         }
     }
-    if (!have || !prepare_array_origin_has_only_fill_mutation(func, origin, found.push))
+    if (!have || !prepare_array_origin_has_only_fill_mutation(
+                     bundle, func, origin, found.push))
         return false;
     if (out)
         *out = found;
@@ -3418,8 +3536,108 @@ static bool xaot_closure_target_can_be_direct_symbol(const XiFunc *target) {
            !plan->is_coroutine;
 }
 
-static bool xaot_closure_value_uses_direct_symbol(const XiFunc *owner, const XiValue *value,
-                                                  const XiFunc *target, int depth) {
+static bool xaot_array_hof_callback_is_exact(
+    const XaotBundle *bundle, const XiFunc *owner, const XiValue *call_value,
+    const XiValue *callback, const XiFunc *callback_target) {
+    const XrTargetPlan *target = bundle && owner
+        ? xaot_bundle_target_plan_for_func(bundle, owner) : NULL;
+    const XrSemanticPlan *semantic = target
+        ? xr_target_plan_semantic_plan(target) : NULL;
+    uint32_t call_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t call_semantic_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t callback_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t callback_semantic_value = XR_SEMANTIC_INDEX_NONE;
+    char error[192] = {0};
+    if (!bundle || !owner || !call_value || !callback || !callback_target ||
+        !target || !semantic || !xr_target_plan_is_verified(target) ||
+        (xr_target_plan_completed_family_mask(target) &
+         XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE) == 0 ||
+        !xr_aot_scalar_semantic_value_id(
+            target, owner, call_value, &call_function, &call_semantic_value,
+            error, sizeof(error)) ||
+        !xr_aot_scalar_semantic_value_id(
+            target, owner, callback, &callback_function,
+            &callback_semantic_value, error, sizeof(error)) ||
+        call_function != callback_function ||
+        callback_target->semantic_plan != semantic ||
+        callback_target->semantic_plan_function_index ==
+            XR_SEMANTIC_INDEX_NONE)
+        return false;
+
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->function != call_function ||
+            candidate->result_value != call_semantic_value)
+            continue;
+        if (operation)
+            return false;
+        operation = candidate;
+        operation_index = i;
+    }
+    uint8_t expected_target_kind = XR_TARGET_ARRAY_HOF_NONE;
+    uint8_t expected_live_kind = XI_ARRAY_HOF_NONE;
+    if (operation && operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF) {
+        switch (operation->array_hof_kind) {
+            case XR_SEM_ARRAY_HOF_MAP:
+                expected_target_kind = XR_TARGET_ARRAY_HOF_MAP;
+                expected_live_kind = XI_ARRAY_HOF_MAP;
+                break;
+            case XR_SEM_ARRAY_HOF_FILTER:
+                expected_target_kind = XR_TARGET_ARRAY_HOF_FILTER;
+                expected_live_kind = XI_ARRAY_HOF_FILTER;
+                break;
+            case XR_SEM_ARRAY_HOF_REDUCE:
+                expected_target_kind = XR_TARGET_ARRAY_HOF_REDUCE;
+                expected_live_kind = XI_ARRAY_HOF_REDUCE;
+                break;
+            default: break;
+        }
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    uint16_t expected_operands =
+        expected_target_kind == XR_TARGET_ARRAY_HOF_REDUCE ? 3u : 2u;
+    if (!operation || expected_target_kind == XR_TARGET_ARRAY_HOF_NONE ||
+        call_value->array_hof_kind != expected_live_kind ||
+        operation->callable_function !=
+            callback_target->semantic_plan_function_index ||
+        operation->operand_count != expected_operands || !operands ||
+        operation->operand_begin > operand_count ||
+        expected_operands > operand_count - operation->operand_begin ||
+        operands[operation->operand_begin + 1u].value !=
+            callback_semantic_value)
+        return false;
+
+    const XrTargetCallRecord *call = NULL;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (call)
+            return false;
+        call = &calls[i];
+    }
+    return call && call->caller_function == call_function &&
+           call->callee_function == operation->callable_function &&
+           call->result_value == call_semantic_value &&
+           call->argument_count == expected_operands &&
+           call->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_HOF &&
+           call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_HOF &&
+           call->array_hof_kind == expected_target_kind &&
+           call->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE &&
+           call->array_result_element_storage != XR_TARGET_ARRAY_STORAGE_NONE;
+}
+
+static bool xaot_closure_value_uses_direct_symbol(
+    const XaotBundle *bundle, const XiFunc *owner, const XiValue *value,
+    const XiFunc *target, int depth) {
     if (!owner || !value || !target || depth > 8)
         return false;
     for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
@@ -3438,13 +3656,20 @@ static bool xaot_closure_value_uses_direct_symbol(const XiFunc *owner, const XiV
                         if (ai != 0)
                             return false;
                         break;
+                    case XI_CALL_METHOD:
+                        if (ai != 1 ||
+                            !xaot_array_hof_callback_is_exact(
+                                bundle, owner, user, value, target))
+                            return false;
+                        break;
                     case XI_BOX:
                     case XI_UNBOX:
                     case XI_COPY:
                     case XI_SOURCE_MOVE:
                     case XI_OWNER_FORWARD:
                         if (ai != 0 ||
-                            !xaot_closure_value_uses_direct_symbol(owner, user, target, depth + 1))
+                            !xaot_closure_value_uses_direct_symbol(
+                                bundle, owner, user, target, depth + 1))
                             return false;
                         break;
                     case XI_RETAIN:
@@ -3461,8 +3686,9 @@ static bool xaot_closure_value_uses_direct_symbol(const XiFunc *owner, const XiV
     return true;
 }
 
-XR_FUNC bool xaot_prepare_closure_plan_for_value(const XiFunc *func, const XiValue *value,
-                                                 XaotClosurePlan *out) {
+XR_FUNC bool xaot_prepare_closure_plan_for_value(
+    const XaotBundle *bundle, const XiFunc *func, const XiValue *value,
+    XaotClosurePlan *out) {
     bool stack_closure = false;
     const XiFunc *target;
 
@@ -3503,7 +3729,8 @@ XR_FUNC bool xaot_prepare_closure_plan_for_value(const XiFunc *func, const XiVal
 
     out->evidence |= XAOT_CLOSURE_EV_CAPTURE_ARITY;
     if (xaot_closure_target_can_be_direct_symbol(target)) {
-        if (xaot_closure_value_uses_direct_symbol(func, value, target, 0)) {
+        if (xaot_closure_value_uses_direct_symbol(
+                bundle, func, value, target, 0)) {
             out->representation = XAOT_CLOSURE_DIRECT_SYMBOL;
             out->evidence &= ~XAOT_CLOSURE_EV_NOESCAPE_STACK;
             out->evidence |= XAOT_CLOSURE_EV_DIRECT_SYMBOL;
@@ -3523,7 +3750,8 @@ static bool prepare_func_closure_plans(XaotBundle *bundle, const XiFunc *func) {
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XaotClosurePlan derived;
             const XiValue *value = blk->values[vi];
-            if (!xaot_prepare_closure_plan_for_value(func, value, &derived))
+            if (!xaot_prepare_closure_plan_for_value(bundle, func, value,
+                                                     &derived))
                 continue;
             if (!xaot_bundle_add_closure_plan(bundle, func, value, derived.target_func,
                                               derived.capture_count, derived.representation,
@@ -3933,7 +4161,8 @@ static bool prepare_array_cache_value(XaotBundle *bundle, const XiFunc *func,
 
     if (array_value_is_cacheable_view(target)) {
         flags |= XAOT_ARRAY_CACHE_READ | XAOT_ARRAY_CACHE_VIEW;
-    } else if (array_method_is_hof_result(target) && !array_value_has_uncacheable_use(target)) {
+    } else if (array_hof_result_is_exact(bundle, target) &&
+               !array_value_has_uncacheable_use(target)) {
         flags |= XAOT_ARRAY_CACHE_READ | XAOT_ARRAY_CACHE_FRESH_RESULT;
         if ((storage->flags & XAOT_ARRAY_STORAGE_MUTABLE) != 0)
             flags |= XAOT_ARRAY_CACHE_MUTABLE;

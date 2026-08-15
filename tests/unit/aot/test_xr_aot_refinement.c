@@ -330,6 +330,57 @@ static XrType direct_local_int_array = {
     .container = {.element_type = &scalar_int},
 };
 
+static XrFunctionParam array_hof_unary_int_params[] = {
+    {.type = &scalar_int, .mode = XR_PARAM_READ},
+};
+
+static XrFunctionParam array_hof_reduce_params[] = {
+    {.type = &scalar_int, .mode = XR_PARAM_READ},
+    {.type = &scalar_int, .mode = XR_PARAM_READ},
+};
+
+static XrType array_hof_map_callback = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 15,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function = {
+        .params = array_hof_unary_int_params,
+        .param_count = 1,
+        .min_params = 1,
+        .return_type = &scalar_int,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
+};
+
+static XrType array_hof_filter_callback = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 16,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function = {
+        .params = array_hof_unary_int_params,
+        .param_count = 1,
+        .min_params = 1,
+        .return_type = &scalar_bool,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
+};
+
+static XrType array_hof_reduce_callback = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 17,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function = {
+        .params = array_hof_reduce_params,
+        .param_count = 2,
+        .min_params = 2,
+        .return_type = &scalar_int,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
+};
+
 static XrType *task_unit_arguments[] = {&scalar_unit};
 
 static XrType task_unit = {
@@ -4063,6 +4114,262 @@ static void test_array_fill_scalar_authority_is_exact_and_fail_closed(void) {
     xi_func_free(function);
 }
 
+static XrTargetPlan *build_array_hof_refinement_fixture(
+    uint8_t kind, XiFunc **out_function, XrTargetProfile **out_profile) {
+    bool reduce = kind == XR_TARGET_ARRAY_HOF_REDUCE;
+    bool filter = kind == XR_TARGET_ARRAY_HOF_FILTER;
+    XrType *callback_type = reduce ? &array_hof_reduce_callback
+                            : filter ? &array_hof_filter_callback
+                                     : &array_hof_map_callback;
+    XrType *callback_result = filter ? &scalar_bool : &scalar_int;
+    XiFunc *root = xi_func_new(reduce ? "array_hof_reduce_refinement"
+                                      : filter ? "array_hof_filter_refinement"
+                                               : "array_hof_map_refinement",
+                               &scalar_int);
+    XiFunc *callback = xi_func_new("array_hof_refinement_callback",
+                                   callback_result);
+    REQUIRE(root && callback);
+    XiBlock *entry = xi_block_new(root);
+    XiBlock *callback_entry = xi_block_new(callback);
+    REQUIRE(entry && callback_entry);
+    callback->nparams = callback->min_params = reduce ? 2 : 1;
+    callback->params = (XiValue **) xr_calloc(
+        callback->nparams, sizeof(*callback->params));
+    REQUIRE(callback->params != NULL);
+    for (uint16_t i = 0; i < callback->nparams; i++) {
+        callback->params[i] =
+            xi_param(callback, callback_entry, i, &scalar_int);
+        REQUIRE(callback->params[i] != NULL);
+    }
+    if (filter) {
+        XiValue *accepted =
+            xi_const_bool(callback, callback_entry, true, &scalar_bool);
+        REQUIRE(accepted != NULL);
+        xi_block_set_return(callback_entry, accepted);
+    } else if (reduce) {
+        XiValue *sum = xi_value_new(callback, callback_entry, XI_ADD,
+                                    &scalar_int, 2);
+        REQUIRE(sum != NULL);
+        sum->args[0] = callback->params[0];
+        sum->args[1] = callback->params[1];
+        xi_block_set_return(callback_entry, sum);
+    } else {
+        xi_block_set_return(callback_entry, callback->params[0]);
+    }
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = callback;
+    root->nchildren = root->children_cap = 1;
+    callback->parent_func = root;
+
+    XiValue *capacity = xi_const_int(root, entry, 4, &scalar_int);
+    XiValue *array = xi_value_new(root, entry, XI_ARRAY_NEW,
+                                  &direct_local_int_array, 1);
+    XiValue *closure =
+        xi_value_new(root, entry, XI_CLOSURE_NEW, callback_type, 0);
+    XiValue *initial =
+        reduce ? xi_const_int(root, entry, 0, &scalar_int) : NULL;
+    XiValue *hof = xi_value_new(root, entry, XI_CALL_METHOD,
+                                reduce ? &scalar_int
+                                       : &direct_local_int_array,
+                                reduce ? 3 : 2);
+    REQUIRE(capacity && array && closure && hof && (!reduce || initial));
+    array->args[0] = capacity;
+    array->array_element_storage = XR_ELEM_I64;
+    closure->aux = callback;
+    hof->args[0] = array;
+    hof->args[1] = closure;
+    if (reduce)
+        hof->args[2] = initial;
+    hof->aux = (void *) (reduce ? "reduce" : filter ? "filter" : "map");
+    hof->array_hof_kind = reduce ? XI_ARRAY_HOF_REDUCE
+                          : filter ? XI_ARRAY_HOF_FILTER
+                                   : XI_ARRAY_HOF_MAP;
+    hof->array_element_storage = XR_ELEM_I64;
+    hof->array_result_element_storage = XR_ELEM_I64;
+    XiValue *nonreduce_result = NULL;
+    if (!reduce) {
+        hof->call_return_ownership = (XiReturnOwnership) {
+            .kind = XI_RETURN_OWNERSHIP_OWNED,
+            .param_index = -1,
+            .complete = true,
+        };
+        XiValue *length =
+            xi_value_new(root, entry, XI_LEN, &scalar_int, 1);
+        XiValue *index = xi_const_int(root, entry, 0, &scalar_int);
+        XiValue *element =
+            xi_value_new(root, entry, XI_INDEX_GET, &scalar_int, 2);
+        nonreduce_result =
+            xi_value_new(root, entry, XI_ADD, &scalar_int, 2);
+        XiValue *release_result =
+            xi_value_new(root, entry, XI_RELEASE, &scalar_unit, 1);
+        REQUIRE(length && index && element && nonreduce_result &&
+                release_result);
+        length->args[0] = hof;
+        element->args[0] = hof;
+        element->args[1] = index;
+        nonreduce_result->args[0] = length;
+        nonreduce_result->args[1] = element;
+        release_result->args[0] = hof;
+    }
+    XiValue *release_array =
+        xi_value_new(root, entry, XI_RELEASE, &scalar_unit, 1);
+    REQUIRE(release_array != NULL);
+    release_array->args[0] = array;
+    if (reduce) {
+        xi_block_set_return(entry, hof);
+    } else {
+        xi_block_set_return(entry, nonreduce_result);
+    }
+    root->stage = callback->stage = XI_STAGE_OPTIMIZED;
+    XrTargetPlan *target = build_attached_target_plan(root, out_profile);
+    *out_function = root;
+    return target;
+}
+
+static void expect_array_hof_mutation_refused(
+    XrTargetPlan *target, const XiRepPolicy *policy) {
+    XrAotRefinementPlan *refinement = NULL;
+    XrAotRefinementDiagnostic diag = {0};
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, policy, &refinement, &diag));
+    REQUIRE(refinement == NULL &&
+            diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
+}
+
+static void test_array_hof_refinement_is_exact_and_fail_closed(void) {
+    for (uint8_t kind = XR_TARGET_ARRAY_HOF_MAP;
+         kind <= XR_TARGET_ARRAY_HOF_REDUCE; kind++) {
+        XiFunc *function = NULL;
+        XrTargetProfile *profile = NULL;
+        XrTargetPlan *target = build_array_hof_refinement_fixture(
+            kind, &function, &profile);
+        const XrSemanticPlan *semantic =
+            xr_target_plan_semantic_plan(target);
+        uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *operation = NULL;
+        for (uint32_t i = 0;
+             i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+            const XrSemanticOperationRecord *candidate =
+                xr_semantic_plan_operation(semantic, i);
+            if (candidate && candidate->intrinsic_kind ==
+                                 XR_SEM_INTRINSIC_ARRAY_HOF) {
+                REQUIRE(operation == NULL);
+                operation = candidate;
+                operation_index = i;
+            }
+        }
+        REQUIRE(operation && operation_index != XR_SEMANTIC_INDEX_NONE);
+        uint32_t call_index = XR_SEMANTIC_INDEX_NONE;
+        for (uint32_t i = 0; i < target->calls_count; i++) {
+            if (target->calls[i].semantic_operation != operation_index)
+                continue;
+            REQUIRE(call_index == XR_SEMANTIC_INDEX_NONE);
+            call_index = i;
+        }
+        REQUIRE(call_index != XR_SEMANTIC_INDEX_NONE);
+        XrTargetCallRecord *call = &target->calls[call_index];
+        REQUIRE(call->array_hof_kind == kind &&
+                call->calling_convention ==
+                    XR_TARGET_CALL_CONVENTION_ARRAY_HOF &&
+                call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_HOF &&
+                call->argument_count ==
+                    (kind == XR_TARGET_ARRAY_HOF_REDUCE ? 3 : 2));
+        XrTargetCallArgumentRecord *callback_argument =
+            &target->call_arguments[call->argument_begin + 1u];
+        const XrTargetValueRepRecord *callback_binding =
+            xr_target_plan_value_rep(target,
+                                     callback_argument->semantic_value);
+        const XrTargetValueRepRecord *result_binding =
+            xr_target_plan_value_rep(target, operation->result_value);
+        REQUIRE(callback_binding && result_binding &&
+                target->machine_reps[callback_binding->register_rep].kind ==
+                    XR_MACHINE_REP_DYN_VALUE &&
+                target->slots[callback_binding->slot].root_kind ==
+                    XR_TARGET_ROOT_DYNAMIC &&
+                target->slots[callback_binding->slot].ownership ==
+                    XR_TARGET_OWNERSHIP_OWNED);
+        if (kind == XR_TARGET_ARRAY_HOF_REDUCE) {
+            REQUIRE(target->machine_reps[result_binding->register_rep].kind ==
+                        XR_MACHINE_REP_I64 &&
+                    target->slots[result_binding->slot].root_kind ==
+                        XR_TARGET_ROOT_NONE &&
+                    target->slots[result_binding->slot].ownership ==
+                        XR_TARGET_OWNERSHIP_TRIVIAL);
+        } else {
+            REQUIRE(target->machine_reps[result_binding->register_rep].kind ==
+                        XR_MACHINE_REP_DYN_VALUE &&
+                    target->slots[result_binding->slot].root_kind ==
+                        XR_TARGET_ROOT_DYNAMIC &&
+                    target->slots[result_binding->slot].ownership ==
+                        XR_TARGET_OWNERSHIP_OWNED);
+        }
+        XiRepPolicy policy = xi_rep_policy_native_boundary();
+        XrAotRefinementDiagnostic diag = {0};
+        XrAotRefinementPlan *refinement = NULL;
+        REQUIRE(xr_aot_representation_refinement_build_from_authority(
+            target, &policy, &refinement, &diag));
+        REQUIRE(refinement &&
+                xr_aot_refinement_plan_view(refinement).record_count == 0);
+        xr_aot_refinement_plan_free(refinement);
+
+        if (kind == XR_TARGET_ARRAY_HOF_MAP) {
+            char error[512] = {0};
+            XrFingerprint saved_plan_fingerprint = target->fingerprint;
+            XrTargetCallRecord saved_call = *call;
+            call->callee_function = XR_SEMANTIC_INDEX_NONE;
+            xr_target_call_compute_fingerprint(target, call_index,
+                                               &call->fingerprint);
+            xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+            expect_array_hof_mutation_refused(target, &policy);
+            *call = saved_call;
+            target->fingerprint = saved_plan_fingerprint;
+
+            XrTargetCallArgumentRecord saved_argument = *callback_argument;
+            callback_argument->semantic_value =
+                target->call_arguments[call->argument_begin].semantic_value;
+            xr_target_call_compute_fingerprint(target, call_index,
+                                               &call->fingerprint);
+            xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+            expect_array_hof_mutation_refused(target, &policy);
+            *callback_argument = saved_argument;
+            call->fingerprint = saved_call.fingerprint;
+            target->fingerprint = saved_plan_fingerprint;
+
+            XrTargetSlotRecord saved_slot =
+                target->slots[result_binding->slot];
+            target->slots[result_binding->slot].root_kind =
+                XR_TARGET_ROOT_NONE;
+            xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+            expect_array_hof_mutation_refused(target, &policy);
+            target->slots[result_binding->slot] = saved_slot;
+            target->fingerprint = saved_plan_fingerprint;
+
+            uint32_t layout_index = XR_SEMANTIC_INDEX_NONE;
+            for (uint32_t i = 0; i < target->layouts_count; i++)
+                if (target->layouts[i].semantic_type ==
+                    operation->result_type)
+                    layout_index = i;
+            REQUIRE(layout_index != XR_SEMANTIC_INDEX_NONE);
+            XrTargetLayoutRecord saved_layout =
+                target->layouts[layout_index];
+            target->layouts[layout_index].array_element_storage =
+                XR_TARGET_ARRAY_STORAGE_U8;
+            xr_target_layout_compute_fingerprint(
+                target, layout_index,
+                &target->layouts[layout_index].fingerprint);
+            xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+            expect_array_hof_mutation_refused(target, &policy);
+            target->layouts[layout_index] = saved_layout;
+            target->fingerprint = saved_plan_fingerprint;
+            REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
+        }
+        xr_target_plan_free(target);
+        xr_target_profile_free(profile);
+        xi_func_free(function);
+    }
+}
+
 static void test_string_concat_cleanup_materialization_is_exact(void) {
     XiFunc *function =
         xi_func_new("string_concat_cleanup_materialization", &scalar_int);
@@ -4139,6 +4446,7 @@ int main(void) {
     test_scalar_array_allocation_storage_is_exact_and_fail_closed();
     test_array_intrinsic_index_storage_is_exact_and_fail_closed();
     test_array_fill_scalar_authority_is_exact_and_fail_closed();
+    test_array_hof_refinement_is_exact_and_fail_closed();
     test_string_concat_cleanup_materialization_is_exact();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     printf("TargetPlan-native AOT refinement tests passed\n");
