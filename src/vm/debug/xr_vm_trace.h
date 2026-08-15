@@ -19,8 +19,15 @@
 #include "../../plan/target/xr_target_plan.h"
 #include "../../../include/xray_runtime_generation.h"
 
-#define XR_VM_TRACE_SCHEMA_VERSION UINT32_C(1)
+#define XR_VM_TRACE_SCHEMA_VERSION UINT32_C(2)
 #define XR_VM_TRACE_ID_NONE UINT32_MAX
+
+typedef enum XrVmDebugFactAvailability {
+    XR_VM_DEBUG_FACT_AVAILABLE = 0,
+    XR_VM_DEBUG_FACT_NOT_APPLICABLE,
+    XR_VM_DEBUG_FACT_CONTEXT_UNAVAILABLE,
+    XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE,
+} XrVmDebugFactAvailability;
 
 typedef enum XrVmTraceEventKind {
     XR_VM_TRACE_FRAME_ENTER = 0,
@@ -52,6 +59,22 @@ typedef struct XrVmTraceEvent {
     uint32_t related_frame;
     uint32_t frame_depth;
     uint32_t status;
+    uint32_t debug_fact;
+    uint32_t semantic_operation;
+    uint32_t coroutine_state;
+    uint32_t source_start_line;
+    uint32_t source_start_column;
+    uint32_t source_end_line;
+    uint32_t source_end_column;
+    uint8_t source_span_availability;
+    uint8_t owner_availability;
+    uint8_t layout_availability;
+    uint8_t coroutine_availability;
+    XrStableId semantic_operation_identity;
+    XrStableId source_span_identity;
+    XrStableId owner_identity;
+    XrStableId coroutine_state_identity;
+    XrFingerprint layout_fingerprint;
 } XrVmTraceEvent;
 
 typedef bool (*XrVmTraceEmitFn)(void *context,
@@ -101,6 +124,8 @@ XR_FUNC bool xr_typed_debug_emit(
     const XrFingerprint *target_plan_fingerprint,
     const XrModuleGenerationIdentity *generation_identity,
     uint64_t ordinal, XrVmTraceEvent *event);
+XR_FUNC bool xr_typed_debug_attach_event_facts(
+    const XrTargetPlan *verified_plan, XrVmTraceEvent *event);
 
 XR_FUNC bool xr_typed_trace_buffer_init(XrVmTraceBuffer *buffer,
                                      XrVmTraceEvent *storage,

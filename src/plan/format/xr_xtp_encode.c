@@ -69,6 +69,7 @@ static bool fill_section_inputs(const XrTargetPlan *plan, XrXtpSectionInput sect
     XR_XTP_FILL_SECTION(18, CAPABILITIES, capabilities);
     XR_XTP_FILL_SECTION(19, COROUTINES, coroutines);
     XR_XTP_FILL_SECTION(20, ENTRY_EXPECTATIONS, entry_expectations);
+    XR_XTP_FILL_SECTION(21, DEBUG_FACTS, debug_facts);
 #undef XR_XTP_FILL_SECTION
     sections[11].flags = XR_XTP_SECTION_FLAG_COMPACT;
     return true;

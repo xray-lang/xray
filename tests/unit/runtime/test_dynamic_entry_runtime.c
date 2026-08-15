@@ -176,12 +176,20 @@ static XrTargetPlan *clone_with_step_loop(
     uint32_t instruction_count = 0;
     const XrTargetInstructionRecord *source_rows =
         xr_target_plan_instructions(source, &instruction_count);
+    uint32_t source_debug_count = 0;
+    const XrTargetDebugFactRecord *source_debug_facts =
+        xr_target_plan_debug_facts(source, &source_debug_count);
     uint32_t inserted = XR_TARGET_INSTRUCTION_SLOT_NONE;
     uint32_t condition_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    uint32_t condition_instruction = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    REQUIRE(source_rows && source_debug_facts &&
+            source_debug_count == instruction_count);
     for (uint32_t i = 0; i < instruction_count; i++) {
         if (source_rows[i].function == function &&
-            source_rows[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64)
+            source_rows[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64) {
             condition_slot = source_rows[i].result_slot;
+            condition_instruction = i;
+        }
         if (source_rows[i].function == function &&
             source_rows[i].opcode == XR_TARGET_INSTRUCTION_RETURN_I64) {
             inserted = i;
@@ -189,11 +197,15 @@ static XrTargetPlan *clone_with_step_loop(
         }
     }
     REQUIRE(inserted != XR_TARGET_INSTRUCTION_SLOT_NONE &&
-            condition_slot != XR_TARGET_INSTRUCTION_SLOT_NONE);
+            condition_slot != XR_TARGET_INSTRUCTION_SLOT_NONE &&
+            condition_instruction != XR_TARGET_INSTRUCTION_SLOT_NONE);
     XrTargetInstructionRecord *rows =
         (XrTargetInstructionRecord *) xr_calloc(
             instruction_count + 2u, sizeof(*rows));
-    REQUIRE(rows);
+    XrTargetDebugFactRecord *debug_facts =
+        (XrTargetDebugFactRecord *) xr_calloc(
+            instruction_count + 2u, sizeof(*debug_facts));
+    REQUIRE(rows && debug_facts);
     for (uint32_t i = 0, out = 0; i < instruction_count + 2u; i++) {
         if (i == inserted) {
             rows[i] = (XrTargetInstructionRecord) {
@@ -207,6 +219,10 @@ static XrTargetPlan *clone_with_step_loop(
                 .opcode = XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64,
                 .operand_count = 1,
             };
+            debug_facts[i] = source_debug_facts[condition_instruction];
+            debug_facts[i].id = i;
+            debug_facts[i].instruction = i;
+            debug_facts[i].function = function;
             continue;
         }
         if (i == inserted + 1u) {
@@ -220,12 +236,23 @@ static XrTargetPlan *clone_with_step_loop(
                     XR_TARGET_INSTRUCTION_TARGET_PACK(i, 0),
                 .opcode = XR_TARGET_INSTRUCTION_JUMP,
             };
+            debug_facts[i] = (XrTargetDebugFactRecord) {
+                .id = i,
+                .instruction = i,
+                .function = function,
+                .semantic_operation = XR_SEMANTIC_INDEX_NONE,
+                .coroutine_state = XR_SEMANTIC_INDEX_NONE,
+            };
             continue;
         }
-        rows[i] = source_rows[out++];
+        uint32_t source_index = out++;
+        rows[i] = source_rows[source_index];
         rows[i].id = i;
         rows[i].immediate_bits =
             shifted_target_immediate(&rows[i], inserted, 2u);
+        debug_facts[i] = source_debug_facts[source_index];
+        debug_facts[i].id = i;
+        debug_facts[i].instruction = i;
     }
     XrTargetPlanDraft draft = {
         .semantic_plan = source->semantic_plan,
@@ -259,6 +286,8 @@ static XrTargetPlan *clone_with_step_loop(
 #undef COPY_TARGET_TABLE
     draft.instructions = rows;
     draft.instructions_count = instruction_count + 2u;
+    draft.debug_facts = debug_facts;
+    draft.debug_facts_count = instruction_count + 2u;
     XrTargetPlan *loop = NULL;
     char diagnostic[512] = {0};
     bool frozen = xr_target_plan_freeze(
@@ -266,6 +295,7 @@ static XrTargetPlan *clone_with_step_loop(
     if (!frozen)
         fprintf(stderr, "dynamic loop plan failed: %s\n", diagnostic);
     REQUIRE(frozen);
+    xr_free(debug_facts);
     xr_free(rows);
     return loop;
 }

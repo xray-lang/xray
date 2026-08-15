@@ -39,6 +39,7 @@
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
+#include "../ownership/xr_ownership_certificate.h"
 #include "../../runtime/value/xtype.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_semantic_array_member_shape.h"
@@ -246,6 +247,8 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t coroutine_count;
     XrTargetEntryExpectationRecord *entry_expectations;
     uint32_t entry_expectation_count;
+    XrTargetDebugFactRecord *debug_facts;
+    uint32_t debug_fact_count;
 } XrTargetMaterializedPlan;
 
 typedef struct XrTargetPlanBuilder XrTargetPlanBuilder;
@@ -351,6 +354,7 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     xr_free(materialized->capabilities);
     xr_free(materialized->coroutines);
     xr_free(materialized->entry_expectations);
+    xr_free(materialized->debug_facts);
     memset(materialized, 0, sizeof(*materialized));
 }
 
@@ -11365,6 +11369,165 @@ static bool materialize_coroutine_state_calls(
                          "coroutine state-call facts are not canonical");
 }
 
+static const XrSemanticEntityRecord *find_semantic_entity(
+    const XrSemanticPlan *semantic, uint16_t kind, uint8_t subject_kind,
+    uint32_t subject) {
+    const XrSemanticEntityRecord *match = NULL;
+    uint32_t count = (uint32_t) xr_semantic_plan_entity_count(semantic);
+    for (uint32_t i = 0; i < count; i++) {
+        const XrSemanticEntityRecord *candidate =
+            xr_semantic_plan_entity(semantic, i);
+        if (!candidate || candidate->kind != kind ||
+            candidate->subject_kind != subject_kind ||
+            candidate->subject != subject)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static uint32_t debug_fact_operation_for_instruction(
+    const XrTargetMaterializedPlan *materialized,
+    const XrTargetInstructionRecord *instruction) {
+    if (!materialized || !instruction)
+        return XR_SEMANTIC_INDEX_NONE;
+    if (instruction->result_slot < materialized->slot_count) {
+        const XrTargetSlotRecord *slot =
+            &materialized->slots[instruction->result_slot];
+        if (slot->id == instruction->result_slot &&
+            slot->function == instruction->function &&
+            slot->semantic_operation != XR_SEMANTIC_INDEX_NONE)
+            return slot->semantic_operation;
+    }
+    if ((instruction->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
+         instruction->opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64) &&
+        instruction->immediate_bits <= UINT32_MAX) {
+        uint32_t call = instruction->opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64
+                            ? (instruction->immediate_bits <
+                                       materialized->entry_expectation_count
+                                   ? materialized->entry_expectations[
+                                         (uint32_t) instruction->immediate_bits]
+                                         .call
+                                   : XR_SEMANTIC_INDEX_NONE)
+                            : (uint32_t) instruction->immediate_bits;
+        if (call < materialized->call_count &&
+            materialized->calls[call].id == call &&
+            materialized->calls[call].caller_function == instruction->function)
+            return materialized->calls[call].semantic_operation;
+    }
+    if (instruction->operand_slots[0] < materialized->slot_count) {
+        const XrTargetSlotRecord *slot =
+            &materialized->slots[instruction->operand_slots[0]];
+        if (slot->id == instruction->operand_slots[0] &&
+            slot->function == instruction->function)
+            return slot->semantic_operation;
+    }
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
+static bool materialize_debug_facts(
+    const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
+    char *error, size_t error_size) {
+    const XrSemanticPlan *semantic = builder->semantic_plan;
+    const XrOwnershipCertificate *ownership = xr_semantic_plan_ownership(semantic);
+    const XrFingerprint zero_fingerprint = {{0}};
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    materialized->debug_fact_count = materialized->instruction_count;
+    materialized->debug_facts = (XrTargetDebugFactRecord *) allocate_records(
+        materialized->debug_fact_count, sizeof(*materialized->debug_facts));
+    if (materialized->debug_fact_count && !materialized->debug_facts)
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "target debug fact materialization failed");
+    for (uint32_t i = 0; i < materialized->debug_fact_count; i++) {
+        const XrTargetInstructionRecord *instruction = &materialized->instructions[i];
+        XrTargetDebugFactRecord *fact = &materialized->debug_facts[i];
+        uint32_t operation =
+            debug_fact_operation_for_instruction(materialized, instruction);
+        if (instruction->id != i || instruction->function >= materialized->function_count)
+            return fail(error, error_size, "XR_TARGET_1005",
+                        "target debug fact instruction relation is invalid");
+        *fact = (XrTargetDebugFactRecord) {
+            .id = i,
+            .instruction = i,
+            .function = instruction->function,
+            .semantic_operation = XR_SEMANTIC_INDEX_NONE,
+            .coroutine_state = XR_SEMANTIC_INDEX_NONE,
+        };
+        if (operation == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        if (operation >= operation_count)
+            return fail(error, error_size, "XR_TARGET_1005",
+                        "target debug fact semantic operation is out of range");
+        const XrSemanticOperationRecord *semantic_operation =
+            xr_semantic_plan_operation(semantic, operation);
+        if (!semantic_operation || semantic_operation->function != instruction->function)
+            return fail(error, error_size, "XR_TARGET_1005",
+                        "target debug fact semantic operation is invalid");
+        fact->semantic_operation = operation;
+        fact->semantic_operation_identity = semantic_operation->id;
+        if (semantic_operation->source_file) {
+            const XrSemanticEntityRecord *span = find_semantic_entity(
+                semantic, XR_SEM_ENTITY_DEBUG_SPAN,
+                XR_SEM_ENTITY_SUBJECT_OPERATION, operation);
+            if (!span)
+                return fail(error, error_size, "XR_TARGET_1005",
+                            "target debug source span identity is invalid");
+            fact->source_start_line = semantic_operation->source_start_line;
+            fact->source_start_column = semantic_operation->source_start_column;
+            fact->source_end_line = semantic_operation->source_end_line;
+            fact->source_end_column = semantic_operation->source_end_column;
+            fact->source_span_identity = span->id;
+        }
+        for (uint32_t state = 0; state < materialized->coroutine_count; state++) {
+            const XrTargetCoroutineStateRecord *candidate =
+                &materialized->coroutines[state];
+            if (candidate->semantic_operation != operation)
+                continue;
+            const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(
+                semantic, candidate->semantic_entity);
+            if (fact->coroutine_state != XR_SEMANTIC_INDEX_NONE || !entity ||
+                entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
+                entity->subject != operation)
+                return fail(error, error_size, "XR_TARGET_1005",
+                            "target debug coroutine identity is invalid");
+            fact->coroutine_state = candidate->id;
+            fact->coroutine_state_identity = entity->id;
+        }
+        for (uint32_t layout = 0; layout < materialized->layout_count; layout++) {
+            const XrTargetLayoutRecord *candidate = &materialized->layouts[layout];
+            if (candidate->semantic_type != semantic_operation->result_type)
+                continue;
+            if (!xr_fingerprint_equal(fact->layout_fingerprint, zero_fingerprint))
+                return fail(error, error_size, "XR_TARGET_1005",
+                            "target debug layout relation is ambiguous");
+            fact->layout_fingerprint = candidate->fingerprint;
+        }
+        if (ownership && semantic_operation->result_value != XR_SEMANTIC_INDEX_NONE) {
+            for (uint32_t owner = 0;
+                 owner < xr_ownership_certificate_owner_count(ownership); owner++) {
+                const XrOwnershipOwnerRecord *record =
+                    xr_ownership_certificate_owner(ownership, owner);
+                if (!record)
+                    return fail(error, error_size, "XR_TARGET_1005",
+                                "target debug ownership certificate is invalid");
+                if (record->function != instruction->function ||
+                    record->origin_value != semantic_operation->result_value)
+                    continue;
+                const XrSemanticEntityRecord *entity = find_semantic_entity(
+                    semantic, XR_SEM_ENTITY_OWNER, XR_SEM_ENTITY_SUBJECT_OWNER, owner);
+                if (!stable_id_is_zero(fact->owner_identity) || !entity)
+                    return fail(error, error_size, "XR_TARGET_1005",
+                                "target debug owner identity is invalid");
+                fact->owner_identity = entity->id;
+            }
+        }
+    }
+    return true;
+}
+
 static bool materialize_foundation_capabilities(
     const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
     char *error, size_t error_size) {
@@ -11416,6 +11579,7 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
                                          error_size) ||
         !materialize_coroutine_state_calls(builder, materialized, error,
                                            error_size) ||
+        !materialize_debug_facts(builder, materialized, error, error_size) ||
         !materialize_foundation_capabilities(builder, materialized, error,
                                              error_size)) {
         builder->poisoned = true;
@@ -11532,6 +11696,8 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out,
         .coroutines_count = materialized.coroutine_count,
         .entry_expectations = materialized.entry_expectations,
         .entry_expectations_count = materialized.entry_expectation_count,
+        .debug_facts = materialized.debug_facts,
+        .debug_facts_count = materialized.debug_fact_count,
     };
     bool frozen = xr_target_plan_freeze(&draft, out, error, error_size);
     materialized_dispose(&materialized);

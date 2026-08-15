@@ -726,6 +726,27 @@ typedef struct XrTargetEntryExpectationRecord {
     XrFingerprint adapter_fingerprint;
 } XrTargetEntryExpectationRecord;
 
+/* One immutable observation record is emitted for every executable row.  It
+ * copies only identities already proved by the SemanticPlan and TargetPlan;
+ * an all-zero optional identity means that the exact source relation does not
+ * apply to that row. */
+typedef struct XrTargetDebugFactRecord {
+    uint32_t id;
+    uint32_t instruction;
+    uint32_t function;
+    uint32_t semantic_operation;
+    uint32_t coroutine_state;
+    uint32_t source_start_line;
+    uint32_t source_start_column;
+    uint32_t source_end_line;
+    uint32_t source_end_column;
+    XrStableId semantic_operation_identity;
+    XrStableId source_span_identity;
+    XrStableId owner_identity;
+    XrStableId coroutine_state_identity;
+    XrFingerprint layout_fingerprint;
+} XrTargetDebugFactRecord;
+
 XR_STATIC_ASSERT(sizeof(XrTargetEntryExpectationRecord) == 144u,
                  "dynamic entry expectation wire facts must stay compact");
 
@@ -771,6 +792,7 @@ XR_TARGET_TABLE_ACCESSOR(adapters, XrTargetAdapterRecord);
 XR_TARGET_TABLE_ACCESSOR(capabilities, XrTargetCapabilityRecord);
 XR_TARGET_TABLE_ACCESSOR(coroutines, XrTargetCoroutineStateRecord);
 XR_TARGET_TABLE_ACCESSOR(entry_expectations, XrTargetEntryExpectationRecord);
+XR_TARGET_TABLE_ACCESSOR(debug_facts, XrTargetDebugFactRecord);
 #undef XR_TARGET_TABLE_ACCESSOR
 
 #endif  // XR_TARGET_PLAN_H

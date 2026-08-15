@@ -119,6 +119,32 @@ static bool freeze_with_rows(const CacheFixture *fixture,
                              const XrTargetInstructionRecord *rows,
                              uint32_t row_count, XrTargetPlan **out,
                              char *error, size_t error_size) {
+    uint32_t source_row_count = 0;
+    uint32_t source_debug_count = 0;
+    const XrTargetInstructionRecord *source_rows =
+        xr_target_plan_instructions(fixture->plan, &source_row_count);
+    const XrTargetDebugFactRecord *source_debug_facts =
+        xr_target_plan_debug_facts(fixture->plan, &source_debug_count);
+    XrTargetDebugFactRecord *debug_facts = row_count
+        ? (XrTargetDebugFactRecord *) xr_calloc(row_count,
+                                                sizeof(*debug_facts))
+        : NULL;
+    if (!source_rows || !source_debug_facts || source_row_count != row_count ||
+        source_debug_count != row_count || (row_count && !debug_facts))
+        return false;
+    for (uint32_t i = 0; i < row_count; i++) {
+        if (rows[i].opcode == source_rows[i].opcode) {
+            debug_facts[i] = source_debug_facts[i];
+        } else {
+            debug_facts[i] = (XrTargetDebugFactRecord) {
+                .id = rows[i].id,
+                .instruction = rows[i].id,
+                .function = rows[i].function,
+                .semantic_operation = XR_SEMANTIC_INDEX_NONE,
+                .coroutine_state = XR_SEMANTIC_INDEX_NONE,
+            };
+        }
+    }
     XrTargetPlanDraft draft = {
         .semantic_plan = fixture->semantic,
         .profile = fixture->profile,
@@ -144,10 +170,15 @@ static bool freeze_with_rows(const CacheFixture *fixture,
     COPY_TABLE(adapters);
     COPY_TABLE(capabilities);
     COPY_TABLE(coroutines);
+    COPY_TABLE(entry_expectations);
 #undef COPY_TABLE
     draft.instructions = rows;
     draft.instructions_count = row_count;
-    return xr_target_plan_freeze(&draft, out, error, error_size);
+    draft.debug_facts = debug_facts;
+    draft.debug_facts_count = row_count;
+    bool frozen = xr_target_plan_freeze(&draft, out, error, error_size);
+    xr_free(debug_facts);
+    return frozen;
 }
 
 static XrTypedDispatchStatus execute_i64(

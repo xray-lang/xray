@@ -68,7 +68,8 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
            draft->root_slots_count <= 40000000u && draft->cleanups_count <= 40000000u &&
            draft->adapters_count <= 1000000u && draft->capabilities_count <= 65536u &&
            draft->coroutines_count <= 10000000u &&
-           draft->entry_expectations_count <= 10000000u))
+           draft->entry_expectations_count <= 10000000u &&
+           draft->debug_facts_count <= 40000000u))
         return false;
     size_t total = sizeof(XrTargetPlan);
     if (draft->semantic_dependency_count >
@@ -102,6 +103,7 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
     XR_ADD_DRAFT_BYTES(capabilities);
     XR_ADD_DRAFT_BYTES(coroutines);
     XR_ADD_DRAFT_BYTES(entry_expectations);
+    XR_ADD_DRAFT_BYTES(debug_facts);
 #undef XR_ADD_DRAFT_BYTES
     return total <= (size_t) UINT32_MAX;
 }
@@ -389,6 +391,24 @@ static void hash_entry_expectation(
     hash_fingerprint(ctx, record->adapter_fingerprint);
 }
 
+static void hash_debug_fact(XrSHA256Context *ctx,
+                            const XrTargetDebugFactRecord *record) {
+    hash_u64(ctx, record->id);
+    hash_u64(ctx, record->instruction);
+    hash_u64(ctx, record->function);
+    hash_u64(ctx, record->semantic_operation);
+    hash_u64(ctx, record->coroutine_state);
+    hash_u64(ctx, record->source_start_line);
+    hash_u64(ctx, record->source_start_column);
+    hash_u64(ctx, record->source_end_line);
+    hash_u64(ctx, record->source_end_column);
+    hash_id(ctx, record->semantic_operation_identity);
+    hash_id(ctx, record->source_span_identity);
+    hash_id(ctx, record->owner_identity);
+    hash_id(ctx, record->coroutine_state_identity);
+    hash_fingerprint(ctx, record->layout_fingerprint);
+}
+
 void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t layout_index,
                                           XrFingerprint *out) {
     static const uint8_t domain[] = "xray-target-layout-v5\0";
@@ -483,6 +503,7 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
     XR_HASH_TABLE_COUNT(capabilities);
     XR_HASH_TABLE_COUNT(coroutines);
     XR_HASH_TABLE_COUNT(entry_expectations);
+    XR_HASH_TABLE_COUNT(debug_facts);
 #undef XR_HASH_TABLE_COUNT
     for (uint32_t i = 0; i < plan->machine_reps_count; i++)
         hash_machine_rep(&ctx, &plan->machine_reps[i]);
@@ -528,6 +549,8 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
         hash_coroutine(&ctx, &plan->coroutines[i]);
     for (uint32_t i = 0; i < plan->entry_expectations_count; i++)
         hash_entry_expectation(&ctx, &plan->entry_expectations[i]);
+    for (uint32_t i = 0; i < plan->debug_facts_count; i++)
+        hash_debug_fact(&ctx, &plan->debug_facts[i]);
     xr_sha256_final(&ctx, out->bytes);
 }
 
@@ -607,6 +630,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
     XR_COPY_DRAFT_TABLE(capabilities, XrTargetCapabilityRecord);
     XR_COPY_DRAFT_TABLE(coroutines, XrTargetCoroutineStateRecord);
     XR_COPY_DRAFT_TABLE(entry_expectations, XrTargetEntryExpectationRecord);
+    XR_COPY_DRAFT_TABLE(debug_facts, XrTargetDebugFactRecord);
     plan->frozen = true;
     for (uint32_t i = 0; i < plan->layouts_count; i++) {
         if (plan->layouts[i].extent >= plan->extents_count ||
@@ -620,6 +644,24 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
                 plan->machine_reps_count)
                 goto invalid;
         xr_target_layout_compute_fingerprint(plan, i, &plan->layouts[i].fingerprint);
+    }
+    for (uint32_t i = 0; i < plan->debug_facts_count; i++) {
+        XrTargetDebugFactRecord *fact = &plan->debug_facts[i];
+        if (fact->semantic_operation == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(
+            plan->semantic_plan, fact->semantic_operation);
+        if (!operation)
+            goto invalid;
+        bool found = false;
+        for (uint32_t layout = 0; layout < plan->layouts_count; layout++) {
+            if (plan->layouts[layout].semantic_type != operation->result_type)
+                continue;
+            if (found)
+                goto invalid;
+            fact->layout_fingerprint = plan->layouts[layout].fingerprint;
+            found = true;
+        }
     }
     for (uint32_t i = 0; i < plan->calls_count; i++) {
         bool direct_local =
@@ -775,6 +817,7 @@ void xr_target_plan_free(XrTargetPlan *plan) {
     XR_FREE_TARGET_TABLE(capabilities);
     XR_FREE_TARGET_TABLE(coroutines);
     XR_FREE_TARGET_TABLE(entry_expectations);
+    XR_FREE_TARGET_TABLE(debug_facts);
 #undef XR_FREE_TARGET_TABLE
     xr_free(plan);
 }
@@ -908,4 +951,5 @@ XR_TARGET_TABLE_ACCESSOR(adapters, XrTargetAdapterRecord)
 XR_TARGET_TABLE_ACCESSOR(capabilities, XrTargetCapabilityRecord)
 XR_TARGET_TABLE_ACCESSOR(coroutines, XrTargetCoroutineStateRecord)
 XR_TARGET_TABLE_ACCESSOR(entry_expectations, XrTargetEntryExpectationRecord)
+XR_TARGET_TABLE_ACCESSOR(debug_facts, XrTargetDebugFactRecord)
 #undef XR_TARGET_TABLE_ACCESSOR

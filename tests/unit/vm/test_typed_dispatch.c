@@ -9,6 +9,7 @@
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_instruction_verify.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
+#include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/vm/debug/xr_vm_materialize.h"
 #include "../../../src/vm/debug/xr_vm_profile.h"
@@ -217,6 +218,16 @@ static XrSemanticPlan *build_semantic(void) {
     sub->args[1] = right;
     mul->args[0] = sub;
     mul->args[1] = right;
+    function->source_file = "typed_dispatch_probe.xr";
+    XiValue *values[] = {left, right, copy, add, sub, mul};
+    for (uint32_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+        values[i]->source_span = (XiSourceSpan) {
+            .start_line = i + 1u,
+            .start_column = 1u,
+            .end_line = i + 1u,
+            .end_column = 8u,
+        };
+    }
     xi_block_set_return(entry, add);
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
@@ -652,7 +663,31 @@ static bool freeze_with_rows(const TypedDispatchFixture *fixture,
     COPY_TABLE(adapters);
     COPY_TABLE(capabilities);
     COPY_TABLE(coroutines);
+    COPY_TABLE(entry_expectations);
+    COPY_TABLE(debug_facts);
 #undef COPY_TABLE
+    XrTargetDebugFactRecord debug_facts[16];
+    REQUIRE(row_count <= sizeof(debug_facts) / sizeof(debug_facts[0]));
+    draft.debug_facts_count = row_count;
+    if (row_count) {
+        for (uint32_t i = 0; i < row_count; i++) {
+            REQUIRE(rows[i].id < fixture->program_plan->debug_facts_count);
+            debug_facts[i] = fixture->program_plan->debug_facts[rows[i].id];
+        }
+        for (uint32_t i = 0; i < row_count; i++) {
+            if (rows && rows[i].opcode == XR_TARGET_INSTRUCTION_JUMP &&
+                fixture->rows[i].opcode != XR_TARGET_INSTRUCTION_JUMP) {
+                debug_facts[i] = (XrTargetDebugFactRecord) {
+                    .id = i,
+                    .instruction = i,
+                    .function = rows[i].function,
+                    .semantic_operation = XR_SEMANTIC_INDEX_NONE,
+                    .coroutine_state = XR_SEMANTIC_INDEX_NONE,
+                };
+            }
+        }
+        draft.debug_facts = debug_facts;
+    }
     draft.instructions = rows;
     draft.instructions_count = row_count;
     return xr_target_plan_freeze(&draft, out, error, error_size);
@@ -722,8 +757,7 @@ static void test_closed_program_and_unavailable_boundary(void) {
             XR_TYPED_DISPATCH_INVALID_ARGUMENT);
     REQUIRE(result == 0);
     REQUIRE(execute_request_i64(fixture.program_plan, &fingerprint,
-                                          0, NULL, 0,
-                                          &result) == XR_TYPED_DISPATCH_OK);
+                                0, NULL, 0, &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN);
 
     REQUIRE(fixture.program_plan->root_maps_count == 0 &&
@@ -1875,9 +1909,9 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
     REQUIRE(materialized.generation_identity == XR_VM_DEBUG_FACT_AVAILABLE);
     REQUIRE(materialized.call_identity == XR_VM_DEBUG_FACT_AVAILABLE);
     REQUIRE(materialized.result.availability == XR_VM_DEBUG_FACT_AVAILABLE);
-    REQUIRE(materialized.source_span == XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE);
-    REQUIRE(materialized.owner_identity == XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE);
-    REQUIRE(materialized.layout_identity == XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE);
+    REQUIRE(materialized.source_span == XR_VM_DEBUG_FACT_CONTEXT_UNAVAILABLE);
+    REQUIRE(materialized.owner_identity == XR_VM_DEBUG_FACT_NOT_APPLICABLE);
+    REQUIRE(materialized.layout_identity == XR_VM_DEBUG_FACT_AVAILABLE);
 
     int64_t unobserved_result = 0;
     REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 0,
@@ -1965,6 +1999,67 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void test_trace_debug_facts_are_source_backed_and_mutation_closed(void) {
+    TypedDispatchFixture fixture = make_fixture();
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(fixture.program_plan);
+    XrModuleGenerationIdentity generation =
+        debug_generation_identity(fixture.program_plan, UINT8_C(0x17));
+    XrVmTraceEvent storage[32];
+    XrVmTraceBuffer buffer;
+    REQUIRE(xr_typed_trace_buffer_init(&buffer, storage, 32));
+    XrVmTraceSink sink = xr_typed_trace_buffer_sink(&buffer);
+    XrVmDebugSession session;
+    REQUIRE(xr_typed_debug_session_init(&fingerprint, &generation, &sink, NULL,
+                                        &session) == XR_VM_DEBUG_SESSION_OK);
+    int64_t result = 0;
+    REQUIRE(execute_debug_request_i64(
+                fixture.program_plan, &fingerprint, 0, NULL, 0, &generation,
+                &session, XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH, &result) ==
+            XR_TYPED_DISPATCH_OK);
+    REQUIRE(result == INT64_MIN && buffer.count > 0);
+
+    bool saw_source_backed_instruction = false;
+    for (uint32_t i = 0; i < buffer.count; i++) {
+        const XrVmTraceEvent *event = &buffer.events[i];
+        REQUIRE(event->schema_version == XR_VM_TRACE_SCHEMA_VERSION);
+        if (event->instruction == XR_VM_TRACE_ID_NONE) {
+            REQUIRE(event->debug_fact == XR_VM_TRACE_ID_NONE);
+            continue;
+        }
+        REQUIRE(event->debug_fact == event->instruction);
+        REQUIRE(event->semantic_operation != XR_VM_TRACE_ID_NONE);
+        REQUIRE(event->source_span_availability == XR_VM_DEBUG_FACT_AVAILABLE);
+        REQUIRE(memcmp(event->semantic_operation_identity.bytes,
+                       (uint8_t[sizeof(event->semantic_operation_identity.bytes)]){0},
+                       sizeof(event->semantic_operation_identity.bytes)) != 0);
+        REQUIRE(memcmp(event->source_span_identity.bytes,
+                       (uint8_t[sizeof(event->source_span_identity.bytes)]){0},
+                       sizeof(event->source_span_identity.bytes)) != 0);
+        REQUIRE(event->source_start_line > 0 && event->source_end_line > 0);
+        XrVmMaterializedEvent materialized;
+        REQUIRE(xr_typed_materialize_event(fixture.program_plan, &fingerprint,
+                                           event, &materialized) ==
+                XR_VM_MATERIALIZE_OK);
+        REQUIRE(materialized.source_span == XR_VM_DEBUG_FACT_AVAILABLE);
+        REQUIRE(materialized.semantic_operation == event->semantic_operation);
+        XrVmTraceEvent mutated = *event;
+        mutated.source_start_column++;
+        REQUIRE(xr_typed_materialize_event(fixture.program_plan, &fingerprint,
+                                           &mutated, &materialized) ==
+                XR_VM_MATERIALIZE_EVENT_INVALID);
+        saw_source_backed_instruction = true;
+    }
+    REQUIRE(saw_source_backed_instruction);
+
+    XrTargetDebugFactRecord saved = fixture.program_plan->debug_facts[0];
+    fixture.program_plan->debug_facts[0].source_end_column++;
+    char error[512] = {0};
+    REQUIRE(!xr_target_plan_verify(fixture.program_plan, error, sizeof(error)));
+    REQUIRE(strncmp(error, "XR_TARGET_1005", strlen("XR_TARGET_1005")) == 0);
+    fixture.program_plan->debug_facts[0] = saved;
+    dispose_fixture(&fixture);
+}
+
 static void test_direct_local_call_depth_is_globally_bounded(void) {
     XrSemanticPlan *semantic = build_deep_direct_i64_call_semantic();
     XrTargetProfile *profile = xr_test_target_profile_build(
@@ -2038,6 +2133,7 @@ int main(void) {
     test_comparison_rows_drive_the_branch();
     test_direct_local_i64_call_executes_and_rejects_drift();
     test_runtime_only_trace_profile_and_materialization();
+    test_trace_debug_facts_are_source_backed_and_mutation_closed();
     test_direct_local_call_depth_is_globally_bounded();
     test_backward_jump_stops_at_the_step_budget();
     puts("typed dispatch tests passed");

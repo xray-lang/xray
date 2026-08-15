@@ -1685,7 +1685,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "3c87be1de8aa629e336fda1e8982e6e7b25fe0e0f127c65fce734f3ef10b8368") == 0);
+                   "20183af2e375f0a5e7be49319dab5964ffe509ecb51dbc670b6369dd310b61c0") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;

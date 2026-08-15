@@ -54,6 +54,29 @@ XrVmMaterializeStatus xr_typed_materialize_event(
     if (event->schema_version != XR_VM_TRACE_SCHEMA_VERSION ||
         event->kind >= XR_VM_TRACE_EVENT_KIND_COUNT)
         return XR_VM_MATERIALIZE_EVENT_INVALID;
+    XrVmTraceEvent expected = *event;
+    if (!xr_typed_debug_attach_event_facts(verified_plan, &expected) ||
+        expected.debug_fact != event->debug_fact ||
+        expected.semantic_operation != event->semantic_operation ||
+        expected.coroutine_state != event->coroutine_state ||
+        expected.source_span_availability != event->source_span_availability ||
+        expected.owner_availability != event->owner_availability ||
+        expected.layout_availability != event->layout_availability ||
+        expected.coroutine_availability != event->coroutine_availability ||
+        expected.source_start_line != event->source_start_line ||
+        expected.source_start_column != event->source_start_column ||
+        expected.source_end_line != event->source_end_line ||
+        expected.source_end_column != event->source_end_column ||
+        !xr_stable_id_equal(expected.semantic_operation_identity,
+                            event->semantic_operation_identity) ||
+        !xr_stable_id_equal(expected.source_span_identity,
+                            event->source_span_identity) ||
+        !xr_stable_id_equal(expected.owner_identity, event->owner_identity) ||
+        !xr_stable_id_equal(expected.coroutine_state_identity,
+                            event->coroutine_state_identity) ||
+        !xr_fingerprint_equal(expected.layout_fingerprint,
+                              event->layout_fingerprint))
+        return XR_VM_MATERIALIZE_EVENT_INVALID;
 
     uint32_t function_count = 0;
     const XrTargetFunctionRecord *functions =
@@ -67,11 +90,22 @@ XrVmMaterializeStatus xr_typed_materialize_event(
         event->generation_identity_present
             ? XR_VM_DEBUG_FACT_AVAILABLE
             : XR_VM_DEBUG_FACT_CONTEXT_UNAVAILABLE;
-    materialized->source_span = XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE;
-    materialized->owner_identity = XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE;
-    materialized->layout_identity = XR_VM_DEBUG_FACT_SCHEMA_UNAVAILABLE;
+    materialized->source_span = event->source_span_availability;
+    materialized->owner_identity = event->owner_availability;
+    materialized->layout_identity = event->layout_availability;
     materialized->semantic_function =
         functions[event->function].semantic_function;
+    materialized->semantic_operation = event->semantic_operation;
+    materialized->coroutine_state = event->coroutine_state;
+    materialized->source_start_line = event->source_start_line;
+    materialized->source_start_column = event->source_start_column;
+    materialized->source_end_line = event->source_end_line;
+    materialized->source_end_column = event->source_end_column;
+    materialized->semantic_operation_identity = event->semantic_operation_identity;
+    materialized->source_span_identity = event->source_span_identity;
+    materialized->owner_stable_identity = event->owner_identity;
+    materialized->coroutine_state_stable_identity = event->coroutine_state_identity;
+    materialized->layout_fingerprint = event->layout_fingerprint;
     materialized->result.availability =
         XR_VM_DEBUG_FACT_NOT_APPLICABLE;
     materialized->operands[0].availability =
