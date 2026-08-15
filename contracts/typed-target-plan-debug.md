@@ -96,8 +96,24 @@ those exact facts. Arbitrary memory inspection or mutation, VM/AOT
 first-divergence, allocation/RC/suspend, mailbox, and provider-cost debugging
 remain unavailable and are not claimed by this runtime slice.
 
+The private target-machine comparison harness projects each accepted typed
+event into `xray-canonical-logical-safepoint-trace/1` without adding a CLI or
+runtime mode. Its manifest records trace availability separately for the
+legacy, typed, and current native lanes. A lane without this exact event
+boundary carries an explicit unavailable reason; neither process output nor an
+empty trace is accepted as trace evidence. The report still compares the
+shared value, error, termination, destruction, and lifecycle observations and
+reports their exact first divergent field or lifecycle event. Cross-lane
+first-divergence remains blocked until every required lane emits the canonical
+safepoints. The harness exercises exact event mismatch and truncation, plus
+empty output, abnormal exit, and timeout refusal, before running its corpus.
+
 Evidence:
 
+- `target_machine_scalar_comparison` captures the typed executor's real
+  canonical stream, validates exact safepoint fields and order, and preserves
+  explicit legacy/native unavailability while comparing every shared scalar
+  observation against the independent oracle.
 - `test_typed_dispatch` proves independent switch-provider and function-table
   runs produce byte-identical canonical trace events and profile snapshots,
   proves exact direct-call nesting and return/error

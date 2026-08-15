@@ -18,6 +18,7 @@
 #include "plan/semantic/xr_semantic_builder.h"
 #include "plan/target/xr_target_builder.h"
 #include "runtime/value/xtype.h"
+#include "vm/debug/xr_vm_trace.h"
 #include "vm/xr_typed_dispatch.h"
 #include "plan/target_profile_test_fixture.h"
 #include <stdint.h>
@@ -36,6 +37,8 @@ typedef struct ComparisonCase {
     ComparisonShape shape;
     XiOp operation;
 } ComparisonCase;
+
+#define COMPARISON_TRACE_CAPACITY 256
 
 static XrType comparison_int = {
     .kind = XR_KIND_INT,
@@ -63,12 +66,13 @@ static XrType comparison_function = {
 static XrTypedDispatchStatus execute_request_i64(
     const XrTargetPlan *plan, const XrFingerprint *fingerprint,
     uint32_t function, const int64_t *arguments, uint32_t argument_count,
-    int64_t *result) {
+    const XrVmDebugSession *debug_session, int64_t *result) {
     XrTypedDispatchI64Request request = {
         .verified_plan = plan,
         .required_plan_fingerprint = fingerprint,
         .arguments = arguments,
         .result = result,
+        .debug_session = debug_session,
         .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
         .function = function,
         .argument_count = argument_count,
@@ -257,7 +261,97 @@ static const char *program_error(XrTypedDispatchStatus status) {
     }
 }
 
-static void print_observation(int64_t value, const char *error) {
+static const char *trace_kind_name(uint8_t kind) {
+    static const char *const names[XR_VM_TRACE_EVENT_KIND_COUNT] = {
+        "frame-enter", "block-enter", "instruction", "call-enter",
+        "call-return", "error", "frame-exit",
+    };
+    return kind < XR_VM_TRACE_EVENT_KIND_COUNT ? names[kind] : NULL;
+}
+
+static bool bytes_are_zero(const uint8_t *bytes, size_t size) {
+    uint8_t combined = 0;
+    for (size_t i = 0; i < size; i++)
+        combined |= bytes[i];
+    return combined == 0;
+}
+
+static void print_optional_id(uint32_t value) {
+    if (value == XR_VM_TRACE_ID_NONE)
+        fputs("null", stdout);
+    else
+        printf("%u", value);
+}
+
+static void print_optional_bytes(const uint8_t *bytes, size_t size) {
+    static const char digits[] = "0123456789abcdef";
+    if (bytes_are_zero(bytes, size)) {
+        fputs("null", stdout);
+        return;
+    }
+    fputc('"', stdout);
+    for (size_t i = 0; i < size; i++) {
+        fputc(digits[bytes[i] >> 4], stdout);
+        fputc(digits[bytes[i] & 0x0f], stdout);
+    }
+    fputc('"', stdout);
+}
+
+static bool trace_is_canonical(const XrVmTraceBuffer *trace,
+                               XrFingerprint fingerprint) {
+    if (!trace || trace->capacity_exceeded || trace->count < 2 ||
+        trace->events[0].kind != XR_VM_TRACE_FRAME_ENTER ||
+        trace->events[trace->count - 1].kind != XR_VM_TRACE_FRAME_EXIT)
+        return false;
+    for (size_t i = 0; i < trace->count; i++) {
+        const XrVmTraceEvent *event = &trace->events[i];
+        if (event->schema_version != XR_VM_TRACE_SCHEMA_VERSION ||
+            event->ordinal != i || !trace_kind_name(event->kind) ||
+            !xr_fingerprint_equal(event->target_plan_fingerprint, fingerprint))
+            return false;
+    }
+    return true;
+}
+
+static void print_trace_event(const XrVmTraceEvent *event) {
+    printf("{\"ordinal\":%llu,\"kind\":\"%s\",\"function\":%u,"
+           "\"relatedFunction\":",
+           (unsigned long long) event->ordinal, trace_kind_name(event->kind),
+           event->function);
+    print_optional_id(event->related_function);
+    fputs(",\"instruction\":", stdout);
+    print_optional_id(event->instruction);
+    fputs(",\"block\":", stdout);
+    print_optional_id(event->block);
+    fputs(",\"call\":", stdout);
+    print_optional_id(event->call);
+    printf(",\"frame\":%u,\"parentFrame\":", event->frame);
+    print_optional_id(event->parent_frame);
+    fputs(",\"relatedFrame\":", stdout);
+    print_optional_id(event->related_frame);
+    printf(",\"frameDepth\":%u,\"status\":%u,\"opcode\":%u,"
+           "\"semanticOperationIdentity\":",
+           event->frame_depth, event->status, event->opcode);
+    print_optional_bytes(event->semantic_operation_identity.bytes,
+                         sizeof(event->semantic_operation_identity.bytes));
+    fputs(",\"sourceSpanIdentity\":", stdout);
+    print_optional_bytes(event->source_span_identity.bytes,
+                         sizeof(event->source_span_identity.bytes));
+    fputs(",\"ownerIdentity\":", stdout);
+    print_optional_bytes(event->owner_identity.bytes,
+                         sizeof(event->owner_identity.bytes));
+    fputs(",\"layoutFingerprint\":", stdout);
+    print_optional_bytes(event->layout_fingerprint.bytes,
+                         sizeof(event->layout_fingerprint.bytes));
+    fputs(",\"coroutineStateIdentity\":", stdout);
+    print_optional_bytes(event->coroutine_state_identity.bytes,
+                         sizeof(event->coroutine_state_identity.bytes));
+    fputc('}', stdout);
+}
+
+static void print_observation(int64_t value, const char *error,
+                              XrFingerprint fingerprint,
+                              const XrVmTraceBuffer *trace) {
     if (error) {
         printf("{\"value\":null,\"error\":\"%s\","
                "\"termination\":\"error\",",
@@ -267,8 +361,21 @@ static void print_observation(int64_t value, const char *error) {
                "\"termination\":\"returned\",",
                (long long) value);
     }
-    puts("\"destruction\":{\"allocations\":0,\"releases\":0,"
-         "\"drops\":0},\"lifecycle\":[],\"trace\":[]}");
+    fputs("\"destruction\":{\"allocations\":0,\"releases\":0,"
+          "\"drops\":0},\"lifecycle\":[],\"trace\":{"
+          "\"availability\":\"available\","
+          "\"schema\":\"xray-canonical-logical-safepoint-trace/1\","
+          "\"targetPlanFingerprint\":\"",
+          stdout);
+    for (size_t i = 0; i < sizeof(fingerprint.bytes); i++)
+        printf("%02x", fingerprint.bytes[i]);
+    fputs("\",\"safepoints\":[", stdout);
+    for (size_t i = 0; i < trace->count; i++) {
+        if (i)
+            fputc(',', stdout);
+        print_trace_event(&trace->events[i]);
+    }
+    puts("]}}");
 }
 
 static bool has_exact_direct_call(const XrTargetPlan *plan) {
@@ -341,18 +448,41 @@ static int execute_case(const ComparisonCase *spec, const int64_t arguments[2]) 
     }
 
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    XrVmTraceEvent trace_storage[COMPARISON_TRACE_CAPACITY];
+    XrVmTraceBuffer trace = {0};
+    XrVmDebugSession *debug_session = NULL;
+    XrVmTraceSink trace_sink = {0};
+    bool trace_ready = xr_typed_trace_buffer_init(
+        &trace, trace_storage, COMPARISON_TRACE_CAPACITY);
+    if (trace_ready)
+        trace_sink = xr_typed_trace_buffer_sink(&trace);
+    if (!trace_ready ||
+        xr_typed_debug_session_create(&fingerprint, NULL, &trace_sink, NULL,
+                                      NULL, &debug_session) !=
+            XR_VM_DEBUG_SESSION_OK) {
+        fputs("typed comparison fixture could not create trace session\n", stderr);
+        xr_target_plan_free(plan);
+        xr_target_profile_free(profile);
+        xr_semantic_plan_free(semantic);
+        return 2;
+    }
     int64_t value = 0;
     XrTypedDispatchStatus status =
-        execute_request_i64(plan, &fingerprint, 0, arguments, 2, &value);
+        execute_request_i64(plan, &fingerprint, 0, arguments, 2,
+                            debug_session, &value);
+    xr_typed_debug_session_free(&debug_session);
     const char *execution_error = program_error(status);
-    if (status == XR_TYPED_DISPATCH_OK || execution_error)
-        print_observation(value, execution_error);
+    bool trace_valid = trace_is_canonical(&trace, fingerprint);
+    if ((status == XR_TYPED_DISPATCH_OK || execution_error) && trace_valid)
+        print_observation(value, execution_error, fingerprint, &trace);
+    else if (!trace_valid)
+        fputs("typed comparison fixture produced a noncanonical trace\n", stderr);
     else
         fprintf(stderr, "typed comparison fixture dispatch failed: %d\n", (int) status);
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
-    return status == XR_TYPED_DISPATCH_OK || execution_error ? 0 : 2;
+    return (status == XR_TYPED_DISPATCH_OK || execution_error) && trace_valid ? 0 : 2;
 }
 
 int main(int argc, char **argv) {
