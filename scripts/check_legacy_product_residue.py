@@ -20,6 +20,7 @@ TEXT_SUFFIXES = {".c", ".h", ".in", ".py", ".sh", ".ps1", ".cmake", ".toml"}
 CANDIDATE_RE = re.compile(
     r"(?P<xrc>\.xrc\b)|"
     r"(?P<xrc_identity>\bXR_ARTIFACT_KIND_LEGACY_XRC\b)|"
+    r"(?P<xrc_staging_identity>\bXRAY_STDLIB_XRC_DIR\b)|"
     r"(?P<bytecode_abi>\b(?:XrBcError|XR_BC_(?:MAGIC|VERSION|OK|ERR_[A-Z0-9_]+|"
     r"STRIP_[A-Z0-9_]+)|XR_LEGACY_XRC_VERSION)\b)|"
     r"(?P<public_vm_symbol>\bxray_vm_[A-Za-z0-9_]+\b)|"
@@ -98,6 +99,7 @@ def family_for(group: str, token: str) -> str:
     families = {
         "xrc": "xrc-artifact",
         "xrc_identity": "xrc-artifact-identity",
+        "xrc_staging_identity": "xrc-artifact-identity",
         "bytecode_abi": "legacy-bytecode-abi",
         "public_vm_type": "legacy-vm-handle-or-bytecode-type",
         "public_runtime_allocation": "legacy-runtime-allocation-api",
@@ -302,6 +304,8 @@ def self_test() -> int:
         compile_format_owner.write_text('const char *format = "c";\n', encoding="utf-8")
         bcgen_format_owner = root / "src/app/tools/xstdlib_bcgen.c"
         bcgen_format_owner.write_text('const char *format = "bytecode";\n', encoding="utf-8")
+        staging_owner = root / "scripts/generate_stdlib_embedded.py"
+        staging_owner.write_text("# canonical extensionless staging\n", encoding="utf-8")
         inventory = root / INVENTORY
         inventory.write_text(render(collect(root)), encoding="utf-8")
         clean, _ = check(root, collect(root))
@@ -323,6 +327,14 @@ def self_test() -> int:
         )
         bcgen_format_alias_drifted, _ = check(root, collect(root))
         bcgen_format_owner.write_text('const char *format = "bytecode";\n', encoding="utf-8")
+        staging_owner.write_text('suffix = ".xrc"\n', encoding="utf-8")
+        staging_suffix_drifted, _ = check(root, collect(root))
+        staging_owner.write_text("# canonical extensionless staging\n", encoding="utf-8")
+        (root / "CMakeLists.txt").write_text(
+            "set(XRAY_STDLIB_XRC_DIR legacy)\n", encoding="utf-8"
+        )
+        staging_variable_drifted, _ = check(root, collect(root))
+        (root / "CMakeLists.txt").write_text("# clean\n", encoding="utf-8")
         retired_backend = root / "include/xray_vm.h"
         retired_backend.write_text(
             "typedef enum { XR_VM_BACKEND_BYTECODE } XrVMBackendType;\n",
@@ -650,12 +662,14 @@ def self_test() -> int:
         owner.unlink()
         compile_format_owner.unlink()
         bcgen_format_owner.unlink()
+        staging_owner.unlink()
         (root / "src/new_loader.c").unlink()
         (root / "src/new_codec.c").unlink()
         zero = collect(root)
         terminal, _ = check(root, zero)
     if (not clean or compile_format_alias_drifted or compile_xrc_compatibility_drifted
             or bcgen_format_alias_drifted
+            or staging_suffix_drifted or staging_variable_drifted
             or backend_drifted or debug_setters_drifted or stats_drifted
             or runtime_constructor_drifted or userdata_api_drifted
             or execution_policy_api_drifted

@@ -11,6 +11,7 @@ import argparse
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -23,6 +24,11 @@ def c_ident(name: str) -> str:
             out.append("_")
     ident = "".join(out).strip("_")
     return ident or "module"
+
+
+def bytecode_staging_path(bytecode_dir: Path, module_name: str) -> Path:
+    """Return the canonical, build-private staging path for one module."""
+    return bytecode_dir / c_ident(module_name)
 
 
 def c_string_bytes(data: bytes) -> str:
@@ -104,7 +110,7 @@ def compile_bytecodes(
     env = os.environ.copy()
     env["XRAY_STDLIB_PATH"] = str(root / "stdlib")
     for name, path, _data in entries:
-        out_path = bytecode_dir / f"{c_ident(name)}.xrc"
+        out_path = bytecode_staging_path(bytecode_dir, name)
         proc = subprocess.run(
             [
                 str(compiler),
@@ -144,7 +150,7 @@ def emit_bytecodes(
     bytecode_entries: list[tuple[str, bytes]] = []
     if bytecode_dir is not None:
         for name, _path, _data in entries:
-            bc_path = bytecode_dir / f"{c_ident(name)}.xrc"
+            bc_path = bytecode_staging_path(bytecode_dir, name)
             if bc_path.is_file():
                 bytecode_entries.append((name, bc_path.read_bytes()))
             elif require_bytecode:
@@ -161,7 +167,7 @@ def emit_bytecodes(
 
     for idx, (name, data) in enumerate(bytecode_entries):
         ident = c_ident(name)
-        out.append(f"/* {name}.xrc */")
+        out.append(f"/* {name} bytecode */")
         out.append(f"static const uint8_t xr_stdlib_bc_{ident}_{idx}[] = {{")
         out.append(c_byte_array(data))
         out.append("};")
@@ -192,17 +198,62 @@ def write_text(path: Path | None, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def self_test() -> int:
+    with tempfile.TemporaryDirectory(prefix="xray-stdlib-bytecode-staging-") as directory:
+        bytecode_dir = Path(directory)
+        module_name = "core.format"
+        payload = bytes((0x00, 0x11, 0x7F, 0x80, 0xFE, 0xFF))
+        path = bytecode_staging_path(bytecode_dir, module_name)
+        if path != bytecode_staging_path(bytecode_dir, module_name):
+            print("stdlib bytecode staging self-test: nondeterministic path", file=sys.stderr)
+            return 1
+        if path.parent != bytecode_dir or path.name != "core_format" or path.suffix:
+            print("stdlib bytecode staging self-test: non-canonical path", file=sys.stderr)
+            return 1
+        path.write_bytes(payload)
+        entries = [(module_name, Path("unused-source"), b"")]
+        emitted = emit_bytecodes(entries, bytecode_dir, require_bytecode=True)
+        if c_byte_array(payload) not in emitted or f'{{"{module_name}",' not in emitted:
+            print("stdlib bytecode staging self-test: embedded bytes changed", file=sys.stderr)
+            return 1
+        retired_suffix = "." + "xr" + "c"
+        if any(candidate.name.endswith(retired_suffix) for candidate in bytecode_dir.iterdir()):
+            print("stdlib bytecode staging self-test: retired suffix revived", file=sys.stderr)
+            return 1
+        try:
+            emit_bytecodes(
+                [("missing", Path("unused-source"), b"")],
+                bytecode_dir,
+                require_bytecode=True,
+            )
+        except RuntimeError:
+            pass
+        else:
+            print("stdlib bytecode staging self-test: missing input accepted", file=sys.stderr)
+            return 1
+    print("stdlib bytecode staging self-test: PASS")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", required=True, type=Path)
+    parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--root", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--source-output", type=Path)
     parser.add_argument("--bytecode-output", type=Path)
     parser.add_argument("--bytecode-dir", type=Path)
     parser.add_argument("--compiler", type=Path)
     parser.add_argument("--require-bytecode", action="store_true")
-    parser.add_argument("sources", nargs="+", type=Path)
+    parser.add_argument("sources", nargs="*", type=Path)
     args = parser.parse_args()
+
+    if args.self_test:
+        return self_test()
+    if args.root is None:
+        parser.error("--root is required")
+    if not args.sources:
+        parser.error("at least one stdlib source is required")
 
     root = args.root.resolve()
     entries = collect_entries(root, args.sources)

@@ -1,10 +1,10 @@
 {
     "counts":  {
                    "api":  38,
-                   "build":  56,
+                   "build":  50,
                    "cli":  99,
                    "install":  2,
-                   "source":  3150
+                   "source":  3147
                },
     "generated_from":  [
                            "CMakeLists.txt",
@@ -448,7 +448,7 @@
                                  "xray_vm_new_full",
                                  "xray_vm_set_script_info"
                              ],
-    "owner_count":  671,
+    "owner_count":  669,
     "owners":  [
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
@@ -557,7 +557,7 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "b125b972bb46193a88c092c9a59521699dcd7a71d3ff9097be4b5a867432ee13",
+                       "evidence_sha256":  "6ce1c9923e401d58b74945f8cd380c46aad12de5a266455310d745289b3baa4f",
                        "family":  "legacy-build-or-install-target",
                        "hit_count":  14,
                        "path":  "CMakeLists.txt",
@@ -618,9 +618,9 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "94c29ad27baa24a325aeed4ef18821c155daaeb9e0e6f8b09e10ebdc5b40cc0c",
+                       "evidence_sha256":  "15d51bcdf711040c94f617a2268b54c9c5d9d42e6545ac5c10451253d9eb6a7f",
                        "family":  "legacy-stdlib-bootstrap-owner",
-                       "hit_count":  7,
+                       "hit_count":  4,
                        "path":  "CMakeLists.txt",
                        "status":  "transitional-owner",
                        "surface":  "build",
@@ -747,18 +747,6 @@
                        "family":  "xrc-artifact",
                        "hit_count":  2,
                        "path":  "scripts/derive_aot_sdk_closure.py",
-                       "status":  "transitional-owner",
-                       "surface":  "build",
-                       "tokens":  [
-                                      ".xrc"
-                                  ]
-                   },
-                   {
-                       "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "bfaf1df4a83e766b849067b36570b2428a891d063cb1e85fb9fe651a65b3c48d",
-                       "family":  "xrc-artifact",
-                       "hit_count":  3,
-                       "path":  "scripts/generate_stdlib_embedded.py",
                        "status":  "transitional-owner",
                        "surface":  "build",
                        "tokens":  [
@@ -1255,7 +1243,7 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "dfa32cafd962e15fef95defd24c39787ba4366465d61958196925ba816458b4a",
+                       "evidence_sha256":  "b2d4187ce9920c97e1c19d1546dd700a1fb64697c859289c133fa8ad581ed4dc",
                        "family":  "legacy-build-or-install-target",
                        "hit_count":  10,
                        "path":  "src/app/tools/xstdlib_bcgen.c",
@@ -8734,18 +8722,6 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "9fef8afa887d18db3d30967c6b8805651682e7a42c210db92b79a095edcbb952",
-                       "family":  "xrc-artifact",
-                       "hit_count":  3,
-                       "path":  "src/app/tools/xstdlib_bcgen.c",
-                       "status":  "transitional-owner",
-                       "surface":  "source",
-                       "tokens":  [
-                                      ".xrc"
-                                  ]
-                   },
-                   {
-                       "disposition":  "remove-with-atomic-target-plan-product-cutover",
                        "evidence_sha256":  "936663ab1475a7d7f0892d104bc51677abd0d3972eccc6ea1fd3f7b6d56af999",
                        "family":  "xrc-artifact",
                        "hit_count":  1,
@@ -8813,6 +8789,6 @@
                    "unclassified_residue":  "error"
                },
     "schema":  2,
-    "source_tree_fingerprint":  "80257afd29187a6349d70213546c0666e861c91cb533677b3e2fc26a9c99599c",
-    "total":  3345
+    "source_tree_fingerprint":  "1ec43716b052b165741e614c1be7f9387949b50107aac0c8fa02e6ca288ca814",
+    "total":  3336
 }

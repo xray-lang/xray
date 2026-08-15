@@ -1165,8 +1165,10 @@ else()
     set(XRAY_STDLIB_RUNTIME_BYTECODE_DIR
         "${XRAY_STDLIB_FINAL_BYTECODE_DIR}")
 endif()
-set(XRAY_STDLIB_XRC_DIR
+set(XRAY_STDLIB_BYTECODE_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib-bytecode")
+set(XRAY_STDLIB_EMBED_GENERATOR
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py")
 add_custom_command(
     OUTPUT
         ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
@@ -1174,13 +1176,13 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
-            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
+            ${XRAY_STDLIB_EMBED_GENERATOR}
             --root ${CMAKE_CURRENT_SOURCE_DIR}
             --source-output ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
             --bytecode-output ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC}
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
-        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
+        ${XRAY_STDLIB_EMBED_GENERATOR}
         ${XRAY_STDLIB_SCRIPT_SOURCES}
     COMMENT "Generating embedded stdlib source table"
     VERBATIM
@@ -1714,18 +1716,18 @@ endif()
 add_custom_command(
     OUTPUT ${XRAY_STDLIB_FINAL_BYTECODE_INC}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_FINAL_BYTECODE_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_XRC_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_BYTECODE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
-            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
+            ${XRAY_STDLIB_EMBED_GENERATOR}
             --root ${CMAKE_CURRENT_SOURCE_DIR}
             --compiler $<TARGET_FILE:xray_stdlib_bcgen>
-            --bytecode-dir ${XRAY_STDLIB_XRC_DIR}
+            --bytecode-dir ${XRAY_STDLIB_BYTECODE_DIR}
             --require-bytecode
             --bytecode-output ${XRAY_STDLIB_FINAL_BYTECODE_INC}
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
         xray_stdlib_bcgen
-        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
+        ${XRAY_STDLIB_EMBED_GENERATOR}
         ${XRAY_STDLIB_SCRIPT_SOURCES}
     COMMENT "Generating embedded stdlib bytecode table"
     VERBATIM
@@ -4107,6 +4109,19 @@ if(BUILD_TESTS)
     )
     set_tests_properties(legacy_product_residue_inventory_self_test PROPERTIES
         LABELS "meta;artifact;legacy;target-machine"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME stdlib_bytecode_staging_identity
+        COMMAND ${XRAY_PYTHON}
+                ${XRAY_STDLIB_EMBED_GENERATOR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(stdlib_bytecode_staging_identity PROPERTIES
+        LABELS "meta;artifact;stdlib;target-machine"
         PROCESSORS 1
         TIMEOUT 30
     )

@@ -8,7 +8,7 @@
  * xstdlib_bcgen.c - build-time stdlib bytecode compiler
  *
  * KEY CONCEPT:
- *   The final runtime embeds stdlib .xrc bytecode, but producing those .xrc
+ *   The final runtime embeds stdlib bytecode, but producing those build-private
  *   files needs a compiler. This tiny build-only tool links against a bootstrap
  *   core that has embedded source plus an empty bytecode table, avoiding a
  *   final-runtime self-dependency cycle.
@@ -30,7 +30,7 @@
 static int usage(void) {
     fprintf(stderr,
             "usage:\n"
-            "  xray_stdlib_bcgen compile <input.xr> --output <output.xrc> "
+            "  xray_stdlib_bcgen compile <input.xr> --output <bytecode-output> "
             "--format bytecode [--stdlib-module <canonical-name>] "
             "[--strip-debug] [--strip-source]\n"
             "  xray_stdlib_bcgen native-fastpaths <input.xr> --output <output.c> "
