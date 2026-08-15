@@ -355,3 +355,9 @@ XA_INTRINSIC(CODEGEN_COMPILER_FENCE, 5002, "codegen.compilerFence", CODEGEN,
  * after analyzer resolution. */
 XA_INTRINSIC(STRING_BYTE_SLICE_VIEW, 6001, "core.string.bytes", CORE,
              STRING_BYTE_SLICE_VIEW, READ_MAY_THROW, NO_ALLOC, SAFE, 0, 0, NONE, NONE, 0, NONE, 0)
+
+/* Array.reserve is a compiler-owned mutating receiver operation.  Its stable
+ * intrinsic identity survives lowering; later plans never reconstruct it from
+ * the source member spelling or from a mutable Xi type. */
+XA_INTRINSIC(ARRAY_RESERVE, 6002, "core.array.reserve", CORE, ARRAY_RESERVE,
+             WRITE_MAY_THROW, MAY_ALLOC, SAFE, 1, 1, NONE, NONE, 0, NONE, 0)

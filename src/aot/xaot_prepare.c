@@ -18,6 +18,7 @@
 #include "xr_target_aggregate_c_projection.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xa_selection.h"
 #include "../ir/xi_analysis.h"
@@ -876,10 +877,14 @@ static bool array_builtin_is_fresh_storage(const XiValue *value) {
 static bool array_builtin_forwards_storage(const XiValue *value) {
     const char *name;
 
-    if (!value || value->op != XI_CALL_BUILTIN || !value->aux || value->nargs < 1)
+    if (!value || value->op != XI_CALL_BUILTIN || value->nargs < 1)
+        return false;
+    if (value->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE)
+        return true;
+    if (!value->aux)
         return false;
     name = (const char *) value->aux;
-    return strcmp(name, "array_reserve") == 0 || strcmp(name, "array_resize") == 0;
+    return strcmp(name, "array_resize") == 0;
 }
 
 static bool array_method_is_hof_result(const XiValue *value) {
@@ -1899,14 +1904,14 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
             return arg_index == 0 || arg_index == 1;
         case XI_LEN:
             return arg_index == 0;
+        case XI_CALL_BUILTIN:
+            return user->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE && arg_index == 0;
         case XI_CALL_METHOD: {
             /* Native-local representation keeps the array object itself as a
              * direct pointer; relocating its backing data does not invalidate
              * that pointer.  Data-cache eligibility is checked separately. */
             if (arg_index == 0 && (prepare_call_method_matches_receiver_registry_id(
                                        user, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) ||
-                                   prepare_call_method_matches_receiver_registry_id(
-                                       user, XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE) ||
                                    prepare_call_method_matches_receiver_registry_id(
                                        user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM) ||
                                    prepare_call_method_matches_receiver_registry_id(

@@ -84,6 +84,11 @@ For every RC-managed value, including registered identity aliases:
   cross its function. A stack closure's physical capture cleanup is normalized
   to that same logical `DESTROY`; it is not an ordinary heap `RELEASE`.
 
+`Array.reserve` borrows its receiver, consumes the scalar capacity value, and
+returns an owned alias of that receiver under its stable intrinsic identity.
+ARC and lowering do not reconstruct this ownership contract from a selector or
+legacy builtin auxiliary string.
+
 The independent verifier must not reuse ARC closure/alias implementation logic.
 It runs after ARC insertion in every build and reports violations as ICEs with
 the contract identifier and counterexample path. Per-pass deep verification may
@@ -109,8 +114,8 @@ this one. A contract names what it proves; this line names what it does not.
 
 anchor-sha256: src/ir/xi_arc_verify.c 487702a09a76c317c7215c09402101721f04f9d1b0b7f7cc279bcec6d0c90289
 anchor-sha256: src/ir/xi_arc.c 03e07024f5c2d5e0b45c461cfa5c1d8b275ff59a1920192b868f60070c6f8bc2
-anchor-sha256: src/ir/xi_lower_expr.c 20e4c623595d6c2c9e19878cb5844c03a0ff09820730861a91ad6bd6e4d4c479
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ab87d8332419b2df244a4f69341cd9e42f9f89429c33255b7104184ccc79e60b
+anchor-sha256: src/ir/xi_lower_expr.c 5b466b91e51569b12090d6ff972f11de2e53e465c557bd11c10d34f18c2b87b8
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c efb1b8d216257431134c05eb96731244335206803c98c294ad4e3802fe222f96
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
 anchor-sha256: src/runtime/mem/xfixed_heap.c 46e45573a71b10592f12f5215f374c6dd896b4cf0e16bfc85f04b586a33fb5c3
 anchor-sha256: src/runtime/core/xr_runtime_core.c cbd57898ab2362dcd2c3676b0762037c93d85b3a9ddcff5bd8ce18f8a78c5b82

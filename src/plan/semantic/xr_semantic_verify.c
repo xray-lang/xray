@@ -1750,6 +1750,36 @@ static bool semantic_type_is_exact_member_bool(const XrSemanticTypeRecord *type)
            type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0;
 }
 
+static bool verify_array_reserve(const XrSemanticPlan *plan,
+                                 const XrSemanticOperationRecord *operation) {
+    if (!plan || !operation || operation->evidence[1] != XA_INTRINSIC_ARRAY_RESERVE ||
+        operation->opcode != XI_CALL_BUILTIN || operation->operand_count != 2 ||
+        operation->operand_begin > plan->operand_count ||
+        operation->operand_count > plan->operand_count - operation->operand_begin ||
+        operation->metadata_count != 0 || operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CALL_BUILTIN))
+        return false;
+    const XrSemanticOperandRecord *receiver = &plan->operands[operation->operand_begin];
+    const XrSemanticOperandRecord *capacity = receiver + 1;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver->type < plan->type_count ? &plan->types[receiver->type] : NULL;
+    const XrSemanticTypeRecord *capacity_type =
+        capacity->type < plan->type_count ? &plan->types[capacity->type] : NULL;
+    return semantic_type_is_exact_member_array(receiver_type) &&
+           semantic_type_is_exact_member_i64(capacity_type) &&
+           operation->result_type == receiver->type && operation->result_alias_operand == 0 &&
+           operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+           operation->return_provenance == XR_SEM_RETURN_OWNED &&
+           operation->return_parameter == -1 && operation->return_complete == 1 &&
+           receiver->role == XR_SEM_OPERAND_ARGUMENT && receiver->parameter == 0 &&
+           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
+           capacity->role == XR_SEM_OPERAND_ARGUMENT && capacity->parameter == 1 &&
+           capacity->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           capacity->ownership_action == XR_SEM_OPERAND_CONSUME;
+}
+
 static uint8_t semantic_array_element_storage(const XrSemanticTypeRecord *type) {
     if (!type || type->child_count != 0 || type->flags != 0)
         return XR_ELEM_ANY;
@@ -1962,6 +1992,10 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
                                        size_t error_size) {
     if (operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR)
         return true;
+    if (operation->evidence[1] == XA_INTRINSIC_ARRAY_RESERVE)
+        return verify_array_reserve(plan, operation) ||
+               report(error, error_size, "XR_SEM_0019",
+                      "Array.reserve authority is not exact");
     const char *selector =
         operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
             ? plan->metadata[operation->metadata_begin]

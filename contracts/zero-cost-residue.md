@@ -95,6 +95,12 @@ definitions, scanner boundaries, allowance semantics, and the post-CGen
 measurement point are frozen. A change migrates shape filetests and all ports
 that cite the affected category.
 
+An unused `Array.reserve` result does not require a generated C local or a
+tagged pointer round trip. Once the frozen SemanticPlan operation and unique
+TargetPlan array-member call identify the mutation, CGen emits the raw reserve
+effect as a statement; missing or stale authority fails closed instead of
+recovering the operation from selector text or mutable Xi types.
+
 Static cleanup registration and execution add no residue category and consume
 no allowance. A non-suspending `defer { ... }` is lowered as ordinary
 control-flow regions and may leave only the residue of operations written in
@@ -108,6 +114,6 @@ stack, or runtime push/pop helper is a contract violation.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f91b93971b6123b498f964986df49ff2991a0863c22eb5c6e7a6e7d51494008b
-anchor-sha256: src/aot/xi_cgen.c 2a36aa2324911838c021c8d90452356a9c14647ddec8d6a8b78bba77bdee44f4
+anchor-sha256: src/aot/xi_cgen.c 5cea44ebabf9f5e8b47cfa8583f8e791d52f7f9166de5377322b9e1b862442dc
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c ddf3b8d501ef8beb8999c06970d6ac2b178e11f6ff38ac28cb4c8570a7d4182c
 anchor-sha256: src/app/cli/xcmd_verify.c 5fd6d66c6bc2c4be29cb121963eea94682cb48ea20f42aacdeb52fb2a2285b9b

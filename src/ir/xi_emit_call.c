@@ -1063,20 +1063,6 @@ static bool emit_builtin_array_shape_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst,
             emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
         return true;
     }
-    if (strcmp(bname, "array_reserve") == 0) {
-        if (v->nargs != 2) {
-            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-            return true;
-        }
-        XiEmitReg arr = reg_of(ctx, v->args[0]);
-        XiEmitReg cap = reg_of(ctx, v->args[1]);
-        if (ctx->status != XI_EMIT_OK)
-            return true;
-        emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESERVE, arr, cap, 0));
-        if (dst != arr)
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, arr, 0));
-        return true;
-    }
     if (strcmp(bname, "array_resize") == 0) {
         if (v->nargs != 3) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -1096,6 +1082,20 @@ static bool emit_builtin_array_shape_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst,
 }
 
 XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE) {
+        if (v->nargs != 2 || !v->args || !v->args[0] || !v->args[1]) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        XiEmitReg arr = reg_of(ctx, v->args[0]);
+        XiEmitReg cap = reg_of(ctx, v->args[1]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESERVE, arr, cap, 0));
+        if (dst != arr)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, arr, 0));
+        return;
+    }
     /* Name-based dispatch (aux is a string identifier) */
     const char *bname = (const char *) v->aux;
     if (bname && emit_builtin_array_shape_op(ctx, v, dst, bname))

@@ -13,6 +13,7 @@
 #include "../../base/xsha256.h"
 #include "../../base/xglobal_indices.h"
 #include "../../base/xmalloc.h"
+#include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../ir/xi_opt.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
@@ -1148,6 +1149,97 @@ static bool aot_stable_id_is_zero(XrStableId id) {
     for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++)
         if (id.bytes[i] != 0)
             return false;
+    return true;
+}
+
+/* Reconstruct the Array.reserve operand contract from immutable plan rows.
+ * The intrinsic evidence selects the semantic operation and the unique Target
+ * call binds its receiver and capacity identities. No live selector, type, or
+ * arity participates in representation refinement. */
+static bool aot_array_reserve_use_is_exact(const VerifyAuthority *ctx,
+                                           uint32_t operation_index,
+                                           uint32_t *receiver_value,
+                                           uint32_t *capacity_value) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    if (!ctx || !operation || !operands ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR ||
+        operation->evidence[1] != XA_INTRINSIC_ARRAY_RESERVE ||
+        operation->opcode != XI_CALL_BUILTIN || operation->operand_count != 2 ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CALL_BUILTIN))
+        return false;
+    const XrSemanticOperandRecord *receiver =
+        &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *capacity = receiver + 1;
+    const XrSemanticTypeRecord *receiver_type =
+        xr_semantic_plan_type(ctx->semantic, receiver->type);
+    const XrSemanticTypeRecord *capacity_type =
+        xr_semantic_plan_type(ctx->semantic, capacity->type);
+    if (!receiver_type || receiver_type->kind != XR_KIND_ARRAY ||
+        receiver_type->builtin_type != XR_TID_NULL ||
+        receiver_type->child_count != 1 ||
+        receiver_type->scalar_rep != XR_SCALAR_REP_NONE ||
+        receiver_type->aggregate_extent != 0 ||
+        receiver_type->aggregate_align != 0 ||
+        receiver_type->flags !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        !semantic_exact_i64_type(capacity_type) ||
+        operation->result_type != receiver->type ||
+        operation->result_alias_operand != 0 ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        receiver->role != XR_SEM_OPERAND_ARGUMENT || receiver->parameter != 0 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        capacity->role != XR_SEM_OPERAND_ARGUMENT || capacity->parameter != 1 ||
+        capacity->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        capacity->ownership_action != XR_SEM_OPERAND_CONSUME)
+        return false;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(ctx->target_plan, &call_count);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (call)
+            return false;
+        call = &calls[i];
+    }
+    XrStableId expected_call;
+    if (!call ||
+        !aot_pair_identity("xray-target-array-member-scalar-v1", operation->id,
+                           receiver_type->id, capacity->value, &expected_call) ||
+        !xr_stable_id_equal(call->identity, expected_call) ||
+        call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->caller_function != operation->function ||
+        call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !aot_stable_id_is_zero(call->source_export_identity) ||
+        !aot_stable_id_is_zero(call->source_callee_identity) ||
+        call->result_value != operation->result_value ||
+        call->argument_count != 0 || call->adapter_count != 0 ||
+        call->flags != 0 ||
+        call->calling_convention !=
+            XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_NONE)
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver->value;
+    if (capacity_value)
+        *capacity_value = capacity->value;
     return true;
 }
 
@@ -6695,7 +6787,21 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                 return false;
             return oracle_machine_storage(ctx, source_value, out_storage,
                                           &ignored_kind);
-        case XI_CALL_BUILTIN:
+        case XI_CALL_BUILTIN: {
+            uint32_t reserve_receiver = XR_SEMANTIC_INDEX_NONE;
+            uint32_t reserve_capacity = XR_SEMANTIC_INDEX_NONE;
+            if (aot_array_reserve_use_is_exact(
+                    ctx, operation_index, &reserve_receiver,
+                    &reserve_capacity)) {
+                if (operand_index == 0 && source_value == reserve_receiver) {
+                    *out_storage = XR_REP_TAGGED;
+                    return true;
+                }
+                if (operand_index == 1 && source_value == reserve_capacity)
+                    return oracle_machine_storage(
+                        ctx, source_value, out_storage, &ignored_kind);
+                return false;
+            }
             if (aot_array_intrinsic_is_exact(ctx->semantic, operation, NULL,
                                              NULL)) {
                 XrRep result_storage = XR_REP_TAGGED;
@@ -6708,6 +6814,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             }
             *out_storage = XR_REP_TAGGED;
             return true;
+        }
         case XI_RETAIN:
         case XI_RELEASE: {
             XrRep literal_storage = XR_REP_TAGGED;

@@ -7612,10 +7612,6 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
         cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_SET) &&
         emit_typed_array_set_unchecked_expr(ctx, out, f, prefix, v))
         return true;
-    if (nargs == 1 &&
-        cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE) &&
-        emit_typed_array_reserve_expr(ctx, out, f, prefix, v))
-        return true;
     if (nargs >= 1 && nargs <= 2 &&
         cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESIZE) &&
         emit_typed_array_resize_zero_expr(ctx, out, f, prefix, v))

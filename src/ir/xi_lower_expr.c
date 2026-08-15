@@ -6566,6 +6566,15 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         value->view_evidence.capability = 1;
         value->view_evidence.lifetime = 1;
         value->view_evidence.complete = 1;
+    } else if (desc->id == XA_INTRINSIC_ARRAY_RESERVE) {
+        value->result_alias_operand = 0;
+        XiSequenceEvidenceIds sequence_ids;
+        XiSequenceEvidenceKinds sequence_kinds = {
+            .capacity_op_kind = XG_CAPACITY_RESERVE,
+        };
+        xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds,
+                                            &sequence_ids);
+        xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
     }
     if (desc->family == XA_INTRINSIC_FAMILY_MEMORY) {
         if (desc->lowering == XA_INTRINSIC_LOWERING_SLICE_REINTERPRET) {
@@ -6755,8 +6764,14 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     XaResolvedCall lowering_resolved;
     if (!resolved && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &call->callee->as.member_access;
-        XaIntrinsicId intrinsic_id = xa_intrinsic_compiler_receiver_method(
-            lower_known_expr_type(l, member->object), member->name);
+        XrType *receiver_type = lower_known_expr_type(l, member->object);
+        XaIntrinsicId intrinsic_id = xa_intrinsic_compiler_receiver_method(receiver_type,
+                                                                            member->name);
+        if (intrinsic_id == XA_INTRINSIC_NONE &&
+            xi_lower_receiver_method_call_matches(
+                receiver_type, member->name, call->arg_count,
+                XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE))
+            intrinsic_id = XA_INTRINSIC_ARRAY_RESERVE;
         if (intrinsic_id != XA_INTRINSIC_NONE) {
             lowering_resolved = (XaResolvedCall) {
                 .source_node_id = node->node_id,
@@ -7179,21 +7194,6 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->aux = (void *) "string_byte_slice";
             v->flags |= XI_FLAG_READS_MEM | XI_FLAG_MAY_THROW;
             v->line = (uint32_t) node->line;
-            return v;
-        }
-
-        if (xi_lower_receiver_method_call_matches(recv->type, ma->name, n,
-                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE)) {
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 2);
-            if (!v)
-                return NULL;
-            v->args[0] = recv;
-            v->args[1] = arg_vals[0];
-            v->aux = (void *) "array_reserve";
-            v->flags |= XI_FLAG_SIDE_EFFECT;
-            v->line = (uint32_t) node->line;
-            lower_seal_member_result_alias(v, method_receiver_type, ma->name);
-            xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
             return v;
         }
 

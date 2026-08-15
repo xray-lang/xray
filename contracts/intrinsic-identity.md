@@ -19,7 +19,11 @@ reinterpretation identities without reassigning the existing registry.
 6. Target-mode queries such as `simd.Capabilities.isRuntimeSelected()` have
    their own stable identity; they are not inferred from `nativeBytes()` or
    from a backend helper spelling.
+7. `Array.reserve` has the stable `core.array.reserve` identity. Its mutating
+   receiver, capacity operand, receiver-alias result, VM opcode, and AOT effect
+   statement are selected from that identity and the frozen plans; selector
+   text is not retained as a second authority.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def f6b8fcd4380366216d5c7d24273f1ee425c60ec79b3510f40ef5c6b391852430
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 3acea091929e3d062fa5183ac6b219dddb1a7df34baa8607b7fac8d5f52b6872

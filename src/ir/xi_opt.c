@@ -1273,9 +1273,11 @@ static bool xi_await_all_task_array_allowed_structural_use(XiFunc *f, const XiVa
                                                            uint16_t arg_idx, XiValue *arr) {
     if (!user || !arr || arg_idx != 0)
         return false;
+    if (user->op == XI_CALL_BUILTIN && user->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE)
+        return true;
     if (user->op == XI_CALL_BUILTIN && user->aux) {
         const char *name = (const char *) user->aux;
-        return strcmp(name, "array_clear") == 0 || strcmp(name, "array_reserve") == 0;
+        return strcmp(name, "array_clear") == 0;
     }
     if ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
         xi_task_array_values_same(f, user->args[0], arr)) {
@@ -2293,8 +2295,6 @@ static bool sr_is_typed_array_native_receiver_method(const XiValue *v) {
         return false;
     return sr_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) ||
            sr_call_method_matches_receiver_registry_id(v,
-                                                       XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE) ||
-           sr_call_method_matches_receiver_registry_id(v,
                                                        XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESIZE) ||
            sr_call_method_matches_receiver_registry_id(
                v, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM) ||
@@ -2810,9 +2810,8 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_CALL_BUILTIN: {
             if (v->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW)
                 return sr_type_native_boundary_rep(v->type);
-            const char *name = (const char *) v->aux;
-            if (name && strcmp(name, "array_reserve") == 0)
-                return sr_type_native_boundary_rep(v->type);
+            if (v->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE)
+                return XR_REP_TAGGED;
             return XR_REP_TAGGED;
         }
         case XI_LEN:
@@ -3239,11 +3238,10 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             if (sr_array_intrinsic_operand_rep(user, arg_idx,
                                                &array_intrinsic_rep))
                 return array_intrinsic_rep;
-            const char *name = (const char *) user->aux;
-            if (name && strcmp(name, "array_reserve") == 0 && arg_idx < user->nargs &&
+            if (user->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
                 if (arg_idx == 0)
-                    return sr_type_native_boundary_rep(user->args[arg_idx]->type);
+                    return XR_REP_TAGGED;
                 if (arg_idx == 1)
                     return XR_REP_I64;
             }

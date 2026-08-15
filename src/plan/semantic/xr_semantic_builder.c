@@ -3117,6 +3117,40 @@ static bool semantic_array_member_bool_type_exact(const XrSemanticTypeRecord *ty
            type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0;
 }
 
+/* Array.reserve is admitted by the analyzer's stable intrinsic id. The
+ * frozen operation then proves the complete receiver/capacity/result shape;
+ * no selector or live Xi type participates in the classification. */
+static bool semantic_array_reserve_exact(const XrSemanticBuildContext *ctx,
+                                         const XrSemanticOperationRecord *record) {
+    if (!ctx || !record || record->evidence[1] != XA_INTRINSIC_ARRAY_RESERVE ||
+        record->opcode != XI_CALL_BUILTIN || record->operand_count != 2 ||
+        record->operand_begin > ctx->plan->operand_count ||
+        record->operand_count > ctx->plan->operand_count - record->operand_begin ||
+        record->metadata_count != 0 || record->auxiliary_kind != XI_AUX_KIND_NONE ||
+        record->semantic_immediate != 0 ||
+        record->effects != xi_generated_op_effects(XI_CALL_BUILTIN))
+        return false;
+    const XrSemanticOperandRecord *receiver =
+        &ctx->plan->operands[record->operand_begin];
+    const XrSemanticOperandRecord *capacity = receiver + 1;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
+    const XrSemanticTypeRecord *capacity_type =
+        capacity->type < ctx->plan->type_count ? &ctx->plan->types[capacity->type] : NULL;
+    return semantic_array_member_receiver_type_exact(receiver_type) &&
+           semantic_array_member_i64_type_exact(capacity_type) &&
+           record->result_type == receiver->type && record->result_alias_operand == 0 &&
+           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+           record->return_provenance == XR_SEM_RETURN_OWNED &&
+           record->return_parameter == -1 && record->return_complete == 1 &&
+           receiver->role == XR_SEM_OPERAND_ARGUMENT && receiver->parameter == 0 &&
+           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
+           capacity->role == XR_SEM_OPERAND_ARGUMENT && capacity->parameter == 1 &&
+           capacity->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           capacity->ownership_action == XR_SEM_OPERAND_CONSUME;
+}
+
 /* The result clause the frozen shape demands. A unit, int, or bool result is a
  * fresh value the call owns outright; a receiver result is the receiver's own
  * reference handed straight back, which the operation records as an alias of
@@ -3631,6 +3665,9 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING;
     if (xi_json_namespace_value_exact(value) && semantic_json_namespace_value_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE;
+    if (value->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE &&
+        semantic_array_reserve_exact(ctx, record))
+        record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR;
     if (xi_array_member_scalar_exact(value) && semantic_array_member_scalar_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR;
     if (xi_native_module_scalar_call_exact(ctx, function, value) &&

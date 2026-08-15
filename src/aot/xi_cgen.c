@@ -2664,6 +2664,85 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function,
            semantic_function == function->semantic_plan_function_index;
 }
 
+/* Resolve Array.reserve only from the frozen SemanticPlan operation and its
+ * verified TargetPlan call row.  The live Xi intrinsic id is checked after
+ * that authority is found so a mutated backend value cannot borrow the row;
+ * selector spelling, live types and arity never select the operation. */
+static bool cg_array_reserve_target_authority(XiCgenCtx *ctx, const XiFunc *function,
+                                              const XiValue *value) {
+    if (!ctx || !function || !value || !function->semantic_plan)
+        return false;
+    const CgValueEmissionRegistryEntry *entry = NULL;
+    for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
+        if (ctx->value_emission_registry[i].semantic_plan != function->semantic_plan)
+            continue;
+        if (entry)
+            return false;
+        entry = &ctx->value_emission_registry[i];
+    }
+    if (!entry || !entry->target_plan ||
+        !xr_target_plan_is_verified(entry->target_plan))
+        return false;
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    char error[256] = {0};
+    if (!xr_aot_scalar_semantic_value_id(entry->target_plan, function, value,
+                                         &semantic_function, &semantic_value, error,
+                                         sizeof(error)) ||
+        semantic_function != function->semantic_plan_function_index)
+        return false;
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(function->semantic_plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(function->semantic_plan, i);
+        if (!candidate || candidate->function != semantic_function ||
+            candidate->result_value != semantic_value)
+            continue;
+        if (operation)
+            return false;
+        operation = candidate;
+        operation_index = i;
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(function->semantic_plan, &operand_count);
+    if (!operation || !operands ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR ||
+        operation->evidence[1] != XA_INTRINSIC_ARRAY_RESERVE ||
+        operation->operand_count != 2 || operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        value->xa_intrinsic_id != XA_INTRINSIC_ARRAY_RESERVE || value->nargs != 2 ||
+        !value->args || !value->args[0] || !value->args[1])
+        return false;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    uint32_t capacity = XR_SEMANTIC_INDEX_NONE;
+    if (!cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
+        !cg_value_semantic_id(ctx, function, value->args[1], &capacity) ||
+        receiver != operands[operation->operand_begin].value ||
+        capacity != operands[operation->operand_begin + 1u].value)
+        return false;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(entry->target_plan, &call_count);
+    const XrTargetCallRecord *match = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (match)
+            return false;
+        match = &calls[i];
+    }
+    return match && match->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+           match->result_value == semantic_value && match->argument_count == 0 &&
+           match->adapter_count == 0 && match->flags == 0 &&
+           match->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
+           match->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
+           match->result_ownership == XR_TARGET_CALL_NONE;
+}
+
 /* Resolve a C-emission recipe operand back to the unique frozen Xi member.
  * The lookup is numeric SemanticPlan identity only: no mutable type, spelling,
  * opcode, arity, or backend representation participates. */
@@ -6105,8 +6184,6 @@ static bool cg_method_receiver_accepts_borrowed_ref(const XiValue *user, uint16_
         return false;
     return cg_call_method_matches_receiver_registry_id(user,
                                                        XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESIZE) ||
-           cg_call_method_matches_receiver_registry_id(user,
-                                                       XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE) ||
            cg_call_method_matches_receiver_registry_id(user,
                                                        XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR) ||
            cg_call_method_matches_receiver_registry_id(
@@ -9605,6 +9682,12 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 
     if (emit_closure_new_value_stmt(ctx, out, f, prefix, v, false))
         return;
+
+    if (!cg_debug_value_has_source_storage(ctx, f, v) &&
+        emit_unused_array_reserve_effect_stmt(ctx, out, f, v)) {
+        emit_value_generated_line_reset(ctx, out, v);
+        return;
+    }
 
     if (cg_unused_call_result_emits_statement(ctx, f, v)) {
         fprintf(out, "    (void)(");

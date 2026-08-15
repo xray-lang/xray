@@ -1419,6 +1419,34 @@ static size_t count_intrinsic_in_func(const XiFunc *func, XaIntrinsicId intrinsi
     return count;
 }
 
+static XiValue *find_unique_intrinsic_in_func(XiFunc *func,
+                                              XaIntrinsicId intrinsic_id) {
+    XiValue *match = NULL;
+    if (!func)
+        return NULL;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *block = func->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!value || value->xa_intrinsic_id != (uint32_t) intrinsic_id)
+                continue;
+            if (match)
+                return NULL;
+            match = value;
+        }
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++) {
+        XiValue *child_match =
+            find_unique_intrinsic_in_func(func->children[ci], intrinsic_id);
+        if (!child_match)
+            continue;
+        if (match)
+            return NULL;
+        match = child_match;
+    }
+    return match;
+}
+
 static const char *next_static_after(const char *fn) {
     assert(fn != NULL);
     const char *next = strstr(fn + 1, "\nstatic ");
@@ -2272,6 +2300,15 @@ TEST(cgen_unused_array_reserve_result_emits_effect_statement_without_local) {
                       "print(grow(true))\n";
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "unused array reserve fixture should compile");
+    XiValue *reserve =
+        find_unique_intrinsic_in_func(ir, XA_INTRINSIC_ARRAY_RESERVE);
+    TEST_REQUIRE(reserve && reserve->op == XI_CALL_BUILTIN &&
+                     reserve->nargs == 2 && reserve->args &&
+                     reserve->args[0] && reserve->args[1] &&
+                     reserve->aux == NULL && reserve->aux_int == 0 &&
+                     reserve->aux_kind == XI_AUX_KIND_NONE &&
+                     reserve->result_alias_operand == 0,
+                 "Array.reserve lowering must preserve stable intrinsic identity without a selector");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
@@ -2283,6 +2320,8 @@ TEST(cgen_unused_array_reserve_result_emits_effect_statement_without_local) {
                  "unused array reserve result must not materialize a C local");
     TEST_REQUIRE(contains_between(fn, fn_end, "(void)(xrt_array_reserve_trusted_raw("),
                  "array reserve side effect must remain emitted");
+    TEST_REQUIRE(strstr(code, "({") == NULL,
+                 "array reserve effect emission must remain portable C11");
 
     printf("  Generated unused array reserve statement %zu bytes of C code\n", strlen(code));
     xr_free(code);

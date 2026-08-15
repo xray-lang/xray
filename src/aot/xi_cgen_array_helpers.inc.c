@@ -3951,11 +3951,11 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
             return arg_index == 0 || arg_index == 1;
         case XI_LEN:
             return arg_index == 0;
+        case XI_CALL_BUILTIN:
+            return user->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE && arg_index == 0;
         case XI_CALL_METHOD: {
             if (arg_index == 0 && (cg_call_method_matches_receiver_registry_id(
                                        user, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) ||
-                                   cg_call_method_matches_receiver_registry_id(
-                                       user, XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE) ||
                                    cg_call_method_matches_receiver_registry_id(
                                        user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM) ||
                                    cg_call_method_matches_receiver_registry_id(
@@ -5374,28 +5374,6 @@ static bool emit_typed_array_resize_zero_expr(XiCgenCtx *ctx, FILE *out, const X
 }
 
 static void emit_byte_array_result_suffix(FILE *out, bool boxed);
-
-static bool emit_typed_array_reserve_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                          const char *prefix, const XiValue *call) {
-    if (!call || call->nargs != 2)
-        return false;
-
-    CgArrayElemInfo info;
-    if (!cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
-        return false;
-
-    bool value_used = cg_value_has_actual_ir_use(f, call);
-    bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
-    if (boxed)
-        fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_array_reserve_trusted_raw(");
-    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
-    fprintf(out, ", ");
-    emit_value_as_rep(out, call->args[1], XR_REP_I64);
-    fprintf(out, ")");
-    emit_byte_array_result_suffix(out, boxed);
-    return true;
-}
 
 static bool cg_array_elem_info_is_u8(const CgArrayElemInfo *info) {
     return info && xr_type_is_exact_u8(info->type);

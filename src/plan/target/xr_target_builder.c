@@ -1224,6 +1224,54 @@ static bool semantic_array_member_bool_type_is_exact(const XrSemanticTypeRecord 
            type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0;
 }
 
+static bool semantic_array_reserve_is_exact(const XrSemanticPlan *plan,
+                                            const XrSemanticOperationRecord *operation,
+                                            uint32_t *receiver_type_index,
+                                            uint32_t *capacity_value) {
+    uint32_t operands_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operands_count);
+    if (!plan || !operation || !operands ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR ||
+        operation->evidence[1] != XA_INTRINSIC_ARRAY_RESERVE ||
+        operation->opcode != XI_CALL_BUILTIN || operation->operand_count != 2 ||
+        operation->operand_begin > operands_count ||
+        operation->operand_count > operands_count - operation->operand_begin ||
+        operation->metadata_count != 0 || operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CALL_BUILTIN))
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *capacity = receiver + 1;
+    const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(plan, receiver->type);
+    const XrSemanticTypeRecord *capacity_type = xr_semantic_plan_type(plan, capacity->type);
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(plan, operation->function);
+    if (!function || !semantic_array_member_receiver_type_is_exact(receiver_type) ||
+        !semantic_array_member_i64_type_is_exact(capacity_type) ||
+        operation->result_type != receiver->type || operation->result_alias_operand != 0 ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        receiver->role != XR_SEM_OPERAND_ARGUMENT || receiver->parameter != 0 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        capacity->role != XR_SEM_OPERAND_ARGUMENT || capacity->parameter != 1 ||
+        capacity->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        capacity->ownership_action != XR_SEM_OPERAND_CONSUME ||
+        receiver->value < function->value_begin ||
+        receiver->value >= function->value_begin + function->value_count ||
+        capacity->value < function->value_begin ||
+        capacity->value >= function->value_begin + function->value_count ||
+        operation->result_value < function->value_begin ||
+        operation->result_value >= function->value_begin + function->value_count)
+        return false;
+    if (receiver_type_index)
+        *receiver_type_index = receiver->type;
+    if (capacity_value)
+        *capacity_value = capacity->value;
+    return true;
+}
+
 /* `Array<T>` is a compiler-owned container: no declaration produces the array
  * kind and the language admits no member declaration on it, so a frozen
  * selector below on that receiver names one implementation.  Each row states
@@ -1262,6 +1310,16 @@ static bool semantic_array_member_scalar_is_exact(const XrSemanticPlan *plan,
                                                   const XrSemanticOperationRecord *operation,
                                                   uint32_t *element_value,
                                                   bool *receiver_result) {
+    uint32_t reserve_receiver_type = XR_SEMANTIC_INDEX_NONE;
+    uint32_t reserve_capacity = XR_SEMANTIC_INDEX_NONE;
+    if (semantic_array_reserve_is_exact(plan, operation, &reserve_receiver_type,
+                                        &reserve_capacity)) {
+        if (element_value)
+            *element_value = reserve_capacity;
+        if (receiver_result)
+            *receiver_result = true;
+        return true;
+    }
     uint32_t operands_count = 0, metadata_count = 0, child_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operands_count);
     const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
@@ -4662,10 +4720,11 @@ static bool builder_add_nullable_scalar_storage(XrTargetPlanBuilder *builder,
 
 /* An array member that hands back its receiver defines a second name for the
  * container the receiver already owns. The only storage fact this plan can
- * state for that name is the same owned tagged outer value the allocation
- * carries, so the row binds its own temporary slot and no layout of its own:
- * the array allocation family already states the one dynamic layout this type
- * has, and a second one would leave the allocation authority with two. */
+ * state for that name is the same owned tagged outer value the receiver
+ * carries. The family also states the type's one dynamic layout: the receiver
+ * can be an array literal whose defining operation has no separate allocation
+ * authority, and append_layout_intent is idempotent when another exact family
+ * already froze the same geometry. */
 static bool builder_add_array_member_result_storage(XrTargetPlanBuilder *builder, char *error,
                                                     size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE, error,
@@ -4726,6 +4785,9 @@ static bool builder_add_array_member_result_storage(XrTargetPlanBuilder *builder
             .has_slot = true,
         };
         valid = append_slot_intent(builder, &slot, error, error_size) &&
+                append_layout_intent(builder, operation->result_type,
+                                     XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                                     error_size) &&
                 append_value_intent(builder, &value, error, error_size);
         if (valid)
             analysis.defined_values[operation->result_value] = 1;

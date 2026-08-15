@@ -220,12 +220,14 @@ static bool builtin_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) 
         user->view_evidence.complete && user->view_evidence.source_operand == 0)
         return arg_idx == 0;
 
+    if (user->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE)
+        return arg_idx == 0;
+
     if (!user->aux)
         return false;
     const char *name = (const char *) user->aux;
 
-    if (strcmp(name, "array_clear") == 0 || strcmp(name, "array_reserve") == 0 ||
-        strcmp(name, "array_resize") == 0) {
+    if (strcmp(name, "array_clear") == 0 || strcmp(name, "array_resize") == 0) {
         return arg_idx == 0;
     }
 

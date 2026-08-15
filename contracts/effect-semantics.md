@@ -73,6 +73,12 @@ and only an element carrying no reference makes that traffic a copy that leaves
 no reference-count obligation for a backend to discharge. Every other container
 member, every operand count outside the frozen range, and every
 reference-capable element, stays without dispatch authority.
+`Array.reserve` is the closed stable-identity member of this container family:
+the analyzer records `core.array.reserve`, SemanticPlan freezes the exact array
+receiver, signed capacity operand, receiver-alias result, write/may-throw
+effects, and empty selector metadata, and independent verification reconstructs
+the same shape. A selector, mutable Xi type, or legacy builtin auxiliary string
+cannot authorize it.
 A member call on an imported native stdlib module namespace carries its own
 numeric intrinsic identity, stated once for every module rather than per module
 name. The receiver is proven from the rows: a module shared-slot read whose
@@ -407,10 +413,10 @@ anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61
 anchor-sha256: tests/unit/ir/test_xi_lower.c 79cb2f81a9a6b9c45ed23eabaf548508ac41ba5e6fe939ab20a5dd57fecbc7e9
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 4c74a794312a006324974d456bece12e1073d3ab3e3e044c49705c19eaf23f8a
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 286b7887eb943763de2e9494df62eef875074bfbe67aa4c0ffcb9c6cda031741
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c db1c1bfdce0e098e294852bc67faf37ad8c3bc4ecbfd9410a8698a82132acc28
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 9e978d76154d505d5f9d37d49550062509f59888032f49791e7389e2767f446e
 anchor-sha256: src/plan/format/xr_xsm_encode.c 9b66a6e25f0bd3557a005617fce7ce569a5d00a38475bcdbdd484225392f5bae
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c fe2536ee533d849b819a7be438d184fadd9dda52ab8c87a5c838c6f355fa6bb2
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c feae89724cf3fd35637547417c95139c74cc510aefa482dd2dae674afe96aac8
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h f04385c2ed2962b891d5773b88ef1e706092744fc2846a40903dde9d8ac7d4b7
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 90528b2d34429cb148751cdac7479de616c18c43280f0248f77070b454e28257
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h e027fff84720e4562f02305aad3bb435128f17ba584522718583b674c344aeb8
@@ -420,6 +426,6 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d190
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h d2dff7451f5eb731348efec9541a2b8cbbfbc879e049d163ed46479352a62a1e
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 0bd5c319832db3c5c1067e5ee364135923a15b1e488b5f9ab4fe5fa7bc8e9310
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h ee7409a02d228f10ed8c812c9b9d7f835106067e37d12bc6ed50c6fa48f93e27
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 2d35e2ec2cc32a35f971eae1b6f12d81cd6cc6291b47af5577ebd31544433bdd
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c e13a45c2e2ab25e7d66de9307e0195890f66046ebbdfde83d60cfbcdb5e22e6c
 anchor-sha256: src/stdlib/xstdlib_metadata.h fea5c1b87e5cf4650f62720540f9728ac71dc475fdab683ba30b6458d3e3902b
 anchor-sha256: tests/unit/plan/test_semantic_plan.c cc748a2ff8931b1e35a600c084546b86db777119b0747a4d2d00ca4486bb5462

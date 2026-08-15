@@ -486,6 +486,41 @@ static XrSemanticPlan *build_array_intrinsic_semantic(void) {
     return semantic;
 }
 
+static XrSemanticPlan *build_array_reserve_semantic(void) {
+    XiFunc *function = xi_func_new("target_array_reserve", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *initial_capacity = xi_const_int(function, entry, 3, &stub_int);
+    XiValue *array = xi_value_new(function, entry, XI_ARRAY_NEW,
+                                  &stub_target_u8_array, 1);
+    XiValue *reserve_capacity = xi_const_int(function, entry, 8, &stub_int);
+    XiValue *reserve = xi_value_new(function, entry, XI_CALL_BUILTIN,
+                                    &stub_target_u8_array, 2);
+    REQUIRE(initial_capacity && array && reserve_capacity && reserve);
+    array->args[0] = initial_capacity;
+    array->array_element_storage = XR_ELEM_U8;
+    reserve->args[0] = array;
+    reserve->args[1] = reserve_capacity;
+    reserve->xa_intrinsic_id = XA_INTRINSIC_ARRAY_RESERVE;
+    reserve->result_alias_operand = 0;
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(release && result);
+    release->args[0] = reserve;
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &semantic, error,
+                                        sizeof(error));
+    if (!built)
+        fprintf(stderr, "Array.reserve semantic failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
+}
+
 /* The three StringBuilder method families are all stated against the same
  * exact constructor receiver, so every fixture starts from one. */
 static XiValue *emit_exact_string_builder(XiFunc *function, XiBlock *entry) {
@@ -3803,6 +3838,69 @@ static void test_array_intrinsic_call_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_array_reserve_call_authority(void) {
+    XrSemanticPlan *semantic = build_array_reserve_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error,
+                                      sizeof(error));
+    if (!built)
+        fprintf(stderr, "Array.reserve TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan && plan->calls_count == 1 &&
+            plan->call_arguments_count == 0);
+    XrTargetCallRecord *call = &plan->calls[0];
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, call->semantic_operation);
+    REQUIRE(operation && operation->opcode == XI_CALL_BUILTIN &&
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR &&
+            operation->evidence[1] == XA_INTRINSIC_ARRAY_RESERVE &&
+            operation->metadata_count == 0 &&
+            operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+            operation->result_alias_operand == 0 &&
+            call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+            call->result_value == operation->result_value &&
+            call->calling_convention ==
+                XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
+            call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
+            call->result_mode == XR_TARGET_CALL_VALUE &&
+            call->result_ownership == XR_TARGET_CALL_NONE &&
+            call->adapter_count == 0 && call->flags == 0);
+    const XrTargetValueRepRecord *result =
+        xr_target_plan_value_rep(plan, operation->result_value);
+    REQUIRE(result && result->slot < plan->slots_count &&
+            plan->machine_reps[result->register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[result->memory_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+    bool found_layout = false;
+    for (uint32_t i = 0; i < plan->layouts_count; i++)
+        if (plan->layouts[i].semantic_type == operation->result_type &&
+            plan->layouts[i].kind == XR_TARGET_LAYOUT_DYNAMIC)
+            found_layout = true;
+    REQUIRE(found_layout);
+
+    XrStableId saved_identity = call->identity;
+    call->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->identity = saved_identity;
+    uint8_t saved_convention = call->calling_convention;
+    call->calling_convention = XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->calling_convention = saved_convention;
+    uint8_t saved_kind = call->target_kind;
+    call->target_kind = XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->target_kind = saved_kind;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static XrTargetCallRecord *find_call_by_convention(XrTargetPlan *plan, uint8_t convention) {
     XrTargetCallRecord *match = NULL;
     for (uint32_t i = 0; i < plan->calls_count; i++) {
@@ -4608,6 +4706,11 @@ static void test_bool_and_nullable_scalar_boundary(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "array-reserve-authority") == 0) {
+        test_array_reserve_call_authority();
+        puts("Array.reserve TargetPlan authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "array-intrinsic-authority") == 0) {
         test_array_intrinsic_call_authority();
         puts("Array intrinsic TargetPlan authority tests passed");
@@ -4616,6 +4719,7 @@ int main(int argc, char **argv) {
     test_direct_local_raw_pointer_call_authority();
     test_unit_enum_target_rep_mutations();
     test_array_intrinsic_call_authority();
+    test_array_reserve_call_authority();
     test_stringbuilder_constructor_call_authority();
     test_stringbuilder_append_rune_call_authority();
     test_stringbuilder_to_string_call_authority();

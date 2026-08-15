@@ -192,6 +192,15 @@ helper. The semantic receiver must be the unique exact
 and CEmission independently rebuild that chain, and CGen consumes only the
 frozen recipe. This does not authorize `runes().nth(...)`, another Rune
 predicate, selector dispatch, live-type inference, or a generic method ABI.
+For exact `Array.reserve`, the existing array-member Target call binds the
+stable Semantic intrinsic, array receiver, signed capacity value, receiver
+alias result, and owned dynamic slot. The same family idempotently supplies the
+dynamic layout when the receiver originated as an array literal. Representation
+refinement independently freezes the receiver's tagged carrier and the native
+signed capacity operand from the same exact Target call. CGen emits an unused
+result as a raw effect statement from that authority and cannot recover it from
+selector text, live Xi type, arity, or legacy auxiliary metadata. This reuses
+existing plan records and changes no serialized schema or public ABI.
 An AOT cross-execution transfer row binds its site and payload to exactly one
 representation authority. A TargetPlan value binding and a legacy value row
 are mutually exclusive; the only accepted legacy rows are the independently
@@ -431,10 +440,10 @@ the compiler core does not download a provider.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de082761402165a3c36919
-anchor-sha256: src/aot/xaot_prepare.c bc3b3986d9c34bdcb03e5abe04aed10e744f65dc6c8f8a17d031924d3e9b9e03
+anchor-sha256: src/aot/xaot_prepare.c fcaf520ec438ea18141e33f3dd64c35a1ebc44f5f7942afdb3042aac20131a12
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c f0012f689493caba9ca93f2dadeb527e56ea4cd35b8d96b68ba563c68ba31033
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c d1c88672f1322f4d567219f24ae96f88265d7aa2d9ff127f28e5c049308ad428
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 6065bcb3e7e5297c971082c0cacc89b7adda80c71b51f65b24299eb31c78e7be
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 70df8d4d8c285f3a3997b16b13d42e9cf195c2a6711f01d11d039f2e7a4f4573
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 9ced733eb9837e6da36212689d9cf49e91c8de34296788fb97b2b671f62da546
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 96f08db32d683342db997d1614595551dfbf57257e97a0af54c024a6e12a50ee
@@ -448,10 +457,10 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 0bd5c319832d
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h ee7409a02d228f10ed8c812c9b9d7f835106067e37d12bc6ed50c6fa48f93e27
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 56ecc9da0b60c8d7f2eaa1b3c041f2ec06d600a7dc3f7f52038c25336250d843
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c f0110919fa8e0b939577fa1ce860249510c887a428bd16b561f4a00b883b1974
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ab87d8332419b2df244a4f69341cd9e42f9f89429c33255b7104184ccc79e60b
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c efb1b8d216257431134c05eb96731244335206803c98c294ad4e3802fe222f96
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 375af2e4b45271d06e6ce6ed798be2e6f9f8786c25e68d38ea3f4ca6f41160c6
-anchor-sha256: src/aot/xi_cgen.c 2a36aa2324911838c021c8d90452356a9c14647ddec8d6a8b78bba77bdee44f4
+anchor-sha256: src/aot/xi_cgen.c 5cea44ebabf9f5e8b47cfa8583f8e791d52f7f9166de5377322b9e1b862442dc
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
 anchor-sha256: src/aot/xrt_core_freestanding.h 4637d9be259b16363f74d330ad0bc3d016c71f588d418e71ed9a57cffcf6ecfb
 anchor-sha256: src/aot/xrt_method.h 17f45e117627c5fb5f428072ea7b7aee285deee5366f04dffbeeb93508ee91bd

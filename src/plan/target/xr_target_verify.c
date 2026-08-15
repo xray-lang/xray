@@ -3203,6 +3203,11 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
             return report(error, error_size, "XR_TARGET_1001",
                           "dynamic-type verification input is invalid");
         }
+        bool exact_array_member_result = false;
+        if (!operation_is_exact_array_member_scalar(
+                plan->semantic_plan, operation, NULL, NULL,
+                &exact_array_member_result))
+            exact_array_member_result = false;
         if (semantic_heap_closure_is_exact(plan->semantic_plan, operation) ||
             semantic_panic_catch_is_exact(plan->semantic_plan, operation) ||
             semantic_array_allocation_is_exact(plan->semantic_plan, operation) ||
@@ -3238,6 +3243,7 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
             xr_semantic_rune_to_uint32_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_rune_is_whitespace_is_exact(plan->semantic_plan, operation, NULL) ||
             operation_is_exact_json_namespace_value(plan->semantic_plan, operation, NULL) ||
+            exact_array_member_result ||
             (exact_direct_callees &&
              exact_direct_callees[operation->result_value] != 0) ||
             (exact_go_callees &&
@@ -4461,6 +4467,57 @@ static bool semantic_array_member_bool_type_is_exact(const XrSemanticTypeRecord 
            type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0;
 }
 
+static bool operation_is_exact_array_reserve(const XrSemanticPlan *semantic,
+                                             const XrSemanticOperationRecord *operation,
+                                             uint32_t *receiver_type_index,
+                                             uint32_t *capacity_value) {
+    uint32_t operands_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operands_count);
+    if (!semantic || !operation || !operands ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR ||
+        operation->evidence[1] != XA_INTRINSIC_ARRAY_RESERVE ||
+        operation->opcode != XI_CALL_BUILTIN || operation->operand_count != 2 ||
+        operation->operand_begin > operands_count ||
+        operation->operand_count > operands_count - operation->operand_begin ||
+        operation->metadata_count != 0 || operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CALL_BUILTIN))
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *capacity = receiver + 1;
+    const XrSemanticTypeRecord *receiver_type =
+        xr_semantic_plan_type(semantic, receiver->type);
+    const XrSemanticTypeRecord *capacity_type =
+        xr_semantic_plan_type(semantic, capacity->type);
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(semantic, operation->function);
+    if (!function || !semantic_array_member_receiver_type_is_exact(receiver_type) ||
+        !semantic_array_member_i64_type_is_exact(capacity_type) ||
+        operation->result_type != receiver->type || operation->result_alias_operand != 0 ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        receiver->role != XR_SEM_OPERAND_ARGUMENT || receiver->parameter != 0 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        capacity->role != XR_SEM_OPERAND_ARGUMENT || capacity->parameter != 1 ||
+        capacity->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        capacity->ownership_action != XR_SEM_OPERAND_CONSUME ||
+        receiver->value < function->value_begin ||
+        receiver->value >= function->value_begin + function->value_count ||
+        capacity->value < function->value_begin ||
+        capacity->value >= function->value_begin + function->value_count ||
+        operation->result_value < function->value_begin ||
+        operation->result_value >= function->value_begin + function->value_count)
+        return false;
+    if (receiver_type_index)
+        *receiver_type_index = receiver->type;
+    if (capacity_value)
+        *capacity_value = capacity->value;
+    return true;
+}
+
 static bool operation_array_member_result_is_exact(const XrSemanticPlan *semantic,
                                                    const XrSemanticOperationRecord *operation,
                                                    const XrArrayMemberShape *shape,
@@ -4489,6 +4546,18 @@ static bool operation_is_exact_array_member_scalar(const XrSemanticPlan *semanti
                                                    uint32_t *receiver_type_index,
                                                    uint32_t *element_value,
                                                    bool *receiver_result) {
+    uint32_t reserve_receiver_type = XR_SEMANTIC_INDEX_NONE;
+    uint32_t reserve_capacity = XR_SEMANTIC_INDEX_NONE;
+    if (operation_is_exact_array_reserve(semantic, operation, &reserve_receiver_type,
+                                         &reserve_capacity)) {
+        if (receiver_type_index)
+            *receiver_type_index = reserve_receiver_type;
+        if (element_value)
+            *element_value = reserve_capacity;
+        if (receiver_result)
+            *receiver_result = true;
+        return true;
+    }
     uint32_t operands_count = 0, metadata_count = 0, child_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operands_count);
     const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);

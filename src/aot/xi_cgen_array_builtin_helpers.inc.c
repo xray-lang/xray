@@ -145,6 +145,48 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         fprintf(out, ", %s)", storage_symbol);
         return true;
     }
+    if (v && v->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE) {
+        if (!cg_array_reserve_target_authority(ctx, f, v)) {
+            (void) cg_value_emission_fail(
+                ctx, "Array.reserve TargetPlan authority is missing or stale");
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        CgArrayElemInfo info;
+        XrRep target_rep = xicgen_value_c_storage_rep(ctx, f, v);
+        if (xicgen_value_c_storage_rep(ctx, f, v->args[0]) == XR_REP_PTR) {
+            const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_PTR, target_rep);
+            fprintf(out, "xrt_array_reserve_trusted_raw(");
+            emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            fprintf(out, ")");
+            emit_conversion_suffix(out, suffix);
+            return true;
+        }
+        if (cg_array_value_storage_info(ctx, f, v->args[0], &info,
+                                        CG_ARRAY_STORAGE_MUTABLE)) {
+            bool boxed = target_rep == XR_REP_TAGGED;
+            if (boxed)
+                fprintf(out, "xr_mkptr(");
+            fprintf(out, "xrt_array_reserve_trusted_raw(");
+            emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            fprintf(out, ")");
+            if (boxed)
+                fprintf(out, ", XR_TAG_ARRAY)");
+            return true;
+        }
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
+        fprintf(out, "xrt_array_reserve_value(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
+        return true;
+    }
     if (!name)
         return false;
     if (strcmp(name, "array_copy_new") == 0) {
@@ -171,42 +213,6 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         fprintf(out, "xrt_array_clear_value(");
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
-        return true;
-    }
-    if (strcmp(name, "array_reserve") == 0) {
-        CgArrayElemInfo info;
-        XrRep target_rep = xicgen_value_c_storage_rep(ctx, f, v);
-        if (v->nargs >= 2 && xicgen_value_c_storage_rep(ctx, f, v->args[0]) == XR_REP_PTR) {
-            const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_PTR, target_rep);
-            fprintf(out, "xrt_array_reserve_trusted_raw(");
-            emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
-            fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_I64);
-            fprintf(out, ")");
-            emit_conversion_suffix(out, suffix);
-            return true;
-        }
-        if (v->nargs >= 2 &&
-            cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_MUTABLE)) {
-            bool boxed = target_rep == XR_REP_TAGGED;
-            if (boxed)
-                fprintf(out, "xr_mkptr(");
-            fprintf(out, "xrt_array_reserve_trusted_raw(");
-            emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
-            fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_I64);
-            fprintf(out, ")");
-            if (boxed)
-                fprintf(out, ", XR_TAG_ARRAY)");
-            return true;
-        }
-        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
-        fprintf(out, "xrt_array_reserve_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, suffix);
         return true;
     }
     if (strcmp(name, "array_resize") == 0) {
@@ -241,4 +247,21 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
     }
     (void) ctx;
     return false;
+}
+
+/* A dead reserve result still owes the mutation and pending-error state, but
+ * converting the returned array pointer back to a tagged value serves no C
+ * consumer. Emit the raw effect statement only after the frozen reserve call
+ * authority has fixed the tagged receiver and native capacity operands. */
+static bool emit_unused_array_reserve_effect_stmt(
+    XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
+    if (!ctx || !out || !f || !v || cg_value_has_actual_ir_use(f, v) ||
+        !cg_array_reserve_target_authority(ctx, f, v) || !v->args)
+        return false;
+    fprintf(out, "    (void)(xrt_array_reserve_trusted_raw(");
+    emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, v->args[1], XR_REP_I64);
+    fprintf(out, "));\n");
+    return true;
 }

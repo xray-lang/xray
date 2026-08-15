@@ -492,6 +492,8 @@ static XaIntrinsicId xa_builtin_receiver_method_intrinsic_id(XaBuiltinReceiverMe
             return XA_INTRINSIC_POD_SLICE_COMPARE;
         case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_GET:
             return XA_INTRINSIC_POD_SLICE_GET;
+        case XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE:
+            return XA_INTRINSIC_ARRAY_RESERVE;
         default:
             return XA_INTRINSIC_NONE;
     }
