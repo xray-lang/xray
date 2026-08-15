@@ -335,6 +335,7 @@ CONTRACT_SPECS = (
             "src/vm/xr_typed_frame.h",
             "src/vm/xr_typed_frame.c",
             "src/vm/xr_typed_dispatch.c",
+            "scripts/check_typed_call_staging.py",
             "tests/benchmarks/target-machine/typed_target_vm/benchmark.c",
             "tests/benchmarks/target-machine/typed_target_vm/run.py",
             "tests/unit/vm/test_typed_frame.c",

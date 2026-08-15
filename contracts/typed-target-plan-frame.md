@@ -177,7 +177,9 @@ Evidence:
   allocation on Windows Release. The call fixture proves that argument
   staging reads the immutable `XrTargetCallArgumentRecord` rows directly and
   reports zero runtime generic-argument-array bytes; the anchored dispatcher
-  source keeps that claim fail closed. The gate consumes the frozen
+  source and `typed_target_vm_call_staging_contract` keep that claim fail
+  closed by rejecting generic value carriers or runtime argument allocation.
+  The gate consumes the frozen
   target-machine warmup, sample-count, CPU, power-policy, and variation rules;
   records all three lanes as baselines until numeric typed-executor budgets are
   frozen; and gates zero Release slot-state metadata plus the exact bounded
@@ -193,6 +195,7 @@ anchor-sha256: src/plan/target/xr_target_plan.h d1ed20e9afa4b5c1bb361a939a8c5b62
 anchor-sha256: src/vm/xr_typed_frame.h e6331d14764199f4256d2a11acc64f520454bedb50615c4565bf502cdf789033
 anchor-sha256: src/vm/xr_typed_frame.c 898f5a49db5ce3676e8f21a1835812034d05fe646e2b21931ada4b571fb391fc
 anchor-sha256: src/vm/xr_typed_dispatch.c ef9ad355401e587b4d27f3189f01c0b0e7779145e0aa1089a70a3dfca9d9147a
+anchor-sha256: scripts/check_typed_call_staging.py 70224976eb831b98465bd1f719f2e66bd81fdf59503a4c929a2542b2081e8655
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c a59c3711715175cbf009341e15720bff4457d8435e37e3252145ef49cc8fe7d1
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py e9e057b890df32005e054290a3425f239c1b3c594432a044a04bd6a12dc6dd14
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8f2acc619749a086bf3be97ef9799ea6abef2c45151113b13a87b9a3609f8101

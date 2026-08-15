@@ -413,6 +413,12 @@ set_tests_properties(typed_target_vm_performance_runner_self_test PROPERTIES
     LABELS "performance;target-machine;self-test"
     PROCESSORS 1
     TIMEOUT 30)
+add_test(NAME typed_target_vm_call_staging_contract
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_typed_call_staging.py
+        --root ${CMAKE_SOURCE_DIR})
+set_tests_properties(typed_target_vm_call_staging_contract PROPERTIES
+    LABELS "performance;target-machine;typed-plan;vm")
 add_executable(test_target_machine_comparison_fixture
     ../target_machine/comparison/typed_fixture.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
