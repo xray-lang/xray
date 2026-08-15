@@ -122,7 +122,7 @@ scalar route remains the only governed product activation path.
     the exact signed-i64 parameter/result shape, native ABI, target data-layout
     hash, and target-profile fingerprint under an entry-specific domain. This
     record is runtime-only and is not serialized into TargetPlan schema 34 or
-    XTP schema 33. Persisting a dynamic-call expectation later requires an atomic
+    XTP schema 34. Persisting a dynamic-call expectation later requires an atomic
     schema cutover; no compatibility interpretation is permitted.
 13. Binding requires an immutable verified TargetPlan with an intact plan
     fingerprint, an exact `SCALAR_I64_CLOSED` function, and zero adapter rows.

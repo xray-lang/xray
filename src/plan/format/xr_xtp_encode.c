@@ -18,6 +18,7 @@
 
 typedef struct XrXtpSectionInput {
     XrXtpSectionKind kind;
+    uint32_t flags;
     const void *rows;
     uint32_t count;
     size_t offset;
@@ -40,11 +41,13 @@ static bool fill_section_inputs(const XrTargetPlan *plan, XrXtpSectionInput sect
     const XrTargetProfileDraft *profile = xr_target_profile_facts(xr_target_plan_profile(plan));
     if (!profile)
         return false;
-    sections[0] = (XrXtpSectionInput) {XR_XTP_SECTION_TARGET_PROFILE, profile, 1, 0, 0};
+    sections[0] =
+        (XrXtpSectionInput) {XR_XTP_SECTION_TARGET_PROFILE, 0, profile, 1, 0, 0};
 #define XR_XTP_FILL_SECTION(index, kind, accessor)                                                 \
     do {                                                                                           \
         const void *rows = xr_target_plan_##accessor(plan, &count);                               \
-        sections[index] = (XrXtpSectionInput) {XR_XTP_SECTION_##kind, rows, count, 0, 0};         \
+        sections[index] =                                                                          \
+            (XrXtpSectionInput) {XR_XTP_SECTION_##kind, 0, rows, count, 0, 0};                    \
     } while (0)
     XR_XTP_FILL_SECTION(1, MACHINE_REPS, machine_reps);
     XR_XTP_FILL_SECTION(2, VALUE_REPS, value_reps);
@@ -66,6 +69,7 @@ static bool fill_section_inputs(const XrTargetPlan *plan, XrXtpSectionInput sect
     XR_XTP_FILL_SECTION(18, CAPABILITIES, capabilities);
     XR_XTP_FILL_SECTION(19, COROUTINES, coroutines);
 #undef XR_XTP_FILL_SECTION
+    sections[11].flags = XR_XTP_SECTION_FLAG_COMPACT;
     return true;
 }
 
@@ -81,7 +85,23 @@ static bool compute_resources(const XrTargetPlan *plan, XrXtpSectionInput sectio
                              "TargetPlan table cannot be encoded");
             return false;
         }
+        size_t compact_length = 0;
         uint64_t length = (uint64_t) sections[i].count * row_size;
+        if (sections[i].kind == XR_XTP_SECTION_INSTRUCTIONS) {
+            if (sections[i].flags != XR_XTP_SECTION_FLAG_COMPACT ||
+                !xr_xtp_instruction_stream_size(
+                    (const XrTargetInstructionRecord *) sections[i].rows,
+                    sections[i].count, &compact_length)) {
+                xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2003",
+                                 "instruction stream cannot be encoded");
+                return false;
+            }
+            length = compact_length;
+        } else if (sections[i].flags != 0) {
+            xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2003",
+                             "typed section flags are invalid");
+            return false;
+        }
         if (length > SIZE_MAX || resources->table_bytes > UINT64_MAX - length ||
             resources->total_rows > UINT64_MAX - sections[i].count) {
             xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
@@ -102,7 +122,16 @@ static bool compute_resources(const XrTargetPlan *plan, XrXtpSectionInput sectio
         }
         resources->total_frame_bytes += functions[i].frame_size;
     }
-    resources->verification_work_units = resources->total_rows;
+    const XrXtpSectionInput *instructions =
+        &sections[(uint32_t) XR_XTP_SECTION_INSTRUCTIONS - 1u];
+    uint64_t instruction_work =
+        (uint64_t) instructions->length + instructions->count;
+    if (resources->total_rows > UINT64_MAX - instruction_work) {
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "instruction decode work overflows");
+        return false;
+    }
+    resources->verification_work_units = resources->total_rows + instruction_work;
     if (resources->total_rows > XR_XTP_MAX_TOTAL_ROWS ||
         resources->table_bytes > XR_XTP_MAX_TABLE_BYTES ||
         resources->total_frame_bytes > XR_XTP_MAX_TOTAL_FRAME_BYTES ||
@@ -171,20 +200,36 @@ static void write_header(uint8_t *artifact, size_t artifact_size, const XrTarget
     xr_xtp_put_u64(artifact + 320, resources->verification_work_units);
 }
 
-static void write_sections(uint8_t *artifact, const XrXtpSectionInput sections[]) {
+static bool write_sections(uint8_t *artifact, const XrXtpSectionInput sections[]) {
     for (uint32_t i = 0; i < XR_XTP_TABLE_SECTION_COUNT; i++) {
         uint8_t *entry = artifact + XR_XTP_HEADER_SIZE +
                          (size_t) i * XR_XTP_DIRECTORY_ENTRY_SIZE;
         xr_xtp_put_u32(entry, sections[i].kind);
+        xr_xtp_put_u32(entry + 4, sections[i].flags);
         xr_xtp_put_u64(entry + 8, sections[i].offset);
         xr_xtp_put_u64(entry + 16, sections[i].length);
         xr_xtp_put_u64(entry + 24, sections[i].count);
-        xr_xtp_put_u32(entry + 32, xr_xtp_wire_row_size(sections[i].kind));
+        xr_xtp_put_u32(entry + 32,
+                       sections[i].kind == XR_XTP_SECTION_INSTRUCTIONS
+                           ? 0
+                           : xr_xtp_wire_row_size(sections[i].kind));
         xr_xtp_put_u32(entry + 36, XR_XTP_SECTION_ALIGNMENT);
-        xr_xtp_encode_rows(sections[i].kind, sections[i].rows, sections[i].count,
-                           artifact + sections[i].offset);
+        if (sections[i].kind == XR_XTP_SECTION_INSTRUCTIONS) {
+            size_t written = 0;
+            if (!xr_xtp_instruction_stream_encode(
+                    (const XrTargetInstructionRecord *) sections[i].rows,
+                    sections[i].count, artifact + sections[i].offset,
+                    sections[i].length, &written) ||
+                written != sections[i].length)
+                return false;
+        } else if (!xr_xtp_encode_rows(sections[i].kind, sections[i].rows,
+                                       sections[i].count,
+                                       artifact + sections[i].offset)) {
+            return false;
+        }
         xr_sha256(artifact + sections[i].offset, sections[i].length, entry + 40);
     }
+    return true;
 }
 
 static void write_full_digest(uint8_t *artifact, size_t size) {
@@ -231,7 +276,12 @@ XR_FUNC bool xr_xtp_encode_plan(const XrTargetPlan *plan, uint8_t **bytes, size_
         return false;
     }
     write_header(artifact, artifact_size, plan, &resources);
-    write_sections(artifact, sections);
+    if (!write_sections(artifact, sections)) {
+        xr_free(artifact);
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2003",
+                         "typed sections cannot be encoded");
+        return false;
+    }
     write_full_digest(artifact, artifact_size);
     *bytes = artifact;
     *size = artifact_size;

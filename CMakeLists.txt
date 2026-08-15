@@ -920,6 +920,11 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/net
 )
 
+set_source_files_properties(
+    src/plan/format/xr_xtp_instruction_stream.c
+    PROPERTIES INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/xisa/target"
+)
+
 # ============================================================================
 # Source File Collection
 # ============================================================================
@@ -1291,6 +1296,7 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     src/plan/format/xr_xsm_encode.c
     src/plan/format/xr_xtp_artifact.c
     src/plan/format/xr_xtp_encode.c
+    src/plan/format/xr_xtp_instruction_stream.c
     src/plan/format/xr_xtp_rows.c
     src/plan/target/xr_target_builder.c
     src/plan/target/xr_target_instruction_verify.c
@@ -1375,6 +1381,7 @@ set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
     src/plan/format/xr_xsm_decode.c
     src/plan/format/xr_xtp_artifact.c
     src/plan/format/xr_xtp_decode.c
+    src/plan/format/xr_xtp_instruction_stream.c
     src/plan/format/xr_xtp_rows.c
     src/plan/semantic/xr_semantic_graph.c
     src/plan/semantic/xr_semantic_ids.c

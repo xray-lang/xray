@@ -1,0 +1,10 @@
+/* Canonical XTP format-only superinstruction registry.
+ *
+ * The token is serialized and therefore append-only. Each row names two
+ * canonical TargetPlan primitive opcodes. The decoder expands the token
+ * before TargetPlan verification, so no executor observes a superinstruction.
+ */
+
+XR_XTP_SUPER_OP(CONST_RETURN, 1, CONST_I64, RETURN_I64)
+XR_XTP_SUPER_OP(PARAM_RETURN, 2, PARAM_I64, RETURN_I64)
+XR_XTP_SUPER_OP(CALL_DIRECT_RETURN, 3, CALL_DIRECT_I64, RETURN_I64)

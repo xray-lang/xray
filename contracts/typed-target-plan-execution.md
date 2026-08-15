@@ -101,8 +101,16 @@ equals the number of parameter-role slots the function frame declares. The
 executable family caps parameters at 64 so that density is proved without
 allocating.
 
-Instruction rows participate in the TargetPlan fingerprint, the bounded XTP
-section directory, the exact 32-byte row codec, and candidate materialization.
+Instruction rows participate in the TargetPlan fingerprint as exact 32-byte
+canonical rows. XTP schema 34 stores them only as a bounded sequential compact
+stream whose directory entry carries the expanded row count, compact byte
+length, `COMPACT` flag, and zero row size. Canonical ULEB128 and signed ZigZag
+payloads plus the format-only superinstruction registry are the sole wire
+authority. Materialization expands every token back to the same primitive
+TargetPlan rows before verification; the decoded cache and dispatcher consume
+only those rows and never observe a wire token. Text dump and diff use the same
+sequential iterator rather than random row-size access. There is no v33
+reader, translated row, alternate stream, or compatibility path.
 The internal scalar dispatcher accepts one immutable request containing only a
 verified plan, its exact fingerprint, a derived nonzero function execution
 family, a positional signed-`i64` argument vector, exact typed-frame slot
@@ -150,7 +158,8 @@ result publication. Provider selection is in-process execution policy rather
 than serialized plan authority, so it changes no TargetPlan or XTP schema and
 does not select representation, calls, ownership, or cleanup semantics.
 
-Schema 34 is a hard cutover from v33 and every earlier TargetPlan schema. The
+TargetPlan schema 34 is a hard cutover from v33 and every earlier TargetPlan
+schema. The
 instruction opcode carrier is now an unsigned 16-bit stable ID while the
 canonical instruction row remains exactly 32 bytes by shrinking its reserved
 tail to one byte. The generated target instruction registry is the only opcode
@@ -355,8 +364,13 @@ Evidence:
   error, termination, step-budget, and call-depth outcomes. The generated
   contract KAT covers every current opcode and refuses unknown providers,
   unknown opcodes, and complete-contract mismatches.
-- `test_xtp_format` proves the instruction row width is part of the complete
-  exact codec registry and exercises the public XSM/XTP generation route.
+- `test_xtp_format` proves fixed compact KAT bytes and digest, primitive and
+  each registered super-pair encoding, byte-exact canonical re-encoding,
+  primitive/super row equivalence, directory field mutations, every stream
+  byte mutation, and fail-closed noncanonical/truncated/overflow/unknown/count/
+  trailing forms while exercising the public XSM/XTP generation route.
+- `test_xtp_resource_stress` proves the size/performance ladder and exact wire,
+  expanded-row, and decode-work accounting.
 - `test_typed_frame_runtime_archive` proves the dispatcher and verifier link
   into the runtime-only archive; the runtime artifact archive gate separately
   proves the exact XSM/XTP sole-function product route.
@@ -379,10 +393,16 @@ anchor-sha256: src/plan/target/xr_target_builder.c 2c6d027795b7453164ba16bc17340
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 895801ca13af72cb9abc02f5d58b4e87fd1782329b80038f94e631d05e154180
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c ef89e252a86b89e0c78d587f4dd974e565ba0c3a747ed48842b0d901f1587c25
 anchor-sha256: src/plan/target/xr_target_verify.c 4b51e45a071e5248ec988829e22c09f275f6dddc2748ca3b61497984ad6920e5
-anchor-sha256: src/plan/format/xr_xtp_schema.h c0ea616d32057488bbb2508a9a9edcad7e5540ac38971ffe462f96bf78b44d13
+anchor-sha256: src/plan/format/xr_xtp_schema.h cd34fd5c252f8f1c47dc49a4135fbe2fe9ea9e1de6adeb5b8599c3fb355be70f
+anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_rows.c 37ade66cec19c828eefe6ed2066273fe16197b9f7908f2b4977e73eb39851c41
-anchor-sha256: src/plan/format/xr_xtp_encode.c 2f6f1fa32e35fd1681ab07bc8a3808d133f33f27e43139224d3f9e253447bd74
-anchor-sha256: src/plan/target/xr_xtp_materialize.c 02de4138a0d49d1afd6143cec910cbe1061a6d84d82096d48fa4800852b98267
+anchor-sha256: src/plan/format/xr_xtp_encode.c f6b3c6cbe65531b5d72442e93a939eb46b81c8ae27f6d26557e6b797c7dce7a6
+anchor-sha256: src/plan/format/xr_xtp_instruction_stream.h 39a81bcf5b337b7fdbf4aafaa4eb8a6ba575d4a1853f6f86c8dca6d0d2e0579a
+anchor-sha256: src/plan/format/xr_xtp_instruction_stream.c d2c219ad22c0f22193abe31436ba5466f7d60b3c4511628a7fa14a0fb2a98773
+anchor-sha256: src/plan/format/xr_xtp_text.h 63367e2a75cc5e1511d1980cd82f579863cfd86a97cbf47d892f4c945d4ca0e1
+anchor-sha256: src/plan/format/xr_xtp_text.c 329d1430c8ad00d5b7c05c69adb3ed5405b5b9b6ea49cc7ea3155f561df00113
+anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
+anchor-sha256: src/plan/target/xr_xtp_materialize.c 3dc7d1b4960cf437b63e649a763e33485d82dccc33c00f6e0dd3dab66a8409d6
 anchor-sha256: src/vm/xr_typed_dispatch.h 10c108b77e3beff1dfd6c04137ce684a4c8c1d08b3af3a4402dae1443fcff768
 anchor-sha256: src/vm/xr_typed_dispatch.c d322275c81f8e833f2f9a850ca8163384e42bb9d703d8a40c16ccb7d711aa9ac
 anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
@@ -390,7 +410,9 @@ anchor-sha256: src/vm/xr_vm_decoded_cache.c 2d4f14d54740e6aac0cdfb23fc7b90b07572
 anchor-sha256: src/vm/xr_typed_frame.c 5e5d7615d8dfe580ac8104f6f391219b876f2789335cfa41ea9e122abf45adb1
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 6759f44e43d36d704cb5d77330dd048f3c699280042eb856877cf5e5239c4bcd
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 5266ff18ca9b135f0b16280c7b4ab4644c96b3b4d9da7e5f10e42b9dbcd01cbf
-anchor-sha256: tests/unit/plan/test_xtp_format.c 3bbaec13fcf391a60f0b8c71580ac76bd3ae749e46529c14edc0b8ab755fb50d
+anchor-sha256: tests/unit/plan/test_xtp_format.c 2c118e5de71adf8cacd45086ec82eaea43c9dc1c0bd19bab57ce153365994a36
+anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c a768faf7caa0097d72d3d0884053a75b03ec8c7b3c9d33cf6701df89c76d9c5f
+anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 933e9f776ea7ae9cb4f52ee19ee6e81405636d5f6d9d1fc1202a10dab110faa2
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 9a50ffa2574a505c375f372893c8168dc082873b1a11b1d546e377b9424a3031
 anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 33da22f5eec9a7889b25380fa99e070c807c19580569ac081a0f0558545eb8e3
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0

@@ -206,7 +206,15 @@ static bool allocate_and_decode(const XrXtpCandidate *candidate, XrXtpSectionKin
         }
     }
     *count = section->count;
-    if (!xr_xtp_decode_rows(kind, candidate->bytes + section->offset, section->count, *storage)) {
+    bool decoded = kind == XR_XTP_SECTION_INSTRUCTIONS
+                       ? xr_xtp_instruction_stream_decode(
+                             candidate->bytes + section->offset,
+                             section->length, section->count,
+                             (XrTargetInstructionRecord *) *storage)
+                       : xr_xtp_decode_rows(kind,
+                                            candidate->bytes + section->offset,
+                                            section->count, *storage);
+    if (!decoded) {
         xr_free(*storage);
         *storage = NULL;
         *count = 0;

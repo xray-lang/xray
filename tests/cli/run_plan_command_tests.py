@@ -119,8 +119,9 @@ def check_diff(binary: Path, base: Path, variant: Path, renamed: Path) -> None:
     require(any(line.startswith("- ") for line in changed.stdout.splitlines()) and
             any(line.startswith("+ ") for line in changed.stdout.splitlines()),
             "plan diff shows both sides of the difference", changed.stdout)
-    require("wire=" in changed.stdout,
-            "plan diff shows the exact wire bytes of the differing row", changed.stdout)
+    require("canonical-row=" in changed.stdout,
+            "plan diff shows the exact canonical bytes of the expanded row",
+            changed.stdout)
 
     context = run([str(binary), "plan", "diff", str(base), str(variant), "--context", "0"])
     require(context.returncode != 0 and "first-difference" in context.stdout,

@@ -11,9 +11,9 @@
  *   Row rendering expands from a reader-side field inventory whose total wire
  *   width is checked against the width the decoder recorded for the table, so
  *   a rendering that has fallen behind the codec stops rather than naming
- *   stale fields. Comparison reads the wire rows instead of the text and
- *   walks one row at a time, so it reports an exact location without ever
- *   holding a whole artifact's rendering in memory.
+ *   stale fields. Comparison reads fixed rows directly and expands the compact
+ *   instruction stream through the same sequential iterator as materialization,
+ *   so it reports an exact location without holding a whole rendering in memory.
  */
 
 #include "xr_xtp_text.h"
@@ -205,9 +205,10 @@ static uint32_t text_row_width(XrXtpSectionKind kind) {
 static bool section_layout_is_exact(const XrXtpSectionView *view) {
     if (!view)
         return false;
-    if (view->count == 0)
-        return true;
-    return view->row_size == text_row_width(view->kind);
+    if (view->kind == XR_XTP_SECTION_INSTRUCTIONS)
+        return view->flags == XR_XTP_SECTION_FLAG_COMPACT && view->row_size == 0;
+    return view->flags == 0 &&
+           (view->count == 0 || view->row_size == text_row_width(view->kind));
 }
 
 /* Byte ranges inside a wire row that hold a digest of something else. A
@@ -280,7 +281,8 @@ typedef union XrXtpTextRowStorage {
 static bool section_row_bytes(const XrXtpCandidate *candidate, const XrXtpSectionView *view,
                               uint32_t index, const uint8_t **bytes) {
     *bytes = NULL;
-    if (!candidate || !view || !view->row_size || index >= view->count)
+    if (!candidate || !view || view->kind == XR_XTP_SECTION_INSTRUCTIONS ||
+        !view->row_size || index >= view->count)
         return false;
     size_t offset = view->offset + (size_t) index * (size_t) view->row_size;
     if (offset > candidate->size || candidate->size - offset < view->row_size)
@@ -296,6 +298,27 @@ static bool decode_row(const XrXtpCandidate *candidate, const XrXtpSectionView *
         return false;
     memset(storage, 0, sizeof(*storage));
     return xr_xtp_decode_rows(view->kind, bytes, 1u, storage);
+}
+
+static bool instruction_stream_init(const XrXtpCandidate *candidate,
+                                    const XrXtpSectionView *view,
+                                    XrXtpInstructionStream *stream) {
+    return candidate && view && stream &&
+           view->kind == XR_XTP_SECTION_INSTRUCTIONS &&
+           section_layout_is_exact(view) && view->offset <= candidate->size &&
+           view->length <= candidate->size - view->offset &&
+           xr_xtp_instruction_stream_init(stream,
+                                          candidate->bytes + view->offset,
+                                          view->length, view->count);
+}
+
+static void render_instruction_row(const XrTargetInstructionRecord *record,
+                                   uint32_t index, const char *prefix,
+                                   FILE *out) {
+    XrXtpTextRow row = {out, prefix, "INSTRUCTIONS", index, 0, false};
+    render_INSTRUCTIONS(&row, record);
+    row_text(&row, "opcode-name", opcode_name(record->opcode));
+    row_end(&row);
 }
 
 static bool render_decoded_row(const XrXtpCandidate *candidate, const XrXtpSectionView *view,
@@ -317,8 +340,6 @@ static bool render_decoded_row(const XrXtpCandidate *candidate, const XrXtpSecti
         default:
             break;
     }
-    if (view->kind == XR_XTP_SECTION_INSTRUCTIONS)
-        row_text(&row, "opcode-name", opcode_name(storage.INSTRUCTIONS_row.opcode));
     row_end(&row);
     return true;
 }
@@ -464,9 +485,10 @@ XR_FUNC bool xr_xtp_candidate_dump(const XrXtpCandidate *candidate, FILE *out) {
         uint32_t count = view ? view->count : 0;
         uint32_t row_size = view ? view->row_size : 0;
         fprintf(out,
-                "section %s count=%" PRIu32 " row-size=%" PRIu32 " bytes=%" PRIu64 "\n",
+                "section %s count=%" PRIu32 " row-size=%" PRIu32
+                " flags=0x%08" PRIx32 " bytes=%" PRIu64 "\n",
                 section_name((XrXtpSectionKind) kind), count, row_size,
-                (uint64_t) count * (uint64_t) row_size);
+                view ? view->flags : 0, view ? (uint64_t) view->length : 0);
     }
 
     for (uint32_t kind = 1; kind < (uint32_t) XR_XTP_SECTION_COUNT; kind++) {
@@ -476,6 +498,20 @@ XR_FUNC bool xr_xtp_candidate_dump(const XrXtpCandidate *candidate, FILE *out) {
             continue;
         if (!section_layout_is_exact(view))
             return false;
+        if (view->kind == XR_XTP_SECTION_INSTRUCTIONS) {
+            XrXtpInstructionStream stream;
+            if (!instruction_stream_init(candidate, view, &stream))
+                return false;
+            for (uint32_t index = 0; index < view->count; index++) {
+                XrTargetInstructionRecord record;
+                if (!xr_xtp_instruction_stream_next(&stream, &record))
+                    return false;
+                render_instruction_row(&record, index, "", out);
+            }
+            if (!xr_xtp_instruction_stream_finish(&stream))
+                return false;
+            continue;
+        }
         for (uint32_t index = 0; index < view->count; index++)
             if (!render_decoded_row(candidate, view, index, "", out))
                 return false;
@@ -515,6 +551,85 @@ static void report_row_difference(const XrXtpCandidate *left, const XrXtpCandida
     }
 }
 
+static bool instruction_rows_equal(const XrTargetInstructionRecord *left,
+                                   const XrTargetInstructionRecord *right) {
+    uint8_t left_bytes[32] = {0};
+    uint8_t right_bytes[32] = {0};
+    return xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, left, 1u,
+                              left_bytes) &&
+           xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, right, 1u,
+                              right_bytes) &&
+           memcmp(left_bytes, right_bytes, sizeof(left_bytes)) == 0;
+}
+
+static void report_instruction_side(const XrTargetInstructionRecord *record,
+                                    uint32_t index, const char *prefix,
+                                    FILE *out) {
+    uint8_t bytes[32] = {0};
+    render_instruction_row(record, index, prefix, out);
+    if (!xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, record, 1u, bytes))
+        return;
+    fprintf(out, "%scanonical-row=", prefix);
+    for (uint32_t offset = 0; offset < sizeof(bytes); offset++)
+        fprintf(out, "%02x", bytes[offset]);
+    fputc('\n', out);
+}
+
+static bool compare_instruction_streams(
+    const XrXtpCandidate *left, const XrXtpCandidate *right,
+    const XrXtpSectionView *left_view, const XrXtpSectionView *right_view,
+    uint32_t context_rows, FILE *out, bool *different) {
+    *different = false;
+    XrXtpInstructionStream left_stream;
+    XrXtpInstructionStream right_stream;
+    if (!instruction_stream_init(left, left_view, &left_stream) ||
+        !instruction_stream_init(right, right_view, &right_stream))
+        return false;
+    XrTargetInstructionRecord prior[XR_XTP_TEXT_MAX_CONTEXT_ROWS];
+    uint32_t prior_count = 0;
+    uint32_t prior_cursor = 0;
+    for (uint32_t index = 0; index < left_view->count; index++) {
+        XrTargetInstructionRecord left_row;
+        XrTargetInstructionRecord right_row;
+        if (!xr_xtp_instruction_stream_next(&left_stream, &left_row) ||
+            !xr_xtp_instruction_stream_next(&right_stream, &right_row))
+            return false;
+        if (!instruction_rows_equal(&left_row, &right_row)) {
+            fprintf(out, "plan-diff first-difference section=INSTRUCTIONS row=%" PRIu32 "\n",
+                    index);
+            uint32_t shown = prior_count < context_rows ? prior_count : context_rows;
+            uint32_t start = (prior_cursor + XR_XTP_TEXT_MAX_CONTEXT_ROWS - shown) %
+                             XR_XTP_TEXT_MAX_CONTEXT_ROWS;
+            for (uint32_t offset = 0; offset < shown; offset++) {
+                uint32_t slot = (start + offset) % XR_XTP_TEXT_MAX_CONTEXT_ROWS;
+                render_instruction_row(&prior[slot], index - shown + offset, "  ", out);
+            }
+            report_instruction_side(&left_row, index, "- ", out);
+            report_instruction_side(&right_row, index, "+ ", out);
+            for (uint32_t offset = 1; offset <= context_rows; offset++) {
+                XrTargetInstructionRecord next_left;
+                XrTargetInstructionRecord next_right;
+                if (index + offset < left_view->count &&
+                    xr_xtp_instruction_stream_next(&left_stream, &next_left))
+                    render_instruction_row(&next_left, index + offset, "- ", out);
+                if (index + offset < right_view->count &&
+                    xr_xtp_instruction_stream_next(&right_stream, &next_right))
+                    render_instruction_row(&next_right, index + offset, "+ ", out);
+            }
+            *different = true;
+            return true;
+        }
+        if (context_rows) {
+            prior[prior_cursor] = left_row;
+            prior_cursor = (prior_cursor + 1u) % XR_XTP_TEXT_MAX_CONTEXT_ROWS;
+            if (prior_count < XR_XTP_TEXT_MAX_CONTEXT_ROWS)
+                prior_count++;
+        }
+    }
+    return xr_xtp_instruction_stream_finish(&left_stream) &&
+           xr_xtp_instruction_stream_finish(&right_stream);
+}
+
 XR_FUNC bool xr_xtp_candidate_diff(const XrXtpCandidate *left, const XrXtpCandidate *right,
                                    uint32_t context_rows, FILE *out, bool *identical) {
     if (!left || !right || !out || !identical)
@@ -546,6 +661,8 @@ XR_FUNC bool xr_xtp_candidate_diff(const XrXtpCandidate *left, const XrXtpCandid
         uint32_t right_count = right_view ? right_view->count : 0;
         uint32_t left_size = left_view ? left_view->row_size : 0;
         uint32_t right_size = right_view ? right_view->row_size : 0;
+        uint32_t left_flags = left_view ? left_view->flags : 0;
+        uint32_t right_flags = right_view ? right_view->flags : 0;
         if (left_count != right_count) {
             fprintf(out, "plan-diff first-difference section=%s field=count\n",
                     section_name((XrXtpSectionKind) kind));
@@ -556,6 +673,13 @@ XR_FUNC bool xr_xtp_candidate_diff(const XrXtpCandidate *left, const XrXtpCandid
             fprintf(out, "plan-diff first-difference section=%s field=row-size\n",
                     section_name((XrXtpSectionKind) kind));
             fprintf(out, "- %" PRIu32 "\n+ %" PRIu32 "\n", left_size, right_size);
+            return true;
+        }
+        if (left_flags != right_flags) {
+            fprintf(out, "plan-diff first-difference section=%s field=flags\n",
+                    section_name((XrXtpSectionKind) kind));
+            fprintf(out, "- 0x%08" PRIx32 "\n+ 0x%08" PRIx32 "\n",
+                    left_flags, right_flags);
             return true;
         }
         if ((left_view && !section_layout_is_exact(left_view)) ||
@@ -574,6 +698,18 @@ XR_FUNC bool xr_xtp_candidate_diff(const XrXtpCandidate *left, const XrXtpCandid
                 xr_xtp_candidate_section(right, (XrXtpSectionKind) kind);
             if (!left_view || !right_view)
                 continue;
+            if (kind == XR_XTP_SECTION_INSTRUCTIONS) {
+                if (pass != 0)
+                    continue;
+                bool different = false;
+                if (!compare_instruction_streams(left, right, left_view,
+                                                 right_view, context_rows,
+                                                 out, &different))
+                    return false;
+                if (different)
+                    return true;
+                continue;
+            }
             XrXtpTextDigestSpan spans[XR_XTP_TEXT_MAX_DIGEST_SPANS];
             uint32_t span_count =
                 pass == 0 ? section_digest_spans((XrXtpSectionKind) kind, spans) : 0;

@@ -121,8 +121,7 @@ static bool parse_header(const uint8_t *bytes, size_t size, XrXtpIdentity *ident
     if (resources->total_rows > XR_XTP_MAX_TOTAL_ROWS ||
         resources->table_bytes > XR_XTP_MAX_TABLE_BYTES ||
         resources->total_frame_bytes > XR_XTP_MAX_TOTAL_FRAME_BYTES ||
-        resources->verification_work_units > XR_XTP_MAX_VERIFY_WORK_UNITS ||
-        resources->verification_work_units != resources->total_rows) {
+        resources->verification_work_units > XR_XTP_MAX_VERIFY_WORK_UNITS) {
         xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
                          "resource manifest exceeds its hard budget");
         return false;
@@ -150,6 +149,7 @@ static bool parse_directory(const uint8_t *bytes, size_t size, size_t directory_
     }
     uint64_t total_rows = 0;
     uint64_t table_bytes = 0;
+    uint64_t instruction_work = 0;
     for (uint32_t i = 0; i < XR_XTP_TABLE_SECTION_COUNT; i++) {
         const uint8_t *entry = bytes + XR_XTP_HEADER_SIZE +
                                (size_t) i * XR_XTP_DIRECTORY_ENTRY_SIZE;
@@ -160,15 +160,21 @@ static bool parse_directory(const uint8_t *bytes, size_t size, size_t directory_
         uint64_t raw_count = xr_xtp_take_u64(entry + XR_XTP_DIRECTORY_COUNT_OFFSET);
         uint32_t row_size = xr_xtp_take_u32(entry + XR_XTP_DIRECTORY_ROW_SIZE_OFFSET);
         uint32_t alignment = xr_xtp_take_u32(entry + XR_XTP_DIRECTORY_ALIGNMENT_OFFSET);
+        uint32_t flags = xr_xtp_take_u32(entry + XR_XTP_DIRECTORY_FLAGS_OFFSET);
         XrXtpSectionKind expected_kind = (XrXtpSectionKind) (i + 1u);
         uint32_t expected_row_size = xr_xtp_wire_row_size(expected_kind);
-        if (kind != expected_kind || xr_xtp_take_u32(entry + XR_XTP_DIRECTORY_FLAGS_OFFSET) != 0 ||
-            row_size != expected_row_size || alignment != XR_XTP_SECTION_ALIGNMENT ||
+        bool compact_instructions = kind == XR_XTP_SECTION_INSTRUCTIONS &&
+                                    flags == XR_XTP_SECTION_FLAG_COMPACT && row_size == 0;
+        bool fixed_rows = kind != XR_XTP_SECTION_INSTRUCTIONS && flags == 0 &&
+                          row_size == expected_row_size;
+        if (kind != expected_kind || (!compact_instructions && !fixed_rows) ||
+            alignment != XR_XTP_SECTION_ALIGNMENT ||
             !bytes_are_zero(entry + 72, 8) || raw_count > xr_xtp_table_count_limit(kind) ||
             raw_count > UINT32_MAX ||
             (kind == XR_XTP_SECTION_TARGET_PROFILE && raw_count != 1) ||
-            (row_size && raw_count > UINT64_MAX / row_size) ||
-            raw_length != raw_count * row_size || raw_length > XR_XTP_MAX_TABLE_BYTES ||
+            (fixed_rows && raw_count > UINT64_MAX / row_size) ||
+            (fixed_rows && raw_length != raw_count * row_size) ||
+            raw_length > XR_XTP_MAX_TABLE_BYTES ||
             raw_offset != expected_offset || raw_offset > size || raw_length > size - raw_offset) {
             xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2003",
                              "typed section directory is invalid");
@@ -181,8 +187,18 @@ static bool parse_directory(const uint8_t *bytes, size_t size, size_t directory_
                              "typed section digest is invalid");
             return false;
         }
+        if (compact_instructions &&
+            !xr_xtp_instruction_stream_validate(bytes + expected_offset,
+                                                 (size_t) raw_length,
+                                                 (uint32_t) raw_count,
+                                                 &instruction_work)) {
+            xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2003",
+                             "compact instruction stream is invalid");
+            return false;
+        }
         views[i] = (XrXtpSectionView) {
             .kind = kind,
+            .flags = flags,
             .offset = expected_offset,
             .length = (size_t) raw_length,
             .count = (uint32_t) raw_count,
@@ -199,8 +215,9 @@ static bool parse_directory(const uint8_t *bytes, size_t size, size_t directory_
             return false;
         }
     }
-    if (expected_offset != size || total_rows != resources->total_rows ||
-        table_bytes != resources->table_bytes) {
+    if (total_rows > UINT64_MAX - instruction_work || expected_offset != size ||
+        total_rows != resources->total_rows || table_bytes != resources->table_bytes ||
+        resources->verification_work_units != total_rows + instruction_work) {
         xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2001",
                          "resource manifest does not match typed tables");
         return false;

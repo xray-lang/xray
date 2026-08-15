@@ -92,11 +92,11 @@ static const XtpMutationCase mutation_cases[] = {
     {'C', XTP_MUTATION_SECTION_COUNT, XTP_EXPECT_DECODE_REJECTION, "section-count"},
     {'Q', XTP_MUTATION_SECTION_ORDER, XTP_EXPECT_DECODE_REJECTION, "section-order"},
     {'G', XTP_MUTATION_SECTION_DIGEST, XTP_EXPECT_DECODE_REJECTION, "section-digest"},
-    {'O', XTP_MUTATION_UNKNOWN_OPCODE, XTP_EXPECT_MATERIALIZE_REJECTION,
+    {'O', XTP_MUTATION_UNKNOWN_OPCODE, XTP_EXPECT_DECODE_REJECTION,
      "unknown-opcode"},
     {'T', XTP_MUTATION_UNKNOWN_RUNTIME_TAG, XTP_EXPECT_MATERIALIZE_REJECTION,
      "unknown-runtime-tag"},
-    {'K', XTP_MUTATION_UNKNOWN_CONSTANT_FORM, XTP_EXPECT_MATERIALIZE_REJECTION,
+    {'K', XTP_MUTATION_UNKNOWN_CONSTANT_FORM, XTP_EXPECT_DECODE_REJECTION,
      "unknown-constant-form"},
     {'R', XTP_MUTATION_TOTAL_ROWS_BUDGET, XTP_EXPECT_DECODE_REJECTION,
      "total-rows-budget"},
@@ -132,7 +132,6 @@ enum {
     XTP_SLOT_REGISTER_REP_OFFSET = 46,
     XTP_SLOT_OWNERSHIP_OFFSET = 52,
     XTP_SLOT_DEBUG_VARIABLE_OFFSET = 54,
-    XTP_INSTRUCTION_RESULT_SLOT_OFFSET = 8,
     XTP_CLEANUP_ACTION_OFFSET = 16,
     XTP_CAPABILITY_PROVIDER_OFFSET = 8,
 };
@@ -405,10 +404,13 @@ static bool apply_mutation(XtpMutationArtifact *artifact,
             resign_artifact(bytes, artifact->size);
             return true;
         case XTP_MUTATION_UNKNOWN_OPCODE:
+            entry = directory_entry(bytes, XR_XTP_SECTION_INSTRUCTIONS);
             rows = section_bytes(bytes, XR_XTP_SECTION_INSTRUCTIONS);
-            require_fuzz(xr_xtp_take_u16(rows + 28) ==
-                         XR_TARGET_INSTRUCTION_CONST_I64);
-            xr_xtp_put_u16(rows + 28, UINT16_MAX);
+            require_fuzz(xr_xtp_take_u64(entry + 16) == 4u && rows[0] == 1u);
+            rows[0] = XR_XTP_INSTRUCTION_TOKEN_PRIMITIVE;
+            rows[1] = UINT8_C(0xff);
+            rows[2] = UINT8_C(0xff);
+            rows[3] = UINT8_C(0x03);
             resign_section_and_artifact(bytes, artifact->size,
                                         XR_XTP_SECTION_INSTRUCTIONS);
             return true;
@@ -419,13 +421,12 @@ static bool apply_mutation(XtpMutationArtifact *artifact,
                                         XR_XTP_SECTION_TARGET_PROFILE);
             return true;
         case XTP_MUTATION_UNKNOWN_CONSTANT_FORM:
+            entry = directory_entry(bytes, XR_XTP_SECTION_INSTRUCTIONS);
             rows = section_bytes(bytes, XR_XTP_SECTION_INSTRUCTIONS);
-            require_fuzz(xr_xtp_take_u16(rows + 28) ==
-                         XR_TARGET_INSTRUCTION_CONST_I64);
-            /* Constants have no kind selector in XTP: the opcode and canonical
-             * zero-operand row are their complete form. A foreign constant
-             * form is therefore represented by a noncanonical operand shape. */
-            rows[30] = 1u;
+            require_fuzz(xr_xtp_take_u64(entry + 16) == 4u && rows[0] == 1u);
+            /* A CONST+RETURN token requires a material result slot. Encoding
+             * the reserved no-slot sentinel is a malformed compact form. */
+            rows[2] = 0u;
             resign_section_and_artifact(bytes, artifact->size,
                                         XR_XTP_SECTION_INSTRUCTIONS);
             return true;
@@ -444,9 +445,11 @@ static bool apply_mutation(XtpMutationArtifact *artifact,
                                         XR_XTP_SECTION_SLOTS);
             return true;
         case XTP_MUTATION_WRONG_SLOT:
+            entry = directory_entry(bytes, XR_XTP_SECTION_INSTRUCTIONS);
             rows = section_bytes(bytes, XR_XTP_SECTION_INSTRUCTIONS);
-            xr_xtp_put_u32(rows + XTP_INSTRUCTION_RESULT_SLOT_OFFSET,
-                           UINT32_MAX);
+            require_fuzz(xr_xtp_take_u64(entry + 16) == 4u && rows[0] == 1u &&
+                         rows[2] > 0u && rows[2] < UINT8_C(0x7f));
+            rows[2]++;
             resign_section_and_artifact(bytes, artifact->size,
                                         XR_XTP_SECTION_INSTRUCTIONS);
             return true;

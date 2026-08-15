@@ -24,7 +24,7 @@
 
 /* Rendering revision. It changes whenever the emitted text changes shape, so
  * a stored rendering states the reader it was produced for. */
-#define XR_XTP_TEXT_REVISION UINT32_C(1)
+#define XR_XTP_TEXT_REVISION UINT32_C(2)
 
 /* Largest number of neighbouring rows a comparison may print on each side of
  * the first differing row. */

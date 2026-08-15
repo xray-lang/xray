@@ -709,6 +709,23 @@ static void expect_materialize_failure(const XtpFixture *fixture, const uint8_t 
     xr_xtp_candidate_release(candidate);
 }
 
+static void expect_decode_or_materialize_failure(const XtpFixture *fixture,
+                                                 const uint8_t *bytes) {
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    if (!xr_xtp_decode_candidate(bytes, fixture->size, &candidate, error,
+                                 sizeof(error))) {
+        REQUIRE(candidate == NULL && strncmp(error, "XR_", 3) == 0);
+        return;
+    }
+    REQUIRE(!xr_xtp_materialize_target_plan(candidate, fixture->semantic,
+                                             fixture->profile, &plan, error,
+                                             sizeof(error)));
+    REQUIRE(plan == NULL && strncmp(error, "XR_", 3) == 0);
+    xr_xtp_candidate_release(candidate);
+}
+
 static void test_exact_roundtrip_and_owned_candidate(void) {
     XtpFixture fixture = make_fixture();
     XrXtpCandidate *candidate = NULL;
@@ -723,7 +740,8 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     REQUIRE(xr_xtp_candidate_resources(candidate, &resources));
     REQUIRE(identity.plan_schema == XR_TARGET_PLAN_SCHEMA_VERSION);
     REQUIRE(identity.completed_family_mask == XR_TARGET_REQUIRED_FAMILIES);
-    REQUIRE(resources.total_rows > 1 && resources.verification_work_units == resources.total_rows);
+    REQUIRE(resources.total_rows > 1 &&
+            resources.verification_work_units > resources.total_rows);
 
     uint8_t saved = fixture.bytes[0];
     uint8_t saved_schema = fixture.bytes[4];
@@ -1591,6 +1609,171 @@ static void test_every_typed_row_codec(void) {
 #undef XR_XTP_ROW_ROUNDTRIP
 }
 
+static void require_instruction_stream_reencodes(
+    const uint8_t *expected, size_t expected_size,
+    const XrTargetInstructionRecord *rows, uint32_t count) {
+    size_t encoded_size = 0;
+    REQUIRE(xr_xtp_instruction_stream_size(rows, count, &encoded_size));
+    REQUIRE(encoded_size == expected_size);
+    uint8_t encoded[64] = {0};
+    REQUIRE(encoded_size <= sizeof(encoded));
+    REQUIRE(xr_xtp_instruction_stream_encode(rows, count, encoded,
+                                             encoded_size, &encoded_size));
+    REQUIRE(memcmp(encoded, expected, expected_size) == 0);
+    XrTargetInstructionRecord decoded[2] = {0};
+    REQUIRE(count <= 2u);
+    REQUIRE(xr_xtp_instruction_stream_decode(encoded, encoded_size, count,
+                                             decoded));
+    for (uint32_t index = 0; index < count; index++) {
+        uint8_t source_row[32] = {0};
+        uint8_t decoded_row[32] = {0};
+        REQUIRE(xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS,
+                                   &rows[index], 1u, source_row));
+        REQUIRE(xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS,
+                                   &decoded[index], 1u, decoded_row));
+        REQUIRE(memcmp(source_row, decoded_row, sizeof(source_row)) == 0);
+    }
+    uint8_t reencoded[64] = {0};
+    size_t reencoded_size = 0;
+    REQUIRE(xr_xtp_instruction_stream_encode(decoded, count, reencoded,
+                                             sizeof(reencoded),
+                                             &reencoded_size));
+    REQUIRE(reencoded_size == expected_size &&
+            memcmp(reencoded, expected, expected_size) == 0);
+}
+
+static void test_compact_instruction_stream_kat_and_mutations(void) {
+    static const uint8_t const_return[] = {0x01, 0x00, 0x03, 0x01};
+    static const uint8_t const_return_digest[XR_FINGERPRINT_BYTES] = {
+        0x42, 0xd1, 0xb1, 0x57, 0x31, 0x20, 0x1a, 0xfb,
+        0xc1, 0x21, 0x3b, 0x05, 0x73, 0x2b, 0xdc, 0xd8,
+        0x54, 0x80, 0x41, 0x97, 0x75, 0x85, 0x82, 0x3f,
+        0x8e, 0xf5, 0x88, 0xfc, 0x97, 0xbf, 0x07, 0xaa,
+    };
+    XrTargetInstructionRecord rows[2] = {
+        {.id = 0,
+         .function = 0,
+         .result_slot = 2,
+         .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                           XR_TARGET_INSTRUCTION_SLOT_NONE},
+         .immediate_bits = UINT64_MAX,
+         .opcode = XR_TARGET_INSTRUCTION_CONST_I64,
+         .operand_count = 0,
+         .reserved = 0},
+        {.id = 1,
+         .function = 0,
+         .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+         .operand_slots = {2, XR_TARGET_INSTRUCTION_SLOT_NONE},
+         .immediate_bits = 0,
+         .opcode = XR_TARGET_INSTRUCTION_RETURN_I64,
+         .operand_count = 1,
+         .reserved = 0},
+    };
+    require_instruction_stream_reencodes(const_return,
+                                         sizeof(const_return), rows, 2u);
+    uint8_t digest[XR_FINGERPRINT_BYTES] = {0};
+    xr_sha256(const_return, sizeof(const_return), digest);
+    REQUIRE(memcmp(digest, const_return_digest, sizeof(digest)) == 0);
+
+    static const uint8_t expanded_fingerprint[XR_FINGERPRINT_BYTES] = {
+        0x3b, 0x9c, 0x9a, 0xb5, 0xa4, 0x77, 0xa8, 0xcd,
+        0xb7, 0xc1, 0x0f, 0x1e, 0x78, 0xea, 0x9e, 0x4c,
+        0xa8, 0x8a, 0xaf, 0xa1, 0xe9, 0x9f, 0x8b, 0x52,
+        0xe5, 0xe6, 0x7d, 0x8a, 0x50, 0x4e, 0x0f, 0xdd,
+    };
+    static const uint8_t expanded_domain[] =
+        "xray-xtp-expanded-instruction-kat-v1";
+    uint8_t canonical_rows[64] = {0};
+    REQUIRE(xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, rows, 2u,
+                               canonical_rows));
+    XrSHA256Context fingerprint_context;
+    xr_sha256_init(&fingerprint_context);
+    xr_sha256_update(&fingerprint_context, expanded_domain,
+                     sizeof(expanded_domain) - 1u);
+    xr_sha256_update(&fingerprint_context, canonical_rows,
+                     sizeof(canonical_rows));
+    xr_sha256_final(&fingerprint_context, digest);
+    REQUIRE(memcmp(digest, expanded_fingerprint, sizeof(digest)) == 0);
+
+    static const uint8_t primitive_add[] = {0x00, 0x03, 0x00,
+                                            0x03, 0x01, 0x02};
+    XrTargetInstructionRecord add = {
+        .id = 0,
+        .function = 0,
+        .result_slot = 2,
+        .operand_slots = {0, 1},
+        .immediate_bits = 0,
+        .opcode = XR_TARGET_INSTRUCTION_ADD_WRAP_I64,
+        .operand_count = 2,
+        .reserved = 0,
+    };
+    require_instruction_stream_reencodes(primitive_add,
+                                         sizeof(primitive_add), &add, 1u);
+
+    static const struct {
+        uint16_t first_opcode;
+        uint64_t immediate;
+        uint8_t bytes[4];
+    } super_kats[] = {
+        {XR_TARGET_INSTRUCTION_PARAM_I64, 0, {0x02, 0x00, 0x03, 0x00}},
+        {XR_TARGET_INSTRUCTION_CALL_DIRECT_I64, 7, {0x03, 0x00, 0x03, 0x07}},
+    };
+    for (size_t index = 0; index < sizeof(super_kats) / sizeof(super_kats[0]);
+         index++) {
+        rows[0].opcode = super_kats[index].first_opcode;
+        rows[0].immediate_bits = super_kats[index].immediate;
+        require_instruction_stream_reencodes(super_kats[index].bytes,
+                                             sizeof(super_kats[index].bytes),
+                                             rows, 2u);
+    }
+
+    uint64_t work = 0;
+    for (size_t length = 0; length < sizeof(const_return); length++)
+        REQUIRE(!xr_xtp_instruction_stream_validate(
+            const_return, length, 2u, &work));
+    REQUIRE(!xr_xtp_instruction_stream_validate(
+        const_return, sizeof(const_return), 1u, &work));
+    uint8_t trailing[] = {0x01, 0x00, 0x03, 0x01, 0x00};
+    REQUIRE(!xr_xtp_instruction_stream_validate(trailing, sizeof(trailing),
+                                                2u, &work));
+    uint8_t unknown[] = {0x7f};
+    REQUIRE(!xr_xtp_instruction_stream_validate(unknown, sizeof(unknown), 1u,
+                                                &work));
+    uint8_t overlong[] = {0x00, 0x81, 0x00, 0x00};
+    REQUIRE(!xr_xtp_instruction_stream_validate(overlong, sizeof(overlong), 1u,
+                                                &work));
+    uint8_t overflow[] = {0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                          0xff, 0xff, 0xff, 0x02};
+    REQUIRE(!xr_xtp_instruction_stream_validate(overflow, sizeof(overflow),
+                                                1u, &work));
+    uint8_t no_slot_alias[] = {0x01, 0x00, 0x80, 0x80,
+                               0x80, 0x80, 0x10, 0x00};
+    REQUIRE(!xr_xtp_instruction_stream_validate(
+        no_slot_alias, sizeof(no_slot_alias), 2u, &work));
+    uint8_t primitive_pair[] = {0x00, 0x01, 0x00, 0x03, 0x01,
+                                0x00, 0x0f, 0x00, 0x03};
+    REQUIRE(!xr_xtp_instruction_stream_validate(
+        primitive_pair, sizeof(primitive_pair), 2u, &work));
+
+    XtpFixture fixture = make_direct_call_fixture();
+    uint8_t *instruction_entry =
+        directory_entry(fixture.bytes, XR_XTP_SECTION_INSTRUCTIONS);
+    size_t instruction_offset =
+        (size_t) xr_xtp_take_u64(instruction_entry + 8);
+    size_t instruction_length =
+        (size_t) xr_xtp_take_u64(instruction_entry + 16);
+    REQUIRE(instruction_length > 0);
+    for (size_t offset = 0; offset < instruction_length; offset++) {
+        uint8_t *copy = copy_artifact(&fixture);
+        copy[instruction_offset + offset] ^= UINT8_C(1);
+        resign_section(copy, XR_XTP_SECTION_INSTRUCTIONS);
+        resign_artifact(copy, fixture.size);
+        expect_decode_or_materialize_failure(&fixture, copy);
+        xr_free(copy);
+    }
+    dispose_fixture(&fixture);
+}
+
 static void test_header_and_directory_mutations(void) {
     XtpFixture fixture = make_fixture();
     uint8_t *copy = copy_artifact(&fixture);
@@ -1617,6 +1800,18 @@ static void test_header_and_directory_mutations(void) {
     memcpy(copy, fixture.bytes, fixture.size);
     entry = directory_entry(copy, XR_XTP_SECTION_FUNCTIONS);
     xr_xtp_put_u64(entry + 8, UINT64_MAX);
+    resign_artifact(copy, fixture.size);
+    expect_decode_failure(copy, fixture.size);
+
+    memcpy(copy, fixture.bytes, fixture.size);
+    entry = directory_entry(copy, XR_XTP_SECTION_INSTRUCTIONS);
+    xr_xtp_put_u32(entry + 4, 0);
+    resign_artifact(copy, fixture.size);
+    expect_decode_failure(copy, fixture.size);
+
+    memcpy(copy, fixture.bytes, fixture.size);
+    entry = directory_entry(copy, XR_XTP_SECTION_INSTRUCTIONS);
+    xr_xtp_put_u32(entry + 32, 32);
     resign_artifact(copy, fixture.size);
     expect_decode_failure(copy, fixture.size);
 
@@ -1848,6 +2043,7 @@ int main(int argc, char **argv) {
     test_artifact_classifier();
     test_wire_row_inventory();
     test_every_typed_row_codec();
+    test_compact_instruction_stream_kat_and_mutations();
     test_exact_roundtrip_and_owned_candidate();
     test_concurrent_candidate_materialization();
     test_direct_call_rows_roundtrip_and_mutate();

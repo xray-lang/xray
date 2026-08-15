@@ -12,6 +12,7 @@
 #define XR_XTP_INTERNAL_H
 
 #include "xr_xtp_schema.h"
+#include "xr_xtp_instruction_stream.h"
 #include "../target/xr_target_profile_internal.h"
 #include <stdatomic.h>
 
@@ -20,6 +21,7 @@
 
 typedef struct XrXtpSectionView {
     XrXtpSectionKind kind;
+    uint32_t flags;
     size_t offset;
     size_t length;
     uint32_t count;

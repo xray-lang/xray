@@ -290,6 +290,14 @@ static void test_valid_resource_ladder(void) {
                                         sizeof(diagnostic)));
         XrXtpResourceManifest resources = {0};
         REQUIRE(xr_xtp_candidate_resources(candidate, &resources));
+        const XrXtpSectionView *instructions = xr_xtp_candidate_section(
+            candidate, XR_XTP_SECTION_INSTRUCTIONS);
+        REQUIRE(instructions != NULL && instructions->count > 0 &&
+                instructions->flags == XR_XTP_SECTION_FLAG_COMPACT &&
+                instructions->row_size == 0 &&
+                instructions->length <
+                    (size_t) instructions->count *
+                        xr_xtp_wire_row_size(XR_XTP_SECTION_INSTRUCTIONS));
         REQUIRE(xr_xtp_materialize_target_plan(
             candidate, fixture.semantic, fixture.profile, &decoded,
             diagnostic, sizeof(diagnostic)));
@@ -301,7 +309,10 @@ static void test_valid_resource_ladder(void) {
         REQUIRE(resources.total_rows > previous_rows);
         REQUIRE(resources.table_bytes > previous_table_bytes);
         REQUIRE(fixture.size > previous_artifact_bytes);
-        REQUIRE(resources.verification_work_units == resources.total_rows);
+        REQUIRE(resources.verification_work_units > resources.total_rows);
+        REQUIRE(resources.verification_work_units ==
+                resources.total_rows + instructions->length +
+                    instructions->count);
         REQUIRE(resources.total_rows <= XR_XTP_MAX_TOTAL_ROWS);
         REQUIRE(resources.table_bytes <= XR_XTP_MAX_TABLE_BYTES);
         REQUIRE(resources.total_frame_bytes <= XR_XTP_MAX_TOTAL_FRAME_BYTES);
