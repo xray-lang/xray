@@ -1422,7 +1422,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "4d57bbf154e1ebf1e8aad22831a7d09b60c3c825fa1121ee3c7c915c78bbc24d") == 0);
+                   "6c1d2cdbf0f57dab0dbe2c9d1ddbfdfcb7d1cdbe450ed46e862ffb632e68bdb8") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2438,7 +2438,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "4ebc3fb1a19c8b08bd18aa9c8a6c344160386ab3549ca66646131a0ab380d009") == 0);
+                   "afceaffea245eb52b3fde772d65bd69c1a585050fd69f4b2fd239a93a5ddaab6") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
         XrTargetCallArgumentRecord fabricated_argument = {0};

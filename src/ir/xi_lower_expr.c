@@ -7458,6 +7458,16 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
          * unresolved shape remains fail-closed. */
         v->call_return_ownership = lower_call_return_ownership(l, call, recv);
         lower_seal_member_result_alias(v, method_receiver_type, ma->name);
+        /* Preserve the analyzer-backed builtin selection before the source
+         * selector becomes debug-only metadata. This first authority slice is
+         * intentionally the one-argument Array.fill family only. */
+        if (n == 1 && xi_lower_receiver_method_call_matches(
+                          recv->type, ma->name, n,
+                          XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILL)) {
+            v->array_member_kind = XI_ARRAY_MEMBER_FILL;
+            v->array_element_storage =
+                xi_array_intrinsic_storage_from_type(recv->type);
+        }
         if (is_time_sleep)
             v->lowering_flags |= XI_LOWERING_FLAG_TIME_SLEEP;
         lower_instantiate_call_view_evidence(v, NULL, method_type, true);
