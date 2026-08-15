@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare one scalar corpus across three executors and an independent oracle."""
+"""Compare scalar and direct-call cases across three executors and an oracle."""
 
 from __future__ import annotations
 
@@ -57,6 +57,10 @@ RELATION_OPERATORS = {
     "cfg-le": "<=",
     "cfg-gt": ">",
     "cfg-ge": ">=",
+}
+DIRECT_CALL_OPERATORS = {
+    "direct-function-call": "+",
+    "direct-function-call-error": "/",
 }
 
 
@@ -252,11 +256,17 @@ def read_manifest(path: Path) -> dict[str, Any]:
             raise ComparisonFailure(
                 f"{case_id}: expected exactly two integer arguments"
             )
-        if case_id not in BINARY_OPERATORS and case_id not in RELATION_OPERATORS:
+        if (
+            case_id not in BINARY_OPERATORS
+            and case_id not in RELATION_OPERATORS
+            and case_id not in DIRECT_CALL_OPERATORS
+        ):
             raise ComparisonFailure(f"{case_id}: comparison operation is not mapped")
         validate_observation(f"oracle:{case_id}", case.get("oracle"))
         ids.add(case_id)
-    expected_cases = set(BINARY_OPERATORS) | set(RELATION_OPERATORS)
+    expected_cases = (
+        set(BINARY_OPERATORS) | set(RELATION_OPERATORS) | set(DIRECT_CALL_OPERATORS)
+    )
     if ids != expected_cases:
         raise ComparisonFailure(
             "comparison manifest does not cover the exact scalar corpus"
@@ -324,6 +334,14 @@ def xray_identity(xray: Path) -> dict[str, Any]:
 def render_source(case: dict[str, Any]) -> str:
     case_id = case["id"]
     left, right = case["arguments"]
+    if case_id in DIRECT_CALL_OPERATORS:
+        operator = DIRECT_CALL_OPERATORS[case_id]
+        return (
+            "fn callee(left: int, right: int) -> int {\n"
+            f"    return left {operator} right\n"
+            "}\n\n"
+            f"print(callee({left}, {right}))\n"
+        )
     if case_id in BINARY_OPERATORS:
         body = f"    return left {BINARY_OPERATORS[case_id]} right\n"
     else:
@@ -452,7 +470,7 @@ def main(argv: list[str]) -> int:
         print(json.dumps(report, indent=2, sort_keys=True), file=sys.stderr)
         return 1
     print(
-        "target-machine scalar comparison: "
+        "target-machine comparison: "
         f"{report['summary']['passedCases']} cases passed; "
         f"{report['summary']['unsupportedPositiveCount']} positive families remain unavailable"
     )

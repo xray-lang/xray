@@ -31,6 +31,8 @@
     {"id": "modulo", "arguments": [-7, 2], "oracle": {"value": -1, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
     {"id": "divide-by-zero", "arguments": [7, 0], "oracle": {"value": null, "error": "division-by-zero", "termination": "error", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
     {"id": "modulo-by-zero", "arguments": [7, 0], "oracle": {"value": null, "error": "modulo-by-zero", "termination": "error", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "direct-function-call", "arguments": [21, 21], "oracle": {"value": 42, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
+    {"id": "direct-function-call-error", "arguments": [7, 0], "oracle": {"value": null, "error": "division-by-zero", "termination": "error", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
     {"id": "cfg-eq", "arguments": [5, 5], "oracle": {"value": 10, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
     {"id": "cfg-ne", "arguments": [5, 5], "oracle": {"value": 0, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
     {"id": "cfg-lt", "arguments": [-2, 3], "oracle": {"value": 1, "error": null, "termination": "returned", "destruction": {"allocations": 0, "releases": 0, "drops": 0}, "lifecycle": [], "trace": []}},
@@ -40,7 +42,6 @@
   ],
   "unsupportedPositiveCases": [
     {"id": "floating-point-arithmetic", "family": "scalar-f64", "typedStatus": "unavailable", "blocksCompletion": true, "reason": "The typed dispatcher accepts signed i64 slots only."},
-    {"id": "direct-function-call", "family": "call", "typedStatus": "unavailable", "blocksCompletion": true, "reason": "The typed dispatcher has no call instruction family."},
     {"id": "owned-string-concat", "family": "object-ownership", "typedStatus": "unavailable", "blocksCompletion": true, "reason": "The typed dispatcher has no object slots or cleanup execution."},
     {"id": "coroutine-resume", "family": "coroutine", "typedStatus": "unavailable", "blocksCompletion": true, "reason": "The typed dispatcher has no coroutine state-machine execution."}
   ]

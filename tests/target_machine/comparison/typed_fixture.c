@@ -28,6 +28,7 @@
 typedef enum ComparisonShape {
     COMPARISON_BINARY,
     COMPARISON_RELATION_CFG,
+    COMPARISON_DIRECT_CALL,
 } ComparisonShape;
 
 typedef struct ComparisonCase {
@@ -47,6 +48,16 @@ static XrType comparison_bool = {
     .id = 2,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
+};
+
+static XrType comparison_function = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 3,
+    .frozen = true,
+    .function = {
+        .return_type = &comparison_int,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
 };
 
 static XrTypedDispatchStatus execute_request_i64(
@@ -77,6 +88,8 @@ static const ComparisonCase comparison_cases[] = {
     {"modulo", COMPARISON_BINARY, XI_MOD},
     {"divide-by-zero", COMPARISON_BINARY, XI_DIV},
     {"modulo-by-zero", COMPARISON_BINARY, XI_MOD},
+    {"direct-function-call", COMPARISON_DIRECT_CALL, XI_ADD},
+    {"direct-function-call-error", COMPARISON_DIRECT_CALL, XI_DIV},
     {"cfg-eq", COMPARISON_RELATION_CFG, XI_EQ},
     {"cfg-ne", COMPARISON_RELATION_CFG, XI_NE},
     {"cfg-lt", COMPARISON_RELATION_CFG, XI_LT},
@@ -160,9 +173,67 @@ static XiFunc *build_relation_function(const ComparisonCase *spec) {
     return function;
 }
 
+static XiFunc *build_direct_call_function(const ComparisonCase *spec) {
+    XiFunc *root = xi_func_new("target_machine_call_root", &comparison_int);
+    XiFunc *child = xi_func_new("target_machine_call_child", &comparison_int);
+    if (!root || !child) {
+        xi_func_free(root);
+        xi_func_free(child);
+        return NULL;
+    }
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    if (!root->children) {
+        xi_func_free(child);
+        xi_func_free(root);
+        return NULL;
+    }
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    if (!root_entry || !child_entry || !add_parameters(root, root_entry) ||
+        !add_parameters(child, child_entry)) {
+        xi_func_free(root);
+        return NULL;
+    }
+    XiValue *child_result =
+        xi_value_new(child, child_entry, spec->operation, &comparison_int, 2);
+    XiValue *closure =
+        xi_value_new(root, root_entry, XI_STACK_ALLOC, &comparison_function, 0);
+    XiValue *alias =
+        xi_value_new(root, root_entry, XI_COPY, &comparison_function, 1);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &comparison_int, 3);
+    if (!child_result || !closure || !alias || !call) {
+        xi_func_free(root);
+        return NULL;
+    }
+    child_result->args[0] = child->params[0];
+    child_result->args[1] = child->params[1];
+    xi_block_set_return(child_entry, child_result);
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = child;
+    alias->args[0] = closure;
+    alias->aux_int = XI_COPY_KIND_IDENTITY;
+    call->args[0] = alias;
+    call->args[1] = root->params[0];
+    call->args[2] = root->params[1];
+    xi_block_set_return(root_entry, call);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+    return root;
+}
+
 static XiFunc *build_function(const ComparisonCase *spec) {
-    return spec->shape == COMPARISON_RELATION_CFG ? build_relation_function(spec)
-                                                  : build_binary_function(spec);
+    switch (spec->shape) {
+        case COMPARISON_BINARY:
+            return build_binary_function(spec);
+        case COMPARISON_RELATION_CFG:
+            return build_relation_function(spec);
+        case COMPARISON_DIRECT_CALL:
+            return build_direct_call_function(spec);
+    }
+    return NULL;
 }
 
 static bool parse_i64(const char *text, int64_t *value) {
@@ -199,6 +270,43 @@ static void print_observation(int64_t value, const char *error) {
          "\"drops\":0},\"lifecycle\":[],\"trace\":[]}");
 }
 
+static bool has_exact_direct_call(const XrTargetPlan *plan) {
+    uint32_t function_count = 0;
+    uint32_t call_count = 0;
+    uint32_t argument_count = 0;
+    uint32_t adapter_count = 0;
+    uint32_t instruction_count = 0;
+    const XrTargetFunctionRecord *functions =
+        xr_target_plan_functions(plan, &function_count);
+    const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(plan, &argument_count);
+    const XrTargetAdapterRecord *adapters =
+        xr_target_plan_adapters(plan, &adapter_count);
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_instructions(plan, &instruction_count);
+    if (!functions || function_count != 2 || !calls || call_count != 1 ||
+        !arguments || argument_count != 2 || adapters || adapter_count != 0 ||
+        !instructions || calls[0].calling_convention !=
+                             XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+        calls[0].target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        calls[0].caller_function != 0 || calls[0].callee_function != 1 ||
+        calls[0].argument_begin != 0 || calls[0].argument_count != 2 ||
+        calls[0].adapter_begin != 0 || calls[0].adapter_count != 0 ||
+        calls[0].flags != 0)
+        return false;
+
+    uint32_t direct_calls = 0;
+    for (uint32_t i = 0; i < instruction_count; i++) {
+        if (instructions[i].opcode != XR_TARGET_INSTRUCTION_CALL_DIRECT_I64)
+            continue;
+        direct_calls++;
+        if (instructions[i].function != 0 || instructions[i].immediate_bits != 0)
+            return false;
+    }
+    return direct_calls == 1;
+}
+
 static int execute_case(const ComparisonCase *spec, const int64_t arguments[2]) {
     XiFunc *function = build_function(spec);
     if (!function) {
@@ -218,6 +326,13 @@ static int execute_case(const ComparisonCase *spec, const int64_t arguments[2]) 
     if (!built || !profile || !plan) {
         fprintf(stderr, "typed comparison fixture plan build failed: %s\n",
                 error[0] ? error : "profile allocation failed");
+        xr_target_plan_free(plan);
+        xr_target_profile_free(profile);
+        xr_semantic_plan_free(semantic);
+        return 2;
+    }
+    if (spec->shape == COMPARISON_DIRECT_CALL && !has_exact_direct_call(plan)) {
+        fputs("typed comparison fixture lacks one exact direct i64 call\n", stderr);
         xr_target_plan_free(plan);
         xr_target_profile_free(profile);
         xr_semantic_plan_free(semantic);
