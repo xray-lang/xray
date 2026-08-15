@@ -40,6 +40,11 @@ def initialize(root: Path) -> dict[str, Any]:
     (root / "contracts/target-machine").mkdir(parents=True)
     (root / "CMakeLists.txt").write_text("# fixture\n", encoding="utf-8")
     (root / "src/authority.h").write_text("#define FIXTURE 1\n", encoding="utf-8")
+    (root / "include").mkdir()
+    (root / "include/runtime.h").write_text("#define RUNTIME 1\n", encoding="utf-8")
+    (root / "include/xray_runtime_api.h").write_text(
+        "#define XRAY_RUNTIME_API 1\n", encoding="utf-8"
+    )
     for name, value in {
         "semantic-owner.json": {"operation_count": 0, "operations": []},
         "legacy-vm.json": {
@@ -94,7 +99,10 @@ def initialize(root: Path) -> dict[str, Any]:
             "forbidden_path_regex": r"(?i)(?:^|/)[^/]*\.xrc$",
             "forbidden_text_regex": r"LEGACY_INSTALL_TEXT",
             "required_deliverables": list(collector.DELIVERABLE_PATTERNS),
-            "required_public_headers": ["include/xray/runtime.h"],
+            "required_public_headers": [
+                "include/xray/runtime.h",
+                "include/xray/xray_runtime_api.h",
+            ],
         },
         "matrix": {
             "policy": "contracts/target-machine/validation-matrix.json",
@@ -127,6 +135,7 @@ def populate(prefix: Path) -> None:
         "lib/xray/compiler/x86_64-windows-msvc/xray_compiler.lib": "compiler",
         "lib/xray/vm/x86_64-windows-msvc/xray_vm.lib": "vm",
         "include/xray/runtime.h": "#define RUNTIME 1\n",
+        "include/xray/xray_runtime_api.h": "#define XRAY_RUNTIME_API 1\n",
         "share/xray/install/aot-sdk-closure.json": "",
         "share/xray/install/payload-manifest.json": "",
     }
@@ -161,7 +170,11 @@ def fake_install(mutation: str = "") -> Callable[[Path, Path], tuple[int, list[s
             "commit": identity["source_commit"], "dirty": False,
         })
         if mutation == "missing":
-            (prefix / "include/xray/runtime.h").unlink()
+            (prefix / "include/xray/xray_runtime_api.h").unlink()
+        if mutation == "header-drift":
+            (prefix / "include/xray/xray_runtime_api.h").write_text(
+                "#define XRAY_RUNTIME_API_FORGED 1\n", encoding="utf-8"
+            )
         if mutation == "residue":
             path = prefix / "lib/xray/legacy.xrc"
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -231,13 +244,14 @@ def self_test() -> int:
             )
             verified = {row["path"] for row in envelope["logs"]}
             findings = assembler.completion.installed_findings(
-                envelope, verified, stage, policy
+                envelope, verified, stage, policy, root
             )
             if findings:
                 raise AssertionError(f"clean installed envelope was rejected: {findings}")
 
             for name, mutation, field in (
-                ("missing", "missing", "absent_public_headers"),
+                ("missing-runtime-api", "missing", "absent_public_headers"),
+                ("runtime-api-drift", "header-drift", "aot_sdk_closure"),
                 ("residue", "residue", "residue_count"),
                 ("replay", "replay", "no_work_replay"),
                 ("sdk-extra", "sdk-extra", "aot_sdk_closure"),
@@ -255,6 +269,10 @@ def self_test() -> int:
                     raise AssertionError("no-work mutation was not reported")
                 if field == "aot_sdk_closure" and failed["payload"][field] != "failed":
                     raise AssertionError("unexpected SDK file mutation was not reported")
+                if mutation == "header-drift" and not any(
+                        "installed header digest mismatch: include/xray/xray_runtime_api.h" in row
+                        for row in failed["payload"]["aot_sdk_findings"]):
+                    raise AssertionError("runtime facade source identity drift was not reported")
 
             try:
                 collector.run_install = fake_install()

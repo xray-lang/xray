@@ -260,7 +260,8 @@
       "libxray-compiler"
     ],
     "required_public_headers": [
-      "include/xray/runtime.h"
+      "include/xray/runtime.h",
+      "include/xray/xray_runtime_api.h"
     ]
   },
   "inventories": {

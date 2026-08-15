@@ -169,48 +169,11 @@ def discover_headers(prefix: Path,
     return present, [relative for relative in required if relative not in present]
 
 
-def validate_sdk_closure(prefix: Path) -> tuple[bool, list[str]]:
-    manifest_path = prefix / "share/xray/install/aot-sdk-closure.json"
-    if not manifest_path.is_file():
-        return False, ["exact AOT SDK closure manifest is missing"]
-    try:
-        manifest = assembler.read_object(manifest_path)
-    except assembler.AssemblyError as error:
-        return False, [str(error)]
-    if (set(manifest) != {"schema", "generator", "entries"}
-            or manifest.get("schema") != 1
-            or manifest.get("generator") != "xray-aot-sdk-header-closure/1"
-            or not isinstance(manifest.get("entries"), list)
-            or not manifest["entries"]):
-        return False, ["exact AOT SDK closure manifest shape is invalid"]
-    expected: dict[str, str] = {}
-    findings: list[str] = []
-    for row in manifest["entries"]:
-        if (not isinstance(row, dict)
-                or set(row) != {"install_path", "sha256", "source_path"}
-                or not isinstance(row.get("install_path"), str)
-                or not isinstance(row.get("sha256"), str)
-                or not isinstance(row.get("source_path"), str)):
-            findings.append("exact AOT SDK closure row shape is invalid")
-            continue
-        relative = row["install_path"]
-        if relative in expected:
-            findings.append(f"duplicate AOT SDK install path: {relative}")
-        expected[relative] = row["sha256"]
-    actual = {
-        path.relative_to(prefix).as_posix(): assembler.sha256_file(path)
-        for base in (prefix / "include/xray", prefix / "lib/xray/sdk")
-        if base.is_dir()
-        for path in base.rglob("*") if path.is_file()
-    }
-    if actual != expected:
-        for relative in sorted(set(expected) - set(actual)):
-            findings.append(f"missing exact AOT SDK file: {relative}")
-        for relative in sorted(set(actual) - set(expected)):
-            findings.append(f"unexpected installed SDK file: {relative}")
-        for relative in sorted(set(actual) & set(expected)):
-            if actual[relative] != expected[relative]:
-                findings.append(f"AOT SDK digest mismatch: {relative}")
+def validate_sdk_closure(root: Path, prefix: Path,
+                         required_headers: list[str]) -> tuple[bool, list[str]]:
+    findings = completion.validate_installed_header_closure(
+        root, prefix, required_headers
+    )
     return not findings, findings
 
 
@@ -301,7 +264,9 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         )
         required_headers = governance["installed"]["required_public_headers"]
         public_headers, absent_headers = discover_headers(prefix, required_headers)
-        sdk_exact, sdk_findings = validate_sdk_closure(prefix)
+        sdk_exact, sdk_findings = validate_sdk_closure(
+            root, prefix, required_headers
+        )
         residue_count, residue_samples = residue_scan(prefix, governance)
         payload_exact, payload_detail = payload_identity(prefix, identity)
         hazards = empty_hazards + replay_hazards
