@@ -159,6 +159,87 @@ static bool invalidation_results_equal(const XrInvalidationResult *left,
     return true;
 }
 
+TEST(module_resolution_fingerprint_is_consumer_exact_and_order_independent) {
+    XrDependencyGraph forward;
+    XrDependencyGraph reverse;
+    TestGraphIds forward_ids;
+    TestGraphIds reverse_ids;
+    ASSERT_TRUE(build_facet_graph(&forward, &forward_ids, false));
+    ASSERT_TRUE(build_facet_graph(&reverse, &reverse_ids, true));
+
+    XrFingerprint forward_body;
+    XrFingerprint reverse_body;
+    XrFingerprint signature;
+    ASSERT_TRUE(xr_dependency_graph_module_resolution_fingerprint(
+        &forward, forward_ids.body, &forward_body));
+    ASSERT_TRUE(xr_dependency_graph_module_resolution_fingerprint(
+        &reverse, reverse_ids.body, &reverse_body));
+    ASSERT_TRUE(xr_dependency_graph_module_resolution_fingerprint(
+        &forward, forward_ids.signature, &signature));
+    ASSERT_TRUE(xr_fingerprint_equal(forward_body, reverse_body));
+    ASSERT_FALSE(xr_fingerprint_equal(forward_body, signature));
+
+    XrStableId missing = forward_ids.body;
+    missing.bytes[0] ^= UINT8_C(1);
+    ASSERT_FALSE(xr_dependency_graph_module_resolution_fingerprint(
+        &forward, missing, &signature));
+    ASSERT_FALSE(xr_dependency_graph_module_resolution_fingerprint(
+        NULL, forward_ids.body, &signature));
+    ASSERT_FALSE(xr_dependency_graph_module_resolution_fingerprint(
+        &forward, forward_ids.body, NULL));
+
+    xr_dependency_graph_finalize(&reverse);
+    xr_dependency_graph_finalize(&forward);
+}
+
+static bool test_relation_is_empty(
+    const XrModuleFacetMask relation[XR_MODULE_FACET_COUNT]) {
+    for (unsigned facet = 0; facet < XR_MODULE_FACET_COUNT; facet++)
+        if (relation[facet] != 0)
+            return false;
+    return true;
+}
+
+static bool apply_test_delta(XrDependencyGraph *graph,
+                             const XrDependencyGraphDelta *delta,
+                             bool forward) {
+    for (size_t cursor = 0; cursor < delta->row_count; cursor++) {
+        size_t index = forward ? cursor : delta->row_count - cursor - 1u;
+        const XrDependencyGraphDeltaRow *row = &delta->rows[index];
+        const XrModuleFacetMask *from =
+            forward ? row->old_relation : row->new_relation;
+        const XrModuleFacetMask *to =
+            forward ? row->new_relation : row->old_relation;
+        bool from_empty = test_relation_is_empty(from);
+        bool to_empty = test_relation_is_empty(to);
+        bool ok;
+        if (from_empty) {
+            ok = xr_dependency_graph_add_edge(
+                graph, row->consumer, row->dependency, to);
+        } else if (to_empty) {
+            ok = xr_dependency_graph_remove_edge(
+                graph, row->consumer, row->dependency);
+        } else {
+            ok = xr_dependency_graph_add_edge(
+                graph, row->consumer, row->dependency, to);
+        }
+        if (!ok)
+            return false;
+    }
+    return xr_dependency_graph_validate(graph);
+}
+
+static bool prospective_resolution_fingerprint(
+    XrDependencyGraph *graph, XrStableId consumer,
+    const XrDependencyGraphDelta *delta, XrFingerprint *out) {
+    if (!apply_test_delta(graph, delta, true))
+        return false;
+    bool fingerprinted = xr_dependency_graph_module_resolution_fingerprint(
+        graph, consumer, out);
+    bool restored = apply_test_delta(graph, delta, false);
+    return fingerprinted && restored;
+}
+
 static const XrInvalidationEvidence *find_evidence(
     const XrInvalidationResult *result, XrStableId module_id,
     XrStableId parent_id, XrModuleFacetMask observed_facet) {
@@ -674,10 +755,15 @@ TEST(reason_explanation_terminates_on_cycles_and_rejects_forged_rows) {
     xr_dependency_graph_finalize(&graph);
 }
 
-TEST(graph_delta_is_verified_bounded_and_atomic) {
+TEST(module_resolution_delta_requires_exact_authority_and_is_atomic) {
     XrDependencyGraph graph;
     TestGraphIds ids;
     ASSERT_TRUE(build_facet_graph(&graph, &ids, false));
+    XrModuleFacetMask downstream_relation[XR_MODULE_FACET_COUNT] = {0};
+    downstream_relation[XR_MODULE_FACET_CAPABILITY] =
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT);
+    ASSERT_TRUE(xr_dependency_graph_add_edge(
+        &graph, ids.leaf, ids.untouched, downstream_relation));
     XrFingerprint original_fingerprint;
     ASSERT_TRUE(xr_dependency_graph_fingerprint(&graph, &original_fingerprint));
 
@@ -690,10 +776,20 @@ TEST(graph_delta_is_verified_bounded_and_atomic) {
     row.new_relation[XR_MODULE_FACET_BODY_EVIDENCE] =
         XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY);
     XrDependencyGraphDelta delta = {.rows = &row, .row_count = 1};
+    XrModuleResolutionChange change = {
+        .delta = &delta,
+        .changed_facets =
+            XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE) |
+            XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY),
+    };
+    ASSERT_TRUE(xr_dependency_graph_module_resolution_fingerprint(
+        &graph, ids.untouched, &change.old_fingerprint));
+    change.new_fingerprint = change.old_fingerprint;
+    change.new_fingerprint.bytes[0] ^= UINT8_C(1);
     XrInvalidationEvent event = {
-        .reason = XR_INVALIDATION_GRAPH_CHANGED,
+        .reason = XR_INVALIDATION_MODULE_RESOLUTION_CHANGED,
         .root_id = ids.untouched,
-        .graph_delta = &delta,
+        .module_resolution = &change,
     };
     XrInvalidationResult rejected;
     ASSERT_FALSE(xr_cache_invalidate_apply(&graph, &event, &rejected));
@@ -702,26 +798,91 @@ TEST(graph_delta_is_verified_bounded_and_atomic) {
     ASSERT_TRUE(xr_fingerprint_equal(original_fingerprint, after_rejection));
 
     memset(row.old_relation, 0, sizeof(row.old_relation));
+    change.changed_facets =
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY);
+    ASSERT_TRUE(prospective_resolution_fingerprint(
+        &graph, ids.untouched, &delta, &change.new_fingerprint));
     delta.row_count = XR_INVALIDATION_MAX_DELTA_ROWS + 1u;
     ASSERT_FALSE(xr_cache_invalidate_apply(&graph, &event, &rejected));
+    delta.row_count = 1;
+
+    change.old_fingerprint.bytes[0] ^= UINT8_C(1);
+    ASSERT_FALSE(xr_cache_invalidate_apply(&graph, &event, &rejected));
+    change.old_fingerprint.bytes[0] ^= UINT8_C(1);
+    change.new_fingerprint.bytes[0] ^= UINT8_C(1);
+    ASSERT_FALSE(xr_cache_invalidate_apply(&graph, &event, &rejected));
+    change.new_fingerprint.bytes[0] ^= UINT8_C(1);
+    change.changed_facets |= XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT);
+    ASSERT_FALSE(xr_cache_invalidate_apply(&graph, &event, &rejected));
+    change.changed_facets =
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY);
+    event.root_id = ids.body;
+    ASSERT_FALSE(xr_cache_invalidate_apply(&graph, &event, &rejected));
+    event.root_id = ids.untouched;
+    row.consumer = ids.body;
+    ASSERT_FALSE(xr_cache_invalidate_apply(&graph, &event, &rejected));
+    row.consumer = ids.untouched;
+    event.module_resolution = NULL;
+    ASSERT_FALSE(xr_cache_invalidate_apply(&graph, &event, &rejected));
+    event.module_resolution = &change;
+
     ASSERT_TRUE(xr_dependency_graph_fingerprint(&graph, &after_rejection));
     ASSERT_TRUE(xr_fingerprint_equal(original_fingerprint, after_rejection));
 
-    delta.row_count = 1;
+    XrDependencyGraph before;
+    TestGraphIds before_ids;
+    ASSERT_TRUE(build_facet_graph(&before, &before_ids, true));
+    ASSERT_TRUE(xr_dependency_graph_add_edge(
+        &before, before_ids.leaf, before_ids.untouched,
+        downstream_relation));
     XrInvalidationResult result;
     ASSERT_TRUE(xr_cache_invalidate_apply(&graph, &event, &result));
+    ASSERT_TRUE(xr_cache_invalidation_verify(
+        &before, &event, &graph, &result));
     const XrDependencyEdge *published = xr_dependency_graph_find_edge(
         &graph, ids.untouched, ids.body);
     ASSERT_NOT_NULL(published);
     ASSERT_MEM_EQ(published->relation, row.new_relation,
                   sizeof(row.new_relation));
-    ASSERT_FALSE(xr_fingerprint_equal(result.root_old_fingerprint,
-                                      result.root_new_fingerprint));
+    ASSERT_TRUE(xr_fingerprint_equal(result.root_old_fingerprint,
+                                     change.old_fingerprint));
+    ASSERT_TRUE(xr_fingerprint_equal(result.root_new_fingerprint,
+                                     change.new_fingerprint));
+    const XrInvalidationRecord *root =
+        xr_invalidation_result_find(&result, ids.untouched);
+    const XrInvalidationRecord *downstream =
+        xr_invalidation_result_find(&result, ids.leaf);
+    ASSERT_NOT_NULL(root);
+    ASSERT_NOT_NULL(downstream);
+    ASSERT_TRUE(root->invalidated_facets == change.changed_facets);
+    ASSERT_TRUE(downstream->invalidated_facets ==
+                XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT));
+    ASSERT_EQ_INT(root->direct_reason,
+                  XR_INVALIDATION_MODULE_RESOLUTION_CHANGED);
+    ASSERT_NULL(xr_invalidation_result_find(&result, ids.signature));
+
+    XrInvalidationExplanation explanation;
+    ASSERT_TRUE(xr_invalidation_explain(
+        &result, ids.leaf, XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT),
+        &explanation));
+    ASSERT_EQ_INT(explanation.root_reason,
+                  XR_INVALIDATION_MODULE_RESOLUTION_CHANGED);
+    ASSERT_EQ_UINT(explanation.step_count, 1);
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[0].module_id,
+                                   ids.leaf));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[0].parent_module_id,
+                                   ids.untouched));
+    ASSERT_TRUE(xr_fingerprint_equal(explanation.root_old_fingerprint,
+                                     change.old_fingerprint));
+    ASSERT_TRUE(xr_fingerprint_equal(explanation.root_new_fingerprint,
+                                     change.new_fingerprint));
+    xr_invalidation_explanation_finalize(&explanation);
 
     XrDependencyGraph corrupt_budget = graph;
     corrupt_budget.edge_count = XR_DEPENDENCY_GRAPH_MAX_EDGES + 1u;
     ASSERT_FALSE(xr_dependency_graph_validate(&corrupt_budget));
     xr_invalidation_result_finalize(&result);
+    xr_dependency_graph_finalize(&before);
     xr_dependency_graph_finalize(&graph);
 }
 
@@ -780,7 +941,7 @@ TEST(independent_verifier_rejects_result_and_graph_mutations) {
     xr_dependency_graph_finalize(&before);
 }
 
-TEST(delete_rename_add_and_graph_change_leave_no_ghost_nodes) {
+TEST(delete_rename_add_and_module_resolution_leave_no_ghost_nodes) {
     XrDependencyGraph graph;
     xr_dependency_graph_init(&graph);
     XrStableId root_id;
@@ -862,13 +1023,24 @@ TEST(delete_rename_add_and_graph_change_leave_no_ghost_nodes) {
         .rows = &delta_row,
         .row_count = 1,
     };
-    XrInvalidationEvent graph_change = {
-        .reason = XR_INVALIDATION_GRAPH_CHANGED,
+    XrModuleResolutionChange resolution_change = {
+        .delta = &delta,
+        .changed_facets =
+            XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+    };
+    ASSERT_TRUE(xr_dependency_graph_module_resolution_fingerprint(
+        &graph, renamed.module_id, &resolution_change.old_fingerprint));
+    ASSERT_TRUE(prospective_resolution_fingerprint(
+        &graph, renamed.module_id, &delta,
+        &resolution_change.new_fingerprint));
+    XrInvalidationEvent resolution_event = {
+        .reason = XR_INVALIDATION_MODULE_RESOLUTION_CHANGED,
         .root_id = renamed.module_id,
-        .graph_delta = &delta,
+        .module_resolution = &resolution_change,
     };
     XrInvalidationResult graph_result;
-    ASSERT_TRUE(xr_cache_invalidate_apply(&graph, &graph_change, &graph_result));
+    ASSERT_TRUE(xr_cache_invalidate_apply(
+        &graph, &resolution_event, &graph_result));
     ASSERT_NOT_NULL(xr_invalidation_result_find(&graph_result, renamed.module_id));
     ASSERT_NOT_NULL(xr_invalidation_result_find(&graph_result, unrelated_id));
     ASSERT_TRUE(result_is_stably_ordered(&graph_result));
@@ -884,6 +1056,7 @@ TEST(delete_rename_add_and_graph_change_leave_no_ghost_nodes) {
 
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Module summary and invalidation graph");
+RUN_TEST(module_resolution_fingerprint_is_consumer_exact_and_order_independent);
 RUN_TEST(module_summary_owns_key_and_distinguishes_facets);
 RUN_TEST(body_only_change_is_precise_and_reason_chain_is_traversable);
 RUN_TEST(summary_change_derives_every_changed_facet);
@@ -892,8 +1065,8 @@ RUN_TEST(relation_rows_propagate_exact_consumer_facets);
 RUN_TEST(invalid_relation_rows_are_rejected_without_mutating_graph);
 RUN_TEST(edge_insertion_order_does_not_change_records);
 RUN_TEST(multi_parent_multi_facet_evidence_is_complete);
-RUN_TEST(graph_delta_is_verified_bounded_and_atomic);
+RUN_TEST(module_resolution_delta_requires_exact_authority_and_is_atomic);
 RUN_TEST(independent_verifier_rejects_result_and_graph_mutations);
-RUN_TEST(delete_rename_add_and_graph_change_leave_no_ghost_nodes);
+RUN_TEST(delete_rename_add_and_module_resolution_leave_no_ghost_nodes);
 RUN_TEST(reason_explanation_terminates_on_cycles_and_rejects_forged_rows);
 TEST_MAIN_END()

@@ -161,9 +161,9 @@ static void absent_summary_fingerprint(XrStableId module_id, XrFingerprint *out)
 }
 
 static bool validate_delta(const XrDependencyGraph *graph,
-                           const XrInvalidationEvent *event,
+                           XrStableId root_id,
+                           const XrDependencyGraphDelta *delta,
                            XrModuleFacetMask *out_changed) {
-    const XrDependencyGraphDelta *delta = event->graph_delta;
     if (!delta || !delta->rows || delta->row_count == 0 ||
         delta->row_count > XR_INVALIDATION_MAX_DELTA_ROWS)
         return false;
@@ -173,7 +173,7 @@ static bool validate_delta(const XrDependencyGraph *graph,
         const XrDependencyGraphDeltaRow *row = &delta->rows[i];
         bool old_empty = relation_is_empty(row->old_relation);
         bool new_empty = relation_is_empty(row->new_relation);
-        if (!xr_stable_id_equal(row->consumer, event->root_id) ||
+        if (!xr_stable_id_equal(row->consumer, root_id) ||
             (old_empty && new_empty) ||
             (!old_empty && !relation_is_valid(row->old_relation)) ||
             (!new_empty && !relation_is_valid(row->new_relation)) ||
@@ -239,7 +239,7 @@ static bool event_shape_is_valid(const XrDependencyGraph *graph,
 
     switch (event->reason) {
     case XR_INVALIDATION_SUMMARY_CHANGED:
-        if (event->graph_delta || !root ||
+        if (event->module_resolution || !root ||
             !xr_module_summary_validate(event->replacement_summary) ||
             !xr_stable_id_equal(event->root_id,
                                 event->replacement_summary->module_id)) {
@@ -252,7 +252,7 @@ static bool event_shape_is_valid(const XrDependencyGraph *graph,
                xr_module_summary_fingerprint(event->replacement_summary,
                                              &resolved->new_fingerprint);
     case XR_INVALIDATION_MODULE_ADDED:
-        if (event->graph_delta || root ||
+        if (event->module_resolution || root ||
             !xr_module_summary_validate(event->replacement_summary) ||
             !xr_stable_id_equal(event->root_id,
                                 event->replacement_summary->module_id) ||
@@ -264,7 +264,7 @@ static bool event_shape_is_valid(const XrDependencyGraph *graph,
         return xr_module_summary_fingerprint(event->replacement_summary,
                                              &resolved->new_fingerprint);
     case XR_INVALIDATION_MODULE_DELETED:
-        if (event->replacement_summary || event->graph_delta || !root ||
+        if (event->replacement_summary || event->module_resolution || !root ||
             root->present_facets == 0)
             return false;
         resolved->changed_facets = root->present_facets;
@@ -273,7 +273,7 @@ static bool event_shape_is_valid(const XrDependencyGraph *graph,
         absent_summary_fingerprint(event->root_id, &resolved->new_fingerprint);
         return true;
     case XR_INVALIDATION_MODULE_RENAMED:
-        if (event->graph_delta || !root ||
+        if (event->module_resolution || !root ||
             !xr_module_summary_validate(event->replacement_summary) ||
             xr_stable_id_equal(event->root_id,
                                event->replacement_summary->module_id) ||
@@ -287,13 +287,24 @@ static bool event_shape_is_valid(const XrDependencyGraph *graph,
                xr_module_summary_fingerprint(root, &resolved->old_fingerprint) &&
                xr_module_summary_fingerprint(event->replacement_summary,
                                              &resolved->new_fingerprint);
-    case XR_INVALIDATION_GRAPH_CHANGED:
-        if (event->replacement_summary || !root ||
-            !validate_delta(graph, event, &resolved->changed_facets)) {
+    case XR_INVALIDATION_MODULE_RESOLUTION_CHANGED: {
+        const XrModuleResolutionChange *change = event->module_resolution;
+        if (event->replacement_summary || !root || !change ||
+            change->changed_facets == 0 ||
+            (change->changed_facets & ~XR_MODULE_FACET_ALL) != 0 ||
+            !validate_delta(graph, event->root_id, change->delta,
+                            &resolved->changed_facets) ||
+            resolved->changed_facets != change->changed_facets ||
+            !xr_dependency_graph_module_resolution_fingerprint(
+                graph, event->root_id, &resolved->old_fingerprint) ||
+            !xr_fingerprint_equal(resolved->old_fingerprint,
+                                  change->old_fingerprint) ||
+            xr_fingerprint_equal(change->old_fingerprint,
+                                 change->new_fingerprint)) {
             return false;
         }
-        return xr_dependency_graph_fingerprint(graph,
-                                               &resolved->old_fingerprint);
+        return true;
+    }
     case XR_INVALIDATION_DEPENDENCY:
         return false;
     }
@@ -324,8 +335,8 @@ static bool build_next_graph(const XrDependencyGraph *graph,
         ok = xr_dependency_graph_rename_node(out, event->root_id,
                                              event->replacement_summary);
         break;
-    case XR_INVALIDATION_GRAPH_CHANGED:
-        ok = apply_delta(out, event->graph_delta);
+    case XR_INVALIDATION_MODULE_RESOLUTION_CHANGED:
+        ok = apply_delta(out, event->module_resolution->delta);
         break;
     case XR_INVALIDATION_DEPENDENCY:
         break;
@@ -334,10 +345,15 @@ static bool build_next_graph(const XrDependencyGraph *graph,
         xr_dependency_graph_finalize(out);
         return false;
     }
-    if (event->reason == XR_INVALIDATION_GRAPH_CHANGED &&
-        !xr_dependency_graph_fingerprint(out, &resolved->new_fingerprint)) {
-        xr_dependency_graph_finalize(out);
-        return false;
+    if (event->reason == XR_INVALIDATION_MODULE_RESOLUTION_CHANGED) {
+        if (!xr_dependency_graph_module_resolution_fingerprint(
+                out, event->root_id, &resolved->new_fingerprint) ||
+            !xr_fingerprint_equal(
+                resolved->new_fingerprint,
+                event->module_resolution->new_fingerprint)) {
+            xr_dependency_graph_finalize(out);
+            return false;
+        }
     }
     return true;
 }
@@ -849,7 +865,8 @@ static bool invalidation_result_is_explainable(
         bool is_root = xr_stable_id_equal(record->module_id, result->root_id);
         if ((is_root && (found_root || record->direct_reason <
                                           XR_INVALIDATION_SUMMARY_CHANGED ||
-                         record->direct_reason > XR_INVALIDATION_GRAPH_CHANGED)) ||
+                          record->direct_reason >
+                              XR_INVALIDATION_MODULE_RESOLUTION_CHANGED)) ||
             (!is_root && record->direct_reason != XR_INVALIDATION_DEPENDENCY)) {
             return false;
         }

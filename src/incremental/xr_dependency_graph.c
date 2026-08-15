@@ -330,6 +330,51 @@ const XrDependencyEdge *xr_dependency_graph_find_edge(const XrDependencyGraph *g
     return index == SIZE_MAX ? NULL : &graph->edges[index];
 }
 
+bool xr_dependency_graph_module_resolution_fingerprint(
+    const XrDependencyGraph *graph, XrStableId consumer, XrFingerprint *out) {
+    static const uint8_t domain[] = "xray-module-resolution-v1\0";
+    if (!out || !xr_dependency_graph_validate(graph) ||
+        !xr_dependency_graph_find_node(graph, consumer)) {
+        return false;
+    }
+
+    size_t edge_count = 0;
+    for (size_t i = 0; i < graph->edge_count; i++) {
+        if (xr_stable_id_equal(graph->edges[i].consumer, consumer))
+            edge_count++;
+    }
+    XrEdgeRef *edges = NULL;
+    if (edge_count != 0) {
+        if (edge_count > SIZE_MAX / sizeof(*edges))
+            return false;
+        edges = (XrEdgeRef *) xr_malloc(edge_count * sizeof(*edges));
+        if (!edges)
+            return false;
+        size_t cursor = 0;
+        for (size_t i = 0; i < graph->edge_count; i++) {
+            if (xr_stable_id_equal(graph->edges[i].consumer, consumer))
+                edges[cursor++].edge = &graph->edges[i];
+        }
+        qsort(edges, edge_count, sizeof(*edges), compare_edge_refs);
+    }
+
+    XrSHA256Context ctx;
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
+    xr_sha256_update(&ctx, consumer.bytes, sizeof(consumer.bytes));
+    hash_u64(&ctx, edge_count);
+    for (size_t i = 0; i < edge_count; i++) {
+        const XrDependencyEdge *edge = edges[i].edge;
+        xr_sha256_update(&ctx, edge->dependency.bytes,
+                         sizeof(edge->dependency.bytes));
+        for (unsigned facet = 0; facet < XR_MODULE_FACET_COUNT; facet++)
+            hash_u64(&ctx, edge->relation[facet]);
+    }
+    xr_sha256_final(&ctx, out->bytes);
+    xr_free(edges);
+    return true;
+}
+
 bool xr_dependency_graph_fingerprint(const XrDependencyGraph *graph, XrFingerprint *out) {
     static const uint8_t domain[] = "xray-dependency-graph-v1\0";
     if (!out || !xr_dependency_graph_validate(graph))

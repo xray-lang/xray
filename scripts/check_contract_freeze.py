@@ -421,6 +421,8 @@ CONTRACT_SPECS = (
     ContractSpec(
         "incremental-compiler-session.md",
         (
+            "src/incremental/xr_dependency_graph.h",
+            "src/incremental/xr_dependency_graph.c",
             "src/incremental/xr_cache_invalidate.h",
             "src/incremental/xr_cache_invalidate.c",
             "src/toolchain/xcompiler_session.h",

@@ -87,7 +87,10 @@ invalidation, compiler-session ownership, or any compatibility reader.
     native build consults the store only after every module owns a verified
     plan; a hit skips re-encoding and re-publication alone, while a miss, a
     rejected candidate, or an unavailable store publishes the freshly encoded
-    artifact and continues unchanged.
+    artifact and continues unchanged. Because the key names the ordered
+    dependency module/fingerprint digest independently, a source import or
+    module-set resolution change necessarily selects a different XSM address;
+    the stale cache identity cannot be accepted as the new request.
 
 Changing the root-lock coverage, rejected-snapshot identity, quota reservation
 order, atomic publication sequence, directory/link boundary, lock cleanup,
@@ -114,7 +117,7 @@ anchor-sha256: tests/unit/CMakeLists.txt 1f7f1d62fd274f1c276e4c888d2bc2caf5deb20
 anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c 8a7a0f35523e2f7b846a84e22f42521d43c2e70d0eb4342d4a3d13c58dfc1fb4
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
 anchor-sha256: tests/unit/incremental/test_target_plan_tasks.c 4ea47fb617bb4bed33d98ada661ef0e171d720815dac8a2c4f66c340ce133188
-anchor-sha256: tests/unit/incremental/test_module_summary_build.c 5b476febd044ceeb01c3463ba69590746154e23aa309ccb25c79383c6303d83c
+anchor-sha256: tests/unit/incremental/test_module_summary_build.c 661372e5984643a4471383f76014273d45ff4cbe1e1f3e364a3f1ca12417ac89
 anchor-sha256: tests/aot/run_module_summary_determinism.py 7da3996037ef52aa3ab75d961f34348ca06051438b6ce70f26ce5966d5b1e545
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 3d00bf877ccb2a2acf955a270e3277e669aa5c6ad125224bef6b301aa6706e62
 anchor-sha256: tests/unit/os/test_fs_atomic.c f8f6ee065dcb3c4b75ae24edb4e96d95253c540f5a40252cf79a10aa140ddb5f

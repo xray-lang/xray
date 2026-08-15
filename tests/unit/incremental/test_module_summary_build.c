@@ -126,27 +126,36 @@ TEST(target_change_moves_only_profile_owned_facets) {
     xr_module_summary_finalize(&after);
 }
 
-/* A verified plan fingerprint already binds its ordered dependency rows, so
- * these components never move alone in a real build. The cache identity still
- * separates them, because an artifact must not be reachable through a key that
- * does not name its exact dependency and declaration set. */
-TEST(dependency_and_declaration_identity_separate_the_cache_key) {
+/* Resolution authority is independently named in the cache key. Even if every
+ * other fact were held fixed, a different resolved module/fingerprint vector
+ * cannot address the stale XSM object. */
+TEST(module_resolution_change_rejects_stale_semantic_cache_identity) {
+    XrModuleSummaryFacts facts = base_facts();
+    XrModuleSummary before;
+    XrModuleSummary after;
+    XrCacheKey base_key;
+    XrCacheKey dependency_key;
+
+    ASSERT_TRUE(xr_module_summary_build(&before, &base_key, "app/main", &facts));
+
+    facts.dependencies = fingerprint("dependencies-2");
+    ASSERT_TRUE(xr_module_summary_build(&after, &dependency_key, "app/main", &facts));
+    ASSERT_FALSE(xr_cache_key_equal(base_key, dependency_key));
+
+    xr_module_summary_finalize(&after);
+    xr_module_summary_finalize(&before);
+}
+
+TEST(declaration_and_schema_identity_separate_the_cache_key) {
     XrModuleSummaryFacts facts = base_facts();
     XrModuleSummary summary;
     XrCacheKey base_key;
-    XrCacheKey dependency_key;
     XrCacheKey declaration_key;
     XrCacheKey schema_key;
 
     ASSERT_TRUE(xr_module_summary_build(&summary, &base_key, "app/main", &facts));
     xr_module_summary_finalize(&summary);
 
-    facts.dependencies = fingerprint("dependencies-2");
-    ASSERT_TRUE(xr_module_summary_build(&summary, &dependency_key, "app/main", &facts));
-    xr_module_summary_finalize(&summary);
-    ASSERT_FALSE(xr_cache_key_equal(base_key, dependency_key));
-
-    facts = base_facts();
     facts.declarations = fingerprint("declarations-2");
     ASSERT_TRUE(xr_module_summary_build(&summary, &declaration_key, "app/main", &facts));
     xr_module_summary_finalize(&summary);
@@ -259,7 +268,8 @@ TEST_MAIN_BEGIN()
     RUN_TEST(every_facet_is_present_and_sourced_from_a_named_authority);
     RUN_TEST(semantic_change_invalidates_every_module_local_facet);
     RUN_TEST(target_change_moves_only_profile_owned_facets);
-    RUN_TEST(dependency_and_declaration_identity_separate_the_cache_key);
+    RUN_TEST(module_resolution_change_rejects_stale_semantic_cache_identity);
+    RUN_TEST(declaration_and_schema_identity_separate_the_cache_key);
     RUN_TEST(distinct_modules_never_share_a_cache_identity);
     RUN_TEST(invalid_derivation_inputs_are_rejected);
     RUN_TEST(published_graph_propagates_a_leaf_change_to_every_consumer);

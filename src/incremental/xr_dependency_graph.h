@@ -64,6 +64,11 @@ XR_FUNC const XrDependencyEdge *xr_dependency_graph_edge_at(const XrDependencyGr
 XR_FUNC const XrDependencyEdge *xr_dependency_graph_find_edge(const XrDependencyGraph *graph,
                                                               XrStableId consumer,
                                                               XrStableId dependency);
+/* Exact identity of one consumer's resolved dependency set. The digest binds
+ * the consumer stable ID plus its canonically ordered dependency IDs and
+ * facet relations; unrelated nodes and edges are deliberately excluded. */
+XR_FUNC bool xr_dependency_graph_module_resolution_fingerprint(
+    const XrDependencyGraph *graph, XrStableId consumer, XrFingerprint *out);
 XR_FUNC bool xr_dependency_graph_fingerprint(const XrDependencyGraph *graph,
                                              XrFingerprint *out);
 XR_FUNC bool xr_dependency_graph_validate(const XrDependencyGraph *graph);

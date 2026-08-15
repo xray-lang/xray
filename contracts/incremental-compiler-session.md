@@ -21,6 +21,17 @@ breaks equal-length ties. Malformed result rows, multi-facet queries, missing
 subjects, and facets outside the verified invalidation set fail closed instead
 of producing a partial reason chain.
 
+A source module's resolved module set is not represented as an unqualified
+graph-change event. Its identity is the domain-separated digest of the exact
+consumer stable ID plus canonically ordered dependency stable IDs and facet
+relations. A module-resolution event supplies the exact root, exact changed
+facet mask, canonical delta, and old/new resolution fingerprints. Apply first
+recomputes and matches the old identity, derives the facet mask from the delta,
+applies the delta to a private graph, then recomputes and matches the new
+identity before publication. The independent verifier repeats the same
+transaction. Stale old/new identities, wrong roots or facets, malformed rows,
+and partial authority fail closed without changing the graph or history.
+
 The native build publishes that graph once per build, after every module owns a
 verified SemanticPlan and before target planning. Its nodes are module
 summaries derived from verified authorities alone, and its edges carry the
@@ -90,16 +101,20 @@ artifact authority and operation-local verifier output.
   does not weaken their independent validation contracts.
 - The dependency-graph focused test proves exact-facet explanations across
   direct, multi-parent, multi-facet, and cyclic graphs, including rejection of
-  forged evidence rows.
+  forged evidence rows. It also proves consumer-exact module-resolution
+  identity, insertion-order independence, exact old/new/facet authority,
+  atomic mutation rejection, and a deterministic downstream explanation.
 - Runtime-only installed symbol gates must continue excluding compiler-session
   and cache-builder APIs.
 
 ## Digest anchors
 
-anchor-sha256: src/incremental/xr_cache_invalidate.h 03415e6782f85f734a1bf943a4687ded96f57289c5b2d36c213d42c227ea71d4
-anchor-sha256: src/incremental/xr_cache_invalidate.c dad8e4e26cb4268ba81fa873cee53365ca1bcf21e42369a13a8eac7e1cbde2ab
+anchor-sha256: src/incremental/xr_dependency_graph.h 549030885cabac77a90280d75cb8b619b52b19c6c4277208330f399ccb471f6c
+anchor-sha256: src/incremental/xr_dependency_graph.c 1148f7a8c0f0621298c6b05afff8ab35e5b99b1af1ee62fd175d302eec2ebedd
+anchor-sha256: src/incremental/xr_cache_invalidate.h d546845678f14a1c84a112370380b58f063f2b3a7d859b7c326ebb17c0a81c3c
+anchor-sha256: src/incremental/xr_cache_invalidate.c f134e5e0ea324161a54cf4d9e352faf630ce7c27bb8c3c7aaaa2856d195ef828
 anchor-sha256: src/toolchain/xcompiler_session.h 8dee7c7df5115c2af9f48015dcce11ef6341830de07c06c3b0b5febcce4d8fde
 anchor-sha256: src/toolchain/xcompiler_session.c 5c15ee43fadd472cc0f2e7c577e214f5133360b4930e686b5df29228311ab017
 anchor-sha256: src/api/xrepl.c 2317cdfb203e2c7c57dd9b1b8409fbf434d4d3eadc9386a9f1ad7ed485ade1ab
-anchor-sha256: tests/unit/incremental/test_dependency_graph.c dcbeffca87293d301dc7c201169a3bfaa2ed5a4be0ef5ade85552e3ab7287ab5
+anchor-sha256: tests/unit/incremental/test_dependency_graph.c a20526e1a319a99a63518e9d46161da34c194853aa9645cdcfbe2efa92400cc4
 anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c 4b0d4aad37518ed2e90e12ac99df88f6afc7e14c3bf54ac10f5575cc19afffd5

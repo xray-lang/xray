@@ -26,7 +26,7 @@ typedef enum XrInvalidationReason {
     XR_INVALIDATION_MODULE_ADDED,
     XR_INVALIDATION_MODULE_DELETED,
     XR_INVALIDATION_MODULE_RENAMED,
-    XR_INVALIDATION_GRAPH_CHANGED,
+    XR_INVALIDATION_MODULE_RESOLUTION_CHANGED,
     XR_INVALIDATION_DEPENDENCY
 } XrInvalidationReason;
 
@@ -47,13 +47,23 @@ typedef struct XrDependencyGraphDelta {
     size_t row_count;
 } XrDependencyGraphDelta;
 
+typedef struct XrModuleResolutionChange {
+    /* Canonical rows for exactly root_id's outgoing dependency set. */
+    const XrDependencyGraphDelta *delta;
+    /* Exact consumer facets derived from delta; mismatches fail closed. */
+    XrModuleFacetMask changed_facets;
+    /* Compare-and-swap authority for the old and replacement module set. */
+    XrFingerprint old_fingerprint;
+    XrFingerprint new_fingerprint;
+} XrModuleResolutionChange;
+
 typedef struct XrInvalidationEvent {
     XrInvalidationReason reason;
     XrStableId root_id;
     /* Copied during apply; never retained by the graph or result. */
     const XrModuleSummary *replacement_summary;
-    /* Required only for GRAPH_CHANGED and applied as one verified transaction. */
-    const XrDependencyGraphDelta *graph_delta;
+    /* Required only for MODULE_RESOLUTION_CHANGED. */
+    const XrModuleResolutionChange *module_resolution;
 } XrInvalidationEvent;
 
 typedef struct XrInvalidationEvidence {
