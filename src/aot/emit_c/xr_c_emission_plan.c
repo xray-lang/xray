@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(27)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(28)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -1033,6 +1033,175 @@ static bool exact_array_intrinsic_recipe(
     if (symbol)
         *symbol = with_capacity ? XR_C_ARRAY_WITH_CAPACITY_SYMBOL
                                 : XR_C_ARRAY_FILLED_NEW_SYMBOL;
+    return true;
+}
+
+/* Array.fill retains XI_CALL_METHOD for VM execution, but its C recipe is
+ * admitted only by the dedicated Semantic and Target identities. Metadata is
+ * structurally checked and never inspected for a selector spelling. */
+static bool exact_array_fill_scalar_recipe(
+    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
+    uint8_t *storage, uint32_t *receiver_value, uint32_t *fill_value) {
+    const XrSemanticPlan *semantic =
+        target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t operand_count = 0, child_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands = semantic
+        ? xr_semantic_plan_operands(semantic, &operand_count)
+        : NULL;
+    const uint32_t *children = semantic
+        ? xr_semantic_plan_type_children(semantic, &child_count)
+        : NULL;
+    if (semantic)
+        (void) xr_semantic_plan_metadata(semantic, &metadata_count);
+    if (!target_plan || !binding || !semantic || !operation || !operands ||
+        !children ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR ||
+        operation->opcode != XI_CALL_METHOD ||
+        operation->result_value != binding->semantic_value ||
+        operation->operand_count != 2 ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 1 ||
+        operation->metadata_begin >= metadata_count ||
+        operation->semantic_immediate != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->result_alias_operand != 0 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1)
+        return false;
+    const XrSemanticOperandRecord *receiver =
+        &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *fill = receiver + 1;
+    const XrSemanticTypeRecord *array =
+        xr_semantic_plan_type(semantic, receiver->type);
+    if (!array || array->kind != XR_KIND_ARRAY ||
+        array->builtin_type != XR_TID_NULL || array->child_count != 1 ||
+        array->child_begin >= child_count ||
+        array->scalar_rep != XR_SCALAR_REP_NONE ||
+        array->aggregate_extent != 0 || array->aggregate_align != 0 ||
+        array->flags !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    uint32_t element_index = children[array->child_begin];
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(semantic, element_index);
+    uint8_t expected_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t semantic_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!element || operation->result_type != receiver->type ||
+        fill->type != element_index ||
+        !c_array_storage_from_type(element, &expected_storage) ||
+        !c_array_storage_from_semantic(operation->array_element_storage,
+                                       &semantic_storage) ||
+        expected_storage != semantic_storage ||
+        receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        fill->role != XR_SEM_OPERAND_ARGUMENT || fill->parameter != 0 ||
+        fill->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        fill->ownership_action != XR_SEM_OPERAND_CONSUME)
+        return false;
+    uint32_t call_count = 0, argument_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(target_plan, &argument_count);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (xr_semantic_plan_operation(semantic,
+                                       calls[i].semantic_operation) != operation)
+            continue;
+        if (call)
+            return false;
+        call = &calls[i];
+    }
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    XrStableId expected_call;
+    if (!call || !arguments || !register_rep || !memory_rep ||
+        !emission_identity_from_pair("xray-target-array-fill-scalar-v1",
+                                     operation->id, array->id,
+                                     expected_storage, &expected_call) ||
+        !xr_stable_id_equal(call->identity, expected_call) ||
+        call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->caller_function != operation->function ||
+        call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !emission_stable_id_is_zero(call->source_export_identity) ||
+        !emission_stable_id_is_zero(call->source_callee_identity) ||
+        call->result_value != binding->semantic_value ||
+        call->result_slot != binding->slot ||
+        call->result_register_rep != binding->register_rep ||
+        call->result_memory_rep != binding->memory_rep ||
+        call->argument_count != 2 || call->argument_begin > argument_count ||
+        call->argument_count > argument_count - call->argument_begin ||
+        call->adapter_count != 0 || call->flags != 0 ||
+        call->calling_convention !=
+            XR_TARGET_CALL_CONVENTION_ARRAY_FILL_SCALAR ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->array_intrinsic_kind != XR_TARGET_ARRAY_INTRINSIC_NONE ||
+        call->array_element_storage != expected_storage ||
+        call->reserved8[0] != 0 || call->reserved8[1] != 0 ||
+        call->reserved8[2] != 0 ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE)
+        return false;
+    for (uint16_t ordinal = 0; ordinal < 2; ordinal++) {
+        uint32_t semantic_operand = operation->operand_begin + ordinal;
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        const XrSemanticTypeRecord *type =
+            xr_semantic_plan_type(semantic, operand->type);
+        const XrTargetValueRepRecord *caller =
+            xr_target_plan_value_rep(target_plan, operand->value);
+        const XrTargetCallArgumentRecord *argument =
+            &arguments[call->argument_begin + ordinal];
+        XrStableId expected_argument;
+        if (!type || !caller ||
+            !emission_identity_from_pair(
+                "xray-target-array-fill-scalar-argument-v1", operation->id,
+                type->id, ordinal, &expected_argument) ||
+            !xr_stable_id_equal(argument->identity, expected_argument) ||
+            argument->call != call->id ||
+            argument->semantic_operand != semantic_operand ||
+            argument->semantic_value != operand->value ||
+            argument->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
+            argument->caller_slot != caller->slot ||
+            argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+            argument->register_rep != caller->register_rep ||
+            argument->memory_rep != caller->memory_rep ||
+            argument->callee_register_rep != caller->register_rep ||
+            argument->callee_memory_rep != caller->memory_rep ||
+            argument->ordinal != ordinal ||
+            argument->mode != XR_TARGET_CALL_VALUE ||
+            argument->ownership !=
+                (ordinal == 0 ? XR_TARGET_CALL_BORROW
+                              : XR_TARGET_CALL_CONSUME) ||
+            argument->transfer_mode != operand->transfer_mode ||
+            argument->flags != 0 ||
+            argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+            argument->reserved8[0] != 0 || argument->reserved8[1] != 0 ||
+            argument->reserved8[2] != 0)
+            return false;
+    }
+    if (storage)
+        *storage = expected_storage;
+    if (receiver_value)
+        *receiver_value = receiver->value;
+    if (fill_value)
+        *fill_value = fill->value;
     return true;
 }
 
@@ -2889,6 +3058,24 @@ static bool verify_value(const XrCValueEmissionView *value) {
                            XR_TARGET_ARRAY_STORAGE_COUNT &&
                        value->recipe_argument_count == 0 &&
                        value->recipe_arguments == NULL;
+    bool array_fill_member =
+        value->materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_FILL_SCALAR;
+    if (array_fill_member)
+        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_argument_value != UINT32_MAX &&
+                       value->recipe_layout_id == 0 &&
+                       value->recipe_discriminant >
+                           XR_TARGET_ARRAY_STORAGE_NONE &&
+                       value->recipe_discriminant <
+                           XR_TARGET_ARRAY_STORAGE_COUNT &&
+                       value->recipe_argument_count == 0 &&
+                       value->recipe_arguments == NULL &&
+                       value->recipe_symbol == NULL &&
+                       value->recipe_type_name == NULL &&
+                       value->recipe_member_name == NULL;
     bool array_allocation =
         value->materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_NEW;
     if (array_allocation)
@@ -2932,7 +3119,8 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_member_name == NULL;
     if (value->materialization !=
             XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR &&
-        !array_recipe && !array_allocation && !direct_array_ref_parameter)
+        !array_recipe && !array_fill_member && !array_allocation &&
+        !direct_array_ref_parameter)
         recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
                        value->recipe_discriminant == 0 &&
                        value->recipe_type_name == NULL &&
@@ -3282,6 +3470,13 @@ bool xr_c_emission_plan_verify(
         uint32_t expected_scalar_source = UINT32_MAX;
         bool expected_scalar_alias = exact_scalar_addressable_alias_recipe(
             target_plan, binding, &expected_scalar_source);
+        uint8_t expected_array_fill_member_storage =
+            XR_TARGET_ARRAY_STORAGE_NONE;
+        uint32_t expected_array_fill_receiver = UINT32_MAX;
+        uint32_t expected_array_fill_argument = UINT32_MAX;
+        bool expected_array_fill_member = exact_array_fill_scalar_recipe(
+            target_plan, binding, &expected_array_fill_member_storage,
+            &expected_array_fill_receiver, &expected_array_fill_argument);
         uint8_t expected_array_allocation_storage =
             XR_TARGET_ARRAY_STORAGE_NONE;
         uint32_t expected_array_allocation_count = UINT32_MAX;
@@ -3396,7 +3591,13 @@ bool xr_c_emission_plan_verify(
                                                                               : expected_string_concat
                                                                                     ? XR_C_STRING_CONCAT_SYMBOL
                                                                                     : NULL;
-        if (expected_array) {
+        if (expected_array_fill_member) {
+            expected_recipe =
+                XR_C_VALUE_MATERIALIZATION_ARRAY_FILL_SCALAR;
+            expected_operand = expected_array_fill_receiver;
+            expected_argument = expected_array_fill_argument;
+            expected_symbol = NULL;
+        } else if (expected_array) {
             expected_recipe = expected_array_recipe;
             expected_operand = expected_array_count;
             expected_argument = expected_array_fill;
@@ -3416,6 +3617,8 @@ bool xr_c_emission_plan_verify(
                 (expected_adt_enum ? expected_enum.layout_id : 0) ||
             row->recipe_discriminant !=
                 (expected_adt_enum ? expected_enum.member_ordinal
+                                   : expected_array_fill_member
+                                         ? expected_array_fill_member_storage
                                    : expected_array ? expected_array_storage
                                    : expected_array_allocation
                                          ? expected_array_allocation_storage
@@ -3899,6 +4102,12 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         uint32_t scalar_alias_source = UINT32_MAX;
         bool scalar_addressable_alias = exact_scalar_addressable_alias_recipe(
             target_plan, binding, &scalar_alias_source);
+        uint8_t array_fill_member_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        uint32_t array_fill_receiver = UINT32_MAX;
+        uint32_t array_fill_argument = UINT32_MAX;
+        bool array_fill_member = exact_array_fill_scalar_recipe(
+            target_plan, binding, &array_fill_member_storage,
+            &array_fill_receiver, &array_fill_argument);
         uint8_t array_allocation_storage = XR_TARGET_ARRAY_STORAGE_NONE;
         uint32_t array_allocation_count = UINT32_MAX;
         const char *array_allocation_symbol = NULL;
@@ -3951,6 +4160,12 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                 recipe_argument->kind =
                     XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND;
             }
+        } else if (array_fill_member) {
+            value->materialization =
+                XR_C_VALUE_MATERIALIZATION_ARRAY_FILL_SCALAR;
+            value->recipe_operand_value = array_fill_receiver;
+            value->recipe_argument_value = array_fill_argument;
+            value->recipe_discriminant = array_fill_member_storage;
         } else if (array_intrinsic) {
             value->recipe_symbol = xr_strdup(array_symbol);
             if (!value->recipe_symbol) {

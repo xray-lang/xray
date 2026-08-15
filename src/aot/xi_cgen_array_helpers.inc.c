@@ -5698,14 +5698,108 @@ static bool cg_array_fill_value_is_zero_bits_literal(const XiValue *value) {
     return false;
 }
 
+static bool cg_array_fill_elem_info_from_recipe_storage(
+    uint32_t storage, CgArrayElemInfo *out) {
+    XaotRep rep = XAOT_REP_COUNT;
+    const char *element_name = NULL;
+    if (!out)
+        return false;
+    switch (storage) {
+        case XR_TARGET_ARRAY_STORAGE_I8:
+            rep = XAOT_REP_I8; element_name = "XR_ELEM_I8"; break;
+        case XR_TARGET_ARRAY_STORAGE_U8:
+            rep = XAOT_REP_U8; element_name = "XR_ELEM_U8"; break;
+        case XR_TARGET_ARRAY_STORAGE_I16:
+            rep = XAOT_REP_I16; element_name = "XR_ELEM_I16"; break;
+        case XR_TARGET_ARRAY_STORAGE_U16:
+            rep = XAOT_REP_U16; element_name = "XR_ELEM_U16"; break;
+        case XR_TARGET_ARRAY_STORAGE_I32:
+            rep = XAOT_REP_I32; element_name = "XR_ELEM_I32"; break;
+        case XR_TARGET_ARRAY_STORAGE_U32:
+            rep = XAOT_REP_U32; element_name = "XR_ELEM_U32"; break;
+        case XR_TARGET_ARRAY_STORAGE_I64:
+            rep = XAOT_REP_I64; element_name = "XR_ELEM_I64"; break;
+        case XR_TARGET_ARRAY_STORAGE_U64:
+            rep = XAOT_REP_U64; element_name = "XR_ELEM_U64"; break;
+        case XR_TARGET_ARRAY_STORAGE_F32:
+            rep = XAOT_REP_F32; element_name = "XR_ELEM_F32"; break;
+        case XR_TARGET_ARRAY_STORAGE_F64:
+            rep = XAOT_REP_F64; element_name = "XR_ELEM_F64"; break;
+        case XR_TARGET_ARRAY_STORAGE_BOOL:
+            rep = XAOT_REP_BOOL; element_name = "XR_ELEM_BOOL"; break;
+        case XR_TARGET_ARRAY_STORAGE_RUNE:
+            rep = XAOT_REP_RUNE; element_name = "XR_ELEM_RUNE"; break;
+        default:
+            return false;
+    }
+    const XaotRepInfo *rep_info = xaot_rep_info(rep);
+    if (!rep_info || !rep_info->c_type)
+        return false;
+    *out = (CgArrayElemInfo) {
+        NULL, element_name, rep_info->c_type, rep_info->storage_rep,
+    };
+    return true;
+}
+
+static bool cg_array_fill_emission_authority(
+    XiCgenCtx *ctx, const XiFunc *f, const XiValue *call,
+    XrCValueEmissionView *out, CgArrayElemInfo *info) {
+    uint32_t receiver_semantic = XR_SEMANTIC_INDEX_NONE;
+    uint32_t fill_semantic = XR_SEMANTIC_INDEX_NONE;
+    uint32_t expected_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!ctx || !f || !call || !out || !info || call->op != XI_CALL_METHOD ||
+        call->array_member_kind != XI_ARRAY_MEMBER_FILL || call->nargs != 2 ||
+        !call->args || !call->args[0] || !call->args[1])
+        return false;
+    switch (call->array_element_storage) {
+        case XR_ELEM_I8: expected_storage = XR_TARGET_ARRAY_STORAGE_I8; break;
+        case XR_ELEM_U8: expected_storage = XR_TARGET_ARRAY_STORAGE_U8; break;
+        case XR_ELEM_I16: expected_storage = XR_TARGET_ARRAY_STORAGE_I16; break;
+        case XR_ELEM_U16: expected_storage = XR_TARGET_ARRAY_STORAGE_U16; break;
+        case XR_ELEM_I32: expected_storage = XR_TARGET_ARRAY_STORAGE_I32; break;
+        case XR_ELEM_U32: expected_storage = XR_TARGET_ARRAY_STORAGE_U32; break;
+        case XR_ELEM_I64: expected_storage = XR_TARGET_ARRAY_STORAGE_I64; break;
+        case XR_ELEM_U64: expected_storage = XR_TARGET_ARRAY_STORAGE_U64; break;
+        case XR_ELEM_F32: expected_storage = XR_TARGET_ARRAY_STORAGE_F32; break;
+        case XR_ELEM_F64: expected_storage = XR_TARGET_ARRAY_STORAGE_F64; break;
+        case XR_ELEM_BOOL: expected_storage = XR_TARGET_ARRAY_STORAGE_BOOL; break;
+        case XR_ELEM_RUNE: expected_storage = XR_TARGET_ARRAY_STORAGE_RUNE; break;
+        default: return false;
+    }
+    return cg_value_emission_view(ctx, f, call, out) ==
+               CG_VALUE_EMISSION_FOUND &&
+           out->rep == XR_C_VALUE_REP_TAGGED &&
+           out->target_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+           out->target_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
+           out->materialization ==
+               XR_C_VALUE_MATERIALIZATION_ARRAY_FILL_SCALAR &&
+           out->c_type && strcmp(out->c_type, "XrValue") == 0 &&
+           out->literal_byte_length == 0 && out->literal_bytes == NULL &&
+           out->recipe_discriminant == expected_storage &&
+           out->recipe_argument_count == 0 &&
+           out->recipe_arguments == NULL && out->recipe_symbol == NULL &&
+           out->recipe_type_name == NULL && out->recipe_member_name == NULL &&
+           cg_value_semantic_id(ctx, f, call->args[0],
+                                &receiver_semantic) &&
+           cg_value_semantic_id(ctx, f, call->args[1], &fill_semantic) &&
+           receiver_semantic == out->recipe_operand_value &&
+           fill_semantic == out->recipe_argument_value &&
+           cg_array_fill_elem_info_from_recipe_storage(expected_storage, info);
+}
+
 static bool emit_typed_array_fill_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                        const char *prefix, const XiValue *call) {
-    if (!call || call->nargs < 2 || call->nargs > 4)
+    if (!call || call->array_member_kind != XI_ARRAY_MEMBER_FILL)
         return false;
 
     CgArrayElemInfo info;
-    if (!cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
-        return false;
+    XrCValueEmissionView emission = {0};
+    if (!cg_array_fill_emission_authority(ctx, f, call, &emission, &info)) {
+        (void) cg_value_emission_fail(
+            ctx, "Array.fill has no exact immutable C recipe");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
 
     const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, call, XG_BULK_FILL, "Array.fill");
     if (call->xg_bulk_op_id != XG_NO_ID && !bulk) {

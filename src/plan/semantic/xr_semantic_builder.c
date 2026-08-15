@@ -3168,6 +3168,90 @@ static bool semantic_array_reserve_exact(const XrSemanticBuildContext *ctx,
            capacity->ownership_action == XR_SEM_OPERAND_CONSUME;
 }
 
+static uint8_t semantic_array_member_scalar_storage(
+    const XrSemanticTypeRecord *type) {
+    if (!type || type->builtin_type != XR_TID_NULL || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->flags != 0)
+        return XR_ELEM_ANY;
+    if (type->kind == XR_KIND_BOOL &&
+        type->scalar_rep == XR_SCALAR_REP_NONE)
+        return XR_ELEM_BOOL;
+    if (type->kind == XR_KIND_RUNE &&
+        type->scalar_rep == XR_SCALAR_REP_NONE)
+        return XR_ELEM_RUNE;
+    switch (type->scalar_rep) {
+        case XR_NATIVE_I8: return XR_ELEM_I8;
+        case XR_NATIVE_U8: return XR_ELEM_U8;
+        case XR_NATIVE_I16: return XR_ELEM_I16;
+        case XR_NATIVE_U16: return XR_ELEM_U16;
+        case XR_NATIVE_I32: return XR_ELEM_I32;
+        case XR_NATIVE_U32: return XR_ELEM_U32;
+        case XR_NATIVE_I64: return XR_ELEM_I64;
+        case XR_NATIVE_U64: return XR_ELEM_U64;
+        case XR_NATIVE_F32: return XR_ELEM_F32;
+        case XR_NATIVE_F64: return XR_ELEM_F64;
+        default: return XR_ELEM_ANY;
+    }
+}
+
+/* The selector is deliberately absent from this proof. Lowering already
+ * stamped XI_ARRAY_MEMBER_FILL after the analyzer-backed builtin receiver
+ * registry selected the member. These frozen rows independently re-prove the
+ * receiver, result alias, ordered operands, scalar element storage, and
+ * ownership contract before preserving that identity. */
+static bool semantic_array_fill_scalar_exact(
+    const XrSemanticBuildContext *ctx,
+    const XrSemanticOperationRecord *record, uint8_t storage) {
+    if (!ctx || !record || record->opcode != XI_CALL_METHOD ||
+        record->operand_count != 2 ||
+        record->operand_begin > ctx->plan->operand_count ||
+        record->operand_count >
+            ctx->plan->operand_count - record->operand_begin ||
+        record->metadata_count != 1 ||
+        record->metadata_begin >= ctx->plan->metadata_count ||
+        storage <= XR_ELEM_ANY || storage >= XR_ELEM_RAWPTR)
+        return false;
+    const XrSemanticOperandRecord *receiver =
+        &ctx->plan->operands[record->operand_begin];
+    const XrSemanticOperandRecord *fill = receiver + 1;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver->type < ctx->plan->type_count
+            ? &ctx->plan->types[receiver->type]
+            : NULL;
+    if (!semantic_array_member_receiver_type_exact(receiver_type) ||
+        receiver_type->child_begin >= ctx->plan->type_child_count)
+        return false;
+    uint32_t element_index =
+        ctx->plan->type_children[receiver_type->child_begin];
+    const XrSemanticTypeRecord *element =
+        element_index < ctx->plan->type_count
+            ? &ctx->plan->types[element_index]
+            : NULL;
+    return element && fill->type == element_index &&
+           semantic_array_member_scalar_storage(element) == storage &&
+           record->result_type == receiver->type &&
+           record->semantic_immediate == 0 &&
+           record->auxiliary_kind == XI_AUX_KIND_NONE &&
+           record->constant == XR_SEMANTIC_INDEX_NONE &&
+           record->callable_function == XR_SEMANTIC_INDEX_NONE &&
+           record->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+           record->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
+           record->ownership_use == xi_generated_op_own_use(XI_CALL_METHOD) &&
+           record->flags == xi_generated_op_default_flags(XI_CALL_METHOD) &&
+           record->result_alias_operand == 0 &&
+           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+           record->return_provenance == XR_SEM_RETURN_OWNED &&
+           record->return_parameter == -1 && record->return_complete == 1 &&
+           receiver->role == XR_SEM_OPERAND_RECEIVER &&
+           receiver->parameter == -1 &&
+           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
+           fill->role == XR_SEM_OPERAND_ARGUMENT && fill->parameter == 0 &&
+           fill->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           fill->ownership_action == XR_SEM_OPERAND_CONSUME;
+}
+
 /* The result clause the frozen shape demands. A unit, int, or bool result is a
  * fresh value the call owns outright; a receiver result is the receiver's own
  * reference handed straight back, which the operation records as an alias of
@@ -3573,9 +3657,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->source_end_line = value->source_span.end_line;
         record->source_end_column = value->source_span.end_column;
     }
-    record->semantic_immediate = value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_NONE
-                                     ? 0
-                                     : value->aux_int;
+    record->semantic_immediate =
+        value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_NONE ||
+                value->array_member_kind != XI_ARRAY_MEMBER_NONE
+            ? 0
+            : value->aux_int;
     record->evidence[0] = value->xg_callsite_id;
     record->evidence[1] = value->xa_intrinsic_id;
     record->evidence[2] = value->xg_method_id;
@@ -3691,7 +3777,13 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     if (value->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE &&
         semantic_array_reserve_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR;
-    if (xi_array_member_scalar_exact(value) && semantic_array_member_scalar_exact(ctx, record))
+    if (value->array_member_kind == XI_ARRAY_MEMBER_FILL &&
+        semantic_array_fill_scalar_exact(ctx, record,
+                                         value->array_element_storage)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR;
+        record->array_element_storage = value->array_element_storage;
+    } else if (xi_array_member_scalar_exact(value) &&
+               semantic_array_member_scalar_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR;
     if (xi_native_module_scalar_call_exact(ctx, function, value) &&
         semantic_native_module_scalar_call_exact(ctx, record))

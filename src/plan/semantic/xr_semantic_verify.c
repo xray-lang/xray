@@ -181,7 +181,7 @@ static bool semantic_source_enum_identity_exact(const XrSemanticTypeRecord *type
                type->enum_layout_id == 0 && type->enum_member_count == 0 &&
                type->enum_flags == 0 && type->reserved_enum == 0;
     const char *cursor = type->source_enum_key;
-    static const char prefix[] = "source-enum-v1:schema=30:owner=";
+    static const char prefix[] = "source-enum-v1:schema=31:owner=";
     if (!cursor || strncmp(cursor, prefix, sizeof(prefix) - 1u) != 0 ||
         !verify_id(cursor, type->source_enum_identity) ||
         type->enum_member_count == 0 || type->enum_layout_id == 0 ||
@@ -1831,6 +1831,73 @@ static bool semantic_array_fill_type_is_exact(
             type->scalar_rep == XR_SCALAR_REP_NONE);
 }
 
+/* Independent verifier for the one-argument Array.fill family. The dedicated
+ * intrinsic kind is the operation identity; metadata remains debug-only and
+ * neither its spelling nor semantic_immediate participates in this proof. */
+static bool verify_array_fill_scalar(
+    const XrSemanticPlan *plan,
+    const XrSemanticOperationRecord *operation, char *error,
+    size_t error_size) {
+    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR)
+        return true;
+    const XrSemanticOperandRecord *operands =
+        operation->operand_count == 2 &&
+                operation->operand_begin <= plan->operand_count &&
+                operation->operand_count <=
+                    plan->operand_count - operation->operand_begin
+            ? &plan->operands[operation->operand_begin]
+            : NULL;
+    const XrSemanticOperandRecord *receiver = operands;
+    const XrSemanticOperandRecord *fill = operands ? operands + 1 : NULL;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver && receiver->type < plan->type_count
+            ? &plan->types[receiver->type]
+            : NULL;
+    uint32_t element_index =
+        receiver_type && receiver_type->child_count == 1 &&
+                receiver_type->child_begin < plan->type_child_count
+            ? plan->type_children[receiver_type->child_begin]
+            : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticTypeRecord *element =
+        element_index < plan->type_count ? &plan->types[element_index] : NULL;
+    uint8_t storage = semantic_array_element_storage(element);
+    bool exact = operation->opcode == XI_CALL_METHOD && receiver && fill &&
+                 semantic_type_is_exact_member_array(receiver_type) &&
+                 fill->type == element_index &&
+                 storage > XR_ELEM_ANY && storage < XR_ELEM_RAWPTR &&
+                 operation->array_element_storage == storage &&
+                 operation->result_type == receiver->type &&
+                 operation->metadata_count == 1 &&
+                 operation->metadata_begin < plan->metadata_count &&
+                 operation->semantic_immediate == 0 &&
+                 operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                 operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                 operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
+                 operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                 operation->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
+                 operation->ownership_use ==
+                     xi_generated_op_own_use(XI_CALL_METHOD) &&
+                 operation->flags ==
+                     xi_generated_op_default_flags(XI_CALL_METHOD) &&
+                 operation->result_alias_operand == 0 &&
+                 operation->result_ownership ==
+                     XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                 operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                 operation->return_parameter == -1 &&
+                 operation->return_complete == 1 &&
+                 receiver->role == XR_SEM_OPERAND_RECEIVER &&
+                 receiver->parameter == -1 &&
+                 receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
+                 fill->role == XR_SEM_OPERAND_ARGUMENT &&
+                 fill->parameter == 0 &&
+                 fill->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+                 fill->ownership_action == XR_SEM_OPERAND_CONSUME;
+    return exact ||
+           report(error, error_size, "XR_SEM_0019",
+                  "Array.fill scalar authority is not exact");
+}
+
 static bool verify_array_allocation_storage(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     char *error, size_t error_size) {
@@ -1860,7 +1927,9 @@ static bool verify_array_allocation_storage(
     bool candidate = expected_storage > XR_ELEM_ANY &&
                      expected_storage < XR_ELEM_RAWPTR;
     if (!candidate)
-        return operation->array_element_storage == XR_ELEM_ANY ||
+        return operation->intrinsic_kind ==
+                       XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR ||
+                       operation->array_element_storage == XR_ELEM_ANY ||
                report(error, error_size, "XR_SEM_0019",
                       "non-scalar Array allocation carries element-storage authority");
     bool exact = array_type && element && capacity && capacity_type &&
@@ -1902,6 +1971,8 @@ static bool verify_array_intrinsic(const XrSemanticPlan *plan,
     bool candidate = operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY ||
                      operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
     if (!candidate) {
+        if (operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR)
+            return verify_array_fill_scalar(plan, operation, error, error_size);
         if (operation->opcode == XI_ARRAY_NEW)
             return verify_array_allocation_storage(
                 plan, operation, error, error_size);
@@ -2372,6 +2443,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_json_namespace_value(plan, operation, error, error_size))
             return false;
         if (!verify_array_member_scalar(plan, operation, error, error_size))
+            return false;
+        if (!verify_array_fill_scalar(plan, operation, error, error_size))
             return false;
         if (!verify_array_intrinsic(plan, operation, error, error_size))
             return false;

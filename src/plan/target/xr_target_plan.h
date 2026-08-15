@@ -263,6 +263,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_RUNE_TO_UINT32,
     XR_TARGET_CALL_CONVENTION_RUNE_IS_WHITESPACE,
     XR_TARGET_CALL_CONVENTION_STRING_SLICE_RANGE,
+    XR_TARGET_CALL_CONVENTION_ARRAY_FILL_SCALAR,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -310,6 +311,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_RUNE_TO_UINT32,
     XR_TARGET_CALL_TARGET_RUNE_IS_WHITESPACE,
     XR_TARGET_CALL_TARGET_STRING_SLICE_RANGE,
+    XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetArrayIntrinsicKind {

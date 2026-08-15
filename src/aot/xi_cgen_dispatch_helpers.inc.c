@@ -7626,8 +7626,7 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
             v, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM) &&
         emit_byte_array_repeat_from_expr(ctx, out, f, prefix, v))
         return true;
-    if (nargs >= 1 && nargs <= 3 &&
-        cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILL) &&
+    if (v && v->array_member_kind == XI_ARRAY_MEMBER_FILL &&
         emit_typed_array_fill_expr(ctx, out, f, prefix, v))
         return true;
     if (!method)

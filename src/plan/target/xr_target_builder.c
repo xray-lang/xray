@@ -2032,6 +2032,74 @@ static bool target_array_fill_type_is_exact(
            target_array_storage_from_type(type, &ignored_storage);
 }
 
+/* The SemanticPlan intrinsic kind is the dispatch identity. Metadata is
+ * intentionally only required to be structurally present; neither selector
+ * spelling, live Xi type recovery, nor operand-count inference participates in
+ * the TargetPlan proof. */
+static bool semantic_array_fill_scalar_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint32_t *receiver_value, uint32_t *fill_value, uint8_t *target_storage) {
+    uint32_t operand_count = 0, child_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan, &operand_count);
+    const uint32_t *children =
+        xr_semantic_plan_type_children(plan, &child_count);
+    (void) xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!plan || !operation || !operands || !children ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR ||
+        operation->opcode != XI_CALL_METHOD || operation->operand_count != 2 ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 1 ||
+        operation->metadata_begin >= metadata_count ||
+        operation->semantic_immediate != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->result_alias_operand != 0 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1)
+        return false;
+    const XrSemanticOperandRecord *receiver =
+        &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *fill = receiver + 1;
+    const XrSemanticTypeRecord *array =
+        xr_semantic_plan_type(plan, receiver->type);
+    if (!semantic_array_member_receiver_type_is_exact(array) ||
+        array->child_begin >= child_count)
+        return false;
+    uint32_t element_index = children[array->child_begin];
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(plan, element_index);
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t semantic_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!element || operation->result_type != receiver->type ||
+        fill->type != element_index ||
+        !target_array_storage_from_type(element, &storage) ||
+        !target_array_storage_from_semantic(operation->array_element_storage,
+                                            &semantic_storage) ||
+        storage != semantic_storage ||
+        receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        fill->role != XR_SEM_OPERAND_ARGUMENT || fill->parameter != 0 ||
+        fill->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        fill->ownership_action != XR_SEM_OPERAND_CONSUME)
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver->value;
+    if (fill_value)
+        *fill_value = fill->value;
+    if (target_storage)
+        *target_storage = storage;
+    return true;
+}
+
 static bool semantic_array_intrinsic_is_exact(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     uint8_t *target_kind, uint8_t *target_storage) {
@@ -4812,10 +4880,14 @@ static bool builder_add_array_member_result_storage(XrTargetPlanBuilder *builder
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(builder->semantic_plan, i);
         bool receiver_result = false;
-        if (!operation ||
-            !semantic_array_member_scalar_is_exact(builder->semantic_plan, operation, NULL,
-                                                   &receiver_result) ||
-            !receiver_result)
+        bool scalar_member =
+            operation && semantic_array_member_scalar_is_exact(
+                             builder->semantic_plan, operation, NULL,
+                             &receiver_result) && receiver_result;
+        bool scalar_fill =
+            operation && semantic_array_fill_scalar_is_exact(
+                             builder->semantic_plan, operation, NULL, NULL, NULL);
+        if (!scalar_member && !scalar_fill)
             continue;
         if (operation->result_value >= analysis.total_values ||
             analysis.defined_values[operation->result_value]) {
@@ -7608,6 +7680,77 @@ static bool collect_array_intrinsic_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_array_fill_scalar_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error,
+    size_t error_size) {
+    uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t fill_value = XR_SEMANTIC_INDEX_NONE;
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!semantic_array_fill_scalar_is_exact(
+            builder->semantic_plan, operation, &receiver_value, &fill_value,
+            &storage))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Array.fill scalar dispatch authority is incomplete");
+    const XrSemanticTypeRecord *receiver_type =
+        xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 2,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_ARRAY_FILL_SCALAR,
+        .target_kind = XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR,
+        .array_intrinsic_kind = XR_TARGET_ARRAY_INTRINSIC_NONE,
+        .array_element_storage = storage,
+    };
+    if (!receiver_type ||
+        !stable_identity_from_pair("xray-target-array-fill-scalar-v1",
+                                   operation->id, receiver_type->id, storage,
+                                   &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Array.fill scalar call identity is incomplete");
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(builder->semantic_plan, &operand_count);
+    uint32_t call_intent = builder->call_intent_count;
+    for (uint16_t ordinal = 0; ordinal < 2; ordinal++) {
+        uint32_t semantic_operand = operation->operand_begin + ordinal;
+        if (!operands || semantic_operand >= operand_count)
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "Array.fill scalar operand authority is incomplete");
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        const XrSemanticTypeRecord *type =
+            xr_semantic_plan_type(builder->semantic_plan, operand->type);
+        XrTargetCallArgumentIntent argument = {
+            .call_intent = call_intent,
+            .semantic_operand = semantic_operand,
+            .semantic_value = ordinal == 0 ? receiver_value : fill_value,
+            .caller_storage_value = ordinal == 0 ? receiver_value : fill_value,
+            .callee_parameter = XR_SEMANTIC_INDEX_NONE,
+            .ordinal = ordinal,
+            .mode = XR_TARGET_CALL_VALUE,
+            .ownership = ordinal == 0 ? XR_TARGET_CALL_BORROW
+                                      : XR_TARGET_CALL_CONSUME,
+            .transfer_mode = operand->transfer_mode,
+        };
+        if (!type ||
+            !stable_identity_from_pair(
+                "xray-target-array-fill-scalar-argument-v1", operation->id,
+                type->id, ordinal, &argument.identity) ||
+            !append_call_argument_intent(builder, &argument, error, error_size))
+            return false;
+    }
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_string_byte_slice_view_call_intent(
     XrTargetPlanBuilder *builder, uint32_t operation_index,
     const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
@@ -8626,6 +8769,10 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_array_intrinsic_is_exact(plan, operation, NULL, NULL)) {
             valid = collect_array_intrinsic_call_intent(builder, i, operation,
                                                         error, error_size);
+        } else if (semantic_array_fill_scalar_is_exact(plan, operation, NULL,
+                                                       NULL, NULL)) {
+            valid = collect_array_fill_scalar_call_intent(
+                builder, i, operation, error, error_size);
         } else if (semantic_string_byte_slice_view_is_exact(plan, operation)) {
             valid = collect_string_byte_slice_view_call_intent(builder, i, operation,
                                                                error, error_size);
@@ -10159,7 +10306,12 @@ static bool materialize_calls_and_adapters(
                                      builder->semantic_dependency_count
                     ? builder->semantic_dependencies[intent->source_dependency]
                     : builder->semantic_plan;
-            const XrSemanticParameterRecord *parameter = array_intrinsic
+            bool array_fill =
+                intent->calling_convention ==
+                    XR_TARGET_CALL_CONVENTION_ARRAY_FILL_SCALAR &&
+                intent->target_kind == XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR;
+            const XrSemanticParameterRecord *parameter =
+                array_intrinsic || array_fill
                 ? NULL
                 : xr_semantic_plan_parameter(callee_semantic,
                                              argument_intent->callee_parameter);
@@ -10224,7 +10376,7 @@ static bool materialize_calls_and_adapters(
                     XR_TARGET_OWNERSHIP_BORROWED &&
                 materialized->machine_reps[callee->memory_rep].ownership ==
                     XR_TARGET_OWNERSHIP_BORROWED;
-            if (array_intrinsic) {
+            if (array_intrinsic || array_fill) {
                 if (argument_intent->call_intent != i ||
                     argument_intent->ordinal != ordinal || !caller ||
                     argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE)
