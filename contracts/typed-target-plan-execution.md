@@ -414,6 +414,12 @@ Evidence:
   trailing forms while exercising the public XSM/XTP generation route.
 - `test_xtp_resource_stress` proves the size/performance ladder and exact wire,
   expanded-row, and decode-work accounting.
+- `test_xtp_fuzz_evidence` binds the standalone decoder/verifier
+  mutation matrix, the resource ladder, and the freshly built runtime identity
+  into one fail-closed executable result. Missing runtime or test executable,
+  zero executed mutations, a non-clean or mismatched commit, and an unlabelled
+  sanitizer binary are failures. Windows ThreadSanitizer is a red unsupported
+  lane, never a skip.
 - `test_typed_frame_runtime_archive` proves the dispatcher and verifier link
   into the runtime-only archive; the runtime artifact archive gate separately
   proves the exact XSM/XTP sole-function product route.
@@ -455,8 +461,8 @@ anchor-sha256: src/vm/xr_typed_frame.c 3afd8fbfa0858e256d0393158b4500ccaa4ef22d5
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 58fd921189d8aaecbd5bf02e90ba9bf1bf1861cd1e098f8ba2ef63d78e8a97ea
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 5266ff18ca9b135f0b16280c7b4ab4644c96b3b4d9da7e5f10e42b9dbcd01cbf
 anchor-sha256: tests/unit/plan/test_xtp_format.c 26c4e561fce68219a915fc190ec5355869fca61727bab442f9054bed33c8d6bf
-anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c a768faf7caa0097d72d3d0884053a75b03ec8c7b3c9d33cf6701df89c76d9c5f
-anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 933e9f776ea7ae9cb4f52ee19ee6e81405636d5f6d9d1fc1202a10dab110faa2
+anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 34ebfa002301c0895e968e58b2d9667976a9a233e7c541729791388596aa3a01
+anchor-sha256: tests/fuzz/fuzz_xtp_decode.c cd38c52f605f446123a65b2b0b5cb851fb730fe8354f6e37f1b3c240ee71ebdc
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 81aee9edb47c6a5b0c9786ca0d68584b0af4867b6a5cb31d3280239f4c9a75d9
 anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 33da22f5eec9a7889b25380fa99e070c807c19580569ac081a0f0558545eb8e3
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
@@ -473,4 +479,4 @@ anchor-sha256: src/vm/xr_vm_ops.def d686e48d8be34cadac9f5c647687d1f02653e4614fbc
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h a58cc2537da332f0d41eb8378dc2ecc324557fec0727bd748313e4dc3d95e25a
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c ae948c59d45890efcd807ee26f998b6406bdebeeb18fdbc3170c8cebdf17f5f6
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 7778b3428bea2edaa5342818dab86f3ff4867f46f0c83a72a489b0328d76356e
-anchor-sha256: tests/unit/CMakeLists.txt 58930b02a448598d32ac4690fcaa8cff3ede37ab60892f68b378204601672158
+anchor-sha256: tests/unit/CMakeLists.txt c6040d3c3953ec8a1a70c73805c555d1e8dd06c17ad6e3c8d1d3fa60d0106d52
