@@ -18,6 +18,7 @@
 #include "../../../include/xray_runtime_generation.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xsha256.h"
+#include "../../../src/os/os_thread.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "target_profile_test_fixture.h"
 #include <stdio.h>
@@ -739,6 +740,73 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     resign_artifact(mutated_profile, fixture.size);
     expect_materialize_failure(&fixture, mutated_profile);
     xr_free(mutated_profile);
+    dispose_fixture(&fixture);
+}
+
+typedef struct ConcurrentCandidateContext {
+    XrXtpCandidate *candidate;
+    const XrSemanticPlan *semantic;
+    XrTargetProfile *profile;
+    XrFingerprint expected_fingerprint;
+    bool completed;
+} ConcurrentCandidateContext;
+
+static void *materialize_candidate_thread(void *opaque) {
+    enum { ITERATIONS = 24 };
+    ConcurrentCandidateContext *context =
+        (ConcurrentCandidateContext *) opaque;
+    for (uint32_t iteration = 0; iteration < ITERATIONS; iteration++) {
+        XrXtpCandidate *retained =
+            xr_xtp_candidate_retain(context->candidate);
+        XrTargetPlan *plan = NULL;
+        XrXtpIdentity identity = {0};
+        XrXtpResourceManifest resources = {0};
+        char error[256] = {0};
+        bool valid =
+            retained && xr_xtp_candidate_identity(retained, &identity) &&
+            xr_xtp_candidate_resources(retained, &resources) &&
+            identity.plan_schema == XR_TARGET_PLAN_SCHEMA_VERSION &&
+            resources.total_rows != 0 &&
+            xr_xtp_materialize_target_plan(
+                retained, context->semantic, context->profile, &plan, error,
+                sizeof(error)) &&
+            plan && xr_target_plan_is_verified(plan) &&
+            xr_fingerprint_equal(xr_target_plan_fingerprint(plan),
+                                 context->expected_fingerprint);
+        xr_target_plan_free(plan);
+        xr_xtp_candidate_release(retained);
+        if (!valid)
+            return NULL;
+    }
+    context->completed = true;
+    return NULL;
+}
+
+static void test_concurrent_candidate_materialization(void) {
+    enum { THREAD_COUNT = 8 };
+    XtpFixture fixture = make_fixture();
+    XrXtpCandidate *candidate = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
+                                    error, sizeof(error)));
+    ConcurrentCandidateContext contexts[THREAD_COUNT] = {0};
+    xr_thread_t threads[THREAD_COUNT] = {0};
+    XrFingerprint expected = xr_target_plan_fingerprint(fixture.plan);
+    for (uint32_t i = 0; i < THREAD_COUNT; i++) {
+        contexts[i] = (ConcurrentCandidateContext) {
+            .candidate = candidate,
+            .semantic = fixture.semantic,
+            .profile = fixture.profile,
+            .expected_fingerprint = expected,
+        };
+        REQUIRE(xr_thread_create(&threads[i], materialize_candidate_thread,
+                                 &contexts[i]));
+    }
+    for (uint32_t i = 0; i < THREAD_COUNT; i++) {
+        REQUIRE(xr_thread_join(threads[i], NULL) == 0);
+        REQUIRE(contexts[i].completed);
+    }
+    xr_xtp_candidate_release(candidate);
     dispose_fixture(&fixture);
 }
 
@@ -1693,6 +1761,7 @@ int main(int argc, char **argv) {
     test_wire_row_inventory();
     test_every_typed_row_codec();
     test_exact_roundtrip_and_owned_candidate();
+    test_concurrent_candidate_materialization();
     test_direct_call_rows_roundtrip_and_mutate();
     test_channel_close_row_roundtrip_and_mutate();
     test_stringbuilder_row_roundtrip_and_mutate();
