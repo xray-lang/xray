@@ -45,6 +45,7 @@ typedef struct XrModuleTaskOutput {
 typedef bool (*XrModuleTaskExecuteFn)(const XrModuleTaskGraph *graph,
                                       uint32_t task_index,
                                       XrModuleTaskOutput *output,
+                                      void *task_state,
                                       void *context);
 
 typedef struct XrModuleTaskBatch {
@@ -53,6 +54,8 @@ typedef struct XrModuleTaskBatch {
     uint32_t worker_limit;
     XrModuleTaskExecuteFn execute;
     void *context;
+    void *task_states;
+    size_t task_state_size;
     XrModuleTaskOutput *outputs;
     uint32_t output_count;
 } XrModuleTaskBatch;
@@ -77,8 +80,8 @@ XR_FUNC bool xr_module_task_graph_task(const XrModuleTaskGraph *graph,
 XR_FUNC bool xr_module_task_graph_fingerprint(const XrModuleTaskGraph *graph,
                                               XrFingerprint *out);
 
-/* Execute callbacks may write only their provided output row. Results and
- * diagnostics become observable after all tasks in the current level join. */
+/* Execute callbacks may write only their provided output row and disjoint
+ * task-state row. Results become observable after the current level joins. */
 XR_FUNC bool xr_module_task_graph_run(const XrModuleTaskBatch *batch,
                                       XrModuleTaskStats *stats, char *error,
                                       size_t error_size);

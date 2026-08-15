@@ -14,6 +14,7 @@
 #include "../base/xdefs.h"
 #include "../base/xforward_decl.h"
 #include "../base/xtarget_data_layout.h"
+#include "../incremental/xr_module_task_graph.h"
 
 struct XrArena;
 struct XrCompileStringPool;
@@ -120,6 +121,40 @@ typedef struct XrCompilerSessionIncrementalStats {
     bool cache_store_open;
 } XrCompilerSessionIncrementalStats;
 
+typedef bool (*XrCompilerSessionModuleTaskPublishFn)(
+    const XrModuleTaskGraph *graph, uint32_t task_index,
+    const XrModuleTaskOutput *output, void *task_state, void *context,
+    char *error, size_t error_size);
+
+typedef bool (*XrCompilerSessionModuleTaskPreflightFn)(
+    const XrModuleTaskGraph *graph, uint32_t task_index,
+    const XrModuleTaskOutput *output, const void *task_state, void *context,
+    char *error, size_t error_size);
+
+typedef void (*XrCompilerSessionModuleTaskFinalizeFn)(void *task_state,
+                                                       void *context);
+
+/* One exact candidate graph is prepared in dependency levels. Every task is
+ * preflighted before canonical immutable publication begins, and the graph is
+ * installed only after every callback succeeds. */
+typedef struct XrCompilerSessionModuleTaskBatch {
+    const struct XrDependencyGraph *dependency_graph;
+    uint32_t worker_limit;
+    size_t task_state_size;
+    XrModuleTaskExecuteFn prepare;
+    XrCompilerSessionModuleTaskPreflightFn preflight;
+    XrCompilerSessionModuleTaskPublishFn publish;
+    XrCompilerSessionModuleTaskFinalizeFn finalize;
+    void *context;
+} XrCompilerSessionModuleTaskBatch;
+
+typedef struct XrCompilerSessionModuleTaskStats {
+    XrModuleTaskStats execution;
+    uint32_t task_count;
+    uint32_t preflighted_task_count;
+    uint32_t published_task_count;
+} XrCompilerSessionModuleTaskStats;
+
 typedef enum XrCompileUnitKind {
     XR_COMPILE_UNIT_USER = 0,
     XR_COMPILE_UNIT_STDLIB,
@@ -187,6 +222,11 @@ XR_FUNC bool xr_compiler_session_operation_fail(
     XrCompilerSessionOperationScope *scope, XrCompilerSessionOperationOutcome outcome);
 XR_FUNC bool xr_compiler_session_publish_dependency_graph(
     XrCompilerSession *session, const struct XrDependencyGraph *graph);
+XR_FUNC bool xr_compiler_session_publish_module_tasks(
+    XrCompilerSession *session,
+    const XrCompilerSessionModuleTaskBatch *batch,
+    XrCompilerSessionModuleTaskStats *stats, char *error,
+    size_t error_size);
 XR_FUNC bool xr_compiler_session_apply_invalidation(
     XrCompilerSession *session, const struct XrInvalidationEvent *event);
 XR_FUNC const struct XrDependencyGraph *xr_compiler_session_dependency_graph(

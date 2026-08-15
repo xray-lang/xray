@@ -953,6 +953,9 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     char home_dir[XR_TEST_PATH_MAX];
     char entry_source[XR_TEST_PATH_MAX];
     char cache_dir[XR_TEST_PATH_MAX];
+    char cache_dir_dual[XR_TEST_PATH_MAX];
+    char cache_dir_wide[XR_TEST_PATH_MAX];
+    char edited_source[XR_TEST_PATH_MAX];
     XaotTarget target = {0};
     XaotBuildOptions options = {0};
     XaotBuildResult result;
@@ -967,6 +970,10 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     snprintf(home_dir, sizeof(home_dir), "%s/home", root);
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
+    snprintf(cache_dir_dual, sizeof(cache_dir_dual),
+             "%s/cache-dual/aot/native", root);
+    snprintf(cache_dir_wide, sizeof(cache_dir_wide),
+             "%s/cache-wide/aot/native", root);
     payload_a = install_package_payload(home_dir, cache_dir, "codex/pkga",
                                         "fn package_a() -> int {\n"
                                         "    return 11\n"
@@ -977,6 +984,10 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
                                         "}\n");
     ASSERT_TRUE(payload_a != NULL);
     ASSERT_TRUE(payload_b != NULL);
+    ASSERT_TRUE(write_global_payload_to_cache(cache_dir_dual, payload_a));
+    ASSERT_TRUE(write_global_payload_to_cache(cache_dir_dual, payload_b));
+    ASSERT_TRUE(write_global_payload_to_cache(cache_dir_wide, payload_a));
+    ASSERT_TRUE(write_global_payload_to_cache(cache_dir_wide, payload_b));
     ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkga\" as a\n"
                                               "import \"codex/pkgb\" as b\n"
                                               "fn value() -> int {\n"
@@ -999,29 +1010,105 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
         ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump,
                                               imported_hash));
     } else {
+        XaotModuleSummaryCacheStats cold[3];
+        XaotModuleSummaryCacheStats warm[3];
+        XaotModuleSummaryCacheStats edited[3];
+        const char *cache_roots[3] = {
+            cache_dir, cache_dir_dual, cache_dir_wide,
+        };
+        const uint32_t worker_limits[3] = {1u, 2u, 8u};
+        const uint32_t expected_workers[3] = {1u, 2u, 2u};
+
+        for (uint32_t run = 0; run < 3u; run++) {
+            options.incremental_cache_dir = cache_roots[run];
+            options.target_plan_workers = worker_limits[run];
+            ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+            cold[run] = result.module_summary_cache;
+            ASSERT_TRUE(cold[run].workers == expected_workers[run]);
+            ASSERT_TRUE(cold[run].tasks == 3);
+            ASSERT_TRUE(cold[run].hits == 0);
+            ASSERT_TRUE(cold[run].misses == 3);
+            ASSERT_TRUE(cold[run].recomputed_modules == 3);
+            ASSERT_TRUE(cold[run].published == 3);
+            ASSERT_TRUE(cold[run].merged_modules == 3);
+            if (run > 0) {
+                ASSERT_TRUE(xr_fingerprint_equal(
+                    cold[run].artifact_order_fingerprint,
+                    cold[0].artifact_order_fingerprint));
+                ASSERT_TRUE(xr_fingerprint_equal(
+                    cold[run].publish_order_fingerprint,
+                    cold[0].publish_order_fingerprint));
+            }
+            ASSERT_TRUE(result.target_plan_cache.workers ==
+                        (run == 0 ? 1u : (run == 1 ? 2u : 3u)));
+            xaot_build_result_free(&result);
+        }
+
+        for (uint32_t run = 0; run < 3u; run++) {
+            options.incremental_cache_dir = cache_roots[run];
+            options.target_plan_workers = worker_limits[run];
+            ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+            warm[run] = result.module_summary_cache;
+            ASSERT_TRUE(warm[run].workers == expected_workers[run]);
+            ASSERT_TRUE(warm[run].tasks == 3);
+            ASSERT_TRUE(warm[run].hits == 3);
+            ASSERT_TRUE(warm[run].misses == 0);
+            ASSERT_TRUE(warm[run].recomputed_modules == 0);
+            ASSERT_TRUE(warm[run].published == 0);
+            ASSERT_TRUE(warm[run].merged_modules == 3);
+            ASSERT_TRUE(xr_fingerprint_equal(
+                warm[run].artifact_order_fingerprint,
+                cold[0].artifact_order_fingerprint));
+            if (run > 0)
+                ASSERT_TRUE(xr_fingerprint_equal(
+                    warm[run].publish_order_fingerprint,
+                    warm[0].publish_order_fingerprint));
+            xaot_build_result_free(&result);
+        }
+
+        ASSERT_TRUE(write_package_source(
+            home_dir, "codex/pkga",
+            "fn package_a() -> int {\n"
+            "    return 31\n"
+            "}\n",
+            edited_source, sizeof(edited_source)));
+        for (uint32_t run = 0; run < 3u; run++) {
+            options.incremental_cache_dir = cache_roots[run];
+            options.target_plan_workers = worker_limits[run];
+            ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+            edited[run] = result.module_summary_cache;
+            ASSERT_TRUE(edited[run].workers == expected_workers[run]);
+            ASSERT_TRUE(edited[run].tasks == 3);
+            ASSERT_TRUE(edited[run].hits < 3);
+            ASSERT_TRUE(edited[run].recomputed_modules > 0);
+            ASSERT_TRUE(edited[run].recomputed_modules < 3);
+            ASSERT_TRUE(edited[run].published ==
+                        edited[run].recomputed_modules);
+            ASSERT_TRUE(edited[run].merged_modules == 3);
+            ASSERT_TRUE(!xr_fingerprint_equal(
+                edited[run].artifact_order_fingerprint,
+                cold[0].artifact_order_fingerprint));
+            if (run > 0) {
+                ASSERT_TRUE(edited[run].hits == edited[0].hits);
+                ASSERT_TRUE(edited[run].recomputed_modules ==
+                            edited[0].recomputed_modules);
+                ASSERT_TRUE(xr_fingerprint_equal(
+                    edited[run].artifact_order_fingerprint,
+                    edited[0].artifact_order_fingerprint));
+                ASSERT_TRUE(xr_fingerprint_equal(
+                    edited[run].publish_order_fingerprint,
+                    edited[0].publish_order_fingerprint));
+            }
+            xaot_build_result_free(&result);
+        }
+
+        options.incremental_cache_dir = cache_dir;
         options.target_plan_workers = 1;
-        ASSERT_TRUE(xaot_build(entry_source, &options, &result) != 0);
-        ASSERT_TRUE(result.target_plan_cache.workers == 1);
-        ASSERT_TRUE(result.target_plan_cache.misses == 3);
-        ASSERT_TRUE(result.target_plan_cache.published == 3);
-
-        xaot_build_result_free(&result);
-        options.target_plan_workers = 2;
-        ASSERT_TRUE(xaot_build(entry_source, &options, &result) != 0);
-        ASSERT_TRUE(result.target_plan_cache.workers == 2);
-        ASSERT_TRUE(result.target_plan_cache.hits == 3);
-
-        xaot_build_result_free(&result);
-        options.target_plan_workers = 8;
-        ASSERT_TRUE(xaot_build(entry_source, &options, &result) != 0);
-        ASSERT_TRUE(result.target_plan_cache.workers == 3);
-        ASSERT_TRUE(result.target_plan_cache.hits == 3);
-
-        xaot_build_result_free(&result);
         XrTargetPlanCancellationToken cancellation;
         xr_target_plan_cancellation_token_init(&cancellation);
         xr_target_plan_cancellation_token_request(&cancellation);
         options.target_plan_cancellation = &cancellation;
+        options.incremental_cache_rebuild = false;
         ASSERT_TRUE(xaot_build(entry_source, &options, &result) != 0);
         ASSERT_TRUE(result.target_plan_cache.cancelled == 3);
         ASSERT_TRUE(result.n_sources == 0);

@@ -1248,7 +1248,9 @@ typedef struct TaskRunContext {
 
 static bool execute_task_fixture(const XrModuleTaskGraph *graph,
                                  uint32_t task_index,
-                                 XrModuleTaskOutput *output, void *context) {
+                                 XrModuleTaskOutput *output, void *task_state,
+                                 void *context) {
+    (void) task_state;
     TaskRunContext *run = (TaskRunContext *) context;
     XrModuleTaskView view;
     if (!run || !xr_module_task_graph_task(graph, task_index, &view))

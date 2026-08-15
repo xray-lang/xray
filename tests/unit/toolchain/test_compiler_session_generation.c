@@ -21,6 +21,7 @@
 #include "runtime/value/xchunk.h"
 #include "xray_vm.h"
 
+#include <stdio.h>
 #include <string.h>
 
 static XrFingerprint test_fingerprint(uint8_t seed) {
@@ -432,6 +433,361 @@ TEST(session_owns_dependency_graph_and_isolates_workspaces) {
     xr_compiler_session_delete(first);
 }
 
+typedef struct SessionModuleTaskState {
+    uint32_t task_index;
+    XrFingerprint artifact;
+} SessionModuleTaskState;
+
+typedef struct SessionModuleTaskContext {
+    uint32_t fail_first;
+    uint32_t fail_second;
+    uint32_t fail_preflight_task;
+    uint32_t fail_publish_task;
+    bool fail;
+    bool fail_preflight;
+    bool fail_publish;
+    uint32_t publish_order[8];
+    XrFingerprint artifacts[8];
+    char diagnostics[8][XR_MODULE_TASK_DIAGNOSTIC_CAPACITY];
+    bool cache_present[8];
+    XrFingerprint cache_artifacts[8];
+    uint32_t exact_revalidations;
+    uint32_t publish_count;
+} SessionModuleTaskContext;
+
+static bool prepare_session_module_task(const XrModuleTaskGraph *graph,
+                                        uint32_t task_index,
+                                        XrModuleTaskOutput *output,
+                                        void *task_state, void *context) {
+    SessionModuleTaskState *state = (SessionModuleTaskState *) task_state;
+    const SessionModuleTaskContext *run =
+        (const SessionModuleTaskContext *) context;
+    XrModuleTaskView view;
+    if (!state || !run ||
+        !xr_module_task_graph_task(graph, task_index, &view))
+        return false;
+    state->task_index = task_index;
+    state->artifact = test_fingerprint(
+        (uint8_t) (80u + task_index + view.level * 9u));
+    output->artifact_fingerprint = state->artifact;
+    (void) snprintf(output->diagnostic, sizeof(output->diagnostic),
+                    "task=%u level=%u", task_index, view.level);
+    return !run->fail ||
+           (task_index != run->fail_first &&
+            task_index != run->fail_second);
+}
+
+static bool preflight_session_module_task(
+    const XrModuleTaskGraph *graph, uint32_t task_index,
+    const XrModuleTaskOutput *output, const void *task_state, void *context,
+    char *error, size_t error_size) {
+    (void) graph;
+    (void) error;
+    (void) error_size;
+    const SessionModuleTaskState *state =
+        (const SessionModuleTaskState *) task_state;
+    const SessionModuleTaskContext *run =
+        (const SessionModuleTaskContext *) context;
+    return state && run && output && output->complete && output->succeeded &&
+           state->task_index == task_index &&
+           xr_fingerprint_equal(state->artifact,
+                                output->artifact_fingerprint) &&
+           (!run->fail_preflight ||
+            task_index != run->fail_preflight_task);
+}
+
+static bool publish_session_module_task(
+    const XrModuleTaskGraph *graph, uint32_t task_index,
+    const XrModuleTaskOutput *output, void *task_state, void *context,
+    char *error, size_t error_size) {
+    (void) graph;
+    (void) error;
+    (void) error_size;
+    SessionModuleTaskState *state = (SessionModuleTaskState *) task_state;
+    SessionModuleTaskContext *run = (SessionModuleTaskContext *) context;
+    if (!state || !run || !output || !output->complete ||
+        !output->succeeded || state->task_index != task_index ||
+        run->publish_count >= 8u ||
+        (run->fail_publish && task_index == run->fail_publish_task))
+        return false;
+    if (run->cache_present[task_index]) {
+        if (!xr_fingerprint_equal(run->cache_artifacts[task_index],
+                                  state->artifact))
+            return false;
+        run->exact_revalidations++;
+    } else {
+        run->cache_present[task_index] = true;
+        run->cache_artifacts[task_index] = state->artifact;
+    }
+    uint32_t cursor = run->publish_count++;
+    run->publish_order[cursor] = task_index;
+    run->artifacts[cursor] = state->artifact;
+    (void) snprintf(run->diagnostics[cursor],
+                    sizeof(run->diagnostics[cursor]), "%s",
+                    output->diagnostic);
+    return xr_fingerprint_equal(state->artifact,
+                                output->artifact_fingerprint);
+}
+
+static bool build_parallel_session_graph(XrDependencyGraph *graph) {
+    XrModuleSummary left = {0};
+    XrModuleSummary right = {0};
+    XrModuleSummary join = {0};
+    xr_dependency_graph_init(graph);
+    if (!init_summary(&left, "pkg/left", 10u) ||
+        !init_summary(&right, "pkg/right", 40u) ||
+        !init_summary(&join, "pkg/join", 70u))
+        goto fail;
+    XrModuleFacetMask relation[XR_MODULE_FACET_COUNT] = {0};
+    relation[XR_MODULE_FACET_BODY_EVIDENCE] =
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE);
+    bool ok = xr_dependency_graph_add_node(graph, &join) &&
+              xr_dependency_graph_add_node(graph, &right) &&
+              xr_dependency_graph_add_node(graph, &left) &&
+              xr_dependency_graph_add_edge(graph, join.module_id,
+                                           left.module_id, relation) &&
+              xr_dependency_graph_add_edge(graph, join.module_id,
+                                           right.module_id, relation) &&
+              xr_dependency_graph_validate(graph);
+    xr_module_summary_finalize(&join);
+    xr_module_summary_finalize(&right);
+    xr_module_summary_finalize(&left);
+    return ok;
+fail:
+    xr_module_summary_finalize(&join);
+    xr_module_summary_finalize(&right);
+    xr_module_summary_finalize(&left);
+    xr_dependency_graph_finalize(graph);
+    return false;
+}
+
+static bool run_session_module_tasks(
+    XrCompilerSession *session, const XrDependencyGraph *graph,
+    uint32_t worker_limit, SessionModuleTaskContext *context,
+    XrCompilerSessionModuleTaskStats *stats, char *error,
+    size_t error_size) {
+    XrCompilerSessionModuleTaskBatch batch = {
+        .dependency_graph = graph,
+        .worker_limit = worker_limit,
+        .task_state_size = sizeof(SessionModuleTaskState),
+        .prepare = prepare_session_module_task,
+        .preflight = preflight_session_module_task,
+        .publish = publish_session_module_task,
+        .context = context,
+    };
+    return xr_compiler_session_publish_module_tasks(
+        session, &batch, stats, error, error_size);
+}
+
+TEST(module_task_session_is_worker_stable_and_publishes_atomically) {
+    XrDependencyGraph graph;
+    ASSERT_TRUE(build_parallel_session_graph(&graph));
+    XrCompilerSession *serial = xr_compiler_session_new(NULL);
+    XrCompilerSession *dual = xr_compiler_session_new(NULL);
+    XrCompilerSession *wide = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(serial);
+    ASSERT_NOT_NULL(dual);
+    ASSERT_NOT_NULL(wide);
+    SessionModuleTaskContext serial_run = {0};
+    SessionModuleTaskContext dual_run = {0};
+    SessionModuleTaskContext wide_run = {0};
+    XrCompilerSessionModuleTaskStats serial_stats;
+    XrCompilerSessionModuleTaskStats dual_stats;
+    XrCompilerSessionModuleTaskStats wide_stats;
+    char serial_error[512];
+    char dual_error[512];
+    char wide_error[512];
+    ASSERT_TRUE(run_session_module_tasks(serial, &graph, 1u, &serial_run,
+                                         &serial_stats, serial_error,
+                                         sizeof(serial_error)));
+    ASSERT_TRUE(run_session_module_tasks(dual, &graph, 2u, &dual_run,
+                                         &dual_stats, dual_error,
+                                         sizeof(dual_error)));
+    ASSERT_TRUE(run_session_module_tasks(wide, &graph, 8u, &wide_run,
+                                         &wide_stats, wide_error,
+                                         sizeof(wide_error)));
+    ASSERT_EQ_UINT(serial_stats.task_count, 3u);
+    ASSERT_EQ_UINT(serial_stats.execution.worker_count, 1u);
+    ASSERT_EQ_UINT(dual_stats.execution.worker_count, 2u);
+    ASSERT_EQ_UINT(wide_stats.execution.worker_count, 2u);
+    ASSERT_EQ_UINT(serial_run.publish_count, 3u);
+    ASSERT_EQ_UINT(dual_run.publish_count, serial_run.publish_count);
+    ASSERT_EQ_UINT(wide_run.publish_count, serial_run.publish_count);
+    for (uint32_t task = 0; task < serial_run.publish_count; task++) {
+        ASSERT_EQ_UINT(dual_run.publish_order[task],
+                       serial_run.publish_order[task]);
+        ASSERT_EQ_UINT(wide_run.publish_order[task],
+                       serial_run.publish_order[task]);
+        ASSERT_TRUE(xr_fingerprint_equal(dual_run.artifacts[task],
+                                         serial_run.artifacts[task]));
+        ASSERT_TRUE(xr_fingerprint_equal(wide_run.artifacts[task],
+                                         serial_run.artifacts[task]));
+        ASSERT_TRUE(strcmp(dual_run.diagnostics[task],
+                           serial_run.diagnostics[task]) == 0);
+        ASSERT_TRUE(strcmp(wide_run.diagnostics[task],
+                           serial_run.diagnostics[task]) == 0);
+    }
+
+    XrFingerprint serial_graph;
+    XrFingerprint dual_graph;
+    XrFingerprint wide_graph;
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(serial), &serial_graph));
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(dual), &dual_graph));
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(wide), &wide_graph));
+    ASSERT_TRUE(xr_fingerprint_equal(serial_graph, dual_graph));
+    ASSERT_TRUE(xr_fingerprint_equal(serial_graph, wide_graph));
+
+    XrCompilerSessionGenerationSnapshot serial_before =
+        xr_compiler_session_generation_snapshot(serial);
+    XrCompilerSessionGenerationSnapshot dual_before =
+        xr_compiler_session_generation_snapshot(dual);
+    XrCompilerSessionGenerationSnapshot wide_before =
+        xr_compiler_session_generation_snapshot(wide);
+    SessionModuleTaskContext serial_failure = {
+        .fail_first = 0u,
+        .fail_second = 1u,
+        .fail = true,
+    };
+    SessionModuleTaskContext dual_failure = serial_failure;
+    SessionModuleTaskContext wide_failure = serial_failure;
+    ASSERT_FALSE(run_session_module_tasks(
+        serial, &graph, 1u, &serial_failure, &serial_stats, serial_error,
+        sizeof(serial_error)));
+    ASSERT_FALSE(run_session_module_tasks(
+        dual, &graph, 2u, &dual_failure, &dual_stats, dual_error,
+        sizeof(dual_error)));
+    ASSERT_FALSE(run_session_module_tasks(
+        wide, &graph, 8u, &wide_failure, &wide_stats, wide_error,
+        sizeof(wide_error)));
+    ASSERT_EQ_UINT(serial_failure.publish_count, 0u);
+    ASSERT_EQ_UINT(dual_failure.publish_count, 0u);
+    ASSERT_EQ_UINT(wide_failure.publish_count, 0u);
+    ASSERT_EQ_UINT(serial_stats.execution.first_failed_task, 0u);
+    ASSERT_EQ_UINT(dual_stats.execution.first_failed_task, 0u);
+    ASSERT_EQ_UINT(wide_stats.execution.first_failed_task, 0u);
+    ASSERT_TRUE(strcmp(serial_error, dual_error) == 0);
+    ASSERT_TRUE(strcmp(serial_error, wide_error) == 0);
+    ASSERT_TRUE(strstr(wide_error, "module task 0 failed") != NULL);
+    XrCompilerSessionGenerationSnapshot serial_after =
+        xr_compiler_session_generation_snapshot(serial);
+    XrCompilerSessionGenerationSnapshot dual_after =
+        xr_compiler_session_generation_snapshot(dual);
+    XrCompilerSessionGenerationSnapshot wide_after =
+        xr_compiler_session_generation_snapshot(wide);
+    ASSERT_EQ_UINT(serial_after.workspace_generation,
+                   serial_before.workspace_generation);
+    ASSERT_EQ_UINT(dual_after.workspace_generation,
+                   dual_before.workspace_generation);
+    ASSERT_EQ_UINT(wide_after.workspace_generation,
+                   wide_before.workspace_generation);
+    ASSERT_TRUE(serial_after.session_generation >
+                serial_before.session_generation);
+    ASSERT_TRUE(dual_after.session_generation > dual_before.session_generation);
+    ASSERT_TRUE(wide_after.session_generation > wide_before.session_generation);
+    XrFingerprint serial_after_failure;
+    XrFingerprint dual_after_failure;
+    XrFingerprint after_failure;
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(serial),
+        &serial_after_failure));
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(dual),
+        &dual_after_failure));
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(wide), &after_failure));
+    ASSERT_TRUE(xr_fingerprint_equal(serial_after_failure, serial_graph));
+    ASSERT_TRUE(xr_fingerprint_equal(dual_after_failure, dual_graph));
+    ASSERT_TRUE(xr_fingerprint_equal(after_failure, wide_graph));
+
+    XrDependencyGraph old_graph;
+    XrStableId old_root;
+    XrStableId old_consumer;
+    ASSERT_TRUE(build_session_graph(&old_graph, &old_root,
+                                    &old_consumer));
+    XrCompilerSession *publication = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(publication);
+    ASSERT_TRUE(xr_compiler_session_publish_dependency_graph(publication,
+                                                             &old_graph));
+    XrFingerprint old_fingerprint;
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(publication),
+        &old_fingerprint));
+
+    SessionModuleTaskContext preflight_failure = {
+        .fail_preflight_task = 1u,
+        .fail_preflight = true,
+    };
+    XrCompilerSessionGenerationSnapshot before_preflight =
+        xr_compiler_session_generation_snapshot(publication);
+    ASSERT_FALSE(run_session_module_tasks(
+        publication, &graph, 8u, &preflight_failure, &wide_stats,
+        wide_error, sizeof(wide_error)));
+    ASSERT_EQ_UINT(preflight_failure.publish_count, 0u);
+    ASSERT_EQ_UINT(wide_stats.preflighted_task_count, 1u);
+    ASSERT_EQ_UINT(wide_stats.published_task_count, 0u);
+    ASSERT_EQ_UINT(wide_stats.execution.first_failed_task, 1u);
+    XrCompilerSessionGenerationSnapshot after_preflight =
+        xr_compiler_session_generation_snapshot(publication);
+    ASSERT_EQ_UINT(after_preflight.workspace_generation,
+                   before_preflight.workspace_generation);
+    ASSERT_TRUE(after_preflight.session_generation >
+                before_preflight.session_generation);
+
+    SessionModuleTaskContext publish_failure = {
+        .fail_publish_task = 1u,
+        .fail_publish = true,
+    };
+    XrCompilerSessionGenerationSnapshot before_publish =
+        xr_compiler_session_generation_snapshot(publication);
+    ASSERT_FALSE(run_session_module_tasks(
+        publication, &graph, 8u, &publish_failure, &wide_stats,
+        wide_error, sizeof(wide_error)));
+    ASSERT_EQ_UINT(publish_failure.publish_count, 1u);
+    ASSERT_EQ_UINT(wide_stats.preflighted_task_count, 3u);
+    ASSERT_EQ_UINT(wide_stats.published_task_count, 1u);
+    ASSERT_EQ_UINT(wide_stats.execution.first_failed_task, 1u);
+    ASSERT_TRUE(publish_failure.cache_present[0]);
+    ASSERT_FALSE(publish_failure.cache_present[1]);
+    ASSERT_FALSE(publish_failure.cache_present[2]);
+    XrCompilerSessionGenerationSnapshot after_publish =
+        xr_compiler_session_generation_snapshot(publication);
+    ASSERT_EQ_UINT(after_publish.workspace_generation,
+                   before_publish.workspace_generation);
+    ASSERT_TRUE(after_publish.session_generation >
+                before_publish.session_generation);
+    XrFingerprint after_publish_failure;
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(publication),
+        &after_publish_failure));
+    ASSERT_TRUE(xr_fingerprint_equal(after_publish_failure,
+                                     old_fingerprint));
+
+    publish_failure.fail_publish = false;
+    publish_failure.publish_count = 0u;
+    ASSERT_TRUE(run_session_module_tasks(
+        publication, &graph, 2u, &publish_failure, &wide_stats,
+        wide_error, sizeof(wide_error)));
+    ASSERT_EQ_UINT(publish_failure.exact_revalidations, 1u);
+    ASSERT_EQ_UINT(wide_stats.published_task_count, 3u);
+    XrFingerprint published_fingerprint;
+    ASSERT_TRUE(xr_dependency_graph_fingerprint(
+        xr_compiler_session_dependency_graph(publication),
+        &published_fingerprint));
+    ASSERT_TRUE(xr_fingerprint_equal(published_fingerprint,
+                                     serial_graph));
+
+    xr_compiler_session_delete(publication);
+    xr_dependency_graph_finalize(&old_graph);
+
+    xr_compiler_session_delete(wide);
+    xr_compiler_session_delete(dual);
+    xr_compiler_session_delete(serial);
+    xr_dependency_graph_finalize(&graph);
+}
+
 TEST(operation_abort_is_transactional_and_invalidates_old_scopes) {
     XrCompilerSession *session = xr_compiler_session_new(NULL);
     ASSERT_NOT_NULL(session);
@@ -716,6 +1072,7 @@ RUN_TEST(incremental_reset_advances_identity_and_clears_transient_state);
 RUN_TEST(session_owns_configuration_paths);
 RUN_TEST(target_and_provider_updates_advance_only_their_generation);
 RUN_TEST(session_owns_dependency_graph_and_isolates_workspaces);
+RUN_TEST(module_task_session_is_worker_stable_and_publishes_atomically);
 RUN_TEST(operation_abort_is_transactional_and_invalidates_old_scopes);
 RUN_TEST(operation_scope_rejects_forged_and_stale_commits);
 RUN_TEST(invalidation_history_is_bounded_and_idle_cleanup_is_observable);

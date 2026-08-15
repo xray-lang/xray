@@ -30,6 +30,7 @@ struct XrModuleGraph;
 XR_FUNC bool xaot_publish_module_summaries(struct XrCompilerSession *session,
                                            const struct XrModuleGraph *graph,
                                            struct XiModule *const *modules, int module_count,
-                                           const XaotBuildOptions *options, bool verbose);
+                                           const XaotBuildOptions *options, bool verbose,
+                                           XaotModuleSummaryCacheStats *stats);
 
 #endif  // XAOT_MODULE_SUMMARY_H

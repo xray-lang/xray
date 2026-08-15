@@ -121,6 +121,18 @@ typedef struct XaotTargetPlanCacheStats {
     uint32_t cancelled;
 } XaotTargetPlanCacheStats;
 
+typedef struct XaotModuleSummaryCacheStats {
+    uint32_t workers;
+    uint32_t tasks;
+    uint32_t hits;
+    uint32_t misses;
+    uint32_t published;
+    uint32_t recomputed_modules;
+    uint32_t merged_modules;
+    XrFingerprint artifact_order_fingerprint;
+    XrFingerprint publish_order_fingerprint;
+} XaotModuleSummaryCacheStats;
+
 /* Result of xaot_build().  Caller must free owned strings via xr_free(). */
 typedef struct {
     XaotModuleSource *sources;  /* per-module generated C (malloc'd array) */
@@ -142,6 +154,7 @@ typedef struct {
     XaotPrepareStats prepare_stats;
     XiCgenStats cgen_stats;
     XiCgenCoroFrameStats coro_frame_stats;
+    XaotModuleSummaryCacheStats module_summary_cache;
     XaotTargetPlanCacheStats target_plan_cache;
 } XaotBuildResult;
 

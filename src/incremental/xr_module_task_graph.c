@@ -66,6 +66,8 @@ typedef struct XrModuleTaskPool {
     uint32_t worker_count;
     XrModuleTaskExecuteFn execute;
     void *context;
+    uint8_t *task_states;
+    size_t task_state_size;
     XrModuleTaskOutput *outputs;
 } XrModuleTaskPool;
 
@@ -755,8 +757,13 @@ static void *worker_main(void *argument) {
          cursor += pool->worker_count) {
         uint32_t task = pool->ready[cursor];
         XrModuleTaskOutput output = {0};
+        void *task_state = pool->task_state_size
+                               ? pool->task_states +
+                                     (size_t) task * pool->task_state_size
+                               : NULL;
         bool succeeded =
-            pool->execute(pool->graph, task, &output, pool->context);
+            pool->execute(pool->graph, task, &output, task_state,
+                          pool->context);
         output.diagnostic[sizeof(output.diagnostic) - 1u] = '\0';
         output.complete = true;
         output.succeeded = succeeded;
@@ -797,8 +804,18 @@ bool xr_module_task_graph_run(const XrModuleTaskBatch *batch,
                   "module task batch output authority is invalid");
         return false;
     }
+    if ((batch->task_state_size == 0) != (batch->task_states == NULL) ||
+        (batch->task_state_size != 0 &&
+         task_count > SIZE_MAX / batch->task_state_size)) {
+        set_error(error, error_size,
+                  "module task batch state authority is invalid");
+        return false;
+    }
     memset(batch->outputs, 0,
            task_count * sizeof(*batch->outputs));
+    if (batch->task_state_size)
+        memset(batch->task_states, 0,
+               (size_t) task_count * batch->task_state_size);
     if (!xr_module_task_graph_verify(batch->dependency_graph,
                                      batch->task_graph, error, error_size)) {
         if (error && error_size && !error[0])
@@ -852,6 +869,8 @@ bool xr_module_task_graph_run(const XrModuleTaskBatch *batch,
             .worker_count = worker_count,
             .execute = batch->execute,
             .context = batch->context,
+            .task_states = (uint8_t *) batch->task_states,
+            .task_state_size = batch->task_state_size,
             .outputs = batch->outputs,
         };
         uint32_t created = 0;

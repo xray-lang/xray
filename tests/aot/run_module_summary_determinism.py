@@ -25,6 +25,7 @@ hit can never stand in for a proof the build owes.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import sys
@@ -46,7 +47,10 @@ PROJECT_DIR = Path(__file__).resolve().parents[2]
 
 SUMMARY_RE = re.compile(
     r"\[module-summary\] modules=(\d+) graph=([0-9a-f]{64}) "
-    r"xsm-hits=(\d+) xsm-published=(\d+) xsm-missed=(\d+)"
+    r"xsm-hits=(\d+) xsm-published=(\d+) xsm-missed=(\d+) "
+    r"workers=(\d+) tasks=(\d+) xsm-recomputed=(\d+) "
+    r"xsm-artifacts=([0-9a-f]{64}) "
+    r"xsm-publish-order=([0-9a-f]{64})"
 )
 
 SOLO_V1 = "fn scale(x: int) -> int {\n    return x * 3\n}\n\nprint(scale(14))\n"
@@ -81,6 +85,11 @@ class Summary:
     hits: int
     published: int
     missed: int
+    workers: int
+    tasks: int
+    recomputed: int
+    artifacts: str
+    publish_order: str
 
 
 @dataclass
@@ -110,7 +119,19 @@ def parse_summary(rec: Recorder, result: proc.ProcResult, label: str,
         rec.bad(f"{label}: no [module-summary] report", log)
         return None
     return Summary(int(match.group(1)), match.group(2), int(match.group(3)),
-                   int(match.group(4)), int(match.group(5)))
+                   int(match.group(4)), int(match.group(5)),
+                   int(match.group(6)), int(match.group(7)),
+                   int(match.group(8)), match.group(9), match.group(10))
+
+
+def xsm_inventory(cache: Path) -> dict[str, str]:
+    return {
+        str(path.relative_to(cache)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for root in sorted(cache.rglob("xsm"))
+        if root.is_dir()
+        for path in sorted(root.iterdir())
+        if path.is_file() and not path.name.startswith(".")
+    }
 
 
 def expect(rec: Recorder, condition: bool, name: str, detail: str = "") -> None:
@@ -138,6 +159,12 @@ def run_determinism(rec: Recorder, config: Config, ws: workspace.Workspace) -> N
         return
     expect(rec, cold.hits == 0 and cold.published == cold.modules,
            "cold: every module publishes its artifact", str(cold))
+    expect(rec, cold.recomputed == cold.modules and cold.tasks > 0,
+           "cold: exact module tasks report every recomputed artifact", str(cold))
+    cold_inventory = xsm_inventory(cache)
+    expect(rec, len(cold_inventory) == cold.modules,
+           "cold: every reported module has one raw XSM object",
+           str(cold_inventory))
     expect_output(rec, config, d / "app1", "42", "cold")
 
     warm = parse_summary(rec, build(config, cache, app, d / "app2"), "warm")
@@ -148,6 +175,10 @@ def run_determinism(rec: Recorder, config: Config, ws: workspace.Workspace) -> N
            f"cold={cold.graph}\nwarm={warm.graph}")
     expect(rec, warm.hits == warm.modules and warm.published == 0,
            "warm: every module is proven unchanged", str(warm))
+    expect(rec, warm.recomputed == 0 and warm.artifacts == cold.artifacts,
+           "warm: cache hits preserve canonical artifact bytes", str(warm))
+    expect(rec, xsm_inventory(cache) == cold_inventory,
+           "warm: raw XSM object bytes are unchanged")
     expect_output(rec, config, d / "app2", "42", "warm")
 
     # --rebuild recomputes and republishes. The identity must not move, because
@@ -159,6 +190,13 @@ def run_determinism(rec: Recorder, config: Config, ws: workspace.Workspace) -> N
            "rebuild: forced recomputation reproduces the graph fingerprint",
            f"cold={cold.graph}\nrebuild={rebuilt.graph}")
     expect(rec, rebuilt.hits == 0, "rebuild: no artifact is consulted", str(rebuilt))
+    expect(rec, rebuilt.recomputed == rebuilt.modules and
+           rebuilt.artifacts == cold.artifacts and
+           rebuilt.publish_order == cold.publish_order,
+           "rebuild: artifact bytes and publish order are deterministic",
+           str(rebuilt))
+    expect(rec, xsm_inventory(cache) == cold_inventory,
+           "rebuild: content-addressed XSM bytes are unchanged")
     expect_output(rec, config, d / "app3", "42", "rebuild")
 
     # An edit must move the identity, or an unchanged fingerprint would prove
@@ -171,6 +209,15 @@ def run_determinism(rec: Recorder, config: Config, ws: workspace.Workspace) -> N
            "edit: the graph fingerprint moves with the source",
            f"cold={cold.graph}\nedit={edited.graph}")
     expect(rec, edited.hits == 0, "edit: the changed semantics cost their cache hit", str(edited))
+    expect(rec, edited.recomputed == edited.modules and
+           edited.artifacts != cold.artifacts,
+           "edit: recomputation moves canonical artifact bytes", str(edited))
+    edited_inventory = xsm_inventory(cache)
+    expect(rec, all(edited_inventory.get(name) == digest
+                    for name, digest in cold_inventory.items()) and
+           len(edited_inventory) > len(cold_inventory),
+           "edit: old immutable XSM objects remain exact-key orphans while new keys publish",
+           str(edited_inventory))
     expect_output(rec, config, d / "app4", "70", "edit")
 
     app.write_text(SOLO_V1, encoding="utf-8")
@@ -182,6 +229,10 @@ def run_determinism(rec: Recorder, config: Config, ws: workspace.Workspace) -> N
            f"cold={cold.graph}\nrevert={restored.graph}")
     expect(rec, restored.hits == restored.modules,
            "revert: the artifact published before the edit is served again", str(restored))
+    expect(rec, restored.artifacts == cold.artifacts,
+           "revert: original canonical artifact bytes return", str(restored))
+    expect(rec, xsm_inventory(cache) == edited_inventory,
+           "revert: exact-key loads do not rewrite immutable XSM objects")
     expect_output(rec, config, d / "app5", "42", "revert")
 
 
@@ -207,6 +258,7 @@ def run_graph_identity(rec: Recorder, config: Config, ws: workspace.Workspace) -
     expect(rec, cold.modules == 3, "chain-cold: three modules summarized", str(cold))
     expect(rec, cold.hits == 0 and cold.published == 3,
            "chain-cold: every module publishes its artifact", str(cold))
+    cold_inventory = xsm_inventory(cache)
 
     warm = parse_summary(rec, build(config, cache, app, d / "chain2"), "chain-warm", False)
     if not warm:
@@ -216,6 +268,10 @@ def run_graph_identity(rec: Recorder, config: Config, ws: workspace.Workspace) -
            f"cold={cold.graph}\nwarm={warm.graph}")
     expect(rec, warm.hits == 3 and warm.published == 0,
            "chain-warm: every module is proven unchanged", str(warm))
+    expect(rec, warm.recomputed == 0 and warm.artifacts == cold.artifacts and
+           xsm_inventory(cache) == cold_inventory,
+           "chain-warm: artifact bytes and raw XSM objects are identical",
+           str(warm))
 
     # A leaf edit must reach the identity even though the entry module's own
     # source is untouched.
@@ -227,6 +283,10 @@ def run_graph_identity(rec: Recorder, config: Config, ws: workspace.Workspace) -
            "chain-edit: a leaf edit moves the graph fingerprint",
            f"cold={cold.graph}\nedit={edited.graph}")
     expect(rec, edited.hits < 3, "chain-edit: the changed module loses its hit", str(edited))
+    expect(rec, 0 < edited.recomputed <= 3 and
+           edited.recomputed == edited.missed and
+           edited.artifacts != cold.artifacts,
+           "chain-edit: the affected closure alone recomputes", str(edited))
 
     leaf.write_text(LEAF_V1, encoding="utf-8")
     restored = parse_summary(rec, build(config, cache, app, d / "chain4"), "chain-revert", False)
@@ -238,6 +298,8 @@ def run_graph_identity(rec: Recorder, config: Config, ws: workspace.Workspace) -
     expect(rec, restored.hits == 3,
            "chain-revert: every module is served from the artifacts published before the edit",
            str(restored))
+    expect(rec, restored.artifacts == cold.artifacts,
+           "chain-revert: canonical artifact bytes return", str(restored))
 
 
 SCENARIOS = {

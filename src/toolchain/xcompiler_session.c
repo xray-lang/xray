@@ -24,6 +24,7 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_internal.h"
 #include "../runtime/value/xtype_pool.h"
+#include <stdio.h>
 #include <string.h>
 
 struct XrCompilerSession {
@@ -191,6 +192,17 @@ static bool copy_dependency_graph(XrDependencyGraph *out, const XrDependencyGrap
 failure:
     xr_dependency_graph_finalize(out);
     return false;
+}
+
+static void install_dependency_graph(XrCompilerSession *session,
+                                     XrDependencyGraph *owned) {
+    XrDependencyGraph previous = session->dependency_graph;
+    session->dependency_graph = *owned;
+    xr_dependency_graph_init(owned);
+    session->generations.workspace_generation++;
+    clear_invalidation_history(session);
+    xr_dependency_graph_finalize(&previous);
+    refresh_incremental_watermark(session);
 }
 
 XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
@@ -604,13 +616,156 @@ bool xr_compiler_session_publish_dependency_graph(XrCompilerSession *session,
     XrDependencyGraph copy;
     if (!copy_dependency_graph(&copy, graph))
         return false;
-    XrDependencyGraph previous = session->dependency_graph;
-    session->dependency_graph = copy;
-    session->generations.workspace_generation++;
-    clear_invalidation_history(session);
-    xr_dependency_graph_finalize(&previous);
-    refresh_incremental_watermark(session);
+    install_dependency_graph(session, &copy);
     return true;
+}
+
+bool xr_compiler_session_publish_module_tasks(
+    XrCompilerSession *session,
+    const XrCompilerSessionModuleTaskBatch *batch,
+    XrCompilerSessionModuleTaskStats *stats, char *error,
+    size_t error_size) {
+    if (error && error_size)
+        error[0] = '\0';
+    if (stats) {
+        memset(stats, 0, sizeof(*stats));
+        stats->execution.first_failed_task = XR_MODULE_TASK_INDEX_NONE;
+    }
+    if (!session || !batch || !stats || !batch->dependency_graph ||
+        !batch->prepare || !batch->preflight || !batch->publish ||
+        session->incremental_operation_active ||
+        session->repl_declaration_active ||
+        session->generations.session_generation == UINT64_MAX ||
+        session->generations.workspace_generation == UINT64_MAX) {
+        if (error && error_size)
+            (void) snprintf(error, error_size,
+                            "module task session authority is invalid");
+        return false;
+    }
+
+    XrModuleTaskGraph *task_graph = NULL;
+    XrDependencyGraph graph_copy;
+    xr_dependency_graph_init(&graph_copy);
+    if (!xr_module_task_graph_build(batch->dependency_graph, &task_graph,
+                                    error, error_size) ||
+        !copy_dependency_graph(&graph_copy, batch->dependency_graph)) {
+        xr_module_task_graph_free(task_graph);
+        xr_dependency_graph_finalize(&graph_copy);
+        if (error && error_size && !error[0])
+            (void) snprintf(error, error_size,
+                            "module task graph copy failed");
+        return false;
+    }
+    uint32_t task_count = xr_module_task_graph_count(task_graph);
+    if (task_count == 0 ||
+        (batch->task_state_size != 0 &&
+         task_count > SIZE_MAX / batch->task_state_size)) {
+        xr_module_task_graph_free(task_graph);
+        xr_dependency_graph_finalize(&graph_copy);
+        if (error && error_size)
+            (void) snprintf(error, error_size,
+                            "module task session shape is invalid");
+        return false;
+    }
+
+    XrModuleTaskOutput *outputs = (XrModuleTaskOutput *) xr_calloc(
+        task_count, sizeof(*outputs));
+    void *task_states = batch->task_state_size
+                            ? xr_calloc(task_count, batch->task_state_size)
+                            : NULL;
+    if (!outputs || (batch->task_state_size && !task_states)) {
+        xr_free(task_states);
+        xr_free(outputs);
+        xr_module_task_graph_free(task_graph);
+        xr_dependency_graph_finalize(&graph_copy);
+        if (error && error_size)
+            (void) snprintf(error, error_size,
+                            "module task session allocation failed");
+        return false;
+    }
+
+    stats->task_count = task_count;
+    bool active = begin_incremental_operation(session);
+    bool ok = false;
+    if (active) {
+        XrModuleTaskBatch task_batch = {
+            .dependency_graph = batch->dependency_graph,
+            .task_graph = task_graph,
+            .worker_limit = batch->worker_limit,
+            .execute = batch->prepare,
+            .context = batch->context,
+            .task_states = task_states,
+            .task_state_size = batch->task_state_size,
+            .outputs = outputs,
+            .output_count = task_count,
+        };
+        ok = xr_module_task_graph_run(&task_batch, &stats->execution,
+                                      error, error_size);
+    } else if (error && error_size) {
+        (void) snprintf(error, error_size,
+                        "module task session could not begin an operation");
+    }
+
+    for (uint32_t task = 0; ok && task < task_count; task++) {
+        const void *task_state = batch->task_state_size
+                                     ? (const uint8_t *) task_states +
+                                           (size_t) task * batch->task_state_size
+                                     : NULL;
+        if (!batch->preflight(task_graph, task, &outputs[task], task_state,
+                              batch->context, error, error_size)) {
+            stats->execution.first_failed_task = task;
+            if (error && error_size && !error[0])
+                (void) snprintf(error, error_size,
+                                "module task %u preflight failed", task);
+            ok = false;
+            break;
+        }
+        stats->preflighted_task_count++;
+    }
+
+    for (uint32_t task = 0; ok && task < task_count; task++) {
+        void *task_state = batch->task_state_size
+                               ? (uint8_t *) task_states +
+                                     (size_t) task * batch->task_state_size
+                               : NULL;
+        if (!batch->publish(task_graph, task, &outputs[task], task_state,
+                            batch->context, error, error_size)) {
+            stats->execution.first_failed_task = task;
+            if (error && error_size && !error[0])
+                (void) snprintf(error, error_size,
+                                "module task %u publication failed", task);
+            ok = false;
+            break;
+        }
+        stats->published_task_count++;
+    }
+
+    if (batch->finalize) {
+        for (uint32_t task = 0; task < task_count; task++) {
+            void *task_state = batch->task_state_size
+                                   ? (uint8_t *) task_states +
+                                         (size_t) task * batch->task_state_size
+                                   : NULL;
+            batch->finalize(task_state, batch->context);
+        }
+    }
+    if (ok && !finish_incremental_operation(session)) {
+        if (error && error_size && !error[0])
+            (void) snprintf(error, error_size,
+                            "module task session commit failed");
+        ok = false;
+    }
+    if (!ok && active && session->incremental_operation_active)
+        (void) abort_incremental_operation(
+            session, XR_COMPILER_SESSION_OPERATION_FATAL);
+    if (ok)
+        install_dependency_graph(session, &graph_copy);
+
+    xr_free(task_states);
+    xr_free(outputs);
+    xr_module_task_graph_free(task_graph);
+    xr_dependency_graph_finalize(&graph_copy);
+    return ok;
 }
 
 bool xr_compiler_session_apply_invalidation(XrCompilerSession *session,

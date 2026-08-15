@@ -89,16 +89,28 @@ invalidation, compiler-session ownership, or any compatibility reader.
     never a substitute for a stage. A missing verifier context, a mismatched
     key, plan, or dependency vector, or mutated bytes fail closed. The
     native build consults the store only after every module owns a verified
-    plan; a hit skips re-encoding and re-publication alone, while a miss, a
-    rejected candidate, or an unavailable store publishes the freshly encoded
-    artifact and continues unchanged. Because the key names the ordered
+    plan. It derives an exact SCC task graph in the compiler session, lets
+    workers prepare disjoint XSM artifact rows from immutable plan authority,
+    joins every level, and preflights every candidate byte sequence with the
+    independent XSM verifier before publication begins. Only then are misses
+    published in canonical task/member order and the candidate dependency graph
+    installed. Worker completion order cannot affect artifact bytes,
+    diagnostics, recomputed-module counts, or publication order. A hit skips
+    re-encoding and re-publication alone, while a miss or rejected candidate
+    prepares a freshly encoded artifact. Because the key names the ordered
     dependency module/fingerprint digest independently, a source import or
     module-set resolution change necessarily selects a different XSM address;
-    the stale cache identity cannot be accepted as the new request.
+    the stale cache identity cannot be accepted as the new request. If a later
+    cache I/O fails after an earlier canonical publish, the session does not
+    install the graph or advance the workspace generation. The earlier object
+    is an immutable exact-key orphan with no failed-generation address; any
+    later operation must derive the same key and independently verify the raw
+    bytes again before it can count as a hit.
 
 Changing the root-lock coverage, rejected-snapshot identity, quota reservation
 order, atomic publication sequence, directory/link boundary, lock cleanup,
-XSM summary derivation, or mandatory verification is a contract change.
+XSM summary derivation, task preflight/publication ordering, or mandatory
+verification is a contract change.
 
 ## Digest anchors
 
@@ -110,10 +122,10 @@ anchor-sha256: src/incremental/xr_target_plan_tasks.h b8898e83f64a5f3526199de7e2
 anchor-sha256: src/incremental/xr_target_plan_tasks.c 97cb9d24a31e852506ace288f2b3c72fd7828a7cc1a1adb161f7a6a3c85377cc
 anchor-sha256: src/incremental/xr_module_summary_build.h 3ce01510e546f6c32bdfa2abf5432f36de55499007e4e46881f482016ecc3000
 anchor-sha256: src/incremental/xr_module_summary_build.c 2c117922f4e35c7354460803a140164b1fa36ce1e15a60cacaf621c8500857f1
-anchor-sha256: src/aot/xaot_module_summary.h 99c801267d15b615778f0520455e1d6c7ecd7bc577b3589665e6ef70a886f2bd
-anchor-sha256: src/aot/xaot_module_summary.c 2aabf8a25cec98690674e93d4b3a73207a8db0aadfee7bcfa1734f9b9a94ed16
-anchor-sha256: src/aot/xaot_driver.h 6788cdeaa4983f58696ca3d1d20a36e0b42485167fa0e1544eea00ee69504c8d
-anchor-sha256: src/aot/xaot_driver.c 1b044a9a9718052b1f5f2f9cda2c22fd556aa5ccd160662298b95624ebb49916
+anchor-sha256: src/aot/xaot_module_summary.h 356f61d193ecfb05a15c0d4ad14a36df8c540b49f841d09bb4375562f9c5d88f
+anchor-sha256: src/aot/xaot_module_summary.c fb55e5df4fbaeef41931bcc863f3dd36c4e2bc1344d30acac8435a699a4800ba
+anchor-sha256: src/aot/xaot_driver.h 01f022c354d4cfa051fe0feba5fc2f21642e4e102bc7ec7c2a5729d3f6bf26cc
+anchor-sha256: src/aot/xaot_driver.c 4370a67e5768302d8901c41cb58b09b7b516c2ca6016da9dcf483cdbdd1bacf7
 anchor-sha256: src/os/os_fs.h b1a95259a4952a1e33e1d2c109fd0955f5b00bff4db81e6a21abede9ec07fe84
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
@@ -122,6 +134,6 @@ anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c dc50ca29db9c5
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
 anchor-sha256: tests/unit/incremental/test_target_plan_tasks.c 4ea47fb617bb4bed33d98ada661ef0e171d720815dac8a2c4f66c340ce133188
 anchor-sha256: tests/unit/incremental/test_module_summary_build.c 661372e5984643a4471383f76014273d45ff4cbe1e1f3e364a3f1ca12417ac89
-anchor-sha256: tests/aot/run_module_summary_determinism.py 7da3996037ef52aa3ab75d961f34348ca06051438b6ce70f26ce5966d5b1e545
-anchor-sha256: tests/unit/aot/test_xaot_driver.c 3d00bf877ccb2a2acf955a270e3277e669aa5c6ad125224bef6b301aa6706e62
+anchor-sha256: tests/aot/run_module_summary_determinism.py dac9acac234c65545adb2c3d560d67534cece6ce3b8afb01c5c1c432e119922f
+anchor-sha256: tests/unit/aot/test_xaot_driver.c 5f1c41ca62b2a73941e6494265c830daadd0d2a41548d30d3498a97fc5677f73
 anchor-sha256: tests/unit/os/test_fs_atomic.c f8f6ee065dcb3c4b75ae24edb4e96d95253c540f5a40252cf79a10aa140ddb5f

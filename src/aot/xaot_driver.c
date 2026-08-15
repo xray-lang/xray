@@ -2480,8 +2480,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     xa_analyzer_set_graph(shared_analyzer, NULL);
 
-    if (!xaot_publish_module_summaries(session, graph, modules, nmodules, options,
-                                       evidence_cache_verbose))
+    if (!xaot_publish_module_summaries(
+            session, graph, modules, nmodules, options,
+            evidence_cache_verbose, &result->module_summary_cache))
         goto fail_free_ir;
 
     /* Xi values and AOT plans retain pointers into the analyzer-owned type
