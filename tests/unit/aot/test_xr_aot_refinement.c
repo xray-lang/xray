@@ -39,6 +39,7 @@
  */
 
 #include "../../../src/aot/refine/xr_aot_refinement.h"
+#include "../../../src/aot/refine/xr_aot_tail_call_conformance.h"
 #include "../../../src/aot/refine/xr_aot_representation_refinement.h"
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #ifdef XAOT_BUNDLE_H
@@ -662,7 +663,7 @@ static void closure_storage_fixture_free(ClosureStorageFixture *fixture) {
 }
 
 static DirectLocalCalleeStorageFixture
-direct_local_callee_storage_fixture_create(bool extra_use) {
+direct_local_callee_storage_fixture_create(bool extra_use, bool tail_call) {
     DirectLocalCalleeStorageFixture fixture = {0};
     fixture.function =
         xi_func_new("direct_local_shared_root", &scalar_int);
@@ -702,7 +703,8 @@ direct_local_callee_storage_fixture_create(bool extra_use) {
     fixture.load = xi_value_new(fixture.caller, caller_entry,
                                 XI_GET_SHARED, &opaque_callable, 0);
     fixture.call = xi_value_new(fixture.caller, caller_entry,
-                                XI_CALL, &scalar_int, 1);
+                                tail_call ? XI_TAIL_CALL : XI_CALL,
+                                &scalar_int, 1);
     REQUIRE(closure && store && fixture.load && fixture.call);
     closure->aux = fixture.child;
     store->aux_int = 0;
@@ -1387,7 +1389,7 @@ static void test_open_target_direct_call_refuses_without_baseline_change(void) {
  * callee must be proved, and the derived record must match the baseline. */
 static void test_direct_call_authority_applies_closed_local_binding(void) {
     DirectLocalCalleeStorageFixture fixture =
-        direct_local_callee_storage_fixture_create(false);
+        direct_local_callee_storage_fixture_create(false, false);
     XrFingerprint target_before =
         xr_target_plan_fingerprint(fixture.target_plan);
     uint32_t call_count = 0;
@@ -1419,12 +1421,76 @@ static void test_direct_call_authority_applies_closed_local_binding(void) {
     direct_local_callee_storage_fixture_free(&fixture);
 }
 
+static void test_tail_call_backend_conformance_is_exact(void) {
+    DirectLocalCalleeStorageFixture fixture =
+        direct_local_callee_storage_fixture_create(false, true);
+    XrAotRefinementDiagnostic refinement_diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_refinement_direct_call_authority_build(
+        fixture.target_plan, 27903, &plan, &refinement_diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count == 1);
+    XrAotTailCallConformance first = {0};
+    XrAotTailCallConformance second = {0};
+    XrAotTailCallDiagnostic diag = {0};
+    bool verified = xr_aot_tail_call_conformance_verify(
+        fixture.function, fixture.target_plan, &view, &first, &diag);
+    if (!verified)
+        fprintf(stderr,
+                "tail conformance failed: %s op=%u call=%u function=%u value=%u\n",
+                xr_aot_tail_call_conformance_issue_name(diag.issue),
+                diag.semantic_operation, diag.target_call_index,
+                diag.semantic_function, diag.semantic_value);
+    REQUIRE(verified);
+    REQUIRE(first.tail_call_count == 1 &&
+            diag.issue == XR_AOT_TAIL_CALL_CONFORMANCE_OK &&
+            !fingerprint_is_zero_bytes(&first.fingerprint));
+    REQUIRE(xr_aot_tail_call_conformance_verify(
+        fixture.function, fixture.target_plan, &view, &second, &diag));
+    REQUIRE(memcmp(&first, &second, sizeof(first)) == 0);
+
+    uint16_t saved_opcode = fixture.call->op;
+    fixture.call->op = XI_CALL;
+    REQUIRE(!xr_aot_tail_call_conformance_verify(
+        fixture.function, fixture.target_plan, &view, &second, &diag));
+    REQUIRE(diag.issue == XR_AOT_TAIL_CALL_CONFORMANCE_LIVE_OPCODE);
+    fixture.call->op = saved_opcode;
+
+    XiValue *saved_callee = fixture.call->args[0];
+    fixture.call->args[0] = fixture.call;
+    REQUIRE(!xr_aot_tail_call_conformance_verify(
+        fixture.function, fixture.target_plan, &view, &second, &diag));
+    REQUIRE(diag.issue == XR_AOT_TAIL_CALL_CONFORMANCE_OPERAND_MAPPING);
+    fixture.call->args[0] = saved_callee;
+
+    XiFunc *saved_shared_callee = fixture.function->shared_slot_funcs[0];
+    fixture.function->shared_slot_funcs[0] = fixture.decoy;
+    REQUIRE(!xr_aot_tail_call_conformance_verify(
+        fixture.function, fixture.target_plan, &view, &second, &diag));
+    REQUIRE(diag.issue == XR_AOT_TAIL_CALL_CONFORMANCE_CALLEE_MAPPING);
+    fixture.function->shared_slot_funcs[0] = saved_shared_callee;
+
+    uint32_t saved_function_index =
+        fixture.caller->semantic_plan_function_index;
+    fixture.caller->semantic_plan_function_index =
+        fixture.decoy->semantic_plan_function_index;
+    REQUIRE(!xr_aot_tail_call_conformance_verify(
+        fixture.function, fixture.target_plan, &view, &second, &diag));
+    REQUIRE(diag.issue == XR_AOT_TAIL_CALL_CONFORMANCE_SOURCE_IDENTITY);
+    fixture.caller->semantic_plan_function_index = saved_function_index;
+    REQUIRE(xr_aot_tail_call_conformance_verify(
+        fixture.function, fixture.target_plan, &view, &second, &diag));
+
+    xr_aot_refinement_plan_free(plan);
+    direct_local_callee_storage_fixture_free(&fixture);
+}
+
 /* Every field the validator derives must be re-derived by the independent
  * verifier. Each mutation below rewrites one proven fact in an APPLIED record
  * and must be rejected; otherwise the record is decoration, not a proof. */
 static void test_direct_call_binding_mutations_fail_closed(void) {
     DirectLocalCalleeStorageFixture fixture =
-        direct_local_callee_storage_fixture_create(false);
+        direct_local_callee_storage_fixture_create(false, false);
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
     REQUIRE(xr_aot_refinement_direct_call_authority_build(
@@ -1895,7 +1961,7 @@ static void test_exact_heap_closure_storage_is_tagged_and_fail_closed(void) {
 
 static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(void) {
     DirectLocalCalleeStorageFixture fixture =
-        direct_local_callee_storage_fixture_create(false);
+        direct_local_callee_storage_fixture_create(false, false);
     REQUIRE((fixture.target_plan->completed_family_mask &
              XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE) != 0);
     uint32_t load_operation = XR_SEMANTIC_INDEX_NONE;
@@ -2145,7 +2211,7 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
     direct_local_callee_storage_fixture_free(&fixture);
 
     DirectLocalCalleeStorageFixture extra_use =
-        direct_local_callee_storage_fixture_create(true);
+        direct_local_callee_storage_fixture_create(true, false);
     direct_local_callee_storage_fixture_free(&extra_use);
 }
 
@@ -4421,6 +4487,7 @@ static void test_string_concat_cleanup_materialization_is_exact(void) {
 int main(void) {
     test_open_target_direct_call_refuses_without_baseline_change();
     test_direct_call_authority_applies_closed_local_binding();
+    test_tail_call_backend_conformance_is_exact();
     test_direct_call_binding_mutations_fail_closed();
     test_direct_call_out_of_range_request_fails_closed();
     test_stale_state_and_baseline_mutations_fail_closed();

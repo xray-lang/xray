@@ -45,6 +45,7 @@
 #include "xi_backend_plan_contract.h"
 #include "emit_c/xr_c_emission_plan.h"
 #include "refine/xr_aot_representation_refinement.h"
+#include "refine/xr_aot_tail_call_conformance.h"
 #include "xaot_bundle.h"
 #include "xaot_boundary.h"
 #include "xaot_link.h"
@@ -1898,6 +1899,21 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
             xr_aot_refinement_plan_free(refinement);
             return false;
         }
+        XrAotTailCallConformance tail_conformance = {0};
+        XrAotTailCallDiagnostic tail_diag = {0};
+        if (!module->init || !xr_aot_tail_call_conformance_verify(
+                                 module->init, target_plan, &view,
+                                 &tail_conformance, &tail_diag)) {
+            fprintf(stderr,
+                    "Error: module tail-call conformance failed for '%s': "
+                    "%s operation=%u target-call=%u function=%u value=%u\n",
+                    module->name ? module->name : "?",
+                    xr_aot_tail_call_conformance_issue_name(tail_diag.issue),
+                    tail_diag.semantic_operation, tail_diag.target_call_index,
+                    tail_diag.semantic_function, tail_diag.semantic_value);
+            xr_aot_refinement_plan_free(refinement);
+            return false;
+        }
         xr_aot_refinement_plan_free(refinement);
     }
     return true;
@@ -2547,6 +2563,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                 aot_bundle.error_msg ? aot_bundle.error_msg : "?");
         goto fail_free_ir;
     }
+    /* Prepare may materialize representation adapters but may not alter the
+     * frozen tail-call identity. Rebuild and recheck the authority before any
+     * C-emission artifact can be published. */
+    if (!xaot_validate_module_direct_calls(&aot_bundle))
+        goto fail_free_ir;
     {
         char verify_err[512];
         if (!xaot_verify_bundle(&aot_bundle, verify_err, sizeof(verify_err))) {

@@ -81,6 +81,7 @@
     X(CALL, "xi.call", xicgen_call) \
     X(CALL_METHOD, "xi.call.method", xicgen_call_method) \
     X(CALL_METHOD_DIRECT, "xi.call.method.direct", xicgen_call_method) \
+    X(TAIL_CALL, "xi.tail.call", xicgen_call) \
     X(CALL_BUILTIN, "xi.call.builtin", xicgen_call_builtin) \
     X(ATOMIC_LOAD, "xi.atomic.load", xicgen_atomic) \
     X(ATOMIC_STORE, "xi.atomic.store", xicgen_atomic) \

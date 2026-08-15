@@ -1398,7 +1398,7 @@
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.call.builtin
   :class call

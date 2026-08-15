@@ -5989,34 +5989,6 @@ static bool prepare_func_extern_decls(XaotBundle *bundle, const XiFunc *func) {
     return true;
 }
 
-/* Task 216: constructive error-check generation lets tail-call optimization
- * fire on calls that previously carried a mandatory error check (the check node
- * sat between the call and its return, so the call was never in tail position).
- * The AOT C backend expresses a tail call as an ordinary call and returns its
- * result —the host C compiler performs the actual tail jump —so it has no
- * XI_TAIL_CALL emitter. Normalize XI_TAIL_CALL back to XI_CALL for every
- * function reached by C generation. The VM keeps its XI_TAIL_CALL handling; this
- * only rewrites the AOT bundle's IR, after all prepare-time analyses (which are
- * already XI_TAIL_CALL-aware) have run. */
-static void xaot_normalize_tail_calls(XiFunc *f) {
-    if (!f)
-        return;
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        XiBlock *blk = f->blocks[b];
-        if (!blk)
-            continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            XiValue *v = blk->values[i];
-            if (v && v->op == XI_TAIL_CALL)
-                v->op = XI_CALL;
-        }
-        if (blk->control && blk->control->op == XI_TAIL_CALL)
-            blk->control->op = XI_CALL;
-    }
-    for (uint16_t c = 0; c < f->nchildren; c++)
-        xaot_normalize_tail_calls(f->children[c]);
-}
-
 XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats) {
     uint32_t mi;
     if (!bundle || !bundle->modules)
@@ -6026,16 +5998,6 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
     bundle->error_msg = NULL;
     if (!prepare_require_target_plans(bundle))
         return false;
-
-    /* Task 216: normalize tail calls to ordinary calls before any prepare-time
-     * analysis or boundary/conversion planning, so those steps build the call
-     * argument/return plans the C backend needs (it has no XI_TAIL_CALL
-     * emitter; the host C compiler performs the tail jump). */
-    for (mi = 0; mi < bundle->nmodules; mi++) {
-        XiModule *mod = bundle->modules[mi];
-        if (mod && mod->init)
-            xaot_normalize_tail_calls(mod->init);
-    }
 
     for (mi = 0; mi < bundle->nmodules; mi++) {
         XiModule *mod = bundle->modules[mi];

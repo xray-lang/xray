@@ -448,8 +448,9 @@
 
 (lower xi.tail.call
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_tail_call))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_tail_call)
+  :aot-c (driver xicgen_call))
 
 (lower xi.call.builtin
   :match ()

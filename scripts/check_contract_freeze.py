@@ -145,6 +145,8 @@ CONTRACT_SPECS = (
             "src/aot/xaot_coro.h",
             "src/aot/refine/xr_aot_representation_refinement.c",
             "src/aot/refine/xr_aot_scalar_value.c",
+            "src/aot/refine/xr_aot_tail_call_conformance.h",
+            "src/aot/refine/xr_aot_tail_call_conformance.c",
             "src/aot/emit_c/xr_c_emission_schema.h",
             "src/aot/emit_c/xr_c_emission_plan.c",
             "src/aot/xi_cgen_value_helpers.inc.c",
@@ -178,6 +180,7 @@ CONTRACT_SPECS = (
             "src/plan/semantic/xr_semantic_rune_to_uint32_shape.h",
             "src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h",
             "stdlib/simd/simd.xr",
+            "tests/unit/aot/test_xr_aot_refinement.c",
         ),
     ),
     ContractSpec(

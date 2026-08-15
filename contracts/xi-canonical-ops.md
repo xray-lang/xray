@@ -80,8 +80,13 @@ compatibility opcode, reserved hole, or second bounds owner.
     is not a canonical operation. Removing such a row compacts subsequent Xi
     opcode numbers and requires an exact schema cutover; consumers must not
     preserve a hole or translate the retired number.
+19. `xi.tail.call` is a native operation in both VM bytecode and portable AOT
+    C lowering. AOT must preserve the frozen opcode through prepare and dispatch
+    it through the generated `xicgen_call` row; rewriting it to `xi.call`,
+    accepting that rewrite as an alias, or selecting a backend from live names
+    is not a supported lowering path.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def bcf213774e5185db696e57bf5040e41041e27944104154ef2cba39de12b62731
-anchor-sha256: xisa/xi/lowering.def 8537a11e486566ce11847065319b2115558ea85ea7420deddc5753e61b6fda30
+anchor-sha256: xisa/xi/ops.def 6632a2d9bff8cf827c51aa905d125f06a3f2e822ed414edad02202cc73191f52
+anchor-sha256: xisa/xi/lowering.def 4de0a8ebdcd77390d5399483f627cc572033f39f924b3032b45c7dacf9ec9eca

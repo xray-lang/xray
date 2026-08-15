@@ -5883,6 +5883,7 @@
       "ownership": "consume",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
@@ -7025,5 +7026,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "f4c80f0641a16ca1747f6423809bfc0a2d81195702eafe12ee742ef2babf83c0"
+  "source_tree_fingerprint": "4e8cf448d1b470a3b172c36ab1a039c5dd87c91b347f2bd674326b655b8ab6bf"
 }

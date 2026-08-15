@@ -112,6 +112,13 @@ materialization. AOT prepare runs only after every required BOX or UNBOX is
 present at its recorded source and use, and rejects a missing, extra, reordered,
 or stale adapter before ABI planning. This adds no public value representation,
 layout, or calling-convention change.
+`XI_TAIL_CALL` remains an exact native Xi opcode through AOT prepare and uses
+the source-generated portable-C call driver. Before emission, an independent
+conformance verifier binds every frozen tail operation to its unique live Xi
+member, ordered operands, direct-local TargetPlan call, exact callee, and
+applied direct-call authority record. Missing, duplicate, reordered, stale, or
+ordinary-`XI_CALL` substitutions fail closed; prepare has no normalization or
+compatibility path. This changes no public ABI or plan schema.
 The C emission projection schema 30 preserves the exact materialization recipe
 and immutable byte payload for every verified String literal row. CGen
 mechanically consumes that row and cannot recover literal bytes, a dynamic
@@ -483,12 +490,15 @@ the compiler core does not download a provider.
 
 anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de082761402165a3c36919
 anchor-sha256: src/aot/xaot_callable.c 13d17addb6fe4492d78a2b010bc8329c2bc2bc912a9cd7e7cd8be59269c56d6a
-anchor-sha256: src/aot/xaot_prepare.c fd956dd138562ffb9817f580cb0621759966629d04fcee04eb5804a381dc4fc4
+anchor-sha256: src/aot/xaot_prepare.c 640f6adcf252e0446baf52d8d861bd920ca00ae9339021e6f79eb071f7c4c05f
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
 anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 83b1ff01635b685413b1d7cefaec4eaf9e6b8a188186177525f83d28321e5dc1
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c d916f37caa6c7b39245526529555728e551048af64fb559cf10a71b49c439ff7
+anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
+anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
+anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 451163c1d1e5d8af6aabe8ce0d0bab796a7daa7826f0a0143c6101e1dcda6164
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 1edbcf73bdd062623c15231d9c7312b025e773b112f9d38483904d61c79064d9
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 27cea072c712ee697f358004e0d726bd75f675b14608271f08a88f1447a7558d
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c ad0d4582896dde9d9f6e82301d349d8b4deb7079764a7ba5dfa9c7ef2f8c6bef
