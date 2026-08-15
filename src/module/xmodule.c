@@ -12,6 +12,7 @@
  */
 
 #include "xmodule.h"
+#include "xmodule_diagnostic.h"
 #include "xray_vm.h"
 #include "../stdlib/xstdlib_vm_fastpath.h"
 #include "xmodule_resolver.h"
@@ -833,6 +834,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
     char path[XR_PATH_MAX];
     const char *source = NULL;
     char *owned_source = NULL;
+    bool embedded_bytecode = false;
 
 #ifndef XR_STDLIB_FROM_FILE
     // Prefer embedded bytecode: bytecode-only embedders can execute pure-Xray
@@ -854,7 +856,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
             XR_DBG_MODULE("load_script_extension: embedded bytecode for %s needs source fallback",
                           module_name);
         } else {
-            snprintf(path, sizeof(path), "<embedded stdlib>/%s/%s.xrc", module_name, module_name);
+            embedded_bytecode = true;
             XR_DBG_MODULE("load_script_extension: loaded embedded bytecode for %s", module_name);
         }
     }
@@ -953,7 +955,20 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
     xr_isolate_set_current_module(isolate, prev_module);
 
     if (result != 0) {
-        xr_log_warning("module", "failed to execute extension '%s'", path);
+        if (embedded_bytecode) {
+            XrModuleExecutionFailureIdentity identity =
+                xr_module_embedded_execution_failure_identity(code, module_name);
+            if (identity.has_source_file) {
+                xr_log_warning(
+                    "module", "failed to execute embedded stdlib bytecode from '%s' for module '%s'",
+                    identity.source_file, identity.module_name);
+            } else {
+                xr_log_warning("module", "failed to execute embedded stdlib bytecode for module '%s'",
+                               identity.module_name);
+            }
+        } else {
+            xr_log_warning("module", "failed to execute extension '%s'", path);
+        }
         return false;
     }
 

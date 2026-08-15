@@ -11,7 +11,9 @@
 #include "../test_framework.h"
 
 #include "base/xmalloc.h"
+#include "module/xmodule_diagnostic.h"
 #include "module/xproto_codec.h"
+#include "module/xstdlib_embedded.h"
 #include "plan/format/xr_artifact_kind.h"
 #include "runtime/xisolate_api.h"
 #include "runtime/xexec_state.h"
@@ -191,11 +193,49 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
     ASSERT_EQ_INT(PROTO_CODE_COUNT(roundtrip), 1);
     ASSERT_EQ_INT(GET_OPCODE(PROTO_CODE(roundtrip, 0)), OP_RETURN);
     ASSERT_EQ_INT(roundtrip->maxstacksize, 1);
+    ASSERT_STR_EQ(roundtrip->source_file, "<bytecode-io-test>");
     ASSERT_EQ_UINT(roundtrip->call_place_param_bitmap, UINT64_C(0x8000000000000003));
     ASSERT_EQ_UINT(roundtrip->entry_plan.entry_func_id, 1);
     ASSERT_EQ_UINT(roundtrip->entry_plan.root_representation, XR_ROOT_ELIDED);
     ASSERT_EQ_UINT(roundtrip->entry_plan.scheduler_mode, XR_SCHED_NONE);
 
+    xr_instruction_unit_free(roundtrip);
+    roundtrip = NULL;
+    xr_free(bytes);
+    bytes = NULL;
+
+    /* Exercise the real embedded-bytecode diagnostic boundary.  The decoded
+     * proto first carries its serialized producer identity; clearing that
+     * field mutates the fixture to the stripped-container case, which must
+     * not manufacture an artifact path. */
+    size = 0;
+    const uint8_t *embedded_bytecode = xr_get_embedded_stdlib_bytecode("path", &size);
+    ASSERT_NOT_NULL(embedded_bytecode);
+    ASSERT_GT(size, 0);
+    error = XR_BOOTSTRAP_CONTAINER_OK;
+    roundtrip = xr_bootstrap_container_read(iso, embedded_bytecode, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
+    ASSERT_NOT_NULL(roundtrip->source_file);
+    ASSERT_GT(strlen(roundtrip->source_file), 0);
+
+    char *producer_source = xr_strdup(roundtrip->source_file);
+    ASSERT_NOT_NULL(producer_source);
+    XrModuleExecutionFailureIdentity present =
+        xr_module_embedded_execution_failure_identity(roundtrip, "path");
+    ASSERT_TRUE(present.has_source_file);
+    ASSERT_STR_EQ(present.source_file, producer_source);
+    ASSERT_STR_EQ(present.module_name, "path");
+
+    xr_free((void *) roundtrip->source_file);
+    roundtrip->source_file = NULL;
+    XrModuleExecutionFailureIdentity missing =
+        xr_module_embedded_execution_failure_identity(roundtrip, "path");
+    ASSERT_FALSE(missing.has_source_file);
+    ASSERT_NULL(missing.source_file);
+    ASSERT_STR_EQ(missing.module_name, "path");
+
+    xr_free(producer_source);
     xr_instruction_unit_free(roundtrip);
     xr_free(bytes);
     xr_instruction_unit_free(proto);

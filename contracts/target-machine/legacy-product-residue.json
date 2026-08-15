@@ -4,7 +4,7 @@
                    "build":  50,
                    "cli":  99,
                    "install":  2,
-                   "source":  3147
+                   "source":  3146
                },
     "generated_from":  [
                            "CMakeLists.txt",
@@ -448,7 +448,7 @@
                                  "xray_vm_new_full",
                                  "xray_vm_set_script_info"
                              ],
-    "owner_count":  669,
+    "owner_count":  668,
     "owners":  [
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
@@ -8722,18 +8722,6 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "936663ab1475a7d7f0892d104bc51677abd0d3972eccc6ea1fd3f7b6d56af999",
-                       "family":  "xrc-artifact",
-                       "hit_count":  1,
-                       "path":  "src/module/xmodule.c",
-                       "status":  "transitional-owner",
-                       "surface":  "source",
-                       "tokens":  [
-                                      ".xrc"
-                                  ]
-                   },
-                   {
-                       "disposition":  "remove-with-atomic-target-plan-product-cutover",
                        "evidence_sha256":  "fa2e1c96d7846a06ebbeb27f0dc4093083b72974da37ebaa343801707366b6d7",
                        "family":  "xrc-artifact",
                        "hit_count":  1,
@@ -8789,6 +8777,6 @@
                    "unclassified_residue":  "error"
                },
     "schema":  2,
-    "source_tree_fingerprint":  "1ec43716b052b165741e614c1be7f9387949b50107aac0c8fa02e6ca288ca814",
-    "total":  3336
+    "source_tree_fingerprint":  "4794dd6073c87fcd0b599f25342cf37ace9ba69d736deb7cd2ff2db867622410",
+    "total":  3335
 }
