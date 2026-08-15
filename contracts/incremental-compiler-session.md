@@ -13,6 +13,14 @@ workspace generation only after successful publication. Rejected graph or
 invalidation transactions leave the prior graph, history, and generations
 unchanged.
 
+An invalidation explanation selects one exact affected module and one exact
+facet. It returns the direct root reason, the root old/new fingerprints, and a
+deterministic shortest evidence path from the subject back to that root.
+Cycles cannot make explanation traversal diverge, and canonical evidence order
+breaks equal-length ties. Malformed result rows, multi-facet queries, missing
+subjects, and facets outside the verified invalidation set fail closed instead
+of producing a partial reason chain.
+
 The native build publishes that graph once per build, after every module owns a
 verified SemanticPlan and before target planning. Its nodes are module
 summaries derived from verified authorities alone, and its edges carry the
@@ -80,12 +88,18 @@ artifact authority and operation-local verifier output.
   value visibility.
 - Dependency graph and cache-store focused tests remain mandatory; the session
   does not weaken their independent validation contracts.
+- The dependency-graph focused test proves exact-facet explanations across
+  direct, multi-parent, multi-facet, and cyclic graphs, including rejection of
+  forged evidence rows.
 - Runtime-only installed symbol gates must continue excluding compiler-session
   and cache-builder APIs.
 
 ## Digest anchors
 
+anchor-sha256: src/incremental/xr_cache_invalidate.h 03415e6782f85f734a1bf943a4687ded96f57289c5b2d36c213d42c227ea71d4
+anchor-sha256: src/incremental/xr_cache_invalidate.c dad8e4e26cb4268ba81fa873cee53365ca1bcf21e42369a13a8eac7e1cbde2ab
 anchor-sha256: src/toolchain/xcompiler_session.h 8dee7c7df5115c2af9f48015dcce11ef6341830de07c06c3b0b5febcce4d8fde
 anchor-sha256: src/toolchain/xcompiler_session.c 5c15ee43fadd472cc0f2e7c577e214f5133360b4930e686b5df29228311ab017
 anchor-sha256: src/api/xrepl.c 2317cdfb203e2c7c57dd9b1b8409fbf434d4d3eadc9386a9f1ad7ed485ade1ab
+anchor-sha256: tests/unit/incremental/test_dependency_graph.c dcbeffca87293d301dc7c201169a3bfaa2ed5a4be0ef5ade85552e3ab7287ab5
 anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c 4b0d4aad37518ed2e90e12ac99df88f6afc7e14c3bf54ac10f5575cc19afffd5

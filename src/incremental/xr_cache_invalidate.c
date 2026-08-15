@@ -804,3 +804,211 @@ const XrInvalidationEvidence *xr_invalidation_evidence_at(
     return result && index < result->evidence_count ? &result->evidence[index]
                                                      : NULL;
 }
+
+typedef struct XrExplanationSearchState {
+    size_t record_index;
+    unsigned facet_index;
+    size_t prior_state;
+    size_t evidence_index;
+} XrExplanationSearchState;
+
+static bool single_facet_mask(XrModuleFacetMask mask) {
+    return mask != 0 && (mask & ~XR_MODULE_FACET_ALL) == 0 &&
+           (mask & (mask - UINT64_C(1))) == 0;
+}
+
+static unsigned single_facet_index(XrModuleFacetMask mask) {
+    unsigned index = 0;
+    while ((mask >> index) != UINT64_C(1))
+        index++;
+    return index;
+}
+
+static bool invalidation_result_is_explainable(
+    const XrInvalidationResult *result) {
+    if (!result || !result->records || result->record_count == 0 ||
+        result->record_count > XR_DEPENDENCY_GRAPH_MAX_NODES + 1u ||
+        (result->evidence_count != 0 && !result->evidence) ||
+        result->evidence_count > XR_INVALIDATION_MAX_EVIDENCE_ROWS) {
+        return false;
+    }
+
+    size_t evidence_cursor = 0;
+    bool found_root = false;
+    for (size_t i = 0; i < result->record_count; i++) {
+        const XrInvalidationRecord *record = &result->records[i];
+        if (record->invalidated_facets == 0 ||
+            (record->invalidated_facets & ~XR_MODULE_FACET_ALL) != 0 ||
+            (record->observed_facets & ~XR_MODULE_FACET_ALL) != 0 ||
+            record->evidence_start != evidence_cursor ||
+            record->evidence_count > result->evidence_count - evidence_cursor ||
+            (i != 0 && xr_stable_id_compare(result->records[i - 1u].module_id,
+                                             record->module_id) >= 0)) {
+            return false;
+        }
+        bool is_root = xr_stable_id_equal(record->module_id, result->root_id);
+        if ((is_root && (found_root || record->direct_reason <
+                                          XR_INVALIDATION_SUMMARY_CHANGED ||
+                         record->direct_reason > XR_INVALIDATION_GRAPH_CHANGED)) ||
+            (!is_root && record->direct_reason != XR_INVALIDATION_DEPENDENCY)) {
+            return false;
+        }
+        found_root |= is_root;
+        for (size_t j = 0; j < record->evidence_count; j++) {
+            const XrInvalidationEvidence *evidence =
+                &result->evidence[evidence_cursor + j];
+            const XrInvalidationRecord *parent = xr_invalidation_result_find(
+                result, evidence->parent_module_id);
+            if (!xr_stable_id_equal(evidence->module_id, record->module_id) ||
+                !single_facet_mask(evidence->observed_facet) ||
+                evidence->invalidated_facets == 0 ||
+                (evidence->invalidated_facets &
+                 ~record->invalidated_facets) != 0 ||
+                !parent ||
+                (parent->invalidated_facets & evidence->observed_facet) == 0) {
+                return false;
+            }
+        }
+        evidence_cursor += record->evidence_count;
+    }
+    return found_root && evidence_cursor == result->evidence_count;
+}
+
+static bool build_explanation_steps(const XrInvalidationResult *result,
+                                    size_t subject_record,
+                                    unsigned subject_facet,
+                                    XrInvalidationExplanation *out) {
+    if (result->record_count > SIZE_MAX / XR_MODULE_FACET_COUNT)
+        return false;
+    size_t state_capacity = result->record_count * XR_MODULE_FACET_COUNT;
+    XrExplanationSearchState *states =
+        (XrExplanationSearchState *) xr_malloc(state_capacity * sizeof(*states));
+    uint8_t *visited = (uint8_t *) xr_malloc(state_capacity);
+    if (!states || !visited) {
+        xr_free(visited);
+        xr_free(states);
+        return false;
+    }
+    memset(visited, 0, state_capacity);
+    states[0] = (XrExplanationSearchState) {
+        .record_index = subject_record,
+        .facet_index = subject_facet,
+        .prior_state = SIZE_MAX,
+        .evidence_index = SIZE_MAX,
+    };
+    visited[subject_record * XR_MODULE_FACET_COUNT + subject_facet] = 1;
+    size_t state_count = 1;
+    size_t root_state = SIZE_MAX;
+
+    for (size_t cursor = 0; cursor < state_count; cursor++) {
+        const XrExplanationSearchState *state = &states[cursor];
+        const XrInvalidationRecord *record =
+            &result->records[state->record_index];
+        XrModuleFacetMask facet = XR_MODULE_FACET_BIT(state->facet_index);
+        if (xr_stable_id_equal(record->module_id, result->root_id)) {
+            root_state = cursor;
+            break;
+        }
+        for (size_t i = 0; i < record->evidence_count; i++) {
+            size_t evidence_index = record->evidence_start + i;
+            const XrInvalidationEvidence *evidence =
+                &result->evidence[evidence_index];
+            if ((evidence->invalidated_facets & facet) == 0)
+                continue;
+            const XrInvalidationRecord *parent = xr_invalidation_result_find(
+                result, evidence->parent_module_id);
+            size_t parent_record = (size_t) (parent - result->records);
+            unsigned parent_facet = single_facet_index(evidence->observed_facet);
+            size_t slot = parent_record * XR_MODULE_FACET_COUNT + parent_facet;
+            if (visited[slot])
+                continue;
+            visited[slot] = 1;
+            states[state_count++] = (XrExplanationSearchState) {
+                .record_index = parent_record,
+                .facet_index = parent_facet,
+                .prior_state = cursor,
+                .evidence_index = evidence_index,
+            };
+        }
+    }
+
+    if (root_state == SIZE_MAX) {
+        xr_free(visited);
+        xr_free(states);
+        return false;
+    }
+    size_t step_count = 0;
+    for (size_t state = root_state; states[state].prior_state != SIZE_MAX;
+         state = states[state].prior_state) {
+        step_count++;
+    }
+    XrInvalidationExplanationStep *steps = NULL;
+    if (step_count) {
+        steps = (XrInvalidationExplanationStep *) xr_malloc(step_count * sizeof(*steps));
+        if (!steps) {
+            xr_free(visited);
+            xr_free(states);
+            return false;
+        }
+        size_t position = step_count;
+        for (size_t state = root_state; states[state].prior_state != SIZE_MAX;
+             state = states[state].prior_state) {
+            size_t prior = states[state].prior_state;
+            const XrInvalidationEvidence *evidence =
+                &result->evidence[states[state].evidence_index];
+            steps[--position] = (XrInvalidationExplanationStep) {
+                .module_id = evidence->module_id,
+                .parent_module_id = evidence->parent_module_id,
+                .invalidated_facet =
+                    XR_MODULE_FACET_BIT(states[prior].facet_index),
+                .observed_facet = evidence->observed_facet,
+            };
+        }
+    }
+    out->steps = steps;
+    out->step_count = step_count;
+    xr_free(visited);
+    xr_free(states);
+    return true;
+}
+
+bool xr_invalidation_explain(const XrInvalidationResult *result,
+                             XrStableId subject_id,
+                             XrModuleFacetMask subject_facet,
+                             XrInvalidationExplanation *out) {
+    if (!out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    if (!single_facet_mask(subject_facet) ||
+        !invalidation_result_is_explainable(result)) {
+        return false;
+    }
+    const XrInvalidationRecord *subject =
+        xr_invalidation_result_find(result, subject_id);
+    const XrInvalidationRecord *root =
+        xr_invalidation_result_find(result, result->root_id);
+    if (!subject || !root ||
+        (subject->invalidated_facets & subject_facet) == 0) {
+        return false;
+    }
+    if (!build_explanation_steps(result,
+                                 (size_t) (subject - result->records),
+                                 single_facet_index(subject_facet), out)) {
+        return false;
+    }
+    out->root_id = result->root_id;
+    out->subject_id = subject_id;
+    out->root_old_fingerprint = result->root_old_fingerprint;
+    out->root_new_fingerprint = result->root_new_fingerprint;
+    out->subject_facet = subject_facet;
+    out->root_reason = root->direct_reason;
+    return true;
+}
+
+void xr_invalidation_explanation_finalize(
+    XrInvalidationExplanation *explanation) {
+    if (!explanation)
+        return;
+    xr_free(explanation->steps);
+    memset(explanation, 0, sizeof(*explanation));
+}

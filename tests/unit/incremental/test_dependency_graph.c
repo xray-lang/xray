@@ -271,6 +271,33 @@ TEST(body_only_change_is_precise_and_reason_chain_is_traversable) {
     ASSERT_FALSE(xr_fingerprint_equal(result.root_old_fingerprint,
                                       result.root_new_fingerprint));
 
+    XrInvalidationExplanation explanation;
+    ASSERT_TRUE(xr_invalidation_explain(
+        &result, ids.leaf,
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE), &explanation));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.root_id, ids.root));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.subject_id, ids.leaf));
+    ASSERT_TRUE(xr_fingerprint_equal(explanation.root_old_fingerprint,
+                                     result.root_old_fingerprint));
+    ASSERT_TRUE(xr_fingerprint_equal(explanation.root_new_fingerprint,
+                                     result.root_new_fingerprint));
+    ASSERT_EQ_INT(explanation.root_reason,
+                  XR_INVALIDATION_SUMMARY_CHANGED);
+    ASSERT_EQ_UINT(explanation.step_count, 2);
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[0].module_id,
+                                   ids.leaf));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[0].parent_module_id,
+                                   ids.body));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[1].module_id,
+                                   ids.body));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[1].parent_module_id,
+                                   ids.root));
+    ASSERT_EQ_UINT(explanation.steps[0].invalidated_facet,
+                   XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE));
+    ASSERT_EQ_UINT(explanation.steps[0].observed_facet,
+                   XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE));
+    xr_invalidation_explanation_finalize(&explanation);
+
     xr_invalidation_result_finalize(&result);
     xr_dependency_graph_finalize(&graph);
 }
@@ -538,8 +565,112 @@ TEST(multi_parent_multi_facet_evidence_is_complete) {
     ASSERT_EQ_UINT(signature_evidence->invalidated_facets,
                    XR_MODULE_FACET_BIT(XR_MODULE_FACET_EFFECT));
 
+    XrInvalidationExplanation layout_explanation;
+    ASSERT_TRUE(xr_invalidation_explain(
+        &result, sink_id, XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT),
+        &layout_explanation));
+    ASSERT_EQ_UINT(layout_explanation.step_count, 2);
+    ASSERT_TRUE(xr_stable_id_equal(layout_explanation.steps[0].module_id,
+                                   sink_id));
+    ASSERT_TRUE(xr_stable_id_equal(
+        layout_explanation.steps[0].parent_module_id, body_parent_id));
+    ASSERT_EQ_UINT(layout_explanation.steps[0].invalidated_facet,
+                   XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT));
+    ASSERT_EQ_UINT(layout_explanation.steps[1].invalidated_facet,
+                   XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE));
+    xr_invalidation_explanation_finalize(&layout_explanation);
+
+    XrInvalidationExplanation effect_explanation;
+    ASSERT_TRUE(xr_invalidation_explain(
+        &result, sink_id, XR_MODULE_FACET_BIT(XR_MODULE_FACET_EFFECT),
+        &effect_explanation));
+    ASSERT_EQ_UINT(effect_explanation.step_count, 2);
+    ASSERT_TRUE(xr_stable_id_equal(
+        effect_explanation.steps[0].parent_module_id,
+        signature_parent_id));
+    ASSERT_EQ_UINT(effect_explanation.steps[0].invalidated_facet,
+                   XR_MODULE_FACET_BIT(XR_MODULE_FACET_EFFECT));
+    ASSERT_EQ_UINT(effect_explanation.steps[1].invalidated_facet,
+                   XR_MODULE_FACET_BIT(XR_MODULE_FACET_PUBLIC_SIGNATURE));
+    xr_invalidation_explanation_finalize(&effect_explanation);
+
     xr_invalidation_result_finalize(&result);
     xr_module_summary_finalize(&replacement);
+    xr_dependency_graph_finalize(&graph);
+}
+
+TEST(reason_explanation_terminates_on_cycles_and_rejects_forged_rows) {
+    XrDependencyGraph graph;
+    xr_dependency_graph_init(&graph);
+    XrStableId root_id;
+    XrStableId left_id;
+    XrStableId right_id;
+    XrStableId leaf_id;
+    ASSERT_TRUE(add_test_module(&graph, "pkg/cycle-root", 1, &root_id));
+    ASSERT_TRUE(add_test_module(&graph, "pkg/cycle-left", 20, &left_id));
+    ASSERT_TRUE(add_test_module(&graph, "pkg/cycle-right", 40, &right_id));
+    ASSERT_TRUE(add_test_module(&graph, "pkg/cycle-leaf", 60, &leaf_id));
+    XrModuleFacetMask body_relation[XR_MODULE_FACET_COUNT] = {0};
+    body_relation[XR_MODULE_FACET_BODY_EVIDENCE] =
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE);
+    XrModuleFacetMask leaf_relation[XR_MODULE_FACET_COUNT] = {0};
+    leaf_relation[XR_MODULE_FACET_BODY_EVIDENCE] =
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT);
+    ASSERT_TRUE(xr_dependency_graph_add_edge(&graph, left_id, root_id,
+                                             body_relation));
+    ASSERT_TRUE(xr_dependency_graph_add_edge(&graph, right_id, left_id,
+                                             body_relation));
+    ASSERT_TRUE(xr_dependency_graph_add_edge(&graph, left_id, right_id,
+                                             body_relation));
+    ASSERT_TRUE(xr_dependency_graph_add_edge(&graph, leaf_id, right_id,
+                                             leaf_relation));
+
+    XrInvalidationResult result;
+    ASSERT_TRUE(apply_single_facet_change(
+        &graph, root_id, XR_MODULE_FACET_BODY_EVIDENCE, 210, &result));
+    XrInvalidationExplanation explanation;
+    ASSERT_TRUE(xr_invalidation_explain(
+        &result, leaf_id, XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT),
+        &explanation));
+    ASSERT_EQ_UINT(explanation.step_count, 3);
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[0].module_id, leaf_id));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[0].parent_module_id,
+                                   right_id));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[1].module_id, right_id));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[1].parent_module_id,
+                                   left_id));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[2].module_id, left_id));
+    ASSERT_TRUE(xr_stable_id_equal(explanation.steps[2].parent_module_id,
+                                   root_id));
+    xr_invalidation_explanation_finalize(&explanation);
+
+    ASSERT_FALSE(xr_invalidation_explain(&result, leaf_id, 0, &explanation));
+    ASSERT_FALSE(xr_invalidation_explain(
+        &result, leaf_id,
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT) |
+            XR_MODULE_FACET_BIT(XR_MODULE_FACET_EFFECT),
+        &explanation));
+    ASSERT_FALSE(xr_invalidation_explain(
+        &result, leaf_id, XR_MODULE_FACET_BIT(XR_MODULE_FACET_EFFECT),
+        &explanation));
+
+    ASSERT_TRUE(result.evidence_count != 0);
+    XrModuleFacetMask saved_observed = result.evidence[0].observed_facet;
+    result.evidence[0].observed_facet |=
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT);
+    ASSERT_FALSE(xr_invalidation_explain(
+        &result, leaf_id, XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT),
+        &explanation));
+    result.evidence[0].observed_facet = saved_observed;
+
+    ASSERT_TRUE(xr_invalidation_explain(
+        &result, root_id,
+        XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE), &explanation));
+    ASSERT_EQ_UINT(explanation.step_count, 0);
+    ASSERT_NULL(explanation.steps);
+    xr_invalidation_explanation_finalize(&explanation);
+
+    xr_invalidation_result_finalize(&result);
     xr_dependency_graph_finalize(&graph);
 }
 
@@ -764,4 +895,5 @@ RUN_TEST(multi_parent_multi_facet_evidence_is_complete);
 RUN_TEST(graph_delta_is_verified_bounded_and_atomic);
 RUN_TEST(independent_verifier_rejects_result_and_graph_mutations);
 RUN_TEST(delete_rename_add_and_graph_change_leave_no_ghost_nodes);
+RUN_TEST(reason_explanation_terminates_on_cycles_and_rejects_forged_rows);
 TEST_MAIN_END()

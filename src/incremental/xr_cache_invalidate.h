@@ -83,6 +83,26 @@ typedef struct XrInvalidationResult {
     size_t evidence_count;
 } XrInvalidationResult;
 
+typedef struct XrInvalidationExplanationStep {
+    XrStableId module_id;
+    XrStableId parent_module_id;
+    /* Both masks contain exactly one facet bit for this selected path. */
+    XrModuleFacetMask invalidated_facet;
+    XrModuleFacetMask observed_facet;
+} XrInvalidationExplanationStep;
+
+typedef struct XrInvalidationExplanation {
+    XrStableId root_id;
+    XrStableId subject_id;
+    XrFingerprint root_old_fingerprint;
+    XrFingerprint root_new_fingerprint;
+    XrModuleFacetMask subject_facet;
+    XrInvalidationReason root_reason;
+    /* Ordered from the affected subject back to the direct root change. */
+    XrInvalidationExplanationStep *steps;
+    size_t step_count;
+} XrInvalidationExplanation;
+
 XR_FUNC bool xr_cache_invalidate_apply(XrDependencyGraph *graph,
                                        const XrInvalidationEvent *event,
                                        XrInvalidationResult *out_result);
@@ -97,5 +117,11 @@ XR_FUNC const XrInvalidationRecord *
 xr_invalidation_result_at(const XrInvalidationResult *result, size_t index);
 XR_FUNC const XrInvalidationEvidence *
 xr_invalidation_evidence_at(const XrInvalidationResult *result, size_t index);
+XR_FUNC bool xr_invalidation_explain(const XrInvalidationResult *result,
+                                     XrStableId subject_id,
+                                     XrModuleFacetMask subject_facet,
+                                     XrInvalidationExplanation *out);
+XR_FUNC void xr_invalidation_explanation_finalize(
+    XrInvalidationExplanation *explanation);
 
 #endif  // XR_CACHE_INVALIDATE_H
