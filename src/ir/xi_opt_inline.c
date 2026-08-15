@@ -527,6 +527,34 @@ static bool callee_result_shape(const XiFunc *callee, uint16_t *out_elems) {
     return true;
 }
 
+static bool inline_value_has_structural_use(const XiFunc *func, const XiValue *target) {
+    if (!func || !target)
+        return false;
+    for (uint32_t b = 0; b < func->nblocks; b++) {
+        const XiBlock *block = func->blocks[b];
+        if (!block)
+            continue;
+        if (block->control == target)
+            return true;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == target)
+                    return true;
+            }
+        }
+        for (uint32_t i = 0; i < block->nvalues; i++) {
+            const XiValue *user = block->values[i];
+            if (!user || user == target)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] == target)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
 /* ========== Single Call Site Inlining ========== */
 
 static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_idx,
@@ -536,6 +564,14 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
 
     uint16_t shape_elems = 0;
     if (!callee_result_shape(callee, &shape_elems))
+        return false;
+    /* Unit calls still produce the language's canonical unit value.  A unit
+     * callee has no RETURN control value, so this pass has no source-backed
+     * SSA value with which to replace a used call result.  Preserve that call
+     * boundary instead of deleting its definition or inventing a new type.
+     * An unused unit call remains eligible because no result replacement is
+     * required. */
+    if (shape_elems == 0 && inline_value_has_structural_use(caller, call_val))
         return false;
 
     uint32_t callee_max_id = callee->next_value_id;

@@ -23,6 +23,7 @@ static int tests_failed = 0;
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 3, .frozen = true};
 static XrType stub_class = {.kind = XR_KIND_INSTANCE, .id = 4, .frozen = true};
+static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 5, .frozen = true};
 
 #define ASSERT(cond)                                                                               \
     do {                                                                                           \
@@ -549,6 +550,36 @@ TEST(inline_preserves_owner_scoped_open_dispatch_boundary) {
     xi_func_free(callee);
 }
 
+TEST(inline_preserves_a_used_unit_result) {
+    XiFunc *callee = make_func("unit_source", &stub_unit);
+    XiFunc *caller = make_func("unit_destination", &stub_unit);
+    ASSERT(callee != NULL);
+    ASSERT(caller != NULL);
+    xi_block_set_return(callee->entry, NULL);
+
+    XiValue *closure = xi_value_new(caller, caller->entry, XI_CLOSURE_NEW, &stub_func, 0);
+    ASSERT(closure != NULL);
+    closure->aux = callee;
+    XiValue *call = xi_value_new(caller, caller->entry, XI_CALL, &stub_unit, 1);
+    ASSERT(call != NULL);
+    call->args[0] = closure;
+    XiValue *use = xi_value_new(caller, caller->entry, XI_PRINT, &stub_unit, 1);
+    ASSERT(use != NULL);
+    use->args[0] = call;
+    xi_block_set_return(caller->entry, NULL);
+
+    XiPassChange change = xi_opt_inline(caller);
+    ASSERT(!change.cfg_changed && !change.values_changed);
+    ASSERT(caller->entry->succs[0] == NULL);
+    ASSERT(use->args[0] == call);
+
+    char errbuf[512];
+    ASSERT(xi_verify(caller, errbuf, sizeof(errbuf)));
+
+    xi_func_free(caller);
+    xi_func_free(callee);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -574,6 +605,7 @@ int main(void) {
     run_inline_clone_reproves_evidence_for_new_subject_and_revision();
     run_inline_clears_callee_tail_position();
     run_inline_preserves_owner_scoped_open_dispatch_boundary();
+    run_inline_preserves_a_used_unit_result();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
