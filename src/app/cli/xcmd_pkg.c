@@ -845,7 +845,6 @@ XR_FUNC int cmd_pkg(const XrCliInvocation *inv) {
     }
 
     if (iso) {
-        xray_vm_multicore_destroy(iso);
         xray_vm_delete(iso);
     }
     return rc;

@@ -89,7 +89,6 @@ static void *vm_parallel_isolate_runner(void *raw) {
 
     run->result = xr_isolate_dostring(isolate, VM_PAR_ISOLATE_SCRIPT);
 
-    xray_vm_multicore_destroy(isolate);
     xray_vm_delete(isolate);
     return NULL;
 }

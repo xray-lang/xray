@@ -525,7 +525,7 @@ anchor-sha256: src/aot/xrt_core_freestanding.h 4637d9be259b16363f74d330ad0bc3d01
 anchor-sha256: src/aot/xrt_method.h 49b124e154a48bc0401fe67e6e3feba34ec57d7791dfb0f8afbc56a3aa9ca06e
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: include/xray_hosted_fragment_abi.h bcf50466f8320c265a49c6776f669912b83ac4ac3d04f397d4f6c527f1ead02c
-anchor-sha256: src/app/cli/xcmd_build.c cf2112486eb8f7534da0587e83e46ad7ddbb6dc84083b89deee43c516ec76f09
+anchor-sha256: src/app/cli/xcmd_build.c 960d404bdaca82090f20a230d3b66eb8df52f895bb7c8c2b07f9e55050f9ecf5
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 8d1cb7212b432a7cefe7e3e3d202509c75dd84190e084c3e7d2a88af62ca4eb1
 anchor-sha256: src/ir/xi.h 95906db980e5746e8be5cdee5bec348482ad87fdbf5e037b064f06e1ee977579

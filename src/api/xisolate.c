@@ -182,7 +182,7 @@ void xray_vm_delete(XrVMRuntime *isolate) {
      * after all isolate GC roots have released their XrValue references. */
     stage_start_ns = xr_time_monotonic_ns();
     if (isolate->vm.scheduler) {
-        xray_vm_multicore_destroy(isolate);
+        xr_isolate_multicore_destroy(isolate);
     }
     runtime_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 

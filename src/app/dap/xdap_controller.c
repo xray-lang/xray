@@ -268,7 +268,6 @@ bool xdap_controller_restart(XdapController *ctrl) {
         //     old isolate and its program info.
         if (old_isolate) {
             xr_debug_free(old_isolate);
-            xray_vm_multicore_destroy(old_isolate);
             xray_vm_delete(old_isolate);
         }
         xr_free(old_program_path);
@@ -295,7 +294,6 @@ bool xdap_controller_restart(XdapController *ctrl) {
     }
     if (ctrl->isolate) {
         xr_debug_free(ctrl->isolate);
-        xray_vm_multicore_destroy(ctrl->isolate);
         xray_vm_delete(ctrl->isolate);
     }
 
@@ -316,7 +314,7 @@ void xdap_controller_terminate(XdapController *ctrl) {
 
     // Cleanup
     if (ctrl->isolate) {
-        xray_vm_multicore_destroy(ctrl->isolate);
+        xr_isolate_multicore_destroy(ctrl->isolate);
     }
 }
 

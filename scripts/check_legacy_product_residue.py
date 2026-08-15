@@ -417,6 +417,14 @@ def self_test() -> int:
         )
         multicore_init_api_drifted, _ = check(root, collect(root))
         retired_multicore_init_api.unlink()
+        retired_multicore_destroy_api = root / "include/xray_vm.h"
+        retired_multicore_destroy_api.write_text(
+            "void " + "".join(("xray_", "vm_", "multicore_", "destroy"))
+            + "(void *);\n",
+            encoding="utf-8",
+        )
+        multicore_destroy_api_drifted, _ = check(root, collect(root))
+        retired_multicore_destroy_api.unlink()
         retired_tls_api = root / "include/xray_vm.h"
         retired_tls_api.write_text(
             "void xray_vm_enter(void *);\n"
@@ -678,6 +686,7 @@ def self_test() -> int:
             or dofile_api_drifted
             or dostring_api_drifted
             or multicore_init_api_drifted
+            or multicore_destroy_api_drifted
             or tls_api_drifted
             or dead_vm_lifecycle_drifted
             or machine_ctx_setter_drifted

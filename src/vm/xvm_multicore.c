@@ -35,7 +35,7 @@ void xr_isolate_multicore_init(XrVMRuntime *X, int num_workers) {
     xr_runtime_start(runtime);
 }
 
-void xray_vm_multicore_destroy(XrVMRuntime *X) {
+void xr_isolate_multicore_destroy(XrVMRuntime *X) {
     if (!X || !X->vm.scheduler)
         return;
 

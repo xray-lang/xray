@@ -139,6 +139,10 @@ def self_test() -> int:
         raise AssertionError("retired exact runtime symbols are not detected")
     if collector.retired_runtime.matches("xr_runtime_target_plan_load"):
         raise AssertionError("current runtime authority was classified as retired")
+    retired_multicore = "".join(("xray_", "vm_", "multicore_", "destroy"))
+    if not collector.retired_runtime.matches(retired_multicore) or not \
+       collector.retired_runtime.compiled_pattern().match(retired_multicore):
+        raise AssertionError("retired public multicore teardown is not detected")
     with tempfile.TemporaryDirectory(prefix="xray-symbol-evidence-") as directory:
         parent = Path(directory)
         root = parent / "repo"
@@ -152,7 +156,7 @@ def self_test() -> int:
         def fixture_symbols(path: Path) -> list[str]:
             content = path.read_text(encoding="utf-8")
             if content == "LEGACY":
-                return [sorted(collector.RETIRED_RUNTIME_EXACT)[0], "clean_symbol"]
+                return [retired_multicore, "clean_symbol"]
             symbols = ["clean_symbol"]
             authorities = sorted(collector.REQUIRED_AUTHORITY_SYMBOLS.get(
                 "libxray-compiler", set()

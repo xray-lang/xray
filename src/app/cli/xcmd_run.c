@@ -327,7 +327,6 @@ static int run_string(const RunOptions *opts, const char *code) {
         return 1;
 
     int result = xr_isolate_dostring(iso, code);
-    xray_vm_multicore_destroy(iso);
     xray_vm_delete(iso);
     return (result != 0) ? 1 : 0;
 }
@@ -427,7 +426,6 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                         ? project->native_plan->error
                         : "invalid xray.toml project configuration");
             xr_project_free(project);
-            xray_vm_multicore_destroy(iso);
             xray_vm_delete(iso);
             return XR_CLI_EXIT_FAIL;
         }
@@ -436,7 +434,6 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
             fprintf(stderr, "Error: native package '%s' does not support the VM backend\n",
                     project->native_plan->name ? project->native_plan->name : "?");
             xr_project_free(project);
-            xray_vm_multicore_destroy(iso);
             xray_vm_delete(iso);
             return XR_CLI_EXIT_FAIL;
         }
@@ -464,7 +461,6 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                                                   : "circular dependency detected");
                         xr_module_graph_free(graph);
                         xr_project_free(project);
-                        xray_vm_multicore_destroy(iso);
                         xray_vm_delete(iso);
                         return XR_CLI_EXIT_FAIL;
                     }
@@ -481,7 +477,6 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                             fprintf(stderr, "Error: cannot create analyzer for module graph\n");
                             xr_module_graph_free(graph);
                             xr_project_free(project);
-                            xray_vm_multicore_destroy(iso);
                             xray_vm_delete(iso);
                             return XR_CLI_EXIT_FAIL;
                         }
@@ -514,7 +509,6 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                                 xa_analyzer_free(analyzer);
                                 xr_module_graph_free(graph);
                                 xr_project_free(project);
-                                xray_vm_multicore_destroy(iso);
                                 xray_vm_delete(iso);
                                 return XR_CLI_EXIT_FAIL;
                             }
@@ -530,7 +524,6 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                             xa_analyzer_free(analyzer);
                             xr_module_graph_free(graph);
                             xr_project_free(project);
-                            xray_vm_multicore_destroy(iso);
                             xray_vm_delete(iso);
                             return XR_CLI_EXIT_FAIL;
                         }
@@ -553,7 +546,6 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                             (void) xr_compiler_session_operation_fail(
                                 &graph_operation, XR_COMPILER_SESSION_OPERATION_FATAL);
                             xr_project_free(project);
-                            xray_vm_multicore_destroy(iso);
                             xray_vm_delete(iso);
                             return XR_CLI_EXIT_FAIL;
                         }
@@ -591,7 +583,6 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
     xr_compiler_session_set_native_package_plan(session, NULL);
     xr_project_free(project);
-    xray_vm_multicore_destroy(iso);
     xray_vm_delete(iso);
 
     return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;

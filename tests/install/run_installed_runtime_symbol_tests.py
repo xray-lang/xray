@@ -283,6 +283,9 @@ def resolve_member_source(
 
 
 def verify_member_resolution_invariants() -> None:
+    retired_multicore = "".join(("xray_", "vm_", "multicore_", "destroy"))
+    if legacy_symbols({retired_multicore}) != {retired_multicore}:
+        raise AssertionError("installed archive inventory accepts retired multicore teardown")
     owners = {
         "collision.c": {"src/base/collision.c", "src/frontend/collision.c"},
         "unique.c": {"src/base/unique.c"},

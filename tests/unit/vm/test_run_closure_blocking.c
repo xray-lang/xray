@@ -41,6 +41,8 @@ TEST(run_closure_blocking_propagates_thrown_error) {
     xray_vm_config_init(&params);
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
+    xr_isolate_multicore_init(iso, 2);
+    ASSERT_NOT_NULL(xr_isolate_get_scheduler_runtime(iso));
 
     XrValue get = xr_module_import_member(iso, "http", "get");
     ASSERT_TRUE(xr_value_is_closure(get));
@@ -53,7 +55,7 @@ TEST(run_closure_blocking_propagates_thrown_error) {
     ASSERT_TRUE(XR_IS_NULL(result));
     ASSERT_FALSE(XR_IS_NULL(err));
 
-    xray_vm_multicore_destroy(iso);
+    /* Owner deletion must stop an active scheduler without a caller teardown. */
     xray_vm_delete(iso);
 }
 
@@ -77,7 +79,6 @@ TEST(run_closure_blocking_reuses_isolate_across_calls) {
         ASSERT_FALSE(XR_IS_NULL(err));
     }
 
-    xray_vm_multicore_destroy(iso);
     xray_vm_delete(iso);
 }
 
@@ -110,7 +111,6 @@ TEST(run_closure_blocking_accepts_byte_array_argument) {
     ASSERT_TRUE(XR_IS_NULL(result));
     ASSERT_FALSE(XR_IS_NULL(err));
 
-    xray_vm_multicore_destroy(iso);
     xray_vm_delete(iso);
 }
 
@@ -126,6 +126,13 @@ TEST(run_closure_blocking_null_closure_is_safe) {
     ASSERT_TRUE(XR_IS_NULL(result));
     ASSERT_TRUE(XR_IS_NULL(err));
 
+    xr_isolate_multicore_init(iso, 2);
+    ASSERT_NOT_NULL(xr_isolate_get_scheduler_runtime(iso));
+    xr_isolate_multicore_destroy(iso);
+    ASSERT_NULL(xr_isolate_get_scheduler_runtime(iso));
+    xr_isolate_multicore_destroy(iso);
+    ASSERT_NULL(xr_isolate_get_scheduler_runtime(iso));
+    /* DAP terminate followed by controller free consumes this exact sequence. */
     xray_vm_delete(iso);
 }
 

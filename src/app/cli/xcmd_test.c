@@ -557,7 +557,6 @@ cleanup_graph:
     }
     if (active_graph)
         xr_module_graph_free(active_graph);
-    xray_vm_multicore_destroy(X);
     xray_vm_delete(X);
 }
 

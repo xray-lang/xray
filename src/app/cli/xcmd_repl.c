@@ -541,7 +541,6 @@ static bool handle_command(ReplState *state, const char *input) {
     // .reset
     if (strcmp(input, ".reset") == 0) {
         repl_free_protos(state);
-        xray_vm_multicore_destroy(state->isolate);
         xray_vm_delete(state->isolate);
         state->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
         if (!state->isolate) {
@@ -815,7 +814,6 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
     else
         printf("bye\n");
     repl_free_protos(&state);
-    xray_vm_multicore_destroy(state.isolate);
     xray_vm_delete(state.isolate);
     xr_free(state.protos);
     xr_free(state.buffer);
