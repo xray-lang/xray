@@ -151,7 +151,12 @@ def main(argv: list[str]) -> int:
                 env.pop("XRAY_XI_RC_COUNT", None)
             result = proc.run([xray, FIXTURES / case.source], env=env,
                               timeout=timeout)
-            stdout = result.stdout.decode("utf-8", "replace").rstrip("\n")
+            stdout = (
+                result.stdout.decode("utf-8", "replace")
+                .replace("\r\n", "\n")
+                .replace("\r", "\n")
+                .rstrip("\n")
+            )
             stderr = result.stderr.decode("utf-8", "replace")
 
             if stdout == case.expect_stdout:
