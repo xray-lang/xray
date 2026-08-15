@@ -957,6 +957,7 @@ file(GLOB RUNTIME_TOP_SRC CONFIGURE_DEPENDS "src/runtime/*.c")
 file(GLOB RUNTIME_ABI_SRC CONFIGURE_DEPENDS "src/runtime/abi/*.c")
 set(RUNTIME_OWNERSHIP_AUDIT_SRC
     "src/runtime/ownership/xr_ownership_audit.c"
+    "src/vm/audit/xr_typed_lifecycle_audit.c"
 )
 list(APPEND RUNTIME_TOP_SRC ${RUNTIME_ABI_SRC})
 file(GLOB RUNTIME_CORE_SRC CONFIGURE_DEPENDS "src/runtime/core/*.c")

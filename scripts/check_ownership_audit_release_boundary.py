@@ -11,9 +11,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT_SOURCE = "src/runtime/ownership/xr_ownership_audit.c"
+AUDIT_ADAPTER_SOURCE = "src/vm/audit/xr_typed_lifecycle_audit.c"
 AUDIT_SOURCE_VAR = "RUNTIME_OWNERSHIP_AUDIT_SRC"
 AUDIT_TARGET = "xray_ownership_audit"
 AUDIT_TEST_TARGET = "test_ownership_audit"
+AUDIT_ADAPTER_TEST_TARGET = "test_typed_lifecycle_audit"
 
 
 @dataclass(frozen=True)
@@ -121,6 +123,7 @@ def verify(texts: dict[str, str]) -> list[str]:
         errors.append(f"{_location(command)}: unterminated CMake command")
 
     source_refs: list[Command] = []
+    adapter_source_refs: list[Command] = []
     variable_refs: list[Command] = []
     target_refs: list[Command] = []
     recursive_runtime_globs: list[Command] = []
@@ -129,6 +132,8 @@ def verify(texts: dict[str, str]) -> list[str]:
         normalized = command.args.replace("\\", "/")
         if AUDIT_SOURCE in normalized:
             source_refs.append(command)
+        if AUDIT_ADAPTER_SOURCE in normalized:
+            adapter_source_refs.append(command)
         if re.search(rf"\b{AUDIT_SOURCE_VAR}\b", normalized):
             variable_refs.append(command)
         if re.search(rf"\b{AUDIT_TARGET}\b", normalized):
@@ -148,11 +153,29 @@ def verify(texts: dict[str, str]) -> list[str]:
     expected_source_refs = {
         ("CMakeLists.txt", "set"),
         ("tests/unit/CMakeLists.txt", "add_executable"),
+        ("tests/unit/CMakeLists.txt", "add_xray_unit_test"),
     }
     actual_source_refs = {(command.path, command.name) for command in source_refs}
-    if actual_source_refs != expected_source_refs or len(source_refs) != 2:
+    if actual_source_refs != expected_source_refs or len(source_refs) != 3:
         locations = ", ".join(_location(command) for command in source_refs) or "none"
         errors.append(f"audit source references must be exactly the manifest and focused test; got {locations}")
+
+    expected_adapter_source_refs = {
+        ("CMakeLists.txt", "set"),
+        ("tests/unit/CMakeLists.txt", "add_xray_unit_test"),
+    }
+    actual_adapter_source_refs = {
+        (command.path, command.name) for command in adapter_source_refs
+    }
+    if actual_adapter_source_refs != expected_adapter_source_refs or \
+            len(adapter_source_refs) != 2:
+        locations = ", ".join(
+            _location(command) for command in adapter_source_refs
+        ) or "none"
+        errors.append(
+            "audit adapter source references must be exactly the manifest "
+            f"and focused adapter test; got {locations}"
+        )
 
     expected_variable_refs = {
         ("CMakeLists.txt", "set"),
@@ -206,6 +229,25 @@ def verify(texts: dict[str, str]) -> list[str]:
     if focused_test is None or AUDIT_SOURCE not in focused_test.args.replace("\\", "/"):
         errors.append("focused ownership-audit test must compile the diagnostic source explicitly")
 
+    adapter_test = next(
+        (
+            command
+            for command in commands
+            if command.path == "tests/unit/CMakeLists.txt"
+            and command.name == "add_xray_unit_test"
+            and _flat_words(command.args)[:1] == [AUDIT_ADAPTER_TEST_TARGET]
+        ),
+        None,
+    )
+    if adapter_test is None or any(
+        source not in adapter_test.args.replace("\\", "/")
+        for source in (AUDIT_SOURCE, AUDIT_ADAPTER_SOURCE)
+    ):
+        errors.append(
+            "focused lifecycle-audit adapter test must compile both "
+            "diagnostic sources explicitly"
+        )
+
     if recursive_runtime_globs:
         locations = ", ".join(_location(command) for command in recursive_runtime_globs)
         errors.append(f"recursive runtime glob could absorb diagnostic sources: {locations}")
@@ -219,12 +261,15 @@ def verify(texts: dict[str, str]) -> list[str]:
 def _fixture() -> dict[str, str]:
     return {
         "CMakeLists.txt": f'''
-set({AUDIT_SOURCE_VAR} "{AUDIT_SOURCE}")
+set({AUDIT_SOURCE_VAR} "{AUDIT_SOURCE}" "{AUDIT_ADAPTER_SOURCE}")
 add_library({AUDIT_TARGET} STATIC EXCLUDE_FROM_ALL ${{{AUDIT_SOURCE_VAR}}})
 target_include_directories({AUDIT_TARGET} PUBLIC src)
 ''',
         "tests/unit/CMakeLists.txt": f'''
 add_executable({AUDIT_TEST_TARGET} test.c ${{CMAKE_SOURCE_DIR}}/{AUDIT_SOURCE})
+add_xray_unit_test({AUDIT_ADAPTER_TEST_TARGET} adapter.c
+    ${{CMAKE_SOURCE_DIR}}/{AUDIT_SOURCE}
+    ${{CMAKE_SOURCE_DIR}}/{AUDIT_ADAPTER_SOURCE})
 ''',
     }
 
@@ -238,6 +283,8 @@ def self_test() -> list[str]:
     mutations = {
         "release-source-injection":
             f"\ntarget_sources(xray_vm PRIVATE {AUDIT_SOURCE})\n",
+        "adapter-release-source-injection":
+            f"\ntarget_sources(xray_vm PRIVATE {AUDIT_ADAPTER_SOURCE})\n",
         "audit-target-link":
             f"\ntarget_link_libraries(xray_vm PRIVATE {AUDIT_TARGET})\n",
         "recursive-runtime-glob":

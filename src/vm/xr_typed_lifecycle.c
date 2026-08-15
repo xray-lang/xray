@@ -373,7 +373,7 @@ static XrTypedFrameStatus execute_release(
         return XR_TYPED_FRAME_ACCESS_MISMATCH;
     }
     int32_t after = last
-                        ? XR_RUNTIME_OBJECT_RC_STICKY
+                        ? 0
                         : atomic_load_explicit(&header->rc,
                                                memory_order_acquire);
     if (last)
@@ -391,7 +391,9 @@ static XrTypedFrameStatus execute_release(
             .exit_kind = (uint8_t) execution->exit_kind,
             .physical_last_release = last ? 1u : 0u,
         };
-        context->observer(context->observer_context, &event);
+        if (context->observer(context->observer_context, &event) !=
+            XR_TYPED_LIFECYCLE_OK)
+            execution->failure = XR_TYPED_LIFECYCLE_AUDIT_REJECTED;
     }
     return XR_TYPED_FRAME_OK;
 }

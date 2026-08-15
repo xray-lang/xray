@@ -1218,8 +1218,8 @@ static void vm_lifecycle_reclaim_object(
     xr_free(object);
 }
 
-static void vm_lifecycle_observe(void *context,
-                                 const XrTypedLifecycleEvent *event) {
+static XrTypedLifecycleStatus vm_lifecycle_observe(
+    void *context, const XrTypedLifecycleEvent *event) {
     VmLifecycleProbe *probe = (VmLifecycleProbe *) context;
     REQUIRE(probe && event && probe->event_count == 0);
     if (event->physical_last_release)
@@ -1228,6 +1228,7 @@ static void vm_lifecycle_observe(void *context,
         REQUIRE(probe->object != NULL && probe->reclaim_calls == 0);
     probe->event = *event;
     probe->event_count++;
+    return XR_TYPED_LIFECYCLE_OK;
 }
 
 static XrTypedLifecycleBindings vm_lifecycle_bindings(
@@ -1349,8 +1350,7 @@ static void test_typed_lifecycle_all_exits_and_exact_once(void) {
                 probe.event.slot == coordinates.slot &&
                 probe.event.physical_rc_before ==
                     XR_RUNTIME_OBJECT_RC_INITIAL &&
-                probe.event.physical_rc_after ==
-                    XR_RUNTIME_OBJECT_RC_STICKY &&
+                probe.event.physical_rc_after == 0 &&
                 probe.event.action == XR_TARGET_CLEANUP_RELEASE &&
                 probe.event.exit_kind == exit &&
                 probe.event.physical_last_release == 1);

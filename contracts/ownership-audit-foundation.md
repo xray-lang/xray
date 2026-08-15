@@ -1,10 +1,11 @@
 # Ownership audit manifest and dynamic heap foundation contract
 
-Status: preparatory executed-path oracle frozen by task 274.
+Status: preparatory executed-path oracle with one narrow typed-VM adapter.
 
 This is an independent, bounded runtime evidence kernel. Certificate-to-manifest
-generation, real VM/AOT instrumentation, and full task 274 cutover remain later
-integration gates; none is implied by this leaf module.
+generation for arbitrary owners, AOT instrumentation, and full backend cutover
+remain later integration gates. The only integrated producer is the exact
+managed String-concat cleanup partition described below.
 
 1. Static owner, ownership-transition, and lifecycle manifests are registered
    before execution. Observed events cannot create their own expectations.
@@ -42,27 +43,44 @@ integration gates; none is implied by this leaf module.
    Their interleaving is verified online by the shared state machine; the two
    arrays alone are not a unified offline trace and expose no common sequence.
 8. The audit target is excluded from release core, coroutine, and VM archives.
-   Its CMake source list names only the audit implementation, so future
+   Its CMake source list names only the audit implementation and its typed
+   lifecycle adapter, so future
    production ownership sources cannot be silently excluded by a directory
-   glob. Only the explicit excluded audit target and focused test compile it.
+   glob. Only the explicit excluded audit target and focused tests compile them.
    A fail-closed source-graph gate rejects direct or variable-mediated archive
    inclusion, production linkage to the audit target, recursive runtime globs,
    ownership-directory globs, or loss of `EXCLUDE_FROM_ALL`.
-9. The public report scope is exactly "executed-path dynamic evidence, not
+9. The typed lifecycle adapter accepts only an intact verified SemanticPlan,
+   its ownership certificate, and an intact TargetPlan with the exact native
+   hosted profile and the existing one-root/one-owned-dynamic-slot/two-release
+   String-concat partition. It independently reconstructs the canonical owner
+   and release-event keys and IDs from producer, value, operation, block,
+   successor, kind, program point, and event ordinal. Slot identity remains a
+   carrier fact and is never reported as owner identity. The adapter registers
+   the canonical String layout, extent, domain, and destructor, maps normal and
+   terminal cleanup observations to the same certificate release obligation,
+   and optionally checks local physical RC before/after. Each successful
+   observation uses the configured invocation plus a new activation epoch.
+   Plan, certificate, slot, operation, exit, or RC mutation poisons the adapter
+   before an oracle event can be committed.
+10. The public report scope is exactly "executed-path dynamic evidence, not
    formal proof". Optimized paths still require proof mapping or an audit lane
    that preserves logical observations. Evaluated-extent identity, sized-free
-   bytes, provider callback identity, certificate adaptation, and real backend
-   hooks remain later gates.
+   bytes, provider callback identity, arbitrary certificate adaptation, and
+   other backend hooks remain later gates.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 3f410f97f156a8ac36847db58a1b0b51049aeffcd9002409543ee47f55213025
+anchor-sha256: CMakeLists.txt cd421dc8805b9b90196b1f991cf6c033c8bc5f3c342ec6e14a84583898bb6c57
 anchor-sha256: src/shared/xr_ownership_event.h 4ee731782643616d5df34ead901ae39cd995fc91113774eabbe8dd95f982d90d
 anchor-sha256: src/plan/ownership/xr_ownership_certificate.h 33de50d0b6bb3a654628ffee0890fa80476e9d85234d8e751bd952e06ed08d07
 anchor-sha256: src/runtime/ownership/xr_ownership_audit.h 524251f129b91b7f6de71081b9514528748ebab1264e25803b547d12a1c39309
 anchor-sha256: src/runtime/ownership/xr_ownership_audit.c 89516b97cfd7a9109acc8c429e486d3743158abb1e718948a1011134076685f5
+anchor-sha256: src/vm/audit/xr_typed_lifecycle_audit.h 85dab081a8f11822651cc686648d97ca228cdb97a2c406fc3aca9fce70d1fbdb
+anchor-sha256: src/vm/audit/xr_typed_lifecycle_audit.c bedfd1ce971c879acacf38feb3cbc4b71c5aefd1283bcd13b36b8e7830123b62
 anchor-sha256: scripts/check_ownership_audit_record_no_alloc.py 00f71577e9278988a69467ffb3ef1078618cb3658ba544568742ffc9c1581f63
-anchor-sha256: scripts/check_ownership_audit_release_boundary.py 11d8469ef2af76e09dc03616ed7e70a467e8e16c3e1a3337423ef929cf1701c8
+anchor-sha256: scripts/check_ownership_audit_release_boundary.py 815dbc1cc4ccd1c7483f2a4425d93de8e0f4b1676d38e5a4c333e70f5dcc798c
 anchor-sha256: scripts/run_tsan_focused.py dccb149395edccc147de3ff70f4f216967b0063de65fa6d2286f81710fcdfea3
 anchor-sha256: tests/unit/CMakeLists.txt a7c215609f83b49d59a650ebe657636f76a4eeb4f1f30b5fe0b0e73b986fca98
 anchor-sha256: tests/unit/runtime/test_ownership_audit.c 98c718b64f6b840bee6172c07e0a931178ca4dd237e5bb1a88ff9f03a130f59e
+anchor-sha256: tests/unit/runtime/test_typed_lifecycle_audit.c 4770e678fcb3b588ec6ab45f3b24c83f5b82693d8c3f37dd92a714252936c2c6

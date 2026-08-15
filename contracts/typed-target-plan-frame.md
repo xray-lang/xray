@@ -185,10 +185,19 @@ prefix before using the canonical object-header release operation. A successful
 last release is handed to the required infallible allocation-owner reclaimer.
 Only after release and any reclamation succeed may the optional observer receive
 an event. That event carries the verified slot stable identity, not an ownership
-certificate identity, and is not an ownership-certificate oracle. Any failure
-before physical release leaves the frame lifecycle active and preserves its
-carrier bytes for retry; a successful release zeroes the carrier and makes a
-second attempt exact-once inactive.
+certificate identity. The diagnostic-only ownership adapter independently
+reconstructs the canonical certificate owner and release-event identities from
+the verified SemanticPlan certificate and the selected TargetPlan
+root/slot/cleanup facts, requires the exact native String target authority, and
+can compare either logical-only release evidence or logical plus local physical
+RC evidence. Normal and terminal cleanup rows realize the same certificate
+release transition; the exit kind remains an independently checked observation.
+Any failure before physical release leaves the frame lifecycle active and
+preserves its carrier bytes for retry. Observer rejection occurs only after the
+irreversible release and reclamation have succeeded, so the executor commits
+the released carrier and reports audit rejection without making it retryable.
+A successful release likewise zeroes the carrier and makes a second attempt
+exact-once inactive.
 
 The scalar dispatcher remains unchanged and still rejects every selected
 function with lifecycle rows. This executor does not execute String concat,
@@ -256,6 +265,14 @@ Evidence:
   and a scalar function with no lifecycle contract.
   `test_typed_frame_runtime_archive` additionally proves that this executor's
   public symbols are present in the runtime-only archive.
+- `test_typed_lifecycle_audit` independently joins that exact TargetPlan
+  partition to the SemanticPlan ownership certificate and proves canonical
+  owner/event reconstruction, logical event acceptance on normal, error,
+  cancel, and return exits, optional physical RC comparison, last and non-last
+  releases, post-reclaimer ordering, resolver retry, exact-once double-call
+  rejection, and fail-closed slot, target-plan, certificate, and observer
+  mutation. The adapter remains absent from release VM/runtime archives and
+  does not claim other owner kinds or lifecycle transitions.
 - `typed_target_vm_performance_gate` directly times the verified scalar
   dispatcher, one exact adapter-free `CALL_DIRECT_I64`, and packed frame
   allocation on Windows Release. The call fixture proves that argument
@@ -286,10 +303,13 @@ anchor-sha256: src/vm/xr_typed_dispatch.c c79296a7d62cd0ae42f41e36e67dead23ac3b2
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 3fd550a0cfcdee2b28a631ef1ef6ae56c5a776c4d380a508d78e6d307bbf1b20
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041
-anchor-sha256: src/vm/xr_typed_lifecycle.h 508883f3d5b6b179c5add48fbeffd9112166b286daaae43032d3dba2919c6983
-anchor-sha256: src/vm/xr_typed_lifecycle.c 2ebd633dfb41fa957f4be1651ab0ec1e0853deceddb6f8cbe37723634e30462b
-anchor-sha256: tests/unit/vm/test_typed_frame.c ae97417ccc6b5bed5a819844b4f25934cd3fd63a88899f483e3ad3258ad54789
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c cfe7790025d9a3962ba5840594f3d6cbaf8f132e67f996292488cc25800dcf2a
+anchor-sha256: src/vm/xr_typed_lifecycle.h 46c945304a46a967dcf6cd95ef51cfa1a4d6fe74c3ca10084a3baab97492167a
+anchor-sha256: src/vm/xr_typed_lifecycle.c e165ffb8b615c34f2a0f62119697c99384b1d55fe16d1097dcf69e48804d8115
+anchor-sha256: src/vm/audit/xr_typed_lifecycle_audit.h 85dab081a8f11822651cc686648d97ca228cdb97a2c406fc3aca9fce70d1fbdb
+anchor-sha256: src/vm/audit/xr_typed_lifecycle_audit.c bedfd1ce971c879acacf38feb3cbc4b71c5aefd1283bcd13b36b8e7830123b62
+anchor-sha256: tests/unit/vm/test_typed_frame.c d74a298644494ab12a749dd4a0e239165bbc83f1fc8baf31b725d4e06f7e290c
+anchor-sha256: tests/unit/runtime/test_typed_lifecycle_audit.c 4770e678fcb3b588ec6ab45f3b24c83f5b82693d8c3f37dd92a714252936c2c6
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 11c01eeae38b5613db50ccbeb04881d2624cdc34c5669d4c14ac64eebd001bae
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h e365e02d0596394df881026895d127ac54ade9d7bccf5ff272ad6f704a88becf
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 119cca4a922e3039c9b57e69102d1fd06b9aaba5cdae55fb10e7fdda0ba9bbb9

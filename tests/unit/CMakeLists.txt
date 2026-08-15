@@ -412,6 +412,13 @@ add_xray_unit_test(test_typed_opaque_boundary
     vm/test_typed_opaque_boundary.c)
 set_tests_properties(test_typed_opaque_boundary PROPERTIES
     LABELS "runtime;target-machine;typed-plan;vm;boundary")
+add_xray_unit_test(test_typed_lifecycle_audit
+    runtime/test_typed_lifecycle_audit.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE}
+    ${CMAKE_SOURCE_DIR}/src/runtime/ownership/xr_ownership_audit.c
+    ${CMAKE_SOURCE_DIR}/src/vm/audit/xr_typed_lifecycle_audit.c)
+set_tests_properties(test_typed_lifecycle_audit PROPERTIES
+    LABELS "runtime;semantic-plan;target-machine;typed-plan;vm;ownership")
 add_xray_unit_test(test_typed_dispatch vm/test_typed_dispatch.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_vm_decoded_cache vm/test_vm_decoded_cache.c

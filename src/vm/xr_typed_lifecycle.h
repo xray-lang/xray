@@ -21,7 +21,7 @@
 #include "../runtime/abi/xr_runtime_object_header.h"
 #include "../runtime/abi/xr_runtime_string_object.h"
 
-#define XR_TYPED_LIFECYCLE_CONTEXT_SCHEMA_VERSION UINT32_C(1)
+#define XR_TYPED_LIFECYCLE_CONTEXT_SCHEMA_VERSION UINT32_C(2)
 
 typedef enum XrTypedLifecycleStatus {
     XR_TYPED_LIFECYCLE_OK = 0,
@@ -33,6 +33,7 @@ typedef enum XrTypedLifecycleStatus {
     XR_TYPED_LIFECYCLE_FRAME_ERROR,
     XR_TYPED_LIFECYCLE_CARRIER_INVALID,
     XR_TYPED_LIFECYCLE_RELEASE_FAILED,
+    XR_TYPED_LIFECYCLE_AUDIT_REJECTED,
     XR_TYPED_LIFECYCLE_ALREADY_EXECUTED,
 } XrTypedLifecycleStatus;
 
@@ -68,8 +69,10 @@ typedef struct XrTypedLifecycleEvent {
 
 /* Emitted only after physical release and any last-release reclamation have
  * succeeded. The stable ID identifies the verified TargetPlan slot; this
- * signal is not an ownership-certificate oracle. */
-typedef void (*XrTypedLifecycleObserver)(
+ * signal is not an ownership-certificate oracle. A rejected observation is
+ * reported to the caller after the frame has committed the successful
+ * cleanup, so it can never make an irreversible release look retryable. */
+typedef XrTypedLifecycleStatus (*XrTypedLifecycleObserver)(
     void *context, const XrTypedLifecycleEvent *event);
 
 typedef struct XrTypedLifecycleBindings {
