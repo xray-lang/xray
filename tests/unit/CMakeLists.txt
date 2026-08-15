@@ -521,6 +521,7 @@ add_test(
         --runtime $<TARGET_FILE:xray>
         --fuzzer $<TARGET_FILE:test_xtp_fuzz_entry>
         --resource-stress $<TARGET_FILE:test_xtp_resource_stress>
+        --corpus ${CMAKE_SOURCE_DIR}/tests/fuzz/corpus/xtp
         --expected-commit ${XRAY_GIT_COMMIT}
         --sanitizer ${XR_XTP_FUZZ_EVIDENCE_SANITIZER}
 )

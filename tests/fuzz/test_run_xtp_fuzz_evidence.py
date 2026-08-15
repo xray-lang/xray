@@ -22,6 +22,9 @@ class XtpFuzzEvidenceTests(unittest.TestCase):
         self.runtime = root / "runtime"
         self.fuzzer = root / "fuzzer"
         self.resource = root / "resource"
+        self.corpus = root / "corpus"
+        self.corpus.mkdir()
+        (self.corpus / "valid.xtpseed").write_bytes(b"V\n")
         for path in (self.runtime, self.fuzzer, self.resource):
             path.write_text("fixture", encoding="utf-8")
 
@@ -33,6 +36,7 @@ class XtpFuzzEvidenceTests(unittest.TestCase):
             "--runtime", str(self.runtime),
             "--fuzzer", str(self.fuzzer),
             "--resource-stress", str(self.resource),
+            "--corpus", str(self.corpus),
             "--expected-commit", COMMIT,
             "--sanitizer", "release",
             *extra,
@@ -45,7 +49,13 @@ class XtpFuzzEvidenceTests(unittest.TestCase):
         outputs = iter((
             self.completed('{"schema":1,"commit":"' + COMMIT + '","dirty":false}'),
             self.completed("typed XTP deterministic mutation matrix passed: executed=26 mutations=26 sanitizer=release\n"),
-            self.completed("XTP resource ladder: 1\nXTP resource ladder: 2\nXTP resource ladder: 3\nXTP resource ladder: 4\nXTP resource stress tests passed\n"),
+            self.completed(
+                "XTP resource ladder: blocks=1 wall-ms=1.0 peak-bytes=1024\n"
+                "XTP resource ladder: blocks=2 wall-ms=2.0 peak-bytes=2048\n"
+                "XTP resource ladder: blocks=3 wall-ms=3.0 peak-bytes=4096\n"
+                "XTP resource ladder: blocks=4 wall-ms=4.0 peak-bytes=8192\n"
+                "XTP resource stress tests passed\n"
+            ),
         ))
         with mock.patch.object(evidence, "run_command", side_effect=lambda *_: next(outputs)):
             self.assertEqual(evidence.main(self.args()), 0)
@@ -66,6 +76,19 @@ class XtpFuzzEvidenceTests(unittest.TestCase):
     def test_rejects_missing_fuzzer(self) -> None:
         self.fuzzer.unlink()
         self.assertEqual(evidence.main(self.args()), 1)
+
+    def test_rejects_empty_corpus(self) -> None:
+        (self.corpus / "valid.xtpseed").unlink()
+        self.assertEqual(evidence.main(self.args()), 1)
+
+    def test_rejects_resource_without_metrics(self) -> None:
+        outputs = iter((
+            self.completed('{"schema":1,"commit":"' + COMMIT + '","dirty":false}'),
+            self.completed("typed XTP deterministic mutation matrix passed: executed=26 mutations=26 sanitizer=release\n"),
+            self.completed("XTP resource ladder: 1\n" * 4 + "XTP resource stress tests passed\n"),
+        ))
+        with mock.patch.object(evidence, "run_command", side_effect=lambda *_: next(outputs)):
+            self.assertEqual(evidence.main(self.args()), 1)
 
     def test_rejects_windows_tsan_without_skipping(self) -> None:
         args = self.args("--sanitizer", "tsan", "--host-os", "windows")
