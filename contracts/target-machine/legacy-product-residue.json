@@ -2,9 +2,9 @@
     "counts":  {
                    "api":  38,
                    "build":  56,
-                   "cli":  106,
+                   "cli":  101,
                    "install":  2,
-                   "source":  3151
+                   "source":  3150
                },
     "generated_from":  [
                            "CMakeLists.txt",
@@ -808,19 +808,14 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "ef3ebdfe2d7905400b3c1809000ab1115b0462c550fc2a1b37c4efc8aace3ac1",
+                       "evidence_sha256":  "c287cfc3a6e6923f51a12db767ff4baaed30f194ca5c61f2a6af8d0bf3b1c481",
                        "family":  "legacy-cli-format-alias",
-                       "hit_count":  6,
+                       "hit_count":  1,
                        "path":  "src/app/cli/xcmd_compile.c",
                        "status":  "transitional-owner",
                        "surface":  "cli",
                        "tokens":  [
-                                      "\"bc\"",
-                                      "\"bytecode\"",
-                                      "\"c\"",
-                                      "\"h\"",
-                                      "\"header\"",
-                                      "\"source\""
+                                      "\"c\""
                                   ]
                    },
                    {
@@ -1318,14 +1313,13 @@
                    },
                    {
                        "disposition":  "remove-with-atomic-target-plan-product-cutover",
-                       "evidence_sha256":  "224cbc8d409729068af984b4f2d49012e4ebb41cecbef9635ac623bc81d7bed8",
+                       "evidence_sha256":  "1a733efbae04d854b378d1ed0b425d3f2897671843c21915db04aa9a41e4cae0",
                        "family":  "legacy-cli-format-alias",
-                       "hit_count":  2,
+                       "hit_count":  1,
                        "path":  "src/app/tools/xstdlib_bcgen.c",
                        "status":  "transitional-owner",
                        "surface":  "source",
                        "tokens":  [
-                                      "\"bc\"",
                                       "\"bytecode\""
                                   ]
                    },
@@ -8832,6 +8826,6 @@
                    "unclassified_residue":  "error"
                },
     "schema":  2,
-    "source_tree_fingerprint":  "d647490a1f43e0e95d0aa4f9555da9088e2c0186d2efa13355cf10feeb3ac8b2",
-    "total":  3353
+    "source_tree_fingerprint":  "ad5c2fe7f49ddf78a12f459c1502f5d3fae4dea62393a16c2ea50a3fa71ed4a9",
+    "total":  3347
 }

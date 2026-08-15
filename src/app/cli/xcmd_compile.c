@@ -62,7 +62,7 @@ static char *generate_var_name(const char *filename) {
 
 // Parse --format argument
 static XrBootstrapEmissionFormat parse_format(const char *fmt) {
-    if (strcmp(fmt, "c") == 0 || strcmp(fmt, "source") == 0) {
+    if (strcmp(fmt, "c") == 0) {
         return XR_BOOTSTRAP_EMISSION_C_SOURCE;
     }
     return XR_BOOTSTRAP_EMISSION_AUTO;
@@ -173,12 +173,6 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     /* Parse explicit format */
     XrBootstrapEmissionFormat explicit_format = XR_BOOTSTRAP_EMISSION_AUTO;
     if (fmt_str) {
-        if (strcmp(fmt_str, "bytecode") == 0 || strcmp(fmt_str, "bc") == 0 ||
-            strcmp(fmt_str, "h") == 0 || strcmp(fmt_str, "header") == 0) {
-            xr_cli_error("compile",
-                         "XR_ARTIFACT_2000: retired output format is removed; use --format c");
-            return XR_CLI_EXIT_USAGE;
-        }
         explicit_format = parse_format(fmt_str);
         if (explicit_format == XR_BOOTSTRAP_EMISSION_AUTO) {
             xr_cli_error("compile", "unknown format '%s'", fmt_str);

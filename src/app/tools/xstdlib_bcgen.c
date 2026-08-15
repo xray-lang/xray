@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc)
                 return usage();
             const char *fmt = argv[++i];
-            if (strcmp(fmt, "bytecode") != 0 && strcmp(fmt, "bc") != 0) {
+            if (strcmp(fmt, "bytecode") != 0) {
                 fprintf(stderr, "xray_stdlib_bcgen: unsupported format '%s'\n", fmt);
                 return 2;
             }

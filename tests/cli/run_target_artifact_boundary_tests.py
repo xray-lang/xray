@@ -166,20 +166,18 @@ def main() -> int:
         require_rejection(compiled, "XR_ARTIFACT_2000",
                           "legacy XRC compilation is removed")
         require(not xrc.exists(), "legacy XRC rejection leaves no artifact")
-        for legacy_format in ("bytecode", "bc"):
-            require_rejection(run([
-                str(binary), "compile", str(source), "--format", legacy_format,
-                "--output", str(root / "legacy.c"),
-            ], cwd=root), "XR_ARTIFACT_2000",
-                f"legacy {legacy_format} format is removed")
-        for retired_alias in ("h", "header"):
-            require_rejection(run([
-                str(binary), "compile", str(source), "--format", retired_alias,
-                "--output", str(root / "retired-header.h"),
-            ], cwd=root), "XR_ARTIFACT_2000",
-                f"retired {retired_alias} output alias is removed")
-        require(not (root / "retired-header.h").exists(),
-                "retired header alias leaves no artifact")
+        retired_output = root / "retired-format-output.c"
+        for retired_format in ("bytecode", "bc", "h", "header", "source"):
+            rejected_format = run([
+                str(binary), "compile", str(source), "--format", retired_format,
+                "--output", str(retired_output),
+            ], cwd=root)
+            require_rejection(rejected_format, f"unknown format '{retired_format}'",
+                              f"retired {retired_format} spelling is not an interface")
+            require("XR_ARTIFACT_2000" not in rejected_format.stdout,
+                    f"retired {retired_format} spelling has no compatibility diagnostic",
+                    rejected_format.stdout)
+        require(not retired_output.exists(), "retired format spellings leave no artifact")
         require_rejection(run([
             str(binary), "compile", str(source), "--format", "c",
             "--output", str(root / "disguised.XRC"),

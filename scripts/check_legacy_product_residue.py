@@ -292,14 +292,31 @@ def check(root: Path, current: dict[str, object] | None = None) -> tuple[bool, s
 def self_test() -> int:
     with tempfile.TemporaryDirectory(prefix="xray-legacy-product-residue-") as directory:
         root = Path(directory)
-        for item in ("contracts/target-machine", "include", "src/app/cli", "scripts", "tests"):
+        for item in ("contracts/target-machine", "include", "src/app/cli",
+                     "src/app/tools", "scripts", "tests"):
             (root / item).mkdir(parents=True, exist_ok=True)
         (root / "CMakeLists.txt").write_text("# clean\n", encoding="utf-8")
         owner = root / "src/app/cli/owner.c"
         owner.write_text('const char *suffix = ".xrc";\n', encoding="utf-8")
+        compile_format_owner = root / "src/app/cli/xcmd_compile.c"
+        compile_format_owner.write_text('const char *format = "c";\n', encoding="utf-8")
+        bcgen_format_owner = root / "src/app/tools/xstdlib_bcgen.c"
+        bcgen_format_owner.write_text('const char *format = "bytecode";\n', encoding="utf-8")
         inventory = root / INVENTORY
         inventory.write_text(render(collect(root)), encoding="utf-8")
         clean, _ = check(root, collect(root))
+        compile_format_owner.write_text(
+            'const char *format = "c";\nconst char *alias = "source";\n',
+            encoding="utf-8",
+        )
+        compile_format_alias_drifted, _ = check(root, collect(root))
+        compile_format_owner.write_text('const char *format = "c";\n', encoding="utf-8")
+        bcgen_format_owner.write_text(
+            'const char *format = "bytecode";\nconst char *alias = "bc";\n',
+            encoding="utf-8",
+        )
+        bcgen_format_alias_drifted, _ = check(root, collect(root))
+        bcgen_format_owner.write_text('const char *format = "bytecode";\n', encoding="utf-8")
         retired_backend = root / "include/xray_vm.h"
         retired_backend.write_text(
             "typedef enum { XR_VM_BACKEND_BYTECODE } XrVMBackendType;\n",
@@ -625,11 +642,14 @@ def self_test() -> int:
         )
         codec_abi_drifted, _ = check(root, collect(root))
         owner.unlink()
+        compile_format_owner.unlink()
+        bcgen_format_owner.unlink()
         (root / "src/new_loader.c").unlink()
         (root / "src/new_codec.c").unlink()
         zero = collect(root)
         terminal, _ = check(root, zero)
-    if (not clean or backend_drifted or debug_setters_drifted or stats_drifted
+    if (not clean or compile_format_alias_drifted or bcgen_format_alias_drifted
+            or backend_drifted or debug_setters_drifted or stats_drifted
             or runtime_constructor_drifted or userdata_api_drifted
             or execution_policy_api_drifted
             or coro_monitor_api_drifted
