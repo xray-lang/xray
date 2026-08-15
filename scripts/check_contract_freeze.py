@@ -379,6 +379,19 @@ CONTRACT_SPECS = (
         ),
     ),
     ContractSpec(
+        "typed-target-plan-opaque-boundary.md",
+        (
+            "src/plan/target/xr_target_plan.h",
+            "src/plan/target/xr_target_builder.c",
+            "src/plan/target/xr_target_verify.c",
+            "src/runtime/xr_dynamic_entry_runtime.c",
+            "src/vm/xr_typed_frame.h",
+            "src/vm/xr_typed_frame.c",
+            "tests/unit/vm/test_typed_opaque_boundary.c",
+            "tests/unit/CMakeLists.txt",
+        ),
+    ),
+    ContractSpec(
         "typed-target-plan-debug.md",
         (
             "src/vm/debug/xr_vm_debug_control.h",

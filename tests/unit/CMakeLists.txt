@@ -408,6 +408,10 @@ add_test(NAME test_typed_lifecycle
     COMMAND $<TARGET_FILE:test_typed_frame> vm-lifecycle)
 set_tests_properties(test_typed_lifecycle PROPERTIES
     LABELS "runtime;target-machine;typed-plan;vm;ownership")
+add_xray_unit_test(test_typed_opaque_boundary
+    vm/test_typed_opaque_boundary.c)
+set_tests_properties(test_typed_opaque_boundary PROPERTIES
+    LABELS "runtime;target-machine;typed-plan;vm;boundary")
 add_xray_unit_test(test_typed_dispatch vm/test_typed_dispatch.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_vm_decoded_cache vm/test_vm_decoded_cache.c
