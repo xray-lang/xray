@@ -89,72 +89,80 @@ static XrTypedDispatchStatus store_bool_byte(XrTypedFrame *frame, uint32_t slot,
                : XR_TYPED_DISPATCH_FRAME_ERROR;
 }
 
-/*
- * Executes one row. `next` arrives holding the row that follows in the table
- * and is rewritten only by a jump or a branch, so control flow is explicit
- * here rather than implied by the caller's loop. `returned` is set only by the
- * row that ends the program.
- */
-static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
-                                         const XrTargetInstructionRecord *row,
-                                         const int64_t *arguments,
-                                         uint32_t argument_count,
-                                         uint32_t row_count, uint32_t *next,
-                                         bool *returned,
-                                         uint64_t *return_bits) {
-    uint64_t left = 0;
-    uint64_t right = 0;
-    XrTypedDispatchStatus status = XR_TYPED_DISPATCH_OK;
-    const XrTargetInstructionContract *contract =
-        xr_target_instruction_contract(row->opcode);
-    if (!contract)
-        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
-    switch ((XrTargetInstructionOpcode) row->opcode) {
-#define XR_VM_OP(symbol, handler, kind, argument)                                                   \
-        case XR_TARGET_INSTRUCTION_##symbol:                                                       \
-            if (contract->dispatch_kind != XR_TARGET_INSTRUCTION_DISPATCH_##kind ||                 \
-                contract->dispatch_argument !=                                                     \
-                    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_##argument)                             \
-                return XR_TYPED_DISPATCH_PROGRAM_INVALID;                                          \
-            goto execute_##handler;
-#include "xr_vm_ops.def"
-#undef XR_VM_OP
-        default:
-            return XR_TYPED_DISPATCH_PROGRAM_INVALID;
-    }
+typedef struct XrTypedDispatchRowContext {
+    const int64_t *arguments;
+    uint32_t argument_count;
+    uint32_t row_count;
+    uint32_t *next;
+    bool *returned;
+    uint64_t *return_bits;
+} XrTypedDispatchRowContext;
 
-execute_const:
+static XrTypedDispatchStatus execute_const(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) contract;
+    (void) context;
     return store_i64_bits(frame, row->result_slot, row->immediate_bits);
+}
 
-execute_param:
-    /* The immediate is the argument ordinal the verifier proved dense. */
-    if (!arguments || row->immediate_bits >= argument_count)
+static XrTypedDispatchStatus execute_param(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) contract;
+    if (!context->arguments || row->immediate_bits >= context->argument_count)
         return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
-    memcpy(&left, &arguments[row->immediate_bits], sizeof(left));
-    return store_i64_bits(frame, row->result_slot, left);
+    uint64_t bits = 0;
+    memcpy(&bits, &context->arguments[row->immediate_bits], sizeof(bits));
+    return store_i64_bits(frame, row->result_slot, bits);
+}
 
-execute_copy:
-    status = load_i64_bits(frame, row->operand_slots[0], &left);
+static XrTypedDispatchStatus execute_copy(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) contract;
+    (void) context;
+    uint64_t bits = 0;
+    XrTypedDispatchStatus status =
+        load_i64_bits(frame, row->operand_slots[0], &bits);
     return status == XR_TYPED_DISPATCH_OK
-               ? store_i64_bits(frame, row->result_slot, left)
+               ? store_i64_bits(frame, row->result_slot, bits)
                : status;
+}
 
-execute_unary:
-    status = load_i64_bits(frame, row->operand_slots[0], &left);
+static XrTypedDispatchStatus execute_unary(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) context;
+    uint64_t bits = 0;
+    XrTypedDispatchStatus status =
+        load_i64_bits(frame, row->operand_slots[0], &bits);
     if (status != XR_TYPED_DISPATCH_OK)
         return status;
     if (contract->dispatch_argument ==
         XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_NEG)
-        left = (uint64_t) (0 - left);
+        bits = (uint64_t) (0 - bits);
     else if (contract->dispatch_argument ==
              XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BNOT)
-        left = ~left;
+        bits = ~bits;
     else
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
-    return store_i64_bits(frame, row->result_slot, left);
+    return store_i64_bits(frame, row->result_slot, bits);
+}
 
-execute_binary:
-    status = load_i64_bits(frame, row->operand_slots[0], &left);
+static XrTypedDispatchStatus execute_binary(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) context;
+    uint64_t left = 0;
+    uint64_t right = 0;
+    XrTypedDispatchStatus status =
+        load_i64_bits(frame, row->operand_slots[0], &left);
     if (status != XR_TYPED_DISPATCH_OK)
         return status;
     status = load_i64_bits(frame, row->operand_slots[1], &right);
@@ -170,9 +178,17 @@ execute_binary:
         default: return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     }
     return store_i64_bits(frame, row->result_slot, left);
+}
 
-execute_shift: {
-    status = load_i64_bits(frame, row->operand_slots[0], &left);
+static XrTypedDispatchStatus execute_shift(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) context;
+    uint64_t left = 0;
+    uint64_t right = 0;
+    XrTypedDispatchStatus status =
+        load_i64_bits(frame, row->operand_slots[0], &left);
     if (status != XR_TYPED_DISPATCH_OK)
         return status;
     status = load_i64_bits(frame, row->operand_slots[1], &right);
@@ -196,8 +212,15 @@ execute_shift: {
     return store_i64_bits(frame, row->result_slot, left);
 }
 
-execute_divmod: {
-    status = load_i64_bits(frame, row->operand_slots[0], &left);
+static XrTypedDispatchStatus execute_divmod(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) context;
+    uint64_t left = 0;
+    uint64_t right = 0;
+    XrTypedDispatchStatus status =
+        load_i64_bits(frame, row->operand_slots[0], &left);
     if (status != XR_TYPED_DISPATCH_OK)
         return status;
     status = load_i64_bits(frame, row->operand_slots[1], &right);
@@ -237,7 +260,11 @@ execute_divmod: {
     return store_i64_bits(frame, row->result_slot, left);
 }
 
-execute_compare: {
+static XrTypedDispatchStatus execute_compare(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) context;
     XrCompareKind kind = XR_COMPARE_EQ;
     switch ((XrTargetInstructionDispatchArgument) contract->dispatch_argument) {
         case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_EQ: kind = XR_COMPARE_EQ; break;
@@ -248,7 +275,10 @@ execute_compare: {
         case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_GE: kind = XR_COMPARE_GE; break;
         default: return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     }
-    status = load_i64_bits(frame, row->operand_slots[0], &left);
+    uint64_t left = 0;
+    uint64_t right = 0;
+    XrTypedDispatchStatus status =
+        load_i64_bits(frame, row->operand_slots[0], &left);
     if (status != XR_TYPED_DISPATCH_OK)
         return status;
     status = load_i64_bits(frame, row->operand_slots[1], &right);
@@ -265,24 +295,35 @@ execute_compare: {
                            holds ? (uint8_t) 1u : (uint8_t) 0u);
 }
 
-execute_return:
-    *returned = true;
-    return load_i64_bits(frame, row->operand_slots[0], return_bits);
+static XrTypedDispatchStatus execute_return(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) contract;
+    *context->returned = true;
+    return load_i64_bits(frame, row->operand_slots[0], context->return_bits);
+}
 
-execute_branch: {
+static XrTypedDispatchStatus execute_branch(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
     uint32_t target =
         XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(row->immediate_bits);
     if (contract->dispatch_argument ==
         XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_I64) {
-        status = load_i64_bits(frame, row->operand_slots[0], &left);
+        uint64_t bits = 0;
+        XrTypedDispatchStatus status =
+            load_i64_bits(frame, row->operand_slots[0], &bits);
         if (status != XR_TYPED_DISPATCH_OK)
             return status;
-        if (left == 0)
+        if (bits == 0)
             target = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(row->immediate_bits);
     } else if (contract->dispatch_argument ==
                XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BOOL) {
         uint8_t truth = 0;
-        status = load_bool_byte(frame, row->operand_slots[0], &truth);
+        XrTypedDispatchStatus status =
+            load_bool_byte(frame, row->operand_slots[0], &truth);
         if (status != XR_TYPED_DISPATCH_OK)
             return status;
         if (truth == 0)
@@ -291,11 +332,42 @@ execute_branch: {
                XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_JUMP) {
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     }
-    if (target >= row_count)
+    if (target >= context->row_count)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
-    *next = target;
+    *context->next = target;
     return XR_TYPED_DISPATCH_OK;
 }
+
+/* The generated cases make missing and duplicate opcode handlers compilation
+ * errors. The contract repeats the generated handler binding at runtime so a
+ * corrupted row cannot select a handler whose metadata disagrees. */
+static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
+                                         const XrTargetInstructionRecord *row,
+                                         const int64_t *arguments,
+                                         uint32_t argument_count,
+                                         uint32_t row_count, uint32_t *next,
+                                         bool *returned,
+                                         uint64_t *return_bits) {
+    const XrTargetInstructionContract *contract =
+        xr_target_instruction_contract(row->opcode);
+    if (!contract)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedDispatchRowContext context = {
+        arguments, argument_count, row_count, next, returned, return_bits,
+    };
+    switch ((XrTargetInstructionOpcode) row->opcode) {
+#define XR_VM_OP(symbol, handler, kind, argument)                                                   \
+        case XR_TARGET_INSTRUCTION_##symbol:                                                       \
+            if (contract->dispatch_kind != XR_TARGET_INSTRUCTION_DISPATCH_##kind ||                 \
+                contract->dispatch_argument !=                                                     \
+                    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_##argument)                             \
+                return XR_TYPED_DISPATCH_PROGRAM_INVALID;                                          \
+            return execute_##handler(frame, row, contract, &context);
+#include "xr_vm_ops.def"
+#undef XR_VM_OP
+        default:
+            return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    }
 }
 
 XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
