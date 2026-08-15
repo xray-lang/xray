@@ -4228,6 +4228,28 @@ if(BUILD_TESTS)
         TIMEOUT 180
     )
 
+    add_custom_target(target_machine_matrix_row_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_matrix_row_runner.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Checking independent target-machine matrix row production"
+        VERBATIM
+    )
+
+    add_test(
+        NAME target_machine_matrix_row_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_matrix_row_runner.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_machine_matrix_row_self_test PROPERTIES
+        LABELS "meta;target-machine;governance;evidence;matrix"
+        PROCESSORS 1
+        TIMEOUT 180
+    )
+
     add_custom_target(target_machine_dependency_graph_evidence_self_test
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/test_dependency_graph_evidence_collector.py

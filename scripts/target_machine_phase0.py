@@ -447,14 +447,21 @@ def object_extent_inventory(root: Path) -> dict[str, Any]:
 
 def validation_matrix(root: Path) -> dict[str, Any]:
     inputs = ["CMakePresets.json", ".github/workflows/ci.yml", "tests/diff/run_backend_diff.py"]
+    cross_platform_release = (
+        "ctest --test-dir build -R "
+        "'^(test_semantic_plan|test_target_plan|test_xtp_format|"
+        "test_xr_aot_refinement|test_typed_frame|test_typed_dispatch|"
+        "test_runtime_target_plan_load_archive|test_runtime_generation_archive|"
+        "test_typed_frame_runtime_archive|backend_diff)$' --output-on-failure"
+    )
     rows = [
         ("macos-arm64", "host-clang", "source", "vm", "Release", "supported", "ctest --test-dir build -R backend_diff --output-on-failure"),
         ("macos-arm64", "host-clang", "native", "aot", "Release", "supported", "ctest --test-dir build -R 'aot_(filetests|standalone_suite|manifest_sweep)' --output-on-failure"),
         ("macos-arm64", "host-clang", "source+native", "vm+aot", "ASan-UBSan", "supported", "ctest --test-dir build -R asan_focused --output-on-failure"),
         ("macos-arm64", "host-clang", "source+native", "vm+aot", "TSan", "supported", "ctest --test-dir build -R tsan_focused --output-on-failure"),
-        ("linux-x86_64", "gcc", "source+native", "vm+aot", "Release+sanitizer", "ci-only", "CI: linux gcc matrix"),
-        ("linux-x86_64", "clang", "source+native", "vm+aot", "Release+sanitizer", "ci-only", "CI: linux clang matrix"),
-        ("windows-x86_64", "msvc", "source+native", "vm+aot", "Release", "ci-only", "CI: windows msvc ninja matrix"),
+        ("linux-x86_64", "gcc", "source+native", "vm+aot", "Release", "ci-only", cross_platform_release),
+        ("linux-x86_64", "clang", "source+native", "vm+aot", "Release", "ci-only", cross_platform_release),
+        ("windows-x86_64", "msvc", "source+native", "vm+aot", "Release", "ci-only", cross_platform_release),
         ("windows-x86_64", "clang", "native", "aot", "Release", "unqualified", "portable generated-C smoke"),
         ("freestanding-aarch64", "zig", "native", "aot", "Release", "unqualified", "ctest --test-dir build -R freestanding --output-on-failure"),
         ("any-32-bit", "any", "any", "any", "any", "unsupported", "compile-time pointer-width rejection"),
