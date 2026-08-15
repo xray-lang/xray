@@ -9019,79 +9019,12 @@ static bool materialized_i64_slot(const XrTargetMaterializedPlan *materialized,
 
 static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
     switch (semantic_opcode) {
-        case XI_CONST: return XR_TARGET_INSTRUCTION_CONST_I64;
-        case XI_COPY: return XR_TARGET_INSTRUCTION_COPY_I64;
-        case XI_ADD: return XR_TARGET_INSTRUCTION_ADD_WRAP_I64;
-        case XI_SUB: return XR_TARGET_INSTRUCTION_SUB_WRAP_I64;
-        case XI_MUL: return XR_TARGET_INSTRUCTION_MUL_WRAP_I64;
-        /* Signed division only: an unsigned divisor never reaches here because
-         * every admitted operand and result is exact signed i64, so no row can
-         * silently read a u64 bit pattern as a negative dividend. */
-        case XI_DIV: return XR_TARGET_INSTRUCTION_DIV_TRAP_I64;
-        case XI_MOD: return XR_TARGET_INSTRUCTION_MOD_TRAP_I64;
-        case XI_BAND: return XR_TARGET_INSTRUCTION_BAND_I64;
-        case XI_BOR: return XR_TARGET_INSTRUCTION_BOR_I64;
-        case XI_BXOR: return XR_TARGET_INSTRUCTION_BXOR_I64;
-        case XI_NEG: return XR_TARGET_INSTRUCTION_NEG_WRAP_I64;
-        case XI_BNOT: return XR_TARGET_INSTRUCTION_BNOT_I64;
-        /* XI_SHR is the arithmetic shift only because every operand and result
-         * of an admitted row is exact signed i64; an unsigned shift never
-         * reaches here, so no row can silently zero fill. */
-        case XI_SHL: return XR_TARGET_INSTRUCTION_SHL_MASKED_I64;
-        case XI_SHR: return XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64;
-        /* The six relations over signed i64 operands. Their result is the
-         * language's `bool`, so their row writes the truth slot the plan
-         * already laid out for that value rather than a signed i64 one. */
-        case XI_EQ: return XR_TARGET_INSTRUCTION_CMP_EQ_I64;
-        case XI_NE: return XR_TARGET_INSTRUCTION_CMP_NE_I64;
-        case XI_LT: return XR_TARGET_INSTRUCTION_CMP_LT_I64;
-        case XI_LE: return XR_TARGET_INSTRUCTION_CMP_LE_I64;
-        case XI_GT: return XR_TARGET_INSTRUCTION_CMP_GT_I64;
-        case XI_GE: return XR_TARGET_INSTRUCTION_CMP_GE_I64;
-        case XI_PARAM: return XR_TARGET_INSTRUCTION_PARAM_I64;
+#define XR_TARGET_SEMANTIC_CASE(semantic, target)                                                   \
+        case semantic: return XR_TARGET_INSTRUCTION_##target;
+        XR_TARGET_INSTRUCTION_SEMANTIC_BINDINGS(XR_TARGET_SEMANTIC_CASE)
+#undef XR_TARGET_SEMANTIC_CASE
         default: return XR_TARGET_INSTRUCTION_INVALID;
     }
-}
-
-/* Spelled out per opcode rather than derived from enum ranges, so extending
- * the instruction set can never silently reassign an existing arity. */
-static uint16_t scalar_instruction_operand_count(uint8_t opcode) {
-    switch ((XrTargetInstructionOpcode) opcode) {
-        case XR_TARGET_INSTRUCTION_CONST_I64:
-        case XR_TARGET_INSTRUCTION_PARAM_I64:
-            return 0;
-        case XR_TARGET_INSTRUCTION_COPY_I64:
-        case XR_TARGET_INSTRUCTION_NEG_WRAP_I64:
-        case XR_TARGET_INSTRUCTION_BNOT_I64:
-            return 1;
-        case XR_TARGET_INSTRUCTION_ADD_WRAP_I64:
-        case XR_TARGET_INSTRUCTION_SUB_WRAP_I64:
-        case XR_TARGET_INSTRUCTION_MUL_WRAP_I64:
-        case XR_TARGET_INSTRUCTION_DIV_TRAP_I64:
-        case XR_TARGET_INSTRUCTION_MOD_TRAP_I64:
-        case XR_TARGET_INSTRUCTION_BAND_I64:
-        case XR_TARGET_INSTRUCTION_BOR_I64:
-        case XR_TARGET_INSTRUCTION_BXOR_I64:
-        case XR_TARGET_INSTRUCTION_SHL_MASKED_I64:
-        case XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64:
-        case XR_TARGET_INSTRUCTION_CMP_EQ_I64:
-        case XR_TARGET_INSTRUCTION_CMP_NE_I64:
-        case XR_TARGET_INSTRUCTION_CMP_LT_I64:
-        case XR_TARGET_INSTRUCTION_CMP_LE_I64:
-        case XR_TARGET_INSTRUCTION_CMP_GT_I64:
-        case XR_TARGET_INSTRUCTION_CMP_GE_I64:
-            return 2;
-        /* Terminators are not lowered from a semantic operation: they come from
-         * the block kind, so they have no arity here at all. */
-        case XR_TARGET_INSTRUCTION_INVALID:
-        case XR_TARGET_INSTRUCTION_RETURN_I64:
-        case XR_TARGET_INSTRUCTION_JUMP:
-        case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64:
-        case XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL:
-        case XR_TARGET_INSTRUCTION_COUNT:
-            break;
-    }
-    return UINT16_MAX;
 }
 
 /*
@@ -9348,12 +9281,13 @@ static bool materialize_scalar_instruction_function(
             uint8_t opcode = operation
                                  ? scalar_instruction_opcode(operation->opcode)
                                  : XR_TARGET_INSTRUCTION_INVALID;
-            uint16_t expected_operands = scalar_instruction_operand_count(opcode);
+            const XrTargetInstructionContract *contract =
+                xr_target_instruction_contract(opcode);
             uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
-            if (!operation || opcode == XR_TARGET_INSTRUCTION_INVALID ||
+            if (!operation || !contract ||
                 operation->function != function_index ||
                 operation->block != block_index || operation->effects != 0 ||
-                operation->operand_count != expected_operands ||
+                operation->operand_count != contract->arity ||
                 operation->operand_begin > operand_total ||
                 operation->operand_count > operand_total - operation->operand_begin) {
                 admissible = false;
@@ -9363,7 +9297,8 @@ static bool materialize_scalar_instruction_function(
              * operation answers a signed i64, so the opcode decides which
              * result the operation must have declared. Both are proved exactly;
              * neither is inferred from what the operation happens to carry. */
-            bool comparison = XR_TARGET_INSTRUCTION_IS_COMPARE(opcode);
+            bool comparison =
+                contract->result_rep == XR_TARGET_INSTRUCTION_REP_BOOL;
             if (comparison
                     ? !semantic_type_is_exact_bool(semantic,
                                                    operation->result_type) ||

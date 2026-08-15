@@ -42,6 +42,46 @@ static XrType stub_bool = {.kind = XR_KIND_BOOL,
                            .frozen = true,
                            .scalar_rep = XR_SCALAR_REP_NONE};
 
+static void test_generated_instruction_contract(void) {
+    enum {
+        XR_TEST_VM_DISPATCH_COUNT = 0
+#define XR_VM_OP(symbol, handler, kind, argument) +1
+#include "../../../src/vm/xr_vm_ops.def"
+#undef XR_VM_OP
+    };
+    REQUIRE(XR_TARGET_INSTRUCTION_CONST_I64 == 1);
+    REQUIRE(XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL == 25);
+    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 25u);
+    REQUIRE(XR_TEST_VM_DISPATCH_COUNT ==
+            XR_TARGET_INSTRUCTION_CONTRACT_COUNT);
+    uint32_t semantic_bindings = 0;
+    for (uint16_t opcode = 1; opcode < XR_TARGET_INSTRUCTION_COUNT; opcode++) {
+        const XrTargetInstructionContract *contract =
+            xr_target_instruction_contract(opcode);
+        REQUIRE(contract != NULL && contract->name != NULL);
+        REQUIRE(contract->arity <= 2u);
+        REQUIRE(contract->terminator ==
+                (contract->control_kind != XR_TARGET_INSTRUCTION_CONTROL_NONE));
+        REQUIRE(contract->terminator ==
+                (contract->result_rep == XR_TARGET_INSTRUCTION_REP_NONE));
+        REQUIRE((contract->error_kind != XR_TARGET_INSTRUCTION_ERROR_NONE) ==
+                ((contract->effects &
+                  XR_TARGET_INSTRUCTION_EFFECT_MAY_ERROR) != 0));
+        REQUIRE(contract->may_suspend ==
+                ((contract->effects &
+                  XR_TARGET_INSTRUCTION_EFFECT_MAY_SUSPEND) != 0));
+        semantic_bindings += contract->semantic_name != NULL;
+        for (uint32_t other = 1; other < opcode; other++)
+            REQUIRE(strcmp(contract->name,
+                           xr_target_instruction_opcode_name(other)) != 0);
+    }
+    REQUIRE(semantic_bindings == 21u);
+    REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_INVALID) ==
+            NULL);
+    REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_COUNT) ==
+            NULL);
+}
+
 static XrSemanticPlan *build_semantic(void) {
     XiFunc *function = xi_func_new("typed_dispatch_probe", &stub_int);
     REQUIRE(function != NULL);
@@ -1296,6 +1336,7 @@ static void test_backward_jump_stops_at_the_step_budget(void) {
 }
 
 int main(void) {
+    test_generated_instruction_contract();
     test_closed_program_and_unavailable_boundary();
     test_production_builder_keeps_unsupported_function_unavailable();
     test_parameters_reach_the_executed_program();

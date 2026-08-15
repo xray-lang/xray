@@ -2,10 +2,10 @@
 """Generated Xi and AOT artifacts must match their xisa source descriptions.
 
 The `.def` files under xisa/ are the single source for Xi's opcode set, its
-verifier, its lowering tables, and the AOT target's representation/ABI/layout
-headers. Everything under src/ that those generate is checked in, so a build
-never has to run the generator -- which means a stale checked-in artifact would
-be silently authoritative. This regenerates into a scratch tree and compares.
+verifier and lowering tables, the typed target instruction contract, and the
+AOT target's representation/ABI/layout headers. Generated artifacts are checked
+in, so a stale copy would otherwise be silently authoritative. This regenerates
+into a scratch tree and compares.
 
 Shared by the Xi and codegen invariant gates so the freshness contract has one
 implementation.
@@ -34,14 +34,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 XISAGEN = Path("tools/xisagen/xisagen.py")
 
 XI_SOURCES = (XISAGEN, Path("xisa/xi/ops.def"), Path("xisa/xi/lowering.def"),
-              Path("xisa/xi/verifier.def"))
+              Path("xisa/xi/verifier.def"), Path("xisa/target/vm_ops.def"))
 AOT_SOURCES = (XISAGEN, Path("xisa/aot/rep.def"), Path("xisa/aot/abi.def"),
                Path("xisa/aot/layout.def"))
 
 XI_ARTIFACTS = (
     "src/ir/xi_ops_gen.h",
     "src/plan/semantic/xr_semantic_ops_gen.h",
+    "src/plan/target/xr_target_instruction_gen.h",
     "src/shared/xr_semantic_owner_ids_gen.h",
+    "src/vm/xr_vm_ops.def",
     "contracts/semantic-owner-registry.json",
     "src/ir/xi_verify_gen.h",
     "src/ir/xi_lowering_coverage_gen.h",
@@ -135,6 +137,8 @@ def main(argv: list[str]) -> int:
                     and run_gen(gate, ["xi-verify", "xisa/xi/ops.def",
                                        "xisa/xi/verifier.def",
                                        scratch / "src/ir/xi_verify_gen.h"])
+                    and run_gen(gate, ["target-vm-ops",
+                                       "xisa/target/vm_ops.def", scratch])
                     and run_gen(gate, ["xi-lowering", "xisa/xi/ops.def",
                                        "xisa/xi/lowering.def", scratch])):
                 compare(gate, "Xi", scratch, XI_ARTIFACTS)

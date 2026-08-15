@@ -326,7 +326,9 @@ file(GLOB_RECURSE XRAY_STDLIB_METADATA_SOURCES CONFIGURE_DEPENDS
 set(XRAY_GEN_XI_OPS_DEPS
     ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
     ${CMAKE_SOURCE_DIR}/src/plan/semantic/xr_semantic_ops_gen.h
+    ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_instruction_gen.h
     ${CMAKE_SOURCE_DIR}/src/shared/xr_semantic_owner_ids_gen.h
+    ${CMAKE_SOURCE_DIR}/src/vm/xr_vm_ops.def
     ${CMAKE_SOURCE_DIR}/contracts/semantic-owner-registry.json
 )
 
@@ -382,6 +384,16 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}
     DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
     COMMENT "xisagen: generating target-neutral semantic owner registry"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_instruction_gen.h
+            ${CMAKE_SOURCE_DIR}/src/vm/xr_vm_ops.def
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} target-vm-ops
+            ${CMAKE_SOURCE_DIR}/xisa/target/vm_ops.def
+            ${CMAKE_SOURCE_DIR}
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/target/vm_ops.def
+    COMMENT "xisagen: generating typed target instruction contract"
 )
 
 add_custom_command(

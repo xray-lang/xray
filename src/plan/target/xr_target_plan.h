@@ -15,6 +15,8 @@
 #ifndef XR_TARGET_PLAN_H
 #define XR_TARGET_PLAN_H
 
+#include "../../base/xchecks.h"
+#include "xr_target_instruction_gen.h"
 #include "xr_target_profile.h"
 #include "../semantic/xr_semantic_plan.h"
 #include <stdbool.h>
@@ -72,70 +74,6 @@ typedef enum XrTargetExecutionFamily {
     XR_TARGET_EXECUTION_SCALAR_I64_CLOSED = UINT64_C(1) << 0,
 } XrTargetExecutionFamily;
 
-typedef enum XrTargetInstructionOpcode {
-    XR_TARGET_INSTRUCTION_INVALID = 0,
-    XR_TARGET_INSTRUCTION_CONST_I64,
-    XR_TARGET_INSTRUCTION_COPY_I64,
-    XR_TARGET_INSTRUCTION_ADD_WRAP_I64,
-    XR_TARGET_INSTRUCTION_SUB_WRAP_I64,
-    XR_TARGET_INSTRUCTION_MUL_WRAP_I64,
-    /* The only rows with an error edge. A zero divisor is not a value: it
-     * stops the program with a divide-by-zero status rather than executing an
-     * undefined division. The remaining C undefined case is defined instead of
-     * refused, matching the rest of the plan's wrapping rule: INT64_MIN
-     * divided by -1 wraps to INT64_MIN, and INT64_MIN modulo -1 is zero. */
-    XR_TARGET_INSTRUCTION_DIV_TRAP_I64,
-    XR_TARGET_INSTRUCTION_MOD_TRAP_I64,
-    XR_TARGET_INSTRUCTION_BAND_I64,
-    XR_TARGET_INSTRUCTION_BOR_I64,
-    XR_TARGET_INSTRUCTION_BXOR_I64,
-    XR_TARGET_INSTRUCTION_NEG_WRAP_I64,
-    XR_TARGET_INSTRUCTION_BNOT_I64,
-    /* Shift counts are taken modulo 64, so every i64 count denotes a defined
-     * shift and C's undefined shift is unreachable. The right shift is
-     * arithmetic: this family admits only exact signed i64, so it replicates
-     * the sign bit rather than zero filling. */
-    XR_TARGET_INSTRUCTION_SHL_MASKED_I64,
-    XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64,
-    XR_TARGET_INSTRUCTION_RETURN_I64,
-    /* Binds one incoming argument ordinal, carried in the immediate, to the
-     * function's parameter slot. It is a definition row, not a computation, so
-     * the same single-assignment and use-after-definition proof covers a
-     * parameter read without any implicitly live slot. */
-    XR_TARGET_INSTRUCTION_PARAM_I64,
-    /* The two terminators that are not a return. Their targets are row indexes
-     * relative to the function's own row group, not block identifiers, because
-     * the plan carries no target-level block table: the block partition is
-     * derived from the rows themselves, so a target can be proved to be a block
-     * entry rather than trusted to name one. */
-    XR_TARGET_INSTRUCTION_JUMP,
-    /* The condition is an ordinary defined i64 slot and the branch is taken
-     * when it is not zero, so it needs no type the slot proof does not already
-     * establish. */
-    XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64,
-    /* The six relations over a pair of exact signed i64 slots. Their result is
-     * a truth value, so it lands in a truth slot rather than in the signed i64
-     * slot every other computation writes: the language types a comparison
-     * `bool`, and the plan gives a bool value a one-byte I1 slot, which no
-     * spelling in this family can turn into an eight-byte signed one. Each
-     * relation is its own opcode rather than one opcode selecting a relation
-     * from its immediate, so a row's meaning never depends on a field the
-     * opcode does not already fix. */
-    XR_TARGET_INSTRUCTION_CMP_EQ_I64,
-    XR_TARGET_INSTRUCTION_CMP_NE_I64,
-    XR_TARGET_INSTRUCTION_CMP_LT_I64,
-    XR_TARGET_INSTRUCTION_CMP_LE_I64,
-    XR_TARGET_INSTRUCTION_CMP_GT_I64,
-    XR_TARGET_INSTRUCTION_CMP_GE_I64,
-    /* The branch a comparison feeds. Its condition is a defined truth slot and
-     * it takes its first edge when that slot is not zero, which is the same
-     * edge rule the i64 branch carries; only the width of the condition it
-     * reads differs, and that width is fixed by the opcode rather than looked
-     * up while the row runs. */
-    XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL,
-    XR_TARGET_INSTRUCTION_COUNT,
-} XrTargetInstructionOpcode;
-
 #define XR_TARGET_INSTRUCTION_SLOT_NONE UINT32_MAX
 
 /* Argument ordinals are proved dense through a fixed-width bitmap, so the
@@ -156,25 +94,6 @@ typedef enum XrTargetInstructionOpcode {
 #define XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(immediate) ((uint32_t) ((immediate) >> 32))
 #define XR_TARGET_INSTRUCTION_TARGET_PACK(nonzero, zero)                                            \
     (((uint64_t) (uint32_t) (zero) << 32) | (uint64_t) (uint32_t) (nonzero))
-
-/* A terminator ends its basic block. The set is spelled out rather than derived
- * from an enum range so that a new opcode cannot silently join or leave it. */
-#define XR_TARGET_INSTRUCTION_IS_TERMINATOR(opcode)                                                 \
-    ((opcode) == XR_TARGET_INSTRUCTION_RETURN_I64 ||                                                \
-     (opcode) == XR_TARGET_INSTRUCTION_JUMP ||                                                      \
-     (opcode) == XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64 ||                                     \
-     (opcode) == XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL)
-
-/* The rows whose result is a truth value rather than a signed i64. Spelled out
- * for the same reason as the terminator set: which slot family a row writes is
- * a property of the opcode, and no enum range may decide it. */
-#define XR_TARGET_INSTRUCTION_IS_COMPARE(opcode)                                                    \
-    ((opcode) == XR_TARGET_INSTRUCTION_CMP_EQ_I64 ||                                                \
-     (opcode) == XR_TARGET_INSTRUCTION_CMP_NE_I64 ||                                                \
-     (opcode) == XR_TARGET_INSTRUCTION_CMP_LT_I64 ||                                                \
-     (opcode) == XR_TARGET_INSTRUCTION_CMP_LE_I64 ||                                                \
-     (opcode) == XR_TARGET_INSTRUCTION_CMP_GT_I64 ||                                                \
-     (opcode) == XR_TARGET_INSTRUCTION_CMP_GE_I64)
 
 #define XR_TARGET_REQUIRED_FAMILIES                                                         \
     ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                  \
@@ -647,6 +566,9 @@ typedef struct XrTargetInstructionRecord {
     uint8_t operand_count;
     uint16_t reserved;
 } XrTargetInstructionRecord;
+
+XR_STATIC_ASSERT(XR_TARGET_INSTRUCTION_MAX_STABLE_ID <= UINT8_MAX,
+                 "XTP instruction opcode carrier must fit the generated registry");
 
 typedef struct XrTargetCallArgumentRecord {
     XrStableId identity;

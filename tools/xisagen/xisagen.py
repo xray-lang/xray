@@ -10,6 +10,7 @@ Reads declarative .def files, generates C headers for Xi IR and AOT metadata:
   - aot-rep: xisa/aot/rep.def    → xaot_rep_gen.h
   - aot-abi: xisa/aot/abi.def    → xaot_abi_gen.h
   - aot-layout: xisa/aot/layout.def → xaot_layout_gen.h
+  - target-vm-ops: xisa/target/vm_ops.def → target contract and dispatch
 
 Usage:
   python3 xisagen.py xi-ops  <ops.def>     <output.h>
@@ -19,6 +20,7 @@ Usage:
   python3 xisagen.py aot-rep <rep.def>     <output.h>
   python3 xisagen.py aot-abi <rep.def> <abi.def> <output.h>
   python3 xisagen.py aot-layout <rep.def> <layout.def> <output.h>
+  python3 xisagen.py target-vm-ops <vm_ops.def> <output-root>
   python3 xisagen.py test
 """
 
@@ -3644,6 +3646,404 @@ def generate_aot_layout_header(entries: list[AotLayoutDef]) -> str:
     return '\n'.join(lines)
 
 # ============================================================
+# Typed TargetPlan instruction contract
+# ============================================================
+
+TARGET_REP_FAMILIES = {'none', 'i64', 'bool'}
+TARGET_RESULT_OWNERSHIPS = {'none', 'trivial'}
+TARGET_OPERAND_OWNERSHIPS = {'none', 'borrow'}
+TARGET_EFFECTS = {'control', 'may-error', 'may-suspend'}
+TARGET_ERRORS = {'none', 'divide-by-zero', 'modulo-by-zero'}
+TARGET_IMMEDIATE_KINDS = {
+    'none', 'i64', 'parameter-ordinal', 'jump-target', 'branch-targets',
+}
+TARGET_CONTROL_KINDS = {'none', 'return', 'jump', 'branch'}
+TARGET_DISPATCH_ARGUMENTS = {
+    'const': {'none'},
+    'param': {'none'},
+    'copy': {'none'},
+    'unary': {'neg', 'bnot'},
+    'binary': {'add', 'sub', 'mul', 'band', 'bor', 'bxor'},
+    'shift': {'left', 'right'},
+    'divmod': {'div', 'mod'},
+    'compare': {'eq', 'ne', 'lt', 'le', 'gt', 'ge'},
+    'return': {'none'},
+    'branch': {'jump', 'i64', 'bool'},
+}
+
+
+@dataclass(frozen=True)
+class TargetInstructionDef:
+    source_name: str
+    ident: str
+    stable_id: int
+    name: str
+    arity: int
+    terminator: bool
+    result_rep: str
+    operand_reps: tuple[str, ...]
+    result_ownership: str
+    operand_ownership: str
+    effects: tuple[str, ...]
+    error: str
+    suspend: bool
+    immediate: str
+    control: str
+    semantic: str
+    dispatch: str
+    dispatch_arg: str
+
+
+def _target_required_atom(form: SList, keyword: str, context: str) -> str:
+    value = _xi_get_kw(form, keyword)
+    if value is None:
+        die(f"{context}: missing {keyword}")
+    return _sexpr_atom_value(value, context)
+
+
+def _target_required_int(form: SList, keyword: str, context: str) -> int:
+    value = _xi_get_kw(form, keyword)
+    if value is None or not isinstance(value, SAtom) or not value.is_number:
+        die(f"{context}: {keyword} must be an integer")
+    return value.int_value
+
+
+def parse_target_instruction_def(text: str,
+                                 path: str = '<input>') -> list[TargetInstructionDef]:
+    forms = parse_sexpr(tokenize_sexpr(text, path), path)
+    entries = []
+    seen_source_names = set()
+    seen_names = set()
+    seen_idents = set()
+    seen_ids = set()
+    for form in forms:
+        if not isinstance(form, SList) or not form.children:
+            die(f"{path}: top-level form must be a list")
+        head = _sexpr_atom_value(form.children[0], path)
+        if head != 'define-target-instruction':
+            die(f"{path}:{form.line}:{form.col}: expected define-target-instruction")
+        if len(form.children) < 2:
+            die(f"{path}:{form.line}:{form.col}: missing instruction name")
+        source_name = _sexpr_atom_value(form.children[1], 'define-target-instruction')
+        ident = _xi_c_ident(source_name)
+        context = f"{path}:{source_name}"
+        stable_id = _target_required_int(form, ':id', context)
+        name = _target_required_atom(form, ':name', context)
+        arity = _target_required_int(form, ':arity', context)
+        terminator = _aot_bool_atom(form, ':terminator', context)
+        result_rep = _target_required_atom(form, ':result-rep', context)
+        operand_reps = tuple(_xi_parse_atom_list(
+            _xi_get_kw_list(form, ':operand-reps'), f"{context}:operand-reps"))
+        result_ownership = _target_required_atom(form, ':result-ownership', context)
+        operand_ownership = _target_required_atom(form, ':operand-ownership', context)
+        effects = tuple(_xi_parse_atom_list(
+            _xi_get_kw_list(form, ':effects'), f"{context}:effects"))
+        error = _target_required_atom(form, ':error', context)
+        suspend = _aot_bool_atom(form, ':suspend', context)
+        immediate = _target_required_atom(form, ':immediate', context)
+        control = _target_required_atom(form, ':control', context)
+        semantic = _target_required_atom(form, ':semantic', context)
+        dispatch = _target_required_atom(form, ':dispatch', context)
+        dispatch_arg = _target_required_atom(form, ':dispatch-arg', context)
+
+        if not source_name or source_name in seen_source_names:
+            die(f"{context}: duplicate or empty source name")
+        if not ident or ident in seen_idents:
+            die(f"{context}: duplicate or invalid C identifier '{ident}'")
+        if not name or name in seen_names:
+            die(f"{context}: duplicate or empty canonical name '{name}'")
+        if stable_id <= 0 or stable_id > 65534 or stable_id in seen_ids:
+            die(f"{context}: stable ID must be unique and in [1, 65534]")
+        if arity < 0 or arity > 2 or arity != len(operand_reps):
+            die(f"{context}: arity must exactly match zero to two operand reps")
+        if result_rep not in TARGET_REP_FAMILIES:
+            die(f"{context}: unknown result rep '{result_rep}'")
+        if any(rep not in TARGET_REP_FAMILIES or rep == 'none'
+               for rep in operand_reps):
+            die(f"{context}: operand reps must be concrete target families")
+        if result_ownership not in TARGET_RESULT_OWNERSHIPS:
+            die(f"{context}: unknown result ownership '{result_ownership}'")
+        if operand_ownership not in TARGET_OPERAND_OWNERSHIPS:
+            die(f"{context}: unknown operand ownership '{operand_ownership}'")
+        if len(set(effects)) != len(effects) or any(
+                effect not in TARGET_EFFECTS for effect in effects):
+            die(f"{context}: effects contain an unknown or duplicate value")
+        if error not in TARGET_ERRORS:
+            die(f"{context}: unknown error kind '{error}'")
+        if immediate not in TARGET_IMMEDIATE_KINDS:
+            die(f"{context}: unknown immediate kind '{immediate}'")
+        if control not in TARGET_CONTROL_KINDS:
+            die(f"{context}: unknown control kind '{control}'")
+        if dispatch not in TARGET_DISPATCH_ARGUMENTS or \
+                dispatch_arg not in TARGET_DISPATCH_ARGUMENTS[dispatch]:
+            die(f"{context}: invalid dispatch binding '{dispatch}/{dispatch_arg}'")
+        if semantic != 'none':
+            _xi_op_ident(semantic)
+
+        has_result = result_rep != 'none'
+        if terminator == has_result:
+            die(f"{context}: terminators have no result and computations require one")
+        if has_result != (result_ownership == 'trivial'):
+            die(f"{context}: result ownership does not match result presence")
+        if bool(operand_reps) != (operand_ownership == 'borrow'):
+            die(f"{context}: operand ownership does not match operand presence")
+        if terminator != (control != 'none') or terminator != ('control' in effects):
+            die(f"{context}: terminator, control kind, and control effect disagree")
+        if (error != 'none') != ('may-error' in effects):
+            die(f"{context}: error kind and may-error effect disagree")
+        if suspend != ('may-suspend' in effects):
+            die(f"{context}: suspend bit and may-suspend effect disagree")
+        if control == 'jump' and immediate != 'jump-target':
+            die(f"{context}: jump control requires a jump target immediate")
+        if control == 'branch' and immediate != 'branch-targets':
+            die(f"{context}: branch control requires branch target immediates")
+        if control == 'return' and immediate != 'none':
+            die(f"{context}: return control cannot carry an immediate")
+
+        seen_source_names.add(source_name)
+        seen_names.add(name)
+        seen_idents.add(ident)
+        seen_ids.add(stable_id)
+        entries.append(TargetInstructionDef(
+            source_name, ident, stable_id, name, arity, terminator, result_rep,
+            operand_reps, result_ownership, operand_ownership, effects, error,
+            suspend, immediate, control, semantic, dispatch, dispatch_arg))
+
+    entries.sort(key=lambda entry: entry.stable_id)
+    expected_ids = list(range(1, len(entries) + 1))
+    if [entry.stable_id for entry in entries] != expected_ids:
+        die(f"{path}: stable instruction IDs must be dense from 1")
+    return entries
+
+
+def _target_enum(prefix: str, value: str) -> str:
+    return f"{prefix}_{_xi_c_ident(value)}"
+
+
+def _target_effect_expr(effects: tuple[str, ...]) -> str:
+    if not effects:
+        return 'XR_TARGET_INSTRUCTION_EFFECT_NONE'
+    return ' | '.join(_target_enum('XR_TARGET_INSTRUCTION_EFFECT', effect)
+                      for effect in effects)
+
+
+def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> str:
+    lines = [
+        '/* AUTO-GENERATED by xisagen - DO NOT EDIT */',
+        '/* Source: xisa/target/vm_ops.def */',
+        '',
+        '#ifndef XR_TARGET_INSTRUCTION_GEN_H',
+        '#define XR_TARGET_INSTRUCTION_GEN_H',
+        '',
+        '#include <stdbool.h>',
+        '#include <stddef.h>',
+        '#include <stdint.h>',
+        '',
+        'typedef enum XrTargetInstructionOpcode {',
+        '    XR_TARGET_INSTRUCTION_INVALID = 0,',
+    ]
+    for entry in entries:
+        lines.append(f'    XR_TARGET_INSTRUCTION_{entry.ident} = {entry.stable_id},')
+    lines.extend([
+        f'    XR_TARGET_INSTRUCTION_COUNT = {len(entries) + 1}',
+        '} XrTargetInstructionOpcode;',
+        '',
+        f'#define XR_TARGET_INSTRUCTION_CONTRACT_COUNT {len(entries)}u',
+        f'#define XR_TARGET_INSTRUCTION_MAX_STABLE_ID {entries[-1].stable_id}u',
+        '',
+        'typedef enum XrTargetInstructionRepFamily {',
+        '    XR_TARGET_INSTRUCTION_REP_NONE = 0,',
+        '    XR_TARGET_INSTRUCTION_REP_I64,',
+        '    XR_TARGET_INSTRUCTION_REP_BOOL,',
+        '} XrTargetInstructionRepFamily;',
+        '',
+        'typedef enum XrTargetInstructionResultOwnership {',
+        '    XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP_NONE = 0,',
+        '    XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP_TRIVIAL,',
+        '} XrTargetInstructionResultOwnership;',
+        '',
+        'typedef enum XrTargetInstructionOperandOwnership {',
+        '    XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_NONE = 0,',
+        '    XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_BORROW,',
+        '} XrTargetInstructionOperandOwnership;',
+        '',
+        'typedef enum XrTargetInstructionEffect {',
+        '    XR_TARGET_INSTRUCTION_EFFECT_NONE = 0,',
+        '    XR_TARGET_INSTRUCTION_EFFECT_CONTROL = 1u << 0,',
+        '    XR_TARGET_INSTRUCTION_EFFECT_MAY_ERROR = 1u << 1,',
+        '    XR_TARGET_INSTRUCTION_EFFECT_MAY_SUSPEND = 1u << 2,',
+        '} XrTargetInstructionEffect;',
+        '',
+        'typedef enum XrTargetInstructionErrorKind {',
+        '    XR_TARGET_INSTRUCTION_ERROR_NONE = 0,',
+        '    XR_TARGET_INSTRUCTION_ERROR_DIVIDE_BY_ZERO,',
+        '    XR_TARGET_INSTRUCTION_ERROR_MODULO_BY_ZERO,',
+        '} XrTargetInstructionErrorKind;',
+        '',
+        'typedef enum XrTargetInstructionImmediateKind {',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_NONE = 0,',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_I64,',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_PARAMETER_ORDINAL,',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_JUMP_TARGET,',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_BRANCH_TARGETS,',
+        '} XrTargetInstructionImmediateKind;',
+        '',
+        'typedef enum XrTargetInstructionControlKind {',
+        '    XR_TARGET_INSTRUCTION_CONTROL_NONE = 0,',
+        '    XR_TARGET_INSTRUCTION_CONTROL_RETURN,',
+        '    XR_TARGET_INSTRUCTION_CONTROL_JUMP,',
+        '    XR_TARGET_INSTRUCTION_CONTROL_BRANCH,',
+        '} XrTargetInstructionControlKind;',
+        '',
+        'typedef enum XrTargetInstructionDispatchKind {',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_CONST = 0,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_PARAM,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_COPY,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_UNARY,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_BINARY,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_SHIFT,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_DIVMOD,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_COMPARE,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_RETURN,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_BRANCH,',
+        '} XrTargetInstructionDispatchKind;',
+        '',
+        'typedef enum XrTargetInstructionDispatchArgument {',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_NONE = 0,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_ADD,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_SUB,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_MUL,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BAND,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BOR,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BXOR,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_NEG,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BNOT,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_LEFT,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_RIGHT,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_DIV,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_MOD,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_EQ,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_NE,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_LT,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_LE,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_GT,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_GE,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_JUMP,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_I64,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BOOL,',
+        '} XrTargetInstructionDispatchArgument;',
+        '',
+        'typedef struct XrTargetInstructionContract {',
+        '    const char *name;',
+        '    const char *semantic_name;',
+        '    uint8_t arity;',
+        '    uint8_t terminator;',
+        '    uint8_t result_rep;',
+        '    uint8_t operand_rep[2];',
+        '    uint8_t result_ownership;',
+        '    uint8_t operand_ownership;',
+        '    uint8_t effects;',
+        '    uint8_t error_kind;',
+        '    uint8_t may_suspend;',
+        '    uint8_t immediate_kind;',
+        '    uint8_t control_kind;',
+        '    uint8_t dispatch_kind;',
+        '    uint8_t dispatch_argument;',
+        '} XrTargetInstructionContract;',
+        '',
+        'static inline const XrTargetInstructionContract *',
+        'xr_target_instruction_contract(uint16_t opcode) {',
+        '    static const XrTargetInstructionContract contracts[] = {',
+        '        {NULL, NULL, 0, false, XR_TARGET_INSTRUCTION_REP_NONE,',
+        '         {XR_TARGET_INSTRUCTION_REP_NONE, XR_TARGET_INSTRUCTION_REP_NONE},',
+        '         XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP_NONE,',
+        '         XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_NONE,',
+        '         XR_TARGET_INSTRUCTION_EFFECT_NONE, XR_TARGET_INSTRUCTION_ERROR_NONE,',
+        '         false, XR_TARGET_INSTRUCTION_IMMEDIATE_NONE,',
+        '         XR_TARGET_INSTRUCTION_CONTROL_NONE,',
+        '         XR_TARGET_INSTRUCTION_DISPATCH_CONST,',
+        '         XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_NONE},',
+    ])
+    for entry in entries:
+        operand_reps = list(entry.operand_reps) + ['none'] * (2 - entry.arity)
+        semantic_name = 'NULL' if entry.semantic == 'none' else f'"{entry.semantic}"'
+        lines.extend([
+            f'        {{"{entry.name}", {semantic_name}, {entry.arity},',
+            f'         {str(entry.terminator).lower()}, '
+            f'{_target_enum("XR_TARGET_INSTRUCTION_REP", entry.result_rep)},',
+            f'         {{{_target_enum("XR_TARGET_INSTRUCTION_REP", operand_reps[0])},',
+            f'          {_target_enum("XR_TARGET_INSTRUCTION_REP", operand_reps[1])}}},',
+            f'         {_target_enum("XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP", entry.result_ownership)},',
+            f'         {_target_enum("XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP", entry.operand_ownership)},',
+            f'         {_target_effect_expr(entry.effects)},',
+            f'         {_target_enum("XR_TARGET_INSTRUCTION_ERROR", entry.error)},',
+            f'         {str(entry.suspend).lower()},',
+            f'         {_target_enum("XR_TARGET_INSTRUCTION_IMMEDIATE", entry.immediate)},',
+            f'         {_target_enum("XR_TARGET_INSTRUCTION_CONTROL", entry.control)},',
+            f'         {_target_enum("XR_TARGET_INSTRUCTION_DISPATCH", entry.dispatch)},',
+            f'         {_target_enum("XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT", entry.dispatch_arg)}}},',
+        ])
+    lines.extend([
+        '    };',
+        '    if (opcode <= XR_TARGET_INSTRUCTION_INVALID ||',
+        '        opcode >= XR_TARGET_INSTRUCTION_COUNT)',
+        '        return NULL;',
+        '    return &contracts[opcode];',
+        '}',
+        '',
+        'static inline const char *xr_target_instruction_opcode_name(uint16_t opcode) {',
+        '    const XrTargetInstructionContract *contract =',
+        '        xr_target_instruction_contract(opcode);',
+        '    return contract ? contract->name : NULL;',
+        '}',
+        '',
+        'static inline bool xr_target_instruction_is_terminator(uint16_t opcode) {',
+        '    const XrTargetInstructionContract *contract =',
+        '        xr_target_instruction_contract(opcode);',
+        '    return contract && contract->terminator;',
+        '}',
+        '',
+    ])
+    semantic_entries = [entry for entry in entries if entry.semantic != 'none']
+    lines.append('#define XR_TARGET_INSTRUCTION_SEMANTIC_BINDINGS(X) \\')
+    for index, entry in enumerate(semantic_entries):
+        suffix = ' \\' if index + 1 < len(semantic_entries) else ''
+        lines.append(
+            f'    X(XI_{_xi_op_ident(entry.semantic)}, {entry.ident}){suffix}')
+    lines.extend(['', '#endif  /* XR_TARGET_INSTRUCTION_GEN_H */', ''])
+    return '\n'.join(lines)
+
+
+def generate_target_vm_ops(entries: list[TargetInstructionDef]) -> str:
+    lines = [
+        '/* AUTO-GENERATED by xisagen - DO NOT EDIT */',
+        '/* Source: xisa/target/vm_ops.def */',
+        '',
+    ]
+    for entry in entries:
+        lines.append(f'XR_VM_OP({entry.ident}, {entry.dispatch}, '
+                     f'{_xi_c_ident(entry.dispatch)}, '
+                     f'{_xi_c_ident(entry.dispatch_arg)})')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def write_target_vm_outputs(output_root: str,
+                            entries: list[TargetInstructionDef]) -> list[str]:
+    outputs = {
+        'src/plan/target/xr_target_instruction_gen.h':
+            generate_target_instruction_header(entries),
+        'src/vm/xr_vm_ops.def': generate_target_vm_ops(entries),
+    }
+    written = []
+    for relative, content in outputs.items():
+        output = os.path.join(output_root, *relative.split('/'))
+        write_file(output, content)
+        written.append(output)
+    return written
+
+
+# ============================================================
 # Command-line entry points
 # ============================================================
 
@@ -3748,6 +4148,19 @@ def cmd_aot_layout(args: list[str]):
     print(f"xisagen: generated {args[2]}", file=sys.stderr)
 
 
+def cmd_target_vm_ops(args: list[str]):
+    if len(args) != 2:
+        die("usage: xisagen.py target-vm-ops <vm_ops.def> <output-root>")
+    entries = parse_target_instruction_def(read_file(args[0]), args[0])
+    if not entries:
+        die(f"no target instructions parsed from {args[0]}")
+    outputs = write_target_vm_outputs(args[1], entries)
+    print(f"xisagen: parsed {len(entries)} target instructions from {args[0]}",
+          file=sys.stderr)
+    for path in outputs:
+        print(f"xisagen: generated {path}", file=sys.stderr)
+
+
 def cmd_test(args: list[str]):
     """Run self-tests."""
     print("xisagen self-test:", file=sys.stderr)
@@ -3759,6 +4172,7 @@ def cmd_test(args: list[str]):
     _test_aot_rep_parser()
     _test_aot_abi_parser()
     _test_aot_layout_parser()
+    _test_target_instruction_parser()
     _test_error_paths()
     print("All xisagen self-tests passed.", file=sys.stderr)
 
@@ -4733,6 +5147,64 @@ def _test_aot_layout_parser():
     print(" PASS", file=sys.stderr)
 
 
+def _test_target_instruction_parser():
+    print("  test_target_instruction_parser...", end='', file=sys.stderr)
+    text = '''
+    (define-target-instruction const-i64
+      :id 1 :name "const.i64" :arity 0 :terminator no
+      :result-rep i64 :operand-reps ()
+      :result-ownership trivial :operand-ownership none
+      :effects () :error none :suspend no :immediate i64 :control none
+      :semantic xi.const :dispatch const :dispatch-arg none)
+    (define-target-instruction return-i64
+      :id 2 :name "return.i64" :arity 1 :terminator yes
+      :result-rep none :operand-reps (i64)
+      :result-ownership none :operand-ownership borrow
+      :effects (control) :error none :suspend no :immediate none :control return
+      :semantic none :dispatch return :dispatch-arg none)
+    '''
+    entries = parse_target_instruction_def(text)
+    assert len(entries) == 2
+    assert entries[0].stable_id == 1 and entries[1].terminator
+    header = generate_target_instruction_header(entries)
+    assert 'XR_TARGET_INSTRUCTION_CONST_I64 = 1' in header
+    assert 'XR_TARGET_INSTRUCTION_COUNT = 3' in header
+    assert 'X(XI_CONST, CONST_I64)' in header
+    dispatch = generate_target_vm_ops(entries)
+    assert 'XR_VM_OP(CONST_I64, const, CONST, NONE)' in dispatch
+    assert 'XR_VM_OP(RETURN_I64, return, RETURN, NONE)' in dispatch
+    specialized = parse_target_instruction_def(
+        text.replace(':semantic none :dispatch return',
+                     ':semantic xi.const :dispatch return'))
+    assert specialized[0].semantic == specialized[1].semantic
+
+    wide_text = '\n'.join(
+        f'''(define-target-instruction op-{stable_id}
+          :id {stable_id} :name "op.{stable_id}" :arity 0 :terminator no
+          :result-rep i64 :operand-reps ()
+          :result-ownership trivial :operand-ownership none
+          :effects () :error none :suspend no :immediate none :control none
+          :semantic none :dispatch const :dispatch-arg none)'''
+        for stable_id in range(1, 257))
+    assert parse_target_instruction_def(wide_text)[-1].stable_id == 256
+
+    def rejects(source: str):
+        try:
+            parse_target_instruction_def(source)
+            assert False, "invalid target instruction registry should be rejected"
+        except SystemExit:
+            pass
+
+    rejects(text.replace(':id 2', ':id 3'))
+    rejects(text.replace(':arity 1', ':arity 0'))
+    rejects(text.replace(':effects (control)', ':effects ()'))
+    rejects(text.replace(':error none :suspend no :immediate none :control return',
+                         ':error divide-by-zero :suspend no :immediate none :control return'))
+    rejects(text.replace(':dispatch return :dispatch-arg none',
+                         ':dispatch return :dispatch-arg i64'))
+    print(" PASS", file=sys.stderr)
+
+
 def _test_error_paths():
     print("  test_error_paths...", end='', file=sys.stderr)
 
@@ -4785,6 +5257,7 @@ def main():
         'aot-rep': cmd_aot_rep,
         'aot-abi': cmd_aot_abi,
         'aot-layout': cmd_aot_layout,
+        'target-vm-ops': cmd_target_vm_ops,
         'test': cmd_test,
     }
 

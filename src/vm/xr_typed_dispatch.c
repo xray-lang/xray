@@ -89,21 +89,6 @@ static XrTypedDispatchStatus store_bool_byte(XrTypedFrame *frame, uint32_t slot,
                : XR_TYPED_DISPATCH_FRAME_ERROR;
 }
 
-/* The relation a comparison row names, as the shared comparison owner spells
- * it. The row's opcode is the only thing that selects it, so the executor never
- * restates what any relation means. */
-static bool compare_row_kind(uint8_t opcode, XrCompareKind *kind) {
-    switch ((XrTargetInstructionOpcode) opcode) {
-        case XR_TARGET_INSTRUCTION_CMP_EQ_I64: *kind = XR_COMPARE_EQ; return true;
-        case XR_TARGET_INSTRUCTION_CMP_NE_I64: *kind = XR_COMPARE_NE; return true;
-        case XR_TARGET_INSTRUCTION_CMP_LT_I64: *kind = XR_COMPARE_LT; return true;
-        case XR_TARGET_INSTRUCTION_CMP_LE_I64: *kind = XR_COMPARE_LE; return true;
-        case XR_TARGET_INSTRUCTION_CMP_GT_I64: *kind = XR_COMPARE_GT; return true;
-        case XR_TARGET_INSTRUCTION_CMP_GE_I64: *kind = XR_COMPARE_GE; return true;
-        default: return false;
-    }
-}
-
 /*
  * Executes one row. `next` arrives holding the row that follows in the table
  * and is rewritten only by a jump or a branch, so control flow is explicit
@@ -120,202 +105,197 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
     uint64_t left = 0;
     uint64_t right = 0;
     XrTypedDispatchStatus status = XR_TYPED_DISPATCH_OK;
+    const XrTargetInstructionContract *contract =
+        xr_target_instruction_contract(row->opcode);
+    if (!contract)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     switch ((XrTargetInstructionOpcode) row->opcode) {
-        case XR_TARGET_INSTRUCTION_CONST_I64:
-            return store_i64_bits(frame, row->result_slot, row->immediate_bits);
-        case XR_TARGET_INSTRUCTION_PARAM_I64:
-            /* The immediate is the argument ordinal the verifier proved dense;
-             * the bound is repeated here so a caller vector shorter than the
-             * program can never read past its end. */
-            if (!arguments || row->immediate_bits >= argument_count)
-                return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
-            memcpy(&left, &arguments[row->immediate_bits], sizeof(left));
-            return store_i64_bits(frame, row->result_slot, left);
-        case XR_TARGET_INSTRUCTION_COPY_I64:
-            status = load_i64_bits(frame, row->operand_slots[0], &left);
-            return status == XR_TYPED_DISPATCH_OK
-                       ? store_i64_bits(frame, row->result_slot, left)
-                       : status;
-        case XR_TARGET_INSTRUCTION_NEG_WRAP_I64:
-            status = load_i64_bits(frame, row->operand_slots[0], &left);
-            if (status != XR_TYPED_DISPATCH_OK)
-                return status;
-            /* Negation wraps like the other arithmetic rows: the plan carries
-             * wrapping semantics, so INT64_MIN negates to itself rather than
-             * trapping. */
-            return store_i64_bits(frame, row->result_slot, (uint64_t) (0 - left));
-        case XR_TARGET_INSTRUCTION_BNOT_I64:
-            status = load_i64_bits(frame, row->operand_slots[0], &left);
-            if (status != XR_TYPED_DISPATCH_OK)
-                return status;
-            return store_i64_bits(frame, row->result_slot, ~left);
-        case XR_TARGET_INSTRUCTION_ADD_WRAP_I64:
-        case XR_TARGET_INSTRUCTION_SUB_WRAP_I64:
-        case XR_TARGET_INSTRUCTION_MUL_WRAP_I64:
-        case XR_TARGET_INSTRUCTION_BAND_I64:
-        case XR_TARGET_INSTRUCTION_BOR_I64:
-        case XR_TARGET_INSTRUCTION_BXOR_I64:
-            status = load_i64_bits(frame, row->operand_slots[0], &left);
-            if (status != XR_TYPED_DISPATCH_OK)
-                return status;
-            status = load_i64_bits(frame, row->operand_slots[1], &right);
-            if (status != XR_TYPED_DISPATCH_OK)
-                return status;
-            if (row->opcode == XR_TARGET_INSTRUCTION_ADD_WRAP_I64)
-                left += right;
-            else if (row->opcode == XR_TARGET_INSTRUCTION_SUB_WRAP_I64)
-                left -= right;
-            else if (row->opcode == XR_TARGET_INSTRUCTION_MUL_WRAP_I64)
-                left *= right;
-            else if (row->opcode == XR_TARGET_INSTRUCTION_BAND_I64)
-                left &= right;
-            else if (row->opcode == XR_TARGET_INSTRUCTION_BOR_I64)
-                left |= right;
-            else
-                left ^= right;
-            return store_i64_bits(frame, row->result_slot, left);
-        case XR_TARGET_INSTRUCTION_SHL_MASKED_I64:
-        case XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64: {
-            status = load_i64_bits(frame, row->operand_slots[0], &left);
-            if (status != XR_TYPED_DISPATCH_OK)
-                return status;
-            status = load_i64_bits(frame, row->operand_slots[1], &right);
-            if (status != XR_TYPED_DISPATCH_OK)
-                return status;
-            int64_t value = 0;
-            int64_t count = 0;
-            memcpy(&value, &left, sizeof(value));
-            memcpy(&count, &right, sizeof(count));
-            /* The shared shift owner is the single definition of the count
-             * rule: it takes the count modulo 64, so this row is defined for
-             * every i64 count and agrees exactly with the bytecode VM, the AOT
-             * runtime, and constant folding. Going through it is also what
-             * keeps the executor out of C's undefined shift. */
-            int64_t shifted = XR_SHIFT_OWNER_APPLY(
-                XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
-                XR_SEM_CONSUMER_VM,
-                row->opcode == XR_TARGET_INSTRUCTION_SHL_MASKED_I64
-                    ? XR_SHIFT_LEFT
-                    : XR_SHIFT_RIGHT_SIGNED,
-                value, count);
-            memcpy(&left, &shifted, sizeof(left));
-            return store_i64_bits(frame, row->result_slot, left);
-        }
-        case XR_TARGET_INSTRUCTION_DIV_TRAP_I64:
-        case XR_TARGET_INSTRUCTION_MOD_TRAP_I64: {
-            status = load_i64_bits(frame, row->operand_slots[0], &left);
-            if (status != XR_TYPED_DISPATCH_OK)
-                return status;
-            status = load_i64_bits(frame, row->operand_slots[1], &right);
-            if (status != XR_TYPED_DISPATCH_OK)
-                return status;
-            int64_t dividend = 0;
-            int64_t divisor = 0;
-            memcpy(&dividend, &left, sizeof(dividend));
-            memcpy(&divisor, &right, sizeof(divisor));
-            bool dividing = row->opcode == XR_TARGET_INSTRUCTION_DIV_TRAP_I64;
-            /* The divisor is a runtime value, so this is the only place the
-             * zero can be caught. The program stops here with the status that
-             * names the operator, leaving the frame untouched, rather than
-             * executing a division C leaves undefined. */
-            if (divisor == 0)
-                return dividing ? XR_TYPED_DISPATCH_DIVIDE_BY_ZERO
-                                : XR_TYPED_DISPATCH_MODULO_BY_ZERO;
-            /* INT64_MIN by -1 is the other C undefined case, and it is defined
-             * rather than refused: the shared helpers give the wrapping negate
-             * and the zero remainder that the bytecode VM, the AOT runtime,
-             * and constant folding all produce for it. */
-            /* The owner macro takes a constant kind, so the two rows resolve
-             * it separately rather than selecting one at run time. */
-            XrIntDivModResult evaluated =
-                dividing ? XR_INT_DIV_MOD_OWNER_APPLY(
-                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,
-                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,
-                               XR_SEM_CONSUMER_VM, XR_INT_DIV_MOD_DIV,
-                               XR_INT_DIV_MOD_PROOF_NONZERO, dividend, divisor)
-                         : XR_INT_DIV_MOD_OWNER_APPLY(
-                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,
-                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,
-                               XR_SEM_CONSUMER_VM, XR_INT_DIV_MOD_MOD,
-                               XR_INT_DIV_MOD_PROOF_NONZERO, dividend, divisor);
-            int64_t computed = evaluated.value;
-            memcpy(&left, &computed, sizeof(left));
-            return store_i64_bits(frame, row->result_slot, left);
-        }
-        case XR_TARGET_INSTRUCTION_CMP_EQ_I64:
-        case XR_TARGET_INSTRUCTION_CMP_NE_I64:
-        case XR_TARGET_INSTRUCTION_CMP_LT_I64:
-        case XR_TARGET_INSTRUCTION_CMP_LE_I64:
-        case XR_TARGET_INSTRUCTION_CMP_GT_I64:
-        case XR_TARGET_INSTRUCTION_CMP_GE_I64: {
-            XrCompareKind kind = XR_COMPARE_EQ;
-            if (!compare_row_kind(row->opcode, &kind))
-                return XR_TYPED_DISPATCH_PROGRAM_INVALID;
-            status = load_i64_bits(frame, row->operand_slots[0], &left);
-            if (status != XR_TYPED_DISPATCH_OK)
-                return status;
-            status = load_i64_bits(frame, row->operand_slots[1], &right);
-            if (status != XR_TYPED_DISPATCH_OK)
-                return status;
-            int64_t first = 0;
-            int64_t second = 0;
-            memcpy(&first, &left, sizeof(first));
-            memcpy(&second, &right, sizeof(second));
-            /* The shared comparison owner is the single definition of what each
-             * relation means. Both operands are proved exact signed i64, so the
-             * pair lands on the owner's signed 64-bit lane and needs no route
-             * question; going through the owner is what keeps this executor in
-             * agreement with the bytecode VM, the AOT runtime, and constant
-             * folding instead of stating the six relations a seventh time. */
-            bool holds = XR_COMPARE_OWNER_APPLY_I64(
-                XR_SEM_OWNER_ID_SHARED_COMPARE_HI,
-                XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_VM, kind,
-                first, second);
-            return store_bool_byte(frame, row->result_slot,
-                                   holds ? (uint8_t) 1u : (uint8_t) 0u);
-        }
-        case XR_TARGET_INSTRUCTION_RETURN_I64:
-            *returned = true;
-            return load_i64_bits(frame, row->operand_slots[0], return_bits);
-        case XR_TARGET_INSTRUCTION_JUMP:
-        case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64:
-        case XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL: {
-            uint32_t target = XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(
-                row->immediate_bits);
-            if (row->opcode == XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64) {
-                status = load_i64_bits(frame, row->operand_slots[0], &left);
-                if (status != XR_TYPED_DISPATCH_OK)
-                    return status;
-                /* The condition is compared against zero as a bit pattern, so
-                 * every i64 value selects an edge and no value is outside the
-                 * test. */
-                if (left == 0)
-                    target = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(
-                        row->immediate_bits);
-            } else if (row->opcode == XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL) {
-                uint8_t truth = 0;
-                status = load_bool_byte(frame, row->operand_slots[0], &truth);
-                if (status != XR_TYPED_DISPATCH_OK)
-                    return status;
-                /* The same test one byte wide. Only a comparison row writes a
-                 * truth slot and it writes 0 or 1, but testing the whole byte
-                 * against zero needs no such assumption. */
-                if (truth == 0)
-                    target = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(
-                        row->immediate_bits);
-            }
-            /* The verifier proved the target is the first row of a block of
-             * this same group; the bound is repeated here so a table that
-             * changed underneath cannot move the instruction pointer out of
-             * the group. */
-            if (target >= row_count)
-                return XR_TYPED_DISPATCH_PROGRAM_INVALID;
-            *next = target;
-            return XR_TYPED_DISPATCH_OK;
-        }
+#define XR_VM_OP(symbol, handler, kind, argument)                                                   \
+        case XR_TARGET_INSTRUCTION_##symbol:                                                       \
+            if (contract->dispatch_kind != XR_TARGET_INSTRUCTION_DISPATCH_##kind ||                 \
+                contract->dispatch_argument !=                                                     \
+                    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_##argument)                             \
+                return XR_TYPED_DISPATCH_PROGRAM_INVALID;                                          \
+            goto execute_##handler;
+#include "xr_vm_ops.def"
+#undef XR_VM_OP
         default:
             return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     }
+
+execute_const:
+    return store_i64_bits(frame, row->result_slot, row->immediate_bits);
+
+execute_param:
+    /* The immediate is the argument ordinal the verifier proved dense. */
+    if (!arguments || row->immediate_bits >= argument_count)
+        return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
+    memcpy(&left, &arguments[row->immediate_bits], sizeof(left));
+    return store_i64_bits(frame, row->result_slot, left);
+
+execute_copy:
+    status = load_i64_bits(frame, row->operand_slots[0], &left);
+    return status == XR_TYPED_DISPATCH_OK
+               ? store_i64_bits(frame, row->result_slot, left)
+               : status;
+
+execute_unary:
+    status = load_i64_bits(frame, row->operand_slots[0], &left);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    if (contract->dispatch_argument ==
+        XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_NEG)
+        left = (uint64_t) (0 - left);
+    else if (contract->dispatch_argument ==
+             XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BNOT)
+        left = ~left;
+    else
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    return store_i64_bits(frame, row->result_slot, left);
+
+execute_binary:
+    status = load_i64_bits(frame, row->operand_slots[0], &left);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    status = load_i64_bits(frame, row->operand_slots[1], &right);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    switch ((XrTargetInstructionDispatchArgument) contract->dispatch_argument) {
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_ADD: left += right; break;
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_SUB: left -= right; break;
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_MUL: left *= right; break;
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BAND: left &= right; break;
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BOR: left |= right; break;
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BXOR: left ^= right; break;
+        default: return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    }
+    return store_i64_bits(frame, row->result_slot, left);
+
+execute_shift: {
+    status = load_i64_bits(frame, row->operand_slots[0], &left);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    status = load_i64_bits(frame, row->operand_slots[1], &right);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    int64_t value = 0;
+    int64_t count = 0;
+    memcpy(&value, &left, sizeof(value));
+    memcpy(&count, &right, sizeof(count));
+    XrShiftKind kind = XR_SHIFT_LEFT;
+    if (contract->dispatch_argument ==
+        XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_RIGHT)
+        kind = XR_SHIFT_RIGHT_SIGNED;
+    else if (contract->dispatch_argument !=
+             XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_LEFT)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    int64_t shifted = XR_SHIFT_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
+        XR_SEM_CONSUMER_VM, kind, value, count);
+    memcpy(&left, &shifted, sizeof(left));
+    return store_i64_bits(frame, row->result_slot, left);
+}
+
+execute_divmod: {
+    status = load_i64_bits(frame, row->operand_slots[0], &left);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    status = load_i64_bits(frame, row->operand_slots[1], &right);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    int64_t dividend = 0;
+    int64_t divisor = 0;
+    memcpy(&dividend, &left, sizeof(dividend));
+    memcpy(&divisor, &right, sizeof(divisor));
+    bool dividing = contract->dispatch_argument ==
+                    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_DIV;
+    if (!dividing && contract->dispatch_argument !=
+                         XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_MOD)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    if (divisor == 0) {
+        if (contract->error_kind ==
+            XR_TARGET_INSTRUCTION_ERROR_DIVIDE_BY_ZERO)
+            return XR_TYPED_DISPATCH_DIVIDE_BY_ZERO;
+        if (contract->error_kind ==
+            XR_TARGET_INSTRUCTION_ERROR_MODULO_BY_ZERO)
+            return XR_TYPED_DISPATCH_MODULO_BY_ZERO;
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    }
+    XrIntDivModResult evaluated =
+        dividing ? XR_INT_DIV_MOD_OWNER_APPLY(
+                       XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,
+                       XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,
+                       XR_SEM_CONSUMER_VM, XR_INT_DIV_MOD_DIV,
+                       XR_INT_DIV_MOD_PROOF_NONZERO, dividend, divisor)
+                 : XR_INT_DIV_MOD_OWNER_APPLY(
+                       XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,
+                       XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,
+                       XR_SEM_CONSUMER_VM, XR_INT_DIV_MOD_MOD,
+                       XR_INT_DIV_MOD_PROOF_NONZERO, dividend, divisor);
+    int64_t computed = evaluated.value;
+    memcpy(&left, &computed, sizeof(left));
+    return store_i64_bits(frame, row->result_slot, left);
+}
+
+execute_compare: {
+    XrCompareKind kind = XR_COMPARE_EQ;
+    switch ((XrTargetInstructionDispatchArgument) contract->dispatch_argument) {
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_EQ: kind = XR_COMPARE_EQ; break;
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_NE: kind = XR_COMPARE_NE; break;
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_LT: kind = XR_COMPARE_LT; break;
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_LE: kind = XR_COMPARE_LE; break;
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_GT: kind = XR_COMPARE_GT; break;
+        case XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_GE: kind = XR_COMPARE_GE; break;
+        default: return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    }
+    status = load_i64_bits(frame, row->operand_slots[0], &left);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    status = load_i64_bits(frame, row->operand_slots[1], &right);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    int64_t first = 0;
+    int64_t second = 0;
+    memcpy(&first, &left, sizeof(first));
+    memcpy(&second, &right, sizeof(second));
+    bool holds = XR_COMPARE_OWNER_APPLY_I64(
+        XR_SEM_OWNER_ID_SHARED_COMPARE_HI, XR_SEM_OWNER_ID_SHARED_COMPARE_LO,
+        XR_SEM_CONSUMER_VM, kind, first, second);
+    return store_bool_byte(frame, row->result_slot,
+                           holds ? (uint8_t) 1u : (uint8_t) 0u);
+}
+
+execute_return:
+    *returned = true;
+    return load_i64_bits(frame, row->operand_slots[0], return_bits);
+
+execute_branch: {
+    uint32_t target =
+        XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(row->immediate_bits);
+    if (contract->dispatch_argument ==
+        XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_I64) {
+        status = load_i64_bits(frame, row->operand_slots[0], &left);
+        if (status != XR_TYPED_DISPATCH_OK)
+            return status;
+        if (left == 0)
+            target = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(row->immediate_bits);
+    } else if (contract->dispatch_argument ==
+               XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_BOOL) {
+        uint8_t truth = 0;
+        status = load_bool_byte(frame, row->operand_slots[0], &truth);
+        if (status != XR_TYPED_DISPATCH_OK)
+            return status;
+        if (truth == 0)
+            target = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(row->immediate_bits);
+    } else if (contract->dispatch_argument !=
+               XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_JUMP) {
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    }
+    if (target >= row_count)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    *next = target;
+    return XR_TYPED_DISPATCH_OK;
+}
 }
 
 XrTypedDispatchStatus xr_typed_dispatch_execute_i64(

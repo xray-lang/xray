@@ -87,38 +87,22 @@ static bool slot_is_family(const XrTargetPlan *plan,
     return true;
 }
 
-static bool slot_is_i64(const XrTargetPlan *plan,
-                        const XrTargetFunctionRecord *function,
-                        uint32_t function_index, uint32_t slot_index,
-                        const XrTargetSlotRecord **out) {
-    return slot_is_family(plan, function, function_index, slot_index,
-                          SLOT_FAMILY_I64, out);
-}
-
 /* Row shape only. That an operand is already defined where it is read is a
  * whole-group question once a function has several blocks, so it is proved
  * separately by the control-flow fixed point rather than by the order this
  * pass happens to walk the table in. */
-static bool operand_is_function_i64(const XrTargetPlan *plan,
-                                    const XrTargetFunctionRecord *function,
-                                    uint32_t function_index, uint32_t slot) {
-    return slot_is_i64(plan, function, function_index, slot, NULL);
-}
-
-static bool operand_is_function_bool(const XrTargetPlan *plan,
-                                     const XrTargetFunctionRecord *function,
-                                     uint32_t function_index, uint32_t slot) {
-    return slot_is_family(plan, function, function_index, slot,
-                          SLOT_FAMILY_BOOL, NULL);
-}
-
-/* Which family a row's result slot must belong to. A comparison writes the
- * truth family and every other computation writes the signed i64 one, so the
- * opcode alone decides it and a row can never be admitted against the family
- * its own result happens to have. */
-static SlotFamily row_result_family(uint8_t opcode) {
-    return XR_TARGET_INSTRUCTION_IS_COMPARE(opcode) ? SLOT_FAMILY_BOOL
-                                                    : SLOT_FAMILY_I64;
+static bool slot_is_contract_rep(const XrTargetPlan *plan,
+                                 const XrTargetFunctionRecord *function,
+                                 uint32_t function_index, uint32_t slot,
+                                 uint8_t rep,
+                                 const XrTargetSlotRecord **out) {
+    if (rep == XR_TARGET_INSTRUCTION_REP_I64)
+        return slot_is_family(plan, function, function_index, slot,
+                              SLOT_FAMILY_I64, out);
+    if (rep == XR_TARGET_INSTRUCTION_REP_BOOL)
+        return slot_is_family(plan, function, function_index, slot,
+                              SLOT_FAMILY_BOOL, out);
+    return false;
 }
 
 /* Counted independently of the rows so that a group binding fewer arguments
@@ -136,29 +120,22 @@ static uint32_t function_parameter_slot_count(const XrTargetPlan *plan,
     return parameters;
 }
 
-/* Shared shape of every two-operand computation row: canonical arity, an
- * unused immediate, and two operand slots this function owns. A computation
- * never ends a block, so it may not be the group's last row. */
-static bool binary_row_shape_is_exact(const XrTargetPlan *plan,
-                                      const XrTargetFunctionRecord *function,
-                                      uint32_t function_index,
-                                      const XrTargetInstructionRecord *row,
-                                      bool terminal) {
-    return row->operand_count == 2 && row->immediate_bits == 0 &&
-           operand_is_function_i64(plan, function, function_index,
-                                   row->operand_slots[0]) &&
-           operand_is_function_i64(plan, function, function_index,
-                                   row->operand_slots[1]) &&
-           !terminal;
-}
-
-static bool slot_role_is(const XrTargetPlan *plan,
-                         const XrTargetFunctionRecord *function,
-                         uint32_t function_index, uint32_t slot_index,
-                         uint8_t role) {
-    const XrTargetSlotRecord *slot = NULL;
-    return slot_is_i64(plan, function, function_index, slot_index, &slot) &&
-           slot->role == role;
+static bool row_immediate_is_exact(
+    const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract) {
+    switch ((XrTargetInstructionImmediateKind) contract->immediate_kind) {
+        case XR_TARGET_INSTRUCTION_IMMEDIATE_NONE:
+            return row->immediate_bits == 0;
+        case XR_TARGET_INSTRUCTION_IMMEDIATE_I64:
+        case XR_TARGET_INSTRUCTION_IMMEDIATE_BRANCH_TARGETS:
+            return true;
+        case XR_TARGET_INSTRUCTION_IMMEDIATE_PARAMETER_ORDINAL:
+            return row->immediate_bits < XR_TARGET_INSTRUCTION_MAX_PARAMETERS;
+        case XR_TARGET_INSTRUCTION_IMMEDIATE_JUMP_TARGET:
+            return XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(row->immediate_bits) == 0;
+        default:
+            return false;
+    }
 }
 
 /* One bitmap word per 64 slots. The proof below reasons about sets of slots
@@ -294,14 +271,14 @@ bool xr_target_instruction_rows_control_flow_is_exact(
     uint32_t slot_begin, uint32_t slot_count) {
     if (!rows || !row_count || !slot_count ||
         slot_count > UINT32_MAX - slot_begin ||
-        !XR_TARGET_INSTRUCTION_IS_TERMINATOR(rows[row_count - 1u].opcode))
+        !xr_target_instruction_is_terminator(rows[row_count - 1u].opcode))
         return false;
     /* The block partition is derived, not declared: a block begins at the first
      * row and after every terminator, so every block ends in a terminator by
      * construction and the last row cannot fall off the end of the table. */
     uint32_t block_count = 1;
     for (uint32_t i = 0; i + 1u < row_count; i++) {
-        if (!XR_TARGET_INSTRUCTION_IS_TERMINATOR(rows[i].opcode))
+        if (!xr_target_instruction_is_terminator(rows[i].opcode))
             continue;
         if (block_count >= XR_TARGET_INSTRUCTION_MAX_BLOCKS)
             return false;
@@ -320,7 +297,7 @@ bool xr_target_instruction_rows_control_flow_is_exact(
     uint32_t block = 0;
     proof.block_start[0] = 0;
     for (uint32_t i = 0; i + 1u < row_count; i++)
-        if (XR_TARGET_INSTRUCTION_IS_TERMINATOR(rows[i].opcode))
+        if (xr_target_instruction_is_terminator(rows[i].opcode))
             proof.block_start[++block] = i + 1u;
     proof.block_start[block_count] = row_count;
     if (block + 1u != block_count)
@@ -332,13 +309,16 @@ bool xr_target_instruction_rows_control_flow_is_exact(
     for (block = 0; block < block_count && valid; block++) {
         const XrTargetInstructionRecord *terminator =
             &rows[proof.block_start[block + 1u] - 1u];
+        const XrTargetInstructionContract *contract =
+            xr_target_instruction_contract(terminator->opcode);
         uint64_t immediate = terminator->immediate_bits;
         proof.successors[block * 2u] = UINT32_MAX;
         proof.successors[block * 2u + 1u] = UINT32_MAX;
-        switch ((XrTargetInstructionOpcode) terminator->opcode) {
-            case XR_TARGET_INSTRUCTION_RETURN_I64:
+        switch (contract ? (XrTargetInstructionControlKind) contract->control_kind
+                         : XR_TARGET_INSTRUCTION_CONTROL_NONE) {
+            case XR_TARGET_INSTRUCTION_CONTROL_RETURN:
                 break;
-            case XR_TARGET_INSTRUCTION_JUMP:
+            case XR_TARGET_INSTRUCTION_CONTROL_JUMP:
                 valid = XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(immediate) == 0 &&
                         control_flow_target_block(
                             proof.block_start, block_count,
@@ -348,8 +328,7 @@ bool xr_target_instruction_rows_control_flow_is_exact(
             /* Both branch rows carry the same pair of explicit edges; only the
              * width of the condition they read differs, and that is a row-shape
              * question rather than a control-flow one. */
-            case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64:
-            case XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL:
+            case XR_TARGET_INSTRUCTION_CONTROL_BRANCH:
                 valid = control_flow_target_block(
                             proof.block_start, block_count,
                             XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(immediate),
@@ -511,151 +490,50 @@ static bool verify_function_group(const XrTargetPlan *plan,
     for (uint32_t i = 0; i < row_count && valid; i++) {
         const XrTargetInstructionRecord *row = &rows[i];
         bool terminal = i + 1u == row_count;
-        if (row->function != function_index || row->reserved != 0 ||
-            row->opcode <= XR_TARGET_INSTRUCTION_INVALID ||
-            row->opcode >= XR_TARGET_INSTRUCTION_COUNT) {
+        const XrTargetInstructionContract *contract =
+            xr_target_instruction_contract(row->opcode);
+        if (row->function != function_index || row->reserved != 0 || !contract ||
+            row->operand_count != contract->arity ||
+            (!contract->terminator && terminal) ||
+            !row_immediate_is_exact(row, contract)) {
             valid = false;
             break;
         }
-        switch ((XrTargetInstructionOpcode) row->opcode) {
-            case XR_TARGET_INSTRUCTION_CONST_I64:
-                valid = row->operand_count == 0 &&
-                        row->operand_slots[0] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        !terminal;
-                break;
-            case XR_TARGET_INSTRUCTION_PARAM_I64:
-                valid = row->operand_count == 0 &&
-                        row->operand_slots[0] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        row->immediate_bits < XR_TARGET_INSTRUCTION_MAX_PARAMETERS &&
-                        (bound_arguments & (UINT64_C(1) << row->immediate_bits)) == 0 &&
-                        slot_role_is(plan, function, function_index,
-                                     row->result_slot, XR_TARGET_SLOT_PARAMETER) &&
-                        !terminal;
+        for (uint32_t operand = 0; operand < 2u && valid; operand++) {
+            if (operand < contract->arity)
+                valid = slot_is_contract_rep(
+                    plan, function, function_index, row->operand_slots[operand],
+                    contract->operand_rep[operand], NULL);
+            else
+                valid = row->operand_slots[operand] ==
+                        XR_TARGET_INSTRUCTION_SLOT_NONE;
+        }
+        if (!valid)
+            break;
+
+        if (contract->terminator) {
+            valid = row->result_slot == XR_TARGET_INSTRUCTION_SLOT_NONE;
+        } else {
+            const XrTargetSlotRecord *result = NULL;
+            valid = slot_is_contract_rep(
+                plan, function, function_index, row->result_slot,
+                contract->result_rep, &result);
+            bool parameter = contract->immediate_kind ==
+                             XR_TARGET_INSTRUCTION_IMMEDIATE_PARAMETER_ORDINAL;
+            if (valid && parameter) {
+                valid = (bound_arguments &
+                         (UINT64_C(1) << row->immediate_bits)) == 0 &&
+                        result->role == XR_TARGET_SLOT_PARAMETER;
                 if (valid) {
                     bound_arguments |= UINT64_C(1) << row->immediate_bits;
                     parameter_rows++;
                 }
-                break;
-            case XR_TARGET_INSTRUCTION_COPY_I64:
-            case XR_TARGET_INSTRUCTION_NEG_WRAP_I64:
-            case XR_TARGET_INSTRUCTION_BNOT_I64:
-                valid = row->operand_count == 1 && row->immediate_bits == 0 &&
-                        row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        operand_is_function_i64(plan, function, function_index,
-                                                row->operand_slots[0]) &&
-                        !terminal;
-                break;
-            case XR_TARGET_INSTRUCTION_ADD_WRAP_I64:
-            case XR_TARGET_INSTRUCTION_SUB_WRAP_I64:
-            case XR_TARGET_INSTRUCTION_MUL_WRAP_I64:
-            case XR_TARGET_INSTRUCTION_BAND_I64:
-            case XR_TARGET_INSTRUCTION_BOR_I64:
-            case XR_TARGET_INSTRUCTION_BXOR_I64:
-                valid = binary_row_shape_is_exact(plan, function, function_index,
-                                                  row, terminal);
-                break;
-            case XR_TARGET_INSTRUCTION_CMP_EQ_I64:
-            case XR_TARGET_INSTRUCTION_CMP_NE_I64:
-            case XR_TARGET_INSTRUCTION_CMP_LT_I64:
-            case XR_TARGET_INSTRUCTION_CMP_LE_I64:
-            case XR_TARGET_INSTRUCTION_CMP_GT_I64:
-            case XR_TARGET_INSTRUCTION_CMP_GE_I64:
-                /* A relation reads the same exact signed i64 pair every other
-                 * two-operand row reads; only what it writes differs, and that
-                 * is proved by the result-family rule below rather than here,
-                 * so the operand shape stays one statement for the whole
-                 * family. Rejecting a non-zero immediate means there is no
-                 * immediate comparison form, so a relation always answers about
-                 * two slots the def-use proof has seen. */
-                valid = binary_row_shape_is_exact(plan, function, function_index,
-                                                  row, terminal);
-                break;
-            case XR_TARGET_INSTRUCTION_SHL_MASKED_I64:
-            case XR_TARGET_INSTRUCTION_SHR_ARITH_MASKED_I64:
-                /* The count is the second operand and nothing else: rejecting a
-                 * non-zero immediate means there is no immediate shift form, so
-                 * every count is a defined i64 slot the executor masks modulo
-                 * 64 on the way in. A defined i64 slot therefore needs no
-                 * further static range proof, because the language leaves no
-                 * i64 count undefined. */
-                valid = binary_row_shape_is_exact(plan, function, function_index,
-                                                  row, terminal);
-                break;
-            case XR_TARGET_INSTRUCTION_DIV_TRAP_I64:
-            case XR_TARGET_INSTRUCTION_MOD_TRAP_I64:
-                /* The divisor is a runtime slot value, so no static proof here
-                 * can exclude a zero: the row shape is what is proved, and the
-                 * executor owns the error edge. Rejecting a non-zero immediate
-                 * keeps that edge reachable, since there is no immediate
-                 * divisor form that could carry a zero the executor never
-                 * inspects. */
-                valid = binary_row_shape_is_exact(plan, function, function_index,
-                                                  row, terminal);
-                break;
-            case XR_TARGET_INSTRUCTION_RETURN_I64:
-                /* A return ends its block wherever it stands. Several blocks
-                 * may each end in one, so the group's last row being a
-                 * terminator is what closes the program, not this row being
-                 * unique. */
-                valid = row->operand_count == 1 && row->immediate_bits == 0 &&
-                        row->result_slot == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        operand_is_function_i64(plan, function, function_index,
-                                                row->operand_slots[0]);
-                break;
-            case XR_TARGET_INSTRUCTION_JUMP:
-                /* The whole immediate is the target: the unused half must be
-                 * zero so that no second edge can hide in a jump. Whether the
-                 * target names a block entry of this group is proved by the
-                 * control-flow pass, which owns the block partition. */
-                valid = row->operand_count == 0 &&
-                        row->result_slot == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        row->operand_slots[0] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(row->immediate_bits) == 0;
-                break;
-            case XR_TARGET_INSTRUCTION_BRANCH_IF_NONZERO_I64:
-                /* The condition is an ordinary i64 slot the executor compares
-                 * against zero, so it carries no truth representation of its
-                 * own and needs no proof beyond the slot proof every other
-                 * operand gets. Both edges are explicit, so neither depends on
-                 * the branch's position in the table. */
-                valid = row->operand_count == 1 &&
-                        row->result_slot == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        operand_is_function_i64(plan, function, function_index,
-                                                row->operand_slots[0]);
-                break;
-            case XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL:
-                /* The same edge rule over a truth slot. The condition family is
-                 * fixed by the opcode rather than read off the slot while the
-                 * row runs, so the executor never has to decide how wide its
-                 * own condition is. */
-                valid = row->operand_count == 1 &&
-                        row->result_slot == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        row->operand_slots[1] == XR_TARGET_INSTRUCTION_SLOT_NONE &&
-                        operand_is_function_bool(plan, function, function_index,
-                                                 row->operand_slots[0]);
-                break;
-            default:
+            } else if (valid && result->role == XR_TARGET_SLOT_PARAMETER) {
                 valid = false;
-                break;
+            }
         }
-        /* Only a terminator has no result. Every other opcode reaches the slot
-         * proof below, so an absent result slot cannot turn a computation into
-         * an unchecked no-op row. */
-        if (!valid || XR_TARGET_INSTRUCTION_IS_TERMINATOR(row->opcode))
+        if (!valid || contract->terminator)
             continue;
-        const XrTargetSlotRecord *result = NULL;
-        if (!slot_is_family(plan, function, function_index, row->result_slot,
-                            row_result_family(row->opcode), &result) ||
-            (row->opcode != XR_TARGET_INSTRUCTION_PARAM_I64 &&
-             result->role == XR_TARGET_SLOT_PARAMETER)) {
-            valid = false;
-            break;
-        }
         uint32_t local = row->result_slot - function->slot_begin;
         if (defined[local]) {
             valid = false;
