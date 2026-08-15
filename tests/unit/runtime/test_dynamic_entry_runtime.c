@@ -18,6 +18,7 @@
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/xr_dynamic_entry_runtime.h"
 #include "../../../src/runtime/xr_module_generation_internal.h"
+#include "../../../src/vm/debug/xr_vm_debug_control.h"
 #include "../../../src/vm/debug/xr_vm_profile.h"
 #include "../../../src/vm/debug/xr_vm_trace.h"
 #include "../../../src/vm/xr_typed_dispatch.h"
@@ -84,6 +85,23 @@ typedef struct RejectCallTraceContext {
     bool rejected;
 } RejectCallTraceContext;
 
+typedef enum DynamicDebugStopAction {
+    DYNAMIC_DEBUG_STOP_STEP_OUT = 0,
+    DYNAMIC_DEBUG_STOP_TERMINATE,
+    DYNAMIC_DEBUG_STOP_REJECT,
+    DYNAMIC_DEBUG_STOP_INVALID_RESUME,
+} DynamicDebugStopAction;
+
+typedef struct DynamicDebugProbe {
+    uint32_t stop_count;
+    uint32_t depths[16];
+    bool saw_child;
+    bool saw_root_after_child;
+    DynamicDebugStopAction action;
+    uint8_t caller_generation[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE];
+    uint8_t callee_generation[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE];
+} DynamicDebugProbe;
+
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_unit = {
     .kind = XR_KIND_UNIT,
@@ -95,10 +113,11 @@ static XrType stub_function = {
     .kind = XR_KIND_FUNCTION,
     .id = 3,
     .frozen = true,
-    .function = {
-        .return_type = &stub_int,
-        .throw_effect = XR_FN_EFFECT_NO_THROW,
-    },
+    .function =
+        {
+            .return_type = &stub_int,
+            .throw_effect = XR_FN_EFFECT_NO_THROW,
+        },
 };
 static XrType stub_module_namespace = {
     .kind = XR_KIND_STRUCT_OBJECT,
@@ -635,13 +654,12 @@ static void *repeat_bind_publish(void *argument) {
     context->success = true;
     for (uint32_t i = 0; i < 256; i++) {
         bool already_bound = false;
-        if (!xr_runtime_entry_handle_bind(
-                context->handle, &context->registration, &already_bound,
-                diagnostic, sizeof(diagnostic)) ||
+        if (!xr_runtime_entry_handle_bind(context->handle, &context->registration, &already_bound,
+                                          diagnostic, sizeof(diagnostic)) ||
             !already_bound ||
-            !xr_runtime_entry_registry_publish(
-                context->authority, context->plan, context->source_export,
-                context->handle, diagnostic, sizeof(diagnostic))) {
+            !xr_runtime_entry_registry_publish(context->authority, context->plan,
+                                               context->source_export, context->handle, diagnostic,
+                                               sizeof(diagnostic))) {
             context->success = false;
             break;
         }
@@ -650,11 +668,11 @@ static void *repeat_bind_publish(void *argument) {
     return NULL;
 }
 
-static XrTypedDispatchStatus execute_dynamic_with_context(
-    XrLoadedModuleGeneration *caller, uint32_t function,
-    XrTypedDispatchProvider provider, bool use_cache,
-    const XrVmDebugSession *debug_session,
-    const XrVmDynamicEntryContext *dynamic_entries, int64_t *result) {
+static XrTypedDispatchStatus
+execute_dynamic_with_context(XrLoadedModuleGeneration *caller, uint32_t function,
+                             XrTypedDispatchProvider provider, bool use_cache,
+                             const XrVmDebugSession *debug_session,
+                             const XrVmDynamicEntryContext *dynamic_entries, int64_t *result) {
     XrFingerprint fingerprint = xr_target_plan_fingerprint(caller->plan);
     XrTypedDispatchI64Request request = {
         .verified_plan = caller->plan,
@@ -671,86 +689,72 @@ static XrTypedDispatchStatus execute_dynamic_with_context(
     return xr_typed_dispatch_execute_i64(&request);
 }
 
-static XrTypedDispatchStatus execute_dynamic(
-    XrLoadedModuleGeneration *caller, uint32_t function,
-    XrTypedDispatchProvider provider, bool use_cache,
-    const XrVmDebugSession *debug_session, int64_t *result) {
-    return execute_dynamic_with_context(
-        caller, function, provider, use_cache, debug_session,
-        &caller->dynamic_entries, result);
+static XrTypedDispatchStatus execute_dynamic(XrLoadedModuleGeneration *caller, uint32_t function,
+                                             XrTypedDispatchProvider provider, bool use_cache,
+                                             const XrVmDebugSession *debug_session,
+                                             int64_t *result) {
+    return execute_dynamic_with_context(caller, function, provider, use_cache, debug_session,
+                                        &caller->dynamic_entries, result);
 }
 
-static XrVmDynamicEntryStatus tracked_validate(
-    const XrVmDynamicEntryContext *context,
-    const XrTargetPlan *caller_plan,
-    const XrFingerprint *caller_fingerprint,
-    const XrModuleGenerationIdentity *caller_generation_identity) {
+static XrVmDynamicEntryStatus
+tracked_validate(const XrVmDynamicEntryContext *context, const XrTargetPlan *caller_plan,
+                 const XrFingerprint *caller_fingerprint,
+                 const XrModuleGenerationIdentity *caller_generation_identity) {
     TrackedDynamicEntryContext *tracked =
         context ? (TrackedDynamicEntryContext *) context->owner : NULL;
     return tracked && tracked->delegate.validate
-               ? tracked->delegate.validate(
-                     &tracked->delegate, caller_plan, caller_fingerprint,
-                     caller_generation_identity)
+               ? tracked->delegate.validate(&tracked->delegate, caller_plan, caller_fingerprint,
+                                            caller_generation_identity)
                : XR_VM_DYNAMIC_ENTRY_INVALID_ARGUMENT;
 }
 
-static XrVmDynamicEntryStatus tracked_acquire(
-    const XrVmDynamicEntryContext *context,
-    const XrTargetPlan *caller_plan,
-    const XrFingerprint *caller_fingerprint,
-    const XrTargetEntryExpectationRecord *expectation, bool use_cache,
-    XrVmDynamicEntryResolution *resolution) {
+static XrVmDynamicEntryStatus tracked_acquire(const XrVmDynamicEntryContext *context,
+                                              const XrTargetPlan *caller_plan,
+                                              const XrFingerprint *caller_fingerprint,
+                                              const XrTargetEntryExpectationRecord *expectation,
+                                              bool use_cache,
+                                              XrVmDynamicEntryResolution *resolution) {
     TrackedDynamicEntryContext *tracked =
         context ? (TrackedDynamicEntryContext *) context->owner : NULL;
     if (!tracked || !tracked->delegate.acquire)
         return XR_VM_DYNAMIC_ENTRY_INVALID_ARGUMENT;
     XrVmDynamicEntryStatus status = tracked->delegate.acquire(
-        &tracked->delegate, caller_plan, caller_fingerprint, expectation,
-        use_cache, resolution);
+        &tracked->delegate, caller_plan, caller_fingerprint, expectation, use_cache, resolution);
     if (status == XR_VM_DYNAMIC_ENTRY_OK)
-        atomic_fetch_add_explicit(&tracked->acquires, 1u,
-                                  memory_order_relaxed);
+        atomic_fetch_add_explicit(&tracked->acquires, 1u, memory_order_relaxed);
     return status;
 }
 
-static XrVmDynamicEntryStatus tracked_retire(
-    const XrVmDynamicEntryContext *context,
-    XrVmDynamicEntryResolution *resolution) {
+static XrVmDynamicEntryStatus tracked_retire(const XrVmDynamicEntryContext *context,
+                                             XrVmDynamicEntryResolution *resolution) {
     TrackedDynamicEntryContext *tracked =
         context ? (TrackedDynamicEntryContext *) context->owner : NULL;
     if (!tracked || !tracked->delegate.retire)
         return XR_VM_DYNAMIC_ENTRY_INVALID_ARGUMENT;
     if (tracked->inject_retire_failure) {
-        XrLoadedModuleGeneration *generation =
-            tracked->injected_retire_generation;
+        XrLoadedModuleGeneration *generation = tracked->injected_retire_generation;
         REQUIRE(generation && generation->authority);
         xr_mutex_lock(&generation->authority->gate);
         REQUIRE(generation->state == XR_MODULE_GENERATION_ACTIVE);
-        REQUIRE(generation->pins_by_kind
-                    [XR_MODULE_GENERATION_INFLIGHT_CALL] == 1u);
+        REQUIRE(generation->pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] == 1u);
         generation->pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] = 0;
         xr_mutex_unlock(&generation->authority->gate);
-        XrVmDynamicEntryStatus status = tracked->delegate.retire(
-            &tracked->delegate, resolution);
+        XrVmDynamicEntryStatus status = tracked->delegate.retire(&tracked->delegate, resolution);
         xr_mutex_lock(&generation->authority->gate);
         REQUIRE(generation->state == XR_MODULE_GENERATION_ACTIVE);
-        REQUIRE(generation->pins_by_kind
-                    [XR_MODULE_GENERATION_INFLIGHT_CALL] == 0u);
+        REQUIRE(generation->pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] == 0u);
         generation->pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] = 1;
         xr_mutex_unlock(&generation->authority->gate);
         tracked->inject_retire_failure = false;
-        tracked->injected_resolution_consumed =
-            resolution && !resolution->lease;
+        tracked->injected_resolution_consumed = resolution && !resolution->lease;
         if (status == XR_VM_DYNAMIC_ENTRY_RETIRE_DEFERRED)
-            atomic_fetch_add_explicit(&tracked->deferred_retires, 1u,
-                                      memory_order_relaxed);
+            atomic_fetch_add_explicit(&tracked->deferred_retires, 1u, memory_order_relaxed);
         return status;
     }
-    XrVmDynamicEntryStatus status = tracked->delegate.retire(
-        &tracked->delegate, resolution);
+    XrVmDynamicEntryStatus status = tracked->delegate.retire(&tracked->delegate, resolution);
     if (status == XR_VM_DYNAMIC_ENTRY_OK)
-        atomic_fetch_add_explicit(&tracked->retires, 1u,
-                                  memory_order_relaxed);
+        atomic_fetch_add_explicit(&tracked->retires, 1u, memory_order_relaxed);
     return status;
 }
 
@@ -768,10 +772,8 @@ static void tracked_context_init(XrLoadedModuleGeneration *caller,
     atomic_init(&tracked->deferred_retires, 0u);
 }
 
-static bool reject_call_trace(void *context,
-                              const XrVmTraceEvent *event) {
-    RejectCallTraceContext *rejection =
-        (RejectCallTraceContext *) context;
+static bool reject_call_trace(void *context, const XrVmTraceEvent *event) {
+    RejectCallTraceContext *rejection = (RejectCallTraceContext *) context;
     if (!rejection || !event)
         return false;
     if (event->kind == XR_VM_TRACE_CALL_ENTER) {
@@ -779,6 +781,63 @@ static bool reject_call_trace(void *context,
         return false;
     }
     rejection->accepted++;
+    return true;
+}
+
+static bool step_dynamic_call(void *context, const XrVmDebugStop *stop,
+                              XrVmDebugResumeCommand *resume) {
+    DynamicDebugProbe *probe = (DynamicDebugProbe *) context;
+    if (!probe || !stop || !resume || probe->stop_count >= 16u)
+        return false;
+    probe->depths[probe->stop_count++] = stop->instruction.frame_depth;
+    if (stop->instruction.frame_depth == 1u) {
+        if (stop->frame_count != 2u ||
+            memcmp(stop->frames[0].instruction.generation_fingerprint.bytes,
+                   probe->caller_generation, sizeof(probe->caller_generation)) != 0 ||
+            memcmp(stop->frames[1].instruction.generation_fingerprint.bytes,
+                   probe->callee_generation, sizeof(probe->callee_generation)) != 0)
+            return false;
+        probe->saw_child = true;
+        *resume = XR_VM_DEBUG_RESUME_STEP_OUT;
+        return true;
+    }
+    if (probe->saw_child) {
+        probe->saw_root_after_child = true;
+        *resume = XR_VM_DEBUG_RESUME_CONTINUE;
+        return true;
+    }
+    *resume = XR_VM_DEBUG_RESUME_STEP_INTO;
+    return true;
+}
+
+static bool stop_dynamic_child(void *context, const XrVmDebugStop *stop,
+                               XrVmDebugResumeCommand *resume) {
+    DynamicDebugProbe *probe = (DynamicDebugProbe *) context;
+    if (!probe || !stop || !resume || probe->stop_count >= 16u)
+        return false;
+    probe->depths[probe->stop_count++] = stop->instruction.frame_depth;
+    if (stop->instruction.frame_depth == 0u && !probe->saw_child) {
+        *resume = XR_VM_DEBUG_RESUME_STEP_INTO;
+        return true;
+    }
+    if (stop->instruction.frame_depth != 1u || stop->frame_count != 2u ||
+        memcmp(stop->frames[0].instruction.generation_fingerprint.bytes,
+               probe->caller_generation, sizeof(probe->caller_generation)) != 0 ||
+        memcmp(stop->frames[1].instruction.generation_fingerprint.bytes,
+               probe->callee_generation, sizeof(probe->callee_generation)) != 0)
+        return false;
+    probe->saw_child = true;
+    if (probe->action == DYNAMIC_DEBUG_STOP_TERMINATE) {
+        *resume = XR_VM_DEBUG_RESUME_TERMINATE;
+        return true;
+    }
+    if (probe->action == DYNAMIC_DEBUG_STOP_INVALID_RESUME) {
+        *resume = XR_VM_DEBUG_RESUME_INVALID;
+        return true;
+    }
+    if (probe->action == DYNAMIC_DEBUG_STOP_REJECT)
+        return false;
+    *resume = XR_VM_DEBUG_RESUME_STEP_OUT;
     return true;
 }
 
@@ -790,8 +849,7 @@ typedef struct ConcurrentExecuteContext {
 } ConcurrentExecuteContext;
 
 static void *execute_warm_calls(void *argument) {
-    ConcurrentExecuteContext *context =
-        (ConcurrentExecuteContext *) argument;
+    ConcurrentExecuteContext *context = (ConcurrentExecuteContext *) argument;
     context->success = true;
     for (uint32_t i = 0; i < 256; i++) {
         int64_t result = 0;
@@ -1102,13 +1160,11 @@ static void test_dynamic_entry_authority_cache_and_lifetime(void) {
                 caller, fixture.caller_function,
                 XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH, false, NULL,
                 &result) == XR_TYPED_DISPATCH_OK);
-    REQUIRE(execute_dynamic(
-                caller, fixture.caller_function,
-                XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE, false,
-                NULL, &result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(execute_dynamic(caller, fixture.caller_function,
+                            XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE, false, NULL,
+                            &result) == XR_TYPED_DISPATCH_OK);
     XrRuntimeDynamicEntryCacheStats no_cache;
-    REQUIRE(xr_runtime_dynamic_entry_cache_stats(
-        caller->entry_cache, &no_cache));
+    REQUIRE(xr_runtime_dynamic_entry_cache_stats(caller->entry_cache, &no_cache));
     REQUIRE(no_cache.registry_scans == unrelated.registry_scans + 2);
 
     XrVmTraceEvent switch_events[32];
@@ -1117,69 +1173,87 @@ static void test_dynamic_entry_authority_cache_and_lifetime(void) {
     XrVmTraceBuffer table_buffer;
     XrVmProfile switch_profile;
     XrVmProfile table_profile;
-    REQUIRE(xr_typed_trace_buffer_init(
-        &switch_buffer, switch_events, 32));
+    REQUIRE(xr_typed_trace_buffer_init(&switch_buffer, switch_events, 32));
     REQUIRE(xr_typed_trace_buffer_init(&table_buffer, table_events, 32));
     REQUIRE(xr_typed_profile_init(&switch_profile));
     REQUIRE(xr_typed_profile_init(&table_profile));
-    XrVmTraceSink switch_sink =
-        xr_typed_trace_buffer_sink(&switch_buffer);
+    XrVmTraceSink switch_sink = xr_typed_trace_buffer_sink(&switch_buffer);
     XrVmTraceSink table_sink = xr_typed_trace_buffer_sink(&table_buffer);
     XrFingerprint caller_fingerprint = xr_target_plan_fingerprint(caller->plan);
-    XrVmDebugSession switch_session;
-    XrVmDebugSession table_session;
-    REQUIRE(xr_typed_debug_session_init(
-                &caller_fingerprint, &caller->identity, &switch_sink,
-                &switch_profile, &switch_session) == XR_VM_DEBUG_SESSION_OK);
-    REQUIRE(xr_typed_debug_session_init(
-                &caller_fingerprint, &caller->identity, &table_sink,
-                &table_profile, &table_session) == XR_VM_DEBUG_SESSION_OK);
+    XrVmDebugSession *switch_session = NULL;
+    XrVmDebugSession *table_session = NULL;
+    REQUIRE(xr_typed_debug_session_create(&caller_fingerprint, &caller->identity, &switch_sink,
+                                          &switch_profile, NULL,
+                                          &switch_session) == XR_VM_DEBUG_SESSION_OK);
+    REQUIRE(xr_typed_debug_session_create(&caller_fingerprint, &caller->identity, &table_sink,
+                                          &table_profile, NULL,
+                                          &table_session) == XR_VM_DEBUG_SESSION_OK);
     int64_t switch_result = 0;
     int64_t table_result = 0;
-    REQUIRE(execute_dynamic(
-                caller, fixture.caller_function,
-                XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH, true,
-                &switch_session, &switch_result) == XR_TYPED_DISPATCH_OK);
-    REQUIRE(execute_dynamic(
-                caller, fixture.caller_function,
-                XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE, true,
-                &table_session, &table_result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(execute_dynamic(caller, fixture.caller_function,
+                            XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH, true, switch_session,
+                            &switch_result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(execute_dynamic(caller, fixture.caller_function,
+                            XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE, true,
+                            table_session, &table_result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(switch_result == 41 && table_result == switch_result &&
             switch_buffer.count == table_buffer.count &&
-            memcmp(switch_events, table_events,
-                   switch_buffer.count * sizeof(*switch_events)) == 0);
+            memcmp(switch_events, table_events, switch_buffer.count * sizeof(*switch_events)) == 0);
     XrVmProfileSnapshot switch_snapshot;
     XrVmProfileSnapshot table_snapshot;
     REQUIRE(xr_typed_profile_snapshot(&switch_profile, &switch_snapshot));
     REQUIRE(xr_typed_profile_snapshot(&table_profile, &table_snapshot));
-    REQUIRE(memcmp(&switch_snapshot, &table_snapshot,
-                   sizeof(switch_snapshot)) == 0);
+    REQUIRE(memcmp(&switch_snapshot, &table_snapshot, sizeof(switch_snapshot)) == 0);
     bool saw_child = false;
     bool saw_return = false;
     XrFingerprint callee_fingerprint = xr_target_plan_fingerprint(callee->plan);
     for (size_t i = 0; i < switch_buffer.count; i++) {
-        saw_child |= xr_fingerprint_equal(
-            switch_buffer.events[i].target_plan_fingerprint,
-            callee_fingerprint);
-        saw_return |=
-            switch_buffer.events[i].kind == XR_VM_TRACE_CALL_RETURN &&
-            switch_buffer.events[i].related_function ==
-                          fixture.dependency_function;
+        saw_child |= xr_fingerprint_equal(switch_buffer.events[i].target_plan_fingerprint,
+                                          callee_fingerprint);
+        saw_return |= switch_buffer.events[i].kind == XR_VM_TRACE_CALL_RETURN &&
+                      switch_buffer.events[i].related_function == fixture.dependency_function;
     }
     REQUIRE(saw_child && saw_return);
 
+    XrVmDebugPlan *dynamic_debug_plan = NULL;
+    REQUIRE(xr_typed_debug_plan_create(caller->plan, &caller_fingerprint, NULL, 0,
+                                       &dynamic_debug_plan) == XR_VM_DEBUG_CONTROL_OK);
+    DynamicDebugProbe dynamic_probe = {0};
+    memcpy(dynamic_probe.caller_generation, caller->identity.generation_fingerprint,
+           sizeof(dynamic_probe.caller_generation));
+    memcpy(dynamic_probe.callee_generation, callee->identity.generation_fingerprint,
+           sizeof(dynamic_probe.callee_generation));
+    XrVmDebugControl *dynamic_control = NULL;
+    REQUIRE(xr_typed_debug_control_create(dynamic_debug_plan, step_dynamic_call, &dynamic_probe,
+                                          &dynamic_control) == XR_VM_DEBUG_CONTROL_OK);
+    XrVmDebugSession *dynamic_session = NULL;
+    REQUIRE(xr_typed_debug_session_create(&caller_fingerprint, &caller->identity, NULL, NULL,
+                                          dynamic_control,
+                                          &dynamic_session) == XR_VM_DEBUG_SESSION_OK);
+    REQUIRE(xr_typed_debug_control_arm(dynamic_control, XR_VM_DEBUG_RESUME_STEP_INTO) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    int64_t stepped_result = 0;
+    REQUIRE(execute_dynamic(caller, fixture.caller_function,
+                            XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE, true,
+                            dynamic_session, &stepped_result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(stepped_result == 41 && dynamic_probe.stop_count >= 3u &&
+            dynamic_probe.depths[0] == 0u && dynamic_probe.saw_child &&
+            dynamic_probe.saw_root_after_child);
+    xr_typed_debug_session_free(&dynamic_session);
+    REQUIRE(xr_typed_debug_control_free(&dynamic_control) == XR_VM_DEBUG_CONTROL_OK);
+    xr_typed_debug_plan_free(&dynamic_debug_plan);
+
     XrRuntimeDynamicEntryLeaseStats completed_leases;
-    REQUIRE(xr_runtime_dynamic_entry_lease_stats(callee,
-                                                 &completed_leases));
+    REQUIRE(xr_runtime_dynamic_entry_lease_stats(callee, &completed_leases));
     REQUIRE(completed_leases.live == 0 && completed_leases.pending == 0);
+    xr_typed_debug_session_free(&table_session);
+    xr_typed_debug_session_free(&switch_session);
 
     XrEntryCallToken inflight;
-    REQUIRE(xr_entry_cell_acquire(
-        xr_runtime_entry_handle_cell(replacement),
-        xr_runtime_entry_handle_expectation(replacement), &inflight,
-        diagnostic, sizeof(diagnostic)));
-    REQUIRE(xr_runtime_entry_registry_unpublish(
-        authority, first, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_entry_cell_acquire(xr_runtime_entry_handle_cell(replacement),
+                                  xr_runtime_entry_handle_expectation(replacement), &inflight,
+                                  diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_entry_registry_unpublish(authority, first, diagnostic, sizeof(diagnostic)));
     REQUIRE(xr_runtime_entry_registry_unpublish(
         authority, replacement, diagnostic, sizeof(diagnostic)));
     REQUIRE(xr_runtime_entry_registry_unpublish(
@@ -1265,16 +1339,13 @@ static void test_dynamic_entry_all_exit_release(void) {
     REQUIRE(xr_module_generation_snapshot(error_caller, &caller_before));
     REQUIRE(xr_module_generation_snapshot(error_callee, &callee_before));
     int64_t result = 91;
-    REQUIRE(execute_dynamic_with_context(
-                error_caller, error_fixture.caller_function,
-                XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH, true, NULL,
-                &error_context.public_context, &result) ==
-            XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
+    REQUIRE(execute_dynamic_with_context(error_caller, error_fixture.caller_function,
+                                         XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH, true, NULL,
+                                         &error_context.public_context,
+                                         &result) == XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
     REQUIRE(result == 0 &&
-            atomic_load_explicit(&error_context.acquires,
-                                 memory_order_relaxed) == 1u &&
-            atomic_load_explicit(&error_context.retires,
-                                 memory_order_relaxed) == 1u);
+            atomic_load_explicit(&error_context.acquires, memory_order_relaxed) == 1u &&
+            atomic_load_explicit(&error_context.retires, memory_order_relaxed) == 1u);
     REQUIRE(xr_module_generation_snapshot(error_caller, &caller_after));
     REQUIRE(xr_module_generation_snapshot(error_callee, &callee_after));
     require_pins_equal(&caller_before, &caller_after);
@@ -1286,29 +1357,91 @@ static void test_dynamic_entry_all_exit_release(void) {
         .emit = reject_call_trace,
         .context = &rejection,
     };
-    XrFingerprint error_fingerprint =
-        xr_target_plan_fingerprint(error_caller->plan);
-    XrVmDebugSession rejecting_session;
-    REQUIRE(xr_typed_debug_session_init(
-                &error_fingerprint, &error_caller->identity,
-                &rejecting_sink, NULL, &rejecting_session) ==
-            XR_VM_DEBUG_SESSION_OK);
+    XrFingerprint error_fingerprint = xr_target_plan_fingerprint(error_caller->plan);
+    XrVmDebugSession *rejecting_session = NULL;
+    REQUIRE(xr_typed_debug_session_create(&error_fingerprint, &error_caller->identity,
+                                          &rejecting_sink, NULL, NULL,
+                                          &rejecting_session) == XR_VM_DEBUG_SESSION_OK);
     result = 92;
-    REQUIRE(execute_dynamic_with_context(
-                error_caller, error_fixture.caller_function,
-                XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE, true,
-                &rejecting_session, &error_context.public_context,
-                &result) == XR_TYPED_DISPATCH_TRACE_REJECTED);
+    REQUIRE(execute_dynamic_with_context(error_caller, error_fixture.caller_function,
+                                         XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE, true,
+                                         rejecting_session, &error_context.public_context,
+                                         &result) == XR_TYPED_DISPATCH_TRACE_REJECTED);
     REQUIRE(result == 0 && rejection.rejected && rejection.accepted > 0 &&
-            atomic_load_explicit(&error_context.acquires,
-                                 memory_order_relaxed) == 2u &&
-            atomic_load_explicit(&error_context.retires,
-                                 memory_order_relaxed) == 2u);
+            atomic_load_explicit(&error_context.acquires, memory_order_relaxed) == 2u &&
+            atomic_load_explicit(&error_context.retires, memory_order_relaxed) == 2u);
     REQUIRE(xr_module_generation_snapshot(error_caller, &caller_after));
     REQUIRE(xr_module_generation_snapshot(error_callee, &callee_after));
     require_pins_equal(&caller_before, &caller_after);
     require_pins_equal(&callee_before, &callee_after);
     require_no_dynamic_leases(error_callee);
+    xr_typed_debug_session_free(&rejecting_session);
+
+    XrVmDebugPlan *exit_debug_plan = NULL;
+    REQUIRE(xr_typed_debug_plan_create(error_caller->plan, &error_fingerprint, NULL, 0,
+                                       &exit_debug_plan) == XR_VM_DEBUG_CONTROL_OK);
+    DynamicDebugProbe exit_probe = {0};
+    memcpy(exit_probe.caller_generation, error_caller->identity.generation_fingerprint,
+           sizeof(exit_probe.caller_generation));
+    memcpy(exit_probe.callee_generation, error_callee->identity.generation_fingerprint,
+           sizeof(exit_probe.callee_generation));
+    XrVmDebugControl *exit_control = NULL;
+    REQUIRE(xr_typed_debug_control_create(exit_debug_plan, stop_dynamic_child, &exit_probe,
+                                          &exit_control) == XR_VM_DEBUG_CONTROL_OK);
+    XrVmDebugSession *exit_session = NULL;
+    REQUIRE(xr_typed_debug_session_create(&error_fingerprint, &error_caller->identity, NULL, NULL,
+                                          exit_control,
+                                          &exit_session) == XR_VM_DEBUG_SESSION_OK);
+    const struct {
+        DynamicDebugStopAction action;
+        XrTypedDispatchStatus expected;
+    } debug_exits[] = {
+        {DYNAMIC_DEBUG_STOP_TERMINATE, XR_TYPED_DISPATCH_DEBUG_TERMINATED},
+        {DYNAMIC_DEBUG_STOP_REJECT, XR_TYPED_DISPATCH_DEBUG_STOP_REJECTED},
+        {DYNAMIC_DEBUG_STOP_INVALID_RESUME, XR_TYPED_DISPATCH_DEBUG_STOP_REJECTED},
+    };
+    uint32_t expected_acquires =
+        atomic_load_explicit(&error_context.acquires, memory_order_relaxed);
+    uint32_t expected_retires =
+        atomic_load_explicit(&error_context.retires, memory_order_relaxed);
+    for (size_t i = 0; i < sizeof(debug_exits) / sizeof(debug_exits[0]); i++) {
+        exit_probe.stop_count = 0;
+        memset(exit_probe.depths, 0, sizeof(exit_probe.depths));
+        exit_probe.saw_child = false;
+        exit_probe.saw_root_after_child = false;
+        exit_probe.action = debug_exits[i].action;
+        REQUIRE(xr_typed_debug_control_arm(exit_control, XR_VM_DEBUG_RESUME_STEP_INTO) ==
+                XR_VM_DEBUG_CONTROL_OK);
+        REQUIRE(xr_module_generation_snapshot(error_caller, &caller_before));
+        REQUIRE(xr_module_generation_snapshot(error_callee, &callee_before));
+        result = 93 + (int64_t) i;
+        REQUIRE(execute_dynamic_with_context(
+                    error_caller, error_fixture.caller_function,
+                    XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE, true,
+                    exit_session, &error_context.public_context,
+                    &result) == debug_exits[i].expected);
+        expected_acquires++;
+        expected_retires++;
+        REQUIRE(result == 0);
+        REQUIRE(exit_probe.stop_count >= 2u);
+        REQUIRE(exit_probe.depths[0] == 0u);
+        for (uint32_t stop = 0; stop + 1u < exit_probe.stop_count; stop++)
+            REQUIRE(exit_probe.depths[stop] == 0u);
+        REQUIRE(exit_probe.depths[exit_probe.stop_count - 1u] == 1u);
+        REQUIRE(exit_probe.saw_child);
+        REQUIRE(atomic_load_explicit(&error_context.acquires,
+                                     memory_order_relaxed) == expected_acquires);
+        REQUIRE(atomic_load_explicit(&error_context.retires,
+                                     memory_order_relaxed) == expected_retires);
+        REQUIRE(xr_module_generation_snapshot(error_caller, &caller_after));
+        REQUIRE(xr_module_generation_snapshot(error_callee, &callee_after));
+        require_pins_equal(&caller_before, &caller_after);
+        require_pins_equal(&callee_before, &callee_after);
+        require_no_dynamic_leases(error_callee);
+    }
+    xr_typed_debug_session_free(&exit_session);
+    REQUIRE(xr_typed_debug_control_free(&exit_control) == XR_VM_DEBUG_CONTROL_OK);
+    xr_typed_debug_plan_free(&exit_debug_plan);
 
     REQUIRE(xr_runtime_entry_registry_unpublish(
         error_authority, error_handle, diagnostic, sizeof(diagnostic)));

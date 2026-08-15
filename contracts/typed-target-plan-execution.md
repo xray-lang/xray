@@ -128,7 +128,8 @@ identities, an optional runtime-only debug session, and an optional immutable
 decoded cache for that exact plan object. A dynamic family request additionally
 carries the exact caller generation identity and its generation-owned dynamic
 entry context. Generation identity is execution authority; a debug session may
-check and observe it but can never supply it. The context validates its exact
+check and observe it or stop at an exact TargetPlan debug fact, but can never
+supply or alter it. The context validates its exact
 immutable owner plan and generation before any frame, trace, cache, or pin side
 effect. The same request must also select
 exactly one generated executor provider: the generated switch or the generated
@@ -482,22 +483,22 @@ anchor-sha256: src/plan/format/xr_xtp_text.h 63367e2a75cc5e1511d1980cd82f579863c
 anchor-sha256: src/plan/format/xr_xtp_text.c 329d1430c8ad00d5b7c05c69adb3ed5405b5b9b6ea49cc7ea3155f561df00113
 anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
-anchor-sha256: src/vm/xr_typed_dispatch.h 25f04f8562c5159cb775553242e753910c91682d3873913ad3eab867cee4a412
-anchor-sha256: src/vm/xr_typed_dispatch.c 8ce9c5270624b2a5c713ea0c57ecd23f09d8940516241f921506c2f7acb3433f
+anchor-sha256: src/vm/xr_typed_dispatch.h 8c764cfb9f22e8c58ea75b0862b496996cd09bc6fc1e86d6fcc1ef5f6398cdb4
+anchor-sha256: src/vm/xr_typed_dispatch.c c79296a7d62cd0ae42f41e36e67dead23ac3b24095504cbba7ed52fe2a60fe9c
 anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
 anchor-sha256: src/vm/xr_vm_decoded_cache.c 2d4f14d54740e6aac0cdfb23fc7b90b075725c479751ba52a1948a658f91fa77
 anchor-sha256: src/vm/xr_typed_frame.c 80ac935291096963179c8f6c58b3105835426c87b2b693d2a62e1d5c16fc913b
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c b3bd5b339e5bbd2756af3db1a791ed98dfeaeff45c404fc234923d1221ae961e
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 0c6753b95b6a07f1bfff18d3294f1cc76348f60252663feb11aef72ddcf52a1a
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
 anchor-sha256: tests/unit/plan/test_xtp_format.c e4ddea03a4d9ec093ae3d0d10ddc7c8f49ddcc84cb87d94968f8078101d3717d
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c cfe41d4e83103cadb5e8eabc7a48aef121b5dc5ebdee14939e5c0f80bf955fff
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c cd38c52f605f446123a65b2b0b5cb851fb730fe8354f6e37f1b3c240ee71ebdc
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 5827191c191aeda84d937af1909a9d6849608fd93569822fd96130680f9f27e9
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c e5b77b5780812f5a514e0657e10a5452968cd5f4cf66bc551955de1f636d41da
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: tests/unit/ir/test_xi_cgen.c f910848c63927902ea320b20d883e7fd4ece9b7b8f4c33050162ced1da42cecc
 anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 33da22f5eec9a7889b25380fa99e070c807c19580569ac081a0f0558545eb8e3
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
-anchor-sha256: src/runtime/xr_module_generation.c 580d612f1c9818e7220b0c5d2f419e4c0a53c1f05b6f94253e4c5dafbaf2ddd8
+anchor-sha256: src/runtime/xr_module_generation.c a07ba16736dd26135e4256d01092ad7f1be71e29787ef68504cd3f61eb979305
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
 anchor-sha256: CMakeLists.txt 52120c519042aa84194f877420c808db07fdde1a563f8bdb94e65af9fde9e00b
 anchor-sha256: xisa/target/vm_ops.def 359a60da3aa91aa5fd8b0569228c29b9590fe5b1e11d77c936b3ef2b36dff6e9
@@ -509,5 +510,5 @@ anchor-sha256: src/vm/xr_vm_dynamic_entry.h e365e02d0596394df881026895d127ac54ad
 anchor-sha256: src/vm/xr_vm_ops.def d686e48d8be34cadac9f5c647687d1f02653e4614fbc0b07acfd29991b89d905
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h e869f525726120a601098e3a37a2a53bf359ec0282ef3b3caf96546b640feaa5
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 86047c42dabc588c9409273fd75ef7d787313471cf6b095515f13e9cf5954d17
-anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 529b9e5618207d743789087697ef51d1b9642532e732e1d73f296d812d9e06b1
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 06262827b3a5f4b46765af60a45192a6ac8427c21a8c8b63ff9870728bab7f1a
 anchor-sha256: tests/unit/CMakeLists.txt 744e26d9c197aa433b2594080f9b3314f13992d870aad2795690760457aacfa2

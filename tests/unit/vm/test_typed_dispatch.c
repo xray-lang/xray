@@ -11,6 +11,8 @@
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/vm/debug/xr_vm_debug_control.h"
+#include "../../../src/vm/debug/xr_vm_debug_control_internal.h"
 #include "../../../src/vm/debug/xr_vm_materialize.h"
 #include "../../../src/vm/debug/xr_vm_profile.h"
 #include "../../../src/vm/xr_typed_dispatch.h"
@@ -1830,8 +1832,7 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
     REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
                                  sizeof(error)));
     XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
-    XrModuleGenerationIdentity generation =
-        debug_generation_identity(plan, UINT8_C(0xa5));
+    XrModuleGenerationIdentity generation = debug_generation_identity(plan, UINT8_C(0xa5));
 
     XrVmTraceEvent first_storage[32];
     XrVmTraceEvent second_storage[32];
@@ -1845,45 +1846,35 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
     REQUIRE(xr_typed_profile_init(&second_profile));
     XrVmTraceSink first_sink = xr_typed_trace_buffer_sink(&first);
     XrVmTraceSink second_sink = xr_typed_trace_buffer_sink(&second);
-    XrVmDebugSession first_session;
-    XrVmDebugSession second_session;
-    REQUIRE(xr_typed_debug_session_init(&fingerprint, &generation, &first_sink,
-                                     &first_profile, &first_session) ==
-            XR_VM_DEBUG_SESSION_OK);
-    REQUIRE(xr_typed_debug_session_init(&fingerprint, &generation, &second_sink,
-                                     &second_profile, &second_session) ==
-            XR_VM_DEBUG_SESSION_OK);
+    XrVmDebugSession *first_session = NULL;
+    XrVmDebugSession *second_session = NULL;
+    REQUIRE(xr_typed_debug_session_create(&fingerprint, &generation, &first_sink, &first_profile,
+                                          NULL, &first_session) == XR_VM_DEBUG_SESSION_OK);
+    REQUIRE(xr_typed_debug_session_create(&fingerprint, &generation, &second_sink, &second_profile,
+                                          NULL, &second_session) == XR_VM_DEBUG_SESSION_OK);
     int64_t first_result = 0;
     int64_t second_result = 0;
-    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                       &generation, &first_session,
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, first_session,
                                       XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
-                                      &first_result) ==
-            XR_TYPED_DISPATCH_OK);
-    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                       &generation, &second_session,
+                                      &first_result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, second_session,
                                       XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
-                                      &second_result) ==
-            XR_TYPED_DISPATCH_OK);
+                                      &second_result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(first_result == 42 && second_result == 42);
     REQUIRE(first.count == 14 && second.count == first.count);
-    REQUIRE(memcmp(first.events, second.events,
-                   first.count * sizeof(*first.events)) == 0);
+    REQUIRE(memcmp(first.events, second.events, first.count * sizeof(*first.events)) == 0);
     for (size_t i = 0; i < first.count; i++) {
         REQUIRE(first.events[i].ordinal == i);
         REQUIRE(first.events[i].generation_identity_present == 1);
         REQUIRE(first.events[i].generation_number == 7);
-        REQUIRE(xr_fingerprint_equal(first.events[i].target_plan_fingerprint,
-                                     fingerprint));
+        REQUIRE(xr_fingerprint_equal(first.events[i].target_plan_fingerprint, fingerprint));
     }
-    REQUIRE(first.events[0].kind == XR_VM_TRACE_FRAME_ENTER &&
-            first.events[0].frame == 0 &&
+    REQUIRE(first.events[0].kind == XR_VM_TRACE_FRAME_ENTER && first.events[0].frame == 0 &&
             first.events[0].parent_frame == XR_VM_TRACE_ID_NONE);
-    REQUIRE(first.events[4].kind == XR_VM_TRACE_CALL_ENTER &&
-            first.events[4].frame == 0 &&
+    REQUIRE(first.events[4].kind == XR_VM_TRACE_CALL_ENTER && first.events[4].frame == 0 &&
             first.events[4].related_frame == 1);
-    REQUIRE(first.events[5].kind == XR_VM_TRACE_FRAME_ENTER &&
-            first.events[5].frame == 1 && first.events[5].parent_frame == 0);
+    REQUIRE(first.events[5].kind == XR_VM_TRACE_FRAME_ENTER && first.events[5].frame == 1 &&
+            first.events[5].parent_frame == 0);
     REQUIRE(first.events[11].kind == XR_VM_TRACE_CALL_RETURN &&
             first.events[11].status == XR_TYPED_DISPATCH_OK);
     REQUIRE(first.events[13].kind == XR_VM_TRACE_FRAME_EXIT &&
@@ -1902,8 +1893,7 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
     REQUIRE(snapshot.opcode_counts[XR_TARGET_INSTRUCTION_CALL_DIRECT_I64] == 1);
 
     XrVmMaterializedEvent materialized;
-    REQUIRE(xr_typed_materialize_event(plan, &fingerprint, &first.events[4],
-                                    &materialized) ==
+    REQUIRE(xr_typed_materialize_event(plan, &fingerprint, &first.events[4], &materialized) ==
             XR_VM_MATERIALIZE_OK);
     REQUIRE(materialized.function_identity == XR_VM_DEBUG_FACT_AVAILABLE);
     REQUIRE(materialized.generation_identity == XR_VM_DEBUG_FACT_AVAILABLE);
@@ -1914,8 +1904,8 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
     REQUIRE(materialized.layout_identity == XR_VM_DEBUG_FACT_AVAILABLE);
 
     int64_t unobserved_result = 0;
-    REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                &unobserved_result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, NULL, 0, &unobserved_result) ==
+            XR_TYPED_DISPATCH_OK);
     REQUIRE(unobserved_result == first_result);
 
     XrVmTraceEvent short_storage[4];
@@ -1924,51 +1914,45 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
     REQUIRE(xr_typed_trace_buffer_init(&short_buffer, short_storage, 4));
     REQUIRE(xr_typed_profile_init(&short_profile));
     XrVmTraceSink short_sink = xr_typed_trace_buffer_sink(&short_buffer);
-    XrVmDebugSession short_session;
-    REQUIRE(xr_typed_debug_session_init(&fingerprint, &generation, &short_sink,
-                                     &short_profile, &short_session) ==
-            XR_VM_DEBUG_SESSION_OK);
+    XrVmDebugSession *short_session = NULL;
+    REQUIRE(xr_typed_debug_session_create(&fingerprint, &generation, &short_sink, &short_profile,
+                                          NULL, &short_session) == XR_VM_DEBUG_SESSION_OK);
     int64_t rejected_result = 99;
-    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                       &generation, &short_session,
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, short_session,
                                       XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
-                                      &rejected_result) ==
-            XR_TYPED_DISPATCH_TRACE_REJECTED);
-    REQUIRE(rejected_result == 0 && short_buffer.count == 4 &&
-            short_buffer.capacity_exceeded);
+                                      &rejected_result) == XR_TYPED_DISPATCH_TRACE_REJECTED);
+    REQUIRE(rejected_result == 0 && short_buffer.count == 4 && short_buffer.capacity_exceeded);
     REQUIRE(xr_typed_profile_snapshot(&short_profile, &snapshot));
     uint64_t accepted_events = 0;
     for (uint32_t i = 0; i < XR_VM_TRACE_EVENT_KIND_COUNT; i++)
         accepted_events += snapshot.event_counts[i];
     REQUIRE(accepted_events == 4);
 
+    xr_typed_debug_session_free(&short_session);
+    xr_typed_debug_session_free(&second_session);
+    xr_typed_debug_session_free(&first_session);
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
 
     semantic = build_direct_i64_call_semantic(true);
-    profile = xr_test_target_profile_build(false,
-                                           XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
     plan = NULL;
-    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
-                                 sizeof(error)));
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
     fingerprint = xr_target_plan_fingerprint(plan);
     generation = debug_generation_identity(plan, UINT8_C(0x5a));
     XrVmTraceEvent error_storage[32];
     XrVmTraceBuffer error_buffer;
     REQUIRE(xr_typed_trace_buffer_init(&error_buffer, error_storage, 32));
     XrVmTraceSink error_sink = xr_typed_trace_buffer_sink(&error_buffer);
-    XrVmDebugSession error_session;
-    REQUIRE(xr_typed_debug_session_init(&fingerprint, &generation, &error_sink,
-                                     NULL, &error_session) ==
-            XR_VM_DEBUG_SESSION_OK);
+    XrVmDebugSession *error_session = NULL;
+    REQUIRE(xr_typed_debug_session_create(&fingerprint, &generation, &error_sink, NULL, NULL,
+                                          &error_session) == XR_VM_DEBUG_SESSION_OK);
     int64_t error_result = 88;
-    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                       &generation, &error_session,
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, error_session,
                                       XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
-                                      &error_result) ==
-            XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
+                                      &error_result) == XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
     REQUIRE(error_result == 0);
     size_t call_enter = SIZE_MAX;
     size_t child_error = SIZE_MAX;
@@ -1985,15 +1969,13 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
         else if (event->kind == XR_VM_TRACE_ERROR && event->frame == 0)
             root_error = i;
     }
-    REQUIRE(call_enter < child_error && child_error < call_return &&
-            call_return < root_error);
-    REQUIRE(error_buffer.events[call_return].status ==
-            XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
-    REQUIRE(error_buffer.events[error_buffer.count - 1u].kind ==
-                XR_VM_TRACE_FRAME_EXIT &&
+    REQUIRE(call_enter < child_error && child_error < call_return && call_return < root_error);
+    REQUIRE(error_buffer.events[call_return].status == XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
+    REQUIRE(error_buffer.events[error_buffer.count - 1u].kind == XR_VM_TRACE_FRAME_EXIT &&
             error_buffer.events[error_buffer.count - 1u].status ==
                 XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
 
+    xr_typed_debug_session_free(&error_session);
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
@@ -2008,14 +1990,13 @@ static void test_trace_debug_facts_are_source_backed_and_mutation_closed(void) {
     XrVmTraceBuffer buffer;
     REQUIRE(xr_typed_trace_buffer_init(&buffer, storage, 32));
     XrVmTraceSink sink = xr_typed_trace_buffer_sink(&buffer);
-    XrVmDebugSession session;
-    REQUIRE(xr_typed_debug_session_init(&fingerprint, &generation, &sink, NULL,
-                                        &session) == XR_VM_DEBUG_SESSION_OK);
+    XrVmDebugSession *session = NULL;
+    REQUIRE(xr_typed_debug_session_create(&fingerprint, &generation, &sink, NULL, NULL, &session) ==
+            XR_VM_DEBUG_SESSION_OK);
     int64_t result = 0;
-    REQUIRE(execute_debug_request_i64(
-                fixture.program_plan, &fingerprint, 0, NULL, 0, &generation,
-                &session, XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH, &result) ==
-            XR_TYPED_DISPATCH_OK);
+    REQUIRE(execute_debug_request_i64(fixture.program_plan, &fingerprint, 0, NULL, 0, &generation,
+                                      session, XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+                                      &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN && buffer.count > 0);
 
     bool saw_source_backed_instruction = false;
@@ -2057,13 +2038,316 @@ static void test_trace_debug_facts_are_source_backed_and_mutation_closed(void) {
     REQUIRE(!xr_target_plan_verify(fixture.program_plan, error, sizeof(error)));
     REQUIRE(strncmp(error, "XR_TARGET_1005", strlen("XR_TARGET_1005")) == 0);
     fixture.program_plan->debug_facts[0] = saved;
+    xr_typed_debug_session_free(&session);
     dispose_fixture(&fixture);
+}
+
+typedef struct DebugStopCopy {
+    uint8_t reason;
+    XrVmTraceEvent instruction;
+    uint32_t frame_count;
+    uint32_t frame_ids[4];
+    uint32_t frame_instructions[4];
+    uint32_t local_count;
+    uint32_t local_frames[16];
+    uint32_t local_slots[16];
+    uint32_t local_sizes[16];
+    XrStableId local_identities[16];
+    uint64_t local_bits[16];
+} DebugStopCopy;
+
+typedef struct DebugControlProbe {
+    XrVmDebugResumeCommand commands[8];
+    uint32_t command_count;
+    uint32_t stop_count;
+    bool accept;
+    DebugStopCopy stops[8];
+} DebugControlProbe;
+
+static bool copy_debug_stop(void *context, const XrVmDebugStop *stop,
+                            XrVmDebugResumeCommand *resume) {
+    DebugControlProbe *probe = (DebugControlProbe *) context;
+    REQUIRE(probe != NULL && stop != NULL && resume != NULL);
+    REQUIRE(stop->schema_version == XR_VM_DEBUG_CONTROL_SCHEMA_VERSION);
+    REQUIRE(probe->stop_count < probe->command_count &&
+            probe->stop_count < sizeof(probe->stops) / sizeof(probe->stops[0]));
+    REQUIRE(stop->frame_count <= 4u && stop->local_count <= 16u);
+    DebugStopCopy *copy = &probe->stops[probe->stop_count];
+    memset(copy, 0, sizeof(*copy));
+    copy->reason = stop->reason;
+    copy->instruction = stop->instruction;
+    copy->frame_count = stop->frame_count;
+    copy->local_count = stop->local_count;
+    for (uint32_t i = 0; i < stop->frame_count; i++) {
+        copy->frame_ids[i] = stop->frames[i].instruction.frame;
+        copy->frame_instructions[i] =
+            stop->frames[i].instruction.instruction;
+    }
+    for (uint32_t i = 0; i < stop->local_count; i++) {
+        const XrVmDebugLocalSnapshot *local = &stop->locals[i];
+        REQUIRE(local->value_size > 0 && local->value_size <= sizeof(uint64_t));
+        REQUIRE(local->value_offset <= stop->local_bytes_size &&
+                local->value_size <=
+                    stop->local_bytes_size - local->value_offset);
+        copy->local_frames[i] = local->frame;
+        copy->local_slots[i] = local->slot;
+        copy->local_sizes[i] = local->value_size;
+        copy->local_identities[i] = local->identity;
+        memcpy(&copy->local_bits[i],
+               stop->local_bytes + local->value_offset, local->value_size);
+    }
+    *resume = probe->commands[probe->stop_count];
+    probe->stop_count++;
+    return probe->accept;
+}
+
+static bool stable_id_is_nonzero(XrStableId identity) {
+    uint8_t combined = 0;
+    for (uint32_t i = 0; i < sizeof(identity.bytes); i++)
+        combined |= identity.bytes[i];
+    return combined != 0;
+}
+
+static void reset_debug_probe(DebugControlProbe *probe,
+                              const XrVmDebugResumeCommand *commands,
+                              uint32_t command_count, bool accept) {
+    REQUIRE(probe != NULL && commands != NULL && command_count > 0 &&
+            command_count <= sizeof(probe->commands) / sizeof(probe->commands[0]));
+    memset(probe, 0, sizeof(*probe));
+    memcpy(probe->commands, commands, (size_t) command_count * sizeof(*commands));
+    probe->command_count = command_count;
+    probe->accept = accept;
+}
+
+static void test_debug_control_breakpoints_and_initialized_locals(void) {
+    TypedDispatchFixture fixture = make_fixture();
+    XrTargetPlan *plan = fixture.program_plan;
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    uint32_t instruction_count = 0;
+    uint32_t fact_count = 0;
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_instructions(plan, &instruction_count);
+    const XrTargetDebugFactRecord *facts = xr_target_plan_debug_facts(plan, &fact_count);
+    REQUIRE(instructions != NULL && facts != NULL && instruction_count == fact_count);
+    uint32_t copy_row =
+        row_of_opcode(instructions, instruction_count, XR_TARGET_INSTRUCTION_COPY_I64, 0);
+    REQUIRE(copy_row != UINT32_MAX && stable_id_is_nonzero(facts[copy_row].source_span_identity));
+    XrVmDebugBreakpointRequest breakpoint = {
+        .kind = XR_VM_DEBUG_BREAKPOINT_SOURCE_SPAN,
+        .identity = facts[copy_row].source_span_identity,
+    };
+    XrVmDebugPlan *debug_plan = NULL;
+    REQUIRE(xr_typed_debug_plan_create(plan, &fingerprint, &breakpoint, 1, &debug_plan) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    XrVmDebugBreakpointRequest duplicate[2] = {breakpoint, breakpoint};
+    XrVmDebugPlan *rejected = NULL;
+    REQUIRE(xr_typed_debug_plan_create(plan, &fingerprint, duplicate, 2, &rejected) ==
+            XR_VM_DEBUG_CONTROL_BREAKPOINT_DUPLICATE);
+    REQUIRE(rejected == NULL);
+    XrVmDebugBreakpointRequest missing = breakpoint;
+    missing.identity.bytes[0] ^= UINT8_C(0x80);
+    REQUIRE(xr_typed_debug_plan_create(plan, &fingerprint, &missing, 1, &rejected) ==
+            XR_VM_DEBUG_CONTROL_BREAKPOINT_NOT_FOUND);
+    REQUIRE(xr_typed_debug_plan_create(plan, &fingerprint, &breakpoint,
+                                       XR_VM_DEBUG_MAX_BREAKPOINTS + UINT32_C(1),
+                                       &rejected) == XR_VM_DEBUG_CONTROL_RESOURCE_LIMIT);
+    uint32_t budget_locals = 0;
+    size_t budget_bytes = 0;
+    REQUIRE(xr_typed_debug_snapshot_budget_reserve(&budget_locals, &budget_bytes,
+                                                   XR_VM_DEBUG_MAX_SNAPSHOT_BYTES));
+    REQUIRE(budget_locals == 1u && budget_bytes == XR_VM_DEBUG_MAX_SNAPSHOT_BYTES);
+    REQUIRE(!xr_typed_debug_snapshot_budget_reserve(&budget_locals, &budget_bytes, 1u));
+    REQUIRE(budget_locals == 1u && budget_bytes == XR_VM_DEBUG_MAX_SNAPSHOT_BYTES);
+    budget_locals = XR_VM_DEBUG_MAX_TRACKED_SLOTS;
+    budget_bytes = 0;
+    REQUIRE(!xr_typed_debug_snapshot_budget_reserve(&budget_locals, &budget_bytes, 1u));
+
+    DebugControlProbe probe;
+    XrVmDebugControl *control = NULL;
+    REQUIRE(xr_typed_debug_control_create(debug_plan, copy_debug_stop, &probe, &control) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    xr_typed_debug_plan_free(&debug_plan);
+    REQUIRE(debug_plan == NULL && control != NULL);
+    XrModuleGenerationIdentity generation = debug_generation_identity(plan, UINT8_C(0x31));
+    XrVmDebugSession *session = NULL;
+    XrFingerprint wrong_fingerprint = fingerprint;
+    wrong_fingerprint.bytes[0] ^= UINT8_C(1);
+    REQUIRE(xr_typed_debug_session_create(&wrong_fingerprint, NULL, NULL, NULL, control,
+                                          &session) == XR_VM_DEBUG_SESSION_PLAN_IDENTITY_MISMATCH);
+    REQUIRE(session == NULL);
+    REQUIRE(xr_typed_debug_session_create(&fingerprint, &generation, NULL, NULL, control,
+                                          &session) == XR_VM_DEBUG_SESSION_OK);
+    static const XrVmDebugResumeCommand run_commands[] = {
+        XR_VM_DEBUG_RESUME_STEP_INTO,
+        XR_VM_DEBUG_RESUME_CONTINUE,
+    };
+    const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    for (uint32_t provider = 0; provider < sizeof(providers) / sizeof(providers[0]); provider++) {
+        reset_debug_probe(&probe, run_commands, 2, true);
+        REQUIRE(xr_typed_debug_control_arm(control, XR_VM_DEBUG_RESUME_CONTINUE) ==
+                XR_VM_DEBUG_CONTROL_OK);
+        int64_t result = 9;
+        REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, session,
+                                          providers[provider], &result) == XR_TYPED_DISPATCH_OK);
+        REQUIRE(result == INT64_MIN && probe.stop_count == 2);
+        REQUIRE(probe.stops[0].reason == XR_VM_DEBUG_STOP_BREAKPOINT &&
+                probe.stops[0].instruction.instruction == copy_row &&
+                probe.stops[0].frame_count == 1 && probe.stops[0].local_count == 2);
+        REQUIRE(probe.stops[1].reason == XR_VM_DEBUG_STOP_STEP &&
+                probe.stops[1].instruction.ordinal > probe.stops[0].instruction.ordinal &&
+                probe.stops[1].frame_count == 1 && probe.stops[1].local_count == 3);
+        bool saw_max = false;
+        bool saw_one = false;
+        for (uint32_t i = 0; i < probe.stops[0].local_count; i++) {
+            REQUIRE(stable_id_is_nonzero(probe.stops[0].local_identities[i]));
+            saw_max |= probe.stops[0].local_bits[i] == (uint64_t) INT64_MAX;
+            saw_one |= probe.stops[0].local_bits[i] == UINT64_C(1);
+        }
+        REQUIRE(saw_max && saw_one);
+    }
+
+    static const XrVmDebugResumeCommand terminate[] = {
+        XR_VM_DEBUG_RESUME_TERMINATE,
+    };
+    reset_debug_probe(&probe, terminate, 1, true);
+    REQUIRE(xr_typed_debug_control_arm(control, XR_VM_DEBUG_RESUME_CONTINUE) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    int64_t result = 7;
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+                                      &result) == XR_TYPED_DISPATCH_DEBUG_TERMINATED);
+    REQUIRE(result == 0 && probe.stop_count == 1);
+
+    reset_debug_probe(&probe, terminate, 1, false);
+    REQUIRE(xr_typed_debug_control_arm(control, XR_VM_DEBUG_RESUME_CONTINUE) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    result = 7;
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+                                      &result) == XR_TYPED_DISPATCH_DEBUG_STOP_REJECTED);
+    REQUIRE(result == 0 && probe.stop_count == 1);
+
+    XrVmDebugSession *mismatched_session = NULL;
+    REQUIRE(xr_typed_debug_session_create(&wrong_fingerprint, NULL, NULL, NULL, NULL,
+                                          &mismatched_session) == XR_VM_DEBUG_SESSION_OK);
+    result = 7;
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation,
+                                      mismatched_session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+                                      &result) == XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH);
+    REQUIRE(result == 0);
+    xr_typed_debug_session_free(&mismatched_session);
+
+    static const XrVmDebugResumeCommand continue_after_owner_release[] = {
+        XR_VM_DEBUG_RESUME_CONTINUE,
+    };
+    reset_debug_probe(&probe, continue_after_owner_release, 1, true);
+    REQUIRE(xr_typed_debug_control_arm(control, XR_VM_DEBUG_RESUME_CONTINUE) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    REQUIRE(xr_typed_debug_control_free(&control) == XR_VM_DEBUG_CONTROL_OK);
+    REQUIRE(control == NULL);
+    result = 0;
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+                                      &result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(result == INT64_MIN && probe.stop_count == 1);
+    xr_typed_debug_session_free(&session);
+    dispose_fixture(&fixture);
+}
+
+static void test_debug_control_steps_across_direct_call_stack(void) {
+    XrSemanticPlan *semantic = build_direct_i64_call_semantic(false);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    XrModuleGenerationIdentity generation = debug_generation_identity(plan, UINT8_C(0x41));
+    XrVmDebugPlan *debug_plan = NULL;
+    REQUIRE(xr_typed_debug_plan_create(plan, &fingerprint, NULL, 0, &debug_plan) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    DebugControlProbe probe;
+    XrVmDebugControl *control = NULL;
+    REQUIRE(xr_typed_debug_control_create(debug_plan, copy_debug_stop, &probe, &control) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    XrVmDebugSession *session = NULL;
+    REQUIRE(xr_typed_debug_session_create(&fingerprint, &generation, NULL, NULL, control,
+                                          &session) == XR_VM_DEBUG_SESSION_OK);
+    static const XrVmDebugResumeCommand commands[] = {
+        XR_VM_DEBUG_RESUME_STEP_INTO,
+        XR_VM_DEBUG_RESUME_STEP_INTO,
+        XR_VM_DEBUG_RESUME_STEP_OUT,
+        XR_VM_DEBUG_RESUME_CONTINUE,
+    };
+    reset_debug_probe(&probe, commands, 4, true);
+    REQUIRE(xr_typed_debug_control_arm(control, XR_VM_DEBUG_RESUME_STEP_INTO) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    int64_t result = 0;
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+                                      &result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(result == 42 && probe.stop_count == 4);
+    REQUIRE(probe.stops[0].instruction.frame_depth == 0 && probe.stops[0].frame_count == 1 &&
+            probe.stops[0].local_count == 0);
+    REQUIRE(probe.stops[1].instruction.opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 &&
+            probe.stops[1].instruction.frame_depth == 0 && probe.stops[1].local_count == 1);
+    REQUIRE(probe.stops[2].instruction.opcode == XR_TARGET_INSTRUCTION_PARAM_I64 &&
+            probe.stops[2].instruction.frame_depth == 1 && probe.stops[2].frame_count == 2 &&
+            probe.stops[2].frame_ids[0] == 0 && probe.stops[2].frame_ids[1] == 1 &&
+            probe.stops[2].local_count == 2 && probe.stops[2].local_frames[0] == 0 &&
+            probe.stops[2].local_frames[1] == 1);
+    REQUIRE(probe.stops[3].instruction.opcode == XR_TARGET_INSTRUCTION_RETURN_I64 &&
+            probe.stops[3].instruction.frame_depth == 0 && probe.stops[3].frame_count == 1 &&
+            probe.stops[3].local_count == 2);
+
+    static const XrVmDebugResumeCommand step_over_commands[] = {
+        XR_VM_DEBUG_RESUME_STEP_INTO,
+        XR_VM_DEBUG_RESUME_STEP_OVER,
+        XR_VM_DEBUG_RESUME_CONTINUE,
+    };
+    reset_debug_probe(&probe, step_over_commands, 3, true);
+    REQUIRE(xr_typed_debug_control_arm(control, XR_VM_DEBUG_RESUME_STEP_INTO) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    result = 0;
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+                                      &result) == XR_TYPED_DISPATCH_OK);
+    REQUIRE(result == 42 && probe.stop_count == 3);
+    REQUIRE(probe.stops[1].reason == XR_VM_DEBUG_STOP_STEP &&
+            probe.stops[1].instruction.opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64);
+    REQUIRE(probe.stops[2].reason == XR_VM_DEBUG_STOP_STEP &&
+            probe.stops[2].instruction.opcode == XR_TARGET_INSTRUCTION_RETURN_I64 &&
+            probe.stops[2].instruction.frame_depth == 0);
+
+    static const XrVmDebugResumeCommand root_step_out[] = {
+        XR_VM_DEBUG_RESUME_STEP_OUT,
+    };
+    reset_debug_probe(&probe, root_step_out, 1, true);
+    REQUIRE(xr_typed_debug_control_arm(control, XR_VM_DEBUG_RESUME_STEP_INTO) ==
+            XR_VM_DEBUG_CONTROL_OK);
+    result = 7;
+    REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0, &generation, session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+                                      &result) == XR_TYPED_DISPATCH_DEBUG_STOP_REJECTED);
+    REQUIRE(result == 0 && probe.stop_count == 1);
+
+    xr_typed_debug_session_free(&session);
+    REQUIRE(xr_typed_debug_control_free(&control) == XR_VM_DEBUG_CONTROL_OK);
+    xr_typed_debug_plan_free(&debug_plan);
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
 }
 
 static void test_direct_local_call_depth_is_globally_bounded(void) {
     XrSemanticPlan *semantic = build_deep_direct_i64_call_semantic();
-    XrTargetProfile *profile = xr_test_target_profile_build(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
@@ -2134,6 +2418,8 @@ int main(void) {
     test_direct_local_i64_call_executes_and_rejects_drift();
     test_runtime_only_trace_profile_and_materialization();
     test_trace_debug_facts_are_source_backed_and_mutation_closed();
+    test_debug_control_breakpoints_and_initialized_locals();
+    test_debug_control_steps_across_direct_call_stack();
     test_direct_local_call_depth_is_globally_bounded();
     test_backward_jump_stops_at_the_step_budget();
     puts("typed dispatch tests passed");

@@ -9,8 +9,10 @@
  *
  * KEY CONCEPT:
  *   Trace identities are numeric facts scoped by an exact TargetPlan
- *   fingerprint. A debug session copies generation identity bytes and never
- *   retains a plan, frame, or generation object.
+ *   fingerprint. An opaque debug session copies generation identity bytes,
+ *   optionally retains
+ * one debug control, and never retains a plan, frame,
+ *   or generation object.
  */
 
 #ifndef XR_VM_TRACE_H
@@ -19,7 +21,7 @@
 #include "../../plan/target/xr_target_plan.h"
 #include "../../../include/xray_runtime_generation.h"
 
-#define XR_VM_TRACE_SCHEMA_VERSION UINT32_C(2)
+#define XR_VM_TRACE_SCHEMA_VERSION UINT32_C(3)
 #define XR_VM_TRACE_ID_NONE UINT32_MAX
 
 typedef enum XrVmDebugFactAvailability {
@@ -77,8 +79,7 @@ typedef struct XrVmTraceEvent {
     XrFingerprint layout_fingerprint;
 } XrVmTraceEvent;
 
-typedef bool (*XrVmTraceEmitFn)(void *context,
-                                const XrVmTraceEvent *event);
+typedef bool (*XrVmTraceEmitFn)(void *context, const XrVmTraceEvent *event);
 
 typedef struct XrVmTraceSink {
     XrVmTraceEmitFn emit;
@@ -93,43 +94,38 @@ typedef struct XrVmTraceBuffer {
 } XrVmTraceBuffer;
 
 typedef struct XrVmProfile XrVmProfile;
-
-typedef struct XrVmDebugSession {
-    uint32_t schema_version;
-    uint8_t generation_identity_present;
-    uint8_t reserved8[3];
-    XrFingerprint target_plan_fingerprint;
-    XrModuleGenerationIdentity generation_identity;
-    XrVmTraceSink trace;
-    XrVmProfile *profile;
-} XrVmDebugSession;
+typedef struct XrVmDebugControl XrVmDebugControl;
+typedef struct XrVmDebugSession XrVmDebugSession;
 
 typedef enum XrVmDebugSessionStatus {
     XR_VM_DEBUG_SESSION_OK = 0,
     XR_VM_DEBUG_SESSION_INVALID_ARGUMENT,
     XR_VM_DEBUG_SESSION_PLAN_IDENTITY_MISMATCH,
     XR_VM_DEBUG_SESSION_GENERATION_IDENTITY_INVALID,
+    XR_VM_DEBUG_SESSION_ALLOCATION_FAILED,
 } XrVmDebugSessionStatus;
 
-XR_FUNC XrVmDebugSessionStatus xr_typed_debug_session_init(
+/* The returned opaque session owns a control reference until free consumes
+ * the session pointer.  A request borrows its session for the complete
+ * synchronous dispatch call: the caller must keep that owner alive and must
+ * not free the same session concurrently.  It is neither copyable nor valid
+ * after free. */
+XR_FUNC XrVmDebugSessionStatus xr_typed_debug_session_create(
     const XrFingerprint *target_plan_fingerprint,
-    const XrModuleGenerationIdentity *generation_identity,
-    const XrVmTraceSink *trace, XrVmProfile *profile,
-    XrVmDebugSession *session);
-XR_FUNC bool xr_typed_debug_session_matches_plan(
-    const XrVmDebugSession *session,
-    XrFingerprint target_plan_fingerprint);
-XR_FUNC bool xr_typed_debug_emit(
-    const XrVmDebugSession *session,
-    const XrFingerprint *target_plan_fingerprint,
-    const XrModuleGenerationIdentity *generation_identity,
-    uint64_t ordinal, XrVmTraceEvent *event);
-XR_FUNC bool xr_typed_debug_attach_event_facts(
-    const XrTargetPlan *verified_plan, XrVmTraceEvent *event);
+    const XrModuleGenerationIdentity *generation_identity, const XrVmTraceSink *trace,
+    XrVmProfile *profile, XrVmDebugControl *control, XrVmDebugSession **session);
+XR_FUNC void xr_typed_debug_session_free(XrVmDebugSession **session);
+XR_FUNC bool xr_typed_debug_session_matches_plan(const XrVmDebugSession *session,
+                                                 XrFingerprint target_plan_fingerprint);
+XR_FUNC bool xr_typed_debug_emit(const XrVmDebugSession *session,
+                                 const XrFingerprint *target_plan_fingerprint,
+                                 const XrModuleGenerationIdentity *generation_identity,
+                                 uint64_t ordinal, XrVmTraceEvent *event);
+XR_FUNC bool xr_typed_debug_attach_event_facts(const XrTargetPlan *verified_plan,
+                                               XrVmTraceEvent *event);
 
-XR_FUNC bool xr_typed_trace_buffer_init(XrVmTraceBuffer *buffer,
-                                     XrVmTraceEvent *storage,
-                                     size_t capacity);
+XR_FUNC bool xr_typed_trace_buffer_init(XrVmTraceBuffer *buffer, XrVmTraceEvent *storage,
+                                        size_t capacity);
 XR_FUNC XrVmTraceSink xr_typed_trace_buffer_sink(XrVmTraceBuffer *buffer);
 
 #endif  // XR_VM_TRACE_H

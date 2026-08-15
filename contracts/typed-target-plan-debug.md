@@ -1,7 +1,7 @@
 # Typed TargetPlan runtime debug contract
 
-The runtime-only typed executor exposes one optional observation boundary in
-its single `XrTypedDispatchI64Request`. A null debug session performs exactly
+The runtime-only typed executor exposes one optional debug boundary in its
+single `XrTypedDispatchI64Request`. A null debug session performs exactly
 the same validation, frame operations, instruction dispatch, result transfer,
 and generation lifetime work as an unobserved execution. There is no alternate
 debug executor, legacy bytecode offset, source/name lookup, SemanticPlan walk,
@@ -9,16 +9,32 @@ or AOT/CGen fallback. The request's mandatory generated switch or generated
 function-table provider selection does not alter the canonical event stream or
 profile counters; nested direct calls inherit the same provider.
 
-A debug session is bound to the root TargetPlan fingerprint. Generation
+A debug session is an opaque allocated object bound to the root TargetPlan
+fingerprint. Creation may attach trace/profile observation only, or retain one
+TargetPlan-driven control whose immutable debug plan was built from that same
+verified fingerprint. The caller must dispose the session through its unique
+pointer-consuming free API; there is no stack-layout contract, copy operation,
+or compatibility initializer. A dispatch request borrows the session for its
+complete synchronous call; its caller must keep the session owner alive and
+must not concurrently free that same session. The caller may release its
+control owner after session creation because the session holds an independent
+reference. Each claimed execution holds another reference until its common
+terminal path, so owner release cannot race a begin or active execution into a
+dangling control.
+Arm and begin are linearized by the control's idle/arming/active state; neither
+can silently overwrite the other's command. Generation
 identity comes independently from the execution request; when the session also
-records it, the two must match exactly before any frame or event. The session is
-observation only and can never supply execution authority. A dynamic child may
+records it, the two must match exactly before any frame or event. Debug state
+can never supply execution authority. A dynamic child may
 carry a different exact plan and generation identity acquired from its pinned
 entry token; its events are scoped by those child identities while retaining
 the same session, provider, ordinal stream, and profile. The session and every
-trace event contain only
-copied numeric identities and fingerprints; no plan, frame, slot, or generation
-pointer is retained by trace, profile, or materialization state.
+trace event contain only copied numeric identities and fingerprints; no plan,
+frame, slot, or generation pointer is retained by trace, profile, or
+materialization state. The control holds frame pointers only while its single
+claimed execution is active and clears them on every exit. Its stop callback
+receives an ephemeral snapshot whose frame stack, initialized locals, and value
+bytes are owned copies; those pointers expire when the callback returns.
 
 The canonical event order is frame-enter, block-enter at each reached block,
 instruction before its semantic action, call-enter before child-frame work,
@@ -40,6 +56,30 @@ depth, saturate instead of wrapping, allocate nothing, and retain no runtime
 authority. Profile presence or absence cannot make a plan legal, change a slot
 byte, extend a generation pin, or change the program result.
 
+The debug plan accepts only nonzero frozen source-span or Semantic-operation
+stable IDs that exist in the verified TargetPlan debug-fact table. Requests are
+sorted and duplicate or missing identities fail closed before a control exists.
+There is no file-name, line-number, function-name, or legacy bytecode-offset
+lookup. One control may be active in only one request. It may start in continue
+or step-into mode; a callback may resume with continue, step-into, step-over,
+step-out, or terminate. Step decisions use the canonical event ordinal and
+numeric frame depth, so direct and dynamic child calls inherit the same rule.
+Step-out at the root frame is rejected because no lower frame can exist.
+Callback refusal and explicit termination have distinct dispatcher statuses,
+publish no result, and release all control state on the common exit path.
+
+Each successful instruction commit marks only that row's result slot initialized;
+prebound child parameters are marked only after exact argument staging. A stop
+copies initialized slots from every active typed frame using the frozen slot
+size, alignment, register representation, memory representation, identity,
+ownership, and root facts. It never reads a poison or uninitialized slot,
+exposes a live arena pointer, scans a legacy stack, or invents a local from
+source names.
+The control admits at most 65,536 breakpoint requests or resolved rows, 256 active frames,
+65,536 tracked slots, and 16 MiB of copied local bytes per stop. Each limit is
+checked with overflow-safe arithmetic before allocation or slot access; an
+over-budget breakpoint plan or stop fails closed without invoking the callback.
+
 Materialization rechecks the immutable plan and event fingerprint, then copies
 only exact function, instruction, call, entry-expectation, slot, and immutable
 debug-fact rows. TargetPlan schema 38 carries one debug fact for every target
@@ -50,10 +90,11 @@ exact coroutine-state and owner stable IDs when applicable and the verified
 layout fingerprint when the operation result has an exact target layout. The
 runtime only attaches these frozen rows; it never derives them from a legacy
 bytecode offset, name lookup, SemanticPlan walk, or a guessed relation. A
-fabricated, stale, or mutated fact is rejected before materialization. Breakpoint,
-step, arbitrary locals/stack, VM/AOT first-divergence, allocation/RC/suspend,
-mailbox, provider-cost, and source-span debugging remain unavailable and are
-not claimed by this runtime slice.
+fabricated, stale, or mutated fact is rejected before materialization.
+Breakpoint, step, initialized locals, and the typed call stack consume only
+those exact facts. Arbitrary memory inspection or mutation, VM/AOT
+first-divergence, allocation/RC/suspend, mailbox, and provider-cost debugging
+remain unavailable and are not claimed by this runtime slice.
 
 Evidence:
 
@@ -63,19 +104,36 @@ Evidence:
   order, exact generation binding, fixed-capacity sink refusal, profile-disabled
   parity, instruction/call/slot materialization, source-backed stable facts,
   and source-fact mutation rejection.
+- `test_typed_dispatch` also proves source-span breakpoints, deterministic
+  switch/function-table stepping, initialized-only local copies, explicit
+  termination and callback rejection, and step-into/over/out across a real
+  two-frame direct call without retaining a stack pointer. It also proves the
+  breakpoint and snapshot budget edges, root step-out rejection, and session
+  ownership after the caller releases its control reference.
+- `test_dynamic_entry_runtime` proves the same control steps into a pinned
+  child with a distinct plan/generation, observes the exact two-frame stack,
+  and steps back to the caller. It also drives terminate, callback refusal,
+  and invalid-resume rejection from that child and proves every outcome retires
+  exactly one lease while restoring caller/callee pins and leaving no live or
+  pending lease.
 - `test_typed_frame_runtime_archive` proves trace, profile, materialization,
-  debug-session, and request-based dispatcher symbols link from `xray_vm`.
+  debug-session, debug-plan/control, and request-based dispatcher symbols link
+  from `xray_vm`.
 
-anchor-sha256: src/vm/debug/xr_vm_trace.h a8a281dad51876c63ff9ba6d8bd52e63a8e52f8ff29fbf683aca3323f4f6f924
-anchor-sha256: src/vm/debug/xr_vm_trace.c c61c7b755f761d24a4f5c721b09502c7afdba32ed4a7c11acedba802c995a7cc
+anchor-sha256: src/vm/debug/xr_vm_trace.h 4e5ed29033c195caa74028ca75f52013abdd340af4d368a04337e692e3067e0a
+anchor-sha256: src/vm/debug/xr_vm_trace.c 6206123d9b212506679303049b1ec983cd6696614b1a2a1c36173aad9d7a88de
+anchor-sha256: src/vm/debug/xr_vm_trace_internal.h 715c757e80e375f9a4923d9c367cdc22d500fa838c1fff61a1e2a842a9840cf2
+anchor-sha256: src/vm/debug/xr_vm_debug_control.h ff0b4660f4f6c9db6783a7e9bfedf4258c14ef33b4a25aa577ee5ba39d59d419
+anchor-sha256: src/vm/debug/xr_vm_debug_control_internal.h 7034512a59f1683cd5d0a85997b293f84f6012c1d8aea0363d1d02570f0dfd84
+anchor-sha256: src/vm/debug/xr_vm_debug_control.c 0576a576a03a74dffcd02a3b44ae77d1d3f4fd4cd1e5eee7d1b5aa26c27b2721
 anchor-sha256: src/vm/debug/xr_vm_profile.h 494f41cb32b3b3e48162f2f5b23c78c5e85ec41afaa702b690c8331f94af1892
 anchor-sha256: src/vm/debug/xr_vm_profile.c d4a1cd75c1d520f3a14721e64757559952ffb6c734b62c7a6769d81444ccbda1
 anchor-sha256: src/vm/debug/xr_vm_materialize.h d87726c0853aafe634f6888fb242167be4bac256ab117f24a58df5aa711ccb8f
 anchor-sha256: src/vm/debug/xr_vm_materialize.c b86beab806b748e1eced0aa4c04c2a87da11f5e774289227fa4d144320195d2a
-anchor-sha256: src/vm/xr_typed_dispatch.h 25f04f8562c5159cb775553242e753910c91682d3873913ad3eab867cee4a412
-anchor-sha256: src/vm/xr_typed_dispatch.c 8ce9c5270624b2a5c713ea0c57ecd23f09d8940516241f921506c2f7acb3433f
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c b3bd5b339e5bbd2756af3db1a791ed98dfeaeff45c404fc234923d1221ae961e
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 5827191c191aeda84d937af1909a9d6849608fd93569822fd96130680f9f27e9
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py cb1b4fd056aebee2f73c03d537294df3d8a2dcc8617a55a1a7e25b0e42570228
+anchor-sha256: src/vm/xr_typed_dispatch.h 8c764cfb9f22e8c58ea75b0862b496996cd09bc6fc1e86d6fcc1ef5f6398cdb4
+anchor-sha256: src/vm/xr_typed_dispatch.c c79296a7d62cd0ae42f41e36e67dead23ac3b24095504cbba7ed52fe2a60fe9c
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 0c6753b95b6a07f1bfff18d3294f1cc76348f60252663feb11aef72ddcf52a1a
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c e5b77b5780812f5a514e0657e10a5452968cd5f4cf66bc551955de1f636d41da
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 2f3570bbfb67a0a73e7d0b2aea41ef422fbf096eac0cc42b1821993d5da4a19b
 anchor-sha256: CMakeLists.txt 52120c519042aa84194f877420c808db07fdde1a563f8bdb94e65af9fde9e00b
-anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 529b9e5618207d743789087697ef51d1b9642532e732e1d73f296d812d9e06b1
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 06262827b3a5f4b46765af60a45192a6ac8427c21a8c8b63ff9870728bab7f1a

@@ -370,7 +370,11 @@ CONTRACT_SPECS = (
     ContractSpec(
         "typed-target-plan-debug.md",
         (
+            "src/vm/debug/xr_vm_debug_control.h",
+            "src/vm/debug/xr_vm_debug_control_internal.h",
+            "src/vm/debug/xr_vm_debug_control.c",
             "src/vm/debug/xr_vm_trace.h",
+            "src/vm/debug/xr_vm_trace_internal.h",
             "src/vm/debug/xr_vm_trace.c",
             "src/vm/debug/xr_vm_profile.h",
             "src/vm/debug/xr_vm_profile.c",

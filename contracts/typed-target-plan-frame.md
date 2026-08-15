@@ -215,7 +215,8 @@ Evidence:
   not claim production-builder reachability.
 - `test_typed_frame_runtime_archive` proves the public header and symbols link
   from the runtime-only archive without compiler or AOT ownership, proves the
-  footprint, exact slot transport, trace, profile, and materialization symbols
+  footprint, exact slot transport, trace, profile, TargetPlan debug control,
+  and materialization symbols
   are present there, and proves that the scalar dispatcher is present without
   activating it.
 - `typed_target_vm_performance_gate` directly times the verified scalar
@@ -244,13 +245,13 @@ Evidence:
 anchor-sha256: src/plan/target/xr_target_plan.h bca30e98e3d1fc20115edc79565910976d46e79dbcecaed7fc0e1e7bfaadfda9
 anchor-sha256: src/vm/xr_typed_frame.h 4737b4ddb1415a875031ac2298910b86e09fa6b7253ab3c2bb771e71169fd2e2
 anchor-sha256: src/vm/xr_typed_frame.c 80ac935291096963179c8f6c58b3105835426c87b2b693d2a62e1d5c16fc913b
-anchor-sha256: src/vm/xr_typed_dispatch.c 8ce9c5270624b2a5c713ea0c57ecd23f09d8940516241f921506c2f7acb3433f
+anchor-sha256: src/vm/xr_typed_dispatch.c c79296a7d62cd0ae42f41e36e67dead23ac3b24095504cbba7ed52fe2a60fe9c
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 3fd550a0cfcdee2b28a631ef1ef6ae56c5a776c4d380a508d78e6d307bbf1b20
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041
 anchor-sha256: tests/unit/vm/test_typed_frame.c 75452812609284831f6246434ec67d9fa085618f8ef993ab80f968940064ad70
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 5827191c191aeda84d937af1909a9d6849608fd93569822fd96130680f9f27e9
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c e5b77b5780812f5a514e0657e10a5452968cd5f4cf66bc551955de1f636d41da
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h e365e02d0596394df881026895d127ac54ade9d7bccf5ff272ad6f704a88becf
-anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 529b9e5618207d743789087697ef51d1b9642532e732e1d73f296d812d9e06b1
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 06262827b3a5f4b46765af60a45192a6ac8427c21a8c8b63ff9870728bab7f1a
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2

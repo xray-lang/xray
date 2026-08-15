@@ -382,6 +382,9 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status, char *diagnostic,
             return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
                         "exported function dynamic entry retirement was deferred");
         case XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH:
+        case XR_TYPED_DISPATCH_DEBUG_CONTROL_ERROR:
+        case XR_TYPED_DISPATCH_DEBUG_TERMINATED:
+        case XR_TYPED_DISPATCH_DEBUG_STOP_REJECTED:
         case XR_TYPED_DISPATCH_TRACE_REJECTED:
         case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
         case XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED:
