@@ -1451,7 +1451,7 @@ static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd, XrCl
             FieldDeclNode *f = &cd->fields[i]->as.field_decl;
             if (f->is_static)
                 continue;
-            desc->instance_fields[idx].name = strdup(f->name);
+            desc->instance_fields[idx].name = xr_strdup(f->name);
             desc->instance_fields[idx].type_name =
                 f->field_type ? xr_type_to_string(xr_tref_resolve(ctx->isolate, f->field_type))
                               : NULL;
@@ -1501,7 +1501,7 @@ static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd, XrCl
             FieldDeclNode *f = &cd->fields[i]->as.field_decl;
             if (!f->is_static)
                 continue;
-            desc->static_fields[idx].name = strdup(f->name);
+            desc->static_fields[idx].name = xr_strdup(f->name);
             desc->static_fields[idx].flags = XR_FIELD_STATIC;
             desc->static_fields[idx].type_name =
                 f->field_type ? xr_type_to_string(xr_tref_resolve(ctx->isolate, f->field_type))
@@ -1564,11 +1564,13 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
         return;
     }
 
-    desc->class_name = strdup(cd->name);
-    desc->super_name = (cd->super_name && !cd->super_module) ? strdup(cd->super_name) : NULL;
+    desc->class_name = xr_strdup(cd->name);
+    desc->super_name =
+        (cd->super_name && !cd->super_module) ? xr_strdup(cd->super_name) : NULL;
     desc->generic_origin_name =
-        cdata->generic_origin_name ? strdup(cdata->generic_origin_name) : NULL;
-    desc->display_name = cdata->display_name ? strdup(cdata->display_name) : NULL;
+        cdata->generic_origin_name ? xr_strdup(cdata->generic_origin_name) : NULL;
+    desc->display_name =
+        cdata->display_name ? xr_strdup(cdata->display_name) : NULL;
     desc->is_monomorphized = cdata->is_monomorphized;
     desc->mono_type_arg_names = NULL;
     desc->mono_type_arg_count = 0;
@@ -1578,7 +1580,9 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
         if (names) {
             for (int i = 0; i < cdata->mono_type_arg_count; i++)
                 names[i] =
-                    cdata->mono_type_arg_names[i] ? strdup(cdata->mono_type_arg_names[i]) : NULL;
+                    cdata->mono_type_arg_names[i]
+                        ? xr_strdup(cdata->mono_type_arg_names[i])
+                        : NULL;
             desc->mono_type_arg_names = names;
             desc->mono_type_arg_count = cdata->mono_type_arg_count;
         }
@@ -1622,7 +1626,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
             MethodDeclNode *m = &cd->methods[i]->as.method_decl;
             if (m->is_static || m->is_static_constructor)
                 continue;
-            desc->instance_methods[mi].name = strdup(m->name);
+            desc->instance_methods[mi].name = xr_strdup(m->name);
             desc->instance_methods[mi].param_count = m->param_count;
             if (m->is_constructor || strcmp(m->name, "constructor") == 0 ||
                 strcmp(m->name, "init") == 0)
@@ -1643,7 +1647,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
             mi++;
         }
         if (mi < cdata->ninst) {
-            desc->instance_methods[mi].name = strdup("constructor");
+            desc->instance_methods[mi].name = xr_strdup("constructor");
             desc->instance_methods[mi].param_count = 0;
             desc->instance_methods[mi].flags |= XMETHOD_FLAG_CONSTRUCTOR;
             XR_DCHECK(cdata->child_idx != NULL, "child_idx must be set");
@@ -1672,7 +1676,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
             MethodDeclNode *m = &cd->methods[i]->as.method_decl;
             if (!m->is_static || m->is_static_constructor)
                 continue;
-            desc->static_methods[mi].name = strdup(m->name);
+            desc->static_methods[mi].name = xr_strdup(m->name);
             desc->static_methods[mi].param_count = m->param_count;
             desc->static_methods[mi].flags = XMETHOD_FLAG_STATIC;
             XR_DCHECK(cdata->child_idx != NULL, "child_idx must be set");

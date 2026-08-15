@@ -246,7 +246,7 @@ void xr_compiler_ctx_register_enum_type(XrCompilerContext *ctx, const char *enum
         ctx->enum_type_capacity = new_capacity;
     }
 
-    ctx->enum_type_names[ctx->enum_type_count] = strdup(enum_name);
+    ctx->enum_type_names[ctx->enum_type_count] = xr_strdup(enum_name);
     ctx->enum_type_count++;
     XR_DCHECK(ctx->enum_type_count <= ctx->enum_type_capacity,
               "register_enum_type: count > capacity");
