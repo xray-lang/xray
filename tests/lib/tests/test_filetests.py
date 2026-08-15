@@ -168,6 +168,64 @@ class RunnerHelpersTest(unittest.TestCase):
         self.assertGreaterEqual(runner.configure_jobs("auto"), 1)
         self.assertEqual(runner.configure_jobs("3"), 3)
 
+    def test_case_directory_identity_is_hashed_once_per_directory(self):
+        with tempfile.TemporaryDirectory(prefix="xt_filetest_keys.") as tmp:
+            root = Path(tmp)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            config = runner.Config(
+                xray=root / "xray",
+                mode="all",
+                selected_modes=["link", "cgen"],
+                verbose=False,
+                keep_tmp=False,
+                jobs=4,
+                cache_dir=root / "cache",
+                sanitizer=False,
+                disable_run_cache=False,
+                baseline=root / "baseline.txt",
+                case_timeout=1,
+            )
+            cases = [
+                ("link", first / "a.xr"),
+                ("link", first / "b.xr"),
+                ("cgen", second / "c.xr"),
+            ]
+            with mock.patch.object(
+                runner.cache, "dir_key", side_effect=lambda path: f"key:{path.name}"
+            ) as dir_key:
+                runner.prepare_case_directory_keys(config, cases)
+
+        self.assertEqual(dir_key.call_count, 2)
+        self.assertEqual(
+            config.case_directory_keys,
+            {first: "key:first", second: "key:second"},
+        )
+
+    def test_disabled_run_cache_does_not_hash_case_directories(self):
+        with tempfile.TemporaryDirectory(prefix="xt_filetest_no_keys.") as tmp:
+            root = Path(tmp)
+            config = runner.Config(
+                xray=root / "xray",
+                mode="rep",
+                selected_modes=["rep"],
+                verbose=False,
+                keep_tmp=False,
+                jobs=1,
+                cache_dir=root / "cache",
+                sanitizer=False,
+                disable_run_cache=True,
+                baseline=root / "baseline.txt",
+                case_timeout=1,
+            )
+            with mock.patch.object(runner.cache, "dir_key") as dir_key:
+                runner.prepare_case_directory_keys(config, [("rep", root / "rep" / "a.xr")])
+
+        dir_key.assert_not_called()
+        self.assertEqual(config.case_directory_keys, {})
+
     def test_pre_measurement_failure_is_nonzero(self):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

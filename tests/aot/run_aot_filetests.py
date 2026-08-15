@@ -19,7 +19,7 @@ import argparse
 import os
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -67,6 +67,10 @@ class Config:
     # becomes one red case, not a hung lane; the child tree is killed on expiry.
     # XRAY_TEST_CASE_TIMEOUT tunes it, 0 disables.
     case_timeout: float | None
+    # Every case in a mode shares one fixture directory. Hash that directory
+    # once before scheduling instead of once per parallel case: the latter is
+    # quadratic in the corpus size and can exhaust the outer CTest budget.
+    case_directory_keys: dict[Path, str] = field(default_factory=dict)
 
 
 # --- helpers ----------------------------------------------------------------
@@ -223,7 +227,9 @@ def _dump_and_c_paths(config: Config, mode: str, xr_file: Path, extra_args: list
         c_bytes = out_c.read_bytes() if out_c.is_file() else b""
         return result.stdout + result.stderr, c_bytes, None
 
-    case_key = cache.dir_key(xr_file.parent)
+    case_key = config.case_directory_keys.get(xr_file.parent)
+    if case_key is None:
+        return b"", b"", f"cache identity missing for case directory: {rel_path(xr_file.parent)}"
     args_key = cache.mix([" ".join(extra_args)])
     safe = safe_case_name(rel_path(xr_file))
     cache_dir = config.cache_dir / mode / f"{safe}-{case_key}-{args_key}"
@@ -383,6 +389,22 @@ def collect(selected_modes: list[str]) -> list[tuple[str, Path]]:
     return out
 
 
+def prepare_case_directory_keys(config: Config, cases: list[tuple[str, Path]]) -> None:
+    """Freeze each fixture-directory identity once before parallel execution.
+
+    Cache keys still cover the same complete directory contents. Precomputing
+    also prevents a source-tree edit during a run from giving sibling cases
+    different identities; one runner invocation measures one fixture snapshot.
+    """
+    config.case_directory_keys.clear()
+    if config.disable_run_cache:
+        return
+    directories = sorted({xr_file.parent for _, xr_file in cases})
+    config.case_directory_keys.update(
+        (directory, cache.dir_key(directory)) for directory in directories
+    )
+
+
 def format_line(v: CaseVerdict) -> str:
     prefix = f"  {v.mode:<9} {v.name:<48}"
     if v.status == Status.PASS.value:
@@ -471,6 +493,7 @@ def main(argv: list[str]) -> int:
                 f"no AOT filetests found for mode '{config.mode}'", 0
             )
 
+        prepare_case_directory_keys(config, cases)
         verdicts = _run_cases(config, cases, ws)
 
     return _report_and_ratchet(config, verdicts)
