@@ -6,6 +6,8 @@ one red result instead of a hung lane.
 """
 
 import io
+import os
+import re
 import sys
 import time
 import unittest
@@ -14,6 +16,30 @@ from _support import bootstrap_xraytest
 
 bootstrap_xraytest()
 from xraytest import platform, proc, progress, scheduler  # noqa: E402
+
+
+def _windows_process_is_running(pid: int) -> bool:
+    """Return whether an owned child PID still has a live process handle."""
+    import ctypes
+    from ctypes import wintypes
+
+    synchronize = 0x00100000
+    wait_timeout = 0x00000102
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(synchronize, False, pid)
+    if not handle:
+        return False
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == wait_timeout
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 class _TtyBuffer(io.StringIO):
@@ -135,18 +161,32 @@ class ProcTimeoutTest(unittest.TestCase):
         self.assertLess(elapsed, 10)  # returned promptly, did not wait 30s
 
     def test_timeout_kills_child_process_tree(self):
-        # The child spawns a grandchild that sleeps; killpg must reach it, so
-        # the call returns promptly rather than blocking on the grandchild.
+        # The child spawns a grandchild that inherits both capture pipes. The
+        # timeout must kill the complete tree, preserve output already written,
+        # and return without waiting for the grandchild to close those pipes.
         code = (
             "import subprocess, sys, time; "
-            "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']); "
+            "child = subprocess.Popen([sys.executable, '-c', "
+            "'import time; time.sleep(30)']); "
+            "print(f'child_pid={child.pid};stdout=ready', flush=True); "
+            "print('stderr=ready', file=sys.stderr, flush=True); "
             "time.sleep(30)"
         )
         start = time.monotonic()
-        r = proc.run([sys.executable, "-c", code], timeout=0.5)
+        argv = [sys.executable, "-c", code]
+        r = proc.run(argv, timeout=0.5)
         elapsed = time.monotonic() - start
+        self.assertEqual(r.argv, tuple(argv))
         self.assertTrue(r.timed_out)
+        self.assertFalse(r.ok)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(len(r.stdout.splitlines()), 1)
+        self.assertRegex(r.stdout.strip(), rb"^child_pid=\d+;stdout=ready$")
+        self.assertEqual(r.stderr.splitlines(), [b"stderr=ready"])
         self.assertLess(elapsed, 10)
+        child_pid = int(re.search(rb"child_pid=(\d+)", r.stdout).group(1))
+        if os.name == "nt":
+            self.assertFalse(_windows_process_is_running(child_pid))
 
 
 if __name__ == "__main__":

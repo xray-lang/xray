@@ -51,14 +51,29 @@ def _terminate_tree(proc: "subprocess.Popen") -> None:
     """Kill a timed-out child and any group it leads.
 
     On POSIX the child is its own process group (start_new_session), so one
-    killpg reaches the grandchildren a compiler or linker spawned. On Windows
-    there is no cheap group kill; terminate() ends the immediate child, which is
-    what the shell `kill` did there too.
+    killpg reaches the grandchildren a compiler or linker spawned. Windows
+    process groups do not provide forced tree termination, so taskkill /T /F
+    walks the process tree rooted at the exact child PID.
     """
     if proc.poll() is not None:
         return
     if os.name == "nt":
-        proc.terminate()
+        system_root = Path(os.environ.get("SystemRoot") or r"C:\Windows")
+        taskkill = system_root / "System32" / "taskkill.exe"
+        try:
+            killed = subprocess.run(
+                [str(taskkill), "/PID", str(proc.pid), "/T", "/F"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            proc.kill()
+            return
+        if killed.returncode != 0 and proc.poll() is None:
+            proc.kill()
         return
     try:
         os.killpg(proc.pid, signal.SIGKILL)
