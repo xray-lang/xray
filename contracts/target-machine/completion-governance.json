@@ -117,7 +117,7 @@
       "id": "semantic-schema-v27",
       "path": "src/plan/semantic/xr_semantic_ids.h",
       "required_regex": [
-        "#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(27\\)"
+        "#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(28\\)"
       ]
     },
     {
@@ -161,7 +161,7 @@
       "id": "runtime-xtp-load-boundary",
       "path": "src/runtime/xr_target_plan_load.c",
       "required_regex": [
-        "accepts only XTP v26 bytes",
+        "accepts only XTP v27 bytes",
         "xr_runtime_artifact_authority_bind_candidate",
         "xr_runtime_artifact_authority_bind_plan"
       ]
@@ -233,7 +233,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "ffdf462c706ac935752b05106d2faf79a2599b3b65e1443678cbe18b9a0ee848"
+    "sha256": "9ff8a7fe4259b251535dfe1c0f82fb6fb1e1825290fed9704df5c02b19a2341c"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",

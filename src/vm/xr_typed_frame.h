@@ -24,7 +24,7 @@
 #define XR_TYPED_FRAME_MAX_SLOT_COUNT UINT32_C(1048576)
 #define XR_TYPED_FRAME_MAX_ALIGNMENT ((size_t) 4096u)
 #define XR_TYPED_FRAME_MAX_TOTAL_BYTES ((size_t) 80u * 1024u * 1024u)
-#define XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION UINT32_C(27)
+#define XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION UINT32_C(28)
 /* The exact closure the production builder completes, named once rather than
  * copied. A second hand-kept list of the same families is what let this
  * boundary fall a family behind and silently reject every plan the builder

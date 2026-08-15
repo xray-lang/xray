@@ -32,6 +32,7 @@
 #include "../semantic/xr_semantic_string_runes_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_next_shape.h"
+#include "../semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../stdlib/xstdlib_metadata.h"
@@ -7567,6 +7568,41 @@ static bool collect_iterator_rune_next_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_rune_to_uint32_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error,
+    size_t error_size) {
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_semantic_rune_to_uint32_is_exact(
+            builder->semantic_plan, operation, &receiver))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "rune.toUInt32 dispatch authority is incomplete");
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_RUNE_TO_UINT32,
+        .target_kind = XR_TARGET_CALL_TARGET_RUNE_TO_UINT32,
+    };
+    if (!result_type ||
+        !stable_identity_from_pair("xray-target-rune-to-uint32-v1",
+                                   operation->id, result_type->id, receiver,
+                                   &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "rune.toUInt32 call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_stringbuilder_to_string_call_intent(
     XrTargetPlanBuilder *builder, uint32_t operation_index,
     const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
@@ -8320,6 +8356,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 builder, i, operation, error, error_size);
         } else if (xr_semantic_iterator_rune_next_is_exact(plan, operation, NULL)) {
             valid = collect_iterator_rune_next_call_intent(
+                builder, i, operation, error, error_size);
+        } else if (xr_semantic_rune_to_uint32_is_exact(plan, operation, NULL)) {
+            valid = collect_rune_to_uint32_call_intent(
                 builder, i, operation, error, error_size);
         } else if (semantic_stringbuilder_to_string_is_exact(plan, operation, NULL)) {
             valid = collect_stringbuilder_to_string_call_intent(builder, i, operation,

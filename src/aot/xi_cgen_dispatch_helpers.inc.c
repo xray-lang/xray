@@ -9363,6 +9363,9 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(
     XrCValueEmissionView string_runes = {0};
     if (cg_string_runes_emission_view(ctx, function, v, &string_runes))
         return true;
+    XrCValueEmissionView rune_to_uint32 = {0};
+    if (cg_rune_to_uint32_emission_view(ctx, function, v, &rune_to_uint32))
+        return true;
     if ((v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) ||
         v->nargs < 1 || !v->aux)
         return false;
@@ -9375,8 +9378,6 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(
      * none of them can publish a language pending error.  Keep this table
      * fail-closed so user-defined structural lookalikes still retain their
      * ordinary error propagation checks. */
-    if (receiver_type && receiver_type->kind == XR_KIND_RUNE)
-        return strcmp(method, "toUInt32") == 0 && nargs == 0;
     if (receiver_type && receiver_type->kind == XR_KIND_STRING)
         return strcmp(method, "iterator") == 0 && nargs == 0;
     if (xr_type_is_builtin_named_class(receiver_type, "Iterator"))
@@ -10521,26 +10522,6 @@ static bool xicgen_emit_bigint_method(XiCgenCtx *ctx, FILE *out, const XiValue *
     return false;
 }
 
-/* A rune is already carried as its Unicode scalar value in the native scalar
- * representation.  Keep the lossless rune -> u32 projection out of tagged
- * runtime method dispatch; freestanding profiles deliberately do not carry
- * the hosted method table. */
-static bool xicgen_emit_rune_numeric_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                            const char *method, uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method || nargs != 0 || strcmp(method, "toUInt32") != 0)
-        return false;
-    const XiValue *recv = v->args[0];
-    if (!recv || !recv->type || recv->type->kind != XR_KIND_RUNE)
-        return false;
-
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
-    fprintf(out, "(uint32_t)(");
-    emit_value_as_rep_ctx(ctx, out, recv, XR_REP_I64);
-    fprintf(out, ")");
-    emit_conversion_suffix(out, conv_suffix);
-    return true;
-}
-
 /* Direct scalar lowering for the remaining int arithmetic methods. Exact
  * width bit methods are canonical XI_BIT_* operations before C generation;
  * method-name dispatch here would discard their width contract. */
@@ -10681,8 +10662,6 @@ static bool xicgen_key_access_runtime_method_preflight(XiCgenCtx *ctx, FILE *out
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *method, uint16_t nargs,
                                        const XaotMethodDispatchPlan *dispatch_plan) {
-    if (xicgen_emit_rune_numeric_method(ctx, out, v, method, nargs))
-        return;
     if (xicgen_emit_int_numeric_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_json_static_method(ctx, out, v, method, nargs))
@@ -11330,6 +11309,13 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
 
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
+    XrCValueEmissionView rune_to_uint32 = {0};
+    if (cg_rune_to_uint32_emission_view(ctx, f, v, &rune_to_uint32)) {
+        fprintf(out, "%s(", rune_to_uint32.recipe_symbol);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        fprintf(out, ")");
+        return;
+    }
     XrCValueEmissionView iterator_rune_next = {0};
     if (cg_iterator_rune_next_emission_view(ctx, f, v,
                                             &iterator_rune_next)) {

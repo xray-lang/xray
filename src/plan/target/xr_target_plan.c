@@ -434,7 +434,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v18\0";
+    static const uint8_t domain[] = "xray-target-plan-v19\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -620,6 +620,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             XR_TARGET_CALL_TARGET_ITERATOR_RUNE_HAS_NEXT;
         bool iterator_rune_next =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NEXT;
+        bool rune_to_uint32 =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_RUNE_TO_UINT32;
         bool stringbuilder_to_string =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING;
         bool stringbuilder_append_string = plan->calls[i].target_kind ==
@@ -645,7 +647,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         if ((!direct_local && !channel_close && !source_export &&
              !stringbuilder_constructor && !string_byte_slice_view &&
              !stringbuilder_append_rune && !string_runes && !iterator_rune_has_next &&
-             !iterator_rune_next &&
+             !iterator_rune_next && !rune_to_uint32 &&
              !stringbuilder_to_string &&
              !stringbuilder_append_string &&
              !json_namespace_value && !array_member_scalar && !native_module_scalar &&
@@ -660,6 +662,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
               stringbuilder_append_rune || stringbuilder_to_string || stringbuilder_append_string ||
               string_runes || iterator_rune_has_next || iterator_rune_next ||
+              rune_to_uint32 ||
               json_namespace_value || array_member_scalar || native_module_scalar ||
               adt_enum_constructor || array_intrinsic) &&
              plan->calls[i].semantic_call_target != XR_SEMANTIC_INDEX_NONE) ||
