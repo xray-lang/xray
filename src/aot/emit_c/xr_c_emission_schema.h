@@ -75,6 +75,7 @@ typedef enum XrCRecipeArgumentKind {
     XR_C_RECIPE_ARGUMENT_STRING_VALUE = 1,
     XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD = 2,
     XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND = 3,
+    XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64 = 4,
 } XrCRecipeArgumentKind;
 
 typedef enum XrCAddressProjection {
@@ -89,7 +90,11 @@ typedef enum XrCCleanupAction {
 } XrCCleanupAction;
 
 typedef struct XrCRecipeArgumentView {
+    /* Ordered logical operand identity and the exact frozen value consumed by
+     * the C recipe.  They are intentionally separate: representation lowering
+     * may insert a backend-only adapter between them after plan freeze. */
     uint32_t semantic_value;
+    uint32_t source_semantic_value;
     uint8_t kind;
     uint8_t reserved[3];
 } XrCRecipeArgumentView;

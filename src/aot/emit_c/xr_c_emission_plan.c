@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(29)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(30)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -584,8 +584,18 @@ static bool exact_string_concat_recipe(
     return true;
 }
 
-static bool string_concat_argument_has_exact_projection(
-    const XrTargetPlan *target_plan, uint32_t semantic_value) {
+/* Freeze one ordered concat operand and the exact C value that renders it.
+ * SemanticPlan retains the logical interpolation operand and its exact display
+ * shape. TargetPlan independently owns that value's machine representation, so
+ * native-u64 selection is an O(1) value-rep lookup rather than an
+ * IR/type/selector guess. */
+static bool string_concat_argument_recipe(
+    const XrTargetPlan *target_plan, uint32_t semantic_value,
+    uint8_t *kind, uint32_t *source_semantic_value) {
+    if (kind)
+        *kind = XR_C_RECIPE_ARGUMENT_INVALID;
+    if (source_semantic_value)
+        *source_semantic_value = UINT32_MAX;
     const XrTargetValueRepRecord *binding =
         xr_target_plan_value_rep(target_plan, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
@@ -596,9 +606,22 @@ static bool string_concat_argument_has_exact_projection(
         binding ? xr_target_plan_machine_rep(target_plan,
                                              binding->memory_rep)
                 : NULL;
-    return binding && register_rep && memory_rep &&
-           register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
-           memory_rep->kind == XR_MACHINE_REP_DYN_VALUE;
+    if (!target_plan || !kind || !source_semantic_value || !binding ||
+        !register_rep || !memory_rep ||
+        register_rep->kind != memory_rep->kind)
+        return false;
+    switch ((XrMachineRepKind) register_rep->kind) {
+        case XR_MACHINE_REP_DYN_VALUE:
+            *kind = XR_C_RECIPE_ARGUMENT_STRING_VALUE;
+            break;
+        case XR_MACHINE_REP_U64:
+            *kind = XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64;
+            break;
+        default:
+            return false;
+    }
+    *source_semantic_value = semantic_value;
+    return true;
 }
 
 static bool exact_adt_enum_constructor_recipe(
@@ -2781,6 +2804,7 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
     for (uint32_t i = 0; i < plan->recipe_argument_count; i++) {
         const XrCRecipeArgumentView *argument = &plan->recipe_arguments[i];
         hash_u64(&ctx, argument->semantic_value);
+        hash_u64(&ctx, argument->source_semantic_value);
         hash_u64(&ctx, argument->kind);
         hash_u64(&ctx, argument->reserved[0]);
         hash_u64(&ctx, argument->reserved[1]);
@@ -3057,6 +3081,8 @@ static bool verify_value(const XrCValueEmissionView *value) {
             const XrCRecipeArgumentView *argument =
                 &value->recipe_arguments[i];
             recipe_valid = argument->semantic_value != UINT32_MAX &&
+                           argument->source_semantic_value ==
+                               argument->semantic_value &&
                            argument->kind ==
                                XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND &&
                            argument->reserved[0] == 0 &&
@@ -3085,8 +3111,11 @@ static bool verify_value(const XrCValueEmissionView *value) {
             const XrCRecipeArgumentView *argument =
                 &value->recipe_arguments[i];
             recipe_valid = argument->semantic_value != UINT32_MAX &&
-                           argument->kind ==
-                               XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
+                           argument->source_semantic_value != UINT32_MAX &&
+                           (argument->kind ==
+                                XR_C_RECIPE_ARGUMENT_STRING_VALUE ||
+                            argument->kind ==
+                                XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64) &&
                            argument->reserved[0] == 0 &&
                            argument->reserved[1] == 0 &&
                            argument->reserved[2] == 0;
@@ -3110,6 +3139,8 @@ static bool verify_value(const XrCValueEmissionView *value) {
             const XrCRecipeArgumentView *argument =
                 &value->recipe_arguments[i];
             recipe_valid = argument->semantic_value != UINT32_MAX &&
+                           argument->source_semantic_value ==
+                               argument->semantic_value &&
                            argument->kind ==
                                XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD &&
                            argument->reserved[0] == 0 &&
@@ -3791,6 +3822,7 @@ bool xr_c_emission_plan_verify(
                 const XrCRecipeArgumentView *actual =
                     &row->recipe_arguments[argument];
                 if (actual->semantic_value != expected_bounds[argument] ||
+                    actual->source_semantic_value != expected_bounds[argument] ||
                     !string_slice_bound_has_exact_projection(
                         target_plan, actual->semantic_value) ||
                     actual->kind !=
@@ -3819,6 +3851,8 @@ bool xr_c_emission_plan_verify(
                     &row->recipe_arguments[argument];
                 if (actual->semantic_value !=
                         expected_enum_payloads[argument].value ||
+                    actual->source_semantic_value !=
+                        expected_enum_payloads[argument].value ||
                     !adt_enum_payload_has_exact_projection(
                         target_plan, actual->semantic_value) ||
                     actual->kind != XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD ||
@@ -3843,11 +3877,18 @@ bool xr_c_emission_plan_verify(
                  argument < expected_concat_argument_count; argument++) {
                 const XrCRecipeArgumentView *actual =
                     &row->recipe_arguments[argument];
-                if (actual->semantic_value !=
+                uint8_t expected_kind = XR_C_RECIPE_ARGUMENT_INVALID;
+                uint32_t expected_source_semantic_value = UINT32_MAX;
+                if (!string_concat_argument_recipe(
+                        target_plan,
+                        expected_concat_arguments[argument].value,
+                        &expected_kind,
+                        &expected_source_semantic_value) ||
+                    actual->semantic_value !=
                         expected_concat_arguments[argument].value ||
-                    !string_concat_argument_has_exact_projection(
-                        target_plan, actual->semantic_value) ||
-                    actual->kind != XR_C_RECIPE_ARGUMENT_STRING_VALUE ||
+                    actual->source_semantic_value !=
+                        expected_source_semantic_value ||
+                    actual->kind != expected_kind ||
                     actual->reserved[0] != 0 || actual->reserved[1] != 0 ||
                     actual->reserved[2] != 0)
                     return emission_error(
@@ -4121,8 +4162,11 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                                       "C emission recipe argument budget overflow");
             for (uint16_t argument = 0;
                  argument < concat_argument_count; argument++) {
-                if (!string_concat_argument_has_exact_projection(
-                        target_plan, concat_arguments[argument].value))
+                uint8_t ignored_kind = XR_C_RECIPE_ARGUMENT_INVALID;
+                uint32_t ignored_semantic_value = UINT32_MAX;
+                if (!string_concat_argument_recipe(
+                        target_plan, concat_arguments[argument].value,
+                        &ignored_kind, &ignored_semantic_value))
                     return emission_error(
                         error, error_size, "XR_TARGET_1001",
                         "string concat argument has no exact C projection");
@@ -4339,6 +4383,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                 XrCRecipeArgumentView *recipe_argument =
                     &plan->recipe_arguments[recipe_argument_index++];
                 recipe_argument->semantic_value = bounds[argument];
+                recipe_argument->source_semantic_value = bounds[argument];
                 recipe_argument->kind =
                     XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND;
             }
@@ -4403,6 +4448,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     &plan->recipe_arguments[recipe_argument_index++];
                 recipe_argument->semantic_value =
                     enum_payloads[argument].value;
+                recipe_argument->source_semantic_value =
+                    enum_payloads[argument].value;
                 recipe_argument->kind =
                     XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD;
             }
@@ -4437,8 +4484,15 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     &plan->recipe_arguments[recipe_argument_index++];
                 recipe_argument->semantic_value =
                     concat_arguments[argument].value;
-                recipe_argument->kind =
-                    XR_C_RECIPE_ARGUMENT_STRING_VALUE;
+                if (!string_concat_argument_recipe(
+                        target_plan, concat_arguments[argument].value,
+                        &recipe_argument->kind,
+                        &recipe_argument->source_semantic_value)) {
+                    xr_c_emission_plan_free(plan);
+                    return emission_error(
+                        error, error_size, "XR_TARGET_1001",
+                        "string concat argument recipe is not exact");
+                }
             }
         } else if (literal) {
             size_t length = strlen(literal);

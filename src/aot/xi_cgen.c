@@ -3155,6 +3155,8 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
         if (!left->recipe_arguments || !right->recipe_arguments ||
             left->recipe_arguments[i].semantic_value !=
                 right->recipe_arguments[i].semantic_value ||
+            left->recipe_arguments[i].source_semantic_value !=
+                right->recipe_arguments[i].source_semantic_value ||
             left->recipe_arguments[i].kind !=
                 right->recipe_arguments[i].kind ||
             memcmp(left->recipe_arguments[i].reserved,
@@ -3431,6 +3433,44 @@ static void cg_emit_channel_receive_payload_expression(
     fprintf(out, ")");
 }
 
+static const XiValue *cg_string_concat_direct_u64_source(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *live_argument,
+    const XrCRecipeArgumentView *argument) {
+    if (!ctx || !function || !live_argument || !argument ||
+        argument->kind != XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64)
+        return NULL;
+    const XaotValuePlan *adapter =
+        xaot_bundle_find_value_plan(ctx->aot_bundle, live_argument);
+    uint32_t logical_semantic_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_semantic_value = XR_SEMANTIC_INDEX_NONE;
+    const XiValue *source =
+        live_argument->nargs == 1u && live_argument->args
+            ? live_argument->args[0]
+            : NULL;
+    XrCValueEmissionView source_view = {0};
+    return adapter &&
+                   xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle,
+                                                        adapter) &&
+                   live_argument->op == XI_BOX && source &&
+                   cg_value_semantic_id(ctx, function, live_argument,
+                                        &logical_semantic_value) &&
+                   logical_semantic_value == argument->semantic_value &&
+                   cg_value_semantic_id(ctx, function, source,
+                                        &source_semantic_value) &&
+                   source_semantic_value ==
+                       argument->source_semantic_value &&
+                   cg_value_emission_view(ctx, function, source,
+                                          &source_view) ==
+                       CG_VALUE_EMISSION_FOUND &&
+                   source_view.rep == XR_C_VALUE_REP_U64 &&
+                   source_view.target_register_kind == XR_MACHINE_REP_U64 &&
+                   source_view.target_memory_kind == XR_MACHINE_REP_U64 &&
+                   source_view.register_bits == 64u && source_view.c_type &&
+                   strcmp(source_view.c_type, "uint64_t") == 0
+               ? source
+               : NULL;
+}
+
 static bool cg_string_concat_emission_view(
     XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
     XrCValueEmissionView *out) {
@@ -3452,16 +3492,34 @@ static bool cg_string_concat_emission_view(
         return false;
     }
     for (uint16_t i = 0; i < out->recipe_argument_count; i++) {
-        uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
-        if (!value->args[i] ||
-            out->recipe_arguments[i].kind !=
-                XR_C_RECIPE_ARGUMENT_STRING_VALUE ||
-            !cg_value_semantic_id(ctx, function, value->args[i],
-                                  &semantic_value) ||
-            semantic_value != out->recipe_arguments[i].semantic_value) {
+        const XrCRecipeArgumentView *argument =
+            &out->recipe_arguments[i];
+        const XiValue *live_argument = value->args[i];
+        if (!live_argument ||
+            (argument->kind != XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
+             argument->kind != XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64)) {
             (void) cg_value_emission_fail(
                 ctx, "string concat C recipe argument identity changed");
             return false;
+        }
+        if (argument->kind == XR_C_RECIPE_ARGUMENT_STRING_VALUE) {
+            uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+            if (argument->source_semantic_value !=
+                    argument->semantic_value ||
+                !cg_value_semantic_id(ctx, function, live_argument,
+                                      &semantic_value) ||
+                semantic_value != argument->semantic_value) {
+                (void) cg_value_emission_fail(
+                    ctx, "string concat tagged argument identity changed");
+                return false;
+            }
+        } else {
+            if (!cg_string_concat_direct_u64_source(
+                    ctx, function, live_argument, argument)) {
+                (void) cg_value_emission_fail(
+                    ctx, "string concat direct-u64 source authority changed");
+                return false;
+            }
         }
     }
     return true;
@@ -8374,6 +8432,13 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
         case XI_CALL_METHOD:
             return arg_index >= 1 &&
                    cg_call_method_is_typed_array_resize_zero_specialization(ctx, f, user);
+        case XI_STR_CONCAT: {
+            XrCValueEmissionView concat = {0};
+            return arg_index < user->nargs &&
+                   cg_string_concat_emission_view(ctx, f, user, &concat) &&
+                   concat.recipe_arguments[arg_index].kind ==
+                       XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64;
+        }
         case XI_CALL:
             if (arg_index == 0 && user->nargs >= 1 && user->args[0] && user->args[0]->type &&
                 XR_TYPE_IS_C_FUNCTION(user->args[0]->type))

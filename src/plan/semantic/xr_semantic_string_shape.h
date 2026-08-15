@@ -42,13 +42,29 @@ static inline bool xr_semantic_owned_string_type_is_exact(const XrSemanticTypeRe
            (type->flags & required) == required;
 }
 
-/* One judgement for a string concatenation: it joins two or more owned String
- * operands into one freshly owned String. Every operand is consumed, so the
- * result borrows nothing and the join leaves no reference-count obligation on
- * any input that this row does not already describe. An operand that is not an
- * owned String row, a result that is not one, a missing allocation identity, or
- * any deviation from the generated operation shape leaves the concatenation
- * unclaimed rather than partially proved. */
+/* One exact native unsigned display source. It owns no reference, aggregate,
+ * nullable encoding, nominal identity, or child geometry; those cases require
+ * different display recipes and remain unclaimed. */
+static inline bool xr_semantic_string_concat_direct_u64_type_is_exact(
+    const XrSemanticTypeRecord *type) {
+    XrStableId zero = {{0}};
+    return type && type->kind == XR_KIND_INT &&
+           type->builtin_type == XR_TID_NULL &&
+           type->scalar_rep == XR_NATIVE_U64 && type->flags == 0 &&
+           type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) &&
+           !type->source_enum_key && type->enum_layout_id == 0 &&
+           type->enum_member_count == 0 && type->enum_flags == 0 &&
+           type->reserved_enum == 0;
+}
+
+/* One judgement for a string concatenation: it joins two or more exact display
+ * operands into one freshly owned String. A String operand is consumed in its
+ * owned tagged carrier. An exact u64 operand is consumed as a logical display
+ * value whose native source remains independently frozen by TargetPlan and the
+ * C-emission recipe. Every other display shape stays unclaimed. */
 static inline bool xr_semantic_string_concat_is_exact(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
     uint32_t operand_count = 0;
@@ -85,12 +101,15 @@ static inline bool xr_semantic_string_concat_is_exact(
         return false;
     for (uint16_t i = 0; i < operation->operand_count; i++) {
         const XrSemanticOperandRecord *piece = &operands[operation->operand_begin + i];
+        const XrSemanticTypeRecord *piece_type =
+            xr_semantic_plan_type(plan, piece->type);
         if (piece->role != XR_SEM_OPERAND_VALUE || piece->parameter != -1 ||
             piece->transfer_mode != 0 || piece->ownership_action != XR_SEM_OPERAND_CONSUME ||
             piece->parameter_mode != 0 || piece->access != 0 || piece->origin != 0 ||
             piece->lifetime != 0 || piece->escape != 0 || piece->flags != 0 ||
-            piece->type != operation->result_type ||
-            !xr_semantic_owned_string_type_is_exact(xr_semantic_plan_type(plan, piece->type)))
+            !((piece->type == operation->result_type &&
+               xr_semantic_owned_string_type_is_exact(piece_type)) ||
+              xr_semantic_string_concat_direct_u64_type_is_exact(piece_type)))
             return false;
     }
     return true;

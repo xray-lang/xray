@@ -1078,6 +1078,8 @@ static void test_string_concat_c_emission_recipe_is_exact(void) {
             strcmp(view.recipe_symbol, "xrt_str_concat_parts") == 0);
     REQUIRE(view.recipe_arguments[0].semantic_value == left_value &&
             view.recipe_arguments[1].semantic_value == right_value &&
+            view.recipe_arguments[0].source_semantic_value == left_value &&
+            view.recipe_arguments[1].source_semantic_value == right_value &&
             view.recipe_arguments[0].kind ==
                 XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
             view.recipe_arguments[1].kind ==
@@ -1261,6 +1263,8 @@ static void test_adt_enum_constructor_c_emission_recipe_is_exact(void) {
             view.recipe_discriminant == 0 &&
             view.recipe_argument_count == 1 && view.recipe_arguments &&
             view.recipe_arguments[0].semantic_value == payload_semantic_value &&
+            view.recipe_arguments[0].source_semantic_value ==
+                payload_semantic_value &&
             view.recipe_arguments[0].kind ==
                 XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD &&
             strcmp(view.recipe_symbol, "xrt_enum_aggregate_box") == 0 &&
@@ -1613,6 +1617,8 @@ static void test_string_slice_range_c_emission_recipe_is_exact(void) {
             view.recipe_argument_count == 2 && view.recipe_arguments &&
             view.recipe_arguments[0].semantic_value == start_value &&
             view.recipe_arguments[1].semantic_value == end_value &&
+            view.recipe_arguments[0].source_semantic_value == start_value &&
+            view.recipe_arguments[1].source_semantic_value == end_value &&
             view.recipe_arguments[0].kind ==
                 XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND &&
             view.recipe_arguments[1].kind ==

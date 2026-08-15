@@ -27,6 +27,7 @@
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_plan.h"
+#include "../../../src/plan/semantic/xr_semantic_string_shape.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/ir/xi_backend_lower.h"
@@ -2368,6 +2369,159 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
                       "print(label(7))\n";
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "native unsigned interpolation fixture should compile");
+    TEST_REQUIRE(test_prepare_backend_ir(ir),
+                 "native unsigned interpolation Backend plan should freeze");
+    char semantic_hex[XR_FINGERPRINT_BYTES * 2u + 1u];
+    xr_fingerprint_hex(xr_semantic_plan_fingerprint(ir->semantic_plan),
+                       semantic_hex);
+    TEST_REQUIRE(strcmp(
+                     semantic_hex,
+                     "e1724a08afa7260b38108a23352f7c5b5575662470b682f2e9fdc95a18ee7af1") == 0,
+                 "native unsigned interpolation preserves the frozen SemanticPlan v31 KAT");
+
+    XiFunc *label = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "label") == 0) {
+            TEST_REQUIRE(label == NULL, "native unsigned interpolation label is unique");
+            label = ir->children[i];
+        }
+    }
+    TEST_REQUIRE(label && label->nparams == 1 && label->params[0],
+                 "native unsigned interpolation label authority is complete");
+    XiValue *concat = NULL;
+    for (uint32_t b = 0; b < label->nblocks; b++) {
+        XiBlock *block = label->blocks[b];
+        for (uint32_t v = 0; block && v < block->nvalues; v++) {
+            XiValue *candidate = block->values[v];
+            if (candidate && candidate->op == XI_STR_CONCAT) {
+                TEST_REQUIRE(concat == NULL,
+                             "native unsigned interpolation concat is unique");
+                concat = candidate;
+            }
+        }
+    }
+    TEST_REQUIRE(concat && concat->nargs == 2 && concat->args[0] &&
+                     concat->args[1],
+                 "native unsigned interpolation concat shape is exact");
+
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetPlan *target = NULL;
+    char error[512] = {0};
+    TEST_REQUIRE(profile && ir->semantic_plan &&
+                     xr_target_plan_build(ir->semantic_plan, profile, &target,
+                                          error, sizeof(error)),
+                 "native unsigned interpolation TargetPlan should build");
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    XrCEmissionPlan *same_emission = NULL;
+    TEST_REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint,
+                                           &emission, error, sizeof(error)),
+                 "native unsigned interpolation CEmission plan should build");
+    TEST_REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint,
+                                           &same_emission, error,
+                                           sizeof(error)) &&
+                     xr_fingerprint_equal(
+                         xr_c_emission_plan_fingerprint(emission),
+                         xr_c_emission_plan_fingerprint(same_emission)),
+                 "native unsigned interpolation CEmission fingerprint is deterministic");
+
+    const XrSemanticOperationRecord *semantic_concat = NULL;
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (candidate && candidate->opcode == XI_STR_CONCAT) {
+            TEST_REQUIRE(semantic_concat == NULL,
+                         "native unsigned semantic concat is unique");
+            semantic_concat = candidate;
+        }
+    }
+    uint32_t semantic_operand_count = 0;
+    const XrSemanticOperandRecord *semantic_operands =
+        xr_semantic_plan_operands(ir->semantic_plan, &semantic_operand_count);
+    TEST_REQUIRE(semantic_concat && semantic_concat->operand_count == 2 &&
+                     semantic_operands &&
+                     semantic_concat->operand_begin <= semantic_operand_count &&
+                     semantic_concat->operand_count <=
+                         semantic_operand_count - semantic_concat->operand_begin,
+                 "native unsigned semantic concat shape is exact");
+    TEST_REQUIRE(xr_semantic_string_concat_is_exact(ir->semantic_plan,
+                                                    semantic_concat),
+                 "native unsigned semantic concat authority is exact");
+    uint32_t concat_value = semantic_concat->result_value;
+    uint32_t literal_value =
+        semantic_operands[semantic_concat->operand_begin].value;
+    uint32_t logical_value =
+        semantic_operands[semantic_concat->operand_begin + 1u].value;
+    XrCValueEmissionView view = {0};
+    bool view_found = xr_c_emission_plan_value_view(
+        emission, concat_value, &view, error, sizeof(error));
+    TEST_REQUIRE(view_found &&
+                     view.materialization ==
+                         XR_C_VALUE_MATERIALIZATION_STRING_CONCAT &&
+                     view.recipe_argument_count == 2 && view.recipe_arguments &&
+                     view.recipe_arguments[0].kind ==
+                         XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
+                     view.recipe_arguments[0].semantic_value == literal_value &&
+                     view.recipe_arguments[0].source_semantic_value ==
+                         literal_value &&
+                     view.recipe_arguments[1].kind ==
+                         XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64 &&
+                     view.recipe_arguments[1].semantic_value == logical_value &&
+                     view.recipe_arguments[1].source_semantic_value ==
+                         logical_value,
+                 "native unsigned interpolation CEmission recipe is exact");
+
+    XrCRecipeArgumentView *direct =
+        (XrCRecipeArgumentView *) &view.recipe_arguments[1];
+    uint8_t saved_kind = direct->kind;
+    direct->kind = XR_C_RECIPE_ARGUMENT_STRING_VALUE;
+    TEST_REQUIRE(!xr_c_emission_plan_verify(
+                     emission, target, profile_fingerprint, error,
+                     sizeof(error)),
+                 "direct u64 recipe kind mutation fails closed");
+    direct->kind = saved_kind;
+    uint32_t saved_logical = direct->semantic_value;
+    direct->semantic_value = literal_value;
+    TEST_REQUIRE(!xr_c_emission_plan_verify(
+                     emission, target, profile_fingerprint, error,
+                     sizeof(error)),
+                 "direct u64 logical identity mutation fails closed");
+    direct->semantic_value = saved_logical;
+    uint32_t saved_source = direct->source_semantic_value;
+    direct->source_semantic_value = literal_value;
+    TEST_REQUIRE(!xr_c_emission_plan_verify(
+                     emission, target, profile_fingerprint, error,
+                     sizeof(error)),
+                 "direct u64 source identity mutation fails closed");
+    direct->source_semantic_value = saved_source;
+    XrTargetValueRepRecord *source_binding =
+        (XrTargetValueRepRecord *) xr_target_plan_value_rep(target,
+                                                            logical_value);
+    const XrTargetValueRepRecord *literal_binding =
+        xr_target_plan_value_rep(target, literal_value);
+    TEST_REQUIRE(source_binding && literal_binding,
+                 "direct u64 Target bindings are complete");
+    uint16_t saved_register_rep = source_binding->register_rep;
+    uint16_t saved_memory_rep = source_binding->memory_rep;
+    source_binding->register_rep = literal_binding->register_rep;
+    source_binding->memory_rep = literal_binding->memory_rep;
+    TEST_REQUIRE(!xr_c_emission_plan_verify(
+                     emission, target, profile_fingerprint, error,
+                     sizeof(error)),
+                 "direct u64 Target representation mutation fails closed");
+    source_binding->register_rep = saved_register_rep;
+    source_binding->memory_rep = saved_memory_rep;
+    TEST_REQUIRE(xr_c_emission_plan_verify(
+                     emission, target, profile_fingerprint, error,
+                     sizeof(error)),
+                 "restored direct u64 CEmission recipe verifies");
+    xr_c_emission_plan_free(same_emission);
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
@@ -2380,6 +2534,9 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
                  "native unsigned interpolation must not materialize a box local");
     TEST_REQUIRE(contains_between(fn, fn_end, "xrt_strpart_init_u64("),
                  "native unsigned interpolation must use the direct u64 string part");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "(abort()") &&
+                     strstr(code, "({") == NULL,
+                 "native unsigned interpolation must remain portable generated C11");
 
     printf("  Generated native unsigned interpolation without box %zu bytes of C code\n",
            strlen(code));

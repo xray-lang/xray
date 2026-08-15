@@ -1231,9 +1231,19 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out,
 
     fprintf(out, "({ xrt_strpart_t _scp_%u[%u]; ", v->id, (unsigned) v->nargs);
     for (uint16_t i = 0; i < v->nargs; i++) {
-        fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id,
-                (unsigned) i);
-        emit_value_as_display_tagged(ctx, out, v->args[i]);
+        const XrCRecipeArgumentView *argument =
+            &recipe.recipe_arguments[i];
+        if (argument->kind == XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64) {
+            const XiValue *source = cg_string_concat_direct_u64_source(
+                ctx, function, v->args[i], argument);
+            fprintf(out, "xrt_strpart_init_u64(&_scp_%u[%u], (uint64_t)",
+                    v->id, (unsigned) i);
+            emit_value_as_rep_ctx(ctx, out, source, XR_REP_I64);
+        } else {
+            fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id,
+                    (unsigned) i);
+            emit_value_as_display_tagged(ctx, out, v->args[i]);
+        }
         fprintf(out, "); ");
     }
     fprintf(out, "%s(%u, _scp_%u); })", recipe.recipe_symbol,
@@ -1257,9 +1267,20 @@ static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
     }
     fprintf(out, "    {\n        xrt_strpart_t _scp_%u[%u];\n", v->id, (unsigned) v->nargs);
     for (uint16_t i = 0; i < v->nargs; i++) {
-        fprintf(out, "        xrt_strpart_init(&_scp_%u[%u], ", v->id,
-                (unsigned) i);
-        emit_value_as_display_tagged(ctx, out, v->args[i]);
+        const XrCRecipeArgumentView *argument =
+            &recipe.recipe_arguments[i];
+        if (argument->kind == XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64) {
+            const XiValue *source = cg_string_concat_direct_u64_source(
+                ctx, f, v->args[i], argument);
+            fprintf(out,
+                    "        xrt_strpart_init_u64(&_scp_%u[%u], (uint64_t)",
+                    v->id, (unsigned) i);
+            emit_value_as_rep_ctx(ctx, out, source, XR_REP_I64);
+        } else {
+            fprintf(out, "        xrt_strpart_init(&_scp_%u[%u], ", v->id,
+                    (unsigned) i);
+            emit_value_as_display_tagged(ctx, out, v->args[i]);
+        }
         fprintf(out, ");\n");
     }
     fprintf(out, "        ");

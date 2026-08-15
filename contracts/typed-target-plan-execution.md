@@ -166,7 +166,15 @@ tail to one byte. The generated target instruction registry is the only opcode
 authority consumed by the builder, verifier, artifact renderer, and dispatcher.
 No v29 row is widened, translated, or accepted by a compatibility reader.
 
-Schema 29 is a hard cutover from v28 and all earlier schemas. It preserves the
+Schema 30 is a hard cutover from v29 and all earlier schemas. Every CEmission
+recipe argument now freezes its ordered logical semantic identity separately
+from the exact source semantic identity consumed by C. Exact String concat
+operands remain tagged, while an exact non-null, non-aggregate `u64` operand is
+admitted only through matching TargetPlan U64 register and memory rows and the
+direct `xrt_strpart_init_u64` recipe. CGen must additionally prove the exact
+post-freeze AOT BOX adapter before eliding its logical tagged local. There is no
+v29 reader, translated row, tagged fallback, or selector/type-derived repair.
+Schema 30 also preserves the
 exact semantic field-name identity of every named aggregate and all existing
 ADT-enum, Array-intrinsic, String-runes, and Iterator-rune authorities while
 replacing the narrower source-namespace family with exact SOURCE-import
@@ -186,7 +194,7 @@ The view binds the frozen Semantic intrinsic and source root to the exact
 String method or slice construction authority. Schema 18 adds a sealed
 `Iterator<rune>.hasNext` bool recipe whose receiver is the exact prior
 `String.runes` result and whose fixed runtime helper preserves pending-error
-polling. C emission schema 29 adds the separate native-rune `next` recipe only
+polling. C emission schema 30 adds the separate native-rune `next` recipe only
 when the receiver has that same unique frozen `String.runes` producer, plus
 the exact native-u32 `rune.toUInt32` recipe only when its receiver is the
 unique exact `.next()` result in the same function, and the exact native-bool
@@ -194,7 +202,7 @@ unique exact `.next()` result in the same function, and the exact native-bool
 Iterator or Rune dispatch. It separately adds the exact owned String
 range-slice recipe only for a frozen required String parameter or exact String
 literal receiver plus two ordered i64 bounds; this grants no generic String
-dispatch. C emission schema 29 also projects the first non-empty cleanup
+dispatch. C emission schema 30 also projects the first non-empty cleanup
 family: one exact explicit release of the fresh owner produced by a frozen
 String concatenation. The Target cleanup row binds the release operation and
 owned dynamic slot; the C row binds that same operation and slot to
@@ -272,7 +280,7 @@ ownership, transfer, and machine representation. An exact `ref` row alone
 authorizes the C projection's additional pointer level. These rows grant no
 imported module object body, allocation, root, cleanup, guessed member lookup,
 dependency activation, unrelated argument ABI, or cross-module frame.
-The C emission projection schema 29 mechanically spells all verified dynamic
+The C emission projection schema 30 mechanically spells all verified dynamic
 families as exact `TAGGED`/`XrValue` rows. For an exact String literal it also
 owns the immutable literal bytes and the explicit String-view materialization
 recipe. For exact `XI_CHAN_NEW` it owns the helper spelling and capacity
