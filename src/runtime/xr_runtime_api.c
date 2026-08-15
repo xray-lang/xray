@@ -21,20 +21,20 @@
 #include "../plan/semantic/xr_semantic_plan.h"
 #include "../plan/target/xr_target_plan.h"
 #include "../vm/xr_typed_dispatch.h"
+#include "xr_entry_cell.h"
 #include "xr_module_generation_internal.h"
 #include <stdio.h>
 #include <string.h>
 
 /*
- * A module may publish many exports, so a resolved handle is cached per target
- * function index. That keeps repeated lookups from growing the module and
- * makes every loan the module hands out stable for the module's whole life.
+ * XrExport is the facade spelling of one canonical entry cell plus the exact
+ * expectation captured by resolution. It carries no second module/function
+ * execution handle: all execution authority and generation pins live in the
+ * cell.
  */
 struct XrExport {
-    const XrModule *module;
-    uint32_t function;
-    uint32_t parameter_count;
-    bool resolved;
+    XrEntryCell cell;
+    XrEntryCellExpectation expectation;
 };
 
 struct XrModule {
@@ -44,6 +44,7 @@ struct XrModule {
     XrLoadedModuleGeneration *generation;
     XrExport *exports;
     uint32_t function_count;
+    bool unloading;
 };
 
 struct XrRuntime {
@@ -123,6 +124,40 @@ static void discard_partial_module(XrLoadedModuleGeneration *generation,
     xr_runtime_artifact_authority_free(authority);
 }
 
+static bool initialize_exports(XrExport *exports, uint32_t count) {
+    for (uint32_t i = 0; i < count; i++) {
+        if (xr_entry_cell_init(&exports[i].cell))
+            continue;
+        char ignored[1] = {0};
+        for (uint32_t j = 0; j < i; j++)
+            xr_entry_cell_dispose(&exports[j].cell, ignored, sizeof(ignored));
+        return false;
+    }
+    return true;
+}
+
+static bool clear_exports(XrExport *exports, uint32_t count,
+                          char *diagnostic, size_t diagnostic_size) {
+    for (uint32_t i = 0; i < count; i++) {
+        if (!xr_entry_cell_clear(&exports[i].cell, diagnostic,
+                                 diagnostic_size))
+            return false;
+        memset(&exports[i].expectation, 0,
+               sizeof(exports[i].expectation));
+    }
+    return true;
+}
+
+static bool dispose_exports(XrExport *exports, uint32_t count,
+                            char *diagnostic, size_t diagnostic_size) {
+    for (uint32_t i = 0; i < count; i++) {
+        if (!xr_entry_cell_dispose(&exports[i].cell, diagnostic,
+                                   diagnostic_size))
+            return false;
+    }
+    return true;
+}
+
 XRAY_API bool xr_module_load_target_plan(
     XrRuntime *runtime, const uint8_t *semantic_artifact_bytes,
     size_t semantic_artifact_size, const uint8_t *target_artifact_bytes,
@@ -182,7 +217,8 @@ XRAY_API bool xr_module_load_target_plan(
         function_count ? (XrExport *) xr_calloc(function_count,
                                                 sizeof(*exports))
                        : NULL;
-    if (!functions || !function_count || !created || !exports) {
+    if (!functions || !function_count || !created || !exports ||
+        !initialize_exports(exports, function_count)) {
         xr_free(exports);
         xr_free(created);
         discard_partial_module(generation, plan, artifact_authority);
@@ -221,21 +257,6 @@ static const XrSemanticSourceExportRecord *lookup_source_export(
             return NULL;
     }
     return NULL;
-}
-
-static uint32_t declared_parameter_count(const XrTargetPlan *plan,
-                                         uint32_t function) {
-    uint32_t instruction_count = 0;
-    const XrTargetInstructionRecord *instructions =
-        xr_target_plan_function_instructions(plan, function,
-                                             &instruction_count);
-    if (!instructions)
-        return UINT32_MAX;
-    uint32_t parameters = 0;
-    for (uint32_t i = 0; i < instruction_count; i++)
-        parameters +=
-            instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64;
-    return parameters;
 }
 
 XRAY_API bool xr_module_find_export(const XrModule *module,
@@ -278,22 +299,27 @@ XRAY_API bool xr_module_find_export(const XrModule *module,
         XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
                     "exported function is outside the installed scalar i64 execution family");
-    uint32_t parameters = declared_parameter_count(module->plan,
-                                                   record->function);
-    if (parameters > XR_TARGET_INSTRUCTION_MAX_PARAMETERS)
-        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
-                    "exported function has no verified scalar i64 signature");
-
-    /* The cache is module state, so it is published under the same runtime
-     * gate that guards module accounting. Concurrent lookups of one name then
-     * agree on one handle instead of racing to write the same slot. */
+    /* Resolution publishes one canonical VM entry registration. The raw-entry
+     * field is absent on this path, so artifact bytes can never inject code. */
     XrExport *slot = &module->exports[record->function];
     xr_mutex_lock(&module->runtime->gate);
-    slot->module = module;
-    slot->function = record->function;
-    slot->parameter_count = parameters;
-    slot->resolved = true;
+    if (module->unloading) {
+        xr_mutex_unlock(&module->runtime->gate);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "export resolution cannot resurrect a draining module");
+    }
+    XrEntryCellRegistration registration = {
+        .generation = module->generation,
+        .verified_plan = module->plan,
+        .function = record->function,
+        .executor_kind = XR_ENTRY_EXECUTOR_TYPED_VM,
+    };
+    bool bound = xr_entry_cell_bind(
+        &slot->cell, &registration, &slot->expectation, diagnostic,
+        diagnostic_size);
     xr_mutex_unlock(&module->runtime->gate);
+    if (!bound)
+        return false;
     *export_handle = slot;
     return true;
 }
@@ -343,13 +369,11 @@ XRAY_API bool xr_export_call(const XrExport *export_handle,
                              char *diagnostic, size_t diagnostic_size) {
     if (result)
         memset(result, 0, sizeof(*result));
-    if (!export_handle || !export_handle->resolved || !export_handle->module ||
-        !result || (argument_count && !arguments))
+    if (!export_handle || !result || (argument_count && !arguments))
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
                     "export call requires a resolved handle and a result cell");
-    const XrModule *module = export_handle->module;
     if (argument_count > XR_TARGET_INSTRUCTION_MAX_PARAMETERS ||
-        argument_count != export_handle->parameter_count)
+        argument_count != export_handle->expectation.abi.parameter_count)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
                     "export argument count does not match the verified signature");
 
@@ -364,40 +388,22 @@ XRAY_API bool xr_export_call(const XrExport *export_handle,
         scalars[i] = arguments[i].i64;
     }
 
-    /* The pin is what keeps the module from unloading mid-call, so it is taken
-     * before execution and released on every path out. */
-    if (!xr_module_generation_pin_acquire(module->generation,
-                                          XR_MODULE_GENERATION_INFLIGHT_CALL,
-                                          diagnostic, diagnostic_size))
-        return false;
-    XrModuleGenerationSnapshot snapshot;
-    bool callable =
-        xr_module_generation_snapshot(module->generation, &snapshot) &&
-        !snapshot.poisoned && !snapshot.rollback_requested &&
-        xr_target_plan_function_execution_family_mask(
-            module->plan, export_handle->function) ==
-            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED;
-    XrFingerprint required_fingerprint = {{0}};
-    if (callable)
-        memcpy(required_fingerprint.bytes, snapshot.identity.target_plan_fingerprint,
-               sizeof(required_fingerprint.bytes));
     int64_t executed = 0;
-    XrTypedDispatchStatus status =
-        callable ? xr_typed_dispatch_execute_i64(
-                       module->plan, &required_fingerprint,
-                       export_handle->function,
-                       argument_count ? scalars : NULL, argument_count,
-                       &executed)
-                 : XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
-    if (!xr_module_generation_pin_release(module->generation,
-                                          XR_MODULE_GENERATION_INFLIGHT_CALL,
-                                          diagnostic, diagnostic_size))
+    uint32_t executor_status = 0;
+    XrEntryInvokeStatus status = xr_entry_cell_invoke_i64(
+        (XrEntryCell *) &export_handle->cell, &export_handle->expectation,
+        argument_count ? scalars : NULL, argument_count, &executed,
+        &executor_status, diagnostic, diagnostic_size);
+    if (status == XR_ENTRY_INVOKE_VM_ERROR)
+        return fail_typed_dispatch((XrTypedDispatchStatus) executor_status,
+                                   diagnostic, diagnostic_size);
+    if (status != XR_ENTRY_INVOKE_OK) {
+        if (status == XR_ENTRY_INVOKE_NATIVE_ERROR ||
+            status == XR_ENTRY_INVOKE_CANCELLED)
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
+                        "export entry returned an unsupported native outcome");
         return false;
-    if (!callable)
-        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
-                    "export lost its installed scalar i64 execution authority");
-    if (status != XR_TYPED_DISPATCH_OK)
-        return fail_typed_dispatch(status, diagnostic, diagnostic_size);
+    }
     result->kind = XR_EXPORT_VALUE_I64;
     result->i64 = executed;
     return true;
@@ -409,6 +415,15 @@ XRAY_API bool xr_module_unload(XrModule **module, char *diagnostic,
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "module is missing");
     XrModule *owned = *module;
+    xr_mutex_lock(&owned->runtime->gate);
+    owned->unloading = true;
+    xr_mutex_unlock(&owned->runtime->gate);
+    /* Clearing every cell first releases the published static-root pins and
+     * prevents a new call from starting. An already acquired call keeps its
+     * independent in-flight pin, so retirement below refuses until it exits. */
+    if (!clear_exports(owned->exports, owned->function_count, diagnostic,
+                       diagnostic_size))
+        return false;
     /* Retirement is the lifecycle's own gate: it refuses while any pin
      * remains, so an in-flight call keeps this from succeeding rather than
      * being torn out from under. Draining is entered only from ACTIVE, and a
@@ -426,6 +441,9 @@ XRAY_API bool xr_module_unload(XrModule **module, char *diagnostic,
                                      diagnostic_size) ||
         !xr_module_generation_unload(&owned->generation, diagnostic,
                                      diagnostic_size))
+        return false;
+    if (!dispose_exports(owned->exports, owned->function_count, diagnostic,
+                         diagnostic_size))
         return false;
     xr_target_plan_free(owned->plan);
     xr_runtime_artifact_authority_free(owned->artifact_authority);

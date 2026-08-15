@@ -369,6 +369,18 @@ target_link_libraries(test_runtime_api_archive PRIVATE
     xray_vm)
 add_test(NAME test_runtime_api_archive
     COMMAND $<TARGET_FILE:test_runtime_api_archive>)
+add_executable(test_entry_cell_runtime_archive
+    runtime/test_entry_cell_runtime_archive.c)
+add_dependencies(test_entry_cell_runtime_archive
+    runtime_scalar_artifact_fixture)
+target_include_directories(test_entry_cell_runtime_archive PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+    ${XR_RUNTIME_SCALAR_ARTIFACT_DIR})
+target_link_libraries(test_entry_cell_runtime_archive PRIVATE
+    xray_vm)
+add_test(NAME test_entry_cell_runtime_archive
+    COMMAND $<TARGET_FILE:test_entry_cell_runtime_archive>)
 add_xray_unit_test(test_typed_frame vm/test_typed_frame.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_typed_dispatch vm/test_typed_dispatch.c

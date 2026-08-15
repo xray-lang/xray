@@ -26,10 +26,11 @@
  *   storage, and the installed activation gate admits only a sole scalar i64
  *   function with no storage authority at all. So a module this runtime can
  *   load publishes no export, and a module that publishes one cannot load.
- *   Lookup and call below are written against the real verified tables rather
- *   than stubbed, and they refuse rather than fabricate an entry: until the
- *   general typed executor is installed, `xr_module_find_export` reports that
- *   the module publishes no such name and `xr_export_call` is unreachable.
+ *   Lookup and call below are written against the real verified tables and
+ *   the runtime's canonical entry cell rather than stubbed. They refuse rather
+ *   than fabricate an entry: until the general typed executor is installed,
+ *   `xr_module_find_export` reports that the module publishes no such name and
+ *   `xr_export_call` remains structurally unreachable.
  */
 
 #ifndef XRAY_RUNTIME_API_H
@@ -94,9 +95,11 @@ XRAY_API bool xr_module_load_target_plan(
 /*
  * Resolves a name against the module's verified source export table. The
  * returned handle is a loan owned by the module: it stays valid until that
- * module is unloaded and must not be freed by the caller. An unknown name, an
- * export outside the installed execution family, and an export whose generation
- * is not ACTIVE each fail closed and yield no handle.
+ * module is unloaded and must not be freed by the caller. Resolution binds the
+ * module's canonical entry cell to its verified TargetPlan and exact generation
+ * identity. An unknown name, an export outside the installed execution family,
+ * and an export whose generation is not ACTIVE each fail closed and yield no
+ * handle.
  */
 XRAY_API bool xr_module_find_export(const XrModule *module,
                                     const char *export_name,
@@ -107,8 +110,10 @@ XRAY_API bool xr_module_find_export(const XrModule *module,
  * Calls a resolved export. The argument count must equal the parameter count
  * the verified rows declare and every value kind must be one the executor
  * owns; a shorter, longer, or differently typed vector is refused rather than
- * truncated or zero filled. The call holds an in-flight pin for its whole
- * duration, so the module cannot unload underneath it.
+ * truncated or zero filled. The entry cell validates the callee ABI, adapter,
+ * executor, TargetPlan, binding, and generation fingerprints before it obtains
+ * an in-flight pin. That pin is released exactly once on every exit, so the
+ * module cannot unload underneath the call.
  */
 XRAY_API bool xr_export_call(const XrExport *export_handle,
                              const XrExportValue *arguments,

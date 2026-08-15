@@ -1394,6 +1394,7 @@ set(XRAY_VM_RUNTIME_SOURCES
     ${OS_SRC}
     ${RUNTIME_ABI_SRC}
     ${XRAY_VM_TARGET_PLAN_LOAD_SOURCES}
+    src/runtime/xr_entry_cell.c
     src/runtime/xr_module_generation.c
     src/runtime/xr_module_generation_verify.c
     src/runtime/xr_runtime_api.c

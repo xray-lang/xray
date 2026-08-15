@@ -1,10 +1,11 @@
 # Runtime module generation lifecycle contract
 
 This contract freezes the runtime-owned authority for loaded TargetPlan
-generations and one deliberately narrow sole-function scalar executor. It does
-not claim that an export resolver, call engine, root scanner, or general typed
-executor is installed. Its sole-function scalar route is the only governed
-product activation path.
+generations, one deliberately narrow sole-function scalar executor, and the
+canonical runtime-only entry cell that can publish an exact scalar VM or native
+entry. It does not claim that dynamic calls, escaping closures, a root scanner,
+hosted/FFI execution, or general typed adapters are installed. Its sole-function
+scalar route remains the only governed product activation path.
 
 1. A generation authority requires explicit, nonzero hard limits for loaded
    generations, total pins, per-generation pins, and every pin kind. The same
@@ -69,23 +70,23 @@ product activation path.
    production PREPARE helper. Its transition model rejects identity mutation,
    skipped/repeated states, mismatched pins, illegal rollback, and revision
    mutation.
-8. The standalone public header and lifecycle/scalar-execution symbols are
-   shipped by the Core component and link from `xray_vm` without
-   compiler builders, encoders, analyzer objects, or Xi implementation symbols.
-   Installed runtime code can derive authority from exact XSM and materialize a
-   matching XTP, so its archive gate owns the XSM/XTP-to-sole-scalar success
-   route. It still has no general resolver, export publication, calls, roots,
-   source/CLI entry, or product end-to-end claim.
-9. The artifact runtime facade adds no execution, verification, or naming
-   authority. A runtime owns exactly one generation authority and refuses to be
-   destroyed while it holds a loaded module. A module load requires both exact
-   artifact images: the semantic image is the authority the target image must
-   bind, neither is inferred from the other, and success means the generation
-   reached ACTIVE under the same PREPARE gate above. A load that cannot reach
-   ACTIVE unwinds through rollback, retirement, and unload, releases both
-   artifacts, and returns no handle, so no module ever denotes a generation that
-   cannot run. Unload drives DRAINING, RETIRED, and UNLOADED through the same
-   gates, so an in-flight pin refuses it rather than being torn out.
+8. The standalone public header and lifecycle/scalar-execution symbols, plus the
+   internal production entry-cell implementation, are shipped by the Core
+   component and link from `xray_vm` without compiler builders, encoders,
+   analyzer objects, or Xi implementation symbols. Installed runtime code can
+   derive authority from exact XSM and materialize a matching XTP, so its archive
+   gate owns the XSM/XTP-to-sole-scalar success route. This remains a runtime
+   boundary only: it makes no source/CLI or product end-to-end claim.
+9. The artifact runtime facade adds no independent execution, verification, or
+   naming authority. A runtime owns exactly one generation authority and refuses
+   to be destroyed while it holds a loaded module. A module load requires both
+   exact artifact images: the semantic image is the authority the target image
+   must bind, neither is inferred from the other, and success means the
+   generation reached ACTIVE under the same PREPARE gate above. A load that
+   cannot reach ACTIVE unwinds through rollback, retirement, and unload, releases
+   both artifacts, and returns no handle, so no module ever denotes a generation
+   that cannot run. `XrExport` contains only one entry cell and its exact
+   expectation; there is no parallel module/function handle or second pin path.
 10. Export names are a semantic-artifact fact. The TargetPlan carries dense
     numeric tables and no spelling, so lookup reads the verified source export
     table the plan retains and matches an exact name in it. It never resolves an
@@ -98,11 +99,44 @@ product activation path.
     so the two are mutually exclusive at this boundary: a module this runtime
     can load publishes no export, and a module that publishes one cannot load.
     Lookup and call are therefore written against the real verified tables and
-    fail closed for that structural reason rather than being stubbed. Calling
-    binds the generation's exact plan fingerprint, holds an `INFLIGHT_CALL` pin
-    for the whole call, releases it on every path, and refuses any argument
-    count or value kind the verified rows do not declare. There is no name
-    guess, no implicit entry, and no result reported that was not executed.
+    canonical entry cell, and fail closed for that structural reason rather than
+    being stubbed. There is no name guess, no implicit entry, and no result
+    reported that was not executed.
+12. An entry ABI fingerprint is a callee identity, separate from
+    `XrTargetCallRecord.fingerprint`. The target call fingerprint intentionally
+    includes the semantic operation, caller function, caller/result slots, and
+    call-argument rows, so reusing it would make one callee acquire a different
+    identity at every call site. `XR_ENTRY_ABI_SCHEMA_VERSION == 1` instead hashes
+    the exact signed-i64 parameter/result shape, native ABI, target data-layout
+    hash, and target-profile fingerprint under an entry-specific domain. This
+    record is runtime-only and is not serialized into TargetPlan schema 30 or
+    XTP schema 29. Persisting a dynamic-call expectation later requires an atomic
+    schema cutover; no compatibility interpretation is permitted.
+13. Binding requires an immutable verified TargetPlan with an intact plan
+    fingerprint, an exact `SCALAR_I64_CLOSED` function, and zero adapter rows.
+    The only admitted adapter is an identity adapter whose fingerprint is
+    derived from the entry ABI. The expectation binds ABI, adapter, plan,
+    generation, binding, and executor identities; any mismatch fails closed
+    before execution. This does not claim dynamic, hosted, FFI, aggregate,
+    ownership-bearing, suspending, or non-identity-adapter calls.
+14. An entry cell stores either a verified VM function index or a typed native
+    i64 entry. A native code pointer may enter only through process-local runtime
+    registration. It has no artifact representation and is never hashed; a
+    nonzero stable native-entry identity participates in the binding fingerprint
+    instead. Artifact-driven export resolution can register only the VM executor
+    and therefore cannot inject a raw code pointer.
+15. A published binding owns one `STATIC_ROOT` generation pin. Acquisition
+    compares the complete expectation while the cell gate is held, obtains one
+    `INFLIGHT_CALL` pin, rechecks the exact generation/plan identity, and only
+    then snapshots executable authority into the call token. Swap publishes the
+    new binding while preserving any old in-flight token; clear removes the
+    binding and releases its static-root pin. Success, VM/native error, and
+    cancellation all release the token, and an atomic token state permits
+    exactly one release: a duplicate or never-acquired release fails without a
+    second decrement. DRAINING rejects new acquisition, while an already acquired
+    token can exit and unblock retirement. Stale expectations and wrong ABI,
+    adapter, plan, generation, binding, or executor identities fail closed
+    without acquiring a pin.
 
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation_internal.h 427d2d23bfa8991dd8d20463169fb9bb23d7486a38d5274cb5d84b089a14a96a
@@ -118,6 +152,9 @@ anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py adbe96cb24fd2da66f8e8c3148d78eab7f59d3b2544ba07a87f41540b6f760cd
 anchor-sha256: tests/install/run_install_public_surface_tests.py 1bbef0d66f5d0d78dbe41848497b678c02c88fc9663f296d9863571fe20eb38e
-anchor-sha256: include/xray_runtime_api.h d9e9f189616f11ca1ed4ffc489fa5ee020a16970e9bc65d3f0218d822347e010
-anchor-sha256: src/runtime/xr_runtime_api.c 8695699c4b87403a19e01a11e85545f3f180934589f8cc5f3b633ac60d9b7da9
+anchor-sha256: include/xray_runtime_api.h c57754f0204441d3575c6c5b3891333bd01eb72b858cb1b17389f5e701866a98
+anchor-sha256: src/runtime/xr_runtime_api.c 9a904890a95976df5082e5e66fe2e5b4cd0758917cfbeb936920c652004267c3
 anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c 225e5777c21a94fcbff21619eef26956c7fad284370c7cbb7091eacebf9817c8
+anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
+anchor-sha256: src/runtime/xr_entry_cell.c 8798082b7c04b33d171be75161f5662bcae485b4138397aac73cbe83ffe24251
+anchor-sha256: tests/unit/runtime/test_entry_cell_runtime_archive.c 34bc22820144f368a5e5914ac387f2a19db85ef4555d458b07215548eef1dca0
