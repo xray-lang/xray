@@ -34,6 +34,11 @@ typedef struct XrRuntimeEntryRegistryStats {
     uint64_t mutations;
 } XrRuntimeEntryRegistryStats;
 
+typedef struct XrRuntimeDynamicEntryLeaseStats {
+    uint32_t live;
+    uint32_t pending;
+} XrRuntimeDynamicEntryLeaseStats;
+
 XR_FUNC bool xr_runtime_entry_registry_create(
     XrRuntimeEntryRegistry **registry, char *diagnostic,
     size_t diagnostic_size);
@@ -80,6 +85,14 @@ XR_FUNC bool xr_runtime_dynamic_entry_cache_free(
 XR_FUNC bool xr_runtime_dynamic_entry_cache_stats(
     const XrRuntimeDynamicEntryCache *cache,
     XrRuntimeDynamicEntryCacheStats *stats);
+XR_FUNC bool xr_runtime_dynamic_entry_lease_stats(
+    XrLoadedModuleGeneration *generation,
+    XrRuntimeDynamicEntryLeaseStats *stats);
+XR_FUNC bool xr_runtime_dynamic_entry_retry_pending(
+    XrLoadedModuleGeneration *generation, char *diagnostic,
+    size_t diagnostic_size);
+XR_FUNC bool xr_runtime_dynamic_entry_generation_is_quiescent(
+    XrLoadedModuleGeneration *generation);
 XR_FUNC void xr_runtime_dynamic_entry_context_init(
     XrLoadedModuleGeneration *generation,
     XrVmDynamicEntryContext *context);

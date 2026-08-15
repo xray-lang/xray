@@ -14,10 +14,11 @@
 #include "../plan/target/xr_target_plan.h"
 #include "../../include/xray_runtime_generation.h"
 
-#define XR_VM_DYNAMIC_ENTRY_CONTEXT_SCHEMA_VERSION UINT32_C(2)
+#define XR_VM_DYNAMIC_ENTRY_CONTEXT_SCHEMA_VERSION UINT32_C(3)
 
 typedef struct XrVmDecodedCache XrVmDecodedCache;
 typedef struct XrVmDynamicEntryContext XrVmDynamicEntryContext;
+typedef struct XrVmDynamicEntryLease XrVmDynamicEntryLease;
 
 typedef enum XrVmDynamicEntryStatus {
     XR_VM_DYNAMIC_ENTRY_OK = 0,
@@ -25,7 +26,7 @@ typedef enum XrVmDynamicEntryStatus {
     XR_VM_DYNAMIC_ENTRY_AUTHORITY_MISMATCH,
     XR_VM_DYNAMIC_ENTRY_NOT_FOUND,
     XR_VM_DYNAMIC_ENTRY_BUDGET_EXCEEDED,
-    XR_VM_DYNAMIC_ENTRY_RELEASE_FAILED,
+    XR_VM_DYNAMIC_ENTRY_RETIRE_DEFERRED,
 } XrVmDynamicEntryStatus;
 
 typedef struct XrVmDynamicEntryResolution {
@@ -34,7 +35,7 @@ typedef struct XrVmDynamicEntryResolution {
     const XrVmDynamicEntryContext *dynamic_entries;
     XrFingerprint plan_fingerprint;
     XrModuleGenerationIdentity generation_identity;
-    void *lease;
+    XrVmDynamicEntryLease *lease;
     uint32_t function;
 } XrVmDynamicEntryResolution;
 
@@ -44,7 +45,10 @@ typedef XrVmDynamicEntryStatus (*XrVmDynamicEntryAcquireFn)(
     const XrFingerprint *caller_fingerprint,
     const XrTargetEntryExpectationRecord *expectation, bool use_cache,
     XrVmDynamicEntryResolution *resolution);
-typedef XrVmDynamicEntryStatus (*XrVmDynamicEntryReleaseFn)(
+/* Retire consumes every successfully acquired lease on every return.  An
+ * unsuccessful immediate pin release transfers the lease to its runtime
+ * authority; the resolution never remains the last reachable owner. */
+typedef XrVmDynamicEntryStatus (*XrVmDynamicEntryRetireFn)(
     const XrVmDynamicEntryContext *context,
     XrVmDynamicEntryResolution *resolution);
 typedef XrVmDynamicEntryStatus (*XrVmDynamicEntryValidateFn)(
@@ -62,7 +66,7 @@ struct XrVmDynamicEntryContext {
     XrModuleGenerationIdentity generation_identity;
     XrVmDynamicEntryValidateFn validate;
     XrVmDynamicEntryAcquireFn acquire;
-    XrVmDynamicEntryReleaseFn release;
+    XrVmDynamicEntryRetireFn retire;
 };
 
 #endif  // XR_VM_DYNAMIC_ENTRY_H

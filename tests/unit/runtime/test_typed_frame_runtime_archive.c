@@ -7,6 +7,7 @@
 #include "vm/debug/xr_vm_materialize.h"
 #include "vm/debug/xr_vm_profile.h"
 #include "vm/debug/xr_vm_trace.h"
+#include "runtime/xr_dynamic_entry_runtime.h"
 #include <stdio.h>
 
 int main(void) {
@@ -32,9 +33,11 @@ int main(void) {
     XrVmTraceSink trace_sink;
     XrVmDebugSession debug_session;
     XrVmMaterializedEvent materialized;
+    XrRuntimeDynamicEntryLeaseStats lease_stats;
     XrVmTraceEvent trace_event = {0};
     uint32_t count = 0;
     if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(37) ||
+        XR_VM_DYNAMIC_ENTRY_CONTEXT_SCHEMA_VERSION != UINT32_C(3) ||
         XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK != XR_TARGET_REQUIRED_FAMILIES ||
         limits.max_arena_bytes != XR_TYPED_FRAME_MAX_ARENA_BYTES ||
         xr_typed_frame_create(NULL, &fingerprint, 0, &limits, &frame) !=
@@ -79,6 +82,7 @@ int main(void) {
             XR_VM_MATERIALIZE_INVALID_ARGUMENT ||
         xr_typed_dispatch_execute_i64(&request) !=
             XR_TYPED_DISPATCH_INVALID_ARGUMENT ||
+        xr_runtime_dynamic_entry_lease_stats(NULL, &lease_stats) ||
         result != 0) {
         fputs("runtime-only typed frame boundary failed\n", stderr);
         return 1;

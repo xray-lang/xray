@@ -236,17 +236,21 @@ Evidence:
   unavailable.
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
+- Dynamic `CALL_ENTRY` treats child-frame disposal and opaque lease retirement
+  as independent all-exit obligations. The runtime-owned context consumes the
+  resolution even when immediate retirement is deferred, so a fallible frame
+  cleanup cannot make the generation pin stack-local or unreachable.
 
 anchor-sha256: src/plan/target/xr_target_plan.h 8f3b11246167ec7052dbec96cf161018cdaf7f1b4ab2819edf1ffae716d3991b
 anchor-sha256: src/vm/xr_typed_frame.h a77910e1b039f5f335cd00af727dc0b46f7b8ec58c846ebc033437572b6aab3c
 anchor-sha256: src/vm/xr_typed_frame.c 80ac935291096963179c8f6c58b3105835426c87b2b693d2a62e1d5c16fc913b
-anchor-sha256: src/vm/xr_typed_dispatch.c d7177d939e0fa7fa59bc88972fb3f6e077b2bbc0e045c35cf500ba4393093f66
+anchor-sha256: src/vm/xr_typed_dispatch.c 32c7045f5b5bdc00220dc816d099e160a5077f1c3ef16d89ddefe2f04bdcfc1d
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 3fd550a0cfcdee2b28a631ef1ef6ae56c5a776c4d380a508d78e6d307bbf1b20
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041
 anchor-sha256: tests/unit/vm/test_typed_frame.c 75452812609284831f6246434ec67d9fa085618f8ef993ab80f968940064ad70
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 2d1b8558b66a96bf49463e677fc45633936404eb387c9c7fb879e03cc2c72d8d
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 6d0ea6cc1968fc5739b65b39b758e18b784b3da2132a63635b36bccbf9e04309
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
-anchor-sha256: src/vm/xr_vm_dynamic_entry.h fda9cca936f9cceaa5c39fb08e4ef525ec29ffa946112e2b8a02106273865395
-anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 7778b3428bea2edaa5342818dab86f3ff4867f46f0c83a72a489b0328d76356e
+anchor-sha256: src/vm/xr_vm_dynamic_entry.h e365e02d0596394df881026895d127ac54ade9d7bccf5ff272ad6f704a88becf
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 5687d46dfaf34f04a68b2cdfc33314569e3b71109cbd621975db66e80a301905
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 9f04a1db2a48200e33e3d491ebf2377461d8bdc55c62ad12c71f69a2378ceb28

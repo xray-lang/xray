@@ -71,8 +71,12 @@ typedef struct RepeatPublishContext {
 typedef struct TrackedDynamicEntryContext {
     XrVmDynamicEntryContext public_context;
     XrVmDynamicEntryContext delegate;
+    XrLoadedModuleGeneration *injected_retire_generation;
     _Atomic uint32_t acquires;
-    _Atomic uint32_t releases;
+    _Atomic uint32_t retires;
+    _Atomic uint32_t deferred_retires;
+    bool inject_retire_failure;
+    bool injected_resolution_consumed;
 } TrackedDynamicEntryContext;
 
 typedef struct RejectCallTraceContext {
@@ -679,17 +683,43 @@ static XrVmDynamicEntryStatus tracked_acquire(
     return status;
 }
 
-static XrVmDynamicEntryStatus tracked_release(
+static XrVmDynamicEntryStatus tracked_retire(
     const XrVmDynamicEntryContext *context,
     XrVmDynamicEntryResolution *resolution) {
     TrackedDynamicEntryContext *tracked =
         context ? (TrackedDynamicEntryContext *) context->owner : NULL;
-    if (!tracked || !tracked->delegate.release)
+    if (!tracked || !tracked->delegate.retire)
         return XR_VM_DYNAMIC_ENTRY_INVALID_ARGUMENT;
-    XrVmDynamicEntryStatus status = tracked->delegate.release(
+    if (tracked->inject_retire_failure) {
+        XrLoadedModuleGeneration *generation =
+            tracked->injected_retire_generation;
+        REQUIRE(generation && generation->authority);
+        xr_mutex_lock(&generation->authority->gate);
+        REQUIRE(generation->state == XR_MODULE_GENERATION_ACTIVE);
+        REQUIRE(generation->pins_by_kind
+                    [XR_MODULE_GENERATION_INFLIGHT_CALL] == 1u);
+        generation->pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] = 0;
+        xr_mutex_unlock(&generation->authority->gate);
+        XrVmDynamicEntryStatus status = tracked->delegate.retire(
+            &tracked->delegate, resolution);
+        xr_mutex_lock(&generation->authority->gate);
+        REQUIRE(generation->state == XR_MODULE_GENERATION_ACTIVE);
+        REQUIRE(generation->pins_by_kind
+                    [XR_MODULE_GENERATION_INFLIGHT_CALL] == 0u);
+        generation->pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] = 1;
+        xr_mutex_unlock(&generation->authority->gate);
+        tracked->inject_retire_failure = false;
+        tracked->injected_resolution_consumed =
+            resolution && !resolution->lease;
+        if (status == XR_VM_DYNAMIC_ENTRY_RETIRE_DEFERRED)
+            atomic_fetch_add_explicit(&tracked->deferred_retires, 1u,
+                                      memory_order_relaxed);
+        return status;
+    }
+    XrVmDynamicEntryStatus status = tracked->delegate.retire(
         &tracked->delegate, resolution);
     if (status == XR_VM_DYNAMIC_ENTRY_OK)
-        atomic_fetch_add_explicit(&tracked->releases, 1u,
+        atomic_fetch_add_explicit(&tracked->retires, 1u,
                                   memory_order_relaxed);
     return status;
 }
@@ -702,9 +732,10 @@ static void tracked_context_init(XrLoadedModuleGeneration *caller,
     tracked->public_context.owner = tracked;
     tracked->public_context.validate = tracked_validate;
     tracked->public_context.acquire = tracked_acquire;
-    tracked->public_context.release = tracked_release;
+    tracked->public_context.retire = tracked_retire;
     atomic_init(&tracked->acquires, 0u);
-    atomic_init(&tracked->releases, 0u);
+    atomic_init(&tracked->retires, 0u);
+    atomic_init(&tracked->deferred_retires, 0u);
 }
 
 static bool reject_call_trace(void *context,
@@ -1107,6 +1138,11 @@ static void test_dynamic_entry_authority_cache_and_lifetime(void) {
     }
     REQUIRE(saw_child && saw_return);
 
+    XrRuntimeDynamicEntryLeaseStats completed_leases;
+    REQUIRE(xr_runtime_dynamic_entry_lease_stats(callee,
+                                                 &completed_leases));
+    REQUIRE(completed_leases.live == 0 && completed_leases.pending == 0);
+
     XrEntryCallToken inflight;
     REQUIRE(xr_entry_cell_acquire(
         xr_runtime_entry_handle_cell(replacement),
@@ -1167,6 +1203,13 @@ static void require_pins_equal(
         REQUIRE(before->pins_by_kind[i] == after->pins_by_kind[i]);
 }
 
+static void require_no_dynamic_leases(
+    XrLoadedModuleGeneration *generation) {
+    XrRuntimeDynamicEntryLeaseStats stats;
+    REQUIRE(xr_runtime_dynamic_entry_lease_stats(generation, &stats));
+    REQUIRE(stats.live == 0 && stats.pending == 0);
+}
+
 static void test_dynamic_entry_all_exit_release(void) {
     char diagnostic[512] = {0};
     XrRuntimeGenerationBudget budget = make_budget();
@@ -1200,12 +1243,13 @@ static void test_dynamic_entry_all_exit_release(void) {
     REQUIRE(result == 0 &&
             atomic_load_explicit(&error_context.acquires,
                                  memory_order_relaxed) == 1u &&
-            atomic_load_explicit(&error_context.releases,
+            atomic_load_explicit(&error_context.retires,
                                  memory_order_relaxed) == 1u);
     REQUIRE(xr_module_generation_snapshot(error_caller, &caller_after));
     REQUIRE(xr_module_generation_snapshot(error_callee, &callee_after));
     require_pins_equal(&caller_before, &caller_after);
     require_pins_equal(&callee_before, &callee_after);
+    require_no_dynamic_leases(error_callee);
 
     RejectCallTraceContext rejection = {0};
     XrVmTraceSink rejecting_sink = {
@@ -1228,12 +1272,13 @@ static void test_dynamic_entry_all_exit_release(void) {
     REQUIRE(result == 0 && rejection.rejected && rejection.accepted > 0 &&
             atomic_load_explicit(&error_context.acquires,
                                  memory_order_relaxed) == 2u &&
-            atomic_load_explicit(&error_context.releases,
+            atomic_load_explicit(&error_context.retires,
                                  memory_order_relaxed) == 2u);
     REQUIRE(xr_module_generation_snapshot(error_caller, &caller_after));
     REQUIRE(xr_module_generation_snapshot(error_callee, &callee_after));
     require_pins_equal(&caller_before, &caller_after);
     require_pins_equal(&callee_before, &callee_after);
+    require_no_dynamic_leases(error_callee);
 
     REQUIRE(xr_runtime_entry_registry_unpublish(
         error_authority, error_handle, diagnostic, sizeof(diagnostic)));
@@ -1270,12 +1315,13 @@ static void test_dynamic_entry_all_exit_release(void) {
     REQUIRE(result == 0 &&
             atomic_load_explicit(&loop_context.acquires,
                                  memory_order_relaxed) == 1u &&
-            atomic_load_explicit(&loop_context.releases,
+            atomic_load_explicit(&loop_context.retires,
                                  memory_order_relaxed) == 1u);
     REQUIRE(xr_module_generation_snapshot(loop_caller, &caller_after));
     REQUIRE(xr_module_generation_snapshot(loop_callee, &callee_after));
     require_pins_equal(&caller_before, &caller_after);
     require_pins_equal(&callee_before, &callee_after);
+    require_no_dynamic_leases(loop_callee);
 
     REQUIRE(xr_runtime_entry_registry_unpublish(
         loop_authority, loop_handle, diagnostic, sizeof(diagnostic)));
@@ -1288,9 +1334,86 @@ static void test_dynamic_entry_all_exit_release(void) {
     free_dynamic_fixture(&loop_fixture);
 }
 
+/* Temporarily hiding the exact per-kind count is an internal fault injection,
+ * not a legal lifecycle mutation.  It makes the production retire callback
+ * take its otherwise invariant-only failure branch without substituting a
+ * test implementation for the runtime owner. */
+static void test_dynamic_entry_deferred_retire_is_durable(void) {
+    char diagnostic[512] = {0};
+    DynamicFixture fixture;
+    build_dynamic_fixture(DYNAMIC_FIXTURE_ECHO, &fixture);
+    XrRuntimeGenerationBudget budget = make_budget();
+    XrRuntimeGenerationAuthority *authority = NULL;
+    REQUIRE(xr_runtime_generation_authority_create(
+        &budget, &authority, diagnostic, sizeof(diagnostic)));
+    XrLoadedModuleGeneration *caller = activate_generation(
+        authority, fixture.caller_plan);
+    XrLoadedModuleGeneration *callee = activate_generation(
+        authority, fixture.dependency_plan);
+    XrRuntimeEntryHandle *handle = NULL;
+    publish_fixture_entry(authority, &fixture, callee, &handle);
+
+    XrModuleGenerationSnapshot before;
+    XrModuleGenerationSnapshot deferred;
+    XrModuleGenerationSnapshot retried;
+    REQUIRE(xr_module_generation_snapshot(callee, &before));
+    TrackedDynamicEntryContext tracked;
+    tracked_context_init(caller, &tracked);
+    tracked.inject_retire_failure = true;
+    tracked.injected_retire_generation = callee;
+    int64_t result = 71;
+    REQUIRE(execute_dynamic_with_context(
+                caller, fixture.caller_function,
+                XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE, true,
+                NULL, &tracked.public_context, &result) ==
+            XR_TYPED_DISPATCH_ENTRY_RETIRE_DEFERRED);
+    REQUIRE(result == 0 && tracked.injected_resolution_consumed &&
+            atomic_load_explicit(&tracked.acquires,
+                                 memory_order_relaxed) == 1u &&
+            atomic_load_explicit(&tracked.retires,
+                                 memory_order_relaxed) == 0u &&
+            atomic_load_explicit(&tracked.deferred_retires,
+                                 memory_order_relaxed) == 1u);
+
+    XrRuntimeDynamicEntryLeaseStats lease_stats;
+    REQUIRE(xr_runtime_dynamic_entry_lease_stats(callee, &lease_stats));
+    REQUIRE(lease_stats.live == 1 && lease_stats.pending == 1);
+    REQUIRE(xr_module_generation_snapshot(callee, &deferred));
+    REQUIRE(deferred.poisoned == 1u);
+    REQUIRE(deferred.total_pins == before.total_pins + 1u);
+    REQUIRE(deferred.pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] ==
+            before.pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] + 1u);
+    XrLoadedModuleGeneration *still_owned = callee;
+    REQUIRE(!xr_module_generation_unload(&callee, diagnostic,
+                                         sizeof(diagnostic)) &&
+            callee == still_owned);
+
+    REQUIRE(xr_module_generation_begin_drain(callee, diagnostic,
+                                             sizeof(diagnostic)));
+    REQUIRE(xr_runtime_dynamic_entry_lease_stats(callee, &lease_stats));
+    REQUIRE(lease_stats.live == 0 && lease_stats.pending == 0);
+    REQUIRE(xr_module_generation_snapshot(callee, &retried));
+    REQUIRE(retried.total_pins == before.total_pins);
+    REQUIRE(retried.pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL] ==
+            before.pins_by_kind[XR_MODULE_GENERATION_INFLIGHT_CALL]);
+    REQUIRE(xr_runtime_entry_registry_unpublish(
+        authority, handle, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_retire(callee, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_unload(&callee, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_runtime_entry_handle_release(&handle, diagnostic,
+                                            sizeof(diagnostic)));
+    retire_generation(&caller);
+    REQUIRE(xr_runtime_generation_authority_destroy(
+        &authority, diagnostic, sizeof(diagnostic)));
+    free_dynamic_fixture(&fixture);
+}
+
 int main(void) {
     test_dynamic_entry_authority_cache_and_lifetime();
     test_dynamic_entry_all_exit_release();
+    test_dynamic_entry_deferred_retire_is_durable();
     puts("dynamic typed entry runtime tests passed");
     return 0;
 }

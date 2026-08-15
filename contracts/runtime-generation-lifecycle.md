@@ -150,12 +150,22 @@ authority.
     then snapshots executable authority into the call token. Swap publishes the
     new binding while preserving any old in-flight token; clear removes the
     binding and releases its static-root pin. Success, VM/native error, and
-    cancellation all release the token, and an atomic token state permits
-    exactly one release: a duplicate or never-acquired release fails without a
-    second decrement. DRAINING rejects new acquisition, while an already acquired
-    token can exit and unblock retirement. Stale expectations and wrong ABI,
-    adapter, plan, generation, binding, or executor identities fail closed
-    without acquiring a pin.
+    cancellation all retire the token, and an atomic token state permits
+    exactly one pin decrement: a duplicate or never-acquired retirement fails
+    without a second decrement. Dynamic context schema 3 has no legacy release
+    callback or untyped lease. Every successful dynamic acquisition first
+    registers its opaque lease in an authority-owned ledger bounded by the
+    authority's total-pin budget. Retirement consumes and clears the resolution
+    on every return. An immediate pin-release refusal leaves the token LIVE,
+    transfers the holder to the ledger's PENDING state, and poisons the
+    generation fail closed; drain retries pending holders deterministically,
+    while retirement, unload, and authority destruction refuse any remaining
+    holder. Frame disposal and lease retirement are independent exit
+    obligations, so one failure cannot skip the other or strand a stack-local
+    lease. DRAINING rejects new acquisition, while an already acquired token can
+    exit and unblock retirement. Stale expectations and wrong ABI, adapter,
+    plan, generation, binding, or executor identities fail closed without
+    acquiring a pin.
 
 16. The registry owns stable per-key rows until authority teardown. Each row
     has an atomic epoch and an optional retained handle. Publish replacement
@@ -178,11 +188,11 @@ authority.
     deterministic ownership on every failure.
 
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
-anchor-sha256: src/runtime/xr_module_generation_internal.h 1e6c5914a7d290d7d8a8af62a11e3623e65467d8092b7e126518cb474a88e71b
-anchor-sha256: src/runtime/xr_module_generation.c 28cecd15918252d54876ce4c33eb5dfd9613a0021daf29e3c1095bce47c90aa7
+anchor-sha256: src/runtime/xr_module_generation_internal.h 892b04cdd946296e3812a68147bc68e541848f22086c460494fc699f1871b5d9
+anchor-sha256: src/runtime/xr_module_generation.c 580d612f1c9818e7220b0c5d2f419e4c0a53c1f05b6f94253e4c5dafbaf2ddd8
 anchor-sha256: src/runtime/xr_module_generation_verify.c d954584f4235e75773790b7a0415c6613ba81e09ed7507338d0021893f7b722a
-anchor-sha256: src/vm/xr_typed_dispatch.h afe8997a2272790226f6591615c8721213df06eba476c1c45114cd2208d7c62d
-anchor-sha256: src/vm/xr_typed_dispatch.c d7177d939e0fa7fa59bc88972fb3f6e077b2bbc0e045c35cf500ba4393093f66
+anchor-sha256: src/vm/xr_typed_dispatch.h 25f04f8562c5159cb775553242e753910c91682d3873913ad3eab867cee4a412
+anchor-sha256: src/vm/xr_typed_dispatch.c 32c7045f5b5bdc00220dc816d099e160a5077f1c3ef16d89ddefe2f04bdcfc1d
 anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
 anchor-sha256: src/vm/xr_vm_decoded_cache.c 2d4f14d54740e6aac0cdfb23fc7b90b075725c479751ba52a1948a658f91fa77
 anchor-sha256: src/vm/xr_typed_frame.h a77910e1b039f5f335cd00af727dc0b46f7b8ec58c846ebc033437572b6aab3c
@@ -195,13 +205,13 @@ anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py cb1b4fd056aebee2f73c03d537294df3d8a2dcc8617a55a1a7e25b0e42570228
 anchor-sha256: tests/install/run_install_public_surface_tests.py 1bbef0d66f5d0d78dbe41848497b678c02c88fc9663f296d9863571fe20eb38e
 anchor-sha256: include/xray_runtime_api.h c57754f0204441d3575c6c5b3891333bd01eb72b858cb1b17389f5e701866a98
-anchor-sha256: src/runtime/xr_runtime_api.c 09f088138ec432f7ef940084695ecbe31bd52a1248314b37a0c0cad91b0a1b54
+anchor-sha256: src/runtime/xr_runtime_api.c bfa116c1345d5e70c2f99e573c5eb72eedb0456a6fc85dc7f61a81cca73c7756
 anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c 225e5777c21a94fcbff21619eef26956c7fad284370c7cbb7091eacebf9817c8
 anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
 anchor-sha256: src/runtime/xr_entry_cell.c 65446775907bdbef5c293d564b1020861836c9b94c52adf727a3e32dbb49241f
 anchor-sha256: tests/unit/runtime/test_entry_cell_runtime_archive.c 34bc22820144f368a5e5914ac387f2a19db85ef4555d458b07215548eef1dca0
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 5266ff18ca9b135f0b16280c7b4ab4644c96b3b4d9da7e5f10e42b9dbcd01cbf
-anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h a58cc2537da332f0d41eb8378dc2ecc324557fec0727bd748313e4dc3d95e25a
-anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c ae948c59d45890efcd807ee26f998b6406bdebeeb18fdbc3170c8cebdf17f5f6
-anchor-sha256: src/vm/xr_vm_dynamic_entry.h fda9cca936f9cceaa5c39fb08e4ef525ec29ffa946112e2b8a02106273865395
-anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 7778b3428bea2edaa5342818dab86f3ff4867f46f0c83a72a489b0328d76356e
+anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h e869f525726120a601098e3a37a2a53bf359ec0282ef3b3caf96546b640feaa5
+anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 86047c42dabc588c9409273fd75ef7d787313471cf6b095515f13e9cf5954d17
+anchor-sha256: src/vm/xr_vm_dynamic_entry.h e365e02d0596394df881026895d127ac54ade9d7bccf5ff272ad6f704a88becf
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 5687d46dfaf34f04a68b2cdfc33314569e3b71109cbd621975db66e80a301905

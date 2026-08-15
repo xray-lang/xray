@@ -72,9 +72,19 @@ struct XrRuntimeDynamicEntryCache {
     atomic_uint_least64_t replacements;
 };
 
-typedef struct XrRuntimeDynamicEntryLease {
+typedef enum XrRuntimeDynamicEntryLeaseState {
+    XR_RUNTIME_DYNAMIC_ENTRY_LEASE_RESERVED = 0,
+    XR_RUNTIME_DYNAMIC_ENTRY_LEASE_ACTIVE,
+    XR_RUNTIME_DYNAMIC_ENTRY_LEASE_RETIRING,
+    XR_RUNTIME_DYNAMIC_ENTRY_LEASE_PENDING,
+} XrRuntimeDynamicEntryLeaseState;
+
+struct XrVmDynamicEntryLease {
     XrEntryCallToken token;
-} XrRuntimeDynamicEntryLease;
+    XrRuntimeGenerationAuthority *authority;
+    XrVmDynamicEntryLease *next;
+    XrRuntimeDynamicEntryLeaseState state;
+};
 
 typedef struct XrRuntimeEntryBindingSnapshot {
     XrEntryCellExpectation expectation;
@@ -94,6 +104,118 @@ static bool fail(char *diagnostic, size_t diagnostic_size, const char *code,
     if (diagnostic && diagnostic_size)
         snprintf(diagnostic, diagnostic_size, "%s: %s", code, detail);
     return false;
+}
+
+static XrVmDynamicEntryLease *reserve_dynamic_entry_lease(
+    XrRuntimeGenerationAuthority *authority) {
+    if (!authority)
+        return NULL;
+    XrVmDynamicEntryLease *lease =
+        (XrVmDynamicEntryLease *) xr_calloc(1, sizeof(*lease));
+    if (!lease)
+        return NULL;
+    lease->authority = authority;
+    lease->state = XR_RUNTIME_DYNAMIC_ENTRY_LEASE_RESERVED;
+    xr_mutex_lock(&authority->dynamic_entry_lease_gate);
+    if (authority->dynamic_entry_lease_count >=
+        authority->budget.max_total_pins) {
+        xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+        xr_free(lease);
+        return NULL;
+    }
+    lease->next = authority->dynamic_entry_leases;
+    authority->dynamic_entry_leases = lease;
+    authority->dynamic_entry_lease_count++;
+    xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+    return lease;
+}
+
+static void remove_dynamic_entry_lease_locked(
+    XrRuntimeGenerationAuthority *authority, XrVmDynamicEntryLease *lease) {
+    XrVmDynamicEntryLease **cursor = &authority->dynamic_entry_leases;
+    while (*cursor && *cursor != lease)
+        cursor = &(*cursor)->next;
+    if (*cursor == lease) {
+        *cursor = lease->next;
+        authority->dynamic_entry_lease_count--;
+    }
+}
+
+static void discard_reserved_dynamic_entry_lease(
+    XrVmDynamicEntryLease *lease) {
+    if (!lease || !lease->authority)
+        return;
+    XrRuntimeGenerationAuthority *authority = lease->authority;
+    bool discarded = false;
+    xr_mutex_lock(&authority->dynamic_entry_lease_gate);
+    if (lease->state == XR_RUNTIME_DYNAMIC_ENTRY_LEASE_RESERVED) {
+        remove_dynamic_entry_lease_locked(authority, lease);
+        discarded = true;
+    }
+    xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+    if (!discarded)
+        return;
+    memset(lease, 0, sizeof(*lease));
+    xr_free(lease);
+}
+
+static void activate_dynamic_entry_lease(XrVmDynamicEntryLease *lease) {
+    XrRuntimeGenerationAuthority *authority = lease->authority;
+    xr_mutex_lock(&authority->dynamic_entry_lease_gate);
+    lease->state = XR_RUNTIME_DYNAMIC_ENTRY_LEASE_ACTIVE;
+    xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+}
+
+static const uint8_t dynamic_entry_retire_poison_fingerprint
+    [XR_RUNTIME_GENERATION_FINGERPRINT_SIZE] = {
+        0x7d, 0x25, 0x96, 0x32, 0x74, 0x55, 0x0b, 0xce,
+        0x3d, 0x72, 0x14, 0xf1, 0x9a, 0x05, 0x8c, 0xa3,
+        0xe8, 0x61, 0x47, 0x29, 0xbc, 0x0f, 0xd4, 0x52,
+        0x31, 0xee, 0x68, 0x9b, 0x06, 0xaf, 0xc7, 0x44,
+};
+
+static XrVmDynamicEntryStatus retire_dynamic_entry_lease(
+    XrVmDynamicEntryLease *lease, XrVmDynamicEntryResolution *resolution) {
+    if (!lease || !lease->authority)
+        return XR_VM_DYNAMIC_ENTRY_INVALID_ARGUMENT;
+    XrRuntimeGenerationAuthority *authority = lease->authority;
+    xr_mutex_lock(&authority->dynamic_entry_lease_gate);
+    if (lease->state != XR_RUNTIME_DYNAMIC_ENTRY_LEASE_ACTIVE) {
+        bool pending = lease->state == XR_RUNTIME_DYNAMIC_ENTRY_LEASE_PENDING ||
+                       lease->state == XR_RUNTIME_DYNAMIC_ENTRY_LEASE_RETIRING;
+        xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+        if (resolution)
+            memset(resolution, 0, sizeof(*resolution));
+        return pending ? XR_VM_DYNAMIC_ENTRY_RETIRE_DEFERRED
+                       : XR_VM_DYNAMIC_ENTRY_INVALID_ARGUMENT;
+    }
+    lease->state = XR_RUNTIME_DYNAMIC_ENTRY_LEASE_RETIRING;
+    xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+
+    XrLoadedModuleGeneration *generation = lease->token.generation;
+    char diagnostic[256] = {0};
+    bool released = xr_entry_call_release(&lease->token, diagnostic,
+                                          sizeof(diagnostic));
+    xr_mutex_lock(&authority->dynamic_entry_lease_gate);
+    if (released) {
+        remove_dynamic_entry_lease_locked(authority, lease);
+    } else {
+        lease->state = XR_RUNTIME_DYNAMIC_ENTRY_LEASE_PENDING;
+        authority->pending_dynamic_entry_lease_count++;
+    }
+    xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+    if (resolution)
+        memset(resolution, 0, sizeof(*resolution));
+    if (released) {
+        memset(lease, 0, sizeof(*lease));
+        xr_free(lease);
+        return XR_VM_DYNAMIC_ENTRY_OK;
+    }
+    char poison_diagnostic[256] = {0};
+    xr_module_generation_poison(
+        generation, dynamic_entry_retire_poison_fingerprint,
+        poison_diagnostic, sizeof(poison_diagnostic));
+    return XR_VM_DYNAMIC_ENTRY_RETIRE_DEFERRED;
 }
 
 static bool fingerprint_matches(XrFingerprint left, XrFingerprint right) {
@@ -725,6 +847,90 @@ bool xr_runtime_dynamic_entry_cache_stats(
     return true;
 }
 
+bool xr_runtime_dynamic_entry_lease_stats(
+    XrLoadedModuleGeneration *generation,
+    XrRuntimeDynamicEntryLeaseStats *stats) {
+    if (!generation || !generation->authority || !stats)
+        return false;
+    memset(stats, 0, sizeof(*stats));
+    XrRuntimeGenerationAuthority *authority = generation->authority;
+    xr_mutex_lock(&authority->dynamic_entry_lease_gate);
+    for (XrVmDynamicEntryLease *lease = authority->dynamic_entry_leases;
+         lease; lease = lease->next) {
+        if (lease->token.generation != generation)
+            continue;
+        stats->live++;
+        stats->pending +=
+            lease->state == XR_RUNTIME_DYNAMIC_ENTRY_LEASE_PENDING;
+    }
+    xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+    return true;
+}
+
+bool xr_runtime_dynamic_entry_generation_is_quiescent(
+    XrLoadedModuleGeneration *generation) {
+    if (!generation || !generation->authority)
+        return false;
+    XrRuntimeGenerationAuthority *authority = generation->authority;
+    bool quiescent = true;
+    xr_mutex_lock(&authority->dynamic_entry_lease_gate);
+    for (XrVmDynamicEntryLease *lease = authority->dynamic_entry_leases;
+         lease; lease = lease->next) {
+        if (lease->token.generation == generation) {
+            quiescent = false;
+            break;
+        }
+    }
+    xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+    return quiescent;
+}
+
+bool xr_runtime_dynamic_entry_retry_pending(
+    XrLoadedModuleGeneration *generation, char *diagnostic,
+    size_t diagnostic_size) {
+    if (!generation || !generation->authority)
+        return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
+                    "dynamic entry retry owner is missing");
+    XrRuntimeGenerationAuthority *authority = generation->authority;
+    for (;;) {
+        XrVmDynamicEntryLease *pending = NULL;
+        xr_mutex_lock(&authority->dynamic_entry_lease_gate);
+        for (XrVmDynamicEntryLease *lease = authority->dynamic_entry_leases;
+             lease; lease = lease->next) {
+            if (lease->token.generation == generation &&
+                lease->state == XR_RUNTIME_DYNAMIC_ENTRY_LEASE_PENDING) {
+                pending = lease;
+                lease->state = XR_RUNTIME_DYNAMIC_ENTRY_LEASE_RETIRING;
+                authority->pending_dynamic_entry_lease_count--;
+                break;
+            }
+        }
+        xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+        if (!pending)
+            return true;
+
+        bool released = xr_entry_call_release(
+            &pending->token, diagnostic, diagnostic_size);
+        xr_mutex_lock(&authority->dynamic_entry_lease_gate);
+        if (released) {
+            remove_dynamic_entry_lease_locked(authority, pending);
+        } else {
+            pending->state = XR_RUNTIME_DYNAMIC_ENTRY_LEASE_PENDING;
+            authority->pending_dynamic_entry_lease_count++;
+        }
+        xr_mutex_unlock(&authority->dynamic_entry_lease_gate);
+        if (!released) {
+            char poison_diagnostic[256] = {0};
+            xr_module_generation_poison(
+                generation, dynamic_entry_retire_poison_fingerprint,
+                poison_diagnostic, sizeof(poison_diagnostic));
+            return false;
+        }
+        memset(pending, 0, sizeof(*pending));
+        xr_free(pending);
+    }
+}
+
 static bool expectation_matches_handle(
     const XrTargetEntryExpectationRecord *expected,
     const XrEntryCellExpectation *actual) {
@@ -864,24 +1070,32 @@ static XrVmDynamicEntryStatus acquire_dynamic_entry(
         return XR_VM_DYNAMIC_ENTRY_NOT_FOUND;
 
     const XrEntryCellExpectation *actual = &handle->expectation;
-    XrRuntimeDynamicEntryLease *lease = NULL;
+    XrVmDynamicEntryLease *lease = NULL;
     char diagnostic[512] = {0};
     bool exact = expectation_matches_handle(expectation, actual);
     if (exact) {
-        lease = (XrRuntimeDynamicEntryLease *) xr_calloc(1, sizeof(*lease));
-        exact = lease && xr_entry_cell_acquire(
-                             &handle->cell, actual, &lease->token,
-                             diagnostic, sizeof(diagnostic));
+        lease = reserve_dynamic_entry_lease(handle->authority);
+        if (!lease) {
+            xr_runtime_entry_handle_release(&handle, diagnostic,
+                                            sizeof(diagnostic));
+            return XR_VM_DYNAMIC_ENTRY_BUDGET_EXCEEDED;
+        }
+        exact = xr_entry_cell_acquire(&handle->cell, actual, &lease->token,
+                                      diagnostic, sizeof(diagnostic));
+        if (exact)
+            activate_dynamic_entry_lease(lease);
     }
     if (exact)
         exact = xr_target_plan_fingerprint_is_intact(lease->token.plan) &&
                 xr_target_instruction_program_verify(
                     lease->token.plan, diagnostic, sizeof(diagnostic));
     if (!exact) {
-        if (lease && lease->token.generation)
-            xr_entry_call_release(&lease->token, diagnostic,
-                                  sizeof(diagnostic));
-        xr_free(lease);
+        if (lease && lease->token.generation) {
+            XrVmDynamicEntryResolution rejected = {.lease = lease};
+            retire_dynamic_entry_lease(lease, &rejected);
+        } else {
+            discard_reserved_dynamic_entry_lease(lease);
+        }
         xr_runtime_entry_handle_release(&handle, diagnostic,
                                         sizeof(diagnostic));
         return XR_VM_DYNAMIC_ENTRY_AUTHORITY_MISMATCH;
@@ -899,9 +1113,8 @@ static XrVmDynamicEntryStatus acquire_dynamic_entry(
             if (!xr_runtime_entry_handle_retain(
                     handle, &retained, diagnostic, sizeof(diagnostic))) {
                 xr_mutex_unlock(&slot->gate);
-                xr_entry_call_release(&lease->token, diagnostic,
-                                      sizeof(diagnostic));
-                xr_free(lease);
+                XrVmDynamicEntryResolution rejected = {.lease = lease};
+                retire_dynamic_entry_lease(lease, &rejected);
                 xr_runtime_entry_handle_release(
                     &handle, diagnostic, sizeof(diagnostic));
                 return XR_VM_DYNAMIC_ENTRY_BUDGET_EXCEEDED;
@@ -913,9 +1126,8 @@ static XrVmDynamicEntryStatus acquire_dynamic_entry(
                     xr_runtime_entry_handle_release(
                         &retained, diagnostic, sizeof(diagnostic));
                     xr_mutex_unlock(&slot->gate);
-                    xr_entry_call_release(&lease->token, diagnostic,
-                                          sizeof(diagnostic));
-                    xr_free(lease);
+                    XrVmDynamicEntryResolution rejected = {.lease = lease};
+                    retire_dynamic_entry_lease(lease, &rejected);
                     xr_runtime_entry_handle_release(
                         &handle, diagnostic, sizeof(diagnostic));
                     return XR_VM_DYNAMIC_ENTRY_AUTHORITY_MISMATCH;
@@ -965,22 +1177,19 @@ static XrVmDynamicEntryStatus validate_dynamic_entry_context(
     return XR_VM_DYNAMIC_ENTRY_OK;
 }
 
-static XrVmDynamicEntryStatus release_dynamic_entry(
+static XrVmDynamicEntryStatus retire_dynamic_entry(
     const XrVmDynamicEntryContext *context,
     XrVmDynamicEntryResolution *resolution) {
-    (void) context;
-    XrRuntimeDynamicEntryLease *lease =
-        resolution ? (XrRuntimeDynamicEntryLease *) resolution->lease : NULL;
+    XrVmDynamicEntryLease *lease = resolution ? resolution->lease : NULL;
     if (!lease)
         return XR_VM_DYNAMIC_ENTRY_INVALID_ARGUMENT;
-    char diagnostic[256] = {0};
-    if (!xr_entry_call_release(&lease->token, diagnostic,
-                               sizeof(diagnostic)))
-        return XR_VM_DYNAMIC_ENTRY_RELEASE_FAILED;
-    memset(resolution, 0, sizeof(*resolution));
-    memset(lease, 0, sizeof(*lease));
-    xr_free(lease);
-    return XR_VM_DYNAMIC_ENTRY_OK;
+    XrLoadedModuleGeneration *caller =
+        context ? (XrLoadedModuleGeneration *) context->owner : NULL;
+    bool same_authority = caller && caller->authority == lease->authority;
+    XrVmDynamicEntryStatus status =
+        retire_dynamic_entry_lease(lease, resolution);
+    return same_authority ? status
+                          : XR_VM_DYNAMIC_ENTRY_AUTHORITY_MISMATCH;
 }
 
 void xr_runtime_dynamic_entry_context_init(
@@ -1000,6 +1209,6 @@ void xr_runtime_dynamic_entry_context_init(
                                    : (XrModuleGenerationIdentity) {0},
         .validate = validate_dynamic_entry_context,
         .acquire = acquire_dynamic_entry,
-        .release = release_dynamic_entry,
+        .retire = retire_dynamic_entry,
     };
 }

@@ -34,11 +34,15 @@ typedef enum XrModuleGenerationMutation {
 
 struct XrRuntimeGenerationAuthority {
     xr_mutex_t gate;
+    xr_mutex_t dynamic_entry_lease_gate;
     XrRuntimeGenerationBudget budget;
     uint64_t next_generation;
     uint32_t live_generations;
     uint32_t total_pins;
     XrRuntimeEntryRegistry *entry_registry;
+    XrVmDynamicEntryLease *dynamic_entry_leases;
+    uint32_t dynamic_entry_lease_count;
+    uint32_t pending_dynamic_entry_lease_count;
 };
 
 struct XrLoadedModuleGeneration {

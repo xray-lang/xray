@@ -378,9 +378,9 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status, char *diagnostic,
         case XR_TYPED_DISPATCH_ENTRY_BUDGET_EXCEEDED:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
                         "exported function dynamic entry budget is exhausted");
-        case XR_TYPED_DISPATCH_ENTRY_RELEASE_FAILED:
+        case XR_TYPED_DISPATCH_ENTRY_RETIRE_DEFERRED:
             return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
-                        "exported function dynamic entry release failed");
+                        "exported function dynamic entry retirement was deferred");
         case XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH:
         case XR_TYPED_DISPATCH_TRACE_REJECTED:
         case XR_TYPED_DISPATCH_INVALID_ARGUMENT:

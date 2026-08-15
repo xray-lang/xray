@@ -212,10 +212,12 @@ XRAY_API bool xr_runtime_generation_authority_create(
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
                     "generation authority allocation failed");
     xr_mutex_init(&created->gate);
+    xr_mutex_init(&created->dynamic_entry_lease_gate);
     created->budget = *budget;
     created->next_generation = 1;
     if (!xr_runtime_entry_registry_create(&created->entry_registry,
                                           diagnostic, diagnostic_size)) {
+        xr_mutex_destroy(&created->dynamic_entry_lease_gate);
         xr_mutex_destroy(&created->gate);
         xr_free(created);
         return false;
@@ -234,12 +236,18 @@ XRAY_API bool xr_runtime_generation_authority_destroy(
     xr_mutex_lock(&owned->gate);
     bool empty = owned->live_generations == 0 && owned->total_pins == 0;
     xr_mutex_unlock(&owned->gate);
-    if (!empty)
+    xr_mutex_lock(&owned->dynamic_entry_lease_gate);
+    bool leases_empty = owned->dynamic_entry_lease_count == 0 &&
+                        owned->pending_dynamic_entry_lease_count == 0 &&
+                        owned->dynamic_entry_leases == NULL;
+    xr_mutex_unlock(&owned->dynamic_entry_lease_gate);
+    if (!empty || !leases_empty)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
-                    "generation authority still owns loaded modules or pins");
+                    "generation authority still owns loaded modules, pins, or dynamic leases");
     if (!xr_runtime_entry_registry_destroy(&owned->entry_registry, diagnostic,
                                            diagnostic_size))
         return false;
+    xr_mutex_destroy(&owned->dynamic_entry_lease_gate);
     xr_mutex_destroy(&owned->gate);
     memset(owned, 0, sizeof(*owned));
     xr_free(owned);
@@ -498,9 +506,9 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status,
         case XR_TYPED_DISPATCH_ENTRY_BUDGET_EXCEEDED:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
                         "scalar generation dynamic entry budget is exhausted");
-        case XR_TYPED_DISPATCH_ENTRY_RELEASE_FAILED:
+        case XR_TYPED_DISPATCH_ENTRY_RETIRE_DEFERRED:
             return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
-                        "scalar generation dynamic entry release failed");
+                        "scalar generation dynamic entry retirement was deferred");
         case XR_TYPED_DISPATCH_DEBUG_IDENTITY_MISMATCH:
         case XR_TYPED_DISPATCH_TRACE_REJECTED:
         case XR_TYPED_DISPATCH_INVALID_ARGUMENT:
@@ -715,7 +723,8 @@ XRAY_API bool xr_module_generation_begin_drain(
                                 "only an active generation may begin draining",
                                 diagnostic, diagnostic_size);
     xr_mutex_unlock(&authority->gate);
-    return ok;
+    return ok && xr_runtime_dynamic_entry_retry_pending(
+                     generation, diagnostic, diagnostic_size);
 }
 
 XRAY_API bool xr_module_generation_retire(
@@ -725,6 +734,12 @@ XRAY_API bool xr_module_generation_retire(
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "generation is missing");
     XrRuntimeGenerationAuthority *authority = generation->authority;
+    xr_mutex_lock(&authority->gate);
+    bool draining = generation->state == XR_MODULE_GENERATION_DRAINING;
+    xr_mutex_unlock(&authority->gate);
+    if (draining && !xr_runtime_dynamic_entry_retry_pending(
+                        generation, diagnostic, diagnostic_size))
+        return false;
     xr_mutex_lock(&authority->gate);
     if (generation->total_pins != 0) {
         xr_mutex_unlock(&authority->gate);
@@ -884,6 +899,9 @@ XRAY_API bool xr_module_generation_unload(
                     "generation is missing");
     XrLoadedModuleGeneration *owned = *generation;
     XrRuntimeGenerationAuthority *authority = owned->authority;
+    if (!xr_runtime_dynamic_entry_generation_is_quiescent(owned))
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
+                    "generation cannot unload while dynamic leases remain");
     xr_mutex_lock(&authority->gate);
     if (owned->state != XR_MODULE_GENERATION_RETIRED ||
         owned->total_pins != 0 || authority->live_generations == 0) {

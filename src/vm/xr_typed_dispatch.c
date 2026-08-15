@@ -651,7 +651,7 @@ static XrTypedDispatchStatus execute_entry_call(
         execution->dynamic_entries->reserved != 0 ||
         !execution->dynamic_entries->validate ||
         !execution->dynamic_entries->acquire ||
-        !execution->dynamic_entries->release)
+        !execution->dynamic_entries->retire)
         return XR_TYPED_DISPATCH_ENTRY_UNAVAILABLE;
 
     uint32_t expectation_count = 0;
@@ -709,7 +709,7 @@ static XrTypedDispatchStatus execute_entry_call(
     XrTypedFrame *child = NULL;
     uint32_t child_frame_id = execution->next_frame_id++;
     uint32_t child_function = resolution.function;
-    const XrVmDynamicEntryContext *release_context =
+    const XrVmDynamicEntryContext *retire_context =
         execution->dynamic_entries;
     uint64_t family = xr_target_plan_function_execution_family_mask(
         resolution.plan, resolution.function);
@@ -786,16 +786,17 @@ static XrTypedDispatchStatus execute_entry_call(
         status = store_i64_bits(frame, row->result_slot, child_result);
 
 cleanup:;
-    bool child_released =
-        free_scalar_frame(&child) == XR_TYPED_DISPATCH_OK;
-    if (!child_released)
+    /* Frame disposal and lease retirement are independent obligations.  The
+     * latter consumes the resolution even when immediate pin release must be
+     * deferred to its runtime-owned ledger. */
+    if (free_scalar_frame(&child) != XR_TYPED_DISPATCH_OK)
         status = XR_TYPED_DISPATCH_FRAME_ERROR;
-    if (acquired && child_released) {
-        XrVmDynamicEntryStatus released =
-            release_context->release(release_context, &resolution);
-        if (released != XR_VM_DYNAMIC_ENTRY_OK &&
+    if (acquired) {
+        XrVmDynamicEntryStatus retired =
+            retire_context->retire(retire_context, &resolution);
+        if (retired != XR_VM_DYNAMIC_ENTRY_OK &&
             status != XR_TYPED_DISPATCH_TRACE_REJECTED)
-            status = XR_TYPED_DISPATCH_ENTRY_RELEASE_FAILED;
+            status = XR_TYPED_DISPATCH_ENTRY_RETIRE_DEFERRED;
     }
     if (status != XR_TYPED_DISPATCH_TRACE_REJECTED) {
         XrVmTraceEvent call_return = make_trace_event(
@@ -1185,7 +1186,7 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
            request->dynamic_entries->reserved != 0 ||
            !request->dynamic_entries->validate ||
            !request->dynamic_entries->acquire ||
-          !request->dynamic_entries->release)))
+          !request->dynamic_entries->retire)))
         return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
     if (request->generation_identity &&
         !generation_identity_matches_plan(
