@@ -11,6 +11,8 @@ int main(void) {
     xr_typed_frame_limits_default(&limits);
     XrFingerprint fingerprint = {{0}};
     XrTypedFrame *frame = (XrTypedFrame *) (uintptr_t) 1;
+    XrTypedFrameContext context;
+    XrModuleGenerationIdentity generation = {0};
     int64_t result = 1;
     if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(29) ||
         XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK != XR_TARGET_REQUIRED_FAMILIES ||
@@ -19,6 +21,18 @@ int main(void) {
             XR_TYPED_FRAME_INVALID_ARGUMENT ||
         frame != NULL ||
         xr_typed_frame_cleanup(NULL) != XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_context(NULL, &context) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_enter_instruction(NULL, 0) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_bind_coroutine_state(NULL, 0) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_bind_generation_identity(NULL, &generation) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_link_child(NULL, NULL) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
+        xr_typed_frame_unlink_child(NULL, NULL) !=
+            XR_TYPED_FRAME_INVALID_ARGUMENT ||
         xr_typed_dispatch_execute_i64(NULL, &fingerprint, 0, NULL, 0, &result) !=
             XR_TYPED_DISPATCH_INVALID_ARGUMENT ||
         result != 0) {

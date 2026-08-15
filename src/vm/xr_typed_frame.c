@@ -14,6 +14,7 @@
 
 #include "xr_typed_frame.h"
 #include "../base/xmalloc.h"
+#include "../plan/target/xr_target_profile.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -22,11 +23,22 @@ struct XrTypedFrame {
     XrFingerprint plan_fingerprint;
     const XrTargetFunctionRecord *function;
     const XrTargetSlotRecord *slots;
+    uint32_t function_index;
+    uint32_t current_block_instruction;
+    uint32_t current_instruction;
+    uint32_t coroutine_state;
+    uint64_t generation_number;
+    XrFingerprint generation_fingerprint;
+    struct XrTypedFrame *parent;
+    struct XrTypedFrame *child;
     uint8_t *allocation;
     uint8_t *arena;
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
     uint8_t *states;
+#endif
     size_t allocation_size;
     uint32_t slot_count;
+    bool generation_bound;
     bool cleaned;
 };
 
@@ -123,9 +135,12 @@ static XrTypedFrameStatus validate_shape(const XrTargetPlan *plan,
     if (arena_allocation > limits->max_arena_bytes)
         return XR_TYPED_FRAME_BUDGET_EXHAUSTED;
     size_t total_allocation = sizeof(XrTypedFrame);
-    if (!checked_add_size(total_allocation, arena_allocation, &total_allocation) ||
+    if (!checked_add_size(total_allocation, arena_allocation,
+                          &total_allocation) ||
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
         !checked_add_size(total_allocation, function->slot_count,
                           &total_allocation) ||
+#endif
         total_allocation > limits->max_total_bytes)
         return XR_TYPED_FRAME_BUDGET_EXHAUSTED;
 
@@ -177,6 +192,7 @@ static XrTypedFrameStatus allocate_frame(const XrTargetPlan *plan,
         }
         frame->arena = (uint8_t *) ((base + mask) & ~mask);
     }
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
     if (shape->function->slot_count) {
         frame->states = (uint8_t *) xr_calloc(shape->function->slot_count, 1);
         if (!frame->states) {
@@ -187,10 +203,15 @@ static XrTypedFrameStatus allocate_frame(const XrTargetPlan *plan,
         memset(frame->states, XR_TYPED_SLOT_STATE_UNINITIALIZED,
                shape->function->slot_count);
     }
+#endif
     frame->plan = xr_target_plan_retain((XrTargetPlan *) plan);
     frame->plan_fingerprint = xr_target_plan_fingerprint(plan);
     frame->function = shape->function;
     frame->slots = shape->slots;
+    frame->function_index = shape->function->id;
+    frame->current_block_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    frame->current_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    frame->coroutine_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     frame->allocation_size = shape->arena_allocation_bytes;
     frame->slot_count = shape->function->slot_count;
     *out = frame;
@@ -302,10 +323,14 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_store(
         return status;
     if (size != access->size)
         return XR_TYPED_FRAME_ACCESS_MISMATCH;
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
     if (frame->states[local] == XR_TYPED_SLOT_STATE_POISONED)
         return XR_TYPED_FRAME_POISONED;
+#endif
     memcpy(frame->arena + frame->slots[local].offset, bytes, size);
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
     frame->states[local] = XR_TYPED_SLOT_STATE_INITIALIZED;
+#endif
     return XR_TYPED_FRAME_OK;
 }
 
@@ -320,18 +345,21 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_load(
         return status;
     if (size != access->size)
         return XR_TYPED_FRAME_ACCESS_MISMATCH;
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
     if (frame->states[local] == XR_TYPED_SLOT_STATE_UNINITIALIZED)
         return XR_TYPED_FRAME_UNINITIALIZED;
     if (frame->states[local] == XR_TYPED_SLOT_STATE_POISONED)
         return XR_TYPED_FRAME_POISONED;
     if (frame->states[local] != XR_TYPED_SLOT_STATE_INITIALIZED)
         return XR_TYPED_FRAME_SLOT_INVALID;
+#endif
     memcpy(bytes, frame->arena + frame->slots[local].offset, size);
     return XR_TYPED_FRAME_OK;
 }
 
 XR_FUNC XrTypedFrameStatus xr_typed_frame_poison(
     XrTypedFrame *frame, const XrTypedSlotAccess *access) {
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
     uint32_t local = 0;
     XrTypedFrameStatus status = validate_access(frame, access, &local);
     if (status != XR_TYPED_FRAME_OK)
@@ -340,6 +368,13 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_poison(
         return XR_TYPED_FRAME_POISONED;
     frame->states[local] = XR_TYPED_SLOT_STATE_POISONED;
     return XR_TYPED_FRAME_OK;
+#else
+    uint32_t local = 0;
+    XrTypedFrameStatus status = validate_access(frame, access, &local);
+    return status == XR_TYPED_FRAME_OK
+               ? XR_TYPED_FRAME_DEBUG_METADATA_UNAVAILABLE
+               : status;
+#endif
 }
 
 XR_FUNC XrTypedFrameStatus xr_typed_frame_slot_state(
@@ -355,11 +390,262 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_slot_state(
     if (slot < frame->function->slot_begin ||
         slot - frame->function->slot_begin >= frame->slot_count)
         return XR_TYPED_FRAME_SLOT_INVALID;
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
     uint8_t stored = frame->states[slot - frame->function->slot_begin];
     if (stored < XR_TYPED_SLOT_STATE_UNINITIALIZED ||
         stored > XR_TYPED_SLOT_STATE_POISONED)
         return XR_TYPED_FRAME_SLOT_INVALID;
     *state = (XrTypedSlotState) stored;
+    return XR_TYPED_FRAME_OK;
+#else
+    return XR_TYPED_FRAME_DEBUG_METADATA_UNAVAILABLE;
+#endif
+}
+
+static bool fingerprint_bytes_match(const uint8_t *bytes,
+                                    XrFingerprint fingerprint) {
+    return bytes &&
+           memcmp(bytes, fingerprint.bytes, sizeof(fingerprint.bytes)) == 0;
+}
+
+static bool fingerprint_bytes_nonzero(const uint8_t *bytes, size_t size) {
+    if (!bytes)
+        return false;
+    for (size_t i = 0; i < size; i++)
+        if (bytes[i] != 0)
+            return true;
+    return false;
+}
+
+static const XrTargetInstructionRecord *frame_instruction_group(
+    const XrTypedFrame *frame, uint32_t *count) {
+    if (count)
+        *count = 0;
+    if (!frame || frame->cleaned || !frame_plan_identity_is_intact(frame))
+        return NULL;
+    return xr_target_plan_function_instructions(frame->plan,
+                                                frame->function_index, count);
+}
+
+static bool instruction_local_index(
+    const XrTargetInstructionRecord *rows, uint32_t count,
+    uint32_t instruction, uint32_t *local) {
+    if (!rows || !count || !local || instruction < rows[0].id)
+        return false;
+    uint32_t index = instruction - rows[0].id;
+    if (index >= count || rows[index].id != instruction)
+        return false;
+    *local = index;
+    return true;
+}
+
+static uint32_t instruction_block_entry(
+    const XrTargetInstructionRecord *rows, uint32_t local) {
+    uint32_t block = rows[0].id;
+    for (uint32_t i = 1; i <= local; i++)
+        if (xr_target_instruction_is_terminator(rows[i - 1u].opcode))
+            block = rows[i].id;
+    return block;
+}
+
+static bool instruction_transition_allowed(
+    const XrTypedFrame *frame, const XrTargetInstructionRecord *rows,
+    uint32_t count, uint32_t next_local) {
+    if (frame->current_instruction == XR_TYPED_FRAME_CONTEXT_INDEX_NONE)
+        return next_local == 0;
+    uint32_t current_local = 0;
+    if (!instruction_local_index(rows, count, frame->current_instruction,
+                                 &current_local))
+        return false;
+    const XrTargetInstructionRecord *current = &rows[current_local];
+    const XrTargetInstructionContract *contract =
+        xr_target_instruction_contract(current->opcode);
+    if (!contract)
+        return false;
+    switch ((XrTargetInstructionControlKind) contract->control_kind) {
+        case XR_TARGET_INSTRUCTION_CONTROL_NONE:
+            return current_local + 1u < count &&
+                   next_local == current_local + 1u;
+        case XR_TARGET_INSTRUCTION_CONTROL_RETURN:
+            return false;
+        case XR_TARGET_INSTRUCTION_CONTROL_JUMP:
+            return next_local == XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(
+                                     current->immediate_bits);
+        case XR_TARGET_INSTRUCTION_CONTROL_BRANCH:
+            return next_local == XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(
+                                     current->immediate_bits) ||
+                   next_local == XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(
+                                     current->immediate_bits);
+    }
+    return false;
+}
+
+XR_FUNC XrTypedFrameStatus xr_typed_frame_context(
+    const XrTypedFrame *frame, XrTypedFrameContext *context) {
+    if (context)
+        memset(context, 0, sizeof(*context));
+    if (!frame || !context)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    if (frame->cleaned)
+        return XR_TYPED_FRAME_CLEANED;
+    if (!frame_plan_identity_is_intact(frame))
+        return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
+    *context = (XrTypedFrameContext) {
+        .function_identity =
+            {
+                .plan_fingerprint = frame->plan_fingerprint,
+                .function = frame->function_index,
+                .semantic_function = frame->function->semantic_function,
+            },
+        .block_entry_instruction = frame->current_block_instruction,
+        .instruction = frame->current_instruction,
+        .coroutine_state = frame->coroutine_state,
+        .generation_number = frame->generation_number,
+        .generation_fingerprint = frame->generation_fingerprint,
+        .generation_bound = frame->generation_bound,
+        .has_parent = frame->parent != NULL,
+        .has_child = frame->child != NULL,
+    };
+    return XR_TYPED_FRAME_OK;
+}
+
+XR_FUNC XrTypedFrameStatus xr_typed_frame_enter_instruction(
+    XrTypedFrame *frame, uint32_t instruction) {
+    if (!frame)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    if (frame->cleaned)
+        return XR_TYPED_FRAME_CLEANED;
+    if (!frame_plan_identity_is_intact(frame))
+        return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
+    if (frame->child)
+        return XR_TYPED_FRAME_CHILD_ACTIVE;
+    uint32_t count = 0;
+    const XrTargetInstructionRecord *rows =
+        frame_instruction_group(frame, &count);
+    uint32_t local = 0;
+    if (!instruction_local_index(rows, count, instruction, &local))
+        return XR_TYPED_FRAME_CONTEXT_UNAVAILABLE;
+    if (!instruction_transition_allowed(frame, rows, count, local))
+        return XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID;
+    frame->current_instruction = instruction;
+    frame->current_block_instruction = instruction_block_entry(rows, local);
+    return XR_TYPED_FRAME_OK;
+}
+
+XR_FUNC XrTypedFrameStatus xr_typed_frame_bind_coroutine_state(
+    XrTypedFrame *frame, uint32_t coroutine_state) {
+    if (!frame)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    if (frame->cleaned)
+        return XR_TYPED_FRAME_CLEANED;
+    if (!frame_plan_identity_is_intact(frame))
+        return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
+    uint32_t count = 0;
+    const XrTargetCoroutineStateRecord *states =
+        xr_target_plan_coroutines(frame->plan, &count);
+    if (!states || coroutine_state >= count ||
+        states[coroutine_state].id != coroutine_state ||
+        states[coroutine_state].function != frame->function_index)
+        return XR_TYPED_FRAME_CONTEXT_UNAVAILABLE;
+    /* The current TargetPlan freezes state identity but not a complete state
+     * transition graph. Bind one verified persisted state and refuse to invent
+     * movement between states until that upstream authority exists. */
+    if (frame->coroutine_state != XR_TYPED_FRAME_CONTEXT_INDEX_NONE &&
+        frame->coroutine_state != coroutine_state)
+        return XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID;
+    frame->coroutine_state = coroutine_state;
+    return XR_TYPED_FRAME_OK;
+}
+
+XR_FUNC XrTypedFrameStatus xr_typed_frame_bind_generation_identity(
+    XrTypedFrame *frame, const XrModuleGenerationIdentity *identity) {
+    if (!frame || !identity)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    if (frame->cleaned)
+        return XR_TYPED_FRAME_CLEANED;
+    if (!frame_plan_identity_is_intact(frame))
+        return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
+    const XrTargetProfile *profile = xr_target_plan_profile(frame->plan);
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    if (identity->schema_version != XR_RUNTIME_GENERATION_SCHEMA_VERSION ||
+        identity->target_plan_schema_version !=
+            XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION ||
+        identity->generation_number == 0 ||
+        identity->completed_family_mask != XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK ||
+        !fingerprint_bytes_match(identity->semantic_fingerprint,
+                                 xr_target_plan_semantic_fingerprint(frame->plan)) ||
+        !fingerprint_bytes_match(identity->target_profile_fingerprint,
+                                 profile_fingerprint) ||
+        !fingerprint_bytes_match(identity->target_plan_fingerprint,
+                                 frame->plan_fingerprint) ||
+        !fingerprint_bytes_nonzero(identity->generation_fingerprint,
+                                   sizeof(identity->generation_fingerprint)))
+        return XR_TYPED_FRAME_GENERATION_IDENTITY_MISMATCH;
+    if (frame->generation_bound &&
+        (frame->generation_number != identity->generation_number ||
+         memcmp(frame->generation_fingerprint.bytes,
+                identity->generation_fingerprint,
+                sizeof(frame->generation_fingerprint.bytes)) != 0))
+        return XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID;
+    if (frame->generation_bound)
+        return XR_TYPED_FRAME_OK;
+    /* Linking requires identical generation contexts. Refuse a late bind on
+     * either side instead of briefly creating an internally inconsistent call
+     * chain; callers bind both frames before linking them. */
+    if (frame->parent || frame->child)
+        return XR_TYPED_FRAME_CALL_LINK_INVALID;
+    frame->generation_number = identity->generation_number;
+    memcpy(frame->generation_fingerprint.bytes,
+           identity->generation_fingerprint,
+           sizeof(frame->generation_fingerprint.bytes));
+    frame->generation_bound = true;
+    return XR_TYPED_FRAME_OK;
+}
+
+static bool generation_contexts_match(const XrTypedFrame *left,
+                                      const XrTypedFrame *right) {
+    return left->generation_bound == right->generation_bound &&
+           (!left->generation_bound ||
+            (left->generation_number == right->generation_number &&
+             xr_fingerprint_equal(left->generation_fingerprint,
+                                  right->generation_fingerprint)));
+}
+
+XR_FUNC XrTypedFrameStatus xr_typed_frame_link_child(
+    XrTypedFrame *parent, XrTypedFrame *child) {
+    if (!parent || !child || parent == child)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    if (parent->cleaned || child->cleaned)
+        return XR_TYPED_FRAME_CLEANED;
+    if (!frame_plan_identity_is_intact(parent) ||
+        !frame_plan_identity_is_intact(child))
+        return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
+    if (parent->child || child->parent ||
+        !xr_fingerprint_equal(parent->plan_fingerprint,
+                              child->plan_fingerprint) ||
+        !generation_contexts_match(parent, child))
+        return XR_TYPED_FRAME_CALL_LINK_INVALID;
+    const XrTypedFrame *ancestor = parent;
+    for (uint32_t depth = 0; ancestor; depth++) {
+        if (ancestor == child || depth >= XR_TYPED_FRAME_MAX_PARENT_DEPTH)
+            return XR_TYPED_FRAME_CALL_LINK_INVALID;
+        ancestor = ancestor->parent;
+    }
+    parent->child = child;
+    child->parent = parent;
+    return XR_TYPED_FRAME_OK;
+}
+
+XR_FUNC XrTypedFrameStatus xr_typed_frame_unlink_child(
+    XrTypedFrame *parent, XrTypedFrame *child) {
+    if (!parent || !child || parent == child)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    if (parent->cleaned || child->cleaned)
+        return XR_TYPED_FRAME_CLEANED;
+    if (parent->child != child || child->parent != parent)
+        return XR_TYPED_FRAME_CALL_LINK_INVALID;
+    parent->child = NULL;
+    child->parent = NULL;
     return XR_TYPED_FRAME_OK;
 }
 
@@ -377,21 +663,39 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_cleanup(XrTypedFrame *frame) {
     if (frame->cleaned)
         return XR_TYPED_FRAME_CLEANED;
     frame->cleaned = true;
+    if (frame->parent)
+        frame->parent->child = NULL;
+    if (frame->child)
+        frame->child->parent = NULL;
+    frame->parent = NULL;
+    frame->child = NULL;
     if (frame->allocation) {
         memset(frame->allocation, 0, frame->allocation_size);
         xr_free(frame->allocation);
     }
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
     if (frame->states) {
         memset(frame->states, XR_TYPED_SLOT_STATE_INVALID, frame->slot_count);
         xr_free(frame->states);
     }
+#endif
     xr_target_plan_free(frame->plan);
     frame->plan = NULL;
     frame->function = NULL;
     frame->slots = NULL;
     frame->allocation = NULL;
     frame->arena = NULL;
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
     frame->states = NULL;
+#endif
+    frame->function_index = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    frame->current_block_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    frame->current_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    frame->coroutine_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    frame->generation_number = 0;
+    memset(&frame->generation_fingerprint, 0,
+           sizeof(frame->generation_fingerprint));
+    frame->generation_bound = false;
     frame->allocation_size = 0;
     frame->slot_count = 0;
     return XR_TYPED_FRAME_OK;

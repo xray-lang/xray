@@ -15,6 +15,7 @@
 #ifndef XR_TYPED_FRAME_H
 #define XR_TYPED_FRAME_H
 
+#include "../../include/xray_runtime_generation.h"
 #include "../plan/target/xr_target_plan.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -25,6 +26,17 @@
 #define XR_TYPED_FRAME_MAX_ALIGNMENT ((size_t) 4096u)
 #define XR_TYPED_FRAME_MAX_TOTAL_BYTES ((size_t) 80u * 1024u * 1024u)
 #define XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION UINT32_C(29)
+#define XR_TYPED_FRAME_CONTEXT_INDEX_NONE UINT32_MAX
+#define XR_TYPED_FRAME_MAX_PARENT_DEPTH UINT32_C(4096)
+
+/* Slot state is diagnostic metadata, never an execution tag. Release builds
+ * omit it completely unless an audit target opts in explicitly; verified
+ * definite assignment remains the release authority for every slot read. */
+#if !defined(NDEBUG) || defined(XR_TYPED_FRAME_AUDIT_SLOT_STATES)
+#define XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA 1
+#else
+#define XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA 0
+#endif
 /* The exact closure the production builder completes, named once rather than
  * copied. A second hand-kept list of the same families is what let this
  * boundary fall a family behind and silently reject every plan the builder
@@ -45,6 +57,12 @@ typedef enum XrTypedFrameStatus {
     XR_TYPED_FRAME_UNINITIALIZED,
     XR_TYPED_FRAME_POISONED,
     XR_TYPED_FRAME_CLEANED,
+    XR_TYPED_FRAME_DEBUG_METADATA_UNAVAILABLE,
+    XR_TYPED_FRAME_CONTEXT_UNAVAILABLE,
+    XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID,
+    XR_TYPED_FRAME_GENERATION_IDENTITY_MISMATCH,
+    XR_TYPED_FRAME_CALL_LINK_INVALID,
+    XR_TYPED_FRAME_CHILD_ACTIVE,
 } XrTypedFrameStatus;
 
 typedef enum XrTypedSlotState {
@@ -70,6 +88,36 @@ typedef struct XrTypedSlotAccess {
     uint16_t reserved;
 } XrTypedSlotAccess;
 
+/* A target function is identified by the immutable plan fingerprint plus the
+ * exact target and semantic indexes. TargetPlan has no second name-based
+ * function identity, so this tuple is the complete runtime identity. */
+typedef struct XrTypedFunctionIdentity {
+    XrFingerprint plan_fingerprint;
+    uint32_t function;
+    uint32_t semantic_function;
+} XrTypedFunctionIdentity;
+
+/* Read-only execution context. `block_entry_instruction` and `instruction`
+ * are global TargetPlan instruction row IDs. A TargetPlan intentionally has no
+ * target-level block table, so the first instruction row derived for the block
+ * is its stable runtime identity. Generation fields copy the stable identity
+ * supplied by the generation authority after checking every plan-bound field;
+ * the caller remains responsible for the corresponding generation pin because
+ * the public pin ABI does not expose an independently owned pin token. */
+typedef struct XrTypedFrameContext {
+    XrTypedFunctionIdentity function_identity;
+    uint32_t block_entry_instruction;
+    uint32_t instruction;
+    uint32_t coroutine_state;
+    uint32_t reserved;
+    uint64_t generation_number;
+    XrFingerprint generation_fingerprint;
+    bool generation_bound;
+    bool has_parent;
+    bool has_child;
+    bool reserved8;
+} XrTypedFrameContext;
+
 typedef struct XrTypedFrame XrTypedFrame;
 
 XR_FUNC void xr_typed_frame_limits_default(XrTypedFrameLimits *limits);
@@ -89,6 +137,18 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_poison(
     XrTypedFrame *frame, const XrTypedSlotAccess *access);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_slot_state(
     const XrTypedFrame *frame, uint32_t slot, XrTypedSlotState *state);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_context(
+    const XrTypedFrame *frame, XrTypedFrameContext *context);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_enter_instruction(
+    XrTypedFrame *frame, uint32_t instruction);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_bind_coroutine_state(
+    XrTypedFrame *frame, uint32_t coroutine_state);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_bind_generation_identity(
+    XrTypedFrame *frame, const XrModuleGenerationIdentity *identity);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_link_child(
+    XrTypedFrame *parent, XrTypedFrame *child);
+XR_FUNC XrTypedFrameStatus xr_typed_frame_unlink_child(
+    XrTypedFrame *parent, XrTypedFrame *child);
 XR_FUNC size_t xr_typed_frame_arena_size(const XrTypedFrame *frame);
 XR_FUNC uint32_t xr_typed_frame_slot_count(const XrTypedFrame *frame);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_cleanup(XrTypedFrame *frame);
