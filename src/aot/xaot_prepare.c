@@ -26,6 +26,7 @@
 #include "../ir/xi_escape.h"
 #include "../ir/xi_effect.h"
 #include "../ir/xi_opt.h"
+#include "../ir/xi_own.h"
 #include "../ir/xi_range.h"
 #include "../ir/xi_value_query.h"
 #include "../plan/target/xr_target_verify.h"
@@ -108,6 +109,114 @@ static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
     return true;
 }
 
+/* RAW_PTR is shared by language Ptr/MutPtr and by the callee-side place of an
+ * exact direct-local `ref Array<T>` parameter.  Rebuild the latter identity
+ * from frozen SemanticPlan and TargetPlan rows so prepare never guesses the C
+ * pointee spelling from the mutable Xi type. */
+static const char *prepare_exact_raw_pointer_c_type(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding, const XiValue *value) {
+    const char *language_pointer =
+        value ? xaot_raw_pointer_c_type(value->type) : NULL;
+    if (language_pointer)
+        return language_pointer;
+    const XrSemanticPlan *semantic =
+        target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
+    if (!semantic || !binding)
+        return NULL;
+    const XrSemanticParameterRecord *parameter = NULL;
+    uint32_t parameter_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0;
+         i < (uint32_t) xr_semantic_plan_parameter_count(semantic); i++) {
+        const XrSemanticParameterRecord *candidate =
+            xr_semantic_plan_parameter(semantic, i);
+        if (!candidate || candidate->value != binding->semantic_value)
+            continue;
+        if (parameter)
+            return NULL;
+        parameter = candidate;
+        parameter_index = i;
+    }
+    const XrSemanticTypeRecord *array = parameter
+        ? xr_semantic_plan_type(semantic, parameter->type)
+        : NULL;
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    if (!parameter || !array || !register_rep || !memory_rep || !slot ||
+        parameter->mode != XR_PARAM_REF ||
+        parameter->ownership != XI_OWN_BORROWED ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
+        parameter->reserved != 0 || array->kind != XR_KIND_ARRAY ||
+        array->builtin_type != XR_TID_NULL || array->child_count != 1 ||
+        array->aggregate_extent != 0 || array->aggregate_align != 0 ||
+        array->scalar_rep != XR_SCALAR_REP_NONE ||
+        array->flags !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        register_rep->kind != XR_MACHINE_REP_RAW_PTR ||
+        memory_rep->kind != XR_MACHINE_REP_RAW_PTR ||
+        register_rep->root_kind != XR_TARGET_ROOT_NONE ||
+        memory_rep->root_kind != XR_TARGET_ROOT_NONE ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        slot->semantic_value != binding->semantic_value ||
+        slot->semantic_operation != XR_SEMANTIC_INDEX_NONE ||
+        slot->function != parameter->function ||
+        slot->role != XR_TARGET_SLOT_PARAMETER ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_NONE ||
+        slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+        return NULL;
+    uint32_t argument_count = 0, call_count = 0;
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(target_plan, &argument_count);
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    uint32_t matches = 0;
+    for (uint32_t i = 0; arguments && calls && i < argument_count; i++) {
+        const XrTargetCallArgumentRecord *argument = &arguments[i];
+        if (argument->callee_parameter != parameter_index)
+            continue;
+        const XrTargetCallRecord *call =
+            argument->call < call_count ? &calls[argument->call] : NULL;
+        const XrTargetMachineRepRecord *caller_register =
+            xr_target_plan_machine_rep(target_plan, argument->register_rep);
+        const XrTargetMachineRepRecord *caller_memory =
+            xr_target_plan_machine_rep(target_plan, argument->memory_rep);
+        if (!call || !caller_register || !caller_memory ||
+            call->calling_convention !=
+                XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+            call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+            call->callee_function != parameter->function ||
+            argument->callee_slot != binding->slot ||
+            argument->callee_register_rep != binding->register_rep ||
+            argument->callee_memory_rep != binding->memory_rep ||
+            argument->mode != XR_TARGET_CALL_REFERENCE ||
+            argument->ownership != XR_TARGET_CALL_BORROW ||
+            argument->transfer_mode != XR_TRANSFER_SHARE ||
+            argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
+            argument->array_element_storage <= XR_TARGET_ARRAY_STORAGE_NONE ||
+            argument->array_element_storage >= XR_TARGET_ARRAY_STORAGE_COUNT ||
+            argument->reserved8[0] != 0 || argument->reserved8[1] != 0 ||
+            argument->reserved8[2] != 0 ||
+            caller_register->kind != XR_MACHINE_REP_DYN_VALUE ||
+            caller_memory->kind != XR_MACHINE_REP_DYN_VALUE ||
+            caller_register->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+            caller_memory->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+            return NULL;
+        matches++;
+    }
+    return matches ? "XrValue *" : NULL;
+}
+
 static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
                                              const XrTargetValueRepRecord *binding,
                                              const XiValue *value, XaotValueRep *out) {
@@ -162,9 +271,9 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
         case XR_MACHINE_REP_F32: rep = XAOT_REP_F32; break;
         case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
         case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
-        case XR_MACHINE_REP_RAW_PTR: rep = XAOT_REP_RAWPTR; break;
         case XR_MACHINE_REP_DYN_VALUE: rep = XAOT_REP_TAGGED; break;
         case XR_MACHINE_REP_VIEW: rep = XAOT_REP_SLICE; break;
+        case XR_MACHINE_REP_RAW_PTR: rep = XAOT_REP_RAWPTR; break;
         default: return false;
     }
     info = xaot_rep_info(rep);
@@ -179,7 +288,8 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
     out->rep = rep;
     out->type = value->type;
     out->c_type = machine->kind == XR_MACHINE_REP_RAW_PTR
-                      ? xaot_raw_pointer_c_type(value->type)
+                      ? prepare_exact_raw_pointer_c_type(target_plan, binding,
+                                                         value)
                       : info->c_type;
     if (!out->c_type)
         return false;
@@ -781,7 +891,25 @@ static bool array_method_is_hof_result(const XiValue *value) {
     return strcmp(method, "map") == 0 || strcmp(method, "filter") == 0;
 }
 
-static bool derive_array_storage_plan(const XaotBundle *bundle, const XiValue *array_value,
+static bool prepare_target_binding_has_machine_kind(
+    XaotBundle *bundle, const XiValue *value, XrMachineRepKind kind) {
+    const XrTargetValueRepRecord *binding = NULL;
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    if (!bundle || !function ||
+        !prepare_target_value_binding(bundle, function, value, &binding) ||
+        !binding)
+        return false;
+    const XrTargetPlan *target_plan =
+        xaot_bundle_target_plan_for_func(bundle, function);
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    return register_rep && memory_rep && register_rep->kind == kind &&
+           memory_rep->kind == kind;
+}
+
+static bool derive_array_storage_plan(XaotBundle *bundle, const XiValue *array_value,
                                       uint32_t required_flag, XaotContainerElemPlan *out_elem,
                                       const XiValue **out_origin, uint8_t depth) {
     const XiValue *value = unwrap_identity_value(array_value);
@@ -834,6 +962,27 @@ static bool derive_array_storage_plan(const XaotBundle *bundle, const XiValue *a
 
     if (!array_elem_plan_for_value(bundle, value, &self_elem))
         return false;
+
+    /* A ref parameter is the address of the callee's XrValue slot, not an
+     * Array value.  Only its exact PLACE_LOAD result participates in Array
+     * storage.  The verified TargetPlan RAW_PTR/DYN pair is the prior identity;
+     * no parameter name, source spelling, or generic Array type inference is
+     * accepted here. */
+    if (value->op == XI_PARAM &&
+        prepare_target_binding_has_machine_kind(
+            bundle, value, XR_MACHINE_REP_RAW_PTR))
+        return false;
+    if (value->op == XI_PLACE_LOAD && value->nargs == 1 && value->args &&
+        prepare_target_binding_has_machine_kind(
+            bundle, value, XR_MACHINE_REP_DYN_VALUE) &&
+        prepare_target_binding_has_machine_kind(
+            bundle, value->args[0], XR_MACHINE_REP_RAW_PTR)) {
+        if (out_elem)
+            *out_elem = self_elem;
+        if (out_origin)
+            *out_origin = value;
+        return true;
+    }
 
     /* Typed array class fields serve reads and writes alike: the element
      * type is static, and the write paths stay runtime-checked unless a

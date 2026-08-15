@@ -12,6 +12,9 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include "../../plan/target/xr_target_verify.h"
+#include "../../ir/xi.h"
+#include "../../ir/xi_own.h"
+#include "../../runtime/value/xtype.h"
 #include "../../shared/xr_param_mode.h"
 #include <stdarg.h>
 #include <stdio.h>
@@ -599,6 +602,52 @@ static void direct_call_record_fingerprint(const XrAotBaselineRef *baseline,
 
 /* Independently re-derive the argument mapping and hash it, so a later
  * comparison covers every argument row rather than the count alone. */
+static bool refinement_direct_array_ref_type_is_exact(
+    const XrSemanticPlan *semantic, uint32_t type_index, uint8_t *storage) {
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_count);
+    const XrSemanticTypeRecord *array =
+        xr_semantic_plan_type(semantic, type_index);
+    if (!children || !array || !storage || array->kind != XR_KIND_ARRAY ||
+        array->builtin_type != XR_TID_NULL || array->child_count != 1 ||
+        array->child_begin >= child_count ||
+        array->scalar_rep != XR_SCALAR_REP_NONE ||
+        array->aggregate_extent != 0 || array->aggregate_align != 0 ||
+        array->flags !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(semantic, children[array->child_begin]);
+    if (!element || element->builtin_type != XR_TID_NULL ||
+        element->child_count != 0 || element->aggregate_extent != 0 ||
+        element->aggregate_align != 0 || element->flags != 0)
+        return false;
+    if (element->kind == XR_KIND_BOOL &&
+        element->scalar_rep == XR_SCALAR_REP_NONE) {
+        *storage = XR_TARGET_ARRAY_STORAGE_BOOL;
+        return true;
+    }
+    if (element->kind == XR_KIND_RUNE &&
+        element->scalar_rep == XR_SCALAR_REP_NONE) {
+        *storage = XR_TARGET_ARRAY_STORAGE_RUNE;
+        return true;
+    }
+    switch (element->scalar_rep) {
+        case XR_NATIVE_I8: *storage = XR_TARGET_ARRAY_STORAGE_I8; return true;
+        case XR_NATIVE_U8: *storage = XR_TARGET_ARRAY_STORAGE_U8; return true;
+        case XR_NATIVE_I16: *storage = XR_TARGET_ARRAY_STORAGE_I16; return true;
+        case XR_NATIVE_U16: *storage = XR_TARGET_ARRAY_STORAGE_U16; return true;
+        case XR_NATIVE_I32: *storage = XR_TARGET_ARRAY_STORAGE_I32; return true;
+        case XR_NATIVE_U32: *storage = XR_TARGET_ARRAY_STORAGE_U32; return true;
+        case XR_NATIVE_I64: *storage = XR_TARGET_ARRAY_STORAGE_I64; return true;
+        case XR_NATIVE_U64: *storage = XR_TARGET_ARRAY_STORAGE_U64; return true;
+        case XR_NATIVE_F32: *storage = XR_TARGET_ARRAY_STORAGE_F32; return true;
+        case XR_NATIVE_F64: *storage = XR_TARGET_ARRAY_STORAGE_F64; return true;
+        default: return false;
+    }
+}
+
 static uint32_t direct_call_argument_map(
     const XrTargetPlan *target_plan, const XrSemanticPlan *semantic,
     const XrTargetCallRecord *call,
@@ -622,7 +671,7 @@ static uint32_t direct_call_argument_map(
     if ((uint64_t) callee->parameter_begin + callee->parameter_count >
         (uint64_t) parameter_total)
         return XR_AOT_REFINEMENT_PLAN_STATE;
-    static const uint8_t domain[] = "xray-aot-direct-call-argument-map-v1\0";
+    static const uint8_t domain[] = "xray-aot-direct-call-argument-map-v2\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -636,6 +685,39 @@ static uint32_t direct_call_argument_map(
         *out_argument = argument_index;
         if (!parameter)
             return XR_AOT_REFINEMENT_PLAN_STATE;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, call->semantic_operation);
+        uint32_t operand_total = 0;
+        const XrSemanticOperandRecord *operands =
+            xr_semantic_plan_operands(semantic, &operand_total);
+        uint32_t semantic_operand =
+            operation ? operation->operand_begin + i + 1u
+                      : XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperandRecord *operand =
+            operands && semantic_operand < operand_total
+                ? &operands[semantic_operand]
+                : NULL;
+        uint8_t array_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        bool array_ref =
+            operation && operand && parameter->type == operand->type &&
+            refinement_direct_array_ref_type_is_exact(
+                semantic, parameter->type, &array_storage) &&
+            parameter->mode == XR_PARAM_REF &&
+            parameter->ownership == XI_OWN_BORROWED &&
+            parameter->transfer_mode == XR_TRANSFER_SHARE &&
+            (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 &&
+            parameter->reserved == 0 &&
+            operand->role == XR_SEM_OPERAND_ARGUMENT &&
+            operand->parameter == (int16_t) i &&
+            operand->parameter_mode == XR_PARAM_REF &&
+            operand->access == XR_CALL_ARG_REF &&
+            operand->origin != XI_PLACE_ORIGIN_NONE &&
+            operand->lifetime == XI_PLACE_LIFETIME_CALL_BOUND &&
+            operand->escape == XI_PLACE_ESCAPE_NONE &&
+            operand->ownership_action == XR_SEM_OPERAND_BORROW &&
+            operand->transfer_mode == XR_TRANSFER_SHARE &&
+            operand->flags == (XR_SEM_OPERAND_CALL_CONTRACT |
+                               XR_SEM_OPERAND_ADDRESSABLE);
         /* The row must name this call and bind the parameter that shares its
          * ordinal; anything else is an unproven permutation of the frame. */
         if (argument->call != call->id || argument->ordinal != i ||
@@ -649,10 +731,18 @@ static uint32_t direct_call_argument_map(
          * parameter can carry, and both sides must already own proven
          * storage. */
         if (argument->transfer_mode != parameter->transfer_mode ||
-            parameter->mode != XR_PARAM_READ ||
-            argument->mode != XR_TARGET_CALL_VALUE ||
-            (argument->ownership != XR_TARGET_CALL_READ &&
-             argument->ownership != XR_TARGET_CALL_CONSUME) ||
+            (!array_ref && parameter->mode != XR_PARAM_READ) ||
+            argument->mode != (array_ref ? XR_TARGET_CALL_REFERENCE
+                                         : XR_TARGET_CALL_VALUE) ||
+            (array_ref ? argument->ownership != XR_TARGET_CALL_BORROW
+                       : (argument->ownership != XR_TARGET_CALL_READ &&
+                          argument->ownership != XR_TARGET_CALL_CONSUME)) ||
+            argument->flags !=
+                (array_ref ? XR_TARGET_CALL_ARGUMENT_ADDRESSABLE : 0) ||
+            argument->array_element_storage !=
+                (array_ref ? array_storage : XR_TARGET_ARRAY_STORAGE_NONE) ||
+            argument->reserved8[0] != 0 || argument->reserved8[1] != 0 ||
+            argument->reserved8[2] != 0 ||
             argument->caller_slot == XR_SEMANTIC_INDEX_NONE ||
             argument->callee_slot == XR_SEMANTIC_INDEX_NONE)
             return XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING;
@@ -664,9 +754,12 @@ static uint32_t direct_call_argument_map(
         hash_u32(&ctx, argument->callee_slot);
         hash_u32(&ctx, argument->register_rep);
         hash_u32(&ctx, argument->memory_rep);
+        hash_u32(&ctx, argument->callee_register_rep);
+        hash_u32(&ctx, argument->callee_memory_rep);
         hash_u32(&ctx, argument->ownership);
         hash_u32(&ctx, argument->transfer_mode);
         hash_u32(&ctx, argument->flags);
+        hash_u32(&ctx, argument->array_element_storage);
         hash_u32(&ctx, parameter->type);
         hash_u32(&ctx, parameter->mode);
         xr_sha256_update(&ctx, parameter->id.bytes, sizeof(parameter->id.bytes));

@@ -1886,6 +1886,57 @@ static XrRep sr_type_call_place_pointee_rep(const struct XrType *type) {
     }
 }
 
+/* The frozen Array-intrinsic discriminant is produced by lowering and is the
+ * same source identity captured by SemanticPlan/TargetPlan.  Keep its ordered
+ * scalar operands in their native representation during refresh; otherwise a
+ * selector-generic CALL_BUILTIN rule would synthesize a BOX that has no
+ * representation obligation in the frozen Array-intrinsic family. */
+static bool sr_array_intrinsic_operand_rep(const XiValue *value,
+                                           uint16_t argument_index,
+                                           XrRep *out) {
+    if (!value || !out || value->op != XI_CALL_BUILTIN ||
+        argument_index >= value->nargs ||
+        value->array_element_storage <= XR_ELEM_ANY ||
+        value->array_element_storage >= XR_ELEM_COUNT)
+        return false;
+    if (value->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY) {
+        if (value->nargs != 1 || argument_index != 0)
+            return false;
+        *out = XR_REP_I64;
+        return true;
+    }
+    if (value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_FILLED_NEW ||
+        value->nargs != 2)
+        return false;
+    if (argument_index == 0) {
+        *out = XR_REP_I64;
+        return true;
+    }
+    switch ((XrArrayElemType) value->array_element_storage) {
+        case XR_ELEM_F32:
+        case XR_ELEM_F64:
+            *out = XR_REP_F64;
+            return true;
+        case XR_ELEM_I8:
+        case XR_ELEM_U8:
+        case XR_ELEM_I16:
+        case XR_ELEM_U16:
+        case XR_ELEM_I32:
+        case XR_ELEM_U32:
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+        case XR_ELEM_BOOL:
+        case XR_ELEM_RUNE:
+            *out = XR_REP_I64;
+            return true;
+        case XR_ELEM_ANY:
+        case XR_ELEM_RAWPTR:
+        case XR_ELEM_COUNT:
+            return false;
+    }
+    return false;
+}
+
 static bool sr_convert_can_return_null(const XiValue *v) {
     if (!v || v->op != XI_CONVERT || v->nargs < 1 || !v->type)
         return false;
@@ -2123,11 +2174,14 @@ static bool sr_value_has_static_unboxed_array_elem_type(const XiValue *value) {
  * Its container operand stays tagged; the index and the element keep their
  * native representations. Every other container keeps the native boundary it
  * already carries at its own definition, so no adapter appears there either. */
-static XrRep sr_container_operand_rep(const XiValue *container) {
+static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy);
+
+static XrRep sr_container_operand_rep(const XiValue *container,
+                                      const XiRepPolicy *policy) {
     const XiValue *v = sr_unwrap_identity_value(container);
     if (v && v->op == XI_ARRAY_NEW)
         return XR_REP_TAGGED;
-    return sr_type_native_boundary_rep(container ? container->type : NULL);
+    return sr_def_rep(container, policy);
 }
 
 static bool sr_is_typed_array_length_field(const XiValue *v) {
@@ -2440,8 +2494,6 @@ static bool sr_map_get_has_present_guard(const XiValue *v) {
     return true;
 }
 
-static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy);
-
 static bool sr_param_uses_default_sentinel(const XiValue *v) {
     if (!v || v->op != XI_PARAM || !v->block || !v->block->func)
         return false;
@@ -2523,7 +2575,12 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
             *out = XR_REP_RAWPTR;
             return true;
         case XI_PLACE_LOAD:
-            *out = sr_type_native_boundary_rep(v->type);
+            /* PLACE_LOAD reads the same ABI slot representation that
+             * XI_LOCAL_ADDR/XI_PARAM expose.  Heap/reference aggregates are
+             * tagged XrValue slots; re-deriving the generic native boundary
+             * here would turn Array into XR_REP_PTR and force an unfrozen BOX
+             * before writeback/ownership uses. */
+            *out = sr_type_call_place_pointee_rep(v->type);
             return true;
         case XI_PTR_LOAD:
             *out = sr_type_native_boundary_rep(v->type);
@@ -2857,7 +2914,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             if (user->nargs >= 2 && user->args[0] &&
                 sr_value_has_static_index_storage(user->args[0])) {
                 if (arg_idx == 0) {
-                    *out = sr_container_operand_rep(user->args[0]);
+                    *out = sr_container_operand_rep(user->args[0], policy);
                     return true;
                 }
                 if (arg_idx == 1) {
@@ -2872,7 +2929,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
                 (sr_value_has_static_index_storage(user->args[0]) ||
                  sr_value_has_static_unboxed_array_elem_type(user->args[0]))) {
                 if (arg_idx == 0) {
-                    *out = sr_container_operand_rep(user->args[0]);
+                    *out = sr_container_operand_rep(user->args[0], policy);
                     return true;
                 }
                 if (arg_idx == 1) {
@@ -3016,7 +3073,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             if (arg_idx == 0 && user->nargs == 1 &&
                 (sr_is_typed_array_length_field(user) ||
                  sr_is_static_collection_length_field(user))) {
-                *out = sr_container_operand_rep(user->args[0]);
+                *out = sr_container_operand_rep(user->args[0], policy);
                 return true;
             }
             *out = XR_REP_TAGGED;
@@ -3178,6 +3235,10 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                 return sr_def_rep(user->args[1], policy);
             return XR_REP_TAGGED;
         case XI_CALL_BUILTIN: {
+            XrRep array_intrinsic_rep = XR_REP_TAGGED;
+            if (sr_array_intrinsic_operand_rep(user, arg_idx,
+                                               &array_intrinsic_rep))
+                return array_intrinsic_rep;
             const char *name = (const char *) user->aux;
             if (name && strcmp(name, "array_reserve") == 0 && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
@@ -3201,7 +3262,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
              * row can state. Every other receiver keeps the native boundary it
              * already carries at its own definition. */
             if (arg_idx == 0 && sr_is_typed_array_native_receiver_method(user))
-                return sr_container_operand_rep(user->args[0]);
+                return sr_container_operand_rep(user->args[0], policy);
             if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
                 return sr_type_native_boundary_rep(user->args[arg_idx]->type);

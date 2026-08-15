@@ -25,9 +25,10 @@
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(22)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(23)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -49,6 +50,8 @@
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
     uint32_t value_count;
+    XrCCallArgumentEmissionView *call_arguments;
+    uint32_t call_argument_count;
     XrCRecipeArgumentView *recipe_arguments;
     uint32_t recipe_argument_count;
     uint32_t schema_version;
@@ -191,6 +194,10 @@ static const char *emission_source_ref_place_c_type(
                                                   : NULL;
 }
 
+static bool exact_direct_local_array_ref_parameter_recipe(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding, uint8_t *out_storage);
+
 static bool machine_kind_to_c_rep(const XrTargetPlan *target_plan,
                                   uint32_t semantic_value, uint16_t kind,
                                   XrCValueRep *out, const char **c_type) {
@@ -273,6 +280,14 @@ static bool machine_kind_to_c_rep(const XrTargetPlan *target_plan,
             if (!*c_type)
                 *c_type = emission_raw_pointer_c_type(target_plan,
                                                        semantic_value);
+            if (!*c_type) {
+                const XrTargetValueRepRecord *binding =
+                    xr_target_plan_value_rep(target_plan, semantic_value);
+                uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+                if (exact_direct_local_array_ref_parameter_recipe(
+                        target_plan, binding, &storage))
+                    *c_type = "XrValue *";
+            }
             return *c_type != NULL;
         default: return false;
     }
@@ -884,6 +899,304 @@ static bool exact_array_intrinsic_recipe(
         *symbol = with_capacity ? XR_C_ARRAY_WITH_CAPACITY_SYMBOL
                                 : XR_C_ARRAY_FILLED_NEW_SYMBOL;
     return true;
+}
+
+/* C spelling for a direct-local Array ref parameter is admitted only after
+ * rebuilding the complete callee-place boundary.  The semantic Array and
+ * parameter rows determine element storage; Target call rows must then prove
+ * that every matching argument is an addressable borrow from a DYN caller
+ * slot into this RAW_PTR callee slot. */
+static bool exact_direct_local_array_ref_parameter_recipe(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding, uint8_t *out_storage) {
+    const XrSemanticPlan *semantic =
+        target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
+    if (!semantic || !binding)
+        return false;
+    const XrSemanticParameterRecord *parameter = NULL;
+    uint32_t parameter_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0;
+         i < (uint32_t) xr_semantic_plan_parameter_count(semantic); i++) {
+        const XrSemanticParameterRecord *candidate =
+            xr_semantic_plan_parameter(semantic, i);
+        if (!candidate || candidate->value != binding->semantic_value)
+            continue;
+        if (parameter)
+            return false;
+        parameter = candidate;
+        parameter_index = i;
+    }
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_count);
+    const XrSemanticTypeRecord *array = parameter
+        ? xr_semantic_plan_type(semantic, parameter->type)
+        : NULL;
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!parameter || !children || !array ||
+        parameter->function >= xr_semantic_plan_function_count(semantic) ||
+        parameter->mode != XR_PARAM_REF ||
+        parameter->ownership != XI_OWN_BORROWED ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
+        parameter->reserved != 0 || array->kind != XR_KIND_ARRAY ||
+        array->builtin_type != XR_TID_NULL || array->child_count != 1 ||
+        array->child_begin >= child_count ||
+        array->aggregate_extent != 0 || array->aggregate_align != 0 ||
+        array->scalar_rep != XR_SCALAR_REP_NONE ||
+        array->flags !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        !c_array_storage_from_type(
+            xr_semantic_plan_type(semantic, children[array->child_begin]),
+            &storage))
+        return false;
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    if (!register_rep || !memory_rep || !slot ||
+        register_rep->kind != XR_MACHINE_REP_RAW_PTR ||
+        memory_rep->kind != XR_MACHINE_REP_RAW_PTR ||
+        register_rep->root_kind != XR_TARGET_ROOT_NONE ||
+        memory_rep->root_kind != XR_TARGET_ROOT_NONE ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        slot->semantic_value != binding->semantic_value ||
+        slot->semantic_operation != XR_SEMANTIC_INDEX_NONE ||
+        slot->function != parameter->function ||
+        slot->role != XR_TARGET_SLOT_PARAMETER ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_NONE ||
+        slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+        return false;
+
+    uint32_t argument_count = 0, call_count = 0, operand_count = 0;
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(target_plan, &argument_count);
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    uint32_t matches = 0;
+    for (uint32_t i = 0; arguments && calls && operands && i < argument_count;
+         i++) {
+        const XrTargetCallArgumentRecord *argument = &arguments[i];
+        if (argument->callee_parameter != parameter_index)
+            continue;
+        matches++;
+        const XrTargetCallRecord *call =
+            argument->call < call_count ? &calls[argument->call] : NULL;
+        const XrSemanticOperationRecord *call_operation = call
+            ? xr_semantic_plan_operation(semantic, call->semantic_operation)
+            : NULL;
+        const XrSemanticOperandRecord *operand =
+            argument->semantic_operand < operand_count
+                ? &operands[argument->semantic_operand]
+                : NULL;
+        const XrTargetValueRepRecord *caller =
+            xr_target_plan_value_rep(target_plan,
+                                     argument->caller_slot < slot_count
+                                         ? slots[argument->caller_slot].semantic_value
+                                         : XR_SEMANTIC_INDEX_NONE);
+        const XrTargetMachineRepRecord *caller_register = caller
+            ? xr_target_plan_machine_rep(target_plan, caller->register_rep)
+            : NULL;
+        const XrTargetMachineRepRecord *caller_memory = caller
+            ? xr_target_plan_machine_rep(target_plan, caller->memory_rep)
+            : NULL;
+        if (!call || !call_operation || !operand || !caller ||
+            call->calling_convention !=
+                XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+            call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+            call->callee_function != parameter->function ||
+            argument->semantic_operand < call_operation->operand_begin + 1u ||
+            argument->semantic_operand >=
+                call_operation->operand_begin + call_operation->operand_count ||
+            operand->value != argument->semantic_value ||
+            operand->type != parameter->type ||
+            operand->role != XR_SEM_OPERAND_ARGUMENT ||
+            operand->parameter != (int16_t) argument->ordinal ||
+            operand->parameter_mode != XR_PARAM_REF ||
+            operand->access != XR_CALL_ARG_REF ||
+            operand->origin == XI_PLACE_ORIGIN_NONE ||
+            operand->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
+            operand->escape != XI_PLACE_ESCAPE_NONE ||
+            operand->ownership_action != XR_SEM_OPERAND_BORROW ||
+            operand->transfer_mode != XR_TRANSFER_SHARE ||
+            operand->flags != (XR_SEM_OPERAND_CALL_CONTRACT |
+                               XR_SEM_OPERAND_ADDRESSABLE) ||
+            argument->callee_slot != binding->slot ||
+            argument->callee_register_rep != binding->register_rep ||
+            argument->callee_memory_rep != binding->memory_rep ||
+            argument->mode != XR_TARGET_CALL_REFERENCE ||
+            argument->ownership != XR_TARGET_CALL_BORROW ||
+            argument->transfer_mode != XR_TRANSFER_SHARE ||
+            argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
+            argument->array_element_storage != storage ||
+            argument->reserved8[0] != 0 || argument->reserved8[1] != 0 ||
+            argument->reserved8[2] != 0 ||
+            argument->caller_slot != caller->slot ||
+            argument->register_rep != caller->register_rep ||
+            argument->memory_rep != caller->memory_rep ||
+            !caller_register || !caller_memory ||
+            caller_register->kind != XR_MACHINE_REP_DYN_VALUE ||
+            caller_memory->kind != XR_MACHINE_REP_DYN_VALUE ||
+            caller_register->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+            caller_memory->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+            return false;
+    }
+    if (matches == 0)
+        return false;
+    if (out_storage)
+        *out_storage = storage;
+    return true;
+}
+
+static bool direct_local_array_ref_argument_candidate(
+    const XrTargetCallArgumentRecord *argument) {
+    return argument &&
+           (argument->mode == XR_TARGET_CALL_REFERENCE ||
+            argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE);
+}
+
+/* Producer reconstruction for the immutable call-argument projection.  The
+ * verified Target row supplies storage indexes; Semantic rows independently
+ * bind the call result, ordered operand, and ref ownership contract. */
+static bool build_direct_local_array_ref_argument_view(
+    const XrTargetPlan *target_plan,
+    const XrTargetCallArgumentRecord *argument,
+    XrCCallArgumentEmissionView *out) {
+    const XrSemanticPlan *semantic =
+        target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
+    uint32_t call_count = 0, slot_count = 0, operand_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    const XrSemanticOperandRecord *operands =
+        semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
+    const XrTargetCallRecord *call = argument && argument->call < call_count
+                                         ? &calls[argument->call]
+                                         : NULL;
+    const XrSemanticOperationRecord *operation = call
+        ? xr_semantic_plan_operation(semantic, call->semantic_operation)
+        : NULL;
+    const XrSemanticFunctionRecord *callee = call
+        ? xr_semantic_plan_function(semantic, call->callee_function)
+        : NULL;
+    const XrSemanticOperandRecord *operand =
+        argument && argument->semantic_operand < operand_count
+            ? &operands[argument->semantic_operand]
+            : NULL;
+    const XrSemanticParameterRecord *parameter = argument
+        ? xr_semantic_plan_parameter(semantic, argument->callee_parameter)
+        : NULL;
+    const XrTargetSlotRecord *caller_slot =
+        argument && argument->caller_slot < slot_count
+            ? &slots[argument->caller_slot]
+            : NULL;
+    const XrTargetSlotRecord *callee_slot =
+        argument && argument->callee_slot < slot_count
+            ? &slots[argument->callee_slot]
+            : NULL;
+    const XrTargetMachineRepRecord *caller_register = argument
+        ? xr_target_plan_machine_rep(target_plan, argument->register_rep)
+        : NULL;
+    const XrTargetMachineRepRecord *caller_memory = argument
+        ? xr_target_plan_machine_rep(target_plan, argument->memory_rep)
+        : NULL;
+    const XrTargetMachineRepRecord *callee_register = argument
+        ? xr_target_plan_machine_rep(target_plan,
+                                     argument->callee_register_rep)
+        : NULL;
+    const XrTargetMachineRepRecord *callee_memory = argument
+        ? xr_target_plan_machine_rep(target_plan,
+                                     argument->callee_memory_rep)
+        : NULL;
+    if (!semantic || !argument || !out || !call || !operation || !callee || !operand ||
+        !parameter || !caller_slot || !callee_slot || !caller_register ||
+        !caller_memory || !callee_register || !callee_memory ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+        call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        operation->result_value != call->result_value ||
+        operation->function != call->caller_function ||
+        argument->semantic_operand != operation->operand_begin +
+                                          argument->ordinal + 1u ||
+        argument->semantic_value != operand->value ||
+        argument->callee_parameter != callee->parameter_begin +
+                                          argument->ordinal ||
+        parameter->function != call->callee_function ||
+        parameter->ordinal != argument->ordinal ||
+        parameter->type != operand->type || parameter->mode != XR_PARAM_REF ||
+        parameter->ownership != XI_OWN_BORROWED ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        operand->role != XR_SEM_OPERAND_ARGUMENT ||
+        operand->parameter != (int16_t) argument->ordinal ||
+        operand->parameter_mode != XR_PARAM_REF ||
+        operand->access != XR_CALL_ARG_REF ||
+        operand->origin == XI_PLACE_ORIGIN_NONE ||
+        operand->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
+        operand->escape != XI_PLACE_ESCAPE_NONE ||
+        operand->ownership_action != XR_SEM_OPERAND_BORROW ||
+        operand->transfer_mode != XR_TRANSFER_SHARE ||
+        operand->flags != (XR_SEM_OPERAND_CALL_CONTRACT |
+                           XR_SEM_OPERAND_ADDRESSABLE) ||
+        argument->mode != XR_TARGET_CALL_REFERENCE ||
+        argument->ownership != XR_TARGET_CALL_BORROW ||
+        argument->transfer_mode != XR_TRANSFER_SHARE ||
+        argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
+        argument->array_element_storage <= XR_TARGET_ARRAY_STORAGE_NONE ||
+        argument->array_element_storage >= XR_TARGET_ARRAY_STORAGE_COUNT ||
+        argument->reserved8[0] != 0 || argument->reserved8[1] != 0 ||
+        argument->reserved8[2] != 0 ||
+        caller_slot->register_rep != argument->register_rep ||
+        caller_slot->memory_rep != argument->memory_rep ||
+        caller_slot->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        callee_slot->semantic_value != parameter->value ||
+        callee_slot->register_rep != argument->callee_register_rep ||
+        callee_slot->memory_rep != argument->callee_memory_rep ||
+        callee_slot->role != XR_TARGET_SLOT_PARAMETER ||
+        callee_slot->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        caller_register->kind != XR_MACHINE_REP_DYN_VALUE ||
+        caller_memory->kind != XR_MACHINE_REP_DYN_VALUE ||
+        callee_register->kind != XR_MACHINE_REP_RAW_PTR ||
+        callee_memory->kind != XR_MACHINE_REP_RAW_PTR)
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->semantic_call_value = operation->result_value;
+    out->semantic_operand = argument->semantic_operand;
+    out->semantic_value = argument->semantic_value;
+    out->callee_parameter = argument->callee_parameter;
+    out->ordinal = argument->ordinal;
+    out->caller_register_kind = caller_register->kind;
+    out->caller_memory_kind = caller_memory->kind;
+    out->callee_register_kind = callee_register->kind;
+    out->callee_memory_kind = callee_memory->kind;
+    out->mode = argument->mode;
+    out->ownership = argument->ownership;
+    out->transfer_mode = argument->transfer_mode;
+    out->flags = argument->flags;
+    out->array_element_storage = argument->array_element_storage;
+    out->c_type = "XrValue *";
+    return true;
+}
+
+static int compare_c_call_argument_view(const void *left, const void *right) {
+    const XrCCallArgumentEmissionView *a =
+        (const XrCCallArgumentEmissionView *) left;
+    const XrCCallArgumentEmissionView *b =
+        (const XrCCallArgumentEmissionView *) right;
+    if (a->semantic_call_value != b->semantic_call_value)
+        return a->semantic_call_value < b->semantic_call_value ? -1 : 1;
+    if (a->ordinal != b->ordinal)
+        return a->ordinal < b->ordinal ? -1 : 1;
+    return 0;
 }
 
 static bool adt_enum_payload_has_exact_projection(
@@ -1792,7 +2105,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v18\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v19\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -1802,6 +2115,7 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
     xr_sha256_update(&ctx, plan->profile_fingerprint.bytes,
                      sizeof(plan->profile_fingerprint.bytes));
     hash_u64(&ctx, plan->value_count);
+    hash_u64(&ctx, plan->call_argument_count);
     hash_u64(&ctx, plan->recipe_argument_count);
     for (uint32_t i = 0; i < plan->value_count; i++) {
         const XrCValueEmissionView *value = &plan->values[i];
@@ -1865,6 +2179,33 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
             xr_sha256_update(&ctx,
                              (const uint8_t *) value->recipe_member_name,
                              recipe_member_name_length);
+    }
+    for (uint32_t i = 0; i < plan->call_argument_count; i++) {
+        const XrCCallArgumentEmissionView *argument =
+            &plan->call_arguments[i];
+        hash_u64(&ctx, argument->semantic_call_value);
+        hash_u64(&ctx, argument->semantic_operand);
+        hash_u64(&ctx, argument->semantic_value);
+        hash_u64(&ctx, argument->callee_parameter);
+        hash_u64(&ctx, argument->ordinal);
+        hash_u64(&ctx, argument->caller_register_kind);
+        hash_u64(&ctx, argument->caller_memory_kind);
+        hash_u64(&ctx, argument->callee_register_kind);
+        hash_u64(&ctx, argument->callee_memory_kind);
+        hash_u64(&ctx, argument->mode);
+        hash_u64(&ctx, argument->ownership);
+        hash_u64(&ctx, argument->transfer_mode);
+        hash_u64(&ctx, argument->flags);
+        hash_u64(&ctx, argument->array_element_storage);
+        for (uint32_t r = 0; r < sizeof(argument->reserved); r++)
+            hash_u64(&ctx, argument->reserved[r]);
+        size_t c_type_length = argument->c_type
+                                   ? strlen(argument->c_type)
+                                   : 0;
+        hash_u64(&ctx, c_type_length);
+        if (c_type_length)
+            xr_sha256_update(&ctx, (const uint8_t *) argument->c_type,
+                             c_type_length);
     }
     for (uint32_t i = 0; i < plan->recipe_argument_count; i++) {
         const XrCRecipeArgumentView *argument = &plan->recipe_arguments[i];
@@ -1984,7 +2325,8 @@ static bool verify_value(const XrCValueEmissionView *value) {
                 (strcmp(value->c_type, "const void *") != 0 &&
                  strcmp(value->c_type, "void *") != 0 &&
                  strcmp(value->c_type, "const void * *") != 0 &&
-                 strcmp(value->c_type, "void * *") != 0))
+                 strcmp(value->c_type, "void * *") != 0 &&
+                 strcmp(value->c_type, "XrValue *") != 0))
                 return false;
             expected_c_type = value->c_type;
             break;
@@ -2198,9 +2540,30 @@ static bool verify_value(const XrCValueEmissionView *value) {
                            XR_TARGET_ARRAY_STORAGE_COUNT &&
                        value->recipe_argument_count == 0 &&
                        value->recipe_arguments == NULL;
+    bool direct_array_ref_parameter =
+        value->materialization ==
+        XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER;
+    if (direct_array_ref_parameter)
+        recipe_valid = value->rep == XR_C_VALUE_REP_RAW_PTR &&
+                       value->c_type &&
+                       strcmp(value->c_type, "XrValue *") == 0 &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value == UINT32_MAX &&
+                       value->recipe_argument_value == UINT32_MAX &&
+                       value->recipe_layout_id == 0 &&
+                       value->recipe_discriminant >
+                           XR_TARGET_ARRAY_STORAGE_NONE &&
+                       value->recipe_discriminant <
+                           XR_TARGET_ARRAY_STORAGE_COUNT &&
+                       value->recipe_argument_count == 0 &&
+                       value->recipe_arguments == NULL &&
+                       value->recipe_symbol == NULL &&
+                       value->recipe_type_name == NULL &&
+                       value->recipe_member_name == NULL;
     if (value->materialization !=
             XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR &&
-        !array_recipe)
+        !array_recipe && !direct_array_ref_parameter)
         recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
                        value->recipe_discriminant == 0 &&
                        value->recipe_type_name == NULL &&
@@ -2222,6 +2585,8 @@ static bool verify_value(const XrCValueEmissionView *value) {
 static bool verify_plan(const XrCEmissionPlan *plan) {
     if (!plan || plan->schema_version != XR_C_EMISSION_PLAN_SCHEMA_VERSION ||
         (plan->value_count && !plan->values) ||
+        (plan->call_argument_count && !plan->call_arguments) ||
+        (!plan->call_argument_count && plan->call_arguments) ||
         (plan->recipe_argument_count && !plan->recipe_arguments) ||
         (!plan->recipe_argument_count && plan->recipe_arguments))
         return false;
@@ -2242,6 +2607,30 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
     }
     if (next_argument != plan->recipe_argument_count)
         return false;
+    for (uint32_t i = 0; i < plan->call_argument_count; i++) {
+        const XrCCallArgumentEmissionView *argument =
+            &plan->call_arguments[i];
+        if (!argument->c_type || strcmp(argument->c_type, "XrValue *") != 0 ||
+            argument->caller_register_kind != XR_MACHINE_REP_DYN_VALUE ||
+            argument->caller_memory_kind != XR_MACHINE_REP_DYN_VALUE ||
+            argument->callee_register_kind != XR_MACHINE_REP_RAW_PTR ||
+            argument->callee_memory_kind != XR_MACHINE_REP_RAW_PTR ||
+            argument->mode != XR_TARGET_CALL_REFERENCE ||
+            argument->ownership != XR_TARGET_CALL_BORROW ||
+            argument->transfer_mode != XR_TRANSFER_SHARE ||
+            argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
+            argument->array_element_storage <= XR_TARGET_ARRAY_STORAGE_NONE ||
+            argument->array_element_storage >= XR_TARGET_ARRAY_STORAGE_COUNT ||
+            argument->reserved[0] != 0 || argument->reserved[1] != 0 ||
+            argument->reserved[2] != 0 ||
+            (i && (plan->call_arguments[i - 1u].semantic_call_value >
+                       argument->semantic_call_value ||
+                   (plan->call_arguments[i - 1u].semantic_call_value ==
+                        argument->semantic_call_value &&
+                    plan->call_arguments[i - 1u].ordinal >=
+                        argument->ordinal))))
+            return false;
+    }
     XrFingerprint actual = {{0}};
     compute_fingerprint(plan, &actual);
     return xr_fingerprint_equal(actual, plan->fingerprint);
@@ -2330,6 +2719,14 @@ static bool verify_target_kind_projection(const XrTargetPlan *target_plan,
             if (!*out_c_type)
                 *out_c_type = emission_raw_pointer_c_type(target_plan,
                                                            semantic_value);
+            if (!*out_c_type) {
+                const XrTargetValueRepRecord *binding =
+                    xr_target_plan_value_rep(target_plan, semantic_value);
+                uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+                if (exact_direct_local_array_ref_parameter_recipe(
+                        target_plan, binding, &storage))
+                    *out_c_type = "XrValue *";
+            }
             return *out_c_type != NULL;
         default: return false;
     }
@@ -2359,6 +2756,8 @@ bool xr_c_emission_plan_verify(
                               "C emission TargetPlan fingerprint is stale");
     if (plan->schema_version != XR_C_EMISSION_PLAN_SCHEMA_VERSION ||
         (plan->value_count && !plan->values) ||
+        (plan->call_argument_count && !plan->call_arguments) ||
+        (!plan->call_argument_count && plan->call_arguments) ||
         (plan->recipe_argument_count && !plan->recipe_arguments) ||
         (!plan->recipe_argument_count && plan->recipe_arguments))
         return emission_error(error, error_size, "XR_TARGET_1001",
@@ -2502,8 +2901,16 @@ bool xr_c_emission_plan_verify(
         uint32_t expected_scalar_source = UINT32_MAX;
         bool expected_scalar_alias = exact_scalar_addressable_alias_recipe(
             target_plan, binding, &expected_scalar_source);
+        uint8_t expected_direct_array_ref_storage =
+            XR_TARGET_ARRAY_STORAGE_NONE;
+        bool expected_direct_array_ref_parameter =
+            exact_direct_local_array_ref_parameter_recipe(
+                target_plan, binding,
+                &expected_direct_array_ref_storage);
         uint8_t expected_recipe = expected_scalar_alias
                                       ? XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS
+                                  : expected_direct_array_ref_parameter
+                                      ? XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER
                                       : expected_adt_enum
                                       ? XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR
                                       : expected_panic_catch
@@ -2598,7 +3005,10 @@ bool xr_c_emission_plan_verify(
                 (expected_adt_enum ? expected_enum.layout_id : 0) ||
             row->recipe_discriminant !=
                 (expected_adt_enum ? expected_enum.member_ordinal
-                                   : expected_array ? expected_array_storage : 0) ||
+                                   : expected_array ? expected_array_storage
+                                   : expected_direct_array_ref_parameter
+                                         ? expected_direct_array_ref_storage
+                                         : 0) ||
             (expected_adt_enum
                  ? (!row->recipe_type_name ||
                     strcmp(row->recipe_type_name,
@@ -2679,6 +3089,59 @@ bool xr_c_emission_plan_verify(
                                   "C emission row has unexpected recipe arguments");
         }
     }
+    uint32_t target_argument_count = 0;
+    const XrTargetCallArgumentRecord *target_arguments =
+        xr_target_plan_call_arguments(target_plan, &target_argument_count);
+    uint32_t projected_call_arguments = 0;
+    for (uint32_t i = 0; i < target_argument_count; i++) {
+        const XrTargetCallArgumentRecord *target_argument =
+            &target_arguments[i];
+        if (!direct_local_array_ref_argument_candidate(target_argument))
+            continue;
+        XrCCallArgumentEmissionView expected = {0};
+        if (!build_direct_local_array_ref_argument_view(
+                target_plan, target_argument, &expected) ||
+            projected_call_arguments >= plan->call_argument_count)
+            return emission_error(
+                error, error_size, "XR_TARGET_1001",
+                "C emission direct-local Array ref argument is missing");
+        const XrCCallArgumentEmissionView *actual = NULL;
+        for (uint32_t a = 0; a < plan->call_argument_count; a++) {
+            if (plan->call_arguments[a].semantic_call_value ==
+                    expected.semantic_call_value &&
+                plan->call_arguments[a].ordinal == expected.ordinal) {
+                if (actual)
+                    return emission_error(
+                        error, error_size, "XR_TARGET_1001",
+                        "C emission call argument identity is duplicated");
+                actual = &plan->call_arguments[a];
+            }
+        }
+        if (!actual ||
+            actual->semantic_operand != expected.semantic_operand ||
+            actual->semantic_value != expected.semantic_value ||
+            actual->callee_parameter != expected.callee_parameter ||
+            actual->caller_register_kind != expected.caller_register_kind ||
+            actual->caller_memory_kind != expected.caller_memory_kind ||
+            actual->callee_register_kind != expected.callee_register_kind ||
+            actual->callee_memory_kind != expected.callee_memory_kind ||
+            actual->mode != expected.mode ||
+            actual->ownership != expected.ownership ||
+            actual->transfer_mode != expected.transfer_mode ||
+            actual->flags != expected.flags ||
+            actual->array_element_storage !=
+                expected.array_element_storage ||
+            actual->reserved[0] != 0 || actual->reserved[1] != 0 ||
+            actual->reserved[2] != 0 || !actual->c_type ||
+            strcmp(actual->c_type, expected.c_type) != 0)
+            return emission_error(
+                error, error_size, "XR_TARGET_1001",
+                "C emission call argument disagrees with Target authority");
+        projected_call_arguments++;
+    }
+    if (projected_call_arguments != plan->call_argument_count)
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "C emission call argument table has an extra row");
     if (projected != plan->value_count)
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission projection has an extra row");
@@ -2720,6 +3183,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE |
         XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |
         XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE |
+        XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE |
         XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE |
         XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE |
         XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE |
@@ -2745,6 +3209,11 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "TargetPlan value-representation table is missing");
     uint32_t emission_value_count = 0;
+    uint32_t target_call_argument_count = 0;
+    const XrTargetCallArgumentRecord *target_call_arguments =
+        xr_target_plan_call_arguments(target_plan,
+                                      &target_call_argument_count);
+    uint32_t emission_call_argument_count = 0;
     uint32_t recipe_argument_count = 0;
     for (uint32_t i = 0; i < target_value_count; i++) {
         const XrTargetValueRepRecord *binding = &values[i];
@@ -2780,6 +3249,17 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "TargetPlan value binding has no exact C projection");
         }
+        uint8_t direct_array_ref_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        if (register_rep->kind == XR_MACHINE_REP_RAW_PTR &&
+            !exact_direct_local_array_ref_parameter_recipe(
+                target_plan, binding, &direct_array_ref_storage) &&
+            !emission_source_ref_place_c_type(target_plan,
+                                              binding->semantic_value) &&
+            !emission_raw_pointer_c_type(target_plan,
+                                         binding->semantic_value))
+            return emission_error(
+                error, error_size, "XR_TARGET_1001",
+                "raw-pointer value has no exact C projection authority");
         const XrSemanticOperandRecord *concat_arguments = NULL;
         uint16_t concat_argument_count = 0;
         XrSemanticAdtEnumConstructorShape enum_shape = {0};
@@ -2821,6 +3301,19 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         }
         emission_value_count++;
     }
+    for (uint32_t i = 0; i < target_call_argument_count; i++) {
+        const XrTargetCallArgumentRecord *argument =
+            &target_call_arguments[i];
+        if (!direct_local_array_ref_argument_candidate(argument))
+            continue;
+        XrCCallArgumentEmissionView projected = {0};
+        if (!build_direct_local_array_ref_argument_view(
+                target_plan, argument, &projected))
+            return emission_error(
+                error, error_size, "XR_TARGET_1001",
+                "direct-local Array ref argument has no exact C projection");
+        emission_call_argument_count++;
+    }
     if (emission_value_count > SIZE_MAX / sizeof(XrCValueEmissionView))
         return emission_error(error, error_size, "XR_EXEC_5003",
                               "C emission value record budget overflow");
@@ -2836,6 +3329,21 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             xr_c_emission_plan_free(plan);
             return emission_error(error, error_size, "XR_EXEC_5003",
                                   "C emission value record allocation failed");
+        }
+    }
+    if (emission_call_argument_count) {
+        if (emission_call_argument_count >
+            SIZE_MAX / sizeof(*plan->call_arguments)) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  "C call-argument record budget overflow");
+        }
+        plan->call_arguments = (XrCCallArgumentEmissionView *) xr_calloc(
+            emission_call_argument_count, sizeof(*plan->call_arguments));
+        if (!plan->call_arguments) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  "C call-argument plan allocation failed");
         }
     }
     if (recipe_argument_count) {
@@ -2854,11 +3362,13 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         }
     }
     plan->value_count = emission_value_count;
+    plan->call_argument_count = emission_call_argument_count;
     plan->recipe_argument_count = recipe_argument_count;
     plan->schema_version = XR_C_EMISSION_PLAN_SCHEMA_VERSION;
     plan->target_fingerprint = xr_target_plan_fingerprint(target_plan);
     plan->profile_fingerprint = actual_profile_fingerprint;
     uint32_t value_index = 0;
+    uint32_t call_argument_index = 0;
     uint32_t recipe_argument_index = 0;
     for (uint32_t i = 0; i < target_value_count; i++) {
         const XrTargetValueRepRecord *binding = &values[i];
@@ -2932,10 +3442,18 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         uint32_t scalar_alias_source = UINT32_MAX;
         bool scalar_addressable_alias = exact_scalar_addressable_alias_recipe(
             target_plan, binding, &scalar_alias_source);
+        uint8_t direct_array_ref_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        bool direct_array_ref_parameter =
+            exact_direct_local_array_ref_parameter_recipe(
+                target_plan, binding, &direct_array_ref_storage);
         if (scalar_addressable_alias) {
             value->materialization =
                 XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS;
             value->recipe_operand_value = scalar_alias_source;
+        } else if (direct_array_ref_parameter) {
+            value->materialization =
+                XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER;
+            value->recipe_discriminant = direct_array_ref_storage;
         } else if (array_intrinsic) {
             value->recipe_symbol = xr_strdup(array_symbol);
             if (!value->recipe_symbol) {
@@ -3214,6 +3732,23 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             }
         }
     }
+    for (uint32_t i = 0; i < target_call_argument_count; i++) {
+        if (!direct_local_array_ref_argument_candidate(
+                &target_call_arguments[i]))
+            continue;
+        if (call_argument_index >= emission_call_argument_count ||
+            !build_direct_local_array_ref_argument_view(
+                target_plan, &target_call_arguments[i],
+                &plan->call_arguments[call_argument_index++])) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(
+                error, error_size, "XR_TARGET_1001",
+                "C call-argument projection is not exact");
+        }
+    }
+    if (emission_call_argument_count > 1)
+        qsort(plan->call_arguments, emission_call_argument_count,
+              sizeof(*plan->call_arguments), compare_c_call_argument_view);
     if (value_index != emission_value_count) {
         xr_c_emission_plan_free(plan);
         return emission_error(error, error_size, "XR_TARGET_1001",
@@ -3223,6 +3758,11 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         xr_c_emission_plan_free(plan);
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission recipe argument partition is not exact");
+    }
+    if (call_argument_index != emission_call_argument_count) {
+        xr_c_emission_plan_free(plan);
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "C call-argument partition is not exact");
     }
     compute_fingerprint(plan, &plan->fingerprint);
     if (!xr_c_emission_plan_verify(plan, target_plan,
@@ -3253,6 +3793,7 @@ void xr_c_emission_plan_free(XrCEmissionPlan *plan) {
         xr_free((void *) plan->values[i].recipe_member_name);
     }
     xr_free(plan->recipe_arguments);
+    xr_free(plan->call_arguments);
     xr_free(plan->values);
     xr_free(plan);
 }
@@ -3263,6 +3804,11 @@ bool xr_c_emission_plan_is_verified(const XrCEmissionPlan *plan) {
 
 uint32_t xr_c_emission_plan_value_count(const XrCEmissionPlan *plan) {
     return plan ? plan->value_count : 0;
+}
+
+uint32_t xr_c_emission_plan_call_argument_count(
+    const XrCEmissionPlan *plan) {
+    return plan ? plan->call_argument_count : 0;
 }
 
 XrFingerprint xr_c_emission_plan_fingerprint(const XrCEmissionPlan *plan) {
@@ -3304,4 +3850,35 @@ bool xr_c_emission_plan_value_view(const XrCEmissionPlan *plan, uint32_t semanti
     }
     return emission_error(error, error_size, "XR_TARGET_1001",
                           "semantic C value has no immutable C emission binding");
+}
+
+bool xr_c_emission_plan_call_argument_view(
+    const XrCEmissionPlan *plan, uint32_t semantic_call_value,
+    uint16_t ordinal, XrCCallArgumentEmissionView *out, char *error,
+    size_t error_size) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!plan || !plan->verified || !out)
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "verified C call-argument plan input is missing");
+    uint32_t begin = 0;
+    uint32_t end = plan->call_argument_count;
+    while (begin < end) {
+        uint32_t middle = begin + (end - begin) / 2u;
+        const XrCCallArgumentEmissionView *candidate =
+            &plan->call_arguments[middle];
+        if (candidate->semantic_call_value == semantic_call_value &&
+            candidate->ordinal == ordinal) {
+            *out = *candidate;
+            return true;
+        }
+        if (candidate->semantic_call_value < semantic_call_value ||
+            (candidate->semantic_call_value == semantic_call_value &&
+             candidate->ordinal < ordinal))
+            begin = middle + 1u;
+        else
+            end = middle;
+    }
+    return emission_error(error, error_size, "XR_TARGET_1001",
+                          "semantic call argument has no immutable C emission binding");
 }

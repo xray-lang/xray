@@ -43,6 +43,8 @@
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
     uint32_t value_count;
+    XrCCallArgumentEmissionView *call_arguments;
+    uint32_t call_argument_count;
     XrCRecipeArgumentView *recipe_arguments;
     uint32_t recipe_argument_count;
     uint32_t schema_version;

@@ -62,6 +62,7 @@ typedef enum XrTargetPlanFamily {
  * family closure. Keep the next family as an explicitly unsigned mask. */
 #define XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE (UINT64_C(1) << 31)
 #define XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE (UINT64_C(1) << 32)
+#define XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE (UINT64_C(1) << 33)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -207,7 +208,8 @@ typedef enum XrTargetInstructionOpcode {
                  XR_TARGET_FAMILY_PANIC_CATCH_STORAGE |                             \
                  XR_TARGET_FAMILY_ADT_ENUM_STORAGE |                                \
                  XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE |                         \
-                 XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE))
+                 XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE |                     \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -659,6 +661,8 @@ typedef struct XrTargetCallArgumentRecord {
     uint8_t ownership;
     uint8_t transfer_mode;
     uint8_t flags;
+    uint8_t array_element_storage;
+    uint8_t reserved8[3];
 } XrTargetCallArgumentRecord;
 
 typedef struct XrTargetCallRecord {

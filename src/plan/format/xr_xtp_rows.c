@@ -178,7 +178,8 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U32, callee_parameter) F(U32, caller_slot) F(U32, callee_slot) F(U16, register_rep)        \
     F(U16, memory_rep) F(U16, callee_register_rep) F(U16, callee_memory_rep)                    \
     F(U16, ordinal) F(U8, mode) F(U8, ownership) F(U8, transfer_mode)                            \
-    F(U8, flags)
+    F(U8, flags) F(U8, array_element_storage) F(U8, reserved8[0]) F(U8, reserved8[1])           \
+    F(U8, reserved8[2])
 #define XR_XTP_ROOT_MAP_FIELDS(F)                                                                  \
     F(U32, id) F(U32, function) F(U32, semantic_operation) F(U32, slot_begin)                    \
     F(U16, slot_count) F(U16, flags)

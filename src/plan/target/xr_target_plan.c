@@ -270,6 +270,10 @@ static void hash_call_argument(XrSHA256Context *ctx,
     hash_u64(ctx, record->ownership);
     hash_u64(ctx, record->transfer_mode);
     hash_u64(ctx, record->flags);
+    hash_u64(ctx, record->array_element_storage);
+    hash_u64(ctx, record->reserved8[0]);
+    hash_u64(ctx, record->reserved8[1]);
+    hash_u64(ctx, record->reserved8[2]);
 }
 
 static void hash_call_base(XrSHA256Context *ctx, const XrTargetCallRecord *record) {

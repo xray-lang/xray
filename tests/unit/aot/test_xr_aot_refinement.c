@@ -72,6 +72,8 @@
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
     uint32_t value_count;
+    XrCCallArgumentEmissionView *call_arguments;
+    uint32_t call_argument_count;
     XrCRecipeArgumentView *recipe_arguments;
     uint32_t recipe_argument_count;
     uint32_t schema_version;
@@ -155,6 +157,18 @@ typedef struct DirectLocalCalleeStorageFixture {
     XrTargetProfile *target_profile;
     XrTargetPlan *target_plan;
 } DirectLocalCalleeStorageFixture;
+
+typedef struct DirectLocalArrayRefFixture {
+    XiFunc *function;
+    XiFunc *child;
+    XiValue *parameter;
+    XiValue *caller_storage;
+    XiValue *place;
+    XiValue *call;
+    XiValue *writeback;
+    XrTargetProfile *target_profile;
+    XrTargetPlan *target_plan;
+} DirectLocalArrayRefFixture;
 
 typedef struct DirectLocalGoCalleeStorageFixture {
     XiFunc *function;
@@ -295,6 +309,14 @@ static XrType fixed_u32x4 = {
         .element_type = &scalar_u32,
         .length = 4,
     },
+};
+
+static XrType direct_local_byte_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 14,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &scalar_byte},
 };
 
 static XrType *task_unit_arguments[] = {&scalar_unit};
@@ -662,6 +684,143 @@ direct_local_callee_storage_fixture_create(bool extra_use) {
 
 static void direct_local_callee_storage_fixture_free(
     DirectLocalCalleeStorageFixture *fixture) {
+    xr_target_plan_free(fixture->target_plan);
+    xr_target_profile_free(fixture->target_profile);
+    xi_func_free(fixture->function);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
+static DirectLocalArrayRefFixture direct_local_array_ref_fixture_create(void) {
+    DirectLocalArrayRefFixture fixture = {0};
+    fixture.function =
+        xi_func_new("direct_local_array_ref_root", &scalar_int);
+    fixture.child =
+        xi_func_new("direct_local_array_ref_target", &scalar_int);
+    REQUIRE(fixture.function && fixture.child);
+    XiBlock *root_entry = xi_block_new(fixture.function);
+    XiBlock *child_entry = xi_block_new(fixture.child);
+    REQUIRE(root_entry && child_entry);
+
+    fixture.child->nparams = fixture.child->min_params = 1;
+    fixture.child->params = (XiValue **) xr_calloc(
+        1, sizeof(*fixture.child->params));
+    REQUIRE(fixture.child->params != NULL);
+    fixture.parameter =
+        xi_param(fixture.child, child_entry, 0, &direct_local_byte_array);
+    REQUIRE(fixture.parameter != NULL);
+    fixture.child->params[0] = fixture.parameter;
+    REQUIRE(xi_func_set_param_passing_mode(fixture.child, 0, XR_PARAM_REF));
+    fixture.parameter->transfer_mode = XR_TRANSFER_SHARE;
+    fixture.child->arc_borrow_sig = (XiBorrowSig *) xi_func_arena_alloc(
+        fixture.child, (uint32_t) sizeof(*fixture.child->arc_borrow_sig));
+    REQUIRE(fixture.child->arc_borrow_sig != NULL);
+    fixture.child->arc_borrow_sig->nparams = 1;
+    fixture.child->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    fixture.child->arc_borrow_sig->valid = true;
+    XiValue *loaded = xi_value_new(fixture.child, child_entry, XI_PLACE_LOAD,
+                                   &direct_local_byte_array, 1);
+    XiValue *length = xi_value_new(fixture.child, child_entry, XI_LEN,
+                                   &scalar_int, 1);
+    REQUIRE(loaded && length);
+    loaded->args[0] = fixture.parameter;
+    length->args[0] = loaded;
+    xi_block_set_return(child_entry, length);
+
+    fixture.function->children =
+        (XiFunc **) xr_calloc(1, sizeof(*fixture.function->children));
+    REQUIRE(fixture.function->children != NULL);
+    fixture.function->children[0] = fixture.child;
+    fixture.function->nchildren = fixture.function->children_cap = 1;
+    fixture.child->parent_func = fixture.function;
+
+    XiValue *closure = xi_value_new(fixture.function, root_entry,
+                                    XI_CLOSURE_NEW, &scalar_closure, 0);
+    XiValue *closure_store = xi_value_new(
+        fixture.function, root_entry, XI_SET_SHARED, &scalar_unit, 1);
+    XiValue *callable = xi_value_new(fixture.function, root_entry,
+                                     XI_GET_SHARED, &opaque_callable, 0);
+    fixture.caller_storage = xi_value_new(
+        fixture.function, root_entry, XI_GET_SHARED,
+        &direct_local_byte_array, 0);
+    fixture.place = xi_value_new(fixture.function, root_entry, XI_LOCAL_ADDR,
+                                 &direct_local_byte_array, 1);
+    REQUIRE(closure && closure_store && callable && fixture.caller_storage &&
+            fixture.place);
+    closure->aux = fixture.child;
+    closure_store->args[0] = closure;
+    closure_store->aux_int = 0;
+    callable->aux_int = 0;
+    fixture.caller_storage->aux_int = 1;
+    fixture.place->args[0] = fixture.caller_storage;
+
+    XiCallPlan *call_plan = (XiCallPlan *) xi_func_arena_alloc(
+        fixture.function, (uint32_t) sizeof(*call_plan));
+    XiCallArgPlan *argument_plan = (XiCallArgPlan *) xi_func_arena_alloc(
+        fixture.function, (uint32_t) sizeof(*argument_plan));
+    REQUIRE(call_plan && argument_plan);
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plan, 0, sizeof(*argument_plan));
+    argument_plan->param_mode = XR_PARAM_REF;
+    argument_plan->access = XR_CALL_ARG_REF;
+    argument_plan->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    argument_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    argument_plan->escape = XI_PLACE_ESCAPE_NONE;
+    argument_plan->addressable = true;
+    argument_plan->origin_var_id = 0;
+    argument_plan->place = fixture.caller_storage;
+    call_plan->args = argument_plan;
+    call_plan->nargs = 1;
+    call_plan->verified = true;
+
+    fixture.call = xi_value_new(fixture.function, root_entry, XI_CALL,
+                                &scalar_int, 2);
+    REQUIRE(fixture.call != NULL);
+    fixture.call->args[0] = callable;
+    fixture.call->args[1] = fixture.place;
+    fixture.call->call_plan = call_plan;
+    fixture.writeback = xi_value_new(fixture.function, root_entry,
+                                     XI_PLACE_LOAD,
+                                     &direct_local_byte_array, 1);
+    XiValue *retain = xi_value_new(fixture.function, root_entry, XI_RETAIN,
+                                   &direct_local_byte_array, 1);
+    XiValue *store = xi_value_new(fixture.function, root_entry, XI_SET_SHARED,
+                                  &scalar_unit, 1);
+    REQUIRE(fixture.writeback && retain && store);
+    fixture.writeback->args[0] = fixture.place;
+    retain->args[0] = fixture.writeback;
+    store->args[0] = fixture.writeback;
+    store->aux_int = 1;
+    xi_block_set_return(root_entry, fixture.call);
+    fixture.function->nshared = 2;
+    fixture.function->shared_slot_funcs =
+        (XiFunc **) xi_func_arena_alloc(
+            fixture.function,
+            (uint32_t) sizeof(*fixture.function->shared_slot_funcs));
+    REQUIRE(fixture.function->shared_slot_funcs != NULL);
+    fixture.function->shared_slot_funcs[0] = fixture.child;
+    fixture.function->shared_slot_func_count = 1;
+    fixture.function->stage = fixture.child->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build_and_attach(
+        fixture.function, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "direct-local Array ref SemanticPlan failed: %s\n",
+                error);
+    REQUIRE(built && fixture.function->semantic_plan != NULL);
+    fixture.target_profile = build_target_profile();
+    built = xr_target_plan_build(fixture.function->semantic_plan,
+                                 fixture.target_profile,
+                                 &fixture.target_plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "direct-local Array ref TargetPlan failed: %s\n",
+                error);
+    REQUIRE(built && fixture.target_plan != NULL);
+    return fixture;
+}
+
+static void direct_local_array_ref_fixture_free(
+    DirectLocalArrayRefFixture *fixture) {
     xr_target_plan_free(fixture->target_plan);
     xr_target_profile_free(fixture->target_profile);
     xi_func_free(fixture->function);
@@ -1919,6 +2078,182 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
     direct_local_callee_storage_fixture_free(&extra_use);
 }
 
+static void test_direct_local_array_ref_argument_authority_is_exact(void) {
+    DirectLocalArrayRefFixture fixture =
+        direct_local_array_ref_fixture_create();
+    XrSemanticPlan *semantic = fixture.function->semantic_plan;
+    XrTargetPlan *target = fixture.target_plan;
+    char error[512] = {0};
+    REQUIRE((target->completed_family_mask &
+             XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE) != 0);
+    REQUIRE(target->calls_count == 1 && target->call_arguments_count == 1);
+    const XrTargetCallRecord *call = &target->calls[0];
+    XrTargetCallArgumentRecord *argument = &target->call_arguments[0];
+    const XrSemanticOperationRecord *call_operation =
+        xr_semantic_plan_operation(semantic, call->semantic_operation);
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(semantic, argument->callee_parameter);
+    uint32_t place_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (!operation || operation->opcode != XI_LOCAL_ADDR ||
+            operation->function != call->caller_function)
+            continue;
+        REQUIRE(place_value == XR_SEMANTIC_INDEX_NONE);
+        place_value = operation->result_value;
+    }
+    REQUIRE(call_operation && parameter &&
+            call_operation->result_value != XR_SEMANTIC_INDEX_NONE &&
+            place_value != XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(argument->call == call->id && argument->ordinal == 0 &&
+            argument->semantic_value == place_value &&
+            argument->mode == XR_TARGET_CALL_REFERENCE &&
+            argument->ownership == XR_TARGET_CALL_BORROW &&
+            argument->transfer_mode == XR_TRANSFER_SHARE &&
+            argument->flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
+            argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_U8 &&
+            argument->reserved8[0] == 0 && argument->reserved8[1] == 0 &&
+            argument->reserved8[2] == 0);
+    REQUIRE(target->machine_reps[argument->register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            target->machine_reps[argument->memory_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            target->machine_reps[argument->callee_register_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR &&
+            target->machine_reps[argument->callee_memory_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR);
+    const XrTargetValueRepRecord *parameter_binding =
+        xr_target_plan_value_rep(target, parameter->value);
+    REQUIRE(parameter_binding &&
+            target->machine_reps[parameter_binding->register_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR &&
+            target->machine_reps[parameter_binding->memory_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR &&
+            target->machine_reps[parameter_binding->register_rep].ownership ==
+                XR_TARGET_OWNERSHIP_BORROWED);
+
+    XrTargetCallArgumentRecord saved_argument = *argument;
+    XrTargetCallRecord saved_call = target->calls[0];
+    XrFingerprint saved_target_fingerprint = target->fingerprint;
+    for (uint32_t mutation = 0; mutation < 13; mutation++) {
+        *argument = saved_argument;
+        switch (mutation) {
+            case 0: argument->semantic_operand++; break;
+            case 1: argument->semantic_value = parameter->value; break;
+            case 2: argument->callee_parameter++; break;
+            case 3: argument->caller_slot = argument->callee_slot; break;
+            case 4: argument->callee_slot = argument->caller_slot; break;
+            case 5: argument->register_rep = argument->callee_register_rep; break;
+            case 6: argument->callee_memory_rep = argument->memory_rep; break;
+            case 7: argument->mode = XR_TARGET_CALL_VALUE; break;
+            case 8: argument->ownership = XR_TARGET_CALL_READ; break;
+            case 9: argument->transfer_mode = XR_TRANSFER_MOVE; break;
+            case 10: argument->flags = 0; break;
+            case 11:
+                argument->array_element_storage = XR_TARGET_ARRAY_STORAGE_I64;
+                break;
+            case 12: argument->reserved8[0] = 1; break;
+            default: abort();
+        }
+        xr_target_call_compute_fingerprint(target, 0,
+                                           &target->calls[0].fingerprint);
+        xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+        REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
+    }
+    *argument = saved_argument;
+    target->calls[0] = saved_call;
+    target->fingerprint = saved_target_fingerprint;
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
+
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *direct_plan = NULL;
+    REQUIRE(xr_aot_refinement_direct_call_authority_build(
+        target, 27902, &direct_plan, &diag));
+    XrAotRefinementPlanView direct_view =
+        xr_aot_refinement_plan_view(direct_plan);
+    REQUIRE(direct_view.record_count == 1 && direct_view.verified &&
+            direct_view.records[0].decision == XR_AOT_REFINEMENT_APPLIED &&
+            direct_view.records[0].direct_call_binding.argument_count == 1 &&
+            !fingerprint_is_zero_bytes(
+                &direct_view.records[0].direct_call_binding
+                     .argument_map_fingerprint));
+    XrAotTransformationRecord mutated_record = direct_view.records[0];
+    XrAotRefinementPlanView mutated_direct = direct_view;
+    mutated_direct.records = &mutated_record;
+    mutated_record.direct_call_binding.argument_map_fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xr_aot_refinement_verify(&mutated_direct, target, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING);
+    xr_aot_refinement_plan_free(direct_plan);
+
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(
+        target, xr_target_profile_fingerprint(fixture.target_profile),
+        &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_call_argument_count(emission) == 1);
+    XrCCallArgumentEmissionView call_view = {0};
+    REQUIRE(xr_c_emission_plan_call_argument_view(
+        emission, call_operation->result_value, 0, &call_view, error,
+        sizeof(error)));
+    REQUIRE(call_view.semantic_operand == argument->semantic_operand &&
+            call_view.semantic_value == argument->semantic_value &&
+            call_view.callee_parameter == argument->callee_parameter &&
+            call_view.caller_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+            call_view.caller_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
+            call_view.callee_register_kind == XR_MACHINE_REP_RAW_PTR &&
+            call_view.callee_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+            call_view.mode == XR_TARGET_CALL_REFERENCE &&
+            call_view.ownership == XR_TARGET_CALL_BORROW &&
+            call_view.transfer_mode == XR_TRANSFER_SHARE &&
+            call_view.flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
+            call_view.array_element_storage == XR_TARGET_ARRAY_STORAGE_U8 &&
+            strcmp(call_view.c_type, "XrValue *") == 0);
+    XrCValueEmissionView parameter_view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+        emission, parameter->value, &parameter_view, error, sizeof(error)));
+    REQUIRE(parameter_view.rep == XR_C_VALUE_REP_RAW_PTR &&
+            parameter_view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER &&
+            strcmp(parameter_view.c_type, "XrValue *") == 0);
+
+    XrCCallArgumentEmissionView saved_emission_argument =
+        emission->call_arguments[0];
+    for (uint32_t mutation = 0; mutation < 13; mutation++) {
+        emission->call_arguments[0] = saved_emission_argument;
+        XrCCallArgumentEmissionView *row = &emission->call_arguments[0];
+        switch (mutation) {
+            case 0: row->semantic_call_value++; break;
+            case 1: row->semantic_operand++; break;
+            case 2: row->semantic_value = parameter->value; break;
+            case 3: row->callee_parameter++; break;
+            case 4: row->ordinal++; break;
+            case 5: row->caller_register_kind = XR_MACHINE_REP_RAW_PTR; break;
+            case 6: row->callee_memory_kind = XR_MACHINE_REP_DYN_VALUE; break;
+            case 7: row->mode = XR_TARGET_CALL_VALUE; break;
+            case 8: row->ownership = XR_TARGET_CALL_READ; break;
+            case 9: row->transfer_mode = XR_TRANSFER_MOVE; break;
+            case 10: row->flags = 0; break;
+            case 11:
+                row->array_element_storage = XR_TARGET_ARRAY_STORAGE_I64;
+                break;
+            case 12: row->c_type = "XrValue"; break;
+            default: abort();
+        }
+        REQUIRE(!xr_c_emission_plan_verify(
+            emission, target,
+            xr_target_profile_fingerprint(fixture.target_profile), error,
+            sizeof(error)));
+    }
+    emission->call_arguments[0] = saved_emission_argument;
+    REQUIRE(xr_c_emission_plan_verify(
+        emission, target,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    xr_c_emission_plan_free(emission);
+
+    direct_local_array_ref_fixture_free(&fixture);
+}
+
 static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
     DirectLocalGoCalleeStorageFixture fixture =
         direct_local_go_callee_storage_fixture_create(false, false);
@@ -3074,6 +3409,7 @@ int main(void) {
     test_scalar_shared_boundary_is_exact_and_fail_closed();
     test_exact_heap_closure_storage_is_tagged_and_fail_closed();
     test_direct_local_shared_callee_storage_is_exact_and_fail_closed();
+    test_direct_local_array_ref_argument_authority_is_exact();
     test_direct_local_go_callee_storage_is_exact_and_fail_closed();
     test_source_namespace_storage_is_exact_and_fail_closed();
     test_standalone_source_namespace_storage_is_exact_and_fail_closed();
