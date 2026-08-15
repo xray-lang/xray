@@ -242,9 +242,9 @@ def main(argv: list[str]) -> int:
     print("")
 
     if not (xray.is_file() and os.access(xray, os.X_OK)):
-        print(f"SKIP: xray binary not found: {xray}")
-        print("=== Results: 0 passed, 0 failed ===")
-        return 0
+        print(f"FAIL: xray binary not executable: {xray}")
+        print("=== Results: 0 passed, 1 failed ===")
+        return 1
 
     results: list[tuple[str, list[Check]]] = []
     with workspace.Workspace("xray_aot_isolate") as ws:
