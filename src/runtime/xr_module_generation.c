@@ -572,6 +572,7 @@ XRAY_API bool xr_module_generation_execute_sole_scalar_i64(
         .required_plan_fingerprint = &required_fingerprint,
         .result = &executed_result,
         .decoded_cache = generation->decoded_cache,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
     };
     XrTypedDispatchStatus status =
         cache_status == XR_VM_DECODED_CACHE_OK

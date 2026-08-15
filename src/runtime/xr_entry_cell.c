@@ -477,6 +477,8 @@ XrEntryInvokeStatus xr_entry_cell_invoke_i64(
             .arguments = arguments,
             .result = &executed,
             .decoded_cache = token.generation->decoded_cache,
+            .provider =
+                XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
             .function = token.function,
             .argument_count = argument_count,
         };

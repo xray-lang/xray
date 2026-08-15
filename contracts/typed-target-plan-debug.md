@@ -5,7 +5,9 @@ its single `XrTypedDispatchI64Request`. A null debug session performs exactly
 the same validation, frame operations, instruction dispatch, result transfer,
 and generation lifetime work as an unobserved execution. There is no alternate
 debug executor, legacy bytecode offset, source/name lookup, SemanticPlan walk,
-or AOT/CGen fallback.
+or AOT/CGen fallback. The request's mandatory generated switch or generated
+function-table provider selection does not alter the canonical event stream or
+profile counters; nested direct calls inherit the same provider.
 
 A debug session is bound to one exact TargetPlan fingerprint. When generation
 identity is present, the session copies the complete public generation identity
@@ -45,8 +47,9 @@ not claimed by this runtime slice.
 
 Evidence:
 
-- `test_typed_dispatch` proves two independent runs produce byte-identical
-  canonical trace events, proves exact direct-call nesting and return/error
+- `test_typed_dispatch` proves independent switch-provider and function-table
+  runs produce byte-identical canonical trace events and profile snapshots,
+  proves exact direct-call nesting and return/error
   order, exact generation binding, fixed-capacity sink refusal, profile-disabled
   parity, instruction/call/slot materialization, and explicit unavailable
   source/owner/layout facts.
@@ -59,9 +62,9 @@ anchor-sha256: src/vm/debug/xr_vm_profile.h 494f41cb32b3b3e48162f2f5b23c78c5e85e
 anchor-sha256: src/vm/debug/xr_vm_profile.c d4a1cd75c1d520f3a14721e64757559952ffb6c734b62c7a6769d81444ccbda1
 anchor-sha256: src/vm/debug/xr_vm_materialize.h 6e784c930527ea25bee1301db2d16065a11d091e51de5a58316ad36f65a0e9db
 anchor-sha256: src/vm/debug/xr_vm_materialize.c dc70a2881d49cab77a9382a5ae9c88e914be806803105aad55a1667001735c6e
-anchor-sha256: src/vm/xr_typed_dispatch.h 878efe171bf1018cd676fe8224ebb70a19faf50741ccc8b6f17e05ff712ca68e
-anchor-sha256: src/vm/xr_typed_dispatch.c 8f1aafc1b2a27cae8ea451ef06cec0c4cfbc5abfa3dd0e8ca8b9617af8a6f2c1
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c 63727b47fb9df9233402f4af919122ac99266bd193f04c6f80893ce2ab4bf69d
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 81f28d9eef2915dec8be0a5676640cce16338a86b5f993f42f79b5df9828ddde
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 3b43b83cccc5b5b2460302a5b04f3201ec6e936f16fe691fe8d09460597daf89
+anchor-sha256: src/vm/xr_typed_dispatch.h 10c108b77e3beff1dfd6c04137ce684a4c8c1d08b3af3a4402dae1443fcff768
+anchor-sha256: src/vm/xr_typed_dispatch.c d322275c81f8e833f2f9a850ca8163384e42bb9d703d8a40c16ccb7d711aa9ac
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 6759f44e43d36d704cb5d77330dd048f3c699280042eb856877cf5e5239c4bcd
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 948a32a64f0f74a42f088da5308c076788f1b87cf39bcede5589ad47aceda380
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py d68f03a9e2da14514ede7254e10a55b4655c2b250e4a815201bed9480928f4da
 anchor-sha256: CMakeLists.txt 6afe2cdfb3157defec19cb249bc3dd4a3634e3091b83845ff21e3df45096edb2

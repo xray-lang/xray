@@ -57,27 +57,44 @@ static XrTypedDispatchStatus execute_request_i64(
     const XrTargetPlan *plan, const XrFingerprint *fingerprint,
     uint32_t function, const int64_t *arguments, uint32_t argument_count,
     int64_t *result) {
-    XrTypedDispatchI64Request request = {
+    REQUIRE(result != NULL);
+    int64_t switch_result = *result;
+    int64_t table_result = *result;
+    XrTypedDispatchI64Request switch_request = {
         .verified_plan = plan,
         .required_plan_fingerprint = fingerprint,
         .arguments = arguments,
-        .result = result,
+        .result = &switch_result,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
         .function = function,
         .argument_count = argument_count,
     };
-    return xr_typed_dispatch_execute_i64(&request);
+    XrTypedDispatchI64Request table_request = switch_request;
+    table_request.result = &table_result;
+    table_request.provider =
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE;
+    XrTypedDispatchStatus switch_status =
+        xr_typed_dispatch_execute_i64(&switch_request);
+    XrTypedDispatchStatus table_status =
+        xr_typed_dispatch_execute_i64(&table_request);
+    REQUIRE(table_status == switch_status);
+    REQUIRE(table_result == switch_result);
+    *result = switch_result;
+    return switch_status;
 }
 
 static XrTypedDispatchStatus execute_debug_request_i64(
     const XrTargetPlan *plan, const XrFingerprint *fingerprint,
     uint32_t function, const int64_t *arguments, uint32_t argument_count,
-    const XrVmDebugSession *debug_session, int64_t *result) {
+    const XrVmDebugSession *debug_session, XrTypedDispatchProvider provider,
+    int64_t *result) {
     XrTypedDispatchI64Request request = {
         .verified_plan = plan,
         .required_plan_fingerprint = fingerprint,
         .arguments = arguments,
         .result = result,
         .debug_session = debug_session,
+        .provider = provider,
         .function = function,
         .argument_count = argument_count,
     };
@@ -120,6 +137,10 @@ static void test_generated_instruction_contract(void) {
     REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 26u);
     REQUIRE(XR_TEST_VM_DISPATCH_COUNT ==
             XR_TARGET_INSTRUCTION_CONTRACT_COUNT);
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
     uint32_t semantic_bindings = 0;
     for (uint16_t opcode = 1; opcode < XR_TARGET_INSTRUCTION_COUNT; opcode++) {
         const XrTargetInstructionContract *contract =
@@ -136,6 +157,18 @@ static void test_generated_instruction_contract(void) {
         REQUIRE(contract->may_suspend ==
                 ((contract->effects &
                   XR_TARGET_INSTRUCTION_EFFECT_MAY_SUSPEND) != 0));
+        for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++) {
+            REQUIRE(xr_typed_dispatch_provider_contract_is_exact(
+                providers[i], opcode, contract));
+            XrTargetInstructionContract mismatch = *contract;
+            mismatch.dispatch_argument = UINT8_MAX;
+            REQUIRE(!xr_typed_dispatch_provider_contract_is_exact(
+                providers[i], opcode, &mismatch));
+            mismatch = *contract;
+            mismatch.name = "mismatched.contract";
+            REQUIRE(!xr_typed_dispatch_provider_contract_is_exact(
+                providers[i], opcode, &mismatch));
+        }
         semantic_bindings += contract->semantic_name != NULL;
         for (uint32_t other = 1; other < opcode; other++)
             REQUIRE(strcmp(contract->name,
@@ -146,6 +179,20 @@ static void test_generated_instruction_contract(void) {
             NULL);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_COUNT) ==
             NULL);
+    const XrTargetInstructionContract *first =
+        xr_target_instruction_contract(XR_TARGET_INSTRUCTION_CONST_I64);
+    REQUIRE(!xr_typed_dispatch_provider_contract_is_exact(
+        XR_TYPED_DISPATCH_PROVIDER_INVALID, XR_TARGET_INSTRUCTION_CONST_I64,
+        first));
+    REQUIRE(!xr_typed_dispatch_provider_contract_is_exact(
+        XR_TYPED_DISPATCH_PROVIDER_COUNT, XR_TARGET_INSTRUCTION_CONST_I64,
+        first));
+    REQUIRE(!xr_typed_dispatch_provider_contract_is_exact(
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TARGET_INSTRUCTION_INVALID, first));
+    REQUIRE(!xr_typed_dispatch_provider_contract_is_exact(
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+        XR_TARGET_INSTRUCTION_COUNT, first));
 }
 
 static XrSemanticPlan *build_semantic(void) {
@@ -631,6 +678,16 @@ static void test_closed_program_and_unavailable_boundary(void) {
         xr_target_plan_fingerprint(fixture.program_plan);
     REQUIRE(xr_target_plan_function_execution_family_mask(fixture.program_plan, 0) ==
             XR_TARGET_EXECUTION_SCALAR_I64_CLOSED);
+    result = 7;
+    XrTypedDispatchI64Request invalid_provider = {
+        .verified_plan = fixture.program_plan,
+        .required_plan_fingerprint = &fingerprint,
+        .result = &result,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_INVALID,
+    };
+    REQUIRE(xr_typed_dispatch_execute_i64(&invalid_provider) ==
+            XR_TYPED_DISPATCH_INVALID_ARGUMENT);
+    REQUIRE(result == 0);
     REQUIRE(execute_request_i64(fixture.program_plan, &fingerprint,
                                           0, NULL, 0,
                                           &result) == XR_TYPED_DISPATCH_OK);
@@ -1638,10 +1695,14 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
     int64_t first_result = 0;
     int64_t second_result = 0;
     REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                      &first_session, &first_result) ==
+                                      &first_session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+                                      &first_result) ==
             XR_TYPED_DISPATCH_OK);
     REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                      &second_session, &second_result) ==
+                                      &second_session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+                                      &second_result) ==
             XR_TYPED_DISPATCH_OK);
     REQUIRE(first_result == 42 && second_result == 42);
     REQUIRE(first.count == 14 && second.count == first.count);
@@ -1668,7 +1729,10 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
             first.events[13].status == XR_TYPED_DISPATCH_OK);
 
     XrVmProfileSnapshot snapshot;
+    XrVmProfileSnapshot second_snapshot;
     REQUIRE(xr_typed_profile_snapshot(&first_profile, &snapshot));
+    REQUIRE(xr_typed_profile_snapshot(&second_profile, &second_snapshot));
+    REQUIRE(memcmp(&snapshot, &second_snapshot, sizeof(snapshot)) == 0);
     REQUIRE(snapshot.saturated == 0 && snapshot.max_frame_depth == 1);
     REQUIRE(snapshot.event_counts[XR_VM_TRACE_FRAME_ENTER] == 2);
     REQUIRE(snapshot.event_counts[XR_VM_TRACE_INSTRUCTION] == 6);
@@ -1705,7 +1769,9 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
             XR_VM_DEBUG_SESSION_OK);
     int64_t rejected_result = 99;
     REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                      &short_session, &rejected_result) ==
+                                      &short_session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+                                      &rejected_result) ==
             XR_TYPED_DISPATCH_TRACE_REJECTED);
     REQUIRE(rejected_result == 0 && short_buffer.count == 4 &&
             short_buffer.capacity_exceeded);
@@ -1738,7 +1804,9 @@ static void test_runtime_only_trace_profile_and_materialization(void) {
             XR_VM_DEBUG_SESSION_OK);
     int64_t error_result = 88;
     REQUIRE(execute_debug_request_i64(plan, &fingerprint, 0, NULL, 0,
-                                      &error_session, &error_result) ==
+                                      &error_session,
+                                      XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+                                      &error_result) ==
             XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
     REQUIRE(error_result == 0);
     size_t call_enter = SIZE_MAX;

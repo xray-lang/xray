@@ -16,6 +16,13 @@
 
 typedef struct XrVmDecodedCache XrVmDecodedCache;
 
+typedef enum XrTypedDispatchProvider {
+    XR_TYPED_DISPATCH_PROVIDER_INVALID = 0,
+    XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+    XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    XR_TYPED_DISPATCH_PROVIDER_COUNT,
+} XrTypedDispatchProvider;
+
 typedef enum XrTypedDispatchStatus {
     XR_TYPED_DISPATCH_OK = 0,
     XR_TYPED_DISPATCH_INVALID_ARGUMENT,
@@ -56,7 +63,9 @@ typedef enum XrTypedDispatchStatus {
  * parameter count the verified instruction group binds; a shorter, longer, or
  * absent vector is rejected rather than truncated or zero filled. The request
  * is the one execution boundary: optional runtime services extend it without
- * growing a positional ABI or introducing alternate entry points. */
+ * growing a positional ABI or introducing alternate entry points. Provider is
+ * mandatory: callers choose one generated provider explicitly, and zero or an
+ * unknown value is rejected rather than selecting a default implementation. */
 typedef struct XrTypedDispatchI64Request {
     const XrTargetPlan *verified_plan;
     const XrFingerprint *required_plan_fingerprint;
@@ -64,10 +73,16 @@ typedef struct XrTypedDispatchI64Request {
     int64_t *result;
     const XrVmDebugSession *debug_session;
     const XrVmDecodedCache *decoded_cache;
+    XrTypedDispatchProvider provider;
     uint32_t function;
     uint32_t argument_count;
 } XrTypedDispatchI64Request;
 
+/* Proves that one provider's generated binding exactly matches the canonical
+ * opcode contract. It grants no authority to verify or execute a plan. */
+XR_FUNC bool xr_typed_dispatch_provider_contract_is_exact(
+    XrTypedDispatchProvider provider, uint16_t opcode,
+    const XrTargetInstructionContract *contract);
 XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
     const XrTypedDispatchI64Request *request);
 

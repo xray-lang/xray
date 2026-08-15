@@ -63,6 +63,7 @@ static XrTypedDispatchStatus execute_request_i64(
         .required_plan_fingerprint = fingerprint,
         .arguments = arguments,
         .result = result,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
         .function = function,
         .argument_count = argument_count,
     };

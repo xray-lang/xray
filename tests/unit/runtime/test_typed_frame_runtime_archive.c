@@ -23,6 +23,7 @@ int main(void) {
     XrTypedDispatchI64Request request = {
         .required_plan_fingerprint = &fingerprint,
         .result = &result,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
     };
     XrVmProfile profile;
     XrVmProfileSnapshot profile_snapshot;

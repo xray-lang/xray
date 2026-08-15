@@ -62,6 +62,7 @@ REQUIRED = {
     "xr_target_plan_verify",
     "xr_target_profile_verify",
     "xr_typed_dispatch_execute_i64",
+    "xr_typed_dispatch_provider_contract_is_exact",
     "xr_typed_debug_emit",
     "xr_typed_debug_session_init",
     "xr_typed_debug_session_matches_plan",

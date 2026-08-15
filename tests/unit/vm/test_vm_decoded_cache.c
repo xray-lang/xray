@@ -154,16 +154,31 @@ static XrTypedDispatchStatus execute_i64(
     const XrTargetPlan *plan, const XrFingerprint *fingerprint,
     const XrVmDecodedCache *cache, const int64_t *arguments,
     uint32_t argument_count, int64_t *result) {
-    XrTypedDispatchI64Request request = {
+    REQUIRE(result != NULL);
+    int64_t switch_result = *result;
+    int64_t table_result = *result;
+    XrTypedDispatchI64Request switch_request = {
         .verified_plan = plan,
         .required_plan_fingerprint = fingerprint,
         .arguments = arguments,
-        .result = result,
+        .result = &switch_result,
         .decoded_cache = cache,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
         .function = 0,
         .argument_count = argument_count,
     };
-    return xr_typed_dispatch_execute_i64(&request);
+    XrTypedDispatchI64Request table_request = switch_request;
+    table_request.result = &table_result;
+    table_request.provider =
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE;
+    XrTypedDispatchStatus switch_status =
+        xr_typed_dispatch_execute_i64(&switch_request);
+    XrTypedDispatchStatus table_status =
+        xr_typed_dispatch_execute_i64(&table_request);
+    REQUIRE(table_status == switch_status);
+    REQUIRE(table_result == switch_result);
+    *result = switch_result;
+    return switch_status;
 }
 
 static void dispose_fixture(CacheFixture *fixture) {

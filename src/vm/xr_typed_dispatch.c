@@ -103,6 +103,17 @@ typedef struct XrTypedDispatchRowContext {
     uint32_t frame_id;
 } XrTypedDispatchRowContext;
 
+typedef XrTypedDispatchStatus (*XrTypedDispatchRowHandler)(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context);
+
+typedef struct XrTypedDispatchFunctionBinding {
+    XrTypedDispatchRowHandler handler;
+    uint8_t dispatch_kind;
+    uint8_t dispatch_argument;
+} XrTypedDispatchFunctionBinding;
+
 typedef struct XrTypedDispatchExecution {
     const XrTargetPlan *plan;
     const XrFingerprint *fingerprint;
@@ -113,6 +124,7 @@ typedef struct XrTypedDispatchExecution {
     uint64_t next_event_ordinal;
     const XrVmDebugSession *debug_session;
     const XrVmDecodedCache *decoded_cache;
+    XrTypedDispatchProvider provider;
 } XrTypedDispatchExecution;
 
 static XrTypedDispatchStatus execute_function(
@@ -510,9 +522,110 @@ cleanup:
     return status;
 }
 
-/* The generated cases make missing and duplicate opcode handlers compilation
- * errors. The contract repeats the generated handler binding at runtime so a
- * corrupted row cannot select a handler whose metadata disagrees. */
+/* The generated providers consume the same dense registry. The function table
+ * deliberately uses only standard function pointers and sequential
+ * initialization so it compiles as ordinary C11 under MSVC. */
+static const XrTypedDispatchFunctionBinding generated_function_table[] = {
+    {NULL, 0, 0},
+#define XR_VM_OP(symbol, handler, kind, argument)                                      \
+    {execute_##handler, XR_TARGET_INSTRUCTION_DISPATCH_##kind,                        \
+     XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_##argument},
+#include "xr_vm_ops.def"
+#undef XR_VM_OP
+};
+
+_Static_assert(sizeof(generated_function_table) /
+                       sizeof(generated_function_table[0]) ==
+                   XR_TARGET_INSTRUCTION_COUNT,
+               "generated function table must cover every typed opcode");
+
+static bool optional_text_equal(const char *left, const char *right) {
+    if (!left || !right)
+        return left == right;
+    return strcmp(left, right) == 0;
+}
+
+static bool instruction_contract_is_exact(
+    uint16_t opcode, const XrTargetInstructionContract *contract) {
+    const XrTargetInstructionContract *expected =
+        xr_target_instruction_contract(opcode);
+    return expected && contract &&
+           optional_text_equal(contract->name, expected->name) &&
+           optional_text_equal(contract->semantic_name,
+                               expected->semantic_name) &&
+           contract->arity == expected->arity &&
+           contract->terminator == expected->terminator &&
+           contract->result_rep == expected->result_rep &&
+           contract->operand_rep[0] == expected->operand_rep[0] &&
+           contract->operand_rep[1] == expected->operand_rep[1] &&
+           contract->result_ownership == expected->result_ownership &&
+           contract->operand_ownership == expected->operand_ownership &&
+           contract->effects == expected->effects &&
+           contract->error_kind == expected->error_kind &&
+           contract->may_suspend == expected->may_suspend &&
+           contract->immediate_kind == expected->immediate_kind &&
+           contract->control_kind == expected->control_kind &&
+           contract->dispatch_kind == expected->dispatch_kind &&
+           contract->dispatch_argument == expected->dispatch_argument;
+}
+
+XR_FUNC bool xr_typed_dispatch_provider_contract_is_exact(
+    XrTypedDispatchProvider provider, uint16_t opcode,
+    const XrTargetInstructionContract *contract) {
+    if (!instruction_contract_is_exact(opcode, contract))
+        return false;
+    if (provider == XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH) {
+        switch ((XrTargetInstructionOpcode) opcode) {
+#define XR_VM_OP(symbol, handler, kind, argument)                                  \
+            case XR_TARGET_INSTRUCTION_##symbol:                                  \
+                return contract->dispatch_kind ==                                 \
+                           XR_TARGET_INSTRUCTION_DISPATCH_##kind &&                \
+                       contract->dispatch_argument ==                             \
+                           XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_##argument;
+#include "xr_vm_ops.def"
+#undef XR_VM_OP
+            default: return false;
+        }
+    }
+    if (provider == XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE &&
+        opcode < sizeof(generated_function_table) /
+                     sizeof(generated_function_table[0])) {
+        const XrTypedDispatchFunctionBinding *binding =
+            &generated_function_table[opcode];
+        return binding->handler &&
+               binding->dispatch_kind == contract->dispatch_kind &&
+               binding->dispatch_argument == contract->dispatch_argument;
+    }
+    return false;
+}
+
+static XrTypedDispatchStatus execute_row_with_switch(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    switch ((XrTargetInstructionOpcode) row->opcode) {
+#define XR_VM_OP(symbol, handler, kind, argument)                                  \
+        case XR_TARGET_INSTRUCTION_##symbol:                                      \
+            return execute_##handler(frame, row, contract, context);
+#include "xr_vm_ops.def"
+#undef XR_VM_OP
+        default: return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    }
+}
+
+static XrTypedDispatchStatus execute_row_with_function_table(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    if (row->opcode >= sizeof(generated_function_table) /
+                          sizeof(generated_function_table[0]))
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    const XrTypedDispatchFunctionBinding *binding =
+        &generated_function_table[row->opcode];
+    return binding->handler ? binding->handler(frame, row, contract, context)
+                            : XR_TYPED_DISPATCH_PROGRAM_INVALID;
+}
+
 static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                                          const XrTargetInstructionRecord *row,
                                          const XrVmDecodedInstruction *decoded,
@@ -533,19 +646,16 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
         arguments, argument_count, row_count, next, returned, return_bits,
         execution, decoded, parameters_prebound, frame_id,
     };
-    switch ((XrTargetInstructionOpcode) row->opcode) {
-#define XR_VM_OP(symbol, handler, kind, argument)                                                   \
-        case XR_TARGET_INSTRUCTION_##symbol:                                                       \
-            if (contract->dispatch_kind != XR_TARGET_INSTRUCTION_DISPATCH_##kind ||                 \
-                contract->dispatch_argument !=                                                     \
-                    XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_##argument)                             \
-                return XR_TYPED_DISPATCH_PROGRAM_INVALID;                                          \
-            return execute_##handler(frame, row, contract, &context);
-#include "xr_vm_ops.def"
-#undef XR_VM_OP
-        default:
-            return XR_TYPED_DISPATCH_PROGRAM_INVALID;
-    }
+    if (!xr_typed_dispatch_provider_contract_is_exact(
+            execution->provider, row->opcode, contract))
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    if (execution->provider ==
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH)
+        return execute_row_with_switch(frame, row, contract, &context);
+    if (execution->provider ==
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE)
+        return execute_row_with_function_table(frame, row, contract, &context);
+    return XR_TYPED_DISPATCH_PROGRAM_INVALID;
 }
 
 static XrTypedDispatchStatus execute_function(
@@ -730,7 +840,11 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         *request->result = 0;
     if (!request || !request->verified_plan ||
         !request->required_plan_fingerprint || !request->result ||
-        (!request->arguments && request->argument_count))
+        (!request->arguments && request->argument_count) ||
+        (request->provider !=
+             XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH &&
+         request->provider !=
+             XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE))
         return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
     const XrTargetPlan *verified_plan = request->verified_plan;
     const XrFingerprint *required_plan_fingerprint =
@@ -794,6 +908,7 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         .next_frame_id = 1,
         .debug_session = request->debug_session,
         .decoded_cache = request->decoded_cache,
+        .provider = request->provider,
     };
     XrTypedDispatchStatus status = execute_function(
         &execution, frame, request->function, request->arguments,
