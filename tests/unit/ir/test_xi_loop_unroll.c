@@ -135,10 +135,8 @@ TEST(skips_loop_with_throw) {
     XiValue *cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, limit);
     xi_block_set_if(header, cond, body, exit_blk);
 
-    XiValue *bc = xi_value_new(f, body, XI_BOUNDS_CHECK, &stub_int, 2);
-    bc->args[0] = &iv->value;
-    bc->args[1] = limit;
-    bc->flags |= XI_FLAG_MAY_THROW;
+    XiValue *may_throw = xi_binary(f, body, XI_DIV, &stub_int, &iv->value, step);
+    ASSERT(may_throw != NULL);
     XiValue *next = xi_binary(f, body, XI_ADD, &stub_int, &iv->value, step);
 
     int pre_idx = pred_index(header, entry);

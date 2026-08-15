@@ -1,8 +1,9 @@
 # Xi canonical operation contract
 
-Status: re-frozen after every memory-effecting operation gained a mandatory
-memory scope (`:tbaa-group`) and every synchronising operation gained its
-language-level happens-before edge (`:sync`).
+Status: re-frozen after the non-lowerable `xi.bounds.check` registry row and
+its dead pass were removed. Bounds behavior belongs to the real
+`xi.index.get` / `xi.index.set` family consumed by VM and AOT; there is no
+compatibility opcode, reserved hole, or second bounds owner.
 
 1. `xisa/xi/ops.def` is the canonical operation table. Opcode semantics,
    effects, result ownership, operand ownership, memory scope,
@@ -62,7 +63,7 @@ language-level happens-before edge (`:sync`).
     duplicate membership, and unknown operations are generator errors.
 15. `xr_semantic_ops_gen.h` contains only target-neutral fields. Target support,
     C/native spelling, backend rewrite, and lowering policy remain outside the
-    SemanticPlan registry. The independent registry verifier checks all 226
+    SemanticPlan registry. The independent registry verifier checks all 225
     rows, and the SemanticPlan verifier reads arity, effects, result ownership,
     and operand ownership from this registry instead of backend metadata.
 16. The operation-registry fingerprint covers every target-neutral contract
@@ -74,8 +75,13 @@ language-level happens-before edge (`:sync`).
     consumers and adapter bindings; VM, AOT, CGen, and runtime use the stable
     owner ID for migrated families instead of reconstructing an owner from a
     source or C spelling.
+18. Source array indexing lowers directly to `xi.index.get` or `xi.index.set`.
+    A standalone bounds guard that has no source lowering and no VM/AOT handler
+    is not a canonical operation. Removing such a row compacts subsequent Xi
+    opcode numbers and requires an exact schema cutover; consumers must not
+    preserve a hole or translate the retired number.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 48b657c03f3992d11f6092d60624bec760d43facad391ad601393f69994714f3
+anchor-sha256: xisa/xi/ops.def bcf213774e5185db696e57bf5040e41041e27944104154ef2cba39de12b62731
 anchor-sha256: xisa/xi/lowering.def 8537a11e486566ce11847065319b2115558ea85ea7420deddc5753e61b6fda30

@@ -58,14 +58,14 @@ XRAY_API bool xr_runtime_target_plan_load(
     if (probe.status != XR_ARTIFACT_PROBE_MATCH ||
         probe.kind != XR_ARTIFACT_KIND_XTP)
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2000",
-                    "runtime TargetPlan loading accepts only XTP v36 bytes");
+                    "runtime TargetPlan loading accepts only XTP v37 bytes");
     XrXtpCandidate *candidate = NULL;
     char nested[512] = {0};
     if (!xr_xtp_decode_candidate(artifact_bytes, artifact_size, &candidate,
                                  nested, sizeof(nested)))
         return propagate_nested(diagnostic, diagnostic_size,
                                 "XR_ARTIFACT_2000",
-                                "XTP v36 candidate decoding failed", nested);
+                                "XTP v37 candidate decoding failed", nested);
 
     XrXtpIdentity identity;
     bool have_identity = xr_xtp_candidate_identity(candidate, &identity);
@@ -81,7 +81,7 @@ XRAY_API bool xr_runtime_target_plan_load(
     if (!materialized)
         return propagate_nested(diagnostic, diagnostic_size,
                                 "XR_ARTIFACT_2004",
-                                "XTP v36 materialization failed", nested);
+                                "XTP v37 materialization failed", nested);
 
     nested[0] = '\0';
     if (!xr_target_plan_is_verified(plan) ||

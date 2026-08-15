@@ -1656,8 +1656,8 @@ TEST(statistics_say_which_passes_do_not_count_values) {
     /* These rewrite the function without the counters moving. Reporting their
      * zero as a count is what let a reader conclude they had not fired. */
     static const char *const uncounted[] = {"constfold", "strength_reduce", "copy_prop",
-                                            "bce",       "licm",            "loop_split",
-                                            "inline",    "tail_call",       "ifconv"};
+                                            "licm",      "loop_split",      "inline",
+                                            "tail_call", "ifconv"};
     for (size_t i = 0; i < sizeof(uncounted) / sizeof(uncounted[0]); i++) {
         const XiPassStats *ps = stats_for(&stats, uncounted[i]);
         REQUIRE(ps && ps->invocations > 0);

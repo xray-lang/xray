@@ -107,7 +107,6 @@ typedef enum {
     X(DCE, "dce")                                                                                  \
     X(SCCP, "sccp")                                                                                \
     X(RANGE, "range")                                                                              \
-    X(BCE, "bce")                                                                                  \
     X(GVN, "gvn")                                                                                  \
     X(LOOP_ROTATE, "loop_rotate")                                                                  \
     X(LICM, "licm")                                                                                \
@@ -148,7 +147,6 @@ typedef uint32_t XiOptDisableMask;
 #define XI_OPT_DISABLE_DCE XI_OPT_DISABLE_BIT(XI_OPT_PASS_DCE)
 #define XI_OPT_DISABLE_SCCP XI_OPT_DISABLE_BIT(XI_OPT_PASS_SCCP)
 #define XI_OPT_DISABLE_RANGE XI_OPT_DISABLE_BIT(XI_OPT_PASS_RANGE)
-#define XI_OPT_DISABLE_BCE XI_OPT_DISABLE_BIT(XI_OPT_PASS_BCE)
 #define XI_OPT_DISABLE_GVN XI_OPT_DISABLE_BIT(XI_OPT_PASS_GVN)
 #define XI_OPT_DISABLE_LOOP_ROTATE XI_OPT_DISABLE_BIT(XI_OPT_PASS_LOOP_ROTATE)
 #define XI_OPT_DISABLE_LICM XI_OPT_DISABLE_BIT(XI_OPT_PASS_LICM)

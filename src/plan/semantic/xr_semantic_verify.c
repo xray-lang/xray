@@ -182,7 +182,7 @@ static bool semantic_source_enum_identity_exact(const XrSemanticTypeRecord *type
                type->enum_layout_id == 0 && type->enum_member_count == 0 &&
                type->enum_flags == 0 && type->reserved_enum == 0;
     const char *cursor = type->source_enum_key;
-    static const char prefix[] = "source-enum-v1:schema=32:owner=";
+    static const char prefix[] = "source-enum-v1:schema=33:owner=";
     if (!cursor || strncmp(cursor, prefix, sizeof(prefix) - 1u) != 0 ||
         !verify_id(cursor, type->source_enum_identity) ||
         type->enum_member_count == 0 || type->enum_layout_id == 0 ||

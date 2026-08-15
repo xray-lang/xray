@@ -1,6 +1,6 @@
 /*
  * Unit tests for extended Xi verifier contracts.
- * Covers bounds checks, tail-call safety, TBAA metadata, and backend legality.
+ * Covers tail-call safety, TBAA metadata, and backend legality.
  */
 
 #include "../../../src/ir/xi_verify.h"
@@ -278,55 +278,6 @@ TEST(slice_call_requires_view_evidence) {
     call->args[0] = callee;
     call->flags |= XI_FLAG_SIDE_EFFECT;
     xi_block_set_return(f->entry, call);
-    ASSERT(verify_fail(f));
-    xi_func_free(f);
-}
-
-/* ========== Bounds check contracts ========== */
-
-TEST(bounds_check_valid) {
-    XiFunc *f = make_func("bounds_valid");
-    ASSERT(f != NULL);
-    XiBlock *entry = f->entry;
-
-    XiValue *idx = xi_const_int(f, entry, 2, &stub_int);
-    XiValue *len = xi_const_int(f, entry, 8, &stub_int);
-    XiValue *bc = xi_value_new(f, entry, XI_BOUNDS_CHECK, &stub_int, 2);
-    bc->args[0] = idx;
-    bc->args[1] = len;
-    xi_block_set_return(entry, bc);
-
-    ASSERT(verify_ok(f));
-    xi_func_free(f);
-}
-
-TEST(bounds_check_arity_failure) {
-    XiFunc *f = make_func("bounds_arity");
-    ASSERT(f != NULL);
-    XiBlock *entry = f->entry;
-
-    XiValue *idx = xi_const_int(f, entry, 2, &stub_int);
-    XiValue *bc = xi_value_new(f, entry, XI_BOUNDS_CHECK, &stub_int, 1);
-    bc->args[0] = idx;
-    xi_block_set_return(entry, bc);
-
-    ASSERT(verify_fail(f));
-    xi_func_free(f);
-}
-
-TEST(bounds_check_effect_failure) {
-    XiFunc *f = make_func("bounds_effect");
-    ASSERT(f != NULL);
-    XiBlock *entry = f->entry;
-
-    XiValue *idx = xi_const_int(f, entry, 2, &stub_int);
-    XiValue *len = xi_const_int(f, entry, 8, &stub_int);
-    XiValue *bc = xi_value_new(f, entry, XI_BOUNDS_CHECK, &stub_int, 2);
-    bc->args[0] = idx;
-    bc->args[1] = len;
-    bc->flags = 0;
-    xi_block_set_return(entry, bc);
-
     ASSERT(verify_fail(f));
     xi_func_free(f);
 }
@@ -2572,9 +2523,6 @@ int main(void) {
     run_raw_slice_accepts_complete_view_evidence();
     run_slice_call_requires_view_evidence();
 
-    run_bounds_check_valid();
-    run_bounds_check_arity_failure();
-    run_bounds_check_effect_failure();
     run_tail_flag_on_non_call_fails();
     run_tail_call_with_non_function_callee_fails();
     run_tail_call_with_function_callee_passes();

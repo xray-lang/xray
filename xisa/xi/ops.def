@@ -2333,17 +2333,6 @@
   :targets (vm-bytecode aot-verify)
   :backend-rewrite (builtin "regex_compile"))
 
-(define-xi-op xi.bounds.check
-  :class guard
-  :arity 2
-  :result-ownership none
-  :own-use consume
-  :effects (side-effect may-throw)
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify)
-  :lowering-policy pass-local)
-
 (define-xi-op xi.retain
   :class ownership
   :arity 1
@@ -2716,7 +2705,6 @@
     xi.len
     xi.get.builtin
     xi.import.ref
-    xi.bounds.check
     xi.source.move
     xi.stack.alloc
     xi.vec.load

@@ -1998,7 +1998,7 @@ static void test_source_enum_identity_and_mutations(void) {
             type = &plan->types[i];
     REQUIRE(type != NULL && type->source_enum_key != NULL &&
             strstr(type->source_enum_key,
-                   "source-enum-v1:schema=32:owner=13:stdlib/base64:") != NULL &&
+                   "source-enum-v1:schema=33:owner=13:stdlib/base64:") != NULL &&
             strstr(type->source_enum_key,
                    ":name=14:Base64Alphabet:members=2:m0=8:Standard:payloads=0:"
                    "m1=7:UrlSafe:payloads=0") != NULL &&
@@ -2136,7 +2136,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(second_debug->canonical_key, "discriminator=2:operation=") != NULL);
     char first_debug_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(first_debug->id, first_debug_id_hex);
-    REQUIRE(strcmp(first_debug_id_hex, "471b5da86abad578ef8aadce33798bfd") == 0);
+    REQUIRE(strcmp(first_debug_id_hex, "133b1e6e78267337d4b18a02efda03d0") == 0);
     const XrSemanticOperationRecord *decoded_debug_operation =
         &decoded->operations[first_debug->subject];
     REQUIRE(
@@ -2161,7 +2161,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
     char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(loan_entity->id, loan_id_hex);
-    REQUIRE(strcmp(loan_id_hex, "afc689830c7a6006b47e22c25b83f67a") == 0);
+    REQUIRE(strcmp(loan_id_hex, "71fdb1936686b554f7383b52869cf370") == 0);
     size_t entity_dump_size = 0;
     char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
     REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&
@@ -2208,11 +2208,11 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "0a341ec853eb50b9f3922762dc70c963af184d8b7872b5938a9bf1e2d5f72f35") == 0);
+                   "fd5776451edffacbaa04a2851dfa1f73e0996735fe9c90ec25ceeb5c998e1453") == 0);
     REQUIRE(strcmp(registry_hex,
-                   "455cdcb093b5d5d162a53cc7db8957d7e2c233064a908976ae4a32739d1b8229") == 0);
+                   "9b71aab82282c619136f865b18be022044e2836076185f1c79d3090b6b9a70c8") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "efa33c860f29daa80f6c18ffe4b05c2671a7108fd612b6289202e386a4746aae") == 0);
+                   "6ed6f0a50381f93ac8c0777bcde3b8085fd9fe8f7c1f3f8e864bfc422d5ac5f6") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -2701,12 +2701,12 @@ static void test_direct_local_call_target_authority(void) {
     REQUIRE(target->function == 1 && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL);
     REQUIRE(plan->operations[target->operation].opcode == XI_CALL);
     REQUIRE(plan->operations[target->operation].effects == xi_generated_op_effects(XI_CALL));
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=32:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=33:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":function=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "3dac555882574705d5b4b444b37a06c4") == 0);
+    REQUIRE(strcmp(target_id_hex, "426e4623002d081ba12aa550055c9131") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
@@ -2788,12 +2788,12 @@ static void test_indirect_callable_state_authority(void) {
             target->callable_type < plan->type_count &&
             plan->types[target->callable_type].kind == XR_KIND_FUNCTION);
     REQUIRE(plan->operations[target->operation].opcode == XI_CALL);
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=32:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=33:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":callable-type=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=4") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "37ddb9811a32a79c22691e33b5198f57") == 0);
+    REQUIRE(strcmp(target_id_hex, "4c1c5562788e8b6848840ebc250668b8") == 0);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         state_count += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
@@ -2911,9 +2911,9 @@ static void test_source_export_call_target_authority(void) {
     xr_stable_id_hex(plan->dependencies[0].id, dependency_id);
     xr_stable_id_hex(dependency->source_exports[0].id, export_id);
     xr_stable_id_hex(target->id, target_id);
-    REQUIRE(strcmp(dependency_id, "f5b60607f9f3c2e986a6dfd3b723c8bb") == 0);
-    REQUIRE(strcmp(export_id, "53917c1d85d427be8dd8b8d8bb274ba6") == 0);
-    REQUIRE(strcmp(target_id, "512ad39da2d440a6286c4ed8541b25ff") == 0);
+    REQUIRE(strcmp(dependency_id, "40e2c81a47eb8291c3ac150683621255") == 0);
+    REQUIRE(strcmp(export_id, "e050c707839cfdae75a446c0b8273685") == 0);
+    REQUIRE(strcmp(target_id, "fd20b649a04e41c6fbc386fe808f5462") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -2990,7 +2990,7 @@ static void test_native_yieldable_call_target_authority(void) {
             target->function == XR_SEMANTIC_INDEX_NONE &&
             target->operation < plan->operation_count &&
             plan->operations[target->operation].opcode == XI_CALL);
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=32:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=33:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":native=os.__sleep:kind=2") != NULL);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
@@ -3079,11 +3079,11 @@ static void test_native_namespace_yieldable_authority(void) {
             target->dependency == XR_SEMANTIC_INDEX_NONE &&
             target->source_export == XR_SEMANTIC_INDEX_NONE &&
             target->callable_type == XR_SEMANTIC_INDEX_NONE);
-    REQUIRE(strstr(target->canonical_key, "call-target-v5:schema=32:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v5:schema=33:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":native-namespace=time.sleep:kind=5") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "f4452ebb2eb94ca6aa5e9edd78181998") == 0);
+    REQUIRE(strcmp(target_id_hex, "8baa83269eb4c39608c71a02073365da") == 0);
     const XrSemanticOperationRecord *import = NULL;
     for (uint32_t i = 0; i < plan->operation_count; i++)
         if (plan->operations[i].opcode == XI_IMPORT_REF)
@@ -3191,11 +3191,11 @@ static void test_builtin_instance_yieldable_authority(void) {
             target->source_export == XR_SEMANTIC_INDEX_NONE &&
             target->callable_type < plan->type_count &&
             plan->types[target->callable_type].builtin_type == XR_TID_SEMAPHORE);
-    REQUIRE(strstr(target->canonical_key, "call-target-v6:schema=32:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v6:schema=33:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":builtin-instance=Semaphore.acquire:type=") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "ba364bc5565749f4d1a88ab14286d5b9") == 0);
+    REQUIRE(strcmp(target_id_hex, "518ee761e47876d89c736d5a0c2eec70") == 0);
     uint32_t states = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         states += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
@@ -3278,7 +3278,7 @@ static void test_source_instance_method_local_authority(void) {
     REQUIRE(source_class->ordinal == 0 && source_class->method_count == 2);
     REQUIRE(source_class->flags ==
             (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_RUNTIME_TYPE));
-    REQUIRE(strstr(source_class->canonical_key, "source-class-v1:schema=32:module=") != NULL);
+    REQUIRE(strstr(source_class->canonical_key, "source-class-v1:schema=33:module=") != NULL);
     REQUIRE(strstr(source_class->canonical_key, ":path=22:pkg/source_instance.xr:") != NULL);
     REQUIRE(strstr(source_class->canonical_key, ":name=11:FinalWorker:") != NULL);
     REQUIRE(strstr(source_class->canonical_key, "xg") == NULL);
@@ -3302,7 +3302,7 @@ static void test_source_instance_method_local_authority(void) {
     REQUIRE(plan->functions[target->function].source_class == 0);
     REQUIRE(plan->types[target->callable_type].source_class == 0);
     REQUIRE(xr_stable_id_equal(target->callee_function, plan->functions[target->function].id));
-    REQUIRE(strstr(target->canonical_key, "call-target-v7:schema=32:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v7:schema=33:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":selector=4:wait:") != NULL);
 
     uint32_t call_states = 0;
@@ -3391,7 +3391,7 @@ static void test_source_instance_method_open_authority(void) {
     REQUIRE(dependency->source_class_count == 1 && dependency->source_method_count == 1);
     const XrSemanticSourceMethodRecord *method = &dependency->source_methods[0];
     REQUIRE(method->flags == (XR_SEM_SOURCE_METHOD_INSTANCE | XR_SEM_SOURCE_METHOD_OPEN_DOMAIN));
-    REQUIRE(strstr(method->canonical_key, "source-method-v1:schema=32:class=") != NULL);
+    REQUIRE(strstr(method->canonical_key, "source-method-v1:schema=33:class=") != NULL);
     REQUIRE(strstr(method->canonical_key, "xg") == NULL);
     REQUIRE(plan->dependency_count == 1 && plan->call_target_count == 1);
     XrSemanticCallTargetRecord *target = &plan->call_targets[0];
@@ -3405,7 +3405,7 @@ static void test_source_instance_method_open_authority(void) {
     const XrSemanticTypeRecord *receiver = &plan->types[target->callable_type];
     REQUIRE(receiver->source_class == XR_SEMANTIC_INDEX_NONE);
     REQUIRE(xr_stable_id_equal(receiver->source_class_identity, dependency->source_classes[0].id));
-    REQUIRE(strstr(target->canonical_key, "call-target-v8:schema=32:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v8:schema=33:operation=") != NULL);
     char error[512] = {0};
     const XrSemanticPlan *dependencies[1] = {dependency};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -3497,11 +3497,11 @@ static void test_shared_direct_call_target_authority(void) {
     REQUIRE(call->function == 2 && call->opcode == XI_CALL);
     REQUIRE((call->effects & XI_EFFECT_MAY_SUSPEND) == 0);
     REQUIRE((call->flags & XI_FLAG_MAY_SUSPEND) == 0);
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=32:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=33:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "dc11acab7021f5f1e7463f3a283d1f6e") == 0);
+    REQUIRE(strcmp(target_id_hex, "48bfff877360c4dfaf1a70078351b1ff") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
@@ -4936,7 +4936,7 @@ static void test_owned_string_coroutine_lifecycle_identity(void) {
         REQUIRE(entity->parent < plan->entity_count &&
                 plan->entities[entity->parent].kind ==
                     XR_SEM_ENTITY_COROUTINE_STATE &&
-                strstr(entity->canonical_key, "entity-v1:schema=32:") != NULL &&
+                strstr(entity->canonical_key, "entity-v1:schema=33:") != NULL &&
                 strstr(entity->canonical_key, ":value-operation=") != NULL &&
                 strstr(entity->canonical_key, ":release=") != NULL &&
                 strstr(entity->canonical_key, ":owner=") != NULL);

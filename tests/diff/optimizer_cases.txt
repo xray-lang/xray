@@ -69,6 +69,5 @@ tests/diff/cases/semantics/optimizer/pass_loop_peel_first_iteration.xr
 tests/diff/cases/semantics/optimizer/pass_loop_rotate_guarded_body.xr
 tests/diff/cases/semantics/optimizer/pass_loop_split_conditional_body.xr
 tests/diff/cases/semantics/optimizer/pass_loop_unroll_small_trip_count.xr
-tests/diff/cases/semantics/optimizer/pass_range_and_bce_index_in_bounds.xr
 tests/diff/cases/semantics/optimizer/pass_sccp_conditional_constant.xr
 tests/diff/cases/semantics/optimizer/pass_tail_call_accumulator.xr

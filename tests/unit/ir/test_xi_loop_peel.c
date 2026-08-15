@@ -5,6 +5,7 @@
 #include "../../../src/ir/xi_analysis.h"
 #include "../../../src/ir/xi_loop.h"
 #include "../../../src/ir/xi_opt_loop_peel.h"
+#include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -55,8 +56,8 @@ static bool verify_func(XiFunc *f) {
     return ok;
 }
 
-/* Build a loop with a bounds check — the pattern peel targets. */
-static XiFunc *build_loop_with_bounds_check(void) {
+/* Build a loop with an index access, the pattern peel targets. */
+static XiFunc *build_loop_with_index_access(void) {
     XiFunc *f = xi_func_new("peel_target", &stub_int);
     XiBlock *entry = xi_block_new(f);
     XiBlock *header = xi_block_new(f);
@@ -76,10 +77,11 @@ static XiFunc *build_loop_with_bounds_check(void) {
     XiValue *cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, limit);
     xi_block_set_if(header, cond, body, exit_blk);
 
-    XiValue *bc = xi_value_new(f, body, XI_BOUNDS_CHECK, &stub_int, 2);
-    bc->args[0] = &iv->value;
-    bc->args[1] = limit;
-    bc->flags |= XI_FLAG_MAY_THROW;
+    XiValue *array = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *access = xi_value_new(f, body, XI_INDEX_GET, &stub_int, 2);
+    access->args[0] = array;
+    access->args[1] = &iv->value;
+    access->mem_group = XI_MEM_ARRAY;
 
     XiValue *next = xi_binary(f, body, XI_ADD, &stub_int, &iv->value, step);
 
@@ -92,8 +94,8 @@ static XiFunc *build_loop_with_bounds_check(void) {
     return f;
 }
 
-TEST(peels_loop_with_bounds_check) {
-    XiFunc *f = build_loop_with_bounds_check();
+TEST(peels_loop_with_index_access) {
+    XiFunc *f = build_loop_with_index_access();
     ASSERT(f != NULL);
     ASSERT(verify_func(f));
 
@@ -105,8 +107,8 @@ TEST(peels_loop_with_bounds_check) {
     xi_func_free(f);
 }
 
-/* Build a loop without bounds check — should NOT be peeled. */
-static XiFunc *build_loop_no_bounds_check(void) {
+/* Build a loop without an index access; it should not be peeled. */
+static XiFunc *build_loop_no_index_access(void) {
     XiFunc *f = xi_func_new("no_peel", &stub_int);
     XiBlock *entry = xi_block_new(f);
     XiBlock *header = xi_block_new(f);
@@ -136,8 +138,8 @@ static XiFunc *build_loop_no_bounds_check(void) {
     return f;
 }
 
-TEST(skips_loop_without_bounds_check) {
-    XiFunc *f = build_loop_no_bounds_check();
+TEST(skips_loop_without_index_access) {
+    XiFunc *f = build_loop_no_index_access();
     ASSERT(f != NULL);
     ASSERT(verify_func(f));
 
@@ -162,8 +164,8 @@ TEST(no_loop_no_change) {
 int main(void) {
     printf("=== Xi Loop Peel Tests ===\n\n");
 
-    run_peels_loop_with_bounds_check();
-    run_skips_loop_without_bounds_check();
+    run_peels_loop_with_index_access();
+    run_skips_loop_without_index_access();
     run_no_loop_no_change();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);

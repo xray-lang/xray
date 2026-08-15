@@ -51,7 +51,12 @@ static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 2, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType stub_array = {
-    .kind = XR_KIND_ARRAY, .id = 4, .frozen = true, .container = {.element_type = &stub_int}};
+    .kind = XR_KIND_ARRAY,
+    .id = 4,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_int},
+};
 static XrType stub_map = {.kind = XR_KIND_MAP,
                           .id = 5,
                           .frozen = true,
@@ -396,6 +401,7 @@ static void test_backend_lower_preserves_collection_ops(void) {
     assert(array_new != NULL);
     array_new->args[0] = cap;
     array_new->flags = xi_op_default_effects(XI_ARRAY_NEW);
+    array_new->array_element_storage = XR_ELEM_I64;
 
     XiValue *map_new = xi_value_new(f, entry, XI_MAP_NEW, &stub_map, 1);
     assert(map_new != NULL);
@@ -501,8 +507,6 @@ static void test_backend_policy_generated_metadata(void) {
     assert(xi_op_is_backend_legal(XI_ERR_SET));
     assert(xi_op_is_backend_legal(XI_ERR_RETURN));
     assert(xi_op_is_backend_legal(XI_ERR_CATCH));
-    assert(xi_op_is_backend_legal(XI_BOUNDS_CHECK));
-
     assert(!xi_op_is_backend_legal(XI_EXTRACT));
     assert(!xi_op_is_backend_legal(XI_MULTI_RET));
 

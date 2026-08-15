@@ -21,7 +21,6 @@
 #include "xi_opt_licm.h"
 #include "xi_opt_loop_rotate.h"
 #include "xi_opt_sccp.h"
-#include "xi_opt_bce.h"
 #include "xi_opt_block_simplify.h"
 #include "xi_opt_jump_thread.h"
 #include "xi_opt_strength.h"
@@ -4299,7 +4298,6 @@ static const XiPassDesc xi_pass_table[] = {
     XI_REWRITE_PASS("dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, 0),
     XI_REWRITE_PASS("sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, 0),
     XI_ANALYSIS_PASS("range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_EVD_RANGE),
-    XI_REWRITE_PASS("bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NO_VALUE_COUNTS, XI_EVD_RANGE),
     XI_REWRITE_PASS("gvn", xi_opt_gvn_pre, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_EVD_ALIAS),
     XI_REWRITE_PASS("loop_rotate", xi_opt_loop_rotate, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),

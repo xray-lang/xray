@@ -579,7 +579,6 @@ add_xray_unit_test(test_compiler_session_generation
 add_xray_unit_test(test_fs_atomic os/test_fs_atomic.c)
 add_xray_unit_test(test_xi_tbaa ir/test_xi_tbaa.c)
 add_xray_unit_test(test_xi_range ir/test_xi_range.c)
-add_xray_unit_test(test_xi_bce ir/test_xi_bce.c)
 add_xray_unit_test(test_xi_block_simplify ir/test_xi_block_simplify.c)
 add_xray_unit_test(test_xi_jump_thread ir/test_xi_jump_thread.c)
 add_xray_unit_test(test_xi_loop_iv ir/test_xi_loop_iv.c)

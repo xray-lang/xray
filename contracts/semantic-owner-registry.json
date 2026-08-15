@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "0a341ec853eb50b9f3922762dc70c963af184d8b7872b5938a9bf1e2d5f72f35",
+  "canonical_fingerprint": "fd5776451edffacbaa04a2851dfa1f73e0996735fe9c90ec25ceeb5c998e1453",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -2171,28 +2171,6 @@
       "category": "shared-semantic-kernel",
       "operations": [
         "xi.await"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.bounds.check",
-      "owner_id": "941ab69f64894b97bad2b11893504f2c",
-      "owner_id_hi": "0x941ab69f64894b97",
-      "owner_id_lo": "0xbad2b11893504f2c",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.bounds.check"
       ],
       "consumers": [
         "semantic-plan"
@@ -11521,29 +11499,6 @@
           "consumer": "runtime",
           "path": "stdlib/regex/xregex_binding.c",
           "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
-        }
-      ]
-    },
-    {
-      "operation": "xi.bounds.check",
-      "operation_id": "941ab69f64894b97bad2b11893504f2c",
-      "operation_id_hi": "0x941ab69f64894b97",
-      "operation_id_lo": "0xbad2b11893504f2c",
-      "owner": "xi.bounds.check",
-      "owner_id": "941ab69f64894b97bad2b11893504f2c",
-      "owner_id_hi": "0x941ab69f64894b97",
-      "owner_id_lo": "0xbad2b11893504f2c",
-      "category": "declarative-primitive",
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
         }
       ]
     },

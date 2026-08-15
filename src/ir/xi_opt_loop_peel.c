@@ -9,9 +9,8 @@
  *
  * Peels the first iteration of a loop into straight-line code before
  * the loop header.  After peeling, the loop body starts from the
- * second iteration, which enables downstream passes (BCE, LICM,
- * guard motion) to remove first-iteration-only checks from the hot
- * loop body.
+ * second iteration, which enables downstream passes to remove
+ * first-iteration-only work from the hot loop body.
  *
  * The pattern handled is:
  *
@@ -97,14 +96,14 @@ static uint32_t count_loop_values(const XiLoop *loop) {
     return total;
 }
 
-static bool has_bounds_check_or_guard(const XiLoop *loop) {
+static bool has_index_access(const XiLoop *loop) {
     for (uint32_t i = 0; i < loop->nbody; i++) {
         XiBlock *blk = loop->body[i];
         if (!blk)
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
-            if (v && v->op == XI_BOUNDS_CHECK)
+            if (v && (v->op == XI_INDEX_GET || v->op == XI_INDEX_SET))
                 return true;
         }
     }
@@ -134,7 +133,7 @@ static bool loop_eligible_for_peel(const XiLoop *loop) {
     if (body_values > PEEL_MAX_BODY_VALUES)
         return false;
 
-    if (!has_bounds_check_or_guard(loop))
+    if (!has_index_access(loop))
         return false;
 
     return true;

@@ -681,15 +681,20 @@ TEST(array_literal) {
 
 TEST(index_access) {
     XiFunc *f = lower_source("var arr = [10, 20, 30]\n"
+                             "arr[1] = 40\n"
                              "var x = arr[1]\n"
                              "print(x)\n");
     assert(f != NULL);
-    int found_index_get = 0;
+    int index_get_count = 0;
+    int index_set_count = 0;
     for (uint32_t i = 0; i < f->entry->nvalues; i++) {
         if (f->entry->values[i]->op == XI_INDEX_GET)
-            found_index_get = 1;
+            index_get_count++;
+        if (f->entry->values[i]->op == XI_INDEX_SET)
+            index_set_count++;
     }
-    assert(found_index_get && "should have INDEX_GET op");
+    assert(index_get_count == 1 && "source index read must lower to one INDEX_GET");
+    assert(index_set_count == 4 && "literal and source index writes must lower to INDEX_SET");
     xi_func_free(f);
 }
 

@@ -34,7 +34,7 @@ int main(void) {
     XrVmMaterializedEvent materialized;
     XrVmTraceEvent trace_event = {0};
     uint32_t count = 0;
-    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(36) ||
+    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(37) ||
         XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK != XR_TARGET_REQUIRED_FAMILIES ||
         limits.max_arena_bytes != XR_TYPED_FRAME_MAX_ARENA_BYTES ||
         xr_typed_frame_create(NULL, &fingerprint, 0, &limits, &frame) !=
