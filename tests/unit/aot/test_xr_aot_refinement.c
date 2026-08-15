@@ -2155,7 +2155,7 @@ static void test_direct_local_array_ref_argument_authority_is_exact(void) {
     XrTargetCallArgumentRecord saved_argument = *argument;
     XrTargetCallRecord saved_call = target->calls[0];
     XrFingerprint saved_target_fingerprint = target->fingerprint;
-    for (uint32_t mutation = 0; mutation < 13; mutation++) {
+    for (uint32_t mutation = 0; mutation < 14; mutation++) {
         *argument = saved_argument;
         switch (mutation) {
             case 0: argument->semantic_operand++; break;
@@ -2173,11 +2173,21 @@ static void test_direct_local_array_ref_argument_authority_is_exact(void) {
                 argument->array_element_storage = XR_TARGET_ARRAY_STORAGE_I64;
                 break;
             case 12: argument->reserved8[0] = 1; break;
+            case 13: argument->identity.bytes[0] ^= 1u; break;
             default: abort();
         }
         xr_target_call_compute_fingerprint(target, 0,
                                            &target->calls[0].fingerprint);
         xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+        if (mutation == 13) {
+            XrCEmissionPlan *rejected = NULL;
+            error[0] = '\0';
+            REQUIRE(!xr_c_emission_plan_build(
+                target, xr_target_profile_fingerprint(fixture.target_profile),
+                &rejected, error, sizeof(error)));
+            REQUIRE(rejected == NULL &&
+                    strstr(error, "direct-local Array ref argument") != NULL);
+        }
         REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
     }
     *argument = saved_argument;

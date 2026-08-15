@@ -1208,6 +1208,40 @@ static bool exact_array_fill_scalar_recipe(
     return true;
 }
 
+static bool exact_direct_local_array_ref_parameter_prior(
+    const XrTargetPlan *target_plan,
+    const XrSemanticParameterRecord *parameter, uint8_t *out_storage) {
+    const XrSemanticPlan *semantic =
+        target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        semantic ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
+    const XrSemanticTypeRecord *array = parameter
+        ? xr_semantic_plan_type(semantic, parameter->type)
+        : NULL;
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!semantic || !parameter || !children || !array ||
+        parameter->function >= xr_semantic_plan_function_count(semantic) ||
+        parameter->mode != XR_PARAM_REF ||
+        parameter->ownership != XI_OWN_BORROWED ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
+        parameter->reserved != 0 || array->kind != XR_KIND_ARRAY ||
+        array->builtin_type != XR_TID_NULL || array->child_count != 1 ||
+        array->child_begin >= child_count || array->aggregate_extent != 0 ||
+        array->aggregate_align != 0 ||
+        array->scalar_rep != XR_SCALAR_REP_NONE ||
+        array->flags !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        !c_array_storage_from_type(
+            xr_semantic_plan_type(semantic, children[array->child_begin]),
+            &storage))
+        return false;
+    if (out_storage)
+        *out_storage = storage;
+    return true;
+}
+
 /* C spelling for a direct-local Array ref parameter is admitted only after
  * rebuilding the complete callee-place boundary.  The semantic Array and
  * parameter rows determine element storage; Target call rows must then prove
@@ -1233,29 +1267,9 @@ static bool exact_direct_local_array_ref_parameter_recipe(
         parameter = candidate;
         parameter_index = i;
     }
-    uint32_t child_count = 0;
-    const uint32_t *children =
-        xr_semantic_plan_type_children(semantic, &child_count);
-    const XrSemanticTypeRecord *array = parameter
-        ? xr_semantic_plan_type(semantic, parameter->type)
-        : NULL;
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    if (!parameter || !children || !array ||
-        parameter->function >= xr_semantic_plan_function_count(semantic) ||
-        parameter->mode != XR_PARAM_REF ||
-        parameter->ownership != XI_OWN_BORROWED ||
-        parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
-        parameter->reserved != 0 || array->kind != XR_KIND_ARRAY ||
-        array->builtin_type != XR_TID_NULL || array->child_count != 1 ||
-        array->child_begin >= child_count ||
-        array->aggregate_extent != 0 || array->aggregate_align != 0 ||
-        array->scalar_rep != XR_SCALAR_REP_NONE ||
-        array->flags !=
-            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
-        !c_array_storage_from_type(
-            xr_semantic_plan_type(semantic, children[array->child_begin]),
-            &storage))
+    if (!exact_direct_local_array_ref_parameter_prior(
+            target_plan, parameter, &storage))
         return false;
     const XrTargetMachineRepRecord *register_rep =
         xr_target_plan_machine_rep(target_plan, binding->register_rep);
@@ -1365,12 +1379,11 @@ static bool exact_direct_local_array_ref_parameter_recipe(
     return true;
 }
 
-static bool direct_local_array_ref_argument_candidate(
-    const XrTargetCallArgumentRecord *argument) {
-    return argument &&
-           (argument->mode == XR_TARGET_CALL_REFERENCE ||
-            argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE);
-}
+typedef enum XrDirectLocalArrayRefArgumentMatch {
+    XR_C_ARRAY_REF_ARGUMENT_NOT_THIS_FAMILY = 0,
+    XR_C_ARRAY_REF_ARGUMENT_EXACT,
+    XR_C_ARRAY_REF_ARGUMENT_MALFORMED,
+} XrDirectLocalArrayRefArgumentMatch;
 
 /* Producer reconstruction for the immutable call-argument projection.  The
  * verified Target row supplies storage indexes; Semantic rows independently
@@ -1393,6 +1406,9 @@ static bool build_direct_local_array_ref_argument_view(
                                          : NULL;
     const XrSemanticOperationRecord *operation = call
         ? xr_semantic_plan_operation(semantic, call->semantic_operation)
+        : NULL;
+    const XrSemanticCallTargetRecord *semantic_target = call
+        ? xr_semantic_plan_call_target(semantic, call->semantic_call_target)
         : NULL;
     const XrSemanticFunctionRecord *callee = call
         ? xr_semantic_plan_function(semantic, call->callee_function)
@@ -1426,11 +1442,21 @@ static bool build_direct_local_array_ref_argument_view(
         ? xr_target_plan_machine_rep(target_plan,
                                      argument->callee_memory_rep)
         : NULL;
+    const XrTargetValueRepRecord *parameter_binding = parameter
+        ? xr_target_plan_value_rep(target_plan, parameter->value)
+        : NULL;
+    uint8_t parameter_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    XrStableId expected_identity = {{0}};
     if (!semantic || !argument || !out || !call || !operation || !callee || !operand ||
-        !parameter || !caller_slot || !callee_slot || !caller_register ||
+        !semantic_target || !parameter || !parameter_binding || !caller_slot ||
+        !callee_slot || !caller_register ||
         !caller_memory || !callee_register || !callee_memory ||
+        semantic_target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+        semantic_target->operation != call->semantic_operation ||
+        semantic_target->function != call->callee_function ||
         call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
         call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
         operation->result_value != call->result_value ||
         operation->function != call->caller_function ||
         argument->semantic_operand != operation->operand_begin +
@@ -1465,6 +1491,9 @@ static bool build_direct_local_array_ref_argument_view(
         caller_slot->register_rep != argument->register_rep ||
         caller_slot->memory_rep != argument->memory_rep ||
         caller_slot->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        parameter_binding->slot != argument->callee_slot ||
+        parameter_binding->register_rep != argument->callee_register_rep ||
+        parameter_binding->memory_rep != argument->callee_memory_rep ||
         callee_slot->semantic_value != parameter->value ||
         callee_slot->register_rep != argument->callee_register_rep ||
         callee_slot->memory_rep != argument->callee_memory_rep ||
@@ -1473,7 +1502,14 @@ static bool build_direct_local_array_ref_argument_view(
         caller_register->kind != XR_MACHINE_REP_DYN_VALUE ||
         caller_memory->kind != XR_MACHINE_REP_DYN_VALUE ||
         callee_register->kind != XR_MACHINE_REP_RAW_PTR ||
-        callee_memory->kind != XR_MACHINE_REP_RAW_PTR)
+        callee_memory->kind != XR_MACHINE_REP_RAW_PTR ||
+        !exact_direct_local_array_ref_parameter_prior(
+            target_plan, parameter, &parameter_storage) ||
+        parameter_storage != argument->array_element_storage ||
+        !emission_identity_from_pair(
+            "xray-target-direct-array-ref-argument-v1", semantic_target->id,
+            parameter->id, argument->ordinal, &expected_identity) ||
+        !xr_stable_id_equal(argument->identity, expected_identity))
         return false;
     memset(out, 0, sizeof(*out));
     out->semantic_call_value = operation->result_value;
@@ -1492,6 +1528,63 @@ static bool build_direct_local_array_ref_argument_view(
     out->array_element_storage = argument->array_element_storage;
     out->c_type = "XrValue *";
     return true;
+}
+
+/* A call-argument row belongs to this consumer only when it carries either
+ * the dedicated Array storage discriminant or the direct-local reference
+ * boundary. Other reference families, including SOURCE_EXPORT writeback,
+ * remain available to their own projections. Once a row claims this family,
+ * every Semantic and Target prior fact, including its stable identity, must
+ * reconstruct exactly or the projection fails closed. */
+static XrDirectLocalArrayRefArgumentMatch
+classify_direct_local_array_ref_argument(
+    const XrTargetPlan *target_plan,
+    const XrTargetCallArgumentRecord *argument,
+    XrCCallArgumentEmissionView *out) {
+    if (!target_plan || !argument || !out)
+        return XR_C_ARRAY_REF_ARGUMENT_MALFORMED;
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target_plan, &call_count);
+    const XrTargetCallRecord *call =
+        argument && calls && argument->call < call_count
+            ? &calls[argument->call]
+            : NULL;
+    const XrSemanticCallTargetRecord *semantic_target = call && semantic
+        ? xr_semantic_plan_call_target(semantic, call->semantic_call_target)
+        : NULL;
+    const XrSemanticParameterRecord *parameter = argument && semantic
+        ? xr_semantic_plan_parameter(semantic, argument->callee_parameter)
+        : NULL;
+    bool semantic_array_prior =
+        exact_direct_local_array_ref_parameter_prior(
+            target_plan, parameter, NULL);
+    XrStableId expected_identity = {{0}};
+    bool exact_prior_identity =
+        semantic_target && parameter &&
+        semantic_target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+        emission_identity_from_pair(
+            "xray-target-direct-array-ref-argument-v1", semantic_target->id,
+            parameter->id, argument->ordinal, &expected_identity) &&
+        xr_stable_id_equal(argument->identity, expected_identity);
+    bool direct_reference_claim =
+        call && semantic_array_prior &&
+        call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL &&
+        call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
+        (argument->mode == XR_TARGET_CALL_REFERENCE ||
+         argument->ownership == XR_TARGET_CALL_BORROW ||
+         (argument->flags & XR_TARGET_CALL_ARGUMENT_ADDRESSABLE) != 0);
+    bool claimed =
+        argument &&
+        (argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+         direct_reference_claim || exact_prior_identity);
+    if (!claimed)
+        return XR_C_ARRAY_REF_ARGUMENT_NOT_THIS_FAMILY;
+    return build_direct_local_array_ref_argument_view(target_plan, argument, out)
+               ? XR_C_ARRAY_REF_ARGUMENT_EXACT
+               : XR_C_ARRAY_REF_ARGUMENT_MALFORMED;
 }
 
 static int compare_c_call_argument_view(const void *left, const void *right) {
@@ -3775,11 +3868,13 @@ bool xr_c_emission_plan_verify(
     for (uint32_t i = 0; i < target_argument_count; i++) {
         const XrTargetCallArgumentRecord *target_argument =
             &target_arguments[i];
-        if (!direct_local_array_ref_argument_candidate(target_argument))
-            continue;
         XrCCallArgumentEmissionView expected = {0};
-        if (!build_direct_local_array_ref_argument_view(
-                target_plan, target_argument, &expected) ||
+        XrDirectLocalArrayRefArgumentMatch match =
+            classify_direct_local_array_ref_argument(
+                target_plan, target_argument, &expected);
+        if (match == XR_C_ARRAY_REF_ARGUMENT_NOT_THIS_FAMILY)
+            continue;
+        if (match != XR_C_ARRAY_REF_ARGUMENT_EXACT ||
             projected_call_arguments >= plan->call_argument_count)
             return emission_error(
                 error, error_size, "XR_TARGET_1001",
@@ -4039,11 +4134,13 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
     for (uint32_t i = 0; i < target_call_argument_count; i++) {
         const XrTargetCallArgumentRecord *argument =
             &target_call_arguments[i];
-        if (!direct_local_array_ref_argument_candidate(argument))
-            continue;
         XrCCallArgumentEmissionView projected = {0};
-        if (!build_direct_local_array_ref_argument_view(
-                target_plan, argument, &projected))
+        XrDirectLocalArrayRefArgumentMatch match =
+            classify_direct_local_array_ref_argument(
+                target_plan, argument, &projected);
+        if (match == XR_C_ARRAY_REF_ARGUMENT_NOT_THIS_FAMILY)
+            continue;
+        if (match != XR_C_ARRAY_REF_ARGUMENT_EXACT)
             return emission_error(
                 error, error_size, "XR_TARGET_1001",
                 "direct-local Array ref argument has no exact C projection");
@@ -4607,18 +4704,20 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         }
     }
     for (uint32_t i = 0; i < target_call_argument_count; i++) {
-        if (!direct_local_array_ref_argument_candidate(
-                &target_call_arguments[i]))
+        XrCCallArgumentEmissionView projected = {0};
+        XrDirectLocalArrayRefArgumentMatch match =
+            classify_direct_local_array_ref_argument(
+                target_plan, &target_call_arguments[i], &projected);
+        if (match == XR_C_ARRAY_REF_ARGUMENT_NOT_THIS_FAMILY)
             continue;
-        if (call_argument_index >= emission_call_argument_count ||
-            !build_direct_local_array_ref_argument_view(
-                target_plan, &target_call_arguments[i],
-                &plan->call_arguments[call_argument_index++])) {
+        if (match != XR_C_ARRAY_REF_ARGUMENT_EXACT ||
+            call_argument_index >= emission_call_argument_count) {
             xr_c_emission_plan_free(plan);
             return emission_error(
                 error, error_size, "XR_TARGET_1001",
                 "C call-argument projection is not exact");
         }
+        plan->call_arguments[call_argument_index++] = projected;
     }
     if (emission_call_argument_count > 1)
         qsort(plan->call_arguments, emission_call_argument_count,

@@ -2513,8 +2513,17 @@ static void test_channel_receive_storage_authority(void) {
     xr_target_profile_free(profile);
 }
 
-static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_out,
-                                                    bool with_argument) {
+typedef enum SourceExportArgumentKind {
+    SOURCE_EXPORT_ARGUMENT_NONE = 0,
+    SOURCE_EXPORT_ARGUMENT_VALUE,
+    SOURCE_EXPORT_ARGUMENT_RAW_POINTER_REFERENCE,
+} SourceExportArgumentKind;
+
+static XrSemanticPlan *build_source_export_semantic(
+    XrSemanticPlan **dependency_out, SourceExportArgumentKind argument_kind) {
+    bool with_argument = argument_kind != SOURCE_EXPORT_ARGUMENT_NONE;
+    bool reference =
+        argument_kind == SOURCE_EXPORT_ARGUMENT_RAW_POINTER_REFERENCE;
     XiFunc *dependency_root = xi_func_new("net_init", &stub_unit);
     XiFunc *write_bytes = xi_func_new("writeBytes", &stub_unit);
     REQUIRE(dependency_root && write_bytes);
@@ -2532,8 +2541,21 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
         write_bytes->params =
             (XiValue **) xr_calloc(1, sizeof(*write_bytes->params));
         REQUIRE(write_bytes->params);
-        write_bytes->params[0] = xi_param(write_bytes, write_entry, 0, &stub_bool);
+        write_bytes->params[0] = xi_param(
+            write_bytes, write_entry, 0,
+            reference ? &stub_raw_pointer : &stub_bool);
         REQUIRE(write_bytes->params[0]);
+        if (reference) {
+            REQUIRE(xi_func_set_param_passing_mode(write_bytes, 0,
+                                                   XR_PARAM_REF));
+            write_bytes->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+            write_bytes->arc_borrow_sig = (XiBorrowSig *) xi_func_arena_alloc(
+                write_bytes, (uint32_t) sizeof(*write_bytes->arc_borrow_sig));
+            REQUIRE(write_bytes->arc_borrow_sig);
+            write_bytes->arc_borrow_sig->nparams = 1;
+            write_bytes->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+            write_bytes->arc_borrow_sig->valid = true;
+        }
     }
     XiValue *closure =
         xi_value_new(dependency_root, dependency_entry, XI_CLOSURE_NEW, &stub_function, 0);
@@ -2598,14 +2620,25 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
     namespace_alias->aux_int = XI_COPY_KIND_IDENTITY;
     namespace_store->args[0] = namespace_alias;
     namespace_store->aux_int = 0;
-    caller_root->nshared = 1;
+    caller_root->nshared = reference ? 2 : 1;
     xi_block_set_return(root_entry, NULL);
     XiValue *receiver =
         xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_module_namespace, 0);
     XiValue *receiver_alias =
         xi_value_new(caller, caller_entry, XI_COPY, &stub_module_namespace, 1);
-    XiValue *argument =
-        with_argument ? xi_const_bool(caller, caller_entry, true, &stub_bool) : NULL;
+    XiValue *argument_storage = NULL;
+    XiValue *argument = NULL;
+    if (argument_kind == SOURCE_EXPORT_ARGUMENT_VALUE) {
+        argument = xi_const_bool(caller, caller_entry, true, &stub_bool);
+    } else if (reference) {
+        argument_storage = xi_value_new(caller, caller_entry, XI_GET_SHARED,
+                                        &stub_raw_pointer, 0);
+        argument = xi_value_new(caller, caller_entry, XI_LOCAL_ADDR,
+                                &stub_raw_pointer, 1);
+        REQUIRE(argument_storage && argument);
+        argument_storage->aux_int = 1;
+        argument->args[0] = argument_storage;
+    }
     XiValue *method =
         xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, with_argument ? 2 : 1);
     REQUIRE(receiver && receiver_alias && (!with_argument || argument) && method);
@@ -2615,8 +2648,39 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
     method->args[0] = receiver_alias;
     if (with_argument)
         method->args[1] = argument;
+    if (reference) {
+        XiCallPlan *call_plan = (XiCallPlan *) xi_func_arena_alloc(
+            caller, (uint32_t) sizeof(*call_plan));
+        XiCallArgPlan *argument_plan = (XiCallArgPlan *) xi_func_arena_alloc(
+            caller, (uint32_t) sizeof(*argument_plan));
+        REQUIRE(call_plan && argument_plan);
+        memset(call_plan, 0, sizeof(*call_plan));
+        memset(argument_plan, 0, sizeof(*argument_plan));
+        argument_plan->param_mode = XR_PARAM_REF;
+        argument_plan->access = XR_CALL_ARG_REF;
+        argument_plan->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+        argument_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+        argument_plan->escape = XI_PLACE_ESCAPE_NONE;
+        argument_plan->addressable = true;
+        argument_plan->origin_var_id = 1;
+        argument_plan->place = argument_storage;
+        call_plan->args = argument_plan;
+        call_plan->nargs = 1;
+        call_plan->verified = true;
+        method->call_plan = call_plan;
+    }
     method->aux = (void *) "writeBytes";
     method->aux_int = 0;
+    if (reference) {
+        XiValue *writeback = xi_value_new(caller, caller_entry, XI_PLACE_LOAD,
+                                          &stub_raw_pointer, 1);
+        XiValue *writeback_store =
+            xi_value_new(caller, caller_entry, XI_SET_SHARED, &stub_unit, 1);
+        REQUIRE(writeback && writeback_store);
+        writeback->args[0] = argument;
+        writeback_store->args[0] = writeback;
+        writeback_store->aux_int = 1;
+    }
     xi_block_set_return(caller_entry, method);
     caller_root->stage = caller->stage = XI_STAGE_SEMANTIC_LOWERED;
     caller_root->invariant_mask = caller->invariant_mask =
@@ -3130,7 +3194,8 @@ static void mutate_source_export_call(XrTargetCallRecord *call, SourceExportCall
 
 static void test_source_export_call_authority(void) {
     XrSemanticPlan *dependency = NULL;
-    XrSemanticPlan *semantic = build_source_export_semantic(&dependency, false);
+    XrSemanticPlan *semantic = build_source_export_semantic(
+        &dependency, SOURCE_EXPORT_ARGUMENT_NONE);
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
@@ -3288,7 +3353,8 @@ static void test_source_export_call_authority(void) {
 
 static void test_source_export_call_argument_authority(void) {
     XrSemanticPlan *dependency = NULL;
-    XrSemanticPlan *semantic = build_source_export_semantic(&dependency, true);
+    XrSemanticPlan *semantic = build_source_export_semantic(
+        &dependency, SOURCE_EXPORT_ARGUMENT_VALUE);
     XrTargetProfile *profile = build_profile(0);
     const XrSemanticPlan *dependencies[] = {dependency};
     XrTargetPlan *plan = NULL;
@@ -3326,6 +3392,60 @@ static void test_source_export_call_argument_authority(void) {
     xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
 
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_semantic_plan_free(dependency);
+}
+
+static void test_source_export_ref_argument_is_not_array_projection(void) {
+    XrSemanticPlan *dependency = NULL;
+    XrSemanticPlan *semantic = build_source_export_semantic(
+        &dependency, SOURCE_EXPORT_ARGUMENT_RAW_POINTER_REFERENCE);
+    XrTargetProfile *profile = build_profile(0);
+    const XrSemanticPlan *dependencies[] = {dependency};
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build_module_set(
+        semantic, dependencies, 1, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-export raw-pointer ref Target fixture failed: %s\n",
+                error);
+    REQUIRE(built && plan && xr_target_plan_verify(plan, error, sizeof(error)));
+    REQUIRE(plan->calls_count == 1 && plan->call_arguments_count == 1);
+    const XrTargetCallRecord *call = &plan->calls[0];
+    const XrTargetCallArgumentRecord *argument = &plan->call_arguments[0];
+    REQUIRE(call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
+            call->calling_convention ==
+                XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
+            argument->call == call->id &&
+            argument->mode == XR_TARGET_CALL_REFERENCE &&
+            argument->ownership == XR_TARGET_CALL_WRITEBACK &&
+            argument->flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
+            argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+            argument->callee_slot == XR_SEMANTIC_INDEX_NONE &&
+            plan->machine_reps[argument->register_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR &&
+            argument->callee_register_rep == argument->register_rep &&
+            argument->callee_memory_rep == argument->memory_rep);
+
+    XrCEmissionPlan *emission = NULL;
+    error[0] = '\0';
+    built = xr_c_emission_plan_build(
+        plan, xr_target_profile_fingerprint(profile), &emission, error,
+        sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-export raw-pointer ref C emission failed: %s\n",
+                error);
+    REQUIRE(built && emission && xr_c_emission_plan_is_verified(emission));
+    REQUIRE(xr_c_emission_plan_call_argument_count(emission) == 0);
+    XrCValueEmissionView value = {0};
+    REQUIRE(xr_c_emission_plan_value_view(
+        emission, argument->semantic_value, &value, error, sizeof(error)));
+    REQUIRE(value.rep == XR_C_VALUE_REP_RAW_PTR && value.c_type &&
+            strcmp(value.c_type, "const void * *") == 0);
+
+    xr_c_emission_plan_free(emission);
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
@@ -4814,6 +4934,11 @@ int main(int argc, char **argv) {
         puts("String range-slice TargetPlan authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "source-export-ref-c-emission") == 0) {
+        test_source_export_ref_argument_is_not_array_projection();
+        puts("Source-export ref C emission family tests passed");
+        return 0;
+    }
     test_direct_local_raw_pointer_call_authority();
     test_unit_enum_target_rep_mutations();
     test_array_intrinsic_call_authority();
@@ -4833,6 +4958,7 @@ int main(int argc, char **argv) {
     test_channel_close_call_authority();
     test_source_export_call_authority();
     test_source_export_call_argument_authority();
+    test_source_export_ref_argument_is_not_array_projection();
     test_profile_freeze_and_determinism();
     test_plan_snapshot_and_determinism();
     test_builder_materializes_canonical_scalar_intents();
