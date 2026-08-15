@@ -27,8 +27,12 @@ the program-output comparison remain byte-native and are not normalized.
 7. Changing compared channels, compared forms, normalization, expected-output
    behavior, oracle provenance, or tombstone meaning is a contract change and
    requires all dependent suites/ports to be revalidated.
+8. A differential measurement requires an executable reference binary, the
+   governed case directory, and at least one runnable case in the selected
+   shard. Missing identity or zero-case selection is a failed measurement, not
+   a skip or a successful empty comparison.
 
 ## Digest anchors
 
-anchor-sha256: tests/diff/run_backend_diff.py 0f6b57c02f09edbfdca1b0828d93bb255eefa5d78e6848814199e060b4589e74
+anchor-sha256: tests/diff/run_backend_diff.py facbe4a8cf2585997b2ddf498e99d362f470373781092f2abb79b521f0f37fd1
 anchor-sha256: tests/aot/TOMBSTONES.tsv 1ad7d280093c5a3aedecdf490fe88dc9c48f79215de9ea1d1c8216373cd56eb7

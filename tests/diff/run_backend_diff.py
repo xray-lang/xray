@@ -582,13 +582,13 @@ def main(argv: list[str]) -> int:
         import shutil
 
         if shutil.which(str(xray)) is None:
-            print(f"SKIP: xray binary not found: {xray_raw}")
-            print("=== Results: 0 passed, 0 failed, 0 skipped ===")
-            return 0
+            print(f"FAIL: xray binary not executable: {xray_raw}")
+            print("=== Results: 0 passed, 1 failed, 0 skipped ===")
+            return 1
     if not CASE_DIR.is_dir():
-        print(f"SKIP: no case dir {CASE_DIR}")
-        print("=== Results: 0 passed, 0 failed, 0 skipped ===")
-        return 0
+        print(f"FAIL: governed backend-diff case directory is missing: {CASE_DIR}")
+        print("=== Results: 0 passed, 1 failed, 0 skipped ===")
+        return 1
 
     base_cases_file = os.environ.get("XRAY_DIFF_CASES_FILE", "")
     if "XRAY_DIFF_EXTRA_CASES_FILE" in os.environ:
@@ -612,6 +612,17 @@ def main(argv: list[str]) -> int:
         if case_index % shard_total == shard_index:
             selected.append((case_index, case))
         case_index += 1
+    if case_index == 0:
+        print("FAIL: backend-diff discovered no runnable cases")
+        print("=== Results: 0 passed, 1 failed, 0 skipped ===")
+        return 1
+    if not selected:
+        print(
+            "FAIL: selected backend-diff shard has no runnable cases: "
+            f"index={shard_index} total={shard_total} discovered={case_index}"
+        )
+        print("=== Results: 0 passed, 1 failed, 0 skipped ===")
+        return 1
 
     cache_state = "hot" if binary_cache_hot(config, selected) else "cold"
     if auto_jobs and cache_state == "hot":

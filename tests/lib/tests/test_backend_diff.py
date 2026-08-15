@@ -7,8 +7,14 @@ changed oracle changes the key -- the miss that would otherwise diff a stale
 binary against a new expectation and pass by accident.
 """
 
+import contextlib
+import io
+import os
+import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from _support import bootstrap_xraytest, load_module
 
@@ -145,6 +151,55 @@ class RatchetWiringTest(unittest.TestCase):
         v = ratchet.evaluate(failed=failed, baseline=baseline, skipped=baseline - failed)
         self.assertEqual(v.now_passing, [])
         self.assertTrue(v.ok)
+
+
+class EntryIdentityTest(unittest.TestCase):
+    def test_missing_xray_binary_fails_closed(self):
+        with tempfile.TemporaryDirectory(prefix="xt_backend_diff.") as tmp:
+            missing = Path(tmp) / "missing-xray"
+            output = io.StringIO()
+
+            with mock.patch.dict(os.environ, {}, clear=True):
+                with contextlib.redirect_stdout(output):
+                    status = rbd.main(["run_backend_diff.py", str(missing)])
+
+            self.assertEqual(status, 1)
+            self.assertIn("FAIL: xray binary not executable", output.getvalue())
+            self.assertIn("0 passed, 1 failed, 0 skipped", output.getvalue())
+
+    def test_missing_case_directory_fails_closed(self):
+        with tempfile.TemporaryDirectory(prefix="xt_backend_diff.") as tmp:
+            missing_cases = Path(tmp) / "missing-cases"
+            output = io.StringIO()
+
+            with mock.patch.object(rbd, "CASE_DIR", missing_cases):
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    with contextlib.redirect_stdout(output):
+                        status = rbd.main(["run_backend_diff.py", sys.executable])
+
+            self.assertEqual(status, 1)
+            self.assertIn(
+                "governed backend-diff case directory is missing",
+                output.getvalue(),
+            )
+
+    def test_zero_runnable_cases_fail_closed(self):
+        with tempfile.TemporaryDirectory(prefix="xt_backend_diff.") as tmp:
+            output = io.StringIO()
+
+            with mock.patch.object(rbd, "CASE_DIR", Path(tmp)):
+                with mock.patch.object(rbd, "collect_cases", return_value=[]):
+                    with mock.patch.dict(os.environ, {}, clear=True):
+                        with contextlib.redirect_stdout(output):
+                            status = rbd.main(
+                                ["run_backend_diff.py", sys.executable]
+                            )
+
+            self.assertEqual(status, 1)
+            self.assertIn(
+                "backend-diff discovered no runnable cases",
+                output.getvalue(),
+            )
 
 
 if __name__ == "__main__":
