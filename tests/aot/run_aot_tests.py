@@ -369,16 +369,45 @@ def main(argv: list[str]) -> int:
     print("")
 
     if not (xray.is_file() and os.access(xray, os.X_OK)):
-        print(f"SKIP: xray binary not found: {xray}")
-        print("=== Results: 0 passed, 0 failed, 0 skipped ===")
-        return 0
+        print(f"FAIL: xray binary not executable: {xray}")
+        print("=== Results: 0 passed, 1 failed, 0 skipped ===")
+        return 1
 
-    positive = [(s, p) for s in POSITIVE_SECTIONS for p in collect(s)]
-    negative = [(NEGATIVE_SECTION, p) for p in collect(NEGATIVE_SECTION)]
+    cases_by_section = {
+        section: collect(section)
+        for section in (*POSITIVE_SECTIONS, NEGATIVE_SECTION)
+    }
+    empty_sections = [
+        section for section, cases in cases_by_section.items() if not cases
+    ]
+    if empty_sections:
+        print(
+            "FAIL: governed AOT sections have no discovered cases: "
+            + ", ".join(empty_sections)
+        )
+        print("=== Results: 0 passed, 1 failed, 0 skipped ===")
+        return 1
+
+    positive = [
+        (section, path)
+        for section in POSITIVE_SECTIONS
+        for path in cases_by_section[section]
+    ]
+    negative = [
+        (NEGATIVE_SECTION, path)
+        for path in cases_by_section[NEGATIVE_SECTION]
+    ]
     everything = positive + negative
     if shard_total > 1:
         everything = [item for i, item in enumerate(everything)
                       if i % shard_total == shard_index]
+    if not everything:
+        print(
+            "FAIL: selected AOT shard has no discovered cases: "
+            f"index={shard_index} total={shard_total}"
+        )
+        print("=== Results: 0 passed, 1 failed, 0 skipped ===")
+        return 1
 
     verdicts: list[CaseVerdict] = []
     with workspace.Workspace("xray_aot_tests") as ws:

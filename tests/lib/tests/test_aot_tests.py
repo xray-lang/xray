@@ -5,9 +5,14 @@ aot_standalone_suite, so a mistake there either hides a regression or blocks a
 clean tree. Its policy is the shared only-shrink ratchet plus a size ceiling.
 """
 
+import contextlib
+import io
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from _support import bootstrap_xraytest, load_module
 
@@ -131,6 +136,54 @@ class CaseHelpersTest(unittest.TestCase):
         self.assertEqual(runner.configure_jobs("4"), 4)
         self.assertGreaterEqual(runner.configure_jobs("auto"), 1)
         self.assertEqual(runner.configure_jobs("junk"), 1)
+
+
+class EntryIdentityTest(unittest.TestCase):
+    def test_missing_xray_binary_fails_closed(self):
+        with tempfile.TemporaryDirectory(prefix="xt_aot_entry.") as tmp:
+            missing = Path(tmp) / "missing-xray"
+            output = io.StringIO()
+
+            with contextlib.redirect_stdout(output):
+                status = runner.main(["run_aot_tests.py", "--xray", str(missing)])
+
+            self.assertEqual(status, 1)
+            self.assertIn("FAIL: xray binary not executable", output.getvalue())
+            self.assertIn("0 passed, 1 failed, 0 skipped", output.getvalue())
+
+    def test_empty_governed_section_fails_before_execution(self):
+        output = io.StringIO()
+
+        with mock.patch.object(runner, "collect", return_value=[]):
+            with contextlib.redirect_stdout(output):
+                status = runner.main(
+                    ["run_aot_tests.py", "--xray", sys.executable]
+                )
+
+        self.assertEqual(status, 1)
+        self.assertIn(
+            "governed AOT sections have no discovered cases: basic, modules, coro, negative",
+            output.getvalue(),
+        )
+
+    def test_empty_selected_shard_fails_before_execution(self):
+        output = io.StringIO()
+
+        with mock.patch.object(runner, "collect", return_value=[Path("case.xr")]):
+            with mock.patch.dict(
+                os.environ,
+                {"XRAY_AOT_SHARD_TOTAL": "8", "XRAY_AOT_SHARD_INDEX": "7"},
+            ):
+                with contextlib.redirect_stdout(output):
+                    status = runner.main(
+                        ["run_aot_tests.py", "--xray", sys.executable]
+                    )
+
+        self.assertEqual(status, 1)
+        self.assertIn(
+            "selected AOT shard has no discovered cases: index=7 total=8",
+            output.getvalue(),
+        )
 
 
 if __name__ == "__main__":
