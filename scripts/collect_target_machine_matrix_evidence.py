@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import platform as host_platform
+import re
 import shlex
 import shutil
 import subprocess
@@ -23,7 +24,7 @@ import check_target_machine_completion as completion
 
 PRODUCER = "target-machine-matrix-evidence/1"
 KIND = "matrix"
-ROW_RESULT_SCHEMA = 1
+ROW_RESULT_SCHEMA = 2
 ROW_RESULT_FIELDS = {
     "schema", "row_id", "status", "source_commit", "repository_sha256",
     "governance_input_sha256", "policy_sha256", "command", "platform",
@@ -33,7 +34,7 @@ ROW_RESULT_FIELDS = {
     "artifact_retention", "artifact_fingerprint", "binary_fingerprint",
     "artifact", "artifact_sha256", "binary", "binary_sha256",
     "source_fingerprint", "last_verified", "log", "log_sha256",
-    "identity_sha256",
+    "normalized_log_sha256", "identity_sha256",
 }
 ROUTES = {
     "source": ("source-to-xsm", "xsm-to-xtp", "xtp-to-vm"),
@@ -153,6 +154,101 @@ def run_exact_command(argv: list[str], root: Path,
         return 127, f"cannot execute matrix command: {error}\n"
 
 
+def canonical_command_log(argv: list[str], text: str) -> str:
+    """Remove only CTest-owned path and elapsed-time fields from a transcript."""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    executable = Path(argv[0]).name.lower() if argv else ""
+    if executable not in {"ctest", "ctest.exe"}:
+        return normalized
+    lines = normalized.splitlines(keepends=True)
+    project_lines = [line for line in lines if line.startswith("Test project ")]
+    total_lines = [line for line in lines
+                   if line.startswith("Total Test time (real) =")]
+    if len(project_lines) != 1 or len(total_lines) != 1:
+        raise CollectionError(
+            "CTest transcript requires one project field and one total elapsed field"
+        )
+    start_rows: list[int] = []
+    start_indices: list[int] = []
+    result_rows: list[tuple[int, int, int]] = []
+    result_indices: list[int] = []
+    summary_rows: list[tuple[int, int]] = []
+    project_index = -1
+    summary_index = -1
+    total_index = -1
+    canonical: list[str] = []
+    for index, line in enumerate(lines):
+        ending = "\n" if line.endswith("\n") else ""
+        body = line[:-1] if ending else line
+        if body.startswith("Test project "):
+            if not body.removeprefix("Test project ").strip():
+                raise CollectionError("CTest project field is empty")
+            project_index = index
+            body = "Test project <build>"
+        elif (start := re.fullmatch(
+                r"\s*Start\s+(\d+):\s+\S(?:.*\S)?\s*", body)) is not None:
+            start_rows.append(int(start.group(1)))
+            start_indices.append(index)
+        elif (result := re.fullmatch(
+                r"\s*(\d+)/(\d+)\s+Test\s+#(\d+):\s+.*\S\s+"
+                r"(?:Passed|\*\*\*Failed|Not Run)\s+"
+                r"(?:<\s*)?\d+(?:\.\d+)?\s+sec", body)) is not None:
+            result_rows.append(tuple(int(result.group(i)) for i in range(1, 4)))
+            result_indices.append(index)
+            body = re.sub(
+                r"\s+(?:<\s*)?\d+(?:\.\d+)?\s+sec$", " <elapsed>", body,
+            )
+        elif body.startswith("Total Test time (real) ="):
+            if re.fullmatch(
+                    r"Total Test time \(real\) =\s+(?:<\s*)?"
+                    r"\d+(?:\.\d+)?\s+sec", body) is None:
+                raise CollectionError("CTest total elapsed field is not canonical")
+            total_index = index
+            body = "Total Test time (real) = <elapsed>"
+        elif "sec*proc" in body:
+            label = re.fullmatch(
+                r"(?P<label>\s*\S(?:.*\S)?)\s*=\s+"
+                r"(?:<\s*)?\d+(?:\.\d+)?\s+sec\*proc\s+"
+                r"\((?P<count>\d+)\s+(?P<unit>tests?)\)", body,
+            )
+            if label is None:
+                raise CollectionError("CTest label elapsed field is not canonical")
+            body = (f"{label.group('label')} = <elapsed>*proc "
+                    f"({label.group('count')} {label.group('unit')})")
+        elif (summary := re.fullmatch(
+                r"(\d+)% tests passed, (\d+) tests failed out of (\d+)",
+                body)) is not None:
+            summary_rows.append((int(summary.group(2)), int(summary.group(3))))
+            summary_index = index
+        elif re.match(r"^\s*\d+/\d+\s+Test\s+#\d+:", body):
+            raise CollectionError("CTest result row has a noncanonical elapsed field")
+        elif re.search(r"(?:<\s*)?\d+(?:\.\d+)?\s+(?:ms|sec|seconds?)\b", body):
+            raise CollectionError("CTest transcript has an unclassified volatile field")
+        canonical.append(body + ending)
+    if not start_rows or len(start_rows) != len(result_rows):
+        raise CollectionError("CTest transcript has incomplete start/result framing")
+    expected_count = len(start_rows)
+    if start_rows != [row[2] for row in result_rows]:
+        raise CollectionError("CTest start/result case order differs")
+    if [row[0] for row in result_rows] != list(range(1, expected_count + 1)) \
+            or any(row[1] != expected_count for row in result_rows):
+        raise CollectionError("CTest result row numbering is not complete")
+    if len(summary_rows) != 1 or summary_rows[0] != (0, expected_count):
+        raise CollectionError("CTest success summary is missing or inconsistent")
+    framing = [project_index, *(
+        position
+        for pair in zip(start_indices, result_indices)
+        for position in pair
+    ), summary_index, total_index]
+    if framing != sorted(framing) or len(set(framing)) != len(framing):
+        raise CollectionError("CTest transcript framing order is not canonical")
+    return "".join(canonical)
+
+
+def command_log_sha256(argv: list[str], text: str) -> str:
+    return hashlib.sha256(canonical_command_log(argv, text).encode("utf-8")).hexdigest()
+
+
 def validate_policy(policy: dict[str, Any], governance: dict[str, Any]) -> list[dict[str, Any]]:
     rows = policy.get("rows")
     if policy.get("schema") != 1 or not isinstance(rows, list) or not rows:
@@ -234,6 +330,16 @@ def load_result(results: Path, row: dict[str, Any], identity: dict[str, str],
     if (not log.is_file() or not completion.exact_sha256(result.get("log_sha256"))
             or assembler.sha256_file(log) != result["log_sha256"]):
         return None, "independent row retained log is missing or stale"
+    try:
+        log_text = log.read_text(encoding="utf-8", errors="strict")
+        normalized_log_sha256 = command_log_sha256(
+            exact_row_command(row["command"]), log_text
+        )
+    except (CollectionError, UnicodeError) as error:
+        return None, f"independent row retained log is not canonical: {error}"
+    if (not completion.exact_sha256(result.get("normalized_log_sha256"))
+            or result["normalized_log_sha256"] != normalized_log_sha256):
+        return None, "independent row normalized log identity is stale"
     artifact = retained_path(results, result.get("artifact"),
                              f"{row['id']} artifact")
     binary = retained_path(results, result.get("binary"), f"{row['id']} binary")
@@ -320,11 +426,21 @@ def collect(root: Path, results: Path, output: Path, owner: str) -> int:
                     failure = f"local exact command exited {execution_code}"
                     result = None
                 elif result is not None:
-                    supplied = retained_path(results, result["log"], f"{row['id']} result log")
-                    if assembler.sha256_file(supplied) != hashlib.sha256(
-                            execution_text.encode("utf-8")).hexdigest():
-                        failure = "local exact command log differs from the independent result"
+                    row_command = exact_row_command(row["command"])
+                    try:
+                        execution_digest = command_log_sha256(
+                            row_command, execution_text
+                        )
+                    except CollectionError as error:
+                        failure = f"local CTest transcript is not canonical: {error}"
                         result = None
+                    else:
+                        if result["normalized_log_sha256"] != execution_digest:
+                            failure = (
+                                "local exact command outcome differs from the "
+                                "independent result"
+                            )
+                            result = None
             row_ok = result is not None
             all_ok = all_ok and row_ok
             relative = f"logs/{row['id']}.log"
@@ -373,6 +489,9 @@ def collect(root: Path, results: Path, output: Path, owner: str) -> int:
                 "source_fingerprint": identity["repository_sha256"],
                 "last_verified": result["last_verified"] if row_ok else generated_at,
                 "log": relative,
+                "raw_log_sha256": digest,
+                "normalized_log_sha256": (result["normalized_log_sha256"]
+                                            if row_ok else ""),
                 "artifact_routes": list(ROUTES[row["artifact_route"]]),
                 **retained_evidence,
             }
