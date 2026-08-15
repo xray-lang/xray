@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -224,7 +225,18 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     xray = pathlib.Path(args.xray)
+    if not (xray.is_file() and os.access(xray, os.X_OK)):
+        print(f"FAIL: xray binary not executable: {xray}", file=sys.stderr)
+        return 1
+
     cases = collect_cases()
+    if not cases:
+        print(
+            f"FAIL: no governed AOT manifest cases found under {DIFF_CASE_DIR}",
+            file=sys.stderr,
+        )
+        return 1
+
     failures: list[str] = []
     checked = 0
     expected_runtime = 0
