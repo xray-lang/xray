@@ -1,0 +1,48 @@
+// A String parameter whose body consumes it. Concatenation consumes its
+// operands, so a function that appends to its own string parameter declares an
+// owning parameter rather than a borrowing one. Both kinds hand over the same
+// tagged carrier and differ only in who releases the allocation, so a backend
+// that describes only the borrowing half refuses this file while accepting the
+// same file with the `+` removed.
+
+fn owning(label: string) -> string {
+    return label + "!"
+}
+
+fn owning_second(n: int, label: string) -> string {
+    return label + "/"
+}
+
+fn chained(label: string) -> string {
+    return owning(owning(label))
+}
+
+// A literal handed straight to an owning parameter.
+print(owning("literal"))
+
+// A named local handed to an owning parameter, then read again: the caller kept
+// nothing the callee released.
+var named = "named"
+print(owning(named))
+print(named)
+
+// A call result handed on to another owning parameter.
+var built = owning("built")
+print(owning(built))
+print(built)
+
+// An owning parameter that is not the first argument.
+print(owning_second(7, "second"))
+
+// Owning parameters nested into one another.
+print(chained("chain"))
+
+// Repeated in a loop, so a leaked or double-released reference shows up as
+// wrong output or a crash rather than as a one-shot accident.
+var i = 0
+var last = ""
+while (i < 50) {
+    last = owning("loop")
+    i = i + 1
+}
+print(last)

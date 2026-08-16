@@ -6024,14 +6024,17 @@ static bool oracle_direct_local_array_ref_parameter_place_storage(const VerifyAu
     return true;
 }
 
-/* The frozen rows a container parameter borrowed by value must carry: the
- * borrowed tagged carrier in both the register and the memory position, and a
- * borrowed dynamic parameter slot that names this value and no operation. An
- * Array and a String differ only in which declaration shape they accept, so the
- * rows they must agree with are stated once here rather than twice. */
-static bool
-borrowed_tagged_value_parameter_rows_are_exact(const VerifyAuthority *ctx, uint32_t semantic_value,
-                                               const XrSemanticParameterRecord *parameter) {
+/* The frozen rows a container parameter taken by value must carry: the tagged
+ * carrier in both the register and the memory position, and a dynamic parameter
+ * slot that names this value and no operation. An Array and a String differ
+ * only in which declaration shape they accept, so the rows they must agree with
+ * are stated once here rather than twice, and `callee_ownership` is the one
+ * thing that varies: an Array by value is always borrowed, while a String
+ * parameter carries whichever ownership its declaration proved. */
+static bool tagged_value_parameter_rows_are_exact(const VerifyAuthority *ctx,
+                                                  uint32_t semantic_value,
+                                                  const XrSemanticParameterRecord *parameter,
+                                                  uint8_t callee_ownership) {
     const XrTargetValueRepRecord *binding =
         xr_target_plan_value_rep(ctx->target_plan, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
@@ -6047,16 +6050,15 @@ borrowed_tagged_value_parameter_rows_are_exact(const VerifyAuthority *ctx, uint3
            memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
            register_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
            memory_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
-           register_rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
-           memory_rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+           register_rep->ownership == callee_ownership &&
+           memory_rep->ownership == callee_ownership &&
            register_rep->null_encoding == XR_TARGET_NULL_TAGGED &&
            memory_rep->null_encoding == XR_TARGET_NULL_TAGGED &&
            slot->semantic_value == semantic_value &&
            slot->semantic_operation == XR_SEMANTIC_INDEX_NONE &&
            slot->function == parameter->function && slot->role == XR_TARGET_SLOT_PARAMETER &&
            slot->register_rep == binding->register_rep && slot->memory_rep == binding->memory_rep &&
-           slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
-           slot->ownership == XR_TARGET_OWNERSHIP_BORROWED;
+           slot->root_kind == XR_TARGET_ROOT_DYNAMIC && slot->ownership == callee_ownership;
 }
 
 /* An `Array<T>` parameter handed over by value. It borrows the caller's
@@ -6076,7 +6078,8 @@ static bool oracle_direct_local_array_value_parameter_storage(const VerifyAuthor
             : NULL;
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
     if (!aot_array_value_parameter_is_exact(ctx->semantic, parameter, &storage) ||
-        !borrowed_tagged_value_parameter_rows_are_exact(ctx, semantic_value, parameter))
+        !tagged_value_parameter_rows_are_exact(ctx, semantic_value, parameter,
+                                               XR_TARGET_OWNERSHIP_BORROWED))
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -6084,8 +6087,8 @@ static bool oracle_direct_local_array_value_parameter_storage(const VerifyAuthor
 }
 
 /* A String parameter handed over by value. A String has no carrier other than
- * the outer tagged value, so borrowing one for the extent of a call binds
- * exactly the rows an Array by value binds. */
+ * the outer tagged value, so it binds exactly the rows an Array by value binds,
+ * under whichever ownership the declaration proved. */
 static bool oracle_direct_local_string_value_parameter_storage(const VerifyAuthority *ctx,
                                                                uint32_t semantic_value,
                                                                XrRep *out_storage,
@@ -6097,8 +6100,12 @@ static bool oracle_direct_local_string_value_parameter_storage(const VerifyAutho
         parameter_index != XR_SEMANTIC_INDEX_NONE
             ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
             : NULL;
-    if (!xr_semantic_direct_local_string_value_parameter_is_exact(ctx->semantic, parameter) ||
-        !borrowed_tagged_value_parameter_rows_are_exact(ctx, semantic_value, parameter))
+    bool callee_owns = false;
+    if (!xr_semantic_direct_local_string_value_parameter_is_exact(ctx->semantic, parameter,
+                                                                  &callee_owns) ||
+        !tagged_value_parameter_rows_are_exact(ctx, semantic_value, parameter,
+                                               callee_owns ? XR_TARGET_OWNERSHIP_OWNED
+                                                           : XR_TARGET_OWNERSHIP_BORROWED))
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;

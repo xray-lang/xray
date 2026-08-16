@@ -50,25 +50,39 @@ static inline bool xr_semantic_tagged_string_type_is_exact(const XrSemanticTypeR
 
 /* A String parameter handed over by value.
  *
- * A String is immutable and shared, so passing one by value borrows: the callee
- * reads the caller's allocation for the extent of the call and releases
- * nothing. Its one storage fact is the outer tagged value, the same carrier a
- * String literal, a concatenation result and a direct-local String result all
- * select, so the parameter needs no place of its own and no addressability. A
- * `ref` String parameter is a different boundary -- it names the caller's cell
- * and may rebind it -- and stays unclaimed here.
+ * A String is immutable and shared, so both sides of the boundary hold the same
+ * outer tagged value -- the same carrier a String literal, a concatenation
+ * result and a direct-local String result all select. The parameter therefore
+ * needs no place of its own and no addressability. A `ref` String parameter is
+ * a different boundary -- it names the caller's cell and may rebind it -- and
+ * stays unclaimed here.
+ *
+ * What the two sides do not share is who releases the allocation, and the
+ * declaration answers that on its own. A body that only reads the string
+ * borrows it and owes nothing back. A body that consumes it holds an owning
+ * reference and releases it itself, and consuming is not an exotic shape:
+ * concatenation consumes its operands, so `fn f(s: string) { print(s + "!") }`
+ * declares an owning parameter. Admitting only the borrowing half would have
+ * refused that function while accepting the same function without the `+`,
+ * which is a distinction the boundary has no reason to draw. So both are one
+ * parameter shape with one carrier question, and the answer is reported through
+ * `callee_owns` rather than assumed by each caller.
  *
  * TargetPlan construction, TargetPlan verification and representation
  * refinement all ask this one judgement, so a parameter one layer binds cannot
  * be one another layer refuses. */
 static inline bool xr_semantic_direct_local_string_value_parameter_is_exact(
-    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter) {
-    return plan && parameter && parameter->function < xr_semantic_plan_function_count(plan) &&
-           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == XR_PARAM_READ &&
-           parameter->ownership == XI_OWN_BORROWED &&
-           parameter->transfer_mode == XR_TRANSFER_SHARE &&
-           (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 && parameter->reserved == 0 &&
-           xr_semantic_tagged_string_type_is_exact(xr_semantic_plan_type(plan, parameter->type));
+    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter, bool *callee_owns) {
+    if (!plan || !parameter || parameter->function >= xr_semantic_plan_function_count(plan) ||
+        parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->mode != XR_PARAM_READ ||
+        (parameter->ownership != XI_OWN_BORROWED && parameter->ownership != XI_OWN_OWNED) ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
+        !xr_semantic_tagged_string_type_is_exact(xr_semantic_plan_type(plan, parameter->type)))
+        return false;
+    if (callee_owns)
+        *callee_owns = parameter->ownership == XI_OWN_OWNED;
+    return true;
 }
 
 /* A String read back out of the shared cell it was bound to.

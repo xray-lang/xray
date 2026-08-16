@@ -6092,21 +6092,25 @@ static bool builder_add_direct_local_string_boundary_storage(XrTargetPlanBuilder
             XR_TARGET_SLOT_TEMPORARY, XR_TARGET_STRING_CARRIER_BORROWED_VALUE, read->id, error,
             error_size);
     }
-    /* A String parameter passed by value. It borrows the caller's allocation for
-     * the extent of the call, so it holds the same tagged carrier the caller
-     * handed over and owes nothing back. */
+    /* A String parameter passed by value. It holds the same tagged carrier the
+     * caller handed over; the declaration says whether the callee borrows that
+     * allocation for the extent of the call or holds an owning reference it
+     * releases itself, and the carrier records which. */
     uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
     for (uint32_t i = 0; valid && i < parameter_count; i++) {
         const XrSemanticParameterRecord *parameter =
             xr_semantic_plan_parameter(builder->semantic_plan, i);
+        bool callee_owns = false;
         if (!xr_semantic_direct_local_string_value_parameter_is_exact(builder->semantic_plan,
-                                                                      parameter) ||
+                                                                      parameter, &callee_owns) ||
             parameter->value >= analysis.total_values || analysis.defined_values[parameter->value])
             continue;
         valid = note_direct_local_string_boundary_storage(
             builder, &analysis, parameter->value, parameter->type, parameter->function,
             XR_SEMANTIC_INDEX_NONE, XR_TARGET_SLOT_PARAMETER,
-            XR_TARGET_STRING_CARRIER_BORROWED_VALUE, parameter->id, error, error_size);
+            callee_owns ? XR_TARGET_STRING_CARRIER_OWNED_VALUE
+                        : XR_TARGET_STRING_CARRIER_BORROWED_VALUE,
+            parameter->id, error, error_size);
     }
     value_storage_analysis_dispose(&analysis);
     if (!valid) {
@@ -8534,11 +8538,20 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
          * shared -- because both are reference-capable containers whose one
          * storage fact is that tagged outer value. Whatever produced the value
          * the caller names, a literal, a concatenation or a call result, was
-         * bound by the family that owns that shape. */
+         * bound by the family that owns that shape.
+         *
+         * The two sides must agree about the allocation, not merely about the
+         * carrier: a callee that holds an owning reference is one the caller
+         * hands its own over to, and a callee that borrows is one the caller
+         * keeps answering for. The declaration proves which, and the call site
+         * has to say the same thing. */
+        bool string_callee_owns = false;
         bool exact_string_value =
             parameter && parameter->type == operand->type &&
-            xr_semantic_direct_local_string_value_parameter_is_exact(plan, parameter) &&
-            operand->ownership_action == XR_SEM_OPERAND_BORROW &&
+            xr_semantic_direct_local_string_value_parameter_is_exact(plan, parameter,
+                                                                     &string_callee_owns) &&
+            operand->ownership_action ==
+                (string_callee_owns ? XR_SEM_OPERAND_CONSUME : XR_SEM_OPERAND_BORROW) &&
             operand->transfer_mode == XR_TRANSFER_SHARE;
         if (!parameter || operand->role != XR_SEM_OPERAND_ARGUMENT ||
             operand->parameter != (int16_t) ordinal || operand->type != parameter->type ||
@@ -8551,10 +8564,15 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             (!exact_array_ref &&
              (parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
               (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0)) ||
-            (parameter->ownership != XI_OWN_NONE &&
+            /* A String by value is absent from the table below because it does
+             * not need one: its own judgement already admitted exactly the two
+             * ownerships a String parameter may declare and required the call
+             * site to state the matching one, so a second table restating half
+             * of that would be the narrower of two spellings of one rule. */
+            (parameter->ownership != XI_OWN_NONE && !exact_string_value &&
              !(exact_adt_enum && parameter->ownership == XI_OWN_OWNED) &&
              !((exact_u8_slice || exact_unit_enum || exact_adt_enum || exact_class_instance ||
-                exact_array_ref || exact_array_value || exact_string_value) &&
+                exact_array_ref || exact_array_value) &&
                parameter->ownership == XI_OWN_BORROWED))) {
             if (target_trace_enabled()) {
                 fprintf(stderr,
@@ -11002,9 +11020,15 @@ static bool machine_reps_have_same_call_abi(const XrTargetMachineRepRecord *call
  * to differ in ownership alone. An Array and a String reach this boundary in
  * the same tagged carrier, so they ask this one question instead of stating the
  * same rep agreement twice in spellings that could drift. */
-static bool tagged_container_value_borrow_boundary(const XrTargetMaterializedPlan *materialized,
-                                                   const XrTargetValueRepRecord *caller,
-                                                   const XrTargetValueRepRecord *callee) {
+/* Both sides of a by-value container boundary hold the same tagged carrier, so
+ * they must agree on representation and on call ABI. They need not agree on
+ * ownership: what the caller holds is its own business -- a freshly built array
+ * or a fresh concatenation is owned, a shared read of a local is borrowed -- and
+ * `callee_ownership` states the one side the boundary does fix. */
+static bool tagged_container_value_boundary(const XrTargetMaterializedPlan *materialized,
+                                            const XrTargetValueRepRecord *caller,
+                                            const XrTargetValueRepRecord *callee,
+                                            uint8_t callee_ownership) {
     return materialized && caller && callee &&
            caller->register_rep < materialized->machine_rep_count &&
            caller->memory_rep < materialized->machine_rep_count &&
@@ -11016,9 +11040,8 @@ static bool tagged_container_value_borrow_boundary(const XrTargetMaterializedPla
                                            &materialized->machine_reps[callee->memory_rep]) &&
            materialized->machine_reps[caller->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
            materialized->machine_reps[caller->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
-           materialized->machine_reps[callee->register_rep].ownership ==
-               XR_TARGET_OWNERSHIP_BORROWED &&
-           materialized->machine_reps[callee->memory_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED;
+           materialized->machine_reps[callee->register_rep].ownership == callee_ownership &&
+           materialized->machine_reps[callee->memory_rep].ownership == callee_ownership;
 }
 
 static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
@@ -11170,6 +11193,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
              * outer value, so both cross this boundary as a plain argument the
              * callee borrows, and the rep agreement they need is the same one. */
             uint8_t exact_array_value_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+            bool string_callee_owns = false;
             bool container_value_argument =
                 parameter && argument_intent->mode == XR_TARGET_CALL_VALUE &&
                 argument_intent->transfer_mode == XR_TRANSFER_SHARE &&
@@ -11177,11 +11201,13 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 argument_intent->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
                 (semantic_direct_local_array_value_parameter_is_exact(
                      builder->semantic_plan, parameter, &exact_array_value_storage) ||
-                 xr_semantic_direct_local_string_value_parameter_is_exact(builder->semantic_plan,
-                                                                          parameter));
+                 xr_semantic_direct_local_string_value_parameter_is_exact(
+                     builder->semantic_plan, parameter, &string_callee_owns));
             bool container_value_borrow_boundary =
                 container_value_argument &&
-                tagged_container_value_borrow_boundary(materialized, caller, callee);
+                tagged_container_value_boundary(materialized, caller, callee,
+                                                string_callee_owns ? XR_TARGET_OWNERSHIP_OWNED
+                                                                   : XR_TARGET_OWNERSHIP_BORROWED);
             if (array_intrinsic || array_fill || array_hof) {
                 if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
                     !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE)

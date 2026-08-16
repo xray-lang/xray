@@ -398,9 +398,10 @@ static bool machine_reps_have_same_call_abi(const XrTargetMachineRepRecord *call
  * to differ in ownership alone. An Array and a String reach this boundary in
  * the same tagged carrier, so they are checked by this one judgement rather
  * than by two copies of the same rep agreement. */
-static bool verify_tagged_container_value_borrow_boundary(const XrTargetPlan *plan,
-                                                          const XrTargetValueRepRecord *caller,
-                                                          const XrTargetValueRepRecord *callee) {
+static bool verify_tagged_container_value_boundary(const XrTargetPlan *plan,
+                                                   const XrTargetValueRepRecord *caller,
+                                                   const XrTargetValueRepRecord *callee,
+                                                   uint8_t callee_ownership) {
     return plan && caller && callee && caller->register_rep < plan->machine_reps_count &&
            caller->memory_rep < plan->machine_reps_count &&
            callee->register_rep < plan->machine_reps_count &&
@@ -411,8 +412,8 @@ static bool verify_tagged_container_value_borrow_boundary(const XrTargetPlan *pl
                                            &plan->machine_reps[callee->memory_rep]) &&
            plan->machine_reps[caller->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
            plan->machine_reps[caller->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
-           plan->machine_reps[callee->register_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
-           plan->machine_reps[callee->memory_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED;
+           plan->machine_reps[callee->register_rep].ownership == callee_ownership &&
+           plan->machine_reps[callee->memory_rep].ownership == callee_ownership;
 }
 
 static bool conversion_mask_is_independently_derived(const XrTargetPlan *plan, uint32_t index) {
@@ -3487,13 +3488,21 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         semantic_direct_local_array_value_parameter_is_exact_verify(plan->semantic_plan, parameter,
                                                                     &exact_array_value_storage) &&
         parameter->type == semantic_type;
-    /* A String handed over by value borrows the caller's allocation for the
-     * extent of the call. A String has no carrier other than the outer tagged
-     * value, so this is the same borrowed tagged binding an Array by value
-     * gets. */
+    /* A String handed over by value. A String has no carrier other than the
+     * outer tagged value, so it is bound to the same tagged binding an Array by
+     * value gets; the declaration says whether the callee borrows the caller's
+     * allocation or holds an owning reference it releases itself, and only the
+     * ownership on the row differs between the two. */
+    bool string_parameter_callee_owns = false;
     bool exact_string_value_parameter =
-        xr_semantic_direct_local_string_value_parameter_is_exact(plan->semantic_plan, parameter) &&
+        xr_semantic_direct_local_string_value_parameter_is_exact(plan->semantic_plan, parameter,
+                                                                 &string_parameter_callee_owns) &&
         parameter->type == semantic_type;
+    /* Whether the callee owns the allocation is the parameter's own recorded
+     * ownership, never a property of the family -- the same way a class
+     * receiver and an ADT enum state theirs. */
+    bool exact_string_value_parameter_borrowed =
+        exact_string_value_parameter && !string_parameter_callee_owns;
     /* An Array a direct-local call returns is a transfer of the outer tagged
      * value, so it is bound exactly as an owned String result is. */
     bool exact_direct_array_result =
@@ -3640,7 +3649,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
              exact_class_instance_borrowed || exact_class_receiver_borrowed ||
              exact_adt_enum_borrowed || exact_array_shared_read || exact_string_shared_read ||
              exact_array_ref_place_load || exact_array_value_parameter ||
-             exact_string_value_parameter ||
+             exact_string_value_parameter_borrowed ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
                 : XR_TARGET_OWNERSHIP_OWNED;
@@ -5570,14 +5579,26 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                  * containers carried by that one tagged value, so they are one
                  * argument shape rather than two. */
                 uint8_t array_value_storage = XR_TARGET_ARRAY_STORAGE_NONE;
-                bool argument_container_value =
+                bool argument_string_callee_owns = false;
+                bool argument_string_value =
                     parameter && parameter->type == operand->type &&
-                    (semantic_direct_local_array_value_parameter_is_exact_verify(
-                         semantic, parameter, &array_value_storage) ||
-                     xr_semantic_direct_local_string_value_parameter_is_exact(semantic,
-                                                                              parameter)) &&
-                    operand->ownership_action == XR_SEM_OPERAND_BORROW &&
-                    operand->transfer_mode == XR_TRANSFER_SHARE;
+                    xr_semantic_direct_local_string_value_parameter_is_exact(
+                        semantic, parameter, &argument_string_callee_owns);
+                bool argument_array_value =
+                    parameter && parameter->type == operand->type &&
+                    semantic_direct_local_array_value_parameter_is_exact_verify(
+                        semantic, parameter, &array_value_storage);
+                bool argument_container_value =
+                    (argument_string_value || argument_array_value) &&
+                    operand->transfer_mode == XR_TRANSFER_SHARE &&
+                    /* The call site must state the same allocation answer the
+                     * declaration proved: a callee that holds an owning
+                     * reference is one the caller hands its own over to. An
+                     * Array by value is always borrowed, so it states so. */
+                    operand->ownership_action ==
+                        (argument_string_value && argument_string_callee_owns
+                             ? XR_SEM_OPERAND_CONSUME
+                             : XR_SEM_OPERAND_BORROW);
                 if (argument_adt_enum)
                     argument_kind = XR_MACHINE_REP_DYN_VALUE;
                 if (argument_array_ref || argument_container_value)
@@ -5639,7 +5660,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                  * differ on ownership. */
                 bool container_value_borrow_boundary =
                     argument_container_value &&
-                    verify_tagged_container_value_borrow_boundary(plan, caller_value, callee_value);
+                    verify_tagged_container_value_boundary(plan, caller_value, callee_value,
+                                                           argument_string_value &&
+                                                                   argument_string_callee_owns
+                                                               ? XR_TARGET_OWNERSHIP_OWNED
+                                                               : XR_TARGET_OWNERSHIP_BORROWED);
                 const char *argument_identity_domain =
                     argument_array_ref ? "xray-target-direct-array-ref-argument-v1"
                                        : "xray-target-call-argument-v1";
@@ -5655,7 +5680,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     (argument_array_ref ||
                      (parameter->mode == XR_PARAM_READ && operand->access == XR_CALL_ARG_PLAIN &&
                       (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0)) &&
-                    (parameter->ownership == XI_OWN_NONE ||
+                    /* A String by value is absent from this table because its
+                     * own judgement already admitted exactly the two ownerships
+                     * a String parameter may declare and required the call site
+                     * to state the matching one. */
+                    (parameter->ownership == XI_OWN_NONE || argument_string_value ||
                      (argument_adt_enum && parameter->ownership == XI_OWN_OWNED) ||
                      ((argument_u8_slice || argument_unit_enum || argument_adt_enum ||
                        argument_class_instance || argument_array_ref || argument_container_value) &&
