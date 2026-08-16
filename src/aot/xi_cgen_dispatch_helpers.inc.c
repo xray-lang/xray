@@ -142,16 +142,12 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
                          const char *prefix) {
     (void) prefix;
     XrCValueEmissionView emission = {0};
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, f, v, &emission);
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, f, v, &emission);
     if (emission_status == CG_VALUE_EMISSION_FOUND &&
-        emission.materialization ==
-            XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW) {
-        if (emission.rep != XR_C_VALUE_REP_TAGGED ||
-            !emission.literal_bytes ||
+        emission.materialization == XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW) {
+        if (emission.rep != XR_C_VALUE_REP_TAGGED || !emission.literal_bytes ||
             strlen(emission.literal_bytes) != emission.literal_byte_length) {
-            (void) cg_value_emission_fail(
-                ctx, "String literal C emission recipe is invalid");
+            (void) cg_value_emission_fail(ctx, "String literal C emission recipe is invalid");
             fprintf(out, "XR_NULL_VAL");
             return;
         }
@@ -295,14 +291,12 @@ static uint32_t cg_target_simd_features(const XiCgenCtx *ctx) {
 /* The owner macro resolves a constant query kind, so each row below asks for
  * exactly one answer rather than selecting a kind at run time. */
 #define XICGEN_TARGET_SIMD_QUERY(ctx, kind)                                                        \
-    XR_TARGET_SIMD_QUERY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_HI,                  \
-                                     XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_LO,                  \
-                                     XR_SEM_CONSUMER_CGEN, (kind),                                 \
-                                     cg_target_simd_selection((ctx)),                              \
-                                     cg_target_simd_features((ctx)))
+    XR_TARGET_SIMD_QUERY_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_HI, XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_LO,  \
+        XR_SEM_CONSUMER_CGEN, (kind), cg_target_simd_selection((ctx)),                             \
+        cg_target_simd_features((ctx)))
 
-static bool xicgen_target_simd_query_ok(XiCgenCtx *ctx, FILE *out,
-                                        XrTargetSimdQueryResult result) {
+static bool xicgen_target_simd_query_ok(XiCgenCtx *ctx, FILE *out, XrTargetSimdQueryResult result) {
     const char *adapter = cg_target_simd_query_adapter_name(ctx);
     if (!adapter || strcmp(adapter, "xr_target_simd_query_core") != 0 ||
         result.status != (uint8_t) XR_TARGET_SIMD_QUERY_OK) {
@@ -339,8 +333,7 @@ static void xicgen_target_simd_accelerated(XiCgenCtx *ctx, FILE *out, const XiFu
                                            const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    XrTargetSimdQueryResult query =
-        XICGEN_TARGET_SIMD_QUERY(ctx, XR_TARGET_SIMD_QUERY_ACCELERATED);
+    XrTargetSimdQueryResult query = XICGEN_TARGET_SIMD_QUERY(ctx, XR_TARGET_SIMD_QUERY_ACCELERATED);
     if (!xicgen_target_simd_query_ok(ctx, out, query))
         return;
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
@@ -718,11 +711,11 @@ static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         emit_codegen_abort_expr(out);
         return;
     }
-    bool has_enum_metadata = v->enum_metadata_owner != NULL || v->enum_metadata_field != 0 ||
-                             v->enum_metadata_kind != 0;
-    XrCopyPlan copy_plan = XR_COPY_OWNER_PLAN(
-        XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO,
-        XR_SEM_CONSUMER_CGEN, v->aux_int, has_enum_metadata);
+    bool has_enum_metadata =
+        v->enum_metadata_owner != NULL || v->enum_metadata_field != 0 || v->enum_metadata_kind != 0;
+    XrCopyPlan copy_plan =
+        XR_COPY_OWNER_PLAN(XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO,
+                           XR_SEM_CONSUMER_CGEN, v->aux_int, has_enum_metadata);
     if (!xr_copy_plan_is_exact_core(copy_plan)) {
         ctx->error = true;
         emit_codegen_abort_expr(out);
@@ -791,11 +784,10 @@ static void xicgen_codegen_opaque(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
     if (rep == XR_REP_I64) {
         bool is_unsigned = v->type && xr_type_is_exact_unsigned_integer(v->type);
-        XrCodegenOpaqueKind kind =
-            is_unsigned ? XR_CODEGEN_OPAQUE_U64 : XR_CODEGEN_OPAQUE_I64;
+        XrCodegenOpaqueKind kind = is_unsigned ? XR_CODEGEN_OPAQUE_U64 : XR_CODEGEN_OPAQUE_I64;
         XrCodegenOpaquePlan plan = XR_CODEGEN_OPAQUE_OWNER_PLAN(
-            XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI,
-            XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO, XR_SEM_CONSUMER_CGEN, kind);
+            XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI, XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO,
+            XR_SEM_CONSUMER_CGEN, kind);
         if (!xr_codegen_opaque_plan_is_exact_core(plan)) {
             ctx->error = true;
             emit_codegen_abort_expr(out);
@@ -811,8 +803,8 @@ static void xicgen_codegen_opaque(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         XrCodegenOpaqueKind kind =
             is_mut ? XR_CODEGEN_OPAQUE_POINTER : XR_CODEGEN_OPAQUE_CONST_POINTER;
         XrCodegenOpaquePlan plan = XR_CODEGEN_OPAQUE_OWNER_PLAN(
-            XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI,
-            XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO, XR_SEM_CONSUMER_CGEN, kind);
+            XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI, XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO,
+            XR_SEM_CONSUMER_CGEN, kind);
         if (!xr_codegen_opaque_plan_is_exact_core(plan)) {
             ctx->error = true;
             emit_codegen_abort_expr(out);
@@ -834,8 +826,8 @@ static void xicgen_move(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     if (v && v->op == XI_OWNER_FORWARD) {
         const char *adapter = cg_owner_forward_adapter_name(ctx);
         XrOwnerForwardPlan plan = XR_OWNER_FORWARD_OWNER_APPLY(
-            XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI,
-            XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO, XR_SEM_CONSUMER_CGEN);
+            XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI, XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO,
+            XR_SEM_CONSUMER_CGEN);
         if (!adapter || !xr_owner_forward_plan_is_exact_core(plan)) {
             emit_codegen_abort_expr(out);
             return;
@@ -1196,11 +1188,9 @@ static void xicgen_exact_bit(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     (void) prefix;
     const char *adapter = cg_exact_bits_adapter_name(ctx);
     const char *kernel = v ? cg_exact_bit_kernel_name(v->op) : NULL;
-    bool binary = v && (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR ||
-                        v->op == XI_BIT_MUL_HIGH);
+    bool binary = v && (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR || v->op == XI_BIT_MUL_HIGH);
     if (!adapter || !kernel || !v || v->nargs != (binary ? 2 : 1) || !v->args[0] ||
-        (binary && !v->args[1]) ||
-        (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)) {
+        (binary && !v->args[1]) || (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)) {
         if (ctx)
             ctx->error = true;
         emit_codegen_abort_expr(out);
@@ -4121,8 +4111,8 @@ static void xicgen_cell_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
                             const char *prefix) {
     (void) prefix;
     const char *owner_adapter = cg_cell_access_adapter_name(ctx);
-    if (!owner_adapter || (ctx && (ctx->freestanding_profile ||
-                                  ctx->c_dialect == XI_CGEN_C_DIALECT_C90))) {
+    if (!owner_adapter ||
+        (ctx && (ctx->freestanding_profile || ctx->c_dialect == XI_CGEN_C_DIALECT_C90))) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
@@ -4148,8 +4138,8 @@ static void xicgen_cell_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     (void) f;
     (void) prefix;
     const char *owner_adapter = cg_cell_access_adapter_name(ctx);
-    if (!owner_adapter || (ctx && (ctx->freestanding_profile ||
-                                  ctx->c_dialect == XI_CGEN_C_DIALECT_C90))) {
+    if (!owner_adapter ||
+        (ctx && (ctx->freestanding_profile || ctx->c_dialect == XI_CGEN_C_DIALECT_C90))) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
@@ -4621,9 +4611,9 @@ typedef enum {
 
 static const char *xicgen_atomic_c11_order_name(CgAtomicOrderUse use, int64_t ordering) {
     if (use == CG_ATOMIC_ORDER_LOAD) {
-        XrAtomicLoadPlan plan = XR_ATOMIC_LOAD_OWNER_PLAN(
-            XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_LO,
-            XR_SEM_CONSUMER_CGEN, ordering);
+        XrAtomicLoadPlan plan = XR_ATOMIC_LOAD_OWNER_PLAN(XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_HI,
+                                                          XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_LO,
+                                                          XR_SEM_CONSUMER_CGEN, ordering);
         if (!xr_atomic_load_plan_is_exact_core(plan))
             return NULL;
         switch (plan.order) {
@@ -4636,9 +4626,9 @@ static const char *xicgen_atomic_c11_order_name(CgAtomicOrderUse use, int64_t or
         }
     }
     if (use == CG_ATOMIC_ORDER_STORE) {
-        XrAtomicStorePlan plan = XR_ATOMIC_STORE_OWNER_PLAN(
-            XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO,
-            XR_SEM_CONSUMER_CGEN, ordering);
+        XrAtomicStorePlan plan = XR_ATOMIC_STORE_OWNER_PLAN(XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI,
+                                                            XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO,
+                                                            XR_SEM_CONSUMER_CGEN, ordering);
         if (!xr_atomic_store_plan_is_exact_core(plan))
             return NULL;
         switch (plan.order) {
@@ -7357,31 +7347,25 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         XrCValueEmissionView emission = {0};
         XrCValueEmissionView source = {0};
         CgValueEmissionStatus source_status =
-            v->nargs == 1 && v->args[0]
-                ? cg_value_emission_view(ctx, f, v->args[0], &source)
-                : CG_VALUE_EMISSION_ERROR;
-        CgValueEmissionStatus result_status =
-            cg_value_emission_view(ctx, f, v, &emission);
+            v->nargs == 1 && v->args[0] ? cg_value_emission_view(ctx, f, v->args[0], &source)
+                                        : CG_VALUE_EMISSION_ERROR;
+        CgValueEmissionStatus result_status = cg_value_emission_view(ctx, f, v, &emission);
         uint32_t source_semantic_value = XR_SEMANTIC_INDEX_NONE;
         bool source_identity = v->nargs == 1 && v->args[0] &&
-                               cg_value_semantic_id(ctx, f, v->args[0],
-                                                    &source_semantic_value);
-        if (v->nargs != 1 || !v->args[0] ||
-            result_status != CG_VALUE_EMISSION_FOUND ||
+                               cg_value_semantic_id(ctx, f, v->args[0], &source_semantic_value);
+        if (v->nargs != 1 || !v->args[0] || result_status != CG_VALUE_EMISSION_FOUND ||
             emission.rep != XR_C_VALUE_REP_VIEW ||
-            emission.materialization !=
-                XR_C_VALUE_MATERIALIZATION_STRING_BYTE_SLICE_VIEW ||
+            emission.materialization != XR_C_VALUE_MATERIALIZATION_STRING_BYTE_SLICE_VIEW ||
             !emission.recipe_symbol || !source_identity ||
             emission.recipe_operand_value != source_semantic_value ||
-            (source_status == CG_VALUE_EMISSION_FOUND &&
-             source.rep != XR_C_VALUE_REP_TAGGED) ||
+            (source_status == CG_VALUE_EMISSION_FOUND && source.rep != XR_C_VALUE_REP_TAGGED) ||
             (source_status == CG_VALUE_EMISSION_ERROR ||
              source_status == CG_VALUE_EMISSION_NOT_CONFIGURED)) {
             fprintf(stderr,
                     "[xi_cgen] ERROR: immutable string byte-slice view recipe is missing "
                     "(result=%u source=%u result-rep=%u materialization=%u)\n",
-                    (unsigned) result_status, (unsigned) source_status,
-                    (unsigned) emission.rep, (unsigned) emission.materialization);
+                    (unsigned) result_status, (unsigned) source_status, (unsigned) emission.rep,
+                    (unsigned) emission.materialization);
             emit_codegen_abort_expr(out);
             cg_ctx_set_error(ctx);
             return;
@@ -7391,13 +7375,11 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, ")");
     } else if (strcmp(bn, "StringBuilder") == 0) {
         XrCValueEmissionView emission = {0};
-        if (cg_value_emission_view(ctx, f, v, &emission) !=
-                CG_VALUE_EMISSION_FOUND ||
+        if (cg_value_emission_view(ctx, f, v, &emission) != CG_VALUE_EMISSION_FOUND ||
             emission.rep != XR_C_VALUE_REP_TAGGED ||
-            emission.materialization !=
-                XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW ||
-            !emission.recipe_symbol ||
-            emission.recipe_operand_value != UINT32_MAX || v->nargs != 0) {
+            emission.materialization != XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW ||
+            !emission.recipe_symbol || emission.recipe_operand_value != UINT32_MAX ||
+            v->nargs != 0) {
             fprintf(stderr,
                     "[xi_cgen] ERROR: immutable StringBuilder materialization recipe is missing\n");
             emit_codegen_abort_expr(out);
@@ -7629,8 +7611,7 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
     if (v && v->array_member_kind == XI_ARRAY_MEMBER_FILL &&
         emit_typed_array_fill_expr(ctx, out, f, prefix, v))
         return true;
-    if (cg_array_hof_is_marked_operation(v) ||
-        cg_array_hof_is_frozen_operation(ctx, f, v)) {
+    if (cg_array_hof_is_marked_operation(v) || cg_array_hof_is_frozen_operation(ctx, f, v)) {
         (void) cg_value_emission_fail(
             ctx, "Array HOF reached generic method emission without exact recipe");
         return true;
@@ -9017,7 +8998,8 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
             authority.recipe_argument_value != UINT32_MAX || !authority.recipe_symbol ||
             strcmp(authority.recipe_symbol, "xrt_strbuf_finish") != 0) {
             ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: StringBuilder.toString lacks immutable emission authority\n");
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: StringBuilder.toString lacks immutable emission authority\n");
             emit_codegen_abort_expr(out);
             return true;
         }
@@ -9100,24 +9082,28 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
             !append_emission.recipe_symbol ||
             strcmp(append_emission.recipe_symbol, "xrt_strbuf_append") != 0) {
             ctx->error = true;
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: StringBuilder.append(rune) lacks immutable emission authority\n");
+            fprintf(
+                stderr,
+                "[xi_cgen] ERROR: StringBuilder.append(rune) lacks immutable emission authority\n");
             emit_codegen_abort_expr(out);
             return true;
         }
     }
     if (v->args[1] && v->args[1]->type && v->args[1]->type->kind == XR_KIND_STRING) {
-        XrCValueEmissionView authority={0};
-        uint32_t receiver=XR_SEMANTIC_INDEX_NONE,argument=XR_SEMANTIC_INDEX_NONE;
-        if(cg_value_emission_view(ctx,f,v,&authority)!=CG_VALUE_EMISSION_FOUND||
-           !cg_value_semantic_id(ctx,f,v->args[0],&receiver)||
-           !cg_value_semantic_id(ctx,f,v->args[1],&argument)||
-           authority.materialization!=XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING||
-           authority.recipe_operand_value!=receiver||authority.recipe_argument_value!=argument||
-           !authority.recipe_symbol||strcmp(authority.recipe_symbol,"xrt_strbuf_append")!=0){
-            ctx->error=true;
-            fprintf(stderr,"[xi_cgen] ERROR: StringBuilder.append(string) lacks immutable emission authority\n");
-            emit_codegen_abort_expr(out);return true;
+        XrCValueEmissionView authority = {0};
+        uint32_t receiver = XR_SEMANTIC_INDEX_NONE, argument = XR_SEMANTIC_INDEX_NONE;
+        if (cg_value_emission_view(ctx, f, v, &authority) != CG_VALUE_EMISSION_FOUND ||
+            !cg_value_semantic_id(ctx, f, v->args[0], &receiver) ||
+            !cg_value_semantic_id(ctx, f, v->args[1], &argument) ||
+            authority.materialization != XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING ||
+            authority.recipe_operand_value != receiver ||
+            authority.recipe_argument_value != argument || !authority.recipe_symbol ||
+            strcmp(authority.recipe_symbol, "xrt_strbuf_append") != 0) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: StringBuilder.append(string) lacks immutable "
+                            "emission authority\n");
+            emit_codegen_abort_expr(out);
+            return true;
         }
     }
 
@@ -9337,8 +9323,8 @@ static bool xicgen_byte_slice_copy_method_drops_helper(XiCgenCtx *ctx, const XiV
     return cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_COPY, XAOT_SLICE_DROP_HELPER);
 }
 
-static bool xicgen_runtime_method_call_is_direct_nothrow(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *call) {
+static bool xicgen_runtime_method_call_is_direct_nothrow(XiCgenCtx *ctx, const XiFunc *function,
+                                                         const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
     if (!v)
         return false;
@@ -9349,11 +9335,9 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(
     if (cg_rune_to_uint32_emission_view(ctx, function, v, &rune_to_uint32))
         return true;
     XrCValueEmissionView rune_is_whitespace = {0};
-    if (cg_rune_is_whitespace_emission_view(
-            ctx, function, v, &rune_is_whitespace))
+    if (cg_rune_is_whitespace_emission_view(ctx, function, v, &rune_is_whitespace))
         return true;
-    if ((v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) ||
-        v->nargs < 1 || !v->aux)
+    if ((v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1 || !v->aux)
         return false;
     const char *method = (const char *) v->aux;
     uint16_t nargs = (uint16_t) (v->nargs - 1);
@@ -11296,8 +11280,7 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
     XrCValueEmissionView string_slice_range = {0};
-    if (cg_string_slice_range_emission_view(
-            ctx, f, v, &string_slice_range)) {
+    if (cg_string_slice_range_emission_view(ctx, f, v, &string_slice_range)) {
         bool discard = cg_unused_call_result_emits_statement(ctx, f, v);
         if (discard)
             fprintf(out, "xrt_discard_owned(");
@@ -11311,8 +11294,7 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     }
     XrCValueEmissionView rune_is_whitespace = {0};
-    if (cg_rune_is_whitespace_emission_view(
-            ctx, f, v, &rune_is_whitespace)) {
+    if (cg_rune_is_whitespace_emission_view(ctx, f, v, &rune_is_whitespace)) {
         fprintf(out, "%s(", rune_is_whitespace.recipe_symbol);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
         fprintf(out, ")");
@@ -11326,16 +11308,14 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     }
     XrCValueEmissionView iterator_rune_next = {0};
-    if (cg_iterator_rune_next_emission_view(ctx, f, v,
-                                            &iterator_rune_next)) {
+    if (cg_iterator_rune_next_emission_view(ctx, f, v, &iterator_rune_next)) {
         fprintf(out, "%s(", iterator_rune_next.recipe_symbol);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
         return;
     }
     XrCValueEmissionView iterator_rune_has_next = {0};
-    if (cg_iterator_rune_has_next_emission_view(
-            ctx, f, v, &iterator_rune_has_next)) {
+    if (cg_iterator_rune_has_next_emission_view(ctx, f, v, &iterator_rune_has_next)) {
         fprintf(out, "%s(", iterator_rune_has_next.recipe_symbol);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
@@ -11751,13 +11731,12 @@ static void xicgen_throw(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
 static void xicgen_ownership_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix, const char *fn_name) {
     (void) prefix;
-    XrReferenceCountAction action =
-        v && v->op == XI_RETAIN ? XR_REFERENCE_COUNT_RETAIN
-                                : v && v->op == XI_RELEASE ? XR_REFERENCE_COUNT_RELEASE
-                                                          : XR_REFERENCE_COUNT_INVALID;
+    XrReferenceCountAction action = v && v->op == XI_RETAIN    ? XR_REFERENCE_COUNT_RETAIN
+                                    : v && v->op == XI_RELEASE ? XR_REFERENCE_COUNT_RELEASE
+                                                               : XR_REFERENCE_COUNT_INVALID;
     XrReferenceCountPlan plan = XR_REFERENCE_COUNT_OWNER_PLAN(
-        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_HI,
-        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_LO, XR_SEM_CONSUMER_CGEN, action);
+        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_HI, XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_LO,
+        XR_SEM_CONSUMER_CGEN, action);
     if (!v || v->nargs < 1 || !cg_reference_count_adapter_name(ctx) ||
         !xr_reference_count_plan_is_exact_core(plan) ||
         (action == XR_REFERENCE_COUNT_RETAIN && !plan.acquires_owner) ||
@@ -11821,8 +11800,7 @@ static bool cg_release_target_is_stack_closure(const XiValue *v) {
 static void xicgen_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
     XrCCleanupEmissionView cleanup = {0};
-    CgValueEmissionStatus status =
-        cg_cleanup_emission_view(ctx, f, v, &cleanup);
+    CgValueEmissionStatus status = cg_cleanup_emission_view(ctx, f, v, &cleanup);
     if (status == CG_VALUE_EMISSION_ERROR) {
         emit_codegen_abort_expr(out);
         return;
@@ -11830,15 +11808,13 @@ static void xicgen_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     if (status == CG_VALUE_EMISSION_FOUND) {
         XrCValueEmissionView operand = {0};
         if (!v->args || v->nargs != 1 || !v->args[0] ||
-            cg_value_emission_view(ctx, f, v->args[0], &operand) !=
-                CG_VALUE_EMISSION_FOUND ||
+            cg_value_emission_view(ctx, f, v->args[0], &operand) != CG_VALUE_EMISSION_FOUND ||
             operand.semantic_value != cleanup.semantic_value ||
             operand.rep != XR_C_VALUE_REP_TAGGED ||
             operand.target_register_kind != XR_MACHINE_REP_DYN_VALUE ||
             operand.target_memory_kind != XR_MACHINE_REP_DYN_VALUE ||
             strcmp(cleanup.recipe_symbol, "xrt_release") != 0) {
-            cg_value_emission_fail(
-                ctx, "String cleanup operand disagrees with frozen authority");
+            cg_value_emission_fail(ctx, "String cleanup operand disagrees with frozen authority");
             emit_codegen_abort_expr(out);
             return;
         }
@@ -12423,15 +12399,14 @@ static void xicgen_fixed_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     CgFixedArrayLaneInfo fixed = {0};
     bool have_fixed = v && v->op == XI_FIXED_ARRAY_NEW
-                          ? cg_fixed_array_lane_info_from_emission(ctx, f, v,
-                                                                   &fixed)
+                          ? cg_fixed_array_lane_info_from_emission(ctx, f, v, &fixed)
                           : cg_fixed_array_lane_info_from_value(v, &fixed);
     if (!have_fixed) {
         emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "xr_array_ref(_fa%u, %u, %u)", v->id,
-            (unsigned) fixed.native_type, (unsigned) fixed.count);
+    fprintf(out, "xr_array_ref(_fa%u, %u, %u)", v->id, (unsigned) fixed.native_type,
+            (unsigned) fixed.count);
 }
 
 static void xicgen_fixed_bytes_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -12540,8 +12515,7 @@ XI_TO_C_TEMPLATE_COMPARE_DRIVERS(XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER)
 
 #undef XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER
 
-static void xicgen_numeric_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                 const XiValue *v) {
+static void xicgen_numeric_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
     (void) f;
     const char *adapter = cg_numeric_width_adapter_name(ctx);
     const char *kernel = v ? xi_to_c_template_width_numeric_kernel(v->op) : NULL;
@@ -12554,8 +12528,7 @@ static void xicgen_numeric_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     }
     fprintf(out, "%s(%s, ", adapter, kernel);
     emit_value_as_rep_ctx(ctx, out, v->args[0],
-                          xi_to_c_template_width_uses_f64_lane(v->op) ? XR_REP_F64
-                                                                     : XR_REP_I64);
+                          xi_to_c_template_width_uses_f64_lane(v->op) ? XR_REP_F64 : XR_REP_I64);
     fprintf(out, ")");
 }
 
@@ -12633,8 +12606,7 @@ static void xicgen_unbox(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         return;
     }
     const XiValue *recipe_source = NULL;
-    if (!cg_scalar_addressable_alias_recipe_source(ctx, f, v,
-                                                   &recipe_source)) {
+    if (!cg_scalar_addressable_alias_recipe_source(ctx, f, v, &recipe_source)) {
         emit_codegen_abort_expr(out);
         return;
     }
@@ -14237,8 +14209,8 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _off = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    fprintf(out, "; bool _ok = false; %s _v = %s(%s(_s.data, _s.length, XR_ELEM_U8, _off, ",
-            ctype, owner_adapter, core_helper);
+    fprintf(out, "; bool _ok = false; %s _v = %s(%s(_s.data, _s.length, XR_ELEM_U8, _off, ", ctype,
+            owner_adapter, core_helper);
     xicgen_emit_endian_arg_i64(ctx, out, v->args[2]);
     fprintf(out,
             ", &_ok)); if (!_ok) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); "
@@ -14268,8 +14240,8 @@ static bool xicgen_emit_byte_slice_float_load(XiCgenCtx *ctx, FILE *out, const X
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _off = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    fprintf(out, "; bool _ok = false; %s _v = %s(%s(_s.data, _s.length, XR_ELEM_U8, _off, ",
-            ctype, owner_adapter, core_helper);
+    fprintf(out, "; bool _ok = false; %s _v = %s(%s(_s.data, _s.length, XR_ELEM_U8, _off, ", ctype,
+            owner_adapter, core_helper);
     xicgen_emit_endian_arg_i64(ctx, out, v->args[2]);
     fprintf(out,
             ", &_ok)); if (!_ok) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); "
@@ -14749,8 +14721,7 @@ static void xicgen_byte_slice_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         emit_codegen_abort_expr(out);
         return;
     }
-    if (bulk && bulk->action != XAOT_BULK_RUNTIME_HELPER &&
-        bulk->action != XAOT_BULK_TYPED_LOOP) {
+    if (bulk && bulk->action != XAOT_BULK_RUNTIME_HELPER && bulk->action != XAOT_BULK_TYPED_LOOP) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
@@ -14823,8 +14794,9 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, "INT64_C(%" PRId64 ")", fixed_count);
     else
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-    fprintf(out, "; XrSliceWindowPlan _win = %s(%s, _src.length, _start, _count, _src.data, "
-                 "sizeof(%s)); ",
+    fprintf(out,
+            "; XrSliceWindowPlan _win = %s(%s, _src.length, _start, _count, _src.data, "
+            "sizeof(%s)); ",
             adapter, proof, elem.ctype);
     if (!bounds_proven)
         fprintf(out, "if (XR_UNLIKELY(!_win.admitted)) "
@@ -14892,8 +14864,9 @@ static void xicgen_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
     fprintf(out, "%s(", adapter);
     emit_span_ref_expr(out, v->args[0]);
-    fprintf(out, ", (uint16_t)sizeof(%s), XR_POD_SLICE_FILL_%s, "
-                 "(XrPodSliceFillValue){ .",
+    fprintf(out,
+            ", (uint16_t)sizeof(%s), XR_POD_SLICE_FILL_%s, "
+            "(XrPodSliceFillValue){ .",
             info.ctype, info.elem_name + 8);
     if (info.rep == XR_REP_F64) {
         fprintf(out, "f64 = (double)");
@@ -14919,8 +14892,8 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         return;
     }
     if (bulk && bulk->action != XAOT_BULK_RUNTIME_HELPER &&
-        bulk->action != XAOT_BULK_INLINE_MEMCPY &&
-        bulk->action != XAOT_BULK_INLINE_MEMMOVE && bulk->action != XAOT_BULK_TYPED_LOOP) {
+        bulk->action != XAOT_BULK_INLINE_MEMCPY && bulk->action != XAOT_BULK_INLINE_MEMMOVE &&
+        bulk->action != XAOT_BULK_TYPED_LOOP) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
@@ -14995,11 +14968,11 @@ static void xicgen_span_reinterpret(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
         emit_codegen_abort_expr(out);
         return;
     }
-    uint16_t expected_elem_size =
-        elem_type < XR_ELEM_COUNT && elem_type != XR_ELEM_ANY ? XR_ELEM_SIZES[elem_type]
-                                                              : elem_size;
-    bool target_layout_valid = elem_type < XR_ELEM_COUNT &&
-                               (elem_type != XR_ELEM_ANY || layout_marker != 0);
+    uint16_t expected_elem_size = elem_type < XR_ELEM_COUNT && elem_type != XR_ELEM_ANY
+                                      ? XR_ELEM_SIZES[elem_type]
+                                      : elem_size;
+    bool target_layout_valid =
+        elem_type < XR_ELEM_COUNT && (elem_type != XR_ELEM_ANY || layout_marker != 0);
     fprintf(out, "%s(", adapter);
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out,
@@ -15284,9 +15257,8 @@ static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     else if (address && address->provenance.address_identity == XR_ADDRESS_SYSTEM_STABLE)
         identity = XR_STATIC_ADDRESS_IDENTITY_SYSTEM;
     XrStaticAddressPlan owner_plan = XR_STATIC_ADDRESS_OWNER_PLAN(
-        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_HI,
-        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_LO, XR_SEM_CONSUMER_CGEN,
-        identity, want_mutable);
+        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_HI, XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_LO,
+        XR_SEM_CONSUMER_CGEN, identity, want_mutable);
     bool adapter_matches = address && xr_static_address_plan_is_exact_core(owner_plan) &&
                            address->provenance.escape == XR_POINTER_ESCAPE_STABLE &&
                            (!owner_plan.requires_mutable_storage ||
@@ -15436,17 +15408,15 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v);
     XrCValueEmissionView emission;
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, f, v, &emission);
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, f, v, &emission);
     XrRep result_rep = value_plan ? xaot_value_storage_rep(value_plan->rep) : XR_REP_RAWPTR;
-    const char *result_c_type =
-        emission_status == CG_VALUE_EMISSION_FOUND &&
-                emission.rep == XR_C_VALUE_REP_RAW_PTR && emission.c_type
-            ? emission.c_type
-            : value_plan && value_plan->rep.c_type &&
-                      (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR)
-                  ? value_plan->rep.c_type
-                  : "void *";
+    const char *result_c_type = emission_status == CG_VALUE_EMISSION_FOUND &&
+                                        emission.rep == XR_C_VALUE_REP_RAW_PTR && emission.c_type
+                                    ? emission.c_type
+                                : value_plan && value_plan->rep.c_type &&
+                                        (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR)
+                                    ? value_plan->rep.c_type
+                                    : "void *";
     if ((v->aux_int & XI_LOCAL_ADDR_AUX_RAW_DEREF) != 0) {
         const XiValue *load = v->args[0];
         if (!load || load->op != XI_PTR_LOAD || load->nargs < 1 || !load->args[0]) {
@@ -15500,8 +15470,7 @@ static void xicgen_place_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     }
     XrCCallArgumentEmissionView array_ref_place = {0};
-    if (cg_direct_local_array_ref_place_emission(
-            ctx, f, v->args[0], &array_ref_place)) {
+    if (cg_direct_local_array_ref_place_emission(ctx, f, v->args[0], &array_ref_place)) {
         fprintf(out, "(*(XrValue *)(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
         fprintf(out, "))");
@@ -15645,8 +15614,7 @@ static void xicgen_place_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         emit_value_as_rep_ctx(ctx, out, v->args[1], pointee_storage_rep);
 }
 
-static void xicgen_emit_raw_scalar_endian(XiCgenCtx *ctx, FILE *out,
-                                          const XiValue *endian_value) {
+static void xicgen_emit_raw_scalar_endian(XiCgenCtx *ctx, FILE *out, const XiValue *endian_value) {
     int64_t endian = XR_ENDIAN_NATIVE;
     if (xicgen_value_is_const_endian(endian_value, &endian)) {
         fprintf(out, "INT64_C(%" PRId64 ")", endian);
