@@ -621,6 +621,99 @@ static bool aot_array_allocation_is_exact(const XrSemanticPlan *semantic,
     return exact;
 }
 
+/* A bare object literal's type. Unlike a tuple or a value class it is not an
+ * aggregate slot at all: the shared aggregate judgement answers 0 for it,
+ * because it is reference capable and roots its own ownership, so the target
+ * plan names no representation for it and the value lives entirely in the
+ * tagged carrier its runtime allocation hands back.
+ *
+ * A struct object carrying the value flag is the separate exact-aggregate
+ * spelling the plan does place, and it must not be claimed here. */
+static bool aot_struct_object_type_is_exact(const XrSemanticTypeRecord *type) {
+    XrStableId zero = {{0}};
+    return type && type->kind == XR_KIND_STRUCT_OBJECT &&
+           type->flags == (uint8_t) (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->builtin_type == XR_TID_NULL &&
+           type->child_count != 0 && type->aggregate_extent == type->child_count &&
+           type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) && !type->source_enum_key &&
+           type->enum_layout_id == 0 && type->enum_member_count == 0 && type->enum_flags == 0 &&
+           type->reserved_enum == 0 && type->canonical_key != NULL;
+}
+
+/* Rebuilt independently of both the TargetPlan collector and its verifier: a
+ * bare object literal is an owned heap allocation whose fields are named by the
+ * operation's own metadata and counted by its immediate, and whose only storage
+ * fact is the outer tagged value. The lanes are written by the field-init
+ * operations that follow, so the allocation itself takes no operand. */
+static bool aot_struct_object_allocation_is_exact(const XrSemanticPlan *semantic,
+                                                  const XrSemanticOperationRecord *operation) {
+    uint32_t metadata_count = 0;
+    const char *const *metadata =
+        semantic ? xr_semantic_plan_metadata(semantic, &metadata_count) : NULL;
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
+    if (!semantic || !operation || !metadata || operation->opcode != XI_OBJECT_NEW ||
+        operation->operand_count != 0 || operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        !aot_struct_object_type_is_exact(type) ||
+        operation->semantic_immediate != (int64_t) type->child_count ||
+        operation->metadata_count != type->child_count ||
+        operation->metadata_begin > metadata_count ||
+        operation->metadata_count > metadata_count - operation->metadata_begin ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->effects != xi_generated_op_effects(XI_OBJECT_NEW) ||
+        operation->flags != xi_generated_op_default_flags(XI_OBJECT_NEW) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_OBJECT_NEW) ||
+        operation->result_ownership != xi_generated_op_result_ownership(XI_OBJECT_NEW) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED || operation->return_parameter != -1 ||
+        operation->return_complete != 1 || operation->view_complete != 0 ||
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
+        !xr_semantic_allocation_identity_is_canonical(operation))
+        return false;
+    for (uint16_t i = 0; i < type->child_count; i++)
+        if (!metadata[operation->metadata_begin + i] || !metadata[operation->metadata_begin + i][0])
+            return false;
+    return true;
+}
+
+/* The borrowed read of a bare object literal held in a shared cell. A local
+ * variable is a shared cell, so every mention of the object after the
+ * assignment is a load whose result is the same allocation the construction
+ * produced; demanding the allocation instruction itself would refuse every
+ * object literal that outlives its own defining instruction, which is every
+ * one bound to a variable. */
+static bool aot_struct_object_shared_read_is_exact(const XrSemanticPlan *semantic,
+                                                   const XrSemanticOperationRecord *operation) {
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
+    XrStableId zero = {{0}};
+    return semantic && operation && operation->opcode == XI_GET_SHARED &&
+           operation->operand_count == 0 && operation->metadata_count == 0 &&
+           operation->result_value != XR_SEMANTIC_INDEX_NONE &&
+           aot_struct_object_type_is_exact(type) && operation->semantic_immediate >= 0 &&
+           operation->semantic_immediate <= UINT16_MAX && !operation->allocation_key &&
+           xr_stable_id_equal(operation->allocation_id, zero) &&
+           operation->constant == XR_SEMANTIC_INDEX_NONE &&
+           operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
+           operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+           operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+           operation->intrinsic_kind == XR_SEM_INTRINSIC_NONE &&
+           operation->effects == xi_generated_op_effects(XI_GET_SHARED) &&
+           operation->flags == xi_generated_op_default_flags(XI_GET_SHARED) &&
+           operation->ownership_use == xi_generated_op_own_use(XI_GET_SHARED) &&
+           operation->result_ownership == xi_generated_op_result_ownership(XI_GET_SHARED) &&
+           operation->result_alias_operand == -1 &&
+           operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
+           operation->return_parameter == -1 && operation->return_complete == 1 &&
+           operation->view_complete == 0 && operation->view_source_operand == -1 &&
+           operation->view_source_parameter == -1;
+}
+
 /* Rebuilt independently of both the TargetPlan collector and its verifier:
  * `T?` is `T | null`, and the language surface requires the nullable primitives
  * to carry `null` in the tagged representation so a null renders as "null" and
@@ -3113,6 +3206,155 @@ static bool oracle_value_aggregate_storage(const VerifyAuthority *ctx, uint32_t 
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_AGGREGATE;
+    return true;
+}
+
+/* An object nests, so the two judgements below call each other: a field read
+ * whose own result is an object is the receiver of the next read. The bound is
+ * on that nesting, and a deeper one stays unproven rather than searched. */
+#define XR_AOT_STRUCT_OBJECT_MAX_NESTING 8u
+
+static bool struct_object_field_access_is_exact_depth(const VerifyAuthority *ctx,
+                                                      uint32_t operation_index, unsigned depth);
+
+/* A bare object literal, whichever instruction the value reaches its use from:
+ * the construction that allocates it, the shared-cell read that hands the same
+ * allocation back, or the field read that hands out a nested one. The value is
+ * a tagged carrier and nothing else.
+ *
+ * The target plan states no representation for this family -- the shared
+ * aggregate judgement answers 0, and the plan's own type classification places
+ * no machine kind -- so a binding here would be a row neither the plan builder
+ * nor the plan verifier can account for. Demanding its absence is what keeps
+ * this authority from admitting a value some other family already placed. */
+static bool struct_object_carrier_storage_depth(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                                unsigned depth, XrRep *out_storage,
+                                                uint16_t *out_machine_kind) {
+    if (!ctx || depth > XR_AOT_STRUCT_OBJECT_MAX_NESTING || semantic_value >= ctx->value_count ||
+        !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        ctx->parameter_by_value[semantic_value] != XR_SEMANTIC_INDEX_NONE ||
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value) != NULL)
+        return false;
+    bool carrier = aot_struct_object_allocation_is_exact(ctx->semantic, operation) ||
+                   aot_struct_object_shared_read_is_exact(ctx->semantic, operation) ||
+                   (operation->opcode == XI_OBJECT_GET_F &&
+                    aot_struct_object_type_is_exact(
+                        xr_semantic_plan_type(ctx->semantic, operation->result_type)) &&
+                    struct_object_field_access_is_exact_depth(ctx, operation_index, depth + 1u));
+    if (!carrier)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+static bool oracle_dynamic_struct_object_storage(const VerifyAuthority *ctx,
+                                                 uint32_t semantic_value, XrRep *out_storage,
+                                                 uint16_t *out_machine_kind) {
+    return struct_object_carrier_storage_depth(ctx, semantic_value, 0, out_storage,
+                                               out_machine_kind);
+}
+
+/* A field of a bare object literal, read or written. The receiver is the
+ * object the judgement above proves, the field ordinal is the operation's own
+ * immediate, and the field type is the one the object type names at that
+ * ordinal -- the same three facts an aggregate field access rests on, over a
+ * runtime object shape rather than a frozen layout.
+ *
+ * Every lane of an object is stored as a full tagged value, so the operand
+ * written and the result read both travel in the carrier. */
+static bool struct_object_field_access_is_exact_depth(const VerifyAuthority *ctx,
+                                                      uint32_t operation_index, unsigned depth) {
+    const XrSemanticOperationRecord *operation =
+        ctx && depth <= XR_AOT_STRUCT_OBJECT_MAX_NESTING
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    uint32_t operand_count = 0;
+    uint32_t child_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    const uint32_t *children =
+        ctx ? xr_semantic_plan_type_children(ctx->semantic, &child_count) : NULL;
+    bool field_read = operation && operation->opcode == XI_OBJECT_GET_F;
+    bool field_write = operation && (operation->opcode == XI_OBJECT_INIT_F ||
+                                     operation->opcode == XI_OBJECT_SET_F);
+    uint16_t expected_operands = field_read ? 1u : field_write ? 2u : 0u;
+    if (!operation || !operands || !children || expected_operands == 0 ||
+        operation->operand_count != expected_operands || operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 0 || operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->effects != xi_generated_op_effects(operation->opcode) ||
+        operation->flags != xi_generated_op_default_flags(operation->opcode) ||
+        operation->ownership_use != xi_generated_op_own_use(operation->opcode) ||
+        operation->result_ownership != xi_generated_op_result_ownership(operation->opcode) ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
+        operation->view_complete != 0 || operation->view_source_operand != -1 ||
+        operation->view_source_parameter != -1)
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    XrRep receiver_storage = XR_REP_TAGGED;
+    uint16_t receiver_kind = XR_MACHINE_REP_COUNT;
+    if (receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
+        receiver->flags != 0 || receiver->value >= ctx->value_count ||
+        !struct_object_carrier_storage_depth(ctx, receiver->value, depth + 1u, &receiver_storage,
+                                             &receiver_kind))
+        return false;
+    const XrSemanticOperationRecord *receiver_definition =
+        xr_semantic_plan_operation(ctx->semantic, ctx->operation_by_value[receiver->value]);
+    const XrSemanticTypeRecord *receiver_type =
+        xr_semantic_plan_type(ctx->semantic, receiver->type);
+    if (!receiver_definition || receiver->type != receiver_definition->result_type ||
+        !aot_struct_object_type_is_exact(receiver_type) ||
+        receiver_type->child_begin > child_count ||
+        receiver_type->child_count > child_count - receiver_type->child_begin ||
+        operation->semantic_immediate < 0 ||
+        operation->semantic_immediate >= (int64_t) receiver_type->child_count)
+        return false;
+    uint32_t field_type =
+        children[receiver_type->child_begin + (uint32_t) operation->semantic_immediate];
+    if (field_read)
+        return operation->result_type == field_type;
+    const XrSemanticOperandRecord *stored = receiver + 1;
+    return stored->role == XR_SEM_OPERAND_VALUE && stored->parameter == -1 && stored->flags == 0 &&
+           stored->value < ctx->value_count && stored->type == field_type;
+}
+
+static bool oracle_struct_object_field_access_is_exact(const VerifyAuthority *ctx,
+                                                       uint32_t operation_index) {
+    return struct_object_field_access_is_exact_depth(ctx, operation_index, 0);
+}
+
+/* The value a proved field read hands back, whatever the field's static type
+ * is. A field holds a full tagged value, so the read produces the carrier and
+ * every consumer either keeps it or adapts from it; the object-typed subset is
+ * what the carrier judgement above admits as a receiver in its own right. */
+static bool oracle_struct_object_field_read_storage(const VerifyAuthority *ctx,
+                                                    uint32_t semantic_value, XrRep *out_storage,
+                                                    uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->opcode != XI_OBJECT_GET_F ||
+        operation->result_value != semantic_value ||
+        !oracle_struct_object_field_access_is_exact(ctx, operation_index))
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
     return true;
 }
 
@@ -6469,6 +6711,15 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             *out_storage = XR_REP_TAGGED;
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
             return true;
+        case XI_OBJECT_NEW:
+            return oracle_dynamic_struct_object_storage(ctx, semantic_value, out_storage,
+                                                        out_machine_kind);
+        case XI_OBJECT_GET_F:
+            /* An object field is stored as a full tagged value, so the read
+             * hands out that carrier and each native consumer adapts from it,
+             * exactly as a tuple lane read does. */
+            return oracle_struct_object_field_read_storage(ctx, semantic_value, out_storage,
+                                                           out_machine_kind);
         case XI_CHAN_RECV:
         case XI_ENUM_DESCRIPTOR_BOX:
             *out_storage = XR_REP_TAGGED;
@@ -6480,6 +6731,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
         case XI_GET_SHARED: {
             if (oracle_dynamic_array_ref_storage(ctx, semantic_value, out_storage,
                                                  out_machine_kind))
+                return true;
+            if (oracle_dynamic_struct_object_storage(ctx, semantic_value, out_storage,
+                                                     out_machine_kind))
                 return true;
             if (ctx->exact_direct_callee_value && ctx->exact_direct_callee_value[semantic_value])
                 return oracle_static_direct_local_callee_storage(ctx, semantic_value, out_storage,
@@ -6882,6 +7136,10 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                                                     &ignored_kind) &&
                 !oracle_value_aggregate_storage(ctx, source_value, &literal_storage,
                                                 &ignored_kind) &&
+                !oracle_dynamic_struct_object_storage(ctx, source_value, &literal_storage,
+                                                      &ignored_kind) &&
+                !oracle_struct_object_field_read_storage(ctx, source_value, &literal_storage,
+                                                         &ignored_kind) &&
                 !(ctx->exact_channel_allocation_value &&
                   ctx->exact_channel_allocation_value[source_value] &&
                   oracle_dynamic_channel_storage(ctx, source_value, &literal_storage,
@@ -6938,6 +7196,10 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                                                               &ignored_kind) &&
                 !oracle_value_aggregate_storage(ctx, source_value, &machine_storage,
                                                 &ignored_kind) &&
+                !oracle_dynamic_struct_object_storage(ctx, source_value, &machine_storage,
+                                                      &ignored_kind) &&
+                !oracle_struct_object_field_read_storage(ctx, source_value, &machine_storage,
+                                                         &ignored_kind) &&
                 !oracle_source_namespace_storage(ctx, source_value, &machine_storage,
                                                  &ignored_kind) &&
                 !oracle_native_module_namespace_storage(ctx, source_value, &machine_storage,
@@ -7224,6 +7486,29 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             if (operand_index != 0 || !oracle_aggregate_field_access_is_exact(ctx, operation_index))
                 return false;
             return oracle_value_aggregate_storage(ctx, source_value, out_storage, &ignored_kind);
+        case XI_OBJECT_GET_F:
+            /* The receiver of a proved field read stays the tagged carrier it
+             * is, and the read has no other operand. */
+            if (operand_index != 0 ||
+                !oracle_struct_object_field_access_is_exact(ctx, operation_index))
+                return false;
+            return oracle_dynamic_struct_object_storage(ctx, source_value, out_storage,
+                                                        &ignored_kind);
+        case XI_OBJECT_INIT_F:
+        case XI_OBJECT_SET_F:
+            /* Every field of an object is stored as a full tagged value, so the
+             * written operand reaches the store in the carrier whatever native
+             * scalar storage its own definition named, and the receiver stays
+             * the carrier it is. */
+            if (!oracle_struct_object_field_access_is_exact(ctx, operation_index))
+                return false;
+            if (operand_index == 0)
+                return oracle_dynamic_struct_object_storage(ctx, source_value, out_storage,
+                                                            &ignored_kind);
+            if (operand_index != 1)
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
         case XI_AGG_NEW:
             if (operand_index != 0 || !oracle_value_aggregate_storage(ctx, operation->result_value,
                                                                       out_storage, &ignored_kind))

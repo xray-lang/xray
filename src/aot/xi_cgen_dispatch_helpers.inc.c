@@ -6206,10 +6206,13 @@ static void xicgen_emit_object_set_field_expr(XiCgenCtx *ctx, FILE *out, const X
             return;
         }
     }
+    /* Both the object and the stored field travel as tagged values, whatever
+     * native storage the operands were emitted in: the receiver is the carrier
+     * the allocation handed back, and a field holds a full XrValue. */
     fprintf(out, "xrt_object_set_field(");
-    emit_vref(out, v->args[0]);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", %d, ", (int) v->aux_int);
-    emit_vref(out, v->args[1]);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ")");
 }
 
@@ -6319,9 +6322,15 @@ static void xicgen_object_get_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         emit_codegen_abort_expr(out);
         return;
     }
+    /* A field read hands back the tagged carrier the field was stored as. The
+     * emitted local may be the narrower storage the plan named for the field's
+     * static type, so the read states what it produces and converts, the same
+     * way a tuple lane read does. */
+    const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, XR_REP_TAGGED);
     fprintf(out, "xrt_object_get_field(");
-    emit_vref(out, v->args[0]);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", %d)", (int) v->aux_int);
+    emit_conversion_suffix(out, conv_suffix);
 }
 
 static void xicgen_object_set_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

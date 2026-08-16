@@ -481,6 +481,25 @@ emission rather than falling back to compiler-host layout.
   construction, and hands an element read back as the tagged carrier a native
   consumer adapts from. A non-scalar, nested, rooted, renamed, or stale lane
   fails closed, and no tuple may enter the named-aggregate path.
+- T18: a bare structural object occupies no aggregate slot and receives no C
+  projection at all. It is reference capable and roots its own ownership, so
+  the shared aggregate judgement places it outside every aggregate family and
+  the target plan states no representation for it; representation refinement
+  admits such a value only while that absence holds, so a row some other family
+  placed can never be claimed here. The authority is rebuilt independently from
+  the frozen rows rather than read back: the construction proves its canonical
+  allocation identity, its field-name metadata and its field count; a
+  shared-cell read proves the borrowed load that hands the same allocation
+  back; and a field access proves its receiver as one of those two, or as a
+  field read whose own result is an object, within a fixed nesting bound. Every
+  field holds a full tagged value, so a write reaches the store in the carrier
+  whatever native storage its own definition named, and a read hands the
+  carrier back for a native consumer to adapt from. CGen converts on both edges
+  through the storage the emission plan named and never references the emitted
+  local directly. A value-flagged struct object, an object crossing a call
+  parameter or a call result, and any operation shape that is not exactly
+  reconstructible fail closed, and no object may enter the named-aggregate
+  path.
 
 The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
@@ -517,7 +536,7 @@ anchor-sha256: src/aot/xaot_prepare.c 77d5bce886e498b736557e06ef6e9916e54b27d42c
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c e49361589e03b5cc8b2e3d1eccc9fc59d522a52e48f9d3f96f567503f0bd5ee1
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 167cb9d8fda7ed88101ce2962afa9f847d700559807f5e9d8cd2ed394c8f56ca
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c d916f37caa6c7b39245526529555728e551048af64fb559cf10a71b49c439ff7
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
@@ -538,7 +557,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h ee7409a0
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 21531ec0fd641f7eaa8269ef0fd43854aaadeb12bc1083ba2c49134de0bc7741
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c f0110919fa8e0b939577fa1ce860249510c887a428bd16b561f4a00b883b1974
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c 1ee9e10ccced6aee0fffa6e23c85708a071dca246ac6101ff653cad03b297c16
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c a90adafa85d6fecfb77be6cfee69b8576005dcfe23912c3ced949bfc09b90a9c
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 00430eeea7c3d16774b427dba60a146a596ea552ff78bb39eb1627eb1a1301f2
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 375af2e4b45271d06e6ce6ed798be2e6f9f8786c25e68d38ea3f4ca6f41160c6
 anchor-sha256: src/aot/xi_cgen.c 6792ca08b6332dc98cd716273c848a2fdce26b8b718a37a86ddf26b701c8cbc1
