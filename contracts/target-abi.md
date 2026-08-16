@@ -292,24 +292,37 @@ Neither boundary authorizes an owned or moved Array parameter, a
 ref result, a SOURCE_EXPORT parameter or result, a non-scalar element type, or
 another container.
 
-The same generation binds one exact direct-local `string` boundary: a parameter
-passed by value. A String is immutable and shared, so passing one hands the
+The same generation binds two exact `string` bindings, one on each side of a
+direct-local call. A String is immutable and shared, so passing one hands the
 callee a borrow -- it reads the caller's allocation for the extent of the call
 and releases nothing -- and a String carries nothing but the outer tagged value,
-so the parameter is bound to a borrowed dynamic parameter slot and states no
-place and no addressability of its own. The caller may hold that allocation
+so a by-value parameter is bound to a borrowed dynamic parameter slot and states
+no place and no addressability of its own. The caller may hold that allocation
 owned or borrowed, so the two sides agree on representation and are allowed to
 differ in ownership alone, exactly as they are for an `Array<T>` passed by
-value. The declaration shape such a parameter must have is stated once, in the
-shared String shape judgement; TargetPlan construction, TargetPlan verification
-and representation refinement each ask that one judgement and then prove their
-own slot, representation and call rows against it, and none of them reads
+value. The value a caller reads back out of a shared cell is the other binding:
+the read borrows the one allocation the cell holds, so it is bound to a borrowed
+dynamic temporary in the reader's own frame. That read is a String value in its
+own right rather than something a call boundary confers, so every exact one is
+bound whether or not an argument ever reaches it, exactly as an `Array<T>` read
+of a shared cell already is.
+
+The shape a shared read must have is the shape a read of any container has --
+no operands, no constant, no callee, no intrinsic, a borrowed result, and a
+single definition for the value -- stated once and asked by both containers,
+with each proving its own result type on top of it. The declaration shape a
+by-value parameter must have is stated once the same way, in the shared String
+shape judgement. TargetPlan construction, TargetPlan verification and
+representation refinement each ask those judgements and then prove their own
+slot, representation and call rows against them, and none of them reads
 another's conclusion. Every way a String can reach a use site already holding
 that tagged carrier -- a literal, a concatenation, a direct-local call result, a
-by-value parameter -- is one list, so a carrier the length read admits cannot be
-one a call argument, an equality, or a retain refuses. This boundary does not
-authorize a `ref`, owned, or moved String parameter, a SOURCE_EXPORT String
-parameter, an optional String, or a String reached through a shared read.
+shared read, a by-value parameter -- is one list, so a carrier the length read
+admits cannot be one a call argument, an equality, or a retain refuses. These
+bindings do not authorize a `ref`, owned, or moved String parameter, a
+SOURCE_EXPORT String parameter, an optional String, a shared read of any other
+container this generation has not bound, or a String reached through a local
+copy, a print, or a slice receiver.
 
 Representation selection keeps every reference-capable container -- `Array<T>`
 and `string` alike -- in the tagged carrier at every boundary it crosses:
@@ -577,7 +590,7 @@ anchor-sha256: src/aot/xaot_prepare.c 77d5bce886e498b736557e06ef6e9916e54b27d42c
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 2f68413314f6d613d949b0291bfbf3468ba4c8ed5bbb21e13981b8e9d229f6b9
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 85882366777e3aa0b7d19b3a77216aef18883f81e4bd4e7b33bea75f432e9aa8
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 092c181dd8674dc8ca75f8328f4e457d1c20a1fb2aa713ad685c428838e49e2d
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
@@ -588,7 +601,8 @@ anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c ad0d4582896dde9d9f6e82301d349
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h abfe201fb679c49334634af0db17ad23152fe896e7f665ae0464f4084505ca65
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 83e9445eb7b1fbf5004cbd198fd0c703839c6ce67f6d6cc34c4f8c78e4938e97
 anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h 9ad3a46f3f41de669f91aa5a6e00452952ef4b0f23c2e9a92ec237a896c5b3b1
-anchor-sha256: src/plan/semantic/xr_semantic_string_shape.h 484c3541d7a23c3972cc32d3386aefa705ee86108100c15aea5ee3146779b70f
+anchor-sha256: src/plan/semantic/xr_semantic_shared_read_shape.h c82c3ac533b4e4b0ef944e66b8a8b1ce1c1f2d96d3772438c7fc5ab9dc9ee0ce
+anchor-sha256: src/plan/semantic/xr_semantic_string_shape.h ee1c254e93d588354bedc36c3245e720b017136f4d34d543f3b6635ba254afb6
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h bbcaf57e24a92de079a0cefa2bdf5c753327b3c737d656cb57fbe2b6a648616c
 anchor-sha256: src/plan/semantic/xr_semantic_string_slice_shape.h d183211f5001d7cc418b0e95c3d2b7576404593ad454b9d4f777d7cfb57f1ff9
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d19001054ed1aa8334872e2998949bb515a8a2cf46fc2d682a681c82d6529f9d

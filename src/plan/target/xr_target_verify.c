@@ -1067,23 +1067,27 @@ static bool semantic_array_shared_read_is_exact_verify(const XrSemanticPlan *sem
     const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
     const XrSemanticTypeRecord *array = xr_semantic_plan_type(semantic, semantic_type);
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    return semantic && operation && children && semantic_array_allocation_type_is_exact(array) &&
-           array->child_begin < child_count && operation->opcode == XI_GET_SHARED &&
+    return semantic && children && semantic_array_allocation_type_is_exact(array) &&
+           array->child_begin < child_count &&
+           xr_semantic_shared_read_operation_is_exact(operation) &&
            operation->result_value == semantic_value && operation->result_type == semantic_type &&
-           operation->function == semantic_function && operation->operand_count == 0 &&
-           operation->effects == xi_generated_op_effects(XI_GET_SHARED) &&
-           operation->flags == xi_generated_op_default_flags(XI_GET_SHARED) &&
-           operation->ownership_use == xi_generated_op_own_use(XI_GET_SHARED) &&
-           operation->result_ownership == xi_generated_op_result_ownership(XI_GET_SHARED) &&
-           operation->result_alias_operand == -1 &&
-           operation->intrinsic_kind == XR_SEM_INTRINSIC_NONE && operation->metadata_count == 0 &&
-           operation->auxiliary_kind == XI_AUX_KIND_NONE &&
-           operation->constant == XR_SEMANTIC_INDEX_NONE &&
-           operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
-           operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
-           operation->semantic_immediate <= UINT32_MAX &&
+           operation->function == semantic_function &&
            verify_array_intrinsic_storage_type(
                xr_semantic_plan_type(semantic, children[array->child_begin]), &storage);
+}
+
+/* The borrowed read of a String held in a shared cell, re-derived through the
+ * shared judgement rather than read back from the builder. The builder binds
+ * every such read, so a value it left unbound has to look like a missing
+ * binding here rather than pass unexamined. */
+static bool semantic_string_shared_read_is_exact_verify(const XrSemanticPlan *semantic,
+                                                        const XrSemanticOperationRecord *operation,
+                                                        uint32_t semantic_value,
+                                                        uint32_t semantic_type,
+                                                        uint32_t semantic_function) {
+    return xr_semantic_tagged_string_shared_read_is_exact(semantic, operation) &&
+           operation->result_value == semantic_value && operation->result_type == semantic_type &&
+           operation->function == semantic_function;
 }
 
 /* Reconstruct the writeback half of an exact direct-local ref boundary from
@@ -3257,6 +3261,9 @@ static bool collect_exact_dynamic_types(
             semantic_array_shared_read_is_exact_verify(
                 plan->semantic_plan, operation, operation->result_value, operation->result_type,
                 operation->function) ||
+            semantic_string_shared_read_is_exact_verify(
+                plan->semantic_plan, operation, operation->result_value, operation->result_type,
+                operation->function) ||
             semantic_direct_local_array_ref_place_load_is_exact_verify(
                 plan, operation, operation->result_value, operation->result_type,
                 operation->function) ||
@@ -3366,6 +3373,11 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     bool exact_array_fill = semantic_array_fill_scalar_is_exact_verify(plan->semantic_plan,
                                                                        operation, NULL, NULL, NULL);
     bool exact_array_shared_read = semantic_array_shared_read_is_exact_verify(
+        plan->semantic_plan, operation, semantic_value, semantic_type, semantic_function);
+    /* A String read back out of its shared cell. It borrows the cell's
+     * allocation, so it is bound to the same borrowed tagged carrier an Array
+     * read of that cell gets. */
+    bool exact_string_shared_read = semantic_string_shared_read_is_exact_verify(
         plan->semantic_plan, operation, semantic_value, semantic_type, semantic_function);
     bool exact_array_ref_place_load = semantic_direct_local_array_ref_place_load_is_exact_verify(
         plan, operation, semantic_value, semantic_type, semantic_function);
@@ -3519,10 +3531,10 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     int eligibility =
         operation_result_void || exact_heap_closure || exact_panic_catch ||
                 exact_array_allocation || exact_array_intrinsic || exact_array_hof_result ||
-                exact_array_fill || exact_array_shared_read || exact_array_ref_place_load ||
-                exact_class_object || exact_class_instance || exact_class_receiver ||
-                exact_string_literal || exact_string_concat || exact_direct_string_result ||
-                exact_stringbuilder || exact_stringbuilder_append ||
+                exact_array_fill || exact_array_shared_read || exact_string_shared_read ||
+                exact_array_ref_place_load || exact_class_object || exact_class_instance ||
+                exact_class_receiver || exact_string_literal || exact_string_concat ||
+                exact_direct_string_result || exact_stringbuilder || exact_stringbuilder_append ||
                 exact_stringbuilder_to_string || exact_stringbuilder_append_string ||
                 exact_string_runes || exact_string_slice_range || exact_json_namespace_value ||
                 exact_array_member_result || exact_direct_callee || exact_go_callee ||
@@ -3559,15 +3571,15 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     int expected_layout = -1;
     if (exact_heap_closure || exact_panic_catch || exact_array_allocation || exact_class_object ||
         exact_array_intrinsic || exact_array_hof_result || exact_array_shared_read ||
-        exact_array_ref_place_load || exact_array_fill || exact_class_instance ||
-        exact_class_receiver || exact_string_literal || exact_string_concat ||
-        exact_direct_string_result || exact_stringbuilder || exact_stringbuilder_append ||
-        exact_stringbuilder_to_string || exact_stringbuilder_append_string || exact_string_runes ||
-        exact_string_slice_range || exact_json_namespace_value || exact_array_member_result ||
-        exact_direct_callee || exact_go_callee || exact_go_task || exact_channel ||
-        exact_source_namespace || exact_native_module_namespace || exact_nullable_scalar ||
-        exact_adt_enum || exact_array_value_parameter || exact_string_value_parameter ||
-        exact_direct_array_result) {
+        exact_string_shared_read || exact_array_ref_place_load || exact_array_fill ||
+        exact_class_instance || exact_class_receiver || exact_string_literal ||
+        exact_string_concat || exact_direct_string_result || exact_stringbuilder ||
+        exact_stringbuilder_append || exact_stringbuilder_to_string ||
+        exact_stringbuilder_append_string || exact_string_runes || exact_string_slice_range ||
+        exact_json_namespace_value || exact_array_member_result || exact_direct_callee ||
+        exact_go_callee || exact_go_task || exact_channel || exact_source_namespace ||
+        exact_native_module_namespace || exact_nullable_scalar || exact_adt_enum ||
+        exact_array_value_parameter || exact_string_value_parameter || exact_direct_array_result) {
         expected_kind = XR_MACHINE_REP_DYN_VALUE;
         expected_layout = target_plan_layout_for_type(plan, semantic_type);
         eligibility =
@@ -3626,8 +3638,9 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
             (exact_direct_callee || exact_go_callee || exact_go_task || exact_source_namespace ||
              exact_native_module_namespace || exact_nullable_scalar ||
              exact_class_instance_borrowed || exact_class_receiver_borrowed ||
-             exact_adt_enum_borrowed || exact_array_shared_read || exact_array_ref_place_load ||
-             exact_array_value_parameter || exact_string_value_parameter ||
+             exact_adt_enum_borrowed || exact_array_shared_read || exact_string_shared_read ||
+             exact_array_ref_place_load || exact_array_value_parameter ||
+             exact_string_value_parameter ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
                 : XR_TARGET_OWNERSHIP_OWNED;

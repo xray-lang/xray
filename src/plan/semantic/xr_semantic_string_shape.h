@@ -24,6 +24,7 @@
 #include "xr_semantic_plan.h"
 #include "xr_semantic_ids.h"
 #include "xr_semantic_allocation_shape.h"
+#include "xr_semantic_shared_read_shape.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
@@ -68,6 +69,33 @@ static inline bool xr_semantic_direct_local_string_value_parameter_is_exact(
            parameter->transfer_mode == XR_TRANSFER_SHARE &&
            (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 && parameter->reserved == 0 &&
            xr_semantic_tagged_string_type_is_exact(xr_semantic_plan_type(plan, parameter->type));
+}
+
+/* A String read back out of the shared cell it was bound to.
+ *
+ * A String is immutable and shared, so reading the cell borrows the one
+ * allocation it holds, in the same tagged carrier a literal, a concatenation
+ * and a direct-local result all select. This is the shape every program that
+ * names a string after binding it has, so it is a String value in its own
+ * right, not something a call boundary confers -- the boundary is only one of
+ * the places that has to recognise it.
+ *
+ * The result type is proved here rather than left to whoever asks: a judgement
+ * that admitted every shared read and relied on its caller to have narrowed the
+ * type would claim Array and nested-container reads the moment it was applied
+ * anywhere else. The value's definition must also be this one operation, since
+ * the storage bound to it has to describe the value's whole life.
+ *
+ * TargetPlan construction, TargetPlan verification and representation
+ * refinement all ask this one judgement, so a read one layer binds cannot be
+ * one another layer refuses. */
+static inline bool
+xr_semantic_tagged_string_shared_read_is_exact(const XrSemanticPlan *plan,
+                                               const XrSemanticOperationRecord *operation) {
+    return plan && operation && xr_semantic_shared_read_operation_is_exact(operation) &&
+           xr_semantic_tagged_string_type_is_exact(
+               xr_semantic_plan_type(plan, operation->result_type)) &&
+           xr_semantic_unique_value_definition(plan, operation->result_value) == operation;
 }
 
 /* One exact native unsigned display source. It owns no reference, aggregate,

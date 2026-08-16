@@ -1998,36 +1998,13 @@ semantic_direct_local_array_ref_place_is_exact(const XrSemanticPlan *plan,
 static bool semantic_array_shared_read_is_exact(const XrSemanticPlan *plan, uint32_t semantic_value,
                                                 uint32_t semantic_type,
                                                 uint32_t semantic_function) {
-    uint32_t count = (uint32_t) xr_semantic_plan_operation_count(plan);
-    const XrSemanticOperationRecord *definition = NULL;
+    const XrSemanticOperationRecord *definition =
+        xr_semantic_unique_value_definition(plan, semantic_value);
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    if (!semantic_direct_local_array_ref_type_is_exact(plan, semantic_type, &storage) ||
-        storage == XR_TARGET_ARRAY_STORAGE_NONE)
-        return false;
-    for (uint32_t i = 0; i < count; i++) {
-        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
-        if (!candidate || candidate->result_value != semantic_value)
-            continue;
-        if (definition)
-            return false;
-        definition = candidate;
-    }
-    if (!definition || definition->opcode != XI_GET_SHARED ||
-        definition->result_type != semantic_type || definition->function != semantic_function ||
-        definition->operand_count != 0 ||
-        definition->effects != xi_generated_op_effects(XI_GET_SHARED) ||
-        definition->flags != xi_generated_op_default_flags(XI_GET_SHARED) ||
-        definition->ownership_use != xi_generated_op_own_use(XI_GET_SHARED) ||
-        definition->result_ownership != xi_generated_op_result_ownership(XI_GET_SHARED) ||
-        definition->result_alias_operand != -1 ||
-        definition->intrinsic_kind != XR_SEM_INTRINSIC_NONE || definition->metadata_count != 0 ||
-        definition->auxiliary_kind != XI_AUX_KIND_NONE ||
-        definition->constant != XR_SEMANTIC_INDEX_NONE ||
-        definition->callable_function != XR_SEMANTIC_INDEX_NONE ||
-        definition->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
-        definition->semantic_immediate > UINT32_MAX)
-        return false;
-    return true;
+    return semantic_direct_local_array_ref_type_is_exact(plan, semantic_type, &storage) &&
+           storage != XR_TARGET_ARRAY_STORAGE_NONE &&
+           xr_semantic_shared_read_operation_is_exact(definition) &&
+           definition->result_type == semantic_type && definition->function == semantic_function;
 }
 
 static bool semantic_direct_local_array_ref_place_load_is_exact(
@@ -5952,6 +5929,23 @@ static bool builder_add_direct_local_string_boundary_storage(XrTargetPlanBuilder
             builder, &analysis, operation->result_value, operation->result_type,
             operation->function, i, XR_TARGET_SLOT_TEMPORARY, XR_TARGET_STRING_CARRIER_OWNED_VALUE,
             operation->id, error, error_size);
+    }
+    /* Every exact shared read of a String, whether or not a call boundary ever
+     * looks at it. Binding only the reads an argument happens to reach would
+     * leave a String bound to a plain local unstated, which is the shape every
+     * program that names a string after binding it has. The read borrows the
+     * cell's allocation, so it holds the tagged carrier and owes nothing back. */
+    for (uint32_t i = 0; valid && i < count; i++) {
+        const XrSemanticOperationRecord *read =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!read || read->result_value >= analysis.total_values ||
+            analysis.defined_values[read->result_value] ||
+            !xr_semantic_tagged_string_shared_read_is_exact(builder->semantic_plan, read))
+            continue;
+        valid = note_direct_local_string_boundary_storage(
+            builder, &analysis, read->result_value, read->result_type, read->function, i,
+            XR_TARGET_SLOT_TEMPORARY, XR_TARGET_STRING_CARRIER_BORROWED_VALUE, read->id, error,
+            error_size);
     }
     /* A String parameter passed by value. It borrows the caller's allocation for
      * the extent of the call, so it holds the same tagged carrier the caller

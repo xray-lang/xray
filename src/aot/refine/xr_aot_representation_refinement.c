@@ -1172,18 +1172,7 @@ static bool aot_direct_local_array_result_is_exact(const XrSemanticPlan *semanti
 static bool aot_array_ref_shared_value_is_exact(const XrSemanticPlan *semantic,
                                                 const XrSemanticOperationRecord *operation,
                                                 uint8_t *storage) {
-    return operation && operation->opcode == XI_GET_SHARED && operation->operand_count == 0 &&
-           operation->effects == xi_generated_op_effects(XI_GET_SHARED) &&
-           operation->flags == xi_generated_op_default_flags(XI_GET_SHARED) &&
-           operation->ownership_use == xi_generated_op_own_use(XI_GET_SHARED) &&
-           operation->result_ownership == xi_generated_op_result_ownership(XI_GET_SHARED) &&
-           operation->result_alias_operand == -1 &&
-           operation->intrinsic_kind == XR_SEM_INTRINSIC_NONE && operation->metadata_count == 0 &&
-           operation->auxiliary_kind == XI_AUX_KIND_NONE &&
-           operation->constant == XR_SEMANTIC_INDEX_NONE &&
-           operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
-           operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
-           operation->semantic_immediate <= UINT32_MAX &&
+    return xr_semantic_shared_read_operation_is_exact(operation) &&
            aot_array_ref_type_is_exact(semantic, operation->result_type, storage);
 }
 
@@ -5381,20 +5370,18 @@ static bool oracle_nullable_scalar_storage(const VerifyAuthority *ctx, uint32_t 
     return true;
 }
 
-static bool oracle_dynamic_direct_local_string_result_storage(const VerifyAuthority *ctx,
-                                                              uint32_t semantic_value,
-                                                              XrRep *out_storage,
-                                                              uint16_t *out_machine_kind) {
-    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
-        return false;
-    uint32_t operation_index = ctx->operation_by_value[semantic_value];
-    const XrSemanticOperationRecord *operation =
-        operation_index != XR_SEMANTIC_INDEX_NONE
-            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
-            : NULL;
-    if (!operation || operation->result_value != semantic_value ||
-        !aot_direct_local_string_result_is_exact(ctx->semantic, operation_index))
-        return false;
+/* The frozen rows a String held in its own temporary slot must carry: the
+ * tagged carrier in both the register and the memory position, a dynamic layout
+ * of exactly that geometry, and a dynamic temporary slot naming this value and
+ * this operation. A String has one carrier however it was produced, so its
+ * producers -- a concatenation, a direct-local result, and a read of the shared
+ * cell it was bound to -- differ only in whether that carrier owns its
+ * allocation, and the rows they must agree with are stated once here rather
+ * than once per producer. */
+static bool tagged_value_temporary_rows_are_exact(const VerifyAuthority *ctx,
+                                                  uint32_t semantic_value,
+                                                  const XrSemanticOperationRecord *operation,
+                                                  uint32_t operation_index, uint8_t ownership) {
     const XrTargetValueRepRecord *binding =
         xr_target_plan_value_rep(ctx->target_plan, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
@@ -5415,24 +5402,63 @@ static bool oracle_dynamic_direct_local_string_result_storage(const VerifyAuthor
             return false;
         layout = &layouts[i];
     }
-    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
-        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
-        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
-        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
-        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
-        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
-        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
-        register_rep->memory_size != memory_rep->memory_size ||
-        register_rep->memory_align != memory_rep->memory_align ||
-        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
-        layout->root_field_count != 0 || layout->fixed_prefix_size != memory_rep->memory_size ||
-        layout->align != memory_rep->memory_align || slot->semantic_value != semantic_value ||
-        slot->semantic_operation != operation_index || slot->function != operation->function ||
-        slot->role != XR_TARGET_SLOT_TEMPORARY || slot->register_rep != binding->register_rep ||
-        slot->memory_rep != binding->memory_rep || slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+    return binding && register_rep && memory_rep && slot && layout &&
+           register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+           memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+           register_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+           memory_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+           register_rep->ownership == ownership && memory_rep->ownership == ownership &&
+           register_rep->null_encoding == XR_TARGET_NULL_TAGGED &&
+           memory_rep->null_encoding == XR_TARGET_NULL_TAGGED &&
+           register_rep->memory_size == memory_rep->memory_size &&
+           register_rep->memory_align == memory_rep->memory_align &&
+           layout->kind == XR_TARGET_LAYOUT_DYNAMIC && layout->field_count == 0 &&
+           layout->root_field_count == 0 && layout->fixed_prefix_size == memory_rep->memory_size &&
+           layout->align == memory_rep->memory_align && slot->semantic_value == semantic_value &&
+           slot->semantic_operation == operation_index && slot->function == operation->function &&
+           slot->role == XR_TARGET_SLOT_TEMPORARY && slot->register_rep == binding->register_rep &&
+           slot->memory_rep == binding->memory_rep && slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+           slot->ownership == ownership;
+}
+
+static bool oracle_dynamic_direct_local_string_result_storage(const VerifyAuthority *ctx,
+                                                              uint32_t semantic_value,
+                                                              XrRep *out_storage,
+                                                              uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !aot_direct_local_string_result_is_exact(ctx->semantic, operation_index) ||
+        !tagged_value_temporary_rows_are_exact(ctx, semantic_value, operation, operation_index,
+                                               XR_TARGET_OWNERSHIP_OWNED))
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+/* A String read back out of the shared cell it was bound to. The read borrows
+ * the cell's allocation, so it lands in the one tagged carrier a String has,
+ * holding it borrowed rather than owned. */
+static bool oracle_dynamic_string_shared_read_storage(const VerifyAuthority *ctx,
+                                                      uint32_t semantic_value, XrRep *out_storage,
+                                                      uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !xr_semantic_tagged_string_shared_read_is_exact(ctx->semantic, operation) ||
+        !tagged_value_temporary_rows_are_exact(ctx, semantic_value, operation, operation_index,
+                                               XR_TARGET_OWNERSHIP_BORROWED))
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -5454,46 +5480,9 @@ static bool oracle_dynamic_string_concat_result_storage(const VerifyAuthority *c
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
     if (!operation || operation->result_value != semantic_value ||
-        !xr_semantic_string_concat_is_exact(ctx->semantic, operation))
-        return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
-    const XrTargetMachineRepRecord *register_rep =
-        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
-    const XrTargetMachineRepRecord *memory_rep =
-        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep) : NULL;
-    uint32_t slot_count = 0;
-    const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
-    const XrTargetSlotRecord *slot =
-        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
-    uint32_t layout_count = 0;
-    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(ctx->target_plan, &layout_count);
-    const XrTargetLayoutRecord *layout = NULL;
-    for (uint32_t i = 0; i < layout_count; i++) {
-        if (layouts[i].semantic_type != operation->result_type)
-            continue;
-        if (layout)
-            return false;
-        layout = &layouts[i];
-    }
-    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
-        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
-        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
-        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
-        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
-        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
-        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
-        register_rep->memory_size != memory_rep->memory_size ||
-        register_rep->memory_align != memory_rep->memory_align ||
-        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
-        layout->root_field_count != 0 || layout->fixed_prefix_size != memory_rep->memory_size ||
-        layout->align != memory_rep->memory_align || slot->semantic_value != semantic_value ||
-        slot->semantic_operation != operation_index || slot->function != operation->function ||
-        slot->role != XR_TARGET_SLOT_TEMPORARY || slot->register_rep != binding->register_rep ||
-        slot->memory_rep != binding->memory_rep || slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        !xr_semantic_string_concat_is_exact(ctx->semantic, operation) ||
+        !tagged_value_temporary_rows_are_exact(ctx, semantic_value, operation, operation_index,
+                                               XR_TARGET_OWNERSHIP_OWNED))
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -6943,6 +6932,12 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             if (oracle_dynamic_array_ref_storage(ctx, semantic_value, out_storage,
                                                  out_machine_kind))
                 return true;
+            /* A String read out of a shared cell is the same borrow an Array
+             * read of that cell is: a reference-capable container whose only
+             * storage fact is the tagged value the cell holds. */
+            if (oracle_dynamic_string_shared_read_storage(ctx, semantic_value, out_storage,
+                                                          out_machine_kind))
+                return true;
             if (oracle_dynamic_struct_object_storage(ctx, semantic_value, out_storage,
                                                      out_machine_kind))
                 return true;
@@ -7928,10 +7923,10 @@ static bool oracle_array_tagged_carrier_storage(const VerifyAuthority *ctx, uint
 
 /* Every way a String can reach a use site already holding its tagged carrier:
  * a literal, a concatenation the caller just built, a String a direct-local
- * call handed back, or one borrowed as a by-value parameter. A String has no
- * other carrier, so every site that accepts one in that carrier asks this one
- * list, and a String the equality test admits can never be one a call argument
- * refuses. */
+ * call handed back, one read back out of the shared cell it was bound to, or
+ * one borrowed as a by-value parameter. A String has no other carrier, so every
+ * site that accepts one in that carrier asks this one list, and a String the
+ * equality test admits can never be one a call argument refuses. */
 static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
                                                  uint32_t semantic_value, XrRep *out_storage,
                                                  uint16_t *out_machine_kind) {
@@ -7941,6 +7936,8 @@ static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
                                                        out_machine_kind) ||
            oracle_dynamic_direct_local_string_result_storage(ctx, semantic_value, out_storage,
                                                              out_machine_kind) ||
+           oracle_dynamic_string_shared_read_storage(ctx, semantic_value, out_storage,
+                                                     out_machine_kind) ||
            oracle_direct_local_string_value_parameter_storage(ctx, semantic_value, out_storage,
                                                               out_machine_kind);
 }

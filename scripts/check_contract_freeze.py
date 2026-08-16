@@ -172,6 +172,7 @@ CONTRACT_SPECS = (
             "src/ir/xi.h",
             "src/ir/xi_opt.c",
             "src/plan/semantic/xr_semantic_value_aggregate_shape.h",
+            "src/plan/semantic/xr_semantic_shared_read_shape.h",
             "src/plan/semantic/xr_semantic_string_shape.h",
             "src/plan/semantic/xr_semantic_string_runes_shape.h",
             "src/plan/semantic/xr_semantic_string_slice_shape.h",
