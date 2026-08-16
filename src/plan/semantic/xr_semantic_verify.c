@@ -4422,6 +4422,39 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
     return true;
 }
 
+/* Whether an argument of this type satisfies a parameter declared with that
+ * type, both rows read from the frozen callee plan.
+ *
+ * Identity is the ordinary answer. A union parameter also admits any one of its
+ * members. `NetConn | NetListener` is the set of types the callee accepts, not
+ * a type the caller can hold: a union has no representation of its own -- the
+ * backend lowers one to a predicate over its members and never to a tagged
+ * carrier -- so what crosses the call is always a member, with the member's
+ * ABI. Demanding identity asked the caller to produce a value whose type
+ * nothing can produce, which refused every direct call into the pure stdlib
+ * modules that reach net.close, net.fd or net.lastError. */
+static bool parameter_type_admits_argument(const XrSemanticPlan *callee,
+                                           const XrSemanticTypeRecord *parameter_type,
+                                           const XrSemanticTypeRecord *operand_type) {
+    if (!callee || !parameter_type || !operand_type)
+        return false;
+    if (xr_stable_id_equal(operand_type->id, parameter_type->id))
+        return true;
+    if (parameter_type->kind != (uint32_t) XR_KIND_UNION)
+        return false;
+    for (uint16_t member = 0; member < parameter_type->child_count; member++) {
+        uint32_t child = parameter_type->child_begin + member;
+        if (child >= callee->type_child_count)
+            return false;
+        uint32_t member_type = callee->type_children[child];
+        if (member_type >= callee->type_count)
+            return false;
+        if (xr_stable_id_equal(operand_type->id, callee->types[member_type].id))
+            return true;
+    }
+    return false;
+}
+
 static bool verify_dependency_rows(const XrSemanticPlan *plan, char *error, size_t error_size) {
     for (uint32_t i = 0; i < plan->dependency_count; i++) {
         const XrSemanticDependencyRecord *record = &plan->dependencies[i];
@@ -4757,7 +4790,7 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
             else if (parameter->function != source_export->function ||
                      parameter->ordinal != ordinal)
                 disagreement = "parameter-row-is-another-function";
-            else if (!xr_stable_id_equal(operand_type->id, parameter_type->id))
+            else if (!parameter_type_admits_argument(match, parameter_type, operand_type))
                 disagreement = "argument-type";
             else if (operand->role != XR_SEM_OPERAND_ARGUMENT ||
                      operand->parameter != (int16_t) ordinal)

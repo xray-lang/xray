@@ -1031,22 +1031,50 @@ static bool build_source_classes(XrSemanticBuildContext *ctx, const XiFunc *root
     return true;
 }
 
+/* Whether this class declaration is the one the type names.
+ *
+ * The analyzer's class pointer is the exact answer and is used whenever the
+ * type carries one. Not every XrType for a class does: instance.class_ref is
+ * filled at some construction sites and left null at others, so whether a given
+ * type object has it is a property of the expression that produced the object,
+ * not of the class it denotes. That distinction cannot reach the canonical key.
+ * The key records this answer, and a key is a stable identity: if the pointer
+ * were the only route, the same declared class would hash one way in the module
+ * that declares it and another way in a module that only names it, and no
+ * cross-module contract mentioning that type could ever agree with itself --
+ * which is what refused every direct call into io, log, http, ws, and the pure
+ * stdlib modules. The declared name closes that gap for the pointerless
+ * objects; callers still discard a name that matches more than one identity. */
+static bool source_class_matches_type(const XiClassData *source, const XrType *type,
+                                      uint32_t class_id) {
+    if (!source || !type)
+        return false;
+    if (type->instance.class_ref)
+        return source->class_info == type->instance.class_ref ||
+               (class_id != 0 && source->xg_class_id == class_id);
+    return type->instance.class_name && source->class_name &&
+           strcmp(source->class_name, type->instance.class_name) == 0;
+}
+
 static uint32_t source_class_for_type(const XrSemanticBuildContext *ctx, const XrType *type) {
-    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
-        !type->instance.class_ref)
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
         return XR_SEMANTIC_INDEX_NONE;
     const XiModule *module = ctx->functions[0].source->module;
-    for (uint32_t c = 0; module && c < module->nclasses; c++)
-        if (module->classes[c] && module->classes[c]->class_info == type->instance.class_ref)
-            return c;
-    return XR_SEMANTIC_INDEX_NONE;
+    uint32_t match = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t c = 0; module && c < module->nclasses; c++) {
+        if (!source_class_matches_type(module->classes[c], type, 0))
+            continue;
+        if (match != XR_SEMANTIC_INDEX_NONE)
+            return XR_SEMANTIC_INDEX_NONE;
+        match = c;
+    }
+    return match;
 }
 
 static bool source_class_identity_for_type(const XrSemanticBuildContext *ctx, const XrType *type,
                                            XrStableId *out) {
     memset(out, 0, sizeof(*out));
-    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
-        !type->instance.class_ref)
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
         return false;
     uint32_t local = source_class_for_type(ctx, type);
     if (local != XR_SEMANTIC_INDEX_NONE) {
@@ -1054,18 +1082,15 @@ static bool source_class_identity_for_type(const XrSemanticBuildContext *ctx, co
         return true;
     }
     const XrSemanticSourceClassRecord *match = NULL;
-    uint32_t class_id = type->instance.class_ref->xg_class_id;
+    uint32_t class_id = type->instance.class_ref ? type->instance.class_ref->xg_class_id : 0;
     for (uint32_t m = 0; m < ctx->dependency_module_count; m++) {
         const XiModule *module = ctx->dependency_modules[m];
         const XrSemanticPlan *plan = module && module->init ? module->init->semantic_plan : NULL;
         if (!plan || plan->schema != XR_SEMANTIC_SCHEMA_VERSION || !plan->frozen || !plan->verified)
             continue;
         for (uint32_t c = 0; c < module->nclasses; c++) {
-            const XiClassData *source = module->classes[c];
-            if (!source ||
-                (source->class_info != type->instance.class_ref &&
-                 (class_id == 0 || source->xg_class_id != class_id)) ||
-                c >= plan->source_class_count)
+            if (c >= plan->source_class_count ||
+                !source_class_matches_type(module->classes[c], type, class_id))
                 continue;
             const XrSemanticSourceClassRecord *candidate = &plan->source_classes[c];
             if (match && !xr_stable_id_equal(match->id, candidate->id))
