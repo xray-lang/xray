@@ -560,7 +560,12 @@ static bool xaot_cli_link_add_verified_runtime(XaotCliLinkCommand *cmd,
     return xaot_cli_link_add_arg(cmd, path, err, err_size);
 }
 
-static bool xaot_cli_stdlib_object_needs_aot_core(const char *value) {
+/* Whether a stdlib symbol is implemented inside the AOT core archive. This
+ * decides which system libraries the link needs -- the archive's crypto and
+ * compress members pull OpenSSL and zlib -- and it does NOT decide whether the
+ * archive itself goes on the link line. That is unconditional: see
+ * xaot_cli_link_add_aot_core. */
+static bool xaot_cli_stdlib_object_uses_aot_core(const char *value) {
     return value &&
            (strncmp(value, "crypto.", 7) == 0 || strncmp(value, "cluster.", 8) == 0 ||
             strncmp(value, "regex.", 6) == 0 || strcmp(value, "compress.deflate") == 0 ||
@@ -573,18 +578,18 @@ static bool xaot_cli_stdlib_object_needs_aot_core(const char *value) {
             strcmp(value, "time.micros") == 0 || strcmp(value, "time.clock") == 0);
 }
 
-static bool xaot_cli_stdlib_object_needs_aot_core_for_target(const char *value,
-                                                             const XrToolchainTarget *target) {
+static bool xaot_cli_stdlib_object_uses_aot_core_for_target(const char *value,
+                                                            const XrToolchainTarget *target) {
     if (target && !target->is_native && value && strncmp(value, "time.", 5) == 0)
         return false;
-    return xaot_cli_stdlib_object_needs_aot_core(value);
+    return xaot_cli_stdlib_object_uses_aot_core(value);
 }
 
 static bool xaot_cli_link_add_stdlib_object(XaotCliLinkCommand *cmd, const char *value, char *err,
                                             size_t err_size) {
     size_t len;
 
-    if (!value || !value[0] || xaot_cli_stdlib_object_needs_aot_core(value))
+    if (!value || !value[0] || xaot_cli_stdlib_object_uses_aot_core(value))
         return true;
     len = strlen(value);
     if (strchr(value, '/') || (len > 2 && strcmp(value + len - 2, ".o") == 0) ||
@@ -594,30 +599,30 @@ static bool xaot_cli_link_add_stdlib_object(XaotCliLinkCommand *cmd, const char 
     return true;
 }
 
-static bool xaot_cli_manifest_needs_aot_core(const XaotLinkManifest *manifest) {
+static bool xaot_cli_manifest_uses_aot_core(const XaotLinkManifest *manifest) {
     if (!manifest)
         return false;
     for (uint32_t i = 0; i < manifest->n_stdlib_objects; i++) {
-        if (xaot_cli_stdlib_object_needs_aot_core(manifest->stdlib_objects[i]))
+        if (xaot_cli_stdlib_object_uses_aot_core(manifest->stdlib_objects[i]))
             return true;
     }
     for (uint32_t i = 0; i < manifest->n_stdlib_symbols; i++) {
-        if (xaot_cli_stdlib_object_needs_aot_core(manifest->stdlib_symbols[i]))
+        if (xaot_cli_stdlib_object_uses_aot_core(manifest->stdlib_symbols[i]))
             return true;
     }
     return false;
 }
 
-static bool xaot_cli_manifest_needs_aot_core_for_target(const XaotLinkManifest *manifest,
-                                                        const XrToolchainTarget *target) {
+static bool xaot_cli_manifest_uses_aot_core_for_target(const XaotLinkManifest *manifest,
+                                                       const XrToolchainTarget *target) {
     if (!manifest)
         return false;
     for (uint32_t i = 0; i < manifest->n_stdlib_objects; i++) {
-        if (xaot_cli_stdlib_object_needs_aot_core_for_target(manifest->stdlib_objects[i], target))
+        if (xaot_cli_stdlib_object_uses_aot_core_for_target(manifest->stdlib_objects[i], target))
             return true;
     }
     for (uint32_t i = 0; i < manifest->n_stdlib_symbols; i++) {
-        if (xaot_cli_stdlib_object_needs_aot_core_for_target(manifest->stdlib_symbols[i], target))
+        if (xaot_cli_stdlib_object_uses_aot_core_for_target(manifest->stdlib_symbols[i], target))
             return true;
     }
     return false;
@@ -1208,7 +1213,7 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     char aot_include[600];
     char runtime_include[600];
     bool needs_runtime;
-    bool needs_aot_core;
+    bool uses_aot_core;
     bool freestanding_profile;
     XrNativeCompileSpec compile_spec;
     XrNativeLinkSpec link_spec;
@@ -1233,7 +1238,7 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     }
 
     needs_runtime = xaot_link_manifest_needs_runtime(manifest);
-    needs_aot_core = xaot_cli_manifest_needs_aot_core_for_target(manifest, target);
+    uses_aot_core = xaot_cli_manifest_uses_aot_core_for_target(manifest, target);
     freestanding_profile =
         xaot_link_manifest_contains(manifest, XAOT_LINK_DEFINE, "XRAY_PROFILE_FREESTANDING=1");
     if (needs_runtime && !target->is_native) {
@@ -1253,9 +1258,8 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     if (!xtc_command_emit_compile(plan, &compile_spec, &sink, err, err_size) ||
         !xtc_command_emit_link_output(plan->provider, output_file, &sink, err, err_size))
         return false;
-    if (intermediate_object &&
-        !xtc_command_emit_intermediate_object_output(plan->provider, intermediate_object, &sink,
-                                                     err, err_size))
+    if (intermediate_object && !xtc_command_emit_intermediate_object_output(
+                                   plan->provider, intermediate_object, &sink, err, err_size))
         return false;
     for (in = 0; in < n_inputs; in++) {
         if (!xaot_cli_link_add_arg(cmd, inputs[in], err, err_size))
@@ -1298,10 +1302,20 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
         if (!xaot_cli_link_add_arg(cmd, manifest->native_inputs[i], err, err_size))
             return false;
     }
-    if (needs_aot_core &&
-        !xaot_cli_link_add_verified_runtime(cmd, plan, "xray_aot_core", err, err_size))
+    /* The AOT core archive goes on every link line, whatever the program does.
+     * Every generated translation unit includes xrt_method.h, whose rune
+     * classification helpers call into the Unicode property tables this archive
+     * carries. At -O2 the helpers inline away and the archive contributes
+     * nothing, but at -O0 the compiler emits them out of line and the link needs
+     * xr_unicode_is_property -- so a program as small as `print(len(s))` failed
+     * to link while the same program at -O2 succeeded. That dependency belongs
+     * to the header, not to any feature a manifest can observe, so no feature
+     * predicate can decide it. A static archive contributes only the members the
+     * link actually pulls, so naming it unconditionally costs nothing for the
+     * programs that need none of it. */
+    if (!xaot_cli_link_add_verified_runtime(cmd, plan, "xray_aot_core", err, err_size))
         return false;
-    if (needs_runtime || needs_aot_core) {
+    if (needs_runtime || uses_aot_core) {
         for (i = 0; i < plan->system_library_count; i++) {
             if (!xtc_command_emit_system_library(plan->provider, target, plan->system_libraries[i],
                                                  &sink, err, err_size))
@@ -1332,8 +1346,8 @@ static int invoke_aot_manifest_link(const XrToolchainSelection *plan,
                                     const XaotLinkManifest *manifest, const char *opt_flag,
                                     const char *output_file, const char *const *inputs,
                                     int n_inputs, bool strip_symbols, bool shared_library,
-                                    const char *sysroot, bool dump_link_command,
-                                    bool dry_run_link, const char *intermediate_object) {
+                                    const char *sysroot, bool dump_link_command, bool dry_run_link,
+                                    const char *intermediate_object) {
     char err[512];
     XaotCliLinkCommand cmd;
 
@@ -2298,10 +2312,11 @@ static uint64_t xaot_hash_fold_link_dependency_stats(uint64_t h, const XaotLinkM
         if (xaot_link_value_is_path(value))
             h = xaot_hash_fold_file_stat(h, value);
     }
-    if (xaot_cli_manifest_needs_aot_core(manifest)) {
-        xaot_runtime_archive_path(resolved_lib_dir, "xray_aot_core", dep, sizeof(dep));
-        h = xaot_hash_fold_file_stat(h, dep);
-    }
+    /* Unconditional, because the archive is on every link line. Folding it in
+     * only when a manifest names one of its stdlib symbols would let a rebuilt
+     * archive be answered from a stale cached link. */
+    xaot_runtime_archive_path(resolved_lib_dir, "xray_aot_core", dep, sizeof(dep));
+    h = xaot_hash_fold_file_stat(h, dep);
     return h;
 }
 
@@ -3176,7 +3191,7 @@ static int xaot_write_temp_c_source(const char *cache_dir, uint64_t key,
 
 static bool xaot_cli_fast_test_direct_link_allowed(const XaotLinkManifest *manifest) {
     return manifest && !xaot_link_manifest_needs_runtime(manifest) &&
-           !xaot_cli_manifest_needs_aot_core(manifest) && manifest->n_runtime_objects == 0 &&
+           !xaot_cli_manifest_uses_aot_core(manifest) && manifest->n_runtime_objects == 0 &&
            manifest->n_stdlib_objects == 0;
 }
 
@@ -3286,8 +3301,7 @@ static int cmd_build_native(
     bool shared_library = artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY;
     char cache_dir[XR_PATH_MAX];
     bool cache_dir_ready = false;
-    if (xaot_resolve_cache_dir(output, target, cache_dir_arg, cache_dir,
-                               sizeof(cache_dir)) != 0) {
+    if (xaot_resolve_cache_dir(output, target, cache_dir_arg, cache_dir, sizeof(cache_dir)) != 0) {
         fprintf(stderr, "Error: cannot create AOT cache directory '%s'\n", cache_dir);
         return 1;
     }
@@ -3310,9 +3324,8 @@ static int cmd_build_native(
         char profile_err[256] = "invalid numeric target codegen facts";
         if (!xaot_target_profile_codegen_facts(&build_target, &codegen) ||
             profile != XR_CLI_BUILD_PROFILE_HOSTED ||
-            !xtc_target_profile_build_native_hosted(
-                target, &codegen, &target_profile, profile_err,
-                sizeof(profile_err))) {
+            !xtc_target_profile_build_native_hosted(target, &codegen, &target_profile, profile_err,
+                                                    sizeof(profile_err))) {
             fprintf(stderr, "Error: %s\n",
                     profile == XR_CLI_BUILD_PROFILE_HOSTED
                         ? profile_err
@@ -3733,11 +3746,10 @@ static int cmd_build_native(
     }
 
     if (ret == 0)
-        ret =
-            invoke_aot_manifest_link(toolchain_plan, target, &aot_result.link_manifest, opt_flag,
-                                     output, obj_ptrs, n_sources, strip, library_artifact, sysroot,
-                                     dump_link_command || verbose || dry_run_link, dry_run_link,
-                                     NULL);
+        ret = invoke_aot_manifest_link(toolchain_plan, target, &aot_result.link_manifest, opt_flag,
+                                       output, obj_ptrs, n_sources, strip, library_artifact,
+                                       sysroot, dump_link_command || verbose || dry_run_link,
+                                       dry_run_link, NULL);
 #ifdef XR_OS_MACOS
     if (ret == 0 && build_dsym && !dry_run_link)
         ret = invoke_dsymutil(output, dump_link_command || verbose);
