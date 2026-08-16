@@ -4745,24 +4745,52 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
             bool reference = parameter && parameter->mode == XR_PARAM_REF;
             bool read = parameter && parameter->mode == XR_PARAM_READ;
             bool addressable = operand && (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0;
-            valid = parameter && operand && operand_type && parameter_type &&
-                    parameter->function == source_export->function &&
-                    parameter->ordinal == ordinal &&
-                    xr_stable_id_equal(operand_type->id, parameter_type->id) &&
-                    operand->role == XR_SEM_OPERAND_ARGUMENT &&
-                    operand->parameter == (int16_t) ordinal &&
-                    operand->parameter_mode == parameter->mode &&
-                    operand->transfer_mode == parameter->transfer_mode &&
-                    (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 && (read || reference) &&
-                    (!read || (operand->access == XR_CALL_ARG_PLAIN && !addressable)) &&
-                    (!reference || (operand->access == XR_CALL_ARG_REF && addressable &&
-                                    operand->ownership_action == XR_SEM_OPERAND_BORROW));
-            if (!valid) {
+            /* Which of the eleven agreements failed, by name. This used to be
+             * one conjunction reported as "argument N disagrees", which names
+             * the argument and nothing else: a type mismatch, a borrow the
+             * callee never asked for and an operand row belonging to a
+             * different call all printed the same sentence, and separating
+             * them meant rebuilding with temporary printfs. */
+            const char *disagreement = NULL;
+            if (!parameter || !operand || !operand_type || !parameter_type)
+                disagreement = "row-out-of-range";
+            else if (parameter->function != source_export->function ||
+                     parameter->ordinal != ordinal)
+                disagreement = "parameter-row-is-another-function";
+            else if (!xr_stable_id_equal(operand_type->id, parameter_type->id))
+                disagreement = "argument-type";
+            else if (operand->role != XR_SEM_OPERAND_ARGUMENT ||
+                     operand->parameter != (int16_t) ordinal)
+                disagreement = "operand-is-not-this-argument";
+            else if (operand->parameter_mode != parameter->mode)
+                disagreement = "parameter-mode";
+            else if (operand->transfer_mode != parameter->transfer_mode)
+                disagreement = "transfer-mode";
+            else if ((operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0)
+                disagreement = "no-call-contract";
+            else if (!read && !reference)
+                disagreement = "parameter-mode-is-neither-read-nor-ref";
+            else if (read && (operand->access != XR_CALL_ARG_PLAIN || addressable))
+                disagreement = "read-argument-access";
+            else if (reference && (operand->access != XR_CALL_ARG_REF || !addressable ||
+                                   operand->ownership_action != XR_SEM_OPERAND_BORROW))
+                disagreement = "ref-argument-access";
+            if (disagreement) {
+                valid = false;
                 snprintf(authority_detail, sizeof(authority_detail),
                          "source export call argument disagrees with frozen dependency "
-                         "target=%u operation=%u ordinal=%u dependency=%u export=%u",
+                         "target=%u operation=%u ordinal=%u dependency=%u export=%u failed=%s "
+                         "caller_mode=%u callee_mode=%u caller_transfer=%u callee_transfer=%u "
+                         "access=%u addressable=%u ownership=%u flags=%u",
                          target_index, target->operation, ordinal, target->dependency,
-                         target->source_export);
+                         target->source_export, disagreement,
+                         operand ? (unsigned) operand->parameter_mode : 0u,
+                         parameter ? (unsigned) parameter->mode : 0u,
+                         operand ? (unsigned) operand->transfer_mode : 0u,
+                         parameter ? (unsigned) parameter->transfer_mode : 0u,
+                         operand ? (unsigned) operand->access : 0u, addressable ? 1u : 0u,
+                         operand ? (unsigned) operand->ownership_action : 0u,
+                         operand ? (unsigned) operand->flags : 0u);
             }
         }
         if (!valid)
