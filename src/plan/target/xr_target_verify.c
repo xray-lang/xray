@@ -2512,39 +2512,21 @@ invalid_authority:
                   "direct-local callee storage authority is not exact");
 }
 
+/* Shared slots live in one module-wide table owned by the module root, so a
+ * slot index means the same slot in every function that names it. This table is
+ * indexed by that index alone; the storing function is recorded so the owner
+ * judgement can require it to be the callee's lexical parent. */
 typedef struct XrVerifierGoStore {
     uint32_t function;
     uint32_t operation;
-    uint16_t slot;
-    uint8_t occupied;
     uint8_t ambiguous;
 } XrVerifierGoStore;
 
-static uint32_t verifier_go_store_hash(uint32_t function, uint16_t slot) {
-    uint32_t mixed = function * UINT32_C(2246822519) + (uint32_t) slot;
-    mixed ^= mixed >> 15;
-    return mixed;
-}
-
-static XrVerifierGoStore *verifier_go_find_store(XrVerifierGoStore *stores, uint32_t capacity,
-                                                 uint32_t function, uint16_t slot, bool insert) {
-    uint32_t cursor = verifier_go_store_hash(function, slot) & (capacity - 1u);
-    for (uint32_t probe = 0; probe < capacity; probe++) {
-        XrVerifierGoStore *entry = &stores[cursor];
-        if (!entry->occupied) {
-            if (!insert)
-                return NULL;
-            entry->occupied = 1;
-            entry->function = function;
-            entry->slot = slot;
-            entry->operation = XR_SEMANTIC_INDEX_NONE;
-            return entry;
-        }
-        if (entry->function == function && entry->slot == slot)
-            return entry;
-        cursor = (cursor + 1u) & (capacity - 1u);
-    }
-    return NULL;
+static XrVerifierGoStore *verifier_go_find_store(XrVerifierGoStore *stores, uint32_t slot_count,
+                                                 int64_t slot) {
+    if (!stores || slot < 0 || slot >= (int64_t) slot_count)
+        return NULL;
+    return &stores[slot];
 }
 
 static bool verifier_go_store_before_activation(const XrSemanticPlan *semantic,
@@ -2594,25 +2576,37 @@ static bool collect_exact_direct_local_go_callee_values(const XrTargetPlan *plan
         value_count = last->value_begin + last->value_count;
     }
     uint32_t operation_count = (uint32_t) operations_size;
-    uint32_t store_capacity = 1;
-    while (store_capacity < operation_count * 2u)
-        store_capacity <<= 1u;
+    uint32_t slot_count = 0;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
+        if (!operation ||
+            (operation->opcode != XI_SET_SHARED && operation->opcode != XI_GET_SHARED))
+            continue;
+        if (operation->semantic_immediate < 0 || operation->semantic_immediate > UINT16_MAX)
+            continue;
+        uint32_t slot = (uint32_t) operation->semantic_immediate;
+        if (slot + 1u > slot_count)
+            slot_count = slot + 1u;
+    }
     uint32_t *definition =
         value_count ? (uint32_t *) xr_malloc((size_t) value_count * sizeof(*definition)) : NULL;
-    XrVerifierGoStore *stores = (XrVerifierGoStore *) xr_calloc(store_capacity, sizeof(*stores));
+    XrVerifierGoStore *stores =
+        slot_count ? (XrVerifierGoStore *) xr_calloc(slot_count, sizeof(*stores)) : NULL;
     uint32_t *targets =
         value_count ? (uint32_t *) xr_malloc((size_t) value_count * sizeof(*targets)) : NULL;
     uint32_t *uses = value_count ? (uint32_t *) xr_calloc(value_count, sizeof(*uses)) : NULL;
     uint8_t *candidate = value_count ? (uint8_t *) xr_calloc(value_count, 1) : NULL;
     uint8_t *invalid = value_count ? (uint8_t *) xr_calloc(value_count, 1) : NULL;
     uint8_t *exact = value_count ? (uint8_t *) xr_calloc(value_count, 1) : NULL;
-    if (!stores ||
+    if ((slot_count && !stores) ||
         (value_count && (!definition || !targets || !uses || !candidate || !invalid || !exact)))
         goto allocation_failed;
     for (uint32_t i = 0; i < value_count; i++) {
         definition[i] = XR_SEMANTIC_INDEX_NONE;
         targets[i] = XR_SEMANTIC_INDEX_NONE;
     }
+    for (uint32_t i = 0; i < slot_count; i++)
+        stores[i].operation = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < operation_count; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
         if (!operation || operation->result_value >= value_count ||
@@ -2622,14 +2616,15 @@ static bool collect_exact_direct_local_go_callee_values(const XrTargetPlan *plan
         if (operation->opcode == XI_SET_SHARED && operation->semantic_immediate >= 0 &&
             operation->semantic_immediate <= UINT16_MAX) {
             XrVerifierGoStore *entry =
-                verifier_go_find_store(stores, store_capacity, operation->function,
-                                       (uint16_t) operation->semantic_immediate, true);
+                verifier_go_find_store(stores, slot_count, operation->semantic_immediate);
             if (!entry)
                 goto invalid_authority;
             if (entry->operation != XR_SEMANTIC_INDEX_NONE)
                 entry->ambiguous = 1;
-            else
+            else {
                 entry->operation = i;
+                entry->function = operation->function;
+            }
         }
     }
     XrSemanticGraph graph = {0};
@@ -2659,10 +2654,7 @@ static bool collect_exact_direct_local_go_callee_values(const XrTargetPlan *plan
             uint32_t value = load->result_value;
             candidate[value] = 1;
             XrVerifierGoStore *entry =
-                load->semantic_immediate >= 0 && load->semantic_immediate <= UINT16_MAX
-                    ? verifier_go_find_store(stores, store_capacity, load->function,
-                                             (uint16_t) load->semantic_immediate, false)
-                    : NULL;
+                verifier_go_find_store(stores, slot_count, load->semantic_immediate);
             const XrSemanticOperationRecord *store =
                 entry && !entry->ambiguous && entry->operation < operation_count
                     ? xr_semantic_plan_operation(semantic, entry->operation)
@@ -2677,15 +2669,21 @@ static bool collect_exact_direct_local_go_callee_values(const XrTargetPlan *plan
                     : NULL;
             uint32_t target = closure ? closure->callable_function : XR_SEMANTIC_INDEX_NONE;
             const XrSemanticFunctionRecord *callee = xr_semantic_plan_function(semantic, target);
+            /* Only a store the loading function makes itself stands in a
+             * dominance relation to the load. A store in the slot's owning
+             * scope is proved instead by the owner and entry-prefix judgements
+             * below: it is the callee's lexical parent, and it ran before any
+             * operation that could activate the loading function. */
             bool initialized =
-                store && (store->block == load->block
-                              ? entry->operation < definition[value]
-                              : xr_semantic_graph_dominates(&graph, store->block, load->block));
+                store && (store->function != load->function ||
+                          (store->block == load->block
+                               ? entry->operation < definition[value]
+                               : xr_semantic_graph_dominates(&graph, store->block, load->block)));
             bool exact_use =
                 entry && !entry->ambiguous && store && stored && closure && callee && a == 0 &&
                 initialized &&
                 verifier_go_store_before_activation(semantic, store->function, entry->operation) &&
-                store->opcode == XI_SET_SHARED && store->function == load->function &&
+                store->opcode == XI_SET_SHARED && callee->parent == store->function &&
                 store->semantic_immediate == load->semantic_immediate && !store->allocation_key &&
                 stable_id_is_zero(store->allocation_id) &&
                 store->constant == XR_SEMANTIC_INDEX_NONE &&

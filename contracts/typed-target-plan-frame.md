@@ -70,7 +70,14 @@ allocator.
 The direct-local-GO-callee-storage family similarly describes only a borrowed
 dynamic outer callable token produced by one canonical shared-slot
 initializer and used exclusively as operand zero of exact `XI_GO` sites for
-one canonical local child. It grants no GO result/task object, callable body,
+one canonical local child. The slot index names one entry of the single
+module-wide shared table whatever function reads it, so the initializer is
+looked up by that index alone and has to sit in the scope owning the slot,
+which is the frozen child's parent. Only a store the loading function makes
+itself carries dominance; a store in an enclosing owner is instead required
+to be that scope's entry-prefix initializer before any activation. This
+covers a module-level helper started from a nested function and rejects a
+store in an unrelated scope. It grants no GO result/task object, callable body,
 allocation, root map, cleanup, argument storage, or execution path and remains
 outside the trivial frame allocator.
 The direct-local-GO-task-result-storage family owns the complementary outer

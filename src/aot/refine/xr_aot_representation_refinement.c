@@ -2790,33 +2790,20 @@ invalid:
     return false;
 }
 
+/* One module-wide table of shared slots is owned by the module root, so a slot
+ * index names the same slot in every function that reads or writes it. These
+ * rows are indexed by that index alone; the storing function is recorded so the
+ * owner judgement can require it to be the callee's lexical parent. */
 typedef struct AotGoStoreRow {
     uint32_t function;
     uint32_t operation;
-    uint16_t slot;
-    uint8_t occupied;
     uint8_t ambiguous;
 } AotGoStoreRow;
 
-static AotGoStoreRow *aot_go_store_lookup(AotGoStoreRow *rows, uint32_t capacity, uint32_t function,
-                                          uint16_t slot, bool insert) {
-    uint32_t cursor = (function * UINT32_C(3266489917) ^ (uint32_t) slot) & (capacity - 1u);
-    for (uint32_t probe = 0; probe < capacity; probe++) {
-        AotGoStoreRow *row = &rows[cursor];
-        if (!row->occupied) {
-            if (!insert)
-                return NULL;
-            row->occupied = 1;
-            row->function = function;
-            row->slot = slot;
-            row->operation = XR_SEMANTIC_INDEX_NONE;
-            return row;
-        }
-        if (row->function == function && row->slot == slot)
-            return row;
-        cursor = (cursor + 1u) & (capacity - 1u);
-    }
-    return NULL;
+static AotGoStoreRow *aot_go_store_lookup(AotGoStoreRow *rows, uint32_t slot_count, int64_t slot) {
+    if (!rows || slot < 0 || slot >= (int64_t) slot_count)
+        return NULL;
+    return &rows[slot];
 }
 
 static bool aot_go_store_is_initial_initializer(const XrSemanticPlan *semantic,
@@ -2845,16 +2832,25 @@ static bool aot_go_store_is_initial_initializer(const XrSemanticPlan *semantic,
 static bool aot_index_direct_local_go_callee_values(VerifyAuthority *ctx) {
     if (!ctx || ctx->operation_count > (1u << 24))
         return false;
-    uint32_t store_capacity = 1;
-    while (store_capacity < ctx->operation_count * 2u)
-        store_capacity <<= 1u;
+    uint32_t slot_count = 0;
+    for (uint32_t i = 0; i < ctx->operation_count; i++) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(ctx->semantic, i);
+        if (!operation ||
+            (operation->opcode != XI_SET_SHARED && operation->opcode != XI_GET_SHARED))
+            continue;
+        if (operation->semantic_immediate < 0 || operation->semantic_immediate > UINT16_MAX)
+            continue;
+        uint32_t slot = (uint32_t) operation->semantic_immediate;
+        if (slot + 1u > slot_count)
+            slot_count = slot + 1u;
+    }
     AotGoStoreRow *stores = NULL;
     uint32_t *uses = NULL;
     uint8_t *candidate = NULL;
     uint8_t *invalid = NULL;
     XrSemanticGraph graph = {0};
     bool graph_ready = false;
-    if (!verify_alloc(ctx, store_capacity, sizeof(*stores), (void **) &stores) ||
+    if (!verify_alloc(ctx, slot_count, sizeof(*stores), (void **) &stores) ||
         !verify_alloc(ctx, ctx->value_count, sizeof(*uses), (void **) &uses) ||
         !verify_alloc(ctx, ctx->value_count, sizeof(*candidate), (void **) &candidate) ||
         !verify_alloc(ctx, ctx->value_count, sizeof(*invalid), (void **) &invalid) ||
@@ -2870,6 +2866,8 @@ static bool aot_index_direct_local_go_callee_values(VerifyAuthority *ctx) {
     }
     for (uint32_t i = 0; i < ctx->value_count; i++)
         ctx->go_callee_target_by_value[i] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < slot_count; i++)
+        stores[i].operation = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < ctx->operation_count; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(ctx->semantic, i);
         if (!operation)
@@ -2877,14 +2875,15 @@ static bool aot_index_direct_local_go_callee_values(VerifyAuthority *ctx) {
         if (operation->opcode != XI_SET_SHARED || operation->semantic_immediate < 0 ||
             operation->semantic_immediate > UINT16_MAX)
             continue;
-        AotGoStoreRow *row = aot_go_store_lookup(stores, store_capacity, operation->function,
-                                                 (uint16_t) operation->semantic_immediate, true);
+        AotGoStoreRow *row = aot_go_store_lookup(stores, slot_count, operation->semantic_immediate);
         if (!row)
             goto rejected;
         if (row->operation != XR_SEMANTIC_INDEX_NONE)
             row->ambiguous = 1;
-        else
+        else {
             row->operation = i;
+            row->function = operation->function;
+        }
     }
     char graph_error[128] = {0};
     if (!xr_semantic_graph_build(ctx->semantic, &graph, graph_error, sizeof(graph_error)))
@@ -2910,11 +2909,7 @@ static bool aot_index_direct_local_go_callee_values(VerifyAuthority *ctx) {
                 continue;
             uint32_t value = load->result_value;
             candidate[value] = 1;
-            AotGoStoreRow *row =
-                load->semantic_immediate >= 0 && load->semantic_immediate <= UINT16_MAX
-                    ? aot_go_store_lookup(stores, store_capacity, load->function,
-                                          (uint16_t) load->semantic_immediate, false)
-                    : NULL;
+            AotGoStoreRow *row = aot_go_store_lookup(stores, slot_count, load->semantic_immediate);
             const XrSemanticOperationRecord *store =
                 row && !row->ambiguous && row->operation < ctx->operation_count
                     ? xr_semantic_plan_operation(ctx->semantic, row->operation)
@@ -2932,16 +2927,22 @@ static bool aot_index_direct_local_go_callee_values(VerifyAuthority *ctx) {
             uint32_t target = closure ? closure->callable_function : XR_SEMANTIC_INDEX_NONE;
             const XrSemanticFunctionRecord *callee =
                 xr_semantic_plan_function(ctx->semantic, target);
+            /* Dominance is a relation only a store in the loading function
+             * itself can carry. A store in the slot's owning scope answers the
+             * same question through the owner and entry-prefix judgements: it
+             * is the callee's lexical parent, and it ran before any operation
+             * that could activate the loading function. */
             bool initialized =
-                store && (store->block == load->block
-                              ? row->operation < ctx->operation_by_value[value]
-                              : xr_semantic_graph_dominates(&graph, store->block, load->block));
+                store && (store->function != load->function ||
+                          (store->block == load->block
+                               ? row->operation < ctx->operation_by_value[value]
+                               : xr_semantic_graph_dominates(&graph, store->block, load->block)));
             bool exact =
                 row && !row->ambiguous && store && stored && closure && callee && a == 0 &&
                 initialized &&
                 aot_go_store_is_initial_initializer(ctx->semantic, store->function,
                                                     row->operation) &&
-                store->opcode == XI_SET_SHARED && store->function == load->function &&
+                store->opcode == XI_SET_SHARED && callee->parent == store->function &&
                 store->semantic_immediate == load->semantic_immediate && !store->allocation_key &&
                 aot_stable_id_is_zero(store->allocation_id) &&
                 store->constant == XR_SEMANTIC_INDEX_NONE &&

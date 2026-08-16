@@ -321,8 +321,14 @@ turning arbitrary shared values into call authority. It grants no closure
 allocation, body, root, cleanup, or indirect-call authority.
 The direct-local-GO-callee-storage row is a distinct borrowed dynamic outer
 `XrValue` token. Three independent reconstructions prove one canonical
-closure initializer, shared-slot dominance, unique canonical local child and
-signature, and that every use is operand zero of `XI_GO` for that same child.
+closure initializer, its ownership of the named shared slot, unique canonical
+local child and signature, and that every use is operand zero of `XI_GO` for
+that same child. Shared slots form one module-wide table, so the initializer
+is identified by slot index alone and must live in the scope owning that
+slot -- the child's own parent. A caller-local store must dominate the load;
+an owning-scope store must instead be that scope's entry-prefix initializer
+before any activation, which is what makes a module-level helper started from
+a nested function exact.
 It grants no GO task-result, child-task object, closure allocation/body, root,
 cleanup, argument storage, or coroutine execution authority.
 The direct-local-GO-task-result-storage row binds that separate result to a
@@ -518,10 +524,10 @@ Evidence:
 
 anchor-sha256: src/plan/target/xr_target_plan.h 23fbf75d5727adf935df85483c2665689c910f1b04da9920f6ad92b5bb6e17e1
 anchor-sha256: src/plan/target/xr_target_plan.c c43c90f7f4b59ad2864b9666863288f030979dd085075dc5c18f98f361334f51
-anchor-sha256: src/plan/target/xr_target_builder.c 6a5afbcf1c1bfa3868665a3c7ed0229feed7fee420421e8271e0d854fffe6022
+anchor-sha256: src/plan/target/xr_target_builder.c 0da42e7be70613c00515667035bf6e3b396c3b9887354fcc6e606a04b1959db2
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c e617933ea48f4f822d3abaa9400a5112a1eaeb0026d693ef5c678052494bf1c5
-anchor-sha256: src/plan/target/xr_target_verify.c 939c060f4de54bff052e7006566ea145e665240c3ded944abd878622348eea85
+anchor-sha256: src/plan/target/xr_target_verify.c c944518f788a658fe7ccd6d842a22af801e2f1179cefb3459b7972054ef843b6
 anchor-sha256: src/plan/format/xr_xtp_schema.h e452a27b2149e30bbafded2799a0a3e2a51fa9df7ffcdbcd41556bde2f230601
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_row_fields.h 84e5b18d06b0a44e25708b80e0f19ff70918d0babd988d0d9ea7260fcb842f29

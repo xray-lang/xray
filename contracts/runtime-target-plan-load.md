@@ -77,9 +77,18 @@ roots, or general module activation.
    borrowed dynamic callable token when it is produced by one canonical
    entry initializer (`CLOSURE_NEW` then `SET_SHARED`) and every use of the
    matching `GET_SHARED` is operand zero of `XI_GO` for the same canonical
-   local child. Builder, Target verifier, and AOT materialization verifier
-   independently reconstruct the store/load dominance, unique child, exact
-   signature, slot, ownership/provenance, and complete use set. It grants no
+   local child. A shared slot belongs to one module-wide table, so the
+   initializer is named by the slot index alone and must sit in the scope
+   that lexically owns the slot, which is the frozen child's own parent. A
+   store the loading function makes itself must dominate the load; a store
+   in an enclosing owner instead has to be that scope's entry-prefix
+   initializer, before any activation-shaped operation. A module-level
+   helper started from another function is therefore exact, while a store
+   in an unrelated function is not authority for any load.
+   Builder, Target verifier, and AOT materialization verifier
+   independently reconstruct that owner and initializer relation, the
+   unique child, exact signature, slot, ownership/provenance, and complete
+   use set. It grants no
    GO task-result, child-task object, callable body, allocation, root map,
    root slot, cleanup, argument storage, or coroutine execution authority.
    Direct-local-GO-task-result storage separately binds the exact `Task<T>`
@@ -342,8 +351,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h 311d38da384e02be242e4025a7d14
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
 anchor-sha256: src/plan/target/xr_target_plan.h 23fbf75d5727adf935df85483c2665689c910f1b04da9920f6ad92b5bb6e17e1
 anchor-sha256: src/plan/target/xr_target_plan.c c43c90f7f4b59ad2864b9666863288f030979dd085075dc5c18f98f361334f51
-anchor-sha256: src/plan/target/xr_target_builder.c 6a5afbcf1c1bfa3868665a3c7ed0229feed7fee420421e8271e0d854fffe6022
-anchor-sha256: src/plan/target/xr_target_verify.c 939c060f4de54bff052e7006566ea145e665240c3ded944abd878622348eea85
+anchor-sha256: src/plan/target/xr_target_builder.c 0da42e7be70613c00515667035bf6e3b396c3b9887354fcc6e606a04b1959db2
+anchor-sha256: src/plan/target/xr_target_verify.c c944518f788a658fe7ccd6d842a22af801e2f1179cefb3459b7972054ef843b6
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
