@@ -68,6 +68,7 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE (UINT64_C(1) << 34)
 #define XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION (UINT64_C(1) << 35)
 #define XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE (UINT64_C(1) << 36)
+#define XR_TARGET_FAMILY_DIRECT_LOCAL_AGGREGATE_RESULT_STORAGE (UINT64_C(1) << 37)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -85,12 +86,11 @@ typedef enum XrTargetExecutionFamily {
 } XrTargetExecutionFamily;
 
 #define XR_TARGET_INSTRUCTION_SLOT_NONE UINT32_MAX
-#define XR_TARGET_INSTRUCTION_SUSPEND_PACK(state, resume)                          \
+#define XR_TARGET_INSTRUCTION_SUSPEND_PACK(state, resume)                                          \
     (((uint64_t) (resume) << 32u) | (uint64_t) (state))
-#define XR_TARGET_INSTRUCTION_SUSPEND_STATE(immediate)                             \
+#define XR_TARGET_INSTRUCTION_SUSPEND_STATE(immediate)                                             \
     ((uint32_t) ((immediate) & UINT64_C(0xffffffff)))
-#define XR_TARGET_INSTRUCTION_SUSPEND_RESUME(immediate)                            \
-    ((uint32_t) ((immediate) >> 32u))
+#define XR_TARGET_INSTRUCTION_SUSPEND_RESUME(immediate) ((uint32_t) ((immediate) >> 32u))
 
 /* Argument ordinals are proved dense through a fixed-width bitmap, so the
  * executable family caps its parameter count instead of allocating. */
@@ -105,49 +105,47 @@ typedef enum XrTargetExecutionFamily {
  * high half zero. A conditional branch carries the nonzero-condition target in
  * the low half and the zero-condition target in the high half, so both edges
  * are explicit and neither depends on row adjacency. */
-#define XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(immediate)                                          \
+#define XR_TARGET_INSTRUCTION_TARGET_IF_NONZERO(immediate)                                         \
     ((uint32_t) ((immediate) & UINT64_C(0xffffffff)))
 #define XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(immediate) ((uint32_t) ((immediate) >> 32))
-#define XR_TARGET_INSTRUCTION_TARGET_PACK(nonzero, zero)                                            \
+#define XR_TARGET_INSTRUCTION_TARGET_PACK(nonzero, zero)                                           \
     (((uint64_t) (uint32_t) (zero) << 32) | (uint64_t) (uint32_t) (nonzero))
 
-#define XR_TARGET_REQUIRED_FAMILIES                                                         \
-    ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                  \
-                 XR_TARGET_FAMILY_CALL_ADAPTER |                                         \
-                 XR_TARGET_FAMILY_CLOSURE_STORAGE |                                      \
-                 XR_TARGET_FAMILY_COROUTINE_STATE_CALL |                                 \
-                 XR_TARGET_FAMILY_STRING_LITERAL_STORAGE |                               \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE |                           \
-                 XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |                            \
-                 XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |                               \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE |                         \
-                 XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE |                            \
-                 XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |                       \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE |                    \
-                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |                    \
-                 XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |                     \
-                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                  \
-                 XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE |                  \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE |            \
-                 XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |                       \
-                 XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE |                \
-                 XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE |                        \
-                 XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE |                    \
-                 XR_TARGET_FAMILY_SOURCE_CLASS_OBJECT_STORAGE |                    \
-                 XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE |                  \
-                 XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE |                  \
-                 XR_TARGET_FAMILY_SOURCE_CLASS_METHOD_RECEIVER_STORAGE |           \
-                 XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE |                  \
-                 XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE |                   \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |             \
-                 XR_TARGET_FAMILY_PANIC_CATCH_STORAGE |                             \
-                 XR_TARGET_FAMILY_ADT_ENUM_STORAGE |                                \
-                 XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE |                         \
-                 XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE |                     \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE |          \
-                 XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE |          \
-                 XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION |                  \
-                 XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE))
+#define XR_TARGET_REQUIRED_FAMILIES                                                                \
+    ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                            \
+                 XR_TARGET_FAMILY_CALL_ADAPTER | XR_TARGET_FAMILY_CLOSURE_STORAGE |                \
+                 XR_TARGET_FAMILY_COROUTINE_STATE_CALL | XR_TARGET_FAMILY_STRING_LITERAL_STORAGE | \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE |                                    \
+                 XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |                                     \
+                 XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |                                        \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE |                                 \
+                 XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE |                                          \
+                 XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |                                 \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE |                        \
+                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |                              \
+                 XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |                                \
+                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                            \
+                 XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE |                                   \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_RESULT_STORAGE |                             \
+                 XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |                                       \
+                 XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE |                                \
+                 XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE |                                        \
+                 XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE |                                    \
+                 XR_TARGET_FAMILY_SOURCE_CLASS_OBJECT_STORAGE |                                    \
+                 XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE |                                  \
+                 XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE |                                  \
+                 XR_TARGET_FAMILY_SOURCE_CLASS_METHOD_RECEIVER_STORAGE |                           \
+                 XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE |                                  \
+                 XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE |                                   \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |                            \
+                 XR_TARGET_FAMILY_PANIC_CATCH_STORAGE | XR_TARGET_FAMILY_ADT_ENUM_STORAGE |        \
+                 XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE |                                        \
+                 XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE |                                    \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE |                        \
+                 XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE |                              \
+                 XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION |                                      \
+                 XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE |                                       \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_AGGREGATE_RESULT_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -789,13 +787,13 @@ XR_FUNC uint64_t xr_target_plan_completed_family_mask(const XrTargetPlan *plan);
 XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_plan(const XrTargetPlan *plan);
 XR_FUNC const XrTargetProfile *xr_target_plan_profile(const XrTargetPlan *plan);
 XR_FUNC const XrTargetMachineRepRecord *xr_target_plan_machine_rep(const XrTargetPlan *plan,
-                                                                    uint16_t rep);
+                                                                   uint16_t rep);
 XR_FUNC const XrTargetValueRepRecord *xr_target_plan_value_rep(const XrTargetPlan *plan,
-                                                                 uint32_t semantic_value);
-XR_FUNC uint64_t xr_target_plan_function_execution_family_mask(
-    const XrTargetPlan *plan, uint32_t function);
-XR_FUNC const XrTargetInstructionRecord *xr_target_plan_function_instructions(
-    const XrTargetPlan *plan, uint32_t function, uint32_t *count);
+                                                               uint32_t semantic_value);
+XR_FUNC uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
+                                                               uint32_t function);
+XR_FUNC const XrTargetInstructionRecord *
+xr_target_plan_function_instructions(const XrTargetPlan *plan, uint32_t function, uint32_t *count);
 
 #define XR_TARGET_TABLE_ACCESSOR(name, type)                                                       \
     XR_FUNC const type *xr_target_plan_##name(const XrTargetPlan *plan, uint32_t *count)

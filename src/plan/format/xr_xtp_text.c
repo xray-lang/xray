@@ -92,13 +92,13 @@ static const XrXtpTextFamilyName family_names[] = {
     {XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE, "SOURCE_CLASS_INSTANCE_STORAGE"},
     {XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE, "SOURCE_CLASS_RECEIVER_STORAGE"},
     {XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE, "STRING_CONCAT_RESULT_STORAGE"},
-    {XR_TARGET_FAMILY_SOURCE_CLASS_METHOD_RECEIVER_STORAGE,
-     "SOURCE_CLASS_METHOD_RECEIVER_STORAGE"},
+    {XR_TARGET_FAMILY_SOURCE_CLASS_METHOD_RECEIVER_STORAGE, "SOURCE_CLASS_METHOD_RECEIVER_STORAGE"},
     {XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE, "SOURCE_CLASS_ARGUMENT_STORAGE"},
-    {XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE,
-     "DIRECT_LOCAL_GO_TASK_RESULT_STORAGE"},
+    {XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE, "DIRECT_LOCAL_GO_TASK_RESULT_STORAGE"},
     {XR_TARGET_FAMILY_PANIC_CATCH_STORAGE, "PANIC_CATCH_STORAGE"},
     {XR_TARGET_FAMILY_ADT_ENUM_STORAGE, "ADT_ENUM_STORAGE"},
+    {XR_TARGET_FAMILY_DIRECT_LOCAL_AGGREGATE_RESULT_STORAGE,
+     "DIRECT_LOCAL_AGGREGATE_RESULT_STORAGE"},
 };
 
 /* ========== Row emission ========== */
@@ -207,8 +207,7 @@ static bool section_layout_is_exact(const XrXtpSectionView *view) {
         return false;
     if (view->kind == XR_XTP_SECTION_INSTRUCTIONS)
         return view->flags == XR_XTP_SECTION_FLAG_COMPACT && view->row_size == 0;
-    return view->flags == 0 &&
-           (view->count == 0 || view->row_size == text_row_width(view->kind));
+    return view->flags == 0 && (view->count == 0 || view->row_size == text_row_width(view->kind));
 }
 
 /* Byte ranges inside a wire row that hold a digest of something else. A
@@ -281,8 +280,8 @@ typedef union XrXtpTextRowStorage {
 static bool section_row_bytes(const XrXtpCandidate *candidate, const XrXtpSectionView *view,
                               uint32_t index, const uint8_t **bytes) {
     *bytes = NULL;
-    if (!candidate || !view || view->kind == XR_XTP_SECTION_INSTRUCTIONS ||
-        !view->row_size || index >= view->count)
+    if (!candidate || !view || view->kind == XR_XTP_SECTION_INSTRUCTIONS || !view->row_size ||
+        index >= view->count)
         return false;
     size_t offset = view->offset + (size_t) index * (size_t) view->row_size;
     if (offset > candidate->size || candidate->size - offset < view->row_size)
@@ -300,21 +299,17 @@ static bool decode_row(const XrXtpCandidate *candidate, const XrXtpSectionView *
     return xr_xtp_decode_rows(view->kind, bytes, 1u, storage);
 }
 
-static bool instruction_stream_init(const XrXtpCandidate *candidate,
-                                    const XrXtpSectionView *view,
+static bool instruction_stream_init(const XrXtpCandidate *candidate, const XrXtpSectionView *view,
                                     XrXtpInstructionStream *stream) {
-    return candidate && view && stream &&
-           view->kind == XR_XTP_SECTION_INSTRUCTIONS &&
+    return candidate && view && stream && view->kind == XR_XTP_SECTION_INSTRUCTIONS &&
            section_layout_is_exact(view) && view->offset <= candidate->size &&
            view->length <= candidate->size - view->offset &&
-           xr_xtp_instruction_stream_init(stream,
-                                          candidate->bytes + view->offset,
-                                          view->length, view->count);
+           xr_xtp_instruction_stream_init(stream, candidate->bytes + view->offset, view->length,
+                                          view->count);
 }
 
-static void render_instruction_row(const XrTargetInstructionRecord *record,
-                                   uint32_t index, const char *prefix,
-                                   FILE *out) {
+static void render_instruction_row(const XrTargetInstructionRecord *record, uint32_t index,
+                                   const char *prefix, FILE *out) {
     XrXtpTextRow row = {out, prefix, "INSTRUCTIONS", index, 0, false};
     render_INSTRUCTIONS(&row, record);
     row_text(&row, "opcode-name", opcode_name(record->opcode));
@@ -433,8 +428,7 @@ static bool header_fields_equal(const XrXtpTextHeaderField *left,
     if (left->kind != right->kind)
         return false;
     if (left->kind == XR_XTP_TEXT_VALUE_FINGERPRINT)
-        return memcmp(left->fingerprint.bytes, right->fingerprint.bytes,
-                      XR_FINGERPRINT_BYTES) == 0;
+        return memcmp(left->fingerprint.bytes, right->fingerprint.bytes, XR_FINGERPRINT_BYTES) == 0;
     return left->scalar == right->scalar;
 }
 
@@ -468,8 +462,8 @@ XR_FUNC bool xr_xtp_candidate_dump(const XrXtpCandidate *candidate, FILE *out) {
     if (field_count != XR_XTP_TEXT_HEADER_FIELD_COUNT)
         return false;
 
-    fprintf(out, "xray-plan-dump revision=%" PRIu32 " schema=%" PRIu32 "\n",
-            XR_XTP_TEXT_REVISION, XR_XTP_SCHEMA_VERSION);
+    fprintf(out, "xray-plan-dump revision=%" PRIu32 " schema=%" PRIu32 "\n", XR_XTP_TEXT_REVISION,
+            XR_XTP_SCHEMA_VERSION);
     fprintf(out, "artifact.bytes=%" PRIu64 "\n", (uint64_t) candidate->size);
     for (uint32_t i = 0; i < field_count; i++) {
         char prefix[128];
@@ -480,20 +474,18 @@ XR_FUNC bool xr_xtp_candidate_dump(const XrXtpCandidate *candidate, FILE *out) {
     }
 
     for (uint32_t kind = 1; kind < (uint32_t) XR_XTP_SECTION_COUNT; kind++) {
-        const XrXtpSectionView *view =
-            xr_xtp_candidate_section(candidate, (XrXtpSectionKind) kind);
+        const XrXtpSectionView *view = xr_xtp_candidate_section(candidate, (XrXtpSectionKind) kind);
         uint32_t count = view ? view->count : 0;
         uint32_t row_size = view ? view->row_size : 0;
         fprintf(out,
-                "section %s count=%" PRIu32 " row-size=%" PRIu32
-                " flags=0x%08" PRIx32 " bytes=%" PRIu64 "\n",
-                section_name((XrXtpSectionKind) kind), count, row_size,
-                view ? view->flags : 0, view ? (uint64_t) view->length : 0);
+                "section %s count=%" PRIu32 " row-size=%" PRIu32 " flags=0x%08" PRIx32
+                " bytes=%" PRIu64 "\n",
+                section_name((XrXtpSectionKind) kind), count, row_size, view ? view->flags : 0,
+                view ? (uint64_t) view->length : 0);
     }
 
     for (uint32_t kind = 1; kind < (uint32_t) XR_XTP_SECTION_COUNT; kind++) {
-        const XrXtpSectionView *view =
-            xr_xtp_candidate_section(candidate, (XrXtpSectionKind) kind);
+        const XrXtpSectionView *view = xr_xtp_candidate_section(candidate, (XrXtpSectionKind) kind);
         if (!view)
             continue;
         if (!section_layout_is_exact(view))
@@ -555,16 +547,13 @@ static bool instruction_rows_equal(const XrTargetInstructionRecord *left,
                                    const XrTargetInstructionRecord *right) {
     uint8_t left_bytes[32] = {0};
     uint8_t right_bytes[32] = {0};
-    return xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, left, 1u,
-                              left_bytes) &&
-           xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, right, 1u,
-                              right_bytes) &&
+    return xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, left, 1u, left_bytes) &&
+           xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, right, 1u, right_bytes) &&
            memcmp(left_bytes, right_bytes, sizeof(left_bytes)) == 0;
 }
 
-static void report_instruction_side(const XrTargetInstructionRecord *record,
-                                    uint32_t index, const char *prefix,
-                                    FILE *out) {
+static void report_instruction_side(const XrTargetInstructionRecord *record, uint32_t index,
+                                    const char *prefix, FILE *out) {
     uint8_t bytes[32] = {0};
     render_instruction_row(record, index, prefix, out);
     if (!xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, record, 1u, bytes))
@@ -575,10 +564,10 @@ static void report_instruction_side(const XrTargetInstructionRecord *record,
     fputc('\n', out);
 }
 
-static bool compare_instruction_streams(
-    const XrXtpCandidate *left, const XrXtpCandidate *right,
-    const XrXtpSectionView *left_view, const XrXtpSectionView *right_view,
-    uint32_t context_rows, FILE *out, bool *different) {
+static bool compare_instruction_streams(const XrXtpCandidate *left, const XrXtpCandidate *right,
+                                        const XrXtpSectionView *left_view,
+                                        const XrXtpSectionView *right_view, uint32_t context_rows,
+                                        FILE *out, bool *different) {
     *different = false;
     XrXtpInstructionStream left_stream;
     XrXtpInstructionStream right_stream;
@@ -653,8 +642,7 @@ XR_FUNC bool xr_xtp_candidate_diff(const XrXtpCandidate *left, const XrXtpCandid
     }
 
     for (uint32_t kind = 1; kind < (uint32_t) XR_XTP_SECTION_COUNT; kind++) {
-        const XrXtpSectionView *left_view =
-            xr_xtp_candidate_section(left, (XrXtpSectionKind) kind);
+        const XrXtpSectionView *left_view = xr_xtp_candidate_section(left, (XrXtpSectionKind) kind);
         const XrXtpSectionView *right_view =
             xr_xtp_candidate_section(right, (XrXtpSectionKind) kind);
         uint32_t left_count = left_view ? left_view->count : 0;
@@ -678,8 +666,7 @@ XR_FUNC bool xr_xtp_candidate_diff(const XrXtpCandidate *left, const XrXtpCandid
         if (left_flags != right_flags) {
             fprintf(out, "plan-diff first-difference section=%s field=flags\n",
                     section_name((XrXtpSectionKind) kind));
-            fprintf(out, "- 0x%08" PRIx32 "\n+ 0x%08" PRIx32 "\n",
-                    left_flags, right_flags);
+            fprintf(out, "- 0x%08" PRIx32 "\n+ 0x%08" PRIx32 "\n", left_flags, right_flags);
             return true;
         }
         if ((left_view && !section_layout_is_exact(left_view)) ||
@@ -702,8 +689,7 @@ XR_FUNC bool xr_xtp_candidate_diff(const XrXtpCandidate *left, const XrXtpCandid
                 if (pass != 0)
                     continue;
                 bool different = false;
-                if (!compare_instruction_streams(left, right, left_view,
-                                                 right_view, context_rows,
+                if (!compare_instruction_streams(left, right, left_view, right_view, context_rows,
                                                  out, &different))
                     return false;
                 if (different)
@@ -719,11 +705,10 @@ XR_FUNC bool xr_xtp_candidate_diff(const XrXtpCandidate *left, const XrXtpCandid
                 if (!section_row_bytes(left, left_view, index, &left_bytes) ||
                     !section_row_bytes(right, right_view, index, &right_bytes))
                     return false;
-                if (row_matches_outside_digests(left_bytes, right_bytes, left_view->row_size,
-                                                spans, span_count))
+                if (row_matches_outside_digests(left_bytes, right_bytes, left_view->row_size, spans,
+                                                span_count))
                     continue;
-                report_row_difference(left, right, left_view, right_view, index, context_rows,
-                                      out);
+                report_row_difference(left, right, left_view, right_view, index, context_rows, out);
                 return true;
             }
         }
@@ -732,8 +717,7 @@ XR_FUNC bool xr_xtp_candidate_diff(const XrXtpCandidate *left, const XrXtpCandid
     /* Every table row agrees, so any remaining identity or resource
      * difference is a fact derived from content that no longer follows from
      * it. Reported last precisely because it has no row to point at. */
-    for (uint32_t i = XR_XTP_TEXT_STRUCTURAL_FIELD_COUNT; i < XR_XTP_TEXT_HEADER_FIELD_COUNT;
-         i++) {
+    for (uint32_t i = XR_XTP_TEXT_STRUCTURAL_FIELD_COUNT; i < XR_XTP_TEXT_HEADER_FIELD_COUNT; i++) {
         if (header_fields_equal(&left_fields[i], &right_fields[i]))
             continue;
         fprintf(out, "plan-diff first-difference field=%s\n", left_fields[i].name);
