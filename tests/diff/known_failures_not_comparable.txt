@@ -33,7 +33,6 @@ tests/diff/cases/limits/json_object_literal_over_254.xr
 tests/diff/cases/limits/string_parts_over_64.xr
 tests/diff/cases/limits/struct_literal_over_32.xr
 tests/diff/cases/limits/symbol_over_254.xr
-tests/diff/cases/limits/tuple_literal_over_15_jit_args.xr
 tests/diff/cases/limits/upval_capture_over_254.xr
 tests/diff/cases/match/adt_enum_nonpayload_variant.xr
 tests/diff/cases/match/adt_enum_payload_tostring.xr
@@ -209,7 +208,6 @@ tests/diff/cases/semantics/functions/lambda_inference_sources.xr
 tests/diff/cases/semantics/functions/named_function_forms.xr
 tests/diff/cases/semantics/functions/parenthesized_function_type.xr
 tests/diff/cases/semantics/functions/unit_return_expression.xr
-tests/diff/cases/semantics/functions/unit_value_rendering.xr
 tests/diff/cases/semantics/functions/vararg_functions.xr
 tests/diff/cases/semantics/generator/early_stop.xr
 tests/diff/cases/semantics/generator/generator_in_coroutine.xr
