@@ -224,7 +224,6 @@ tests/diff/cases/semantics/generic_type_alias.xr
 tests/diff/cases/semantics/int/contextual_numeric_conversion.xr
 tests/diff/cases/semantics/int/wrapping_fixed_width.xr
 tests/diff/cases/semantics/int_wrap/exact_integer_bit_intrinsics.xr
-tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr
 tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr
 tests/diff/cases/semantics/int_wrap/int_overflow_predicates.xr
 tests/diff/cases/semantics/int_wrap/int_safe_methods.xr
