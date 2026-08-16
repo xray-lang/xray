@@ -255,13 +255,12 @@ static uint32_t frozen_builtin_type(const XrType *type) {
     return XR_TID_NULL;
 }
 
-static bool source_enum_key(const XrType *type, XrTextBuilder *key,
-                            XrStableId *identity, uint8_t *flags) {
+static bool source_enum_key(const XrType *type, XrTextBuilder *key, XrStableId *identity,
+                            uint8_t *flags) {
     if (!type || type->kind != XR_KIND_ENUM || !type->enum_type.layout ||
-        !type->enum_type.layout->nominal_owner ||
-        !type->enum_type.layout->nominal_owner[0] || !type->enum_type.layout->name ||
-        !type->enum_type.layout->name[0] || !type->enum_type.layout->variants ||
-        type->enum_type.layout->variant_count == 0 ||
+        !type->enum_type.layout->nominal_owner || !type->enum_type.layout->nominal_owner[0] ||
+        !type->enum_type.layout->name || !type->enum_type.layout->name[0] ||
+        !type->enum_type.layout->variants || type->enum_type.layout->variant_count == 0 ||
         type->enum_type.layout->variant_count > UINT16_MAX)
         return false;
     const XrEnumLayout *layout = type->enum_type.layout;
@@ -270,8 +269,7 @@ static bool source_enum_key(const XrType *type, XrTextBuilder *key,
         strcmp(type->enum_type.enum_name ? type->enum_type.enum_name : "", layout->name) != 0)
         return false;
     bool unit = layout->is_zero_payload;
-    if (!text_append_format(key, "source-enum-v1:schema=%u:owner=",
-                            XR_SEMANTIC_SCHEMA_VERSION) ||
+    if (!text_append_format(key, "source-enum-v1:schema=%u:owner=", XR_SEMANTIC_SCHEMA_VERSION) ||
         !text_append_component(key, layout->nominal_owner) || !text_append(key, ":name=") ||
         !text_append_component(key, layout->name) ||
         !text_append_format(key, ":members=%u", layout->variant_count))
@@ -279,8 +277,7 @@ static bool source_enum_key(const XrType *type, XrTextBuilder *key,
     for (uint32_t i = 0; i < layout->variant_count; i++) {
         const XrEnumVariantLayout *variant = &layout->variants[i];
         if (!variant->name || !variant->name[0] || variant->tag != i ||
-            !text_append_format(key, ":m%u=", i) ||
-            !text_append_component(key, variant->name) ||
+            !text_append_format(key, ":m%u=", i) || !text_append_component(key, variant->name) ||
             !text_append_format(key, ":payloads=%u", variant->payload_count))
             return false;
         unit = unit && variant->payload_count == 0;
@@ -406,9 +403,8 @@ static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stac
             bool valid = text_append(key, ";enum:") &&
                          text_append_component(key, type->enum_type.enum_name) &&
                          text_append_format(key, ":%u:", type->enum_type.layout_id) &&
-                         type_key_list(type->enum_type.type_args,
-                                       type->enum_type.type_arg_count, key, stack,
-                                       depth + 1, ctx) &&
+                         type_key_list(type->enum_type.type_args, type->enum_type.type_arg_count,
+                                       key, stack, depth + 1, ctx) &&
                          (!exact || (text_append(key, ";source-enum:") &&
                                      text_append_stable_id(key, identity)));
             text_dispose(&declaration);
@@ -611,11 +607,10 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
     (void) source_class_identity_for_type(ctx, type, &record->source_class_identity);
     if (type->kind == XR_KIND_ENUM) {
         XrTextBuilder enum_key = {0};
-        bool exact = source_enum_key(type, &enum_key, &record->source_enum_identity,
-                                     &record->enum_flags);
-        record->source_enum_key = exact
-                                      ? xr_semantic_plan_copy_string(ctx->plan, enum_key.data)
-                                      : NULL;
+        bool exact =
+            source_enum_key(type, &enum_key, &record->source_enum_identity, &record->enum_flags);
+        record->source_enum_key =
+            exact ? xr_semantic_plan_copy_string(ctx->plan, enum_key.data) : NULL;
         text_dispose(&enum_key);
         if (exact && !record->source_enum_key)
             return fail(ctx, "XR_EXEC_5003", "enum declaration identity allocation failed");
@@ -1500,8 +1495,7 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
             if (!import_ref)
                 return true;
             const char *module_path = import_ref->module_path ? import_ref->module_path : "";
-            if (classify_import_resolution(import_ref) ==
-                    XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE &&
+            if (classify_import_resolution(import_ref) == XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE &&
                 import_ref->resolved_module && import_ref->resolved_module->path) {
                 module_path = copy_canonical_source_file(ctx, import_ref->resolved_module->path);
                 if (!module_path)
@@ -1538,15 +1532,11 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
                               add_metadata(ctx, record, match->name));
         }
         case XI_AGG_NEW: {
-            const XiClassData *aggregate =
-                value_aggregate_class_data(ctx, value->type);
+            const XiClassData *aggregate = value_aggregate_class_data(ctx, value->type);
             if (!aggregate || !aggregate->struct_layout ||
-                aggregate->instance_field_count !=
-                    aggregate->struct_layout->field_count ||
-                (aggregate->instance_field_count != 0 &&
-                 !aggregate->instance_field_names))
-                return fail(ctx, "XR_SEM_0019",
-                            "value aggregate field identity is incomplete");
+                aggregate->instance_field_count != aggregate->struct_layout->field_count ||
+                (aggregate->instance_field_count != 0 && !aggregate->instance_field_names))
+                return fail(ctx, "XR_SEM_0019", "value aggregate field identity is incomplete");
             for (uint16_t i = 0; i < aggregate->instance_field_count; i++) {
                 const char *name = aggregate->instance_field_names[i];
                 if (!name || !name[0] || !add_metadata(ctx, record, name))
@@ -2190,13 +2180,12 @@ static bool append_dependency(XrSemanticBuildContext *ctx, const XiModule *modul
  * from the local alias.  Freeze that dependency while the resolved Xi module
  * identity is still available; later consumers must reconstruct the binding
  * from the frozen SOURCE_MODULE classification and this exact dependency row. */
-static bool append_source_namespace_dependency(XrSemanticBuildContext *ctx,
-                                               const XiValue *value) {
+static bool append_source_namespace_dependency(XrSemanticBuildContext *ctx, const XiValue *value) {
     if (!ctx || !value || value->op != XI_IMPORT_REF)
         return true;
     const XiImportRef *ref = (const XiImportRef *) value->aux;
-    if (classify_import_resolution(ref) != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
-        !ref || (ref->member_name && ref->member_name[0] != '\0'))
+    if (classify_import_resolution(ref) != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE || !ref ||
+        (ref->member_name && ref->member_name[0] != '\0'))
         return true;
     bool dependency_present = false;
     for (uint32_t i = 0; i < ctx->dependency_module_count; i++)
@@ -2204,11 +2193,9 @@ static bool append_source_namespace_dependency(XrSemanticBuildContext *ctx,
     if (!dependency_present)
         return true;
     uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
-    if (ref->resolved_func || ref->resolved_shared_slot != -1 ||
-        ref->resolved_export_slot != -1 ||
+    if (ref->resolved_func || ref->resolved_shared_slot != -1 || ref->resolved_export_slot != -1 ||
         !append_dependency(ctx, ref->resolved_module, &dependency))
-        return fail(ctx, "XR_SEM_0019",
-                    "source namespace dependency identity is incomplete");
+        return fail(ctx, "XR_SEM_0019", "source namespace dependency identity is incomplete");
     return true;
 }
 
@@ -2243,19 +2230,18 @@ static const XiImportRef *resolve_namespace_import_receiver(const XrSemanticBuil
 /* Resolve a named source import while the module graph identity still exists.
  * A shared load is admitted only through the unique root initializer store;
  * the member string alone is never used as call authority. */
-static const XiImportRef *resolve_source_import_callee(
-    const XrSemanticBuildContext *ctx, const XiFunc *caller,
-    const XiValue *callee) {
+static const XiImportRef *resolve_source_import_callee(const XrSemanticBuildContext *ctx,
+                                                       const XiFunc *caller,
+                                                       const XiValue *callee) {
     callee = strip_identity_copies(caller, callee);
     const XiValue *source = callee;
-    if (callee && callee->block && callee->block->func == caller &&
-        callee->op == XI_GET_SHARED && callee->aux_int >= 0) {
+    if (callee && callee->block && callee->block->func == caller && callee->op == XI_GET_SHARED &&
+        callee->aux_int >= 0) {
         const XiFunc *root = caller;
         while (root->parent_func)
             root = root->parent_func;
         bool ambiguous = false;
-        const XiValue *store = indexed_root_shared_store(
-            ctx, callee->aux_int, &ambiguous);
+        const XiValue *store = indexed_root_shared_store(ctx, callee->aux_int, &ambiguous);
         if (ambiguous || !store || store->nargs != 1 ||
             !root_store_precedes_activation(root, store))
             return NULL;
@@ -2264,16 +2250,13 @@ static const XiImportRef *resolve_source_import_callee(
     if (!source || source->op != XI_IMPORT_REF || !source->aux)
         return NULL;
     const XiImportRef *ref = (const XiImportRef *) source->aux;
-    if (classify_import_resolution(ref) !=
-            XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
-        !ref->member_name || ref->member_name[0] == '\0' ||
-        !ref->resolved_func || ref->resolved_shared_slot < 0 ||
-        ref->resolved_export_slot < 0)
+    if (classify_import_resolution(ref) != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
+        !ref->member_name || ref->member_name[0] == '\0' || !ref->resolved_func ||
+        ref->resolved_shared_slot < 0 || ref->resolved_export_slot < 0)
         return NULL;
     bool dependency_present = false;
     for (uint32_t i = 0; i < ctx->dependency_module_count; i++)
-        dependency_present |=
-            ctx->dependency_modules[i] == ref->resolved_module;
+        dependency_present |= ctx->dependency_modules[i] == ref->resolved_module;
     return dependency_present ? ref : NULL;
 }
 
@@ -2610,22 +2593,18 @@ static bool append_source_instance_method_open_call_target(XrSemanticBuildContex
 
 static bool append_source_export_call_target(XrSemanticBuildContext *ctx, const XiValue *value,
                                              uint32_t operation) {
-    if (!value || (value->op != XI_CALL && value->op != XI_CALL_METHOD) ||
-        value->nargs == 0 ||
-        (value->op == XI_CALL_METHOD &&
-         (!value->aux || (value->aux_int & 1) != 0)))
+    if (!value || (value->op != XI_CALL && value->op != XI_CALL_METHOD) || value->nargs == 0 ||
+        (value->op == XI_CALL_METHOD && (!value->aux || (value->aux_int & 1) != 0)))
         return true;
     const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
     const XiFunc *caller = ctx->functions[call->function].source;
-    const XiImportRef *ref =
-        value->op == XI_CALL_METHOD
-            ? resolve_namespace_import_receiver(ctx, caller, value->args[0])
-            : resolve_source_import_callee(ctx, caller, value->args[0]);
+    const XiImportRef *ref = value->op == XI_CALL_METHOD
+                                 ? resolve_namespace_import_receiver(ctx, caller, value->args[0])
+                                 : resolve_source_import_callee(ctx, caller, value->args[0]);
     if (!ref)
         return true;
-    const char *selector = value->op == XI_CALL_METHOD
-                               ? (const char *) value->aux
-                               : ref->member_name;
+    const char *selector =
+        value->op == XI_CALL_METHOD ? (const char *) value->aux : ref->member_name;
     const XrSemanticPlan *dependency_plan =
         ref->resolved_module->init ? ref->resolved_module->init->semantic_plan : NULL;
     uint32_t source_export = XR_SEMANTIC_INDEX_NONE;
@@ -2634,8 +2613,7 @@ static bool append_source_export_call_target(XrSemanticBuildContext *ctx, const 
     const XrSemanticFunctionRecord *callee =
         exported ? xr_semantic_plan_function(dependency_plan, exported->function) : NULL;
     const uint8_t *suspendable = plan_suspendability(ctx, dependency_plan);
-    if (!exported || !callee || !suspendable ||
-        callee->parameter_count == UINT16_MAX ||
+    if (!exported || !callee || !suspendable || callee->parameter_count == UINT16_MAX ||
         value->nargs != (uint16_t) (callee->parameter_count + 1u) ||
         (value->op == XI_CALL_METHOD &&
          (call->metadata_count != 1 ||
@@ -2704,14 +2682,13 @@ static bool append_source_class_constructor_call_target(XrSemanticBuildContext *
     record->callable_type = call->result_type;
     record->kind = XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
     XrTextBuilder key = {0};
-    bool valid =
-        text_append_format(&key,
-                           "call-target-v9:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
-        text_append_stable_id(&key, call->id) && text_append(&key, ":source-class=") &&
-        text_append_stable_id(&key, ctx->plan->source_classes[source_class].id) &&
-        text_append(&key, ":type=") &&
-        text_append_stable_id(&key, ctx->plan->types[record->callable_type].id) &&
-        text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    bool valid = text_append_format(
+                     &key, "call-target-v9:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
+                 text_append_stable_id(&key, call->id) && text_append(&key, ":source-class=") &&
+                 text_append_stable_id(&key, ctx->plan->source_classes[source_class].id) &&
+                 text_append(&key, ":type=") &&
+                 text_append_stable_id(&key, ctx->plan->types[record->callable_type].id) &&
+                 text_append_format(&key, ":kind=%u", (unsigned) record->kind);
     if (valid)
         record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
     text_dispose(&key);
@@ -2759,10 +2736,10 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
      * function it names is the caller.  Everything past this point is the
      * ordinary direct-local row, so a self-call is admitted on exactly the
      * signature, argument and result terms any other local call must meet. */
-    int function = xi_call_targets_own_frame(value->op, value->aux_int)
-                       ? (int) caller
-                       : resolve_direct_local_callee(ctx, ctx->functions[caller].source,
-                                                     value->args[0]);
+    int function =
+        xi_call_targets_own_frame(value->op, value->aux_int)
+            ? (int) caller
+            : resolve_direct_local_callee(ctx, ctx->functions[caller].source, value->args[0]);
     const char *native_module = NULL;
     const char *native_member = NULL;
     bool native_yieldable =
@@ -2831,9 +2808,8 @@ static bool xi_string_runes_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
     const XrType *receiver_type = receiver ? receiver->type : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
-           strcmp((const char *) value->aux, "runes") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 && receiver_type &&
+           strcmp((const char *) value->aux, "runes") == 0 && value->aux_kind == XI_AUX_KIND_NONE &&
+           value->aux_int > 0 && (value->aux_int & 1) == 0 && receiver_type &&
            receiver_type->kind == XR_KIND_STRING;
 }
 
@@ -2846,9 +2822,8 @@ static bool xi_iterator_rune_has_next_exact(const XiValue *value) {
                                 : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
            strcmp((const char *) value->aux, "hasNext") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 && receiver_type &&
-           xr_type_is_named_class(receiver_type, "Iterator") && element &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
+           receiver_type && xr_type_is_named_class(receiver_type, "Iterator") && element &&
            element->kind == XR_KIND_RUNE && value->type && value->type->kind == XR_KIND_BOOL;
 }
 
@@ -2860,33 +2835,29 @@ static bool xi_iterator_rune_next_exact(const XiValue *value) {
                                 ? receiver_type->instance.type_args[0]
                                 : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
-           strcmp((const char *) value->aux, "next") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 && receiver_type &&
+           strcmp((const char *) value->aux, "next") == 0 && value->aux_kind == XI_AUX_KIND_NONE &&
+           value->aux_int > 0 && (value->aux_int & 1) == 0 && receiver_type &&
            xr_type_is_named_class(receiver_type, "Iterator") && element &&
-           element->kind == XR_KIND_RUNE && value->type &&
-           value->type->kind == XR_KIND_RUNE && xi_string_runes_exact(receiver);
+           element->kind == XR_KIND_RUNE && value->type && value->type->kind == XR_KIND_RUNE &&
+           xi_string_runes_exact(receiver);
 }
 
 static bool xi_rune_to_uint32_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
            strcmp((const char *) value->aux, "toUInt32") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 && receiver->type &&
-           receiver->type->kind == XR_KIND_RUNE && value->type &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
+           receiver->type && receiver->type->kind == XR_KIND_RUNE && value->type &&
            value->type->kind == XR_KIND_INT && !value->type->is_nullable &&
-           value->type->scalar_rep == XR_NATIVE_U32 &&
-           xi_iterator_rune_next_exact(receiver);
+           value->type->scalar_rep == XR_NATIVE_U32 && xi_iterator_rune_next_exact(receiver);
 }
 
 static bool xi_rune_is_whitespace_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
            strcmp((const char *) value->aux, "isWhitespace") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 && receiver->type &&
-           receiver->type->kind == XR_KIND_RUNE && value->type &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
+           receiver->type && receiver->type->kind == XR_KIND_RUNE && value->type &&
            value->type->kind == XR_KIND_BOOL && xi_iterator_rune_next_exact(receiver);
 }
 
@@ -2894,16 +2865,14 @@ static bool xi_string_slice_range_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 3 ? value->args[0] : NULL;
     const XiValue *start = value && value->nargs == 3 ? value->args[1] : NULL;
     const XiValue *end = value && value->nargs == 3 ? value->args[2] : NULL;
-    return value && value->op == XI_CALL_METHOD && receiver && start && end &&
-           value->aux && strcmp((const char *) value->aux, "slice") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 && value->type && receiver->type &&
+    return value && value->op == XI_CALL_METHOD && receiver && start && end && value->aux &&
+           strcmp((const char *) value->aux, "slice") == 0 && value->aux_kind == XI_AUX_KIND_NONE &&
+           value->aux_int > 0 && (value->aux_int & 1) == 0 && value->type && receiver->type &&
            value->type == receiver->type && value->type->kind == XR_KIND_STRING &&
            !value->type->is_nullable && start->type && end->type &&
            start->type->kind == XR_KIND_INT && end->type->kind == XR_KIND_INT &&
            !start->type->is_nullable && !end->type->is_nullable &&
-           start->type->scalar_rep == XR_NATIVE_I64 &&
-           end->type->scalar_rep == XR_NATIVE_I64;
+           start->type->scalar_rep == XR_NATIVE_I64 && end->type->scalar_rep == XR_NATIVE_I64;
 }
 
 static bool xi_string_builder_constructor_candidate(const XiValue *value) {
@@ -2943,8 +2912,7 @@ static bool semantic_string_builder_type_exact(const XrSemanticTypeRecord *type)
 static bool xi_string_builder_append_rune_exact(const XiValue *value) {
     return value && value->op == XI_CALL_METHOD && value->nargs == 2 && value->args[0] &&
            value->args[1] && value->aux && strcmp((const char *) value->aux, "append") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
            xr_type_is_builtin_named_class(value->args[0]->type, "StringBuilder") &&
            value->args[1]->type && value->args[1]->type->kind == XR_KIND_RUNE &&
            xr_type_is_builtin_named_class(value->type, "StringBuilder");
@@ -2953,31 +2921,28 @@ static bool xi_string_builder_append_rune_exact(const XiValue *value) {
 static bool xi_string_builder_to_string_exact(const XiValue *value) {
     return value && value->op == XI_CALL_METHOD && value->nargs == 1 && value->args[0] &&
            value->aux && strcmp((const char *) value->aux, "toString") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 &&
-           xr_type_is_builtin_named_class(value->args[0]->type, "StringBuilder") &&
-           value->type && value->type->kind == XR_KIND_STRING;
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
+           xr_type_is_builtin_named_class(value->args[0]->type, "StringBuilder") && value->type &&
+           value->type->kind == XR_KIND_STRING;
 }
 
 static bool xi_string_builder_append_string_exact(const XiValue *value) {
     return value && value->op == XI_CALL_METHOD && value->nargs == 2 && value->args[0] &&
            value->args[1] && value->aux && strcmp((const char *) value->aux, "append") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
            xr_type_is_builtin_named_class(value->args[0]->type, "StringBuilder") &&
            value->args[1]->type && value->args[1]->type->kind == XR_KIND_STRING &&
            xr_type_is_builtin_named_class(value->type, "StringBuilder");
 }
 
-static bool semantic_string_builder_append_rune_exact(
-    const XrSemanticBuildContext *ctx, const XrSemanticOperationRecord *record) {
+static bool semantic_string_builder_append_rune_exact(const XrSemanticBuildContext *ctx,
+                                                      const XrSemanticOperationRecord *record) {
     if (!ctx || !record || record->operand_count != 2 ||
         record->operand_begin > ctx->plan->operand_count ||
         record->operand_count > ctx->plan->operand_count - record->operand_begin ||
         record->metadata_count != 1 || record->metadata_begin >= ctx->plan->metadata_count)
         return false;
-    const XrSemanticOperandRecord *receiver =
-        &ctx->plan->operands[record->operand_begin];
+    const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
     const XrSemanticOperandRecord *argument = receiver + 1;
     const XrSemanticTypeRecord *receiver_type =
         receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
@@ -2992,13 +2957,12 @@ static bool semantic_string_builder_append_rune_exact(
            receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
            receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
-           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           record->result_alias_operand == 0 &&
+           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && record->result_alias_operand == 0 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED;
 }
 
-static bool semantic_string_builder_to_string_exact(
-    const XrSemanticBuildContext *ctx, const XrSemanticOperationRecord *record) {
+static bool semantic_string_builder_to_string_exact(const XrSemanticBuildContext *ctx,
+                                                    const XrSemanticOperationRecord *record) {
     if (!ctx || !record || record->operand_count != 1 ||
         record->operand_begin >= ctx->plan->operand_count || record->metadata_count != 1 ||
         record->metadata_begin >= ctx->plan->metadata_count)
@@ -3014,13 +2978,12 @@ static bool semantic_string_builder_to_string_exact(
            result_type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
            strcmp(ctx->plan->metadata[record->metadata_begin], "toString") == 0 &&
            receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
-           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           record->result_alias_operand == -1 &&
+           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT && record->result_alias_operand == -1 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED;
 }
 
-static bool semantic_string_builder_append_string_exact(
-    const XrSemanticBuildContext *ctx, const XrSemanticOperationRecord *record) {
+static bool semantic_string_builder_append_string_exact(const XrSemanticBuildContext *ctx,
+                                                        const XrSemanticOperationRecord *record) {
     if (!ctx || !record || record->operand_count != 2 ||
         record->operand_begin > ctx->plan->operand_count ||
         record->operand_count > ctx->plan->operand_count - record->operand_begin ||
@@ -3028,10 +2991,10 @@ static bool semantic_string_builder_append_string_exact(
         return false;
     const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
     const XrSemanticOperandRecord *argument = receiver + 1;
-    const XrSemanticTypeRecord *receiver_type = receiver->type < ctx->plan->type_count
-                                                    ? &ctx->plan->types[receiver->type] : NULL;
-    const XrSemanticTypeRecord *argument_type = argument->type < ctx->plan->type_count
-                                                    ? &ctx->plan->types[argument->type] : NULL;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
+    const XrSemanticTypeRecord *argument_type =
+        argument->type < ctx->plan->type_count ? &ctx->plan->types[argument->type] : NULL;
     return semantic_string_builder_type_exact(receiver_type) && argument_type &&
            argument_type->kind == XR_KIND_STRING && argument_type->builtin_type == XR_TID_NULL &&
            argument_type->child_count == 0 && argument_type->scalar_rep == XR_SCALAR_REP_NONE &&
@@ -3041,8 +3004,7 @@ static bool semantic_string_builder_append_string_exact(
            receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
            receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
-           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           record->result_alias_operand == 0 &&
+           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && record->result_alias_operand == 0 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED;
 }
 
@@ -3074,20 +3036,23 @@ static bool xi_array_member_scalar_exact(const XiValue *value) {
         value && value->op == XI_CALL_METHOD && value->aux && value->aux_kind == XI_AUX_KIND_NONE
             ? xr_array_member_shape((const char *) value->aux, value->nargs)
             : NULL;
-    if (!shape || !receiver || !receiver_type || value->aux_int <= 0 ||
-        (value->aux_int & 1) != 0 || (value->flags & XI_FLAG_MAY_SUSPEND) != 0 ||
-        receiver_type->kind != XR_KIND_ARRAY || !receiver_type->container.element_type ||
-        !value->type)
+    if (!shape || !receiver || !receiver_type || value->aux_int <= 0 || (value->aux_int & 1) != 0 ||
+        (value->flags & XI_FLAG_MAY_SUSPEND) != 0 || receiver_type->kind != XR_KIND_ARRAY ||
+        !receiver_type->container.element_type || !value->type)
         return false;
     for (uint16_t i = 1; i < value->nargs; i++) {
         if (!value->args[i] || !value->args[i]->type)
             return false;
     }
     switch (shape->result_shape) {
-        case XR_ARRAY_MEMBER_RESULT_UNIT: return value->type->kind == XR_KIND_UNIT;
-        case XR_ARRAY_MEMBER_RESULT_INT: return value->type->kind == XR_KIND_INT;
-        case XR_ARRAY_MEMBER_RESULT_BOOL: return value->type->kind == XR_KIND_BOOL;
-        default: return value->type == receiver_type;
+        case XR_ARRAY_MEMBER_RESULT_UNIT:
+            return value->type->kind == XR_KIND_UNIT;
+        case XR_ARRAY_MEMBER_RESULT_INT:
+            return value->type->kind == XR_KIND_INT;
+        case XR_ARRAY_MEMBER_RESULT_BOOL:
+            return value->type->kind == XR_KIND_BOOL;
+        default:
+            return value->type == receiver_type;
     }
 }
 
@@ -3097,9 +3062,9 @@ static bool xi_array_member_scalar_exact(const XiValue *value) {
  * element rather than against a spelled type name. */
 static bool semantic_array_member_receiver_type_exact(const XrSemanticTypeRecord *type) {
     char expected[96];
-    int length = snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:",
-                          (unsigned) XR_KIND_ARRAY, (unsigned) XR_TID_NULL,
-                          (unsigned) XR_SCALAR_REP_NONE);
+    int length = snprintf(expected, sizeof(expected),
+                          "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
+                          (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
     XrStableId zero = {{0}};
     return type && length > 0 && (size_t) length < sizeof(expected) &&
            type->kind == XR_KIND_ARRAY && type->builtin_type == XR_TID_NULL &&
@@ -3113,12 +3078,12 @@ static bool semantic_array_member_receiver_type_exact(const XrSemanticTypeRecord
 
 static bool semantic_array_member_unit_type_exact(const XrSemanticTypeRecord *type) {
     char expected[96];
-    int length = snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:",
-                          (unsigned) XR_KIND_UNIT, (unsigned) XR_TID_NULL,
-                          (unsigned) XR_SCALAR_REP_NONE);
-    return type && length > 0 && (size_t) length < sizeof(expected) &&
-           type->kind == XR_KIND_UNIT && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+    int length = snprintf(expected, sizeof(expected),
+                          "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:", (unsigned) XR_KIND_UNIT,
+                          (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
+    return type && length > 0 && (size_t) length < sizeof(expected) && type->kind == XR_KIND_UNIT &&
+           type->builtin_type == XR_TID_NULL && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0 && type->canonical_key &&
            strcmp(type->canonical_key, expected) == 0;
 }
@@ -3148,8 +3113,7 @@ static bool semantic_array_reserve_exact(const XrSemanticBuildContext *ctx,
         record->semantic_immediate != 0 ||
         record->effects != xi_generated_op_effects(XI_CALL_BUILTIN))
         return false;
-    const XrSemanticOperandRecord *receiver =
-        &ctx->plan->operands[record->operand_begin];
+    const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
     const XrSemanticOperandRecord *capacity = receiver + 1;
     const XrSemanticTypeRecord *receiver_type =
         receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
@@ -3159,49 +3123,59 @@ static bool semantic_array_reserve_exact(const XrSemanticBuildContext *ctx,
            semantic_array_member_i64_type_exact(capacity_type) &&
            record->result_type == receiver->type && record->result_alias_operand == 0 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-           record->return_provenance == XR_SEM_RETURN_OWNED &&
-           record->return_parameter == -1 && record->return_complete == 1 &&
-           receiver->role == XR_SEM_OPERAND_ARGUMENT && receiver->parameter == 0 &&
-           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           record->return_provenance == XR_SEM_RETURN_OWNED && record->return_parameter == -1 &&
+           record->return_complete == 1 && receiver->role == XR_SEM_OPERAND_ARGUMENT &&
+           receiver->parameter == 0 && receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
            capacity->role == XR_SEM_OPERAND_ARGUMENT && capacity->parameter == 1 &&
            capacity->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            capacity->ownership_action == XR_SEM_OPERAND_CONSUME;
 }
 
-static uint8_t semantic_array_member_scalar_storage(
-    const XrSemanticTypeRecord *type) {
+static uint8_t semantic_array_member_scalar_storage(const XrSemanticTypeRecord *type) {
     if (!type || type->builtin_type != XR_TID_NULL || type->child_count != 0 ||
-        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
-        type->flags != 0)
+        type->aggregate_extent != 0 || type->aggregate_align != 0 || type->flags != 0)
         return XR_ELEM_ANY;
-    if (type->kind == XR_KIND_BOOL &&
-        type->scalar_rep == XR_SCALAR_REP_NONE)
+    if (type->kind == XR_KIND_BOOL && type->scalar_rep == XR_SCALAR_REP_NONE)
         return XR_ELEM_BOOL;
-    if (type->kind == XR_KIND_RUNE &&
-        type->scalar_rep == XR_SCALAR_REP_NONE)
+    if (type->kind == XR_KIND_RUNE && type->scalar_rep == XR_SCALAR_REP_NONE)
         return XR_ELEM_RUNE;
     switch (type->scalar_rep) {
-        case XR_NATIVE_I8: return XR_ELEM_I8;
-        case XR_NATIVE_U8: return XR_ELEM_U8;
-        case XR_NATIVE_I16: return XR_ELEM_I16;
-        case XR_NATIVE_U16: return XR_ELEM_U16;
-        case XR_NATIVE_I32: return XR_ELEM_I32;
-        case XR_NATIVE_U32: return XR_ELEM_U32;
-        case XR_NATIVE_I64: return XR_ELEM_I64;
-        case XR_NATIVE_U64: return XR_ELEM_U64;
-        case XR_NATIVE_F32: return XR_ELEM_F32;
-        case XR_NATIVE_F64: return XR_ELEM_F64;
-        default: return XR_ELEM_ANY;
+        case XR_NATIVE_I8:
+            return XR_ELEM_I8;
+        case XR_NATIVE_U8:
+            return XR_ELEM_U8;
+        case XR_NATIVE_I16:
+            return XR_ELEM_I16;
+        case XR_NATIVE_U16:
+            return XR_ELEM_U16;
+        case XR_NATIVE_I32:
+            return XR_ELEM_I32;
+        case XR_NATIVE_U32:
+            return XR_ELEM_U32;
+        case XR_NATIVE_I64:
+            return XR_ELEM_I64;
+        case XR_NATIVE_U64:
+            return XR_ELEM_U64;
+        case XR_NATIVE_F32:
+            return XR_ELEM_F32;
+        case XR_NATIVE_F64:
+            return XR_ELEM_F64;
+        default:
+            return XR_ELEM_ANY;
     }
 }
 
 static uint8_t semantic_array_hof_kind_from_xi(uint8_t kind) {
     switch (kind) {
-        case XI_ARRAY_HOF_MAP: return XR_SEM_ARRAY_HOF_MAP;
-        case XI_ARRAY_HOF_FILTER: return XR_SEM_ARRAY_HOF_FILTER;
-        case XI_ARRAY_HOF_REDUCE: return XR_SEM_ARRAY_HOF_REDUCE;
-        default: return XR_SEM_ARRAY_HOF_NONE;
+        case XI_ARRAY_HOF_MAP:
+            return XR_SEM_ARRAY_HOF_MAP;
+        case XI_ARRAY_HOF_FILTER:
+            return XR_SEM_ARRAY_HOF_FILTER;
+        case XI_ARRAY_HOF_REDUCE:
+            return XR_SEM_ARRAY_HOF_REDUCE;
+        default:
+            return XR_SEM_ARRAY_HOF_NONE;
     }
 }
 
@@ -3209,10 +3183,9 @@ static uint8_t semantic_array_hof_kind_from_xi(uint8_t kind) {
  * selector stays debug metadata. This proof binds the callback directly to a
  * noncapturing child of the caller and freezes both sides of its scalar
  * signature before Xi is discarded. */
-static bool semantic_array_hof_exact(
-    const XrSemanticBuildContext *ctx, const XiFunc *owner,
-    const XiValue *value, const XrSemanticOperationRecord *record,
-    uint32_t *callback_function) {
+static bool semantic_array_hof_exact(const XrSemanticBuildContext *ctx, const XiFunc *owner,
+                                     const XiValue *value, const XrSemanticOperationRecord *record,
+                                     uint32_t *callback_function) {
     uint8_t kind = semantic_array_hof_kind_from_xi(value ? value->array_hof_kind : 0);
     uint16_t expected_operands = kind == XR_SEM_ARRAY_HOF_REDUCE ? 3u : 2u;
     if (!ctx || !owner || !value || !record || kind == XR_SEM_ARRAY_HOF_NONE ||
@@ -3224,8 +3197,7 @@ static bool semantic_array_hof_exact(
         value->array_element_storage <= XR_ELEM_ANY ||
         value->array_element_storage >= XR_ELEM_RAWPTR ||
         value->array_result_element_storage <= XR_ELEM_ANY ||
-        value->array_result_element_storage >= XR_ELEM_RAWPTR ||
-        !value->args[0] || !value->args[1])
+        value->array_result_element_storage >= XR_ELEM_RAWPTR || !value->args[0] || !value->args[1])
         return false;
     int callback = resolve_closure_binding(ctx, owner, value->args[1]);
     if (callback < 0 || (uint32_t) callback >= ctx->plan->function_count)
@@ -3240,30 +3212,23 @@ static bool semantic_array_hof_exact(
         callee->parameter_begin > ctx->plan->parameter_count ||
         callee->parameter_count > ctx->plan->parameter_count - callee->parameter_begin)
         return false;
-    const XrSemanticOperandRecord *operands =
-        &ctx->plan->operands[record->operand_begin];
+    const XrSemanticOperandRecord *operands = &ctx->plan->operands[record->operand_begin];
     const XrSemanticTypeRecord *receiver_type =
-        operands[0].type < ctx->plan->type_count
-            ? &ctx->plan->types[operands[0].type]
-            : NULL;
+        operands[0].type < ctx->plan->type_count ? &ctx->plan->types[operands[0].type] : NULL;
     if (!semantic_array_member_receiver_type_exact(receiver_type) ||
         receiver_type->child_begin >= ctx->plan->type_child_count)
         return false;
     uint32_t receiver_element = ctx->plan->type_children[receiver_type->child_begin];
     const XrSemanticTypeRecord *receiver_element_type =
-        receiver_element < ctx->plan->type_count
-            ? &ctx->plan->types[receiver_element]
-            : NULL;
+        receiver_element < ctx->plan->type_count ? &ctx->plan->types[receiver_element] : NULL;
     if (!receiver_element_type ||
-        semantic_array_member_scalar_storage(receiver_element_type) !=
-            value->array_element_storage)
+        semantic_array_member_scalar_storage(receiver_element_type) != value->array_element_storage)
         return false;
     uint32_t result_element = record->result_type;
     if (kind != XR_SEM_ARRAY_HOF_REDUCE) {
-        const XrSemanticTypeRecord *result_array =
-            record->result_type < ctx->plan->type_count
-                ? &ctx->plan->types[record->result_type]
-                : NULL;
+        const XrSemanticTypeRecord *result_array = record->result_type < ctx->plan->type_count
+                                                       ? &ctx->plan->types[record->result_type]
+                                                       : NULL;
         if (!semantic_array_member_receiver_type_exact(result_array) ||
             result_array->child_begin >= ctx->plan->type_child_count)
             return false;
@@ -3276,38 +3241,30 @@ static bool semantic_array_hof_exact(
     }
     const XrSemanticTypeRecord *result_element_type =
         result_element < ctx->plan->type_count ? &ctx->plan->types[result_element] : NULL;
-    if (!result_element_type ||
-        semantic_array_member_scalar_storage(result_element_type) !=
-            value->array_result_element_storage)
+    if (!result_element_type || semantic_array_member_scalar_storage(result_element_type) !=
+                                    value->array_result_element_storage)
         return false;
     if (kind == XR_SEM_ARRAY_HOF_FILTER) {
         if (callee->return_type >= ctx->plan->type_count ||
-            !semantic_array_member_bool_type_exact(
-                &ctx->plan->types[callee->return_type]))
+            !semantic_array_member_bool_type_exact(&ctx->plan->types[callee->return_type]))
             return false;
     } else if (callee->return_type != result_element) {
         return false;
     }
-    const XrSemanticParameterRecord *parameters =
-        &ctx->plan->parameters[callee->parameter_begin];
+    const XrSemanticParameterRecord *parameters = &ctx->plan->parameters[callee->parameter_begin];
     if (parameters[0].function != (uint32_t) callback || parameters[0].ordinal != 0 ||
-        parameters[0].type != (kind == XR_SEM_ARRAY_HOF_REDUCE
-                                   ? result_element
-                                   : receiver_element))
+        parameters[0].type != (kind == XR_SEM_ARRAY_HOF_REDUCE ? result_element : receiver_element))
         return false;
     if (kind == XR_SEM_ARRAY_HOF_REDUCE &&
         (parameters[1].function != (uint32_t) callback || parameters[1].ordinal != 1 ||
          parameters[1].type != receiver_element))
         return false;
     const XrSemanticTypeRecord *callback_type =
-        operands[1].type < ctx->plan->type_count
-            ? &ctx->plan->types[operands[1].type]
-            : NULL;
+        operands[1].type < ctx->plan->type_count ? &ctx->plan->types[operands[1].type] : NULL;
     if (!callback_type || callback_type->kind != XR_KIND_FUNCTION ||
         callback_type->child_count != (uint32_t) callee->parameter_count + 1u ||
         callback_type->child_begin > ctx->plan->type_child_count ||
-        callback_type->child_count >
-            ctx->plan->type_child_count - callback_type->child_begin)
+        callback_type->child_count > ctx->plan->type_child_count - callback_type->child_begin)
         return false;
     for (uint16_t i = 0; i < callee->parameter_count; i++)
         if (ctx->plan->type_children[callback_type->child_begin + i] != parameters[i].type)
@@ -3316,11 +3273,9 @@ static bool semantic_array_hof_exact(
         callee->return_type)
         return false;
     const XiValue *callback_value = value->args[1];
-    if (!callback_value->block || callback_value->block->func != owner ||
-        !callback_value->aux ||
+    if (!callback_value->block || callback_value->block->func != owner || !callback_value->aux ||
         (callback_value->op != XI_CLOSURE_NEW &&
-         !(callback_value->op == XI_STACK_ALLOC &&
-           callback_value->aux_int == XI_CLOSURE_NEW)))
+         !(callback_value->op == XI_STACK_ALLOC && callback_value->aux_int == XI_CLOSURE_NEW)))
         return false;
     uint32_t uses = 0;
     for (uint16_t b = 0; b < owner->nblocks; b++) {
@@ -3347,8 +3302,7 @@ static bool semantic_array_hof_exact(
         record->result_alias_operand != -1 || record->return_parameter != -1 ||
         (kind == XR_SEM_ARRAY_HOF_REDUCE
              ? record->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
-                   record->return_provenance != XR_SEM_RETURN_NONE ||
-                   record->return_complete != 0
+                   record->return_provenance != XR_SEM_RETURN_NONE || record->return_complete != 0
              : record->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
                    record->return_provenance != XR_SEM_RETURN_OWNED ||
                    record->return_complete != 1) ||
@@ -3369,38 +3323,28 @@ static bool semantic_array_hof_exact(
  * registry selected the member. These frozen rows independently re-prove the
  * receiver, result alias, ordered operands, scalar element storage, and
  * ownership contract before preserving that identity. */
-static bool semantic_array_fill_scalar_exact(
-    const XrSemanticBuildContext *ctx,
-    const XrSemanticOperationRecord *record, uint8_t storage) {
-    if (!ctx || !record || record->opcode != XI_CALL_METHOD ||
-        record->operand_count != 2 ||
+static bool semantic_array_fill_scalar_exact(const XrSemanticBuildContext *ctx,
+                                             const XrSemanticOperationRecord *record,
+                                             uint8_t storage) {
+    if (!ctx || !record || record->opcode != XI_CALL_METHOD || record->operand_count != 2 ||
         record->operand_begin > ctx->plan->operand_count ||
-        record->operand_count >
-            ctx->plan->operand_count - record->operand_begin ||
-        record->metadata_count != 1 ||
-        record->metadata_begin >= ctx->plan->metadata_count ||
+        record->operand_count > ctx->plan->operand_count - record->operand_begin ||
+        record->metadata_count != 1 || record->metadata_begin >= ctx->plan->metadata_count ||
         storage <= XR_ELEM_ANY || storage >= XR_ELEM_RAWPTR)
         return false;
-    const XrSemanticOperandRecord *receiver =
-        &ctx->plan->operands[record->operand_begin];
+    const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
     const XrSemanticOperandRecord *fill = receiver + 1;
     const XrSemanticTypeRecord *receiver_type =
-        receiver->type < ctx->plan->type_count
-            ? &ctx->plan->types[receiver->type]
-            : NULL;
+        receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
     if (!semantic_array_member_receiver_type_exact(receiver_type) ||
         receiver_type->child_begin >= ctx->plan->type_child_count)
         return false;
-    uint32_t element_index =
-        ctx->plan->type_children[receiver_type->child_begin];
+    uint32_t element_index = ctx->plan->type_children[receiver_type->child_begin];
     const XrSemanticTypeRecord *element =
-        element_index < ctx->plan->type_count
-            ? &ctx->plan->types[element_index]
-            : NULL;
+        element_index < ctx->plan->type_count ? &ctx->plan->types[element_index] : NULL;
     return element && fill->type == element_index &&
            semantic_array_member_scalar_storage(element) == storage &&
-           record->result_type == receiver->type &&
-           record->semantic_immediate == 0 &&
+           record->result_type == receiver->type && record->semantic_immediate == 0 &&
            record->auxiliary_kind == XI_AUX_KIND_NONE &&
            record->constant == XR_SEMANTIC_INDEX_NONE &&
            record->callable_function == XR_SEMANTIC_INDEX_NONE &&
@@ -3410,11 +3354,9 @@ static bool semantic_array_fill_scalar_exact(
            record->flags == xi_generated_op_default_flags(XI_CALL_METHOD) &&
            record->result_alias_operand == 0 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-           record->return_provenance == XR_SEM_RETURN_OWNED &&
-           record->return_parameter == -1 && record->return_complete == 1 &&
-           receiver->role == XR_SEM_OPERAND_RECEIVER &&
-           receiver->parameter == -1 &&
-           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           record->return_provenance == XR_SEM_RETURN_OWNED && record->return_parameter == -1 &&
+           record->return_complete == 1 && receiver->role == XR_SEM_OPERAND_RECEIVER &&
+           receiver->parameter == -1 && receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
            fill->role == XR_SEM_OPERAND_ARGUMENT && fill->parameter == 0 &&
            fill->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
@@ -3432,13 +3374,13 @@ static bool semantic_array_member_result_exact(const XrSemanticOperationRecord *
     if (shape->result_shape == XR_ARRAY_MEMBER_RESULT_RECEIVER)
         return record->result_type == receiver_type_index && record->result_alias_operand == 0 &&
                record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-               record->return_provenance == XR_SEM_RETURN_OWNED &&
-               record->return_parameter == -1 && record->return_complete == 1;
+               record->return_provenance == XR_SEM_RETURN_OWNED && record->return_parameter == -1 &&
+               record->return_complete == 1;
     bool typed = shape->result_shape == XR_ARRAY_MEMBER_RESULT_UNIT
                      ? semantic_array_member_unit_type_exact(result_type)
-                     : shape->result_shape == XR_ARRAY_MEMBER_RESULT_INT
-                           ? semantic_array_member_i64_type_exact(result_type)
-                           : semantic_array_member_bool_type_exact(result_type);
+                 : shape->result_shape == XR_ARRAY_MEMBER_RESULT_INT
+                     ? semantic_array_member_i64_type_exact(result_type)
+                     : semantic_array_member_bool_type_exact(result_type);
     return typed && record->result_alias_operand == -1 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
            record->return_provenance == XR_SEM_RETURN_NONE && record->return_parameter == -1 &&
@@ -3495,8 +3437,9 @@ static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx
  * because a reference-capable value would leave an ownership obligation this
  * row does not state. */
 static bool semantic_native_module_scalar_type_exact(const XrSemanticTypeRecord *type) {
-    return type && (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
-                    type->kind == XR_KIND_BOOL) &&
+    return type &&
+           (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
+            type->kind == XR_KIND_BOOL) &&
            type->builtin_type == XR_TID_NULL && type->scalar_rep != XR_SCALAR_REP_NONE &&
            type->flags == 0 && type->child_count == 0 && type->aggregate_extent == 0 &&
            type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE;
@@ -3515,8 +3458,8 @@ static bool semantic_native_module_namespace_import_exact(const XrSemanticPlan *
     const XrSemanticTypeRecord *type =
         record ? xr_semantic_plan_type(plan, record->result_type) : NULL;
     XrStableId zero = {{0}};
-    if (!record || !type || !metadata || record->opcode != XI_IMPORT_REF ||
-        record->function != 0 || record->operand_count != 0 || record->metadata_count != 2 ||
+    if (!record || !type || !metadata || record->opcode != XI_IMPORT_REF || record->function != 0 ||
+        record->operand_count != 0 || record->metadata_count != 2 ||
         record->metadata_begin + 1u >= metadata_count ||
         record->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
         record->semantic_immediate < -1 || record->semantic_immediate > UINT16_MAX ||
@@ -3576,9 +3519,9 @@ static const char *semantic_native_module_namespace_path(const XrSemanticPlan *p
         load->ownership_use != xi_generated_op_own_use(XI_GET_SHARED) ||
         load->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
         load->result_alias_operand != -1 ||
-        load->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
-        load->return_parameter != -1 || load->return_complete != 1 ||
-        load_type->scalar_rep != XR_SCALAR_REP_NONE || load_type->child_count != 0 ||
+        load->return_provenance != XR_SEM_RETURN_BORROWED_STATIC || load->return_parameter != -1 ||
+        load->return_complete != 1 || load_type->scalar_rep != XR_SCALAR_REP_NONE ||
+        load_type->child_count != 0 ||
         load_type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
         return NULL;
     const XrSemanticOperationRecord *store = NULL;
@@ -3642,9 +3585,9 @@ static bool semantic_native_module_scalar_call_exact(const XrSemanticBuildContex
         record->result_alias_operand != -1 ||
         record->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
         record->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
-        !semantic_native_module_scalar_type_exact(
-            record->result_type < ctx->plan->type_count ? &ctx->plan->types[record->result_type]
-                                                        : NULL))
+        !semantic_native_module_scalar_type_exact(record->result_type < ctx->plan->type_count
+                                                      ? &ctx->plan->types[record->result_type]
+                                                      : NULL))
         return false;
     const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
     if (receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
@@ -3659,12 +3602,10 @@ static bool semantic_native_module_scalar_call_exact(const XrSemanticBuildContex
                 argument->type < ctx->plan->type_count ? &ctx->plan->types[argument->type] : NULL))
             return false;
     }
-    const char *module_path =
-        semantic_native_module_namespace_path(ctx->plan, receiver->value);
-    return module_path &&
-           xr_stdlib_metadata_exact_native_direct_member(
-               module_path, ctx->plan->metadata[record->metadata_begin],
-               (uint16_t) (record->operand_count - 1u)) != NULL;
+    const char *module_path = semantic_native_module_namespace_path(ctx->plan, receiver->value);
+    return module_path && xr_stdlib_metadata_exact_native_direct_member(
+                              module_path, ctx->plan->metadata[record->metadata_begin],
+                              (uint16_t) (record->operand_count - 1u)) != NULL;
 }
 
 /* `JSON` is a compiler-owned class namespace: its receiver is the reserved
@@ -3675,9 +3616,8 @@ static bool semantic_native_module_scalar_call_exact(const XrSemanticBuildContex
 static bool xi_json_namespace_value_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 2 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->args[1] && value->aux &&
-           strcmp((const char *) value->aux, "value") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 &&
-           (value->aux_int & 1) == 0 && receiver->op == XI_GET_BUILTIN &&
+           strcmp((const char *) value->aux, "value") == 0 && value->aux_kind == XI_AUX_KIND_NONE &&
+           value->aux_int > 0 && (value->aux_int & 1) == 0 && receiver->op == XI_GET_BUILTIN &&
            receiver->aux_int == XR_GLOBAL_VAR_JSON && receiver->aux &&
            strcmp((const char *) receiver->aux, "JSON") == 0 && receiver->type &&
            receiver->type->kind == XR_KIND_CLASS && !receiver->type->instance.class_ref &&
@@ -3686,15 +3626,14 @@ static bool xi_json_namespace_value_exact(const XiValue *value) {
 
 static bool semantic_json_namespace_type_exact(const XrSemanticTypeRecord *type) {
     char expected[160];
-    int length = snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:4:JSON[0]",
-                          (unsigned) XR_KIND_CLASS, (unsigned) XR_TID_NULL,
-                          (unsigned) XR_SCALAR_REP_NONE);
+    int length =
+        snprintf(expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:4:JSON[0]",
+                 (unsigned) XR_KIND_CLASS, (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
     XrStableId zero = {{0}};
     return type && length > 0 && (size_t) length < sizeof(expected) &&
            type->kind == XR_KIND_CLASS && type->builtin_type == XR_TID_NULL &&
            type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->source_class == XR_SEMANTIC_INDEX_NONE &&
            xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
            strcmp(type->canonical_key, expected) == 0;
 }
@@ -3719,8 +3658,7 @@ static bool semantic_json_namespace_value_exact(const XrSemanticBuildContext *ct
            receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
            receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
-           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           record->result_alias_operand == -1 &&
+           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && record->result_alias_operand == -1 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED;
 }
 
@@ -3826,12 +3764,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->source_end_line = value->source_span.end_line;
         record->source_end_column = value->source_span.end_column;
     }
-    record->semantic_immediate =
-        value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_NONE ||
-                value->array_member_kind != XI_ARRAY_MEMBER_NONE ||
-                value->array_hof_kind != XI_ARRAY_HOF_NONE
-            ? 0
-            : value->aux_int;
+    record->semantic_immediate = value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_NONE ||
+                                         value->array_member_kind != XI_ARRAY_MEMBER_NONE ||
+                                         value->array_hof_kind != XI_ARRAY_HOF_NONE
+                                     ? 0
+                                     : value->aux_int;
     record->evidence[0] = value->xg_callsite_id;
     record->evidence[1] = value->xa_intrinsic_id;
     record->evidence[2] = value->xg_method_id;
@@ -3861,9 +3798,8 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
                               : NULL;
         if (!view->complete || view->origin != XI_VIEW_ORIGIN_RECEIVER ||
             view->source_operand != 0 || view->source_param != -1 || value->nargs != 1 ||
-            !value->args[0] || view->root_value_id != value->args[0]->id ||
-            view->capability != 1 || view->lifetime != 1 || !element ||
-            !add_type(ctx, element, &record->view_element_type))
+            !value->args[0] || view->root_value_id != value->args[0]->id || view->capability != 1 ||
+            view->lifetime != 1 || !element || !add_type(ctx, element, &record->view_element_type))
             return fail(ctx, "XR_SEM_0019", "string byte-slice view authority is incomplete");
         record->view_source_value = value_ref(ctx, function, value->args[0]);
         if (record->view_source_value == XR_SEMANTIC_INDEX_NONE)
@@ -3895,8 +3831,7 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
             return fail(ctx, "XR_SEM_0007", "try operation references an unknown block");
     }
     if (!add_operation_metadata(ctx, value, record) ||
-        !append_source_namespace_dependency(ctx, value) ||
-        !append_constant(ctx, value, record))
+        !append_source_namespace_dependency(ctx, value) || !append_constant(ctx, value, record))
         return false;
     if (xi_string_runes_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRING_RUNES;
@@ -3906,31 +3841,26 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     if (xi_iterator_rune_has_next_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_ITERATOR_RUNE_HAS_NEXT;
         if (!xr_semantic_iterator_rune_has_next_is_exact(ctx->plan, record, NULL))
-            return fail(ctx, "XR_SEM_0019",
-                        "Iterator<rune>.hasNext authority is not exact");
+            return fail(ctx, "XR_SEM_0019", "Iterator<rune>.hasNext authority is not exact");
     }
     if (xi_iterator_rune_next_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_ITERATOR_RUNE_NEXT;
         if (!xr_semantic_iterator_rune_next_is_exact(ctx->plan, record, NULL))
-            return fail(ctx, "XR_SEM_0019",
-                        "Iterator<rune>.next authority is not exact");
+            return fail(ctx, "XR_SEM_0019", "Iterator<rune>.next authority is not exact");
     }
     if (xi_rune_to_uint32_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_RUNE_TO_UINT32;
         if (!xr_semantic_rune_to_uint32_is_exact(ctx->plan, record, NULL))
-            return fail(ctx, "XR_SEM_0019",
-                        "rune.toUInt32 authority is not exact");
+            return fail(ctx, "XR_SEM_0019", "rune.toUInt32 authority is not exact");
     }
     if (xi_rune_is_whitespace_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_RUNE_IS_WHITESPACE;
         if (!xr_semantic_rune_is_whitespace_is_exact(ctx->plan, record, NULL))
-            return fail(ctx, "XR_SEM_0019",
-                        "rune.isWhitespace authority is not exact");
+            return fail(ctx, "XR_SEM_0019", "rune.isWhitespace authority is not exact");
     }
     if (xi_string_slice_range_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRING_SLICE_RANGE;
-        if (!xr_semantic_string_slice_range_is_exact(
-                ctx->plan, record, NULL, NULL, NULL))
+        if (!xr_semantic_string_slice_range_is_exact(ctx->plan, record, NULL, NULL, NULL))
             record->intrinsic_kind = XR_SEM_INTRINSIC_NONE;
     }
     if (xi_string_builder_append_rune_exact(value) &&
@@ -3957,22 +3887,18 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
                          "result-type=%u ownership=%u return=%u/%u alias=%d callback=%u",
                          value->array_hof_kind, value->array_element_storage,
                          value->array_result_element_storage, record->operand_count,
-                         record->result_type, record->result_ownership,
-                         record->return_provenance, record->return_complete,
-                         record->result_alias_operand, callback);
+                         record->result_type, record->result_ownership, record->return_provenance,
+                         record->return_complete, record->result_alias_operand, callback);
             return false;
         }
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_HOF;
-        record->array_hof_kind =
-            semantic_array_hof_kind_from_xi(value->array_hof_kind);
+        record->array_hof_kind = semantic_array_hof_kind_from_xi(value->array_hof_kind);
         record->array_element_storage = value->array_element_storage;
-        record->array_result_element_storage =
-            value->array_result_element_storage;
+        record->array_result_element_storage = value->array_result_element_storage;
         record->callable_function = callback;
     }
     if (value->array_member_kind == XI_ARRAY_MEMBER_FILL &&
-        semantic_array_fill_scalar_exact(ctx, record,
-                                         value->array_element_storage)) {
+        semantic_array_fill_scalar_exact(ctx, record, value->array_element_storage)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR;
         record->array_element_storage = value->array_element_storage;
     } else if (xi_array_member_scalar_exact(value) &&
@@ -3987,17 +3913,14 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
          !value->args[1]->type->is_nullable &&
          (value->array_element_storage == XR_ELEM_RUNE
               ? XR_TYPE_IS_RUNE(value->args[1]->type)
-              : (XR_TYPE_IS_INT(value->args[1]->type) ||
-                 XR_TYPE_IS_FLOAT(value->args[1]->type) ||
+              : (XR_TYPE_IS_INT(value->args[1]->type) || XR_TYPE_IS_FLOAT(value->args[1]->type) ||
                  XR_TYPE_IS_BOOL(value->args[1]->type))));
     bool array_intrinsic_exact =
-        value->op == XI_CALL_BUILTIN &&
-        value->array_intrinsic_kind > XI_ARRAY_INTRINSIC_NONE &&
+        value->op == XI_CALL_BUILTIN && value->array_intrinsic_kind > XI_ARRAY_INTRINSIC_NONE &&
         value->array_intrinsic_kind < XI_ARRAY_INTRINSIC_COUNT &&
         value->array_element_storage > XR_ELEM_ANY &&
-        value->array_element_storage < XR_ELEM_RAWPTR &&
-        value->aux_kind == XI_AUX_KIND_NONE && value->type &&
-        XR_TYPE_IS_ARRAY(value->type) && value->type->container.element_type &&
+        value->array_element_storage < XR_ELEM_RAWPTR && value->aux_kind == XI_AUX_KIND_NONE &&
+        value->type && XR_TYPE_IS_ARRAY(value->type) && value->type->container.element_type &&
         value->nargs ==
             (value->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY ? 1u : 2u) &&
         value->args[0] && value->args[0]->type && XR_TYPE_IS_INT(value->args[0]->type) &&
@@ -4006,7 +3929,8 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         if (ctx->error && ctx->error_size)
             snprintf(ctx->error, ctx->error_size,
                      "XR_SEM_0019: Array intrinsic authority is not exact "
-                     "kind=%u storage=%u immediate=%lld op=%u nargs=%u result-kind=%u arg0-kind=%u arg1-match=%u",
+                     "kind=%u storage=%u immediate=%lld op=%u nargs=%u result-kind=%u arg0-kind=%u "
+                     "arg1-match=%u",
                      value->array_intrinsic_kind, value->array_element_storage,
                      (long long) value->aux_int, value->op, value->nargs,
                      value->type ? value->type->kind : UINT16_MAX,
@@ -4017,20 +3941,16 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         return false;
     }
     if (array_intrinsic_exact) {
-        record->intrinsic_kind =
-            value->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY
-                ? XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY
-                : XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
+        record->intrinsic_kind = value->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY
+                                     ? XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY
+                                     : XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
         record->array_element_storage = value->array_element_storage;
     }
     bool array_allocation_exact =
-        value->op == XI_ARRAY_NEW && value->type &&
-        XR_TYPE_IS_ARRAY(value->type) &&
-        value->type->container.element_type && value->nargs == 1 &&
-        value->args[0] && value->args[0]->type &&
-        XR_TYPE_IS_INT(value->args[0]->type) &&
-        value->array_element_storage > XR_ELEM_ANY &&
-        value->array_element_storage < XR_ELEM_RAWPTR;
+        value->op == XI_ARRAY_NEW && value->type && XR_TYPE_IS_ARRAY(value->type) &&
+        value->type->container.element_type && value->nargs == 1 && value->args[0] &&
+        value->args[0]->type && XR_TYPE_IS_INT(value->args[0]->type) &&
+        value->array_element_storage > XR_ELEM_ANY && value->array_element_storage < XR_ELEM_RAWPTR;
     if (array_allocation_exact) {
         record->array_element_storage = value->array_element_storage;
         record->semantic_immediate = 0;
@@ -4601,12 +4521,11 @@ static bool build_ownership_entities(XrSemanticBuildContext *ctx, uint32_t modul
     return true;
 }
 
-static bool mark_coroutine_value_membership(
-    uint8_t *membership, uint32_t total_values, uint32_t semantic_value,
-    uint8_t shift, uint32_t *touched, uint32_t *touched_count,
-    uint32_t touched_capacity) {
-    if (!membership || semantic_value >= total_values || shift > 4u ||
-        !touched || !touched_count)
+static bool mark_coroutine_value_membership(uint8_t *membership, uint32_t total_values,
+                                            uint32_t semantic_value, uint8_t shift,
+                                            uint32_t *touched, uint32_t *touched_count,
+                                            uint32_t touched_capacity) {
+    if (!membership || semantic_value >= total_values || shift > 4u || !touched || !touched_count)
         return false;
     uint8_t previous = membership[semantic_value];
     if (previous == 0) {
@@ -4618,8 +4537,7 @@ static bool mark_coroutine_value_membership(
     if (count < 2u)
         count++;
     membership[semantic_value] =
-        (uint8_t) ((previous & (uint8_t) ~(0x3u << shift)) |
-                   (uint8_t) (count << shift));
+        (uint8_t) ((previous & (uint8_t) ~(0x3u << shift)) | (uint8_t) (count << shift));
     return true;
 }
 
@@ -4636,19 +4554,17 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
                      : NULL;
     if (total_values && !operation_by_value)
         return fail(ctx, "XR_EXEC_5003", "coroutine identity map allocation failed");
-    uint32_t *state_entity_by_operation = ctx->plan->operation_count
-        ? (uint32_t *) xr_malloc((size_t) ctx->plan->operation_count *
-                                 sizeof(*state_entity_by_operation))
-        : NULL;
+    uint32_t *state_entity_by_operation =
+        ctx->plan->operation_count ? (uint32_t *) xr_malloc((size_t) ctx->plan->operation_count *
+                                                            sizeof(*state_entity_by_operation))
+                                   : NULL;
     if (ctx->plan->operation_count && !state_entity_by_operation) {
         xr_free(operation_by_value);
-        return fail(ctx, "XR_EXEC_5003",
-                    "coroutine state index allocation failed");
+        return fail(ctx, "XR_EXEC_5003", "coroutine state index allocation failed");
     }
     for (uint32_t value = 0; value < total_values; value++)
         operation_by_value[value] = XR_SEMANTIC_INDEX_NONE;
-    for (uint32_t operation = 0; operation < ctx->plan->operation_count;
-         operation++)
+    for (uint32_t operation = 0; operation < ctx->plan->operation_count; operation++)
         state_entity_by_operation[operation] = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t operation = 0; operation < ctx->plan->operation_count; operation++) {
         uint32_t value = ctx->plan->operations[operation].result_value;
@@ -4689,11 +4605,9 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
                          text_append_format(&key, ":state=%u:operation=", point->state_id) &&
                          text_append_stable_id(&key, ctx->plan->operations[operation].id);
             if (!valid ||
-                !append_entity(
-                    ctx, XR_SEM_ENTITY_COROUTINE_STATE,
-                    XR_SEM_ENTITY_SUBJECT_OPERATION, operation,
-                    point->state_id, parent, &key,
-                    &state_entity_by_operation[operation])) {
+                !append_entity(ctx, XR_SEM_ENTITY_COROUTINE_STATE, XR_SEM_ENTITY_SUBJECT_OPERATION,
+                               operation, point->state_id, parent, &key,
+                               &state_entity_by_operation[operation])) {
                 text_dispose(&key);
                 xr_free(operation_by_value);
                 xr_free(state_entity_by_operation);
@@ -4705,22 +4619,18 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
 
     uint64_t list_count = 0;
     uint32_t touched_capacity = 0;
-    for (uint32_t function = 0; function < ctx->plan->function_count;
-         function++) {
+    for (uint32_t function = 0; function < ctx->plan->function_count; function++) {
         const XiCoroPlan *coro = ctx->functions[function].source->coro_plan;
         if (!coro)
             continue;
         for (uint32_t state = 0; state < coro->nstates; state++) {
             const XiCoroSuspendPoint *point = &coro->points[state];
-            if ((point->nlive && !point->live) ||
-                (point->nroots && !point->roots) ||
-                (point->ndrops && !point->drops) ||
-                point->nlive > UINT32_MAX - point->nroots ||
+            if ((point->nlive && !point->live) || (point->nroots && !point->roots) ||
+                (point->ndrops && !point->drops) || point->nlive > UINT32_MAX - point->nroots ||
                 point->nlive + point->nroots > UINT32_MAX - point->ndrops) {
                 xr_free(state_entity_by_operation);
                 xr_free(operation_by_value);
-                return fail(ctx, "XR_SEM_0019",
-                            "coroutine lifecycle source sets are invalid");
+                return fail(ctx, "XR_SEM_0019", "coroutine lifecycle source sets are invalid");
             }
             uint32_t rows = point->nlive + point->nroots + point->ndrops;
             list_count += rows;
@@ -4731,54 +4641,42 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
     if (list_count > UINT32_MAX) {
         xr_free(state_entity_by_operation);
         xr_free(operation_by_value);
-        return fail(ctx, "XR_EXEC_5003",
-                    "coroutine lifecycle source row budget exhausted");
+        return fail(ctx, "XR_EXEC_5003", "coroutine lifecycle source row budget exhausted");
     }
     XrSemanticGraph graph = {0};
-    if (!xr_semantic_graph_build(ctx->plan, &graph, ctx->error,
-                                 ctx->error_size)) {
+    if (!xr_semantic_graph_build(ctx->plan, &graph, ctx->error, ctx->error_size)) {
         xr_free(state_entity_by_operation);
         xr_free(operation_by_value);
         return false;
     }
     XrSemanticCoroutineLifecycleProjection projection = {0};
     XrSemanticCoroutineLifecycleProjectionStatus projection_status =
-        xr_semantic_coroutine_lifecycle_projection_build(
-            ctx->plan, &graph, (uint32_t) (list_count / 3u), &projection);
-    size_t owner_count_size = xr_ownership_certificate_owner_count(
-        xr_semantic_plan_ownership(ctx->plan));
-    if (projection_status != XR_SEMANTIC_LIFECYCLE_PROJECTION_OK ||
-        owner_count_size > UINT32_MAX ||
-        !xr_semantic_lifecycle_work_charge_product(
-            &projection.indexed_work, list_count, 2u) ||
-        !xr_semantic_lifecycle_work_charge(
-            &projection.indexed_work, ctx->plan->entity_count) ||
-        !xr_semantic_lifecycle_work_charge_product(
-            &projection.indexed_work, total_values, 3u) ||
-        !xr_semantic_lifecycle_work_charge(
-            &projection.indexed_work, ctx->plan->operation_count)) {
+        xr_semantic_coroutine_lifecycle_projection_build(ctx->plan, &graph,
+                                                         (uint32_t) (list_count / 3u), &projection);
+    size_t owner_count_size =
+        xr_ownership_certificate_owner_count(xr_semantic_plan_ownership(ctx->plan));
+    if (projection_status != XR_SEMANTIC_LIFECYCLE_PROJECTION_OK || owner_count_size > UINT32_MAX ||
+        !xr_semantic_lifecycle_work_charge_product(&projection.indexed_work, list_count, 2u) ||
+        !xr_semantic_lifecycle_work_charge(&projection.indexed_work, ctx->plan->entity_count) ||
+        !xr_semantic_lifecycle_work_charge_product(&projection.indexed_work, total_values, 3u) ||
+        !xr_semantic_lifecycle_work_charge(&projection.indexed_work, ctx->plan->operation_count)) {
         xr_semantic_coroutine_lifecycle_projection_dispose(&projection);
         xr_semantic_graph_dispose(&graph);
         xr_free(state_entity_by_operation);
         xr_free(operation_by_value);
         return fail(ctx,
-                    projection_status ==
-                            XR_SEMANTIC_LIFECYCLE_PROJECTION_INVALID
-                        ? "XR_SEM_0019"
-                        : "XR_EXEC_5003",
+                    projection_status == XR_SEMANTIC_LIFECYCLE_PROJECTION_INVALID ? "XR_SEM_0019"
+                                                                                  : "XR_EXEC_5003",
                     "coroutine lifecycle projection budget exhausted");
     }
     uint32_t owner_count = (uint32_t) owner_count_size;
-    uint32_t *owner_entities = owner_count
-        ? (uint32_t *) xr_malloc((size_t) owner_count *
-                                 sizeof(*owner_entities))
-        : NULL;
-    uint8_t *membership = total_values
-        ? (uint8_t *) xr_calloc(total_values, sizeof(*membership))
-        : NULL;
+    uint32_t *owner_entities =
+        owner_count ? (uint32_t *) xr_malloc((size_t) owner_count * sizeof(*owner_entities)) : NULL;
+    uint8_t *membership =
+        total_values ? (uint8_t *) xr_calloc(total_values, sizeof(*membership)) : NULL;
     uint32_t *touched = touched_capacity
-        ? (uint32_t *) xr_malloc((size_t) touched_capacity * sizeof(*touched))
-        : NULL;
+                            ? (uint32_t *) xr_malloc((size_t) touched_capacity * sizeof(*touched))
+                            : NULL;
     if ((owner_count && !owner_entities) || (total_values && !membership) ||
         (touched_capacity && !touched)) {
         xr_free(touched);
@@ -4788,8 +4686,7 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
         xr_semantic_graph_dispose(&graph);
         xr_free(state_entity_by_operation);
         xr_free(operation_by_value);
-        return fail(ctx, "XR_EXEC_5003",
-                    "coroutine lifecycle projection allocation failed");
+        return fail(ctx, "XR_EXEC_5003", "coroutine lifecycle projection allocation failed");
     }
     for (uint32_t owner = 0; owner < owner_count; owner++)
         owner_entities[owner] = XR_SEMANTIC_INDEX_NONE;
@@ -4798,41 +4695,31 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
         const XrSemanticEntityRecord *record = &ctx->plan->entities[entity];
         if (record->kind != XR_SEM_ENTITY_OWNER)
             continue;
-        if (record->subject_kind != XR_SEM_ENTITY_SUBJECT_OWNER ||
-            record->subject >= owner_count ||
+        if (record->subject_kind != XR_SEM_ENTITY_SUBJECT_OWNER || record->subject >= owner_count ||
             owner_entities[record->subject] != XR_SEMANTIC_INDEX_NONE) {
-            lifecycle_ok = fail(
-                ctx, "XR_SEM_0019",
-                "owned String coroutine owner identity is incomplete");
+            lifecycle_ok =
+                fail(ctx, "XR_SEM_0019", "owned String coroutine owner identity is incomplete");
             goto lifecycle_cleanup;
         }
         owner_entities[record->subject] = entity;
     }
     uint32_t projection_cursor = 0;
-    for (uint32_t function = 0; lifecycle_ok &&
-                                function < ctx->plan->function_count;
-         function++) {
+    for (uint32_t function = 0; lifecycle_ok && function < ctx->plan->function_count; function++) {
         const XiCoroPlan *coro = ctx->functions[function].source->coro_plan;
         if (!coro)
             continue;
-        for (uint32_t state = 0; lifecycle_ok && state < coro->nstates;
-             state++) {
+        for (uint32_t state = 0; lifecycle_ok && state < coro->nstates; state++) {
             const XiCoroSuspendPoint *point = &coro->points[state];
-            uint32_t state_value =
-                point->op
-                    ? ctx->plan->functions[function].value_begin + point->op->id
-                    : XR_SEMANTIC_INDEX_NONE;
-            uint32_t state_operation =
-                state_value < total_values
-                    ? operation_by_value[state_value]
-                    : XR_SEMANTIC_INDEX_NONE;
-            uint32_t state_entity =
-                state_operation < ctx->plan->operation_count
-                    ? state_entity_by_operation[state_operation]
-                    : XR_SEMANTIC_INDEX_NONE;
+            uint32_t state_value = point->op
+                                       ? ctx->plan->functions[function].value_begin + point->op->id
+                                       : XR_SEMANTIC_INDEX_NONE;
+            uint32_t state_operation = state_value < total_values ? operation_by_value[state_value]
+                                                                  : XR_SEMANTIC_INDEX_NONE;
+            uint32_t state_entity = state_operation < ctx->plan->operation_count
+                                        ? state_entity_by_operation[state_operation]
+                                        : XR_SEMANTIC_INDEX_NONE;
             if (state_entity == XR_SEMANTIC_INDEX_NONE) {
-                lifecycle_ok = fail(ctx, "XR_SEM_0019",
-                                    "coroutine state identity is incomplete");
+                lifecycle_ok = fail(ctx, "XR_SEM_0019", "coroutine state identity is incomplete");
                 break;
             }
             uint32_t touched_count = 0;
@@ -4843,49 +4730,38 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
                 for (uint32_t i = 0; i < counts[set]; i++) {
                     XiValue *value = sets[set][i];
                     uint32_t semantic_value =
-                        value && value->id <
-                                     ctx->plan->functions[function].value_count
-                            ? ctx->plan->functions[function].value_begin +
-                                  value->id
+                        value && value->id < ctx->plan->functions[function].value_count
+                            ? ctx->plan->functions[function].value_begin + value->id
                             : XR_SEMANTIC_INDEX_NONE;
-                    if (!mark_coroutine_value_membership(
-                            membership, total_values, semantic_value,
-                            shifts[set], touched, &touched_count,
-                            touched_capacity)) {
-                        lifecycle_ok = fail(
-                            ctx, "XR_SEM_0019",
-                            "coroutine lifecycle source sets are invalid");
+                    if (!mark_coroutine_value_membership(membership, total_values, semantic_value,
+                                                         shifts[set], touched, &touched_count,
+                                                         touched_capacity)) {
+                        lifecycle_ok =
+                            fail(ctx, "XR_SEM_0019", "coroutine lifecycle source sets are invalid");
                         break;
                     }
                 }
             }
             if (projection_cursor < projection.count &&
-                projection.rows[projection_cursor].state_entity <
-                    state_entity) {
-                lifecycle_ok = fail(
-                    ctx, "XR_SEM_0019",
-                    "owned String coroutine lifecycle state order is invalid");
+                projection.rows[projection_cursor].state_entity < state_entity) {
+                lifecycle_ok = fail(ctx, "XR_SEM_0019",
+                                    "owned String coroutine lifecycle state order is invalid");
             }
             while (lifecycle_ok && projection_cursor < projection.count &&
-                   projection.rows[projection_cursor].state_entity ==
-                       state_entity) {
+                   projection.rows[projection_cursor].state_entity == state_entity) {
                 const XrSemanticCoroutineLifecycleShape *shape =
                     &projection.rows[projection_cursor++];
-                if (shape->function != function ||
-                    shape->logical_state != point->state_id ||
+                if (shape->function != function || shape->logical_state != point->state_id ||
                     shape->producer_value >= total_values ||
                     membership[shape->producer_value] != UINT8_C(0x15) ||
-                    shape->producer_operation >=
-                        ctx->plan->operation_count ||
+                    shape->producer_operation >= ctx->plan->operation_count ||
                     shape->owner >= owner_count ||
                     owner_entities[shape->owner] == XR_SEMANTIC_INDEX_NONE) {
-                    lifecycle_ok = fail(
-                        ctx, "XR_SEM_0019",
-                        "owned String coroutine lifecycle facts are incomplete");
+                    lifecycle_ok = fail(ctx, "XR_SEM_0019",
+                                        "owned String coroutine lifecycle facts are incomplete");
                     break;
                 }
-                XrStableId owner_identity =
-                    ctx->plan->entities[owner_entities[shape->owner]].id;
+                XrStableId owner_identity = ctx->plan->entities[owner_entities[shape->owner]].id;
                 const uint16_t roles[] = {
                     XR_SEM_ENTITY_COROUTINE_LIVE,
                     XR_SEM_ENTITY_COROUTINE_ROOT,
@@ -4894,30 +4770,21 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
                 for (uint32_t role = 0; role < 3u; role++) {
                     XrTextBuilder key = {0};
                     bool valid =
-                        begin_entity_key(ctx, &key, roles[role],
-                                         state_entity) &&
+                        begin_entity_key(ctx, &key, roles[role], state_entity) &&
                         text_append(&key, ":value-operation=") &&
                         text_append_stable_id(
-                            &key,
-                            ctx->plan->operations[shape->producer_operation]
-                                .id) &&
+                            &key, ctx->plan->operations[shape->producer_operation].id) &&
                         text_append(&key, ":release=") &&
-                        text_append_stable_id(
-                            &key,
-                            ctx->plan->operations[shape->release_operation]
-                                .id) &&
-                        text_append(&key, ":owner=") &&
-                        text_append_stable_id(&key, owner_identity);
+                        text_append_stable_id(&key,
+                                              ctx->plan->operations[shape->release_operation].id) &&
+                        text_append(&key, ":owner=") && text_append_stable_id(&key, owner_identity);
                     if (!valid ||
-                        !append_entity(
-                            ctx, roles[role],
-                            XR_SEM_ENTITY_SUBJECT_OPERATION,
-                            shape->producer_operation, 0, state_entity, &key,
-                            NULL)) {
+                        !append_entity(ctx, roles[role], XR_SEM_ENTITY_SUBJECT_OPERATION,
+                                       shape->producer_operation, 0, state_entity, &key, NULL)) {
                         text_dispose(&key);
-                        lifecycle_ok = fail(
-                            ctx, "XR_SEM_0019",
-                            "owned String coroutine lifecycle identity allocation failed");
+                        lifecycle_ok =
+                            fail(ctx, "XR_SEM_0019",
+                                 "owned String coroutine lifecycle identity allocation failed");
                         break;
                     }
                     text_dispose(&key);
@@ -4928,9 +4795,8 @@ static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
         }
     }
     if (lifecycle_ok && projection_cursor != projection.count)
-        lifecycle_ok = fail(
-            ctx, "XR_SEM_0019",
-            "owned String coroutine lifecycle state coverage is incomplete");
+        lifecycle_ok = fail(ctx, "XR_SEM_0019",
+                            "owned String coroutine lifecycle state coverage is incomplete");
 lifecycle_cleanup:
     xr_semantic_graph_dispose(&graph);
     xr_free(touched);
