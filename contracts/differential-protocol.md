@@ -31,8 +31,18 @@ the program-output comparison remain byte-native and are not normalized.
    governed case directory, and at least one runnable case in the selected
    shard. Missing identity or zero-case selection is a failed measurement, not
    a skip or a successful empty comparison.
+9. A form that refuses to build a case produces no program output, so the case
+   yields no equivalence verdict and is not a divergence. Refusals are
+   classified apart from cases where every compared form ran and their output
+   disagreed, and each classification carries its own baseline. Both ratchet
+   the same way: the list may only shrink, a case leaving one list deletes its
+   line rather than moving to the other, and a case that stops building is a
+   regression even though it states nothing about equivalence. Conflating the
+   two is what made this net unreadable while the native backend was
+   fail-closed ahead of its per-construct authorities: on the native lane 564
+   refusals hid a single real divergence, and on the embedded lane 68 hid nine.
 
 ## Digest anchors
 
-anchor-sha256: tests/diff/run_backend_diff.py 097572dd61a90cec25e5d2504bd3c52e2f4a362844375e14e1a3c3c25e3cefb5
+anchor-sha256: tests/diff/run_backend_diff.py 90d7ab23536d4e7e9794d543dccdbeec2dd6579ac96ee2896ce7932695643069
 anchor-sha256: tests/aot/TOMBSTONES.tsv 1ad7d280093c5a3aedecdf490fe88dc9c48f79215de9ea1d1c8216373cd56eb7

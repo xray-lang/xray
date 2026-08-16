@@ -1,7 +1,14 @@
 # Backend-differential ratchet baseline
 #
 # Every line is a VM/AOT divergence that fails today and is tracked, not
-# forgotten. The net still gates all 471 other cases.
+# forgotten: both backends ran the case and disagreed about the language.
+#
+# A backend that refuses to build a case produces no such disagreement and does
+# not belong here. Those ratchet separately, in known_failures_not_comparable.txt.
+# Until 2026-08-16 they were counted as divergences, and 564 of them buried the
+# single real one this net had found -- the whole net read as permanently red,
+# so nobody could use it as a gate. Keeping the two questions apart is what
+# makes a line here mean something again.
 #
 # Rules
 #   - The list may only shrink. run_backend_diff.py fails the run when a
@@ -59,3 +66,18 @@
 # iterator into two frame slots that both get released. See
 # xrt_method_return_self in src/aot/xrt_method.h.
 
+# --- Group 5: VM rejects a case whose contract says it runs ------------------
+# Filed 2026-08-16, the divergence that separating build refusals made visible.
+# The case pins a deliberate boundary: the closed-world AOT planner cannot prove
+# the target of an indirect call through an upvalue, a Map read, or a
+# loop-built array, so it rejects the program while the VM runs it. That is the
+# written contract at the top of the case.
+#
+# The VM no longer runs it. It fails in its own semantic-plan stage with
+# XR_SEM_0018 "semantic capture contract is incomplete (func=<main>)", so both
+# halves of the rejection contract now refuse, for unrelated reasons. Either
+# the capture contract has a real gap that the AOT-side rejection was hiding,
+# or the case's premise about the VM has expired. Neither is settled here, and
+# no line was deleted to reach this state -- the entry records a divergence that
+# was already there.
+tests/diff/cases/semantics/functions/unproven_callee_targets.xr

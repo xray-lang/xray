@@ -211,7 +211,15 @@ class BackendResult:
 @dataclass
 class CaseResult:
     order: int
-    status: str  # "pass" | "fail" | "skip"
+    # "pass" | "fail" | "refused" | "skip"
+    #
+    # "refused" is a backend that would not build the case at all. It is not
+    # "fail": this net asks whether two backends agree about the language, and a
+    # case only one of them can run produced no answer to disagree about.
+    # Counting a build refusal as a divergence is what let 494 unfinished
+    # authorities bury the handful of real disagreements this net exists to
+    # catch. Refusals ratchet separately, in not_comparable.txt.
+    status: str
     output: str
     name: str = ""
 
@@ -361,7 +369,10 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
             continue
         enabled.append(backend)
 
-    prefix = f"  {name:<84}"
+    # A name past the column width must still be separated from its verdict:
+    # left-justify padding adds nothing once the field overflows, which ran the
+    # longest case paths straight into the word "FAIL" with no space between.
+    prefix = f"  {name:<84} "
     if len(enabled) < 2:
         # The rejection contract is an assertion about the native backend, so it
         # is only owed by a lane that runs it. A vm/embed lane must not re-assert
@@ -409,6 +420,17 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
 
     ref = enabled[0]
     ref_result = results[ref]
+
+    # A backend that refused to build answers nothing about agreement. Report
+    # which one refused and let the coverage ratchet own it.
+    refusers = [b for b in enabled if results[b].rc == 200]
+    if refusers:
+        lines = [prefix + f"REFUSED ({', '.join(refusers)} did not build)"]
+        for backend in refusers:
+            log = decode_build_log(results[backend].buildlog)
+            lines.extend("      " + line for line in log.splitlines()[:20])
+        return CaseResult(order, "refused", "\n".join(lines), name)
+
     mismatch = ""
     other = ""
     for backend in enabled[1:]:
@@ -599,7 +621,9 @@ def main(argv: list[str]) -> int:
     if single_case:
         result = run_case(config, int(single_id_raw) if is_uint(single_id_raw) else 0, Path(single_case))
         print(result.output)
-        return 0 if result.status != "fail" else 1
+        # A refusal is not a divergence, but debugging one case still wants a
+        # nonzero exit: nothing was compared.
+        return 0 if result.status in ("pass", "skip") else 1
 
     if not (xray.is_file() and os.access(xray, os.X_OK)):
         import shutil
@@ -704,18 +728,23 @@ def main(argv: list[str]) -> int:
             results.append(value)
     reporter.finish()
 
-    passed = failed = skipped = 0
+    passed = failed = refused = skipped = 0
     for result in sorted(results, key=lambda item: item.order):
         print(console_safe_text(result.output))
         if result.status == "pass":
             passed += 1
         elif result.status == "skip":
             skipped += 1
+        elif result.status == "refused":
+            refused += 1
         else:
             failed += 1
 
     print("")
-    print(f"=== Results: {passed} passed, {failed} failed, {skipped} skipped ===")
+    print(
+        f"=== Results: {passed} passed, {failed} failed, "
+        f"{refused} refused, {skipped} skipped ==="
+    )
 
     # Ratchet. New-failure detection is always valid. The stale-entry check is
     # only valid on a full run: a case-subset run never executes most baselined
@@ -723,7 +752,11 @@ def main(argv: list[str]) -> int:
     baseline_path = Path(os.environ.get("XRAY_DIFF_BASELINE", str(SCRIPT_DIR / "known_failures.txt")))
     baseline = ratchet.read_baseline(baseline_path)
     failed_names = {r.name for r in results if r.status == "fail" and r.name}
-    skipped_names = {r.name for r in results if r.status == "skip" and r.name}
+    refused_names = {r.name for r in results if r.status == "refused" and r.name}
+    # A refusal produced no agreement verdict, so to the divergence ratchet it
+    # reads exactly like a skip: it can neither be a new divergence nor prove a
+    # baselined one is fixed.
+    skipped_names = {r.name for r in results if r.status == "skip" and r.name} | refused_names
 
     full_run = not os.environ.get("XRAY_DIFF_CASES_FILE") and shard_total <= 1
     verdict = ratchet.evaluate(
@@ -753,7 +786,44 @@ def main(argv: list[str]) -> int:
                 print(f"  {name}")
             print(f"The baseline may only shrink. Remove the lines above from {rel_path(baseline_path)}.")
             status = 1
-        print(f"Ratchet: {len(failed_names)} failing, {len(baseline)} baselined.")
+        print(f"Ratchet: {len(failed_names)} diverging, {len(baseline)} baselined.")
+
+    # Coverage ratchet. Same policy, different question: which cases can be
+    # compared at all. A case that stops building is a regression even though it
+    # states nothing about agreement, and one that starts building must leave
+    # the list so it cannot quietly stop again.
+    # Derived from the divergence baseline rather than configured separately, so
+    # every lane gets its own coverage list automatically: the embedded lane
+    # compares a different pair of backends and therefore has its own set of
+    # cases it can build at all.
+    refused_path = baseline_path.with_name(baseline_path.stem + "_not_comparable.txt")
+    refused_baseline = ratchet.read_baseline(refused_path)
+    refused_verdict = ratchet.evaluate(
+        failed=refused_names,
+        baseline=refused_baseline,
+        skipped={r.name for r in results if r.status == "skip" and r.name}
+        if full_run
+        else (refused_baseline - refused_names),
+    )
+    if refused_verdict.new_failures:
+        print("")
+        print(f"=== Cases that stopped building (not in {rel_path(refused_path)}) ===")
+        for name in refused_verdict.new_failures:
+            print(f"  {name}")
+        print("A case that built before and does not now is a backend regression.")
+        status = 1
+    if full_run:
+        if refused_verdict.now_passing:
+            print("")
+            print("=== Listed cases now build; delete these entries ===")
+            for name in refused_verdict.now_passing:
+                print(f"  {name}")
+            print(f"The list may only shrink. Remove the lines above from {rel_path(refused_path)}.")
+            status = 1
+        print(
+            f"Coverage: {len(refused_names)} not comparable, "
+            f"{len(refused_baseline)} listed."
+        )
 
     return status
 

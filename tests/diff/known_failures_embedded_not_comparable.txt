@@ -1,0 +1,88 @@
+# Cases the embedded-bytecode lane cannot compare
+#
+# A line here is a case the default `xray build` refuses to produce a binary
+# for, so the run compared nothing and reached no verdict about whether the
+# serialize/deserialize round trip preserves the program. That is a coverage
+# limit, not a divergence; known_failures_embedded.txt beside this file is for
+# cases where both forms ran and their output disagreed.
+#
+# Rules, the same ratchet as every other baseline here
+#   - The list may only shrink. A case outside it that stops building fails the
+#     run; a listed case that starts building must have its line deleted.
+#   - Do not add a line to make a change go green.
+#
+# Established 2026-08-16, when build refusals stopped being counted as
+# divergences. Before that this lane reported 77 failures with an empty
+# baseline and was permanently red, which hid the nine real disagreements it
+# had actually found.
+#
+# One case path per line. Comments and blank lines ignored.
+
+tests/diff/cases/semantics/cleanup/defer_nested_cleanup_and_local_control.xr
+tests/diff/cases/semantics/closure/shared_mutable_capture_cell.xr
+tests/diff/cases/semantics/collections/array_capacity_panic_shared_core.xr
+tests/diff/cases/semantics/collections/array_char_compact.xr
+tests/diff/cases/semantics/collections/hof_index_param.xr
+tests/diff/cases/semantics/collections/json_forin_shared_core.xr
+tests/diff/cases/semantics/collections/method_self_return_ownership.xr
+tests/diff/cases/semantics/concurrency/barrier_compose.xr
+tests/diff/cases/semantics/concurrency/condvar_compose.xr
+tests/diff/cases/semantics/concurrency/mutex_cross_coroutine.xr
+tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr
+tests/diff/cases/semantics/concurrency/once_compose.xr
+tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr
+tests/diff/cases/semantics/coro/await_value_error_keeps_channel.xr
+tests/diff/cases/semantics/coro/channel_for_in_recv_or.xr
+tests/diff/cases/semantics/coro/channel_recv_timeout_unbuffered.xr
+tests/diff/cases/semantics/coro/channel_send_timeout_partner_arrives.xr
+tests/diff/cases/semantics/coro/channel_send_timeout_unbuffered.xr
+tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr
+tests/diff/cases/semantics/coro/linked_scope_error_propagates_at_exit.xr
+tests/diff/cases/semantics/coro/poll_try_recv_safepoint.xr
+tests/diff/cases/semantics/coro/poll_try_send_safepoint.xr
+tests/diff/cases/semantics/coro/select_send_transfer.xr
+tests/diff/cases/semantics/exception/defer_nested_function_call.xr
+tests/diff/cases/semantics/exception/panic_exception_shape.xr
+tests/diff/cases/semantics/functions/bare_lambda_expression_positions.xr
+tests/diff/cases/semantics/functions/function_type_surface.xr
+tests/diff/cases/semantics/functions/higher_order_closures.xr
+tests/diff/cases/semantics/iter_order/map_set_order.xr
+tests/diff/cases/semantics/modules/xmod_class.xr
+tests/diff/cases/semantics/modules/xmod_default_arg_class.xr
+tests/diff/cases/semantics/modules/xmod_static.xr
+tests/diff/cases/semantics/oop/computed_accessor_inheritance.xr
+tests/diff/cases/semantics/oop/function_typed_field_call.xr
+tests/diff/cases/semantics/oop/generic_class_constructor_lambda_return.xr
+tests/diff/cases/semantics/oop/method_as_value.xr
+tests/diff/cases/semantics/oop/operator_overload_result_type.xr
+tests/diff/cases/semantics/oop/repr_packed_aligned_struct_aggregate_param.xr
+tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr
+tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr
+tests/diff/cases/semantics/optional_call.xr
+tests/diff/cases/semantics/ownership/converged_capability_positive.xr
+tests/diff/cases/semantics/slice/slice_value_to_string.xr
+tests/diff/cases/semantics/stdlib/datetime_core_direct.xr
+tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr
+tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr
+tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr
+tests/diff/cases/semantics/stdlib/net_copy_bidirectional_error_enum.xr
+tests/diff/cases/semantics/stdlib/parallel_api_reference.xr
+tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr
+tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr
+tests/diff/cases/semantics/stdlib/probe_module_shapes.xr
+tests/diff/cases/semantics/stdlib/sync_module_import.xr
+tests/diff/cases/semantics/stdlib/sys_process_direct.xr
+tests/diff/cases/semantics/string/char_scalar.xr
+tests/regression/11_coroutine/1106_select.xr
+tests/regression/11_coroutine/1111_comprehensive.xr
+tests/regression/11_coroutine/1113_select_send.xr
+tests/regression/11_coroutine/1118_comprehensive.xr
+tests/regression/11_coroutine/1123_channel_timeout.xr
+tests/regression/11_coroutine/1124_coro_stats.xr
+tests/regression/11_coroutine/1155_channel_close_timeout_fanout.xr
+tests/regression/11_coroutine/1156_select_close_wake.xr
+tests/regression/11_coroutine/1157_work_queue_generic_class.xr
+tests/regression/11_coroutine/1161_multiple_task_awaiters.xr
+tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr
+tests/regression/11_coroutine/1167_channel_explicit_transfer.xr
+tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr
