@@ -23,8 +23,9 @@ struct XrCoroHeap;
 struct XrVMRuntime;
 struct XrCopyContext;
 
-// Object type table capacity.
-#define XR_OBJ_TYPE_MAX 64
+/* Object type table capacity: XR_OBJ_TYPE_MAX comes from
+ * src/shared/xr_obj_header.h (via xobj_header.h above), which owns the id
+ * space it bounds. */
 
 typedef void (*XrObjDestroyFn)(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 typedef XrValue (*XrObjDeepCopyFn)(struct XrCopyContext *ctx, XrObjHeader *obj);

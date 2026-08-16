@@ -170,6 +170,22 @@ typedef enum {
                              * no-payload members, refcounted heap object when a
                              * payload-carrying construction crosses a tagged
                              * boundary. */
+
+    /* One past the last builtin. Per-type lookup tables size themselves off
+     * this rather than off whichever member happened to be last when they were
+     * written, so appending above breaks their pins instead of silently
+     * leaving the new type unmapped. Not a type id — never store it in
+     * header.type. */
+    XR_OBJ_TYPE_BUILTIN_COUNT,
 } XrObjType;
+
+/* Ceiling of the whole header.type id space. Builtins occupy
+ * [0, XR_OBJ_TYPE_BUILTIN_COUNT); extension types registered by embedders are
+ * allocated upward from there. Pinned at 64 because the per-type capability
+ * bitmaps in XrRuntimeCore are uint64_t words indexed by type id. */
+#define XR_OBJ_TYPE_MAX 64
+
+_Static_assert(XR_OBJ_TYPE_BUILTIN_COUNT <= XR_OBJ_TYPE_MAX,
+               "XrObjType builtins overflow the header.type id space");
 
 #endif  // XR_OBJ_HEADER_H

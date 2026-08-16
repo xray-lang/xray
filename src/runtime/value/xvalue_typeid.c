@@ -18,11 +18,9 @@
 #include "../class/xinstance.h"
 #include "../object/xarray.h" /* elem_tid carries a Json array's domain */
 
-#define XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(core_id, public_id, numeric_id)          \
-    _Static_assert((unsigned) (core_id) == (numeric_id),                           \
-                   "type identity core id drifted");                              \
-    _Static_assert((unsigned) (public_id) == (numeric_id),                         \
-                   "public type id drifted")
+#define XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(core_id, public_id, numeric_id)                          \
+    _Static_assert((unsigned) (core_id) == (numeric_id), "type identity core id drifted");         \
+    _Static_assert((unsigned) (public_id) == (numeric_id), "public type id drifted")
 
 XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_NULL, XR_TID_NULL, 0u);
 XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_BOOL, XR_TID_BOOL, 1u);
@@ -34,17 +32,22 @@ XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_RUNE, XR_TID_RUNE, 43u);
 #undef XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID
 
 static const XrTypeIdentityCoreKind tag_to_type_identity[8] = {
-    [XR_TAG_NULL] = XR_TYPE_IDENTITY_CORE_NULL,
-    [XR_TAG_BOOL] = XR_TYPE_IDENTITY_CORE_BOOL,
-    [XR_TAG_RUNE] = XR_TYPE_IDENTITY_CORE_RUNE,
-    [XR_TAG_I64] = XR_TYPE_IDENTITY_CORE_INT,
-    [XR_TAG_F64] = XR_TYPE_IDENTITY_CORE_FLOAT,
-    [XR_TAG_PTR] = XR_TYPE_IDENTITY_CORE_NULL,
-    [XR_TAG_AGG_REF] = XR_TYPE_IDENTITY_CORE_NULL,
-    [XR_TAG_NOTFOUND] = XR_TYPE_IDENTITY_CORE_NULL,
+    [XR_TAG_NULL] = XR_TYPE_IDENTITY_CORE_NULL,    [XR_TAG_BOOL] = XR_TYPE_IDENTITY_CORE_BOOL,
+    [XR_TAG_RUNE] = XR_TYPE_IDENTITY_CORE_RUNE,    [XR_TAG_I64] = XR_TYPE_IDENTITY_CORE_INT,
+    [XR_TAG_F64] = XR_TYPE_IDENTITY_CORE_FLOAT,    [XR_TAG_PTR] = XR_TYPE_IDENTITY_CORE_NULL,
+    [XR_TAG_AGG_REF] = XR_TYPE_IDENTITY_CORE_NULL, [XR_TAG_NOTFOUND] = XR_TYPE_IDENTITY_CORE_NULL,
 };
 
-static const XrTypeIdentityCoreKind gctype_to_type_identity[XR_TENUM_SCALAR_LAYOUT + 1] = {
+/* Designated initializers cannot be pinned complete by the array bound alone —
+ * a builtin appended to XrObjType would just widen the table with a zeroed
+ * (XR_TYPE_IDENTITY_CORE_NULL) slot and read as deliberately unmapped.
+ * Re-anchor this count by hand after adding the new type's entry below. */
+_Static_assert(XR_OBJ_TYPE_BUILTIN_COUNT == 35,
+               "XrObjType gained a member: give it a kind in gctype_to_type_identity "
+               "(XR_TYPE_IDENTITY_CORE_NULL if it is internal and never surfaces as a "
+               "value), then re-anchor this count");
+
+static const XrTypeIdentityCoreKind gctype_to_type_identity[XR_OBJ_TYPE_BUILTIN_COUNT] = {
     [XR_TNULL] = XR_TYPE_IDENTITY_CORE_NULL,
     [XR_TBOOL] = XR_TYPE_IDENTITY_CORE_BOOL,
     [XR_TINT] = XR_TYPE_IDENTITY_CORE_INT,
@@ -76,6 +79,17 @@ static const XrTypeIdentityCoreKind gctype_to_type_identity[XR_TENUM_SCALAR_LAYO
     [XR_TENUM_CTOR] = XR_TYPE_IDENTITY_CORE_FUNCTION,
     [XR_TENUM_DESCRIPTOR] = XR_TYPE_IDENTITY_CORE_INSTANCE,
     [XR_TENUM_SCALAR_LAYOUT] = XR_TYPE_IDENTITY_CORE_ENUM_VALUE,
+    /* Internal storage, like XR_TCOROPOOL above: a weak field holds the handle,
+     * but every user-visible read goes through xr_weak_field_load, which hands
+     * back the target or null. Seeing the raw handle here means someone typed
+     * the slot instead of the load, and null is the honest answer for both a
+     * cleared handle and one whose target was never asked for. */
+    [XR_TWEAK_HANDLE] = XR_TYPE_IDENTITY_CORE_NULL,
+    /* A payload-carrying enum member that crossed a tagged boundary. Same
+     * answer as the other two enum-member forms, XR_TENUM_SCALAR_LAYOUT above
+     * and XR_BK_ADT_ENUM below — the boxing is a representation choice, not a
+     * different type to the program. */
+    [XR_TENUM_BOX] = XR_TYPE_IDENTITY_CORE_ENUM_VALUE,
 };
 
 static XrTypeIdentityCoreKind xr_value_type_identity_kind(XrValue v) {
@@ -129,16 +143,14 @@ static XrTypeIdentityCoreKind xr_value_type_identity_kind(XrValue v) {
 
 XrTypeId xr_value_typeid(XrValue v) {
     return (XrTypeId) xr_type_identity_core_eval(
-        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
-        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO, XR_SEM_CONSUMER_RUNTIME,
-        xr_value_type_identity_kind(v));
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI, XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO,
+        XR_SEM_CONSUMER_RUNTIME, xr_value_type_identity_kind(v));
 }
 
 XrTypeId xr_value_typeid_vm(XrValue v) {
     return (XrTypeId) xr_type_identity_core_eval(
-        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
-        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO, XR_SEM_CONSUMER_VM,
-        xr_value_type_identity_kind(v));
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI, XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO,
+        XR_SEM_CONSUMER_VM, xr_value_type_identity_kind(v));
 }
 
 /* Membership in JSON.Value is a constant-time tag/provenance read. Objects use

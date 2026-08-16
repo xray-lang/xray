@@ -317,15 +317,20 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   TYPE_NAME_ENUM_TYPE,
                                   "enum_ctor",
                                   "enum_descriptor",
-                                  "enum_scalar_layout"};
-    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TENUM_SCALAR_LAYOUT + 1,
+                                  "enum_scalar_layout",
+                                  "weak_handle",
+                                  "enum_box"};
+    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_OBJ_TYPE_BUILTIN_COUNT,
                    "xr_obj_type_name: names array out of sync with XrObjType enum");
-    if (type < sizeof(names) / sizeof(names[0])) {
+    /* Unsigned compares: a negative id is not a builtin and must not index the
+     * array, but it must still land on the "unknown" tail rather than "ext". */
+    if ((unsigned) type < (unsigned) XR_OBJ_TYPE_BUILTIN_COUNT) {
         return names[type];
     }
-    /* Extension types (allocated dynamically per isolate).
-     * Use per-isolate lookup for named types; generic label here. */
-    if (type < 64) {
+    /* Extension types (allocated dynamically per isolate, upward from
+     * XR_OBJ_TYPE_BUILTIN_COUNT). Use per-isolate lookup for named types;
+     * generic label here. */
+    if ((unsigned) type < (unsigned) XR_OBJ_TYPE_MAX) {
         return "ext";
     }
     return TYPE_NAME_UNKNOWN;
