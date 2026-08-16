@@ -29,7 +29,6 @@ tests/diff/cases/basic/range_precedence_arithmetic.xr
 tests/diff/cases/basic/ranges.xr
 tests/diff/cases/basic/strings.xr
 tests/diff/cases/control/labeled_break_continue.xr
-tests/diff/cases/limits/json_object_literal_over_254.xr
 tests/diff/cases/limits/string_parts_over_64.xr
 tests/diff/cases/limits/struct_literal_over_32.xr
 tests/diff/cases/limits/symbol_over_254.xr
@@ -270,7 +269,6 @@ tests/diff/cases/semantics/narrowing/narrowed_types_reach_codegen.xr
 tests/diff/cases/semantics/nullable_primitive_display.xr
 tests/diff/cases/semantics/nullable_scalar_target.xr
 tests/diff/cases/semantics/object/object_destructure.xr
-tests/diff/cases/semantics/object/object_static_index_get_set.xr
 tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr
 tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr
 tests/diff/cases/semantics/objects/generic_width_direct_ordinal.xr
