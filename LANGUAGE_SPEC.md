@@ -5985,6 +5985,8 @@ These global functions and built-in constructor/static functions are usable with
 | `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
 | `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
 
+`int(s)` and `float(s)` parse the whole string, and anything the grammar does not accept throws: surrounding whitespace and a leading sign are allowed, and the rest must be decimal digits; `float` also accepts a fractional part and an exponent, and needs only one digit across the integer and fractional parts (`.5` and `1.` both parse). Trailing residue is a parse failure rather than a prefix parse, so `int("12abc")` throws instead of yielding `12`; hex and the `inf` / `nan` spellings are rejected as well, and an integer outside the `int` range is rejected rather than saturated. This is the grammar `strconv.parseInt` / `strconv.parseFloat` already enforce (§15.8).
+
 ### 13.3 Type Checking
 
 | Function / expression | Signature | Description |

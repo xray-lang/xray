@@ -32,6 +32,8 @@ order: 014
 | `chr(n)` | `(int) -> string` | Unicode 码点转单 scalar 字符串 |
 | `copy(x)` | `(value) -> fresh value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
 
+`int(s)` / `float(s)` 解析整个字符串，不被文法接受的输入一律抛异常：允许首尾空白与前导符号，其余必须是十进制数字；`float` 额外接受小数部分和指数，整数与小数部分合计有一位数字即可（`.5` 与 `1.` 都能解析）。尾部残留是解析失败而不是前缀解析，因此 `int("12abc")` 抛异常而不是得到 `12`；十六进制与 `inf` / `nan` 写法同样拒绝，整数超出 `int` 范围也是拒绝而不是饱和。这与 `strconv.parseInt` / `strconv.parseFloat` 已有的文法一致（§15.8）。
+
 ### 13.3 类型检查
 
 | 函数 / 表达式 | 签名 | 说明 |
@@ -114,6 +116,8 @@ These global functions and built-in constructor/static functions are usable with
 | `rune(n)` | `(int) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
 | `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
 | `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
+
+`int(s)` and `float(s)` parse the whole string, and anything the grammar does not accept throws: surrounding whitespace and a leading sign are allowed, and the rest must be decimal digits; `float` also accepts a fractional part and an exponent, and needs only one digit across the integer and fractional parts (`.5` and `1.` both parse). Trailing residue is a parse failure rather than a prefix parse, so `int("12abc")` throws instead of yielding `12`; hex and the `inf` / `nan` spellings are rejected as well, and an integer outside the `int` range is rejected rather than saturated. This is the grammar `strconv.parseInt` / `strconv.parseFloat` already enforce (§15.8).
 
 ### 13.3 Type Checking
 
