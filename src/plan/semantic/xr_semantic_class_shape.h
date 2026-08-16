@@ -459,6 +459,47 @@ xr_semantic_class_shared_store_shape_is_exact(const XrSemanticPlan *plan,
            stored->lifetime == 0 && stored->escape == 0 && stored->flags == 0;
 }
 
+/* The single function a direct-local call target names for `operation`, or NULL
+ * when the plan names none or more than one.
+ *
+ * The operation is given as a record rather than an index because every caller
+ * in this header holds one, and the index it needs is recovered by the same
+ * identity scan the rest of the header uses. Keeping the lookup here is what
+ * lets the judgements below ask about a call's callee without each of their
+ * four callers having to supply it, which is how the same question ends up
+ * answered differently in different layers. */
+static inline const XrSemanticFunctionRecord *
+xr_semantic_class_direct_local_callee(const XrSemanticPlan *plan,
+                                      const XrSemanticOperationRecord *operation) {
+    if (!plan || !operation)
+        return NULL;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < operation_count; i++) {
+        if (xr_semantic_plan_operation(plan, i) != operation)
+            continue;
+        if (operation_index != XR_SEMANTIC_INDEX_NONE)
+            return NULL;
+        operation_index = i;
+    }
+    if (operation_index == XR_SEMANTIC_INDEX_NONE)
+        return NULL;
+    uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(plan);
+    const XrSemanticFunctionRecord *callee = NULL;
+    for (uint32_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
+        if (!target || target->operation != operation_index ||
+            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            continue;
+        if (callee)
+            return NULL;
+        callee = xr_semantic_plan_function(plan, target->function);
+        if (!callee)
+            return NULL;
+    }
+    return callee;
+}
+
 /* The one operation in the module whose result is `value`, or NULL when the
  * module defines it zero times or more than once. */
 static inline const XrSemanticOperationRecord *
@@ -629,7 +670,40 @@ xr_semantic_class_construction_source_class(const XrSemanticPlan *plan,
     return source_class;
 }
 
-/* The declaration whose instance this shared read loads, or NONE. */
+/* The declaration whose instance a direct-local call hands back, or NONE.
+ *
+ * An instance is a reference-capable allocation, not a slot the caller writes
+ * into, so the result is a transfer: the callee hands back the allocation and
+ * the caller takes ownership of the outer tagged value, exactly as it does for
+ * an owned String or Array. The return must be fresh and whole -- an aliased or
+ * parameter-forwarded return would hand back a borrow whose extent this plan
+ * cannot state -- and the callee's declared return contract has to say the same
+ * thing the call site reads. */
+static inline uint32_t
+xr_semantic_class_instance_result_source_class(const XrSemanticPlan *plan,
+                                               const XrSemanticOperationRecord *operation) {
+    const XrSemanticFunctionRecord *callee = xr_semantic_class_direct_local_callee(plan, operation);
+    if (!plan || !operation || !callee ||
+        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        operation->result_type != callee->return_type ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
+        operation->return_complete != 1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        callee->return_parameter != -1 || callee->return_provenance != XR_SEM_RETURN_OWNED)
+        return XR_SEMANTIC_INDEX_NONE;
+    return xr_semantic_class_instance_type_source_class(
+        plan, xr_semantic_plan_type(plan, operation->result_type));
+}
+
+/* The declaration whose instance this shared read loads, or NONE.
+ *
+ * The read is proved through the one value its slot holds, and that value is an
+ * instance for either of the two reasons an instance exists at all: a
+ * construction made it, or a direct-local call handed it back. Asking only
+ * about the construction would make a read of `var k = mk()` unnameable while
+ * the same read of `var k = K()` is fine, which is a distinction about how the
+ * allocation arrived rather than about what the slot holds. */
 static inline uint32_t
 xr_semantic_class_instance_read_source_class(const XrSemanticPlan *plan,
                                              const XrSemanticOperationRecord *operation) {
@@ -638,18 +712,24 @@ xr_semantic_class_instance_read_source_class(const XrSemanticPlan *plan,
         return XR_SEMANTIC_INDEX_NONE;
     uint32_t source_class = xr_semantic_class_instance_type_source_class(
         plan, xr_semantic_plan_type(plan, operation->result_type));
-    if (source_class == XR_SEMANTIC_INDEX_NONE ||
-        xr_semantic_class_construction_source_class(
-            plan, xr_semantic_class_shared_read_definition(plan, operation)) != source_class)
+    const XrSemanticOperationRecord *definition =
+        xr_semantic_class_shared_read_definition(plan, operation);
+    uint32_t stored_class = xr_semantic_class_construction_source_class(plan, definition);
+    if (stored_class == XR_SEMANTIC_INDEX_NONE)
+        stored_class = xr_semantic_class_instance_result_source_class(plan, definition);
+    if (source_class == XR_SEMANTIC_INDEX_NONE || stored_class != source_class)
         return XR_SEMANTIC_INDEX_NONE;
     return source_class;
 }
 
-/* One judgement for the whole construction family: the borrowed reads of a
- * class object out of its module slot, the owned instance a construction
- * returns, and the borrowed reads of that instance out of its own module slot.
- * Ownership is never assumed from the shape: it is the operation's own result
- * ownership, owned for the construction and borrowed for either read. */
+/* One judgement for every value in the construction family: the borrowed reads
+ * of a class object out of its module slot, the owned instance a construction
+ * returns, the owned instance a direct-local call returns, and the borrowed
+ * reads of an instance out of its own module slot. All of them are the outer
+ * tagged value, because the IR gives an instance no machine geometry a bare
+ * object pointer could state, and that is why they are one family rather than
+ * four. Ownership is never assumed from the shape: it is the operation's own
+ * result ownership, owned for either kind of call and borrowed for a read. */
 static inline bool
 xr_semantic_class_instance_value_is_exact(const XrSemanticPlan *plan,
                                           const XrSemanticOperationRecord *operation,
@@ -657,9 +737,11 @@ xr_semantic_class_instance_value_is_exact(const XrSemanticPlan *plan,
     uint32_t source_class = XR_SEMANTIC_INDEX_NONE;
     if (!operation)
         return false;
-    if (operation->opcode == XI_CALL)
+    if (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) {
         source_class = xr_semantic_class_construction_source_class(plan, operation);
-    else if (operation->opcode == XI_GET_SHARED) {
+        if (source_class == XR_SEMANTIC_INDEX_NONE)
+            source_class = xr_semantic_class_instance_result_source_class(plan, operation);
+    } else if (operation->opcode == XI_GET_SHARED) {
         source_class = xr_semantic_class_object_read_source_class(plan, operation);
         if (source_class == XR_SEMANTIC_INDEX_NONE)
             source_class = xr_semantic_class_instance_read_source_class(plan, operation);

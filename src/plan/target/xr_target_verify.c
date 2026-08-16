@@ -772,10 +772,11 @@ static int semantic_type_expected_rep(const XrSemanticTypeRecord *type, uint16_t
 }
 
 /* Rebuilt here from the frozen semantic rows, not read back from the builder.
- * `Array<T>` is a compiler-owned container that no declaration produces, and a
- * fresh allocation has an owned tagged outer value and one dedicated scalar
- * element-storage identity. Reference-capable elements remain outside this
- * family because no element ownership/drop contract is frozen here. */
+ * `Array<T>` is a compiler-owned container that no declaration produces, so the
+ * whole shape is the outer row: one element child, no aggregate or scalar
+ * geometry, and the reference-capable ownership root a container carries. What
+ * the element is stays a separate question, asked by whichever carrier needs
+ * the answer. */
 static bool semantic_array_allocation_type_is_exact(const XrSemanticTypeRecord *type) {
     char expected_type_key[96];
     int written = snprintf(expected_type_key, sizeof(expected_type_key),
@@ -793,9 +794,10 @@ static bool semantic_array_allocation_type_is_exact(const XrSemanticTypeRecord *
 }
 
 static bool verify_array_intrinsic_storage(uint8_t semantic_storage, uint8_t *target_storage);
-static bool semantic_direct_local_array_ref_type_is_exact_verify(const XrSemanticPlan *plan,
-                                                                 uint32_t type_index,
-                                                                 uint8_t *storage);
+static bool semantic_direct_local_array_type_is_exact_verify(const XrSemanticPlan *plan,
+                                                             uint32_t type_index,
+                                                             bool indexes_elements,
+                                                             uint8_t *storage);
 static const XrSemanticFunctionRecord *
 semantic_direct_local_callee_for_operation(const XrSemanticPlan *semantic,
                                            uint32_t operation_index);
@@ -833,8 +835,8 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *semantic,
     return element && capacity_type && function &&
            (element->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 &&
            verify_array_intrinsic_storage(operation->array_element_storage, &semantic_storage) &&
-           semantic_direct_local_array_ref_type_is_exact_verify(semantic, operation->result_type,
-                                                                &type_storage) &&
+           semantic_direct_local_array_type_is_exact_verify(semantic, operation->result_type, true,
+                                                            &type_storage) &&
            semantic_storage == type_storage &&
            semantic_type_expected_rep(capacity_type, &capacity_kind) == 1 &&
            capacity_kind == XR_MACHINE_REP_I64 && capacity->role == XR_SEM_OPERAND_VALUE &&
@@ -940,19 +942,35 @@ static bool verify_array_intrinsic_storage_type(const XrSemanticTypeRecord *type
     }
 }
 
-static bool semantic_direct_local_array_ref_type_is_exact_verify(const XrSemanticPlan *semantic,
-                                                                 uint32_t type_index,
-                                                                 uint8_t *storage) {
+/* Independently rebuilt: an exact `Array<T>` at a direct-local boundary, and
+ * the element storage that boundary is entitled to know. A carrier holding the
+ * tagged outer value never reaches an element and so asks nothing of it; a
+ * carrier holding a pointer into the caller's cell may index and rewrite
+ * elements and so demands one scalar element storage. `indexes_elements` is
+ * which of the two is asking, and `storage` is the element's scalar storage
+ * when the element has one and NONE otherwise. */
+static bool semantic_direct_local_array_type_is_exact_verify(const XrSemanticPlan *semantic,
+                                                             uint32_t type_index,
+                                                             bool indexes_elements,
+                                                             uint8_t *storage) {
     uint32_t child_count = 0;
     const uint32_t *children =
         semantic ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
     const XrSemanticTypeRecord *array =
         semantic ? xr_semantic_plan_type(semantic, type_index) : NULL;
+    uint8_t element = XR_TARGET_ARRAY_STORAGE_NONE;
     if (!semantic || !children || !semantic_array_allocation_type_is_exact(array) ||
         array->child_begin >= child_count)
         return false;
-    return verify_array_intrinsic_storage_type(
-        xr_semantic_plan_type(semantic, children[array->child_begin]), storage);
+    if (!verify_array_intrinsic_storage_type(
+            xr_semantic_plan_type(semantic, children[array->child_begin]), &element)) {
+        if (indexes_elements)
+            return false;
+        element = XR_TARGET_ARRAY_STORAGE_NONE;
+    }
+    if (storage)
+        *storage = element;
+    return true;
 }
 
 /* A borrowed `Array<T>` parameter in either passing mode. Both modes borrow the
@@ -970,7 +988,8 @@ semantic_direct_local_array_parameter_is_exact_verify(const XrSemanticPlan *sema
         parameter->ownership != XI_OWN_BORROWED || parameter->transfer_mode != XR_TRANSFER_SHARE ||
         (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0)
         return false;
-    return semantic_direct_local_array_ref_type_is_exact_verify(semantic, parameter->type, storage);
+    return semantic_direct_local_array_type_is_exact_verify(semantic, parameter->type,
+                                                            mode == XR_PARAM_REF, storage);
 }
 
 static bool semantic_direct_local_array_ref_parameter_is_exact_verify(
@@ -992,7 +1011,6 @@ static bool semantic_direct_local_array_value_parameter_is_exact_verify(
  * borrow whose extent this plan cannot state. */
 static bool semantic_direct_local_array_result_is_exact_verify(const XrSemanticPlan *semantic,
                                                                uint32_t operation_index) {
-    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
     const XrSemanticOperationRecord *operation =
         operation_index == XR_SEMANTIC_INDEX_NONE
             ? NULL
@@ -1002,9 +1020,8 @@ static bool semantic_direct_local_array_result_is_exact_verify(const XrSemanticP
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
         operation->return_complete != 1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
-        !semantic_direct_local_array_ref_type_is_exact_verify(semantic, operation->result_type,
-                                                              &storage) ||
-        storage == XR_TARGET_ARRAY_STORAGE_NONE)
+        !semantic_direct_local_array_type_is_exact_verify(semantic, operation->result_type, false,
+                                                          NULL))
         return false;
     const XrSemanticFunctionRecord *callee =
         semantic_direct_local_callee_for_operation(semantic, operation_index);
@@ -1064,17 +1081,10 @@ static bool semantic_array_shared_read_is_exact_verify(const XrSemanticPlan *sem
                                                        uint32_t semantic_value,
                                                        uint32_t semantic_type,
                                                        uint32_t semantic_function) {
-    uint32_t child_count = 0;
-    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
-    const XrSemanticTypeRecord *array = xr_semantic_plan_type(semantic, semantic_type);
-    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    return semantic && children && semantic_array_allocation_type_is_exact(array) &&
-           array->child_begin < child_count &&
+    return semantic_direct_local_array_type_is_exact_verify(semantic, semantic_type, false, NULL) &&
            xr_semantic_shared_read_operation_is_exact(operation) &&
            operation->result_value == semantic_value && operation->result_type == semantic_type &&
-           operation->function == semantic_function &&
-           verify_array_intrinsic_storage_type(
-               xr_semantic_plan_type(semantic, children[array->child_begin]), &storage);
+           operation->function == semantic_function;
 }
 
 /* The borrowed read of a String held in a shared cell, re-derived through the
@@ -3945,8 +3955,8 @@ static bool verify_layouts(const XrTargetPlan *plan, const uint8_t *exact_dynami
         const XrSemanticTypeRecord *semantic_type =
             xr_semantic_plan_type(plan->semantic_plan, layout->semantic_type);
         uint8_t expected_array_storage = XR_TARGET_ARRAY_STORAGE_NONE;
-        bool exact_array_layout = semantic_direct_local_array_ref_type_is_exact_verify(
-            plan->semantic_plan, layout->semantic_type, &expected_array_storage);
+        bool exact_array_layout = semantic_direct_local_array_type_is_exact_verify(
+            plan->semantic_plan, layout->semantic_type, false, &expected_array_storage);
         if (layout->array_element_storage !=
             (exact_array_layout ? expected_array_storage : XR_TARGET_ARRAY_STORAGE_NONE))
             return report(error, error_size, "XR_TARGET_1002",
@@ -5383,6 +5393,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                                                  semantic, call->semantic_operation);
         bool direct_adt_enum_result = direct && semantic_direct_local_adt_enum_result_is_exact(
                                                     semantic, call->semantic_operation);
+        bool direct_class_instance_result =
+            direct && xr_semantic_class_instance_result_source_class(semantic, operation) !=
+                          XR_SEMANTIC_INDEX_NONE;
         bool direct_aggregate_result =
             direct &&
             xr_semantic_direct_local_aggregate_result_is_exact(
@@ -5390,8 +5403,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 semantic_direct_local_callee_for_operation(semantic, call->semantic_operation));
         if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string ||
             direct_string_result || direct_array_result || direct_adt_enum_result ||
-            json_namespace_value || class_construction || adt_enum_constructor || array_intrinsic ||
-            array_fill) {
+            direct_class_instance_result || json_namespace_value || class_construction ||
+            adt_enum_constructor || array_intrinsic || array_fill) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -5460,10 +5473,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
              * re-assert it, so the two demands must stay in step. */
             call->result_ownership ==
                 (stringbuilder_constructor || direct_string_result || direct_array_result ||
-                         direct_adt_enum_result || stringbuilder_append_rune || string_runes ||
-                         string_slice_range || stringbuilder_to_string ||
-                         stringbuilder_append_string || json_namespace_value ||
-                         class_construction || adt_enum_constructor || array_intrinsic ||
+                         direct_adt_enum_result || direct_class_instance_result ||
+                         stringbuilder_append_rune || string_runes || string_slice_range ||
+                         stringbuilder_to_string || stringbuilder_append_string ||
+                         json_namespace_value || class_construction || adt_enum_constructor ||
+                         array_intrinsic ||
                          (array_hof && array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE)
                      ? XR_TARGET_CALL_RETURN_OWNED
                  : string_byte_slice_view ? XR_TARGET_CALL_BORROW

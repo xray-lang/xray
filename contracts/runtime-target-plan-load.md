@@ -140,14 +140,21 @@ roots, or general module activation.
    grants no class object body, field table, method table, allocation
    execution, root map, root slot, cleanup, construction, or member lookup
    authority.
-   Source-class-instance storage covers the three values a construction
-   produces: the borrowed read of the class object the call dispatches on, the
-   owned instance the call returns, and the borrowed reads of that instance out
-   of its own module slot. All three are outer tagged dynamic values for the
-   same reason the class object is, and ownership is never a property of the
-   family: it is the operation's own result ownership, owned for the
-   construction and borrowed for either read, so a read can never be frozen as
-   an owning root. The construction itself carries a call dispatch kind driven
+   Source-class-instance storage covers the four values an instance can be:
+   the borrowed read of the class object a construction dispatches on, the
+   owned instance a construction returns, the owned instance a direct-local
+   call returns, and the borrowed reads of an instance out of its own module
+   slot. All four are outer tagged dynamic values for the same reason the class
+   object is, and ownership is never a property of the family: it is the
+   operation's own result ownership, owned for either kind of call and borrowed
+   for either read, so a read can never be frozen as an owning root. A returned
+   instance is a transfer of the outer tagged value exactly as an owned String
+   or Array result is: the return must be fresh and whole rather than aliased
+   or forwarded through a return parameter, and the callee's declared return
+   contract must state what the call site reads. A read is proved through the
+   one value its slot holds, and that value is an instance for either reason an
+   instance exists, so how the allocation arrived never decides whether the
+   read can be named. The construction itself carries a call dispatch kind driven
    by the SemanticPlan call target of the same name; it names no callee
    function and never makes its caller suspendable, because the shared
    judgement admits only a call whose effects are the generated call effects.
@@ -335,8 +342,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h 311d38da384e02be242e4025a7d14
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
 anchor-sha256: src/plan/target/xr_target_plan.h 23fbf75d5727adf935df85483c2665689c910f1b04da9920f6ad92b5bb6e17e1
 anchor-sha256: src/plan/target/xr_target_plan.c c43c90f7f4b59ad2864b9666863288f030979dd085075dc5c18f98f361334f51
-anchor-sha256: src/plan/target/xr_target_builder.c 1ca3cf14c93f1144d659d4e51172ce2e1aafd9fb949f1c01a79735bd70f0dded
-anchor-sha256: src/plan/target/xr_target_verify.c 2713c0d4c6e8e6f2fc6ead38ddbcb708b48229951a79b89b0240890be5afb311
+anchor-sha256: src/plan/target/xr_target_builder.c 91a706376ab5fa3908fcc2fb0a269709d68d9014c1edc55a26111ab14d59165c
+anchor-sha256: src/plan/target/xr_target_verify.c 46104bf6eb809544e5c8e71be68762d9655faf2f72d50fad5b58858f39767d16
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317

@@ -2016,28 +2016,53 @@ static bool target_array_storage_from_type(const XrSemanticTypeRecord *type, uin
     }
 }
 
-/* The direct-local ref boundary admits only an exact Array<T> whose element
- * has one scalar storage identity.  Reference-capable elements remain outside
- * this family because a ref callee can mutate them and would need a separate
- * element ownership/drop contract. */
-static bool semantic_direct_local_array_ref_type_is_exact(const XrSemanticPlan *plan,
-                                                          uint32_t type_index, uint8_t *storage) {
+/* An exact `Array<T>` at a direct-local boundary, and the element storage that
+ * boundary is entitled to know.
+ *
+ * Two kinds of carrier cross such a boundary and they ask different questions
+ * of the element. A carrier that holds the tagged outer value -- a by-value
+ * parameter, an owned result, a shared read -- copies one tagged value and
+ * shares one allocation; it never reaches an element, so what the elements are
+ * is not its question and `Array<String>` is as carryable as `Array<i64>`. A
+ * carrier that hands the callee a pointer into the caller's cell does reach
+ * them: the callee may index and rewrite elements, and that needs one scalar
+ * element storage identity, because a reference-capable element would need an
+ * element ownership and drop contract this plan does not state.
+ *
+ * `indexes_elements` is which of the two is asking. Writing it as one judgement
+ * with that as its parameter is what keeps the wide carriers from inheriting
+ * the narrow carrier's requirement, which is what they did while this was a
+ * single "ref type" question every carrier had to answer.
+ *
+ * `storage` is the element's scalar storage when the element has one and NONE
+ * otherwise -- exactly the value the layout row records for the type. */
+static bool semantic_direct_local_array_type_is_exact(const XrSemanticPlan *plan,
+                                                      uint32_t type_index, bool indexes_elements,
+                                                      uint8_t *storage) {
     uint32_t child_count = 0;
     const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
     const XrSemanticTypeRecord *array = xr_semantic_plan_type(plan, type_index);
+    uint8_t element = XR_TARGET_ARRAY_STORAGE_NONE;
     if (!children || !semantic_array_member_receiver_type_is_exact(array) ||
         array->child_begin >= child_count)
         return false;
-    return target_array_storage_from_type(xr_semantic_plan_type(plan, children[array->child_begin]),
-                                          storage);
+    if (!target_array_storage_from_type(xr_semantic_plan_type(plan, children[array->child_begin]),
+                                        &element)) {
+        if (indexes_elements)
+            return false;
+        element = XR_TARGET_ARRAY_STORAGE_NONE;
+    }
+    if (storage)
+        *storage = element;
+    return true;
 }
 
 static bool append_array_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic_type,
                                        uint8_t storage, const XrTargetMachineRepRecord *memory_rep,
                                        char *error, size_t error_size) {
     uint8_t expected = XR_TARGET_ARRAY_STORAGE_NONE;
-    if (!semantic_direct_local_array_ref_type_is_exact(builder ? builder->semantic_plan : NULL,
-                                                       semantic_type, &expected) ||
+    if (!semantic_direct_local_array_type_is_exact(builder ? builder->semantic_plan : NULL,
+                                                   semantic_type, false, &expected) ||
         expected != storage ||
         !append_layout_intent(builder, semantic_type, XR_TARGET_LAYOUT_DYNAMIC, 0, memory_rep,
                               error, error_size))
@@ -2066,7 +2091,11 @@ static bool append_array_layout_intent(XrTargetPlanBuilder *builder, uint32_t se
  * pointer to that cell; a by-value parameter arrives as the tagged value
  * itself. Everything else the two demand of the declaration is identical, which
  * is why they are one judgement with the mode as its parameter rather than two
- * that could drift apart. */
+ * that could drift apart.
+ *
+ * The mode is also what decides how much of the element the boundary has to
+ * know: only the ref parameter reaches elements, so only it demands one scalar
+ * element storage. */
 static bool
 semantic_direct_local_array_parameter_is_exact(const XrSemanticPlan *plan,
                                                const XrSemanticParameterRecord *parameter,
@@ -2076,7 +2105,8 @@ semantic_direct_local_array_parameter_is_exact(const XrSemanticPlan *plan,
            parameter->ownership == XI_OWN_BORROWED &&
            parameter->transfer_mode == XR_TRANSFER_SHARE &&
            (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 && parameter->reserved == 0 &&
-           semantic_direct_local_array_ref_type_is_exact(plan, parameter->type, storage);
+           semantic_direct_local_array_type_is_exact(plan, parameter->type, mode == XR_PARAM_REF,
+                                                     storage);
 }
 
 static bool semantic_direct_local_array_ref_parameter_is_exact(
@@ -2100,7 +2130,6 @@ static bool semantic_direct_local_array_value_parameter_is_exact(
 static bool semantic_direct_local_array_result_is_exact(const XrSemanticPlan *plan,
                                                         const XrSemanticOperationRecord *operation,
                                                         const XrSemanticFunctionRecord *callee) {
-    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
     return plan && operation && callee &&
            (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
            operation->result_type == callee->return_type &&
@@ -2108,8 +2137,7 @@ static bool semantic_direct_local_array_result_is_exact(const XrSemanticPlan *pl
            operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
            operation->return_complete == 1 && operation->return_provenance == XR_SEM_RETURN_OWNED &&
            callee->return_parameter == -1 && callee->return_provenance == XR_SEM_RETURN_OWNED &&
-           semantic_direct_local_array_ref_type_is_exact(plan, operation->result_type, &storage) &&
-           storage != XR_TARGET_ARRAY_STORAGE_NONE;
+           semantic_direct_local_array_type_is_exact(plan, operation->result_type, false, NULL);
 }
 
 static bool
@@ -2171,9 +2199,7 @@ static bool semantic_array_shared_read_is_exact(const XrSemanticPlan *plan, uint
                                                 uint32_t semantic_function) {
     const XrSemanticOperationRecord *definition =
         xr_semantic_unique_value_definition(plan, semantic_value);
-    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    return semantic_direct_local_array_ref_type_is_exact(plan, semantic_type, &storage) &&
-           storage != XR_TARGET_ARRAY_STORAGE_NONE &&
+    return semantic_direct_local_array_type_is_exact(plan, semantic_type, false, NULL) &&
            xr_semantic_shared_read_operation_is_exact(definition) &&
            definition->result_type == semantic_type && definition->function == semantic_function;
 }
@@ -4695,10 +4721,13 @@ static bool note_direct_local_array_boundary_storage(
     uint8_t carrier, XrStableId source_identity, char *error, size_t error_size) {
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
     bool parameter = role == XR_TARGET_SLOT_PARAMETER;
-    if (!semantic_direct_local_array_ref_type_is_exact(builder->semantic_plan, semantic_type,
-                                                       &storage) ||
-        storage == XR_TARGET_ARRAY_STORAGE_NONE || semantic_value >= analysis->total_values ||
-        semantic_type >= analysis->type_count ||
+    /* Only the ref carrier reaches elements, so only it has to know what they
+     * are; the two value carriers state the element storage the layout records
+     * and are content when the type has none. */
+    if (!semantic_direct_local_array_type_is_exact(builder->semantic_plan, semantic_type,
+                                                   carrier == XR_TARGET_ARRAY_CARRIER_REF_PLACE,
+                                                   &storage) ||
+        semantic_value >= analysis->total_values || semantic_type >= analysis->type_count ||
         semantic_function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
         (!parameter &&
          semantic_operation >= xr_semantic_plan_operation_count(builder->semantic_plan)) ||
@@ -8446,6 +8475,8 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
          !semantic_direct_local_string_result_is_exact(plan, operation, callee) &&
          !xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee) &&
          !semantic_direct_local_array_result_is_exact(plan, operation, callee) &&
+         xr_semantic_class_instance_result_source_class(plan, operation) ==
+             XR_SEMANTIC_INDEX_NONE &&
          !xr_semantic_direct_local_aggregate_result_is_exact(plan, operation, callee))) {
         if (target_trace_enabled()) {
             fprintf(stderr,
@@ -8476,6 +8507,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             target_trace_judgement(
                 "result is an exact Array",
                 semantic_direct_local_array_result_is_exact(plan, operation, callee));
+            target_trace_judgement("result is an exact class instance",
+                                   xr_semantic_class_instance_result_source_class(
+                                       plan, operation) != XR_SEMANTIC_INDEX_NONE);
             target_trace_judgement(
                 "result is an exact aggregate",
                 xr_semantic_direct_local_aggregate_result_is_exact(plan, operation, callee));
@@ -8507,7 +8541,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
         .result_ownership =
             (semantic_direct_local_string_result_is_exact(plan, operation, callee) ||
              xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee) ||
-             semantic_direct_local_array_result_is_exact(plan, operation, callee))
+             semantic_direct_local_array_result_is_exact(plan, operation, callee) ||
+             xr_semantic_class_instance_result_source_class(plan, operation) !=
+                 XR_SEMANTIC_INDEX_NONE)
                 ? XR_TARGET_CALL_RETURN_OWNED
                 : XR_TARGET_CALL_NONE,
         .calling_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,

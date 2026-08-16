@@ -288,9 +288,20 @@ transfer, so it is bound to an owned dynamic temporary in the caller's own
 frame, exactly as an owned String result is. SemanticPlan, TargetPlan, and
 representation refinement each rebuild the parameter mode, ownership, transfer,
 and element storage independently rather than reading one another's conclusion.
-Neither boundary authorizes an owned or moved Array parameter, a
-ref result, a SOURCE_EXPORT parameter or result, a non-scalar element type, or
-another container.
+
+What the element is stays outside both of these two boundaries. Neither ever
+reaches an element: each copies one tagged value and shares one allocation, and
+the element storage it states is whatever the type's own layout row records,
+which is none when the element is reference capable. `Array<String>` therefore
+crosses them exactly as `Array<i64>` does. The scalar element type remains a
+requirement of the ref parameter alone, which hands the callee a pointer into
+the caller's cell and may index and rewrite through it; a reference-capable
+element there would need an element ownership and drop contract no row states.
+The three carriers ask one shared judgement that takes which of them is asking
+as its parameter, so the wide two cannot silently inherit the narrow one's
+requirement again. None of the three authorizes an owned or moved Array
+parameter, a ref result, a SOURCE_EXPORT parameter or result, or another
+container.
 
 The same generation binds two exact `string` bindings, one on each side of a
 direct-local call. A String is immutable and shared and carries nothing but the
@@ -611,7 +622,7 @@ anchor-sha256: src/aot/xaot_prepare.c 77d5bce886e498b736557e06ef6e9916e54b27d42c
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c bc1520ec2d2e537d7d44139daedbbdee07a90a7e591550ad272f910aef94170f
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c b471c5d51ee927586460ae87cfe35376d9b66ac6ee685dcd63f468e4889e18e0
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 092c181dd8674dc8ca75f8328f4e457d1c20a1fb2aa713ad685c428838e49e2d
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
