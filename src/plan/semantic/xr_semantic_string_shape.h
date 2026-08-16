@@ -32,8 +32,8 @@
  * aggregate geometry, no nullability, no borrow view and no value spelling.
  * These are the only String rows whose storage is the plain tagged value. */
 static inline bool xr_semantic_owned_string_type_is_exact(const XrSemanticTypeRecord *type) {
-    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
-                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT;
+    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
+                        XR_SEM_TYPE_AGGREGATE_EXACT;
     uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
     return type && type->kind == XR_KIND_STRING && type->builtin_type == XR_TID_NULL &&
            type->child_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
@@ -45,18 +45,15 @@ static inline bool xr_semantic_owned_string_type_is_exact(const XrSemanticTypeRe
 /* One exact native unsigned display source. It owns no reference, aggregate,
  * nullable encoding, nominal identity, or child geometry; those cases require
  * different display recipes and remain unclaimed. */
-static inline bool xr_semantic_string_concat_direct_u64_type_is_exact(
-    const XrSemanticTypeRecord *type) {
+static inline bool
+xr_semantic_string_concat_direct_u64_type_is_exact(const XrSemanticTypeRecord *type) {
     XrStableId zero = {{0}};
-    return type && type->kind == XR_KIND_INT &&
-           type->builtin_type == XR_TID_NULL &&
-           type->scalar_rep == XR_NATIVE_U64 && type->flags == 0 &&
-           type->child_count == 0 && type->aggregate_extent == 0 &&
-           type->aggregate_align == 0 &&
+    return type && type->kind == XR_KIND_INT && type->builtin_type == XR_TID_NULL &&
+           type->scalar_rep == XR_NATIVE_U64 && type->flags == 0 && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->source_class == XR_SEMANTIC_INDEX_NONE &&
-           xr_stable_id_equal(type->source_class_identity, zero) &&
-           !type->source_enum_key && type->enum_layout_id == 0 &&
-           type->enum_member_count == 0 && type->enum_flags == 0 &&
+           xr_stable_id_equal(type->source_class_identity, zero) && !type->source_enum_key &&
+           type->enum_layout_id == 0 && type->enum_member_count == 0 && type->enum_flags == 0 &&
            type->reserved_enum == 0;
 }
 
@@ -65,19 +62,17 @@ static inline bool xr_semantic_string_concat_direct_u64_type_is_exact(
  * owned tagged carrier. An exact u64 operand is consumed as a logical display
  * value whose native source remains independently frozen by TargetPlan and the
  * C-emission recipe. Every other display shape stays unclaimed. */
-static inline bool xr_semantic_string_concat_is_exact(
-    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+static inline bool xr_semantic_string_concat_is_exact(const XrSemanticPlan *plan,
+                                                      const XrSemanticOperationRecord *operation) {
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
     const XrSemanticFunctionRecord *function =
         operation ? xr_semantic_plan_function(plan, operation->function) : NULL;
-    if (!plan || !operation || !operands || !function ||
-        operation->opcode != XI_STR_CONCAT || operation->operand_count < 2u ||
-        operation->operand_begin > operand_count ||
+    if (!plan || !operation || !operands || !function || operation->opcode != XI_STR_CONCAT ||
+        operation->operand_count < 2u || operation->operand_begin > operand_count ||
         operation->operand_count > operand_count - operation->operand_begin ||
-        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
-        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
-        operation->auxiliary_kind != 0 ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 || operation->auxiliary_kind != 0 ||
         operation->constant != XR_SEMANTIC_INDEX_NONE ||
         operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
         operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
@@ -89,10 +84,9 @@ static inline bool xr_semantic_string_concat_is_exact(
         operation->result_ownership != xi_generated_op_result_ownership(XI_STR_CONCAT) ||
         operation->transfer_mode != 0 || operation->parameter_mode != 0 ||
         operation->parameter_ownership != 0 || operation->result_alias_operand != -1 ||
-        operation->return_provenance != XR_SEM_RETURN_OWNED ||
-        operation->return_parameter != -1 || operation->return_complete != 1 ||
-        operation->view_complete != 0 || operation->view_source_operand != -1 ||
-        operation->view_source_parameter != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED || operation->return_parameter != -1 ||
+        operation->return_complete != 1 || operation->view_complete != 0 ||
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
         !xr_semantic_allocation_identity_is_canonical(operation) ||
         !xr_semantic_owned_string_type_is_exact(
             xr_semantic_plan_type(plan, operation->result_type)) ||
@@ -101,8 +95,7 @@ static inline bool xr_semantic_string_concat_is_exact(
         return false;
     for (uint16_t i = 0; i < operation->operand_count; i++) {
         const XrSemanticOperandRecord *piece = &operands[operation->operand_begin + i];
-        const XrSemanticTypeRecord *piece_type =
-            xr_semantic_plan_type(plan, piece->type);
+        const XrSemanticTypeRecord *piece_type = xr_semantic_plan_type(plan, piece->type);
         if (piece->role != XR_SEM_OPERAND_VALUE || piece->parameter != -1 ||
             piece->transfer_mode != 0 || piece->ownership_action != XR_SEM_OPERAND_CONSUME ||
             piece->parameter_mode != 0 || piece->access != 0 || piece->origin != 0 ||
