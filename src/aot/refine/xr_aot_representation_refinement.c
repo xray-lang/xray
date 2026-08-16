@@ -17,6 +17,7 @@
 #include "../../ir/xi_opt.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
+#include "../../ir/xi_op_name.h"
 #include "../../ir/xi_module.h"
 #include "../../ir/xi_value_query.h"
 #include "../../plan/semantic/xr_semantic_graph.h"
@@ -293,6 +294,128 @@ typedef struct VerifyAuthority {
     uint64_t bytes;
     uint64_t work;
 } VerifyAuthority;
+
+/* Setting XRAY_AOT_REFINE_TRACE prints, on stderr, why this pass refused a
+ * program. Unset, the variable is never read and nothing is printed: it is
+ * consulted only on the path that is already failing the build, so a passing
+ * compile pays nothing for it.
+ *
+ * It exists because XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE, on its
+ * own, cannot be read. `value=N operation=M` names two independent things: N is
+ * the value being consumed and M is the operation consuming it. The operation
+ * that DEFINED N is a third index, and it is not M -- reading M as "where N
+ * comes from" has misdirected more than one investigation. The trace prints all
+ * three under their own names, plus the storage each side asked for, so the
+ * refusal can be placed without adding temporary instrumentation. */
+static bool rep_trace_enabled(void) {
+    return getenv("XRAY_AOT_REFINE_TRACE") != NULL;
+}
+
+/* XR_REP_COUNT stands for "this side never named a storage". */
+static const char *rep_trace_storage_name(XrRep storage) {
+    switch (storage) {
+        case XR_REP_I64:
+            return "i64";
+        case XR_REP_F64:
+            return "f64";
+        case XR_REP_PTR:
+            return "ptr";
+        case XR_REP_TAGGED:
+            return "tagged";
+        case XR_REP_VOID:
+            return "void";
+        case XR_REP_STR:
+            return "str";
+        case XR_REP_RAWPTR:
+            return "rawptr";
+        default:
+            return "unnamed";
+    }
+}
+
+/* Where a value came from: the parameter that bound it on entry, or the
+ * operation that produced it. This is the index a reader of the diagnostic
+ * tends to assume `operation=` already holds. */
+static void rep_trace_origin(const VerifyAuthority *ctx, uint32_t value) {
+    if (!ctx || value == XR_SEMANTIC_INDEX_NONE || value >= ctx->value_count) {
+        fprintf(stderr, "[aot-refine]     defined by      = <value out of range>\n");
+        return;
+    }
+    uint32_t parameter_index =
+        ctx->parameter_by_value ? ctx->parameter_by_value[value] : XR_SEMANTIC_INDEX_NONE;
+    if (parameter_index != XR_SEMANTIC_INDEX_NONE) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(ctx->semantic, parameter_index);
+        fprintf(stderr,
+                "[aot-refine]     defined by      = parameter %u (ordinal %u) of function %u, "
+                "semantic type %u\n",
+                parameter_index, parameter ? (unsigned) parameter->ordinal : 0u,
+                parameter ? parameter->function : 0u, parameter ? parameter->type : 0u);
+        return;
+    }
+    uint32_t operation_index =
+        ctx->operation_by_value ? ctx->operation_by_value[value] : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation) {
+        fprintf(stderr,
+                "[aot-refine]     defined by      = nothing this pass indexed (no parameter, no "
+                "operation)\n");
+        return;
+    }
+    fprintf(stderr,
+            "[aot-refine]     defined by      = operation %u %s in function %u, block %u, "
+            "semantic type %u\n",
+            operation_index, xi_op_name(operation->opcode), operation->function, operation->block,
+            operation->result_type);
+    if (operation->source_file)
+        fprintf(stderr, "[aot-refine]                       %s:%u\n", operation->source_file,
+                operation->source_line);
+}
+
+/* One refusal, printed whole. `stage` names the judgement that said no,
+ * `reason` says what it wanted. Either storage may be XR_REP_COUNT when that
+ * side of the question never got as far as naming one. */
+static void rep_trace_refusal(const VerifyAuthority *ctx, const char *stage, const char *reason,
+                              uint32_t source_value, uint32_t use_operation, uint16_t use_operand,
+                              XrRep definition_storage, XrRep use_storage) {
+    if (!rep_trace_enabled())
+        return;
+    fprintf(stderr, "[aot-refine] refused in %s: %s\n", stage, reason);
+    fprintf(stderr, "[aot-refine]   value=%u          the value being consumed (the source)\n",
+            source_value);
+    rep_trace_origin(ctx, source_value);
+    fprintf(stderr, "[aot-refine]     definition rep  = %s\n",
+            rep_trace_storage_name(definition_storage));
+    if (use_operation == XR_SEMANTIC_INDEX_NONE) {
+        fprintf(stderr,
+                "[aot-refine]   operation=<none>  the use is a block return, not an operand\n");
+    } else {
+        const XrSemanticOperationRecord *operation =
+            ctx ? xr_semantic_plan_operation(ctx->semantic, use_operation) : NULL;
+        fprintf(stderr,
+                "[aot-refine]   operation=%u      the USE SITE consuming that value -- not where "
+                "it is defined\n",
+                use_operation);
+        if (operation) {
+            fprintf(stderr,
+                    "[aot-refine]     opcode          = %s, operand %u, function %u, block %u\n",
+                    xi_op_name(operation->opcode), (unsigned) use_operand, operation->function,
+                    operation->block);
+            if (operation->source_file)
+                fprintf(stderr, "[aot-refine]                       %s:%u\n",
+                        operation->source_file, operation->source_line);
+        }
+    }
+    fprintf(stderr, "[aot-refine]     required rep    = %s\n", rep_trace_storage_name(use_storage));
+    fprintf(stderr,
+            "[aot-refine]   read it as: operation=%u consumes value=%u; the operation that "
+            "defines value=%u is the one printed under \"defined by\" above, and the two indexes "
+            "are unrelated.\n",
+            use_operation, source_value, source_value);
+}
 
 static bool oracle_dynamic_array_intrinsic_storage(const VerifyAuthority *ctx,
                                                    uint32_t semantic_value, XrRep *out_storage,
@@ -7765,6 +7888,11 @@ static bool authority_add_obligation(CollectContext *ctx, const VerifyAuthority 
         ((input_storage != XR_REP_TAGGED) && input_storage != native_storage) ||
         ((output_storage != XR_REP_TAGGED) && output_storage != native_storage) ||
         (input_storage != XR_REP_TAGGED && output_storage != XR_REP_TAGGED)) {
+        rep_trace_refusal(oracle, "the adapter contract",
+                          "definition and use disagree, and the pair is not one the box/unbox "
+                          "adapter can bridge: exactly one side must be tagged and the other must "
+                          "be the value's own native storage",
+                          source_value, use_operation, use_operand, input_storage, output_storage);
         set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE, ctx->record_count,
                  source_value, use_operation);
         return false;
@@ -7785,6 +7913,13 @@ static bool authority_add_obligation(CollectContext *ctx, const VerifyAuthority 
     uint32_t layout =
         type_index < ctx->type_count ? ctx->layout_by_type[type_index] : XR_SEMANTIC_INDEX_NONE;
     if ((!parameter && !operation) || layout == XR_SEMANTIC_INDEX_NONE) {
+        rep_trace_refusal(oracle, "the adapter layout lookup",
+                          (!parameter && !operation)
+                              ? "the value has neither a parameter nor an operation to take a "
+                                "type from"
+                              : "the TargetPlan binds no layout for the value's semantic type, so "
+                                "no adapter can be built for it",
+                          source_value, use_operation, use_operand, input_storage, output_storage);
         set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE, ctx->record_count,
                  source_value, use_operation);
         return false;
@@ -7806,9 +7941,17 @@ static bool authority_add_obligation(CollectContext *ctx, const VerifyAuthority 
     if (!xr_aot_refinement_try_representation_adapter(
             ctx->builder, &ctx->protocol, ctx->target_plan, &request, &decision, ctx->diag) ||
         decision != XR_AOT_REFINEMENT_APPLIED) {
-        if (decision != XR_AOT_REFINEMENT_APPLIED)
+        if (decision != XR_AOT_REFINEMENT_APPLIED) {
+            rep_trace_refusal(oracle, "the representation adapter",
+                              box ? "the protocol has no BOX adapter for this machine rep and "
+                                    "layout"
+                                  : "the protocol has no UNBOX adapter for this machine rep and "
+                                    "layout",
+                              source_value, use_operation, use_operand, input_storage,
+                              output_storage);
             set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                      ctx->record_count, source_value, use_operation);
+        }
         return false;
     }
     ctx->record_count++;
@@ -7984,6 +8127,15 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
             bool has_use =
                 has_definition && oracle_use_storage(oracle, i, a, source_value, &output_storage);
             if (!has_definition || !has_use) {
+                rep_trace_refusal(
+                    oracle, has_definition ? "the use-site oracle" : "the definition oracle",
+                    has_definition
+                        ? "the use site admits no storage for this operand: its opcode branch in "
+                          "oracle_use_storage names no family that covers the value"
+                        : "no definition oracle names this value, so the pass never learns what "
+                          "storage it is already in",
+                    source_value, i, a, has_definition ? input_storage : XR_REP_COUNT,
+                    XR_REP_COUNT);
                 set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                          ctx->record_count, source_value, i);
                 return false;
@@ -8015,6 +8167,10 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
         uint16_t machine_kind = XR_MACHINE_REP_COUNT;
         if (!oracle_definition_storage(oracle, block->control_value, &input_storage,
                                        &machine_kind)) {
+            rep_trace_refusal(oracle, "the definition oracle",
+                              "no definition oracle names the value this block returns",
+                              block->control_value, XR_SEMANTIC_INDEX_NONE, 0, XR_REP_COUNT,
+                              XR_REP_COUNT);
             set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                      ctx->record_count, block->control_value, XR_SEMANTIC_INDEX_NONE);
             return false;
@@ -8024,6 +8180,11 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
          * this path. */
         if (!ctx->policy->force_return_tagged &&
             !oracle_return_storage(oracle, block->control_value, &output_storage, &machine_kind)) {
+            rep_trace_refusal(oracle, "the return-storage oracle",
+                              "oracle_return_storage names no carrier a return may hand this "
+                              "value back in",
+                              block->control_value, XR_SEMANTIC_INDEX_NONE, 0, input_storage,
+                              XR_REP_COUNT);
             set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                      ctx->record_count, block->control_value, XR_SEMANTIC_INDEX_NONE);
             return false;
@@ -8807,6 +8968,9 @@ static bool verify_exact_obligation(VerifyAuthority *ctx, uint32_t source_value,
     XrRep native_storage = XR_REP_TAGGED;
     uint16_t machine_kind = XR_MACHINE_REP_COUNT;
     if (!oracle_definition_storage(ctx, source_value, &input_storage, &machine_kind)) {
+        rep_trace_refusal(ctx, "the definition oracle, replayed by the verifier",
+                          "no definition oracle names this value", source_value, use_operation,
+                          use_operand, XR_REP_COUNT, output_storage);
         set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                  (uint32_t) ctx->work, source_value, use_operation);
         return false;
@@ -8816,12 +8980,20 @@ static bool verify_exact_obligation(VerifyAuthority *ctx, uint32_t source_value,
     if (input_storage == output_storage)
         return true;
     if (!oracle_machine_storage(ctx, source_value, &native_storage, &machine_kind)) {
+        rep_trace_refusal(ctx, "the verifier's machine-storage lookup",
+                          "definition and use disagree but the value has no native storage row to "
+                          "adapt through",
+                          source_value, use_operation, use_operand, input_storage, output_storage);
         set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                  (uint32_t) ctx->work, source_value, use_operation);
         return false;
     }
     if ((input_storage != XR_REP_TAGGED && input_storage != native_storage) ||
         (output_storage != XR_REP_TAGGED && output_storage != native_storage)) {
+        rep_trace_refusal(ctx, "the verifier's adapter contract",
+                          "a non-tagged side does not match the value's own native storage, so "
+                          "the pair is not one box/unbox can bridge",
+                          source_value, use_operation, use_operand, input_storage, output_storage);
         set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                  (uint32_t) ctx->work, source_value, use_operation);
         return false;
@@ -8899,6 +9071,9 @@ static bool verify_exact_semantic_coverage(VerifyAuthority *ctx) {
             XrRep output_storage = XR_REP_TAGGED;
             if (source_value >= ctx->value_count ||
                 !oracle_use_storage(ctx, i, a, source_value, &output_storage)) {
+                rep_trace_refusal(ctx, "the use-site oracle, replayed by the verifier",
+                                  "the use site admits no storage for this operand", source_value,
+                                  i, a, XR_REP_COUNT, XR_REP_COUNT);
                 set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE, i,
                          source_value, i);
                 return false;
@@ -8931,6 +9106,11 @@ static bool verify_exact_semantic_coverage(VerifyAuthority *ctx) {
         if (!ctx->policy->force_return_tagged) {
             uint16_t machine_kind = 0;
             if (!oracle_return_storage(ctx, block->control_value, &output_storage, &machine_kind)) {
+                rep_trace_refusal(ctx, "the return-storage oracle, replayed by the verifier",
+                                  "oracle_return_storage names no carrier a return may hand this "
+                                  "value back in",
+                                  block->control_value, XR_SEMANTIC_INDEX_NONE, 0, XR_REP_COUNT,
+                                  XR_REP_COUNT);
                 set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE, i,
                          block->control_value, XR_SEMANTIC_INDEX_NONE);
                 return false;
