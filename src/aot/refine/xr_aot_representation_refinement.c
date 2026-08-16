@@ -311,6 +311,50 @@ static bool rep_trace_enabled(void) {
     return getenv("XRAY_AOT_REFINE_TRACE") != NULL;
 }
 
+/* Setting XRAY_COLLECT_ALL_REFUSALS makes this pass keep walking after a
+ * refusal instead of stopping at the first one, printing each on stderr under
+ * [refusal-survey]. The build still fails: an operand this pass refused got no
+ * obligation, so the plan cannot freeze whatever the operands after it answer.
+ * What changes is that one compile says how many separate oracle branches a
+ * module is missing rather than only the lowest-numbered one, which is what
+ * separates "this program needs a fix" from "this program needs five".
+ *
+ * The same variable drives the same walk in the TargetPlan pass, so one run
+ * surveys whichever pass a program reaches. What the count is not is a proof of
+ * independence: the walk continues over a builder missing the obligation the
+ * refused operand would have carried.
+ *
+ * Unset, the variable is never read: every call sits on a path that has already
+ * refused, so a compile that succeeds pays nothing. */
+static bool rep_survey_enabled(void) {
+    return getenv("XRAY_COLLECT_ALL_REFUSALS") != NULL;
+}
+
+/* What a reader needs to place a refusal in the oracle: which side declined,
+ * the opcode of the operation that DEFINED the value (which is the branch a
+ * definition-side fix extends) and the opcode consuming it (the branch a
+ * use-side fix extends). The two are different operations, and naming only one
+ * of them is what makes the bare diagnostic unreadable. */
+static void rep_survey_row(const CollectContext *ctx, const char *side, uint32_t source_value,
+                           uint32_t use_operation, uint16_t operand) {
+    uint32_t definer = ctx && ctx->operation_by_value && source_value < ctx->semantic_value_count
+                           ? ctx->operation_by_value[source_value]
+                           : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperationRecord *def = definer != XR_SEMANTIC_INDEX_NONE
+                                               ? xr_semantic_plan_operation(ctx->semantic, definer)
+                                               : NULL;
+    const XrSemanticOperationRecord *use = xr_semantic_plan_operation(ctx->semantic, use_operation);
+    uint32_t metadata_count = 0;
+    const char *const *metadata = xr_semantic_plan_metadata(ctx->semantic, &metadata_count);
+    const char *selector = use && use->metadata_count == 1 && use->metadata_begin < metadata_count
+                               ? metadata[use->metadata_begin]
+                               : "";
+    fprintf(stderr,
+            "[refusal-survey] family=refinement_%s_oracle definer-opcode=%u use-opcode=%u "
+            "selector=%s operand=%u\n",
+            side, def ? def->opcode : 9999u, use ? use->opcode : 9999u, selector, operand);
+}
+
 /* XR_REP_COUNT stands for "this side never named a storage". */
 static const char *rep_trace_storage_name(XrRep storage) {
     switch (storage) {
@@ -8175,6 +8219,8 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
     const XrSemanticOperandRecord *operands =
         xr_semantic_plan_operands(ctx->semantic, &operand_count);
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(ctx->semantic);
+    bool survey = rep_survey_enabled();
+    uint32_t refused_operands = 0;
     for (uint32_t i = 0; i < operation_count; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(ctx->semantic, i);
         if (!operation || operation->operand_begin > operand_count ||
@@ -8207,7 +8253,11 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
                     XR_REP_COUNT);
                 set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                          ctx->record_count, source_value, i);
-                return false;
+                refused_operands++;
+                if (!survey)
+                    return false;
+                rep_survey_row(ctx, has_definition ? "use_site" : "definition", source_value, i, a);
+                continue;
             }
             if (!authority_add_obligation(ctx, oracle, source_value, i, operation->block, a,
                                           XR_AOT_REP_USE_OPERATION, input_storage, output_storage))
@@ -8242,7 +8292,12 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
                               XR_REP_COUNT);
             set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                      ctx->record_count, block->control_value, XR_SEMANTIC_INDEX_NONE);
-            return false;
+            refused_operands++;
+            if (!survey)
+                return false;
+            rep_survey_row(ctx, "definition_at_return", block->control_value,
+                           XR_SEMANTIC_INDEX_NONE, 0);
+            continue;
         }
         /* A returned owned String is tagged storage. Each oracle re-proves its
          * own exact TargetPlan row, so no unproven reference return reaches
@@ -8256,12 +8311,20 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
                               XR_REP_COUNT);
             set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                      ctx->record_count, block->control_value, XR_SEMANTIC_INDEX_NONE);
-            return false;
+            refused_operands++;
+            if (!survey)
+                return false;
+            rep_survey_row(ctx, "return_storage", block->control_value, XR_SEMANTIC_INDEX_NONE, 0);
+            continue;
         }
         if (!authority_add_obligation(ctx, oracle, block->control_value, XR_SEMANTIC_INDEX_NONE, i,
                                       0, XR_AOT_REP_USE_BLOCK_CONTROL, input_storage,
                                       output_storage))
             return false;
+    }
+    if (refused_operands) {
+        fprintf(stderr, "[refusal-survey] refinement operands refused: %u\n", refused_operands);
+        return false;
     }
     return true;
 }

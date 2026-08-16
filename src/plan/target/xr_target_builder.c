@@ -287,6 +287,32 @@ static bool fail(char *error, size_t error_size, const char *code, const char *d
     return false;
 }
 
+/* Setting XRAY_COLLECT_ALL_REFUSALS makes this pass keep walking after a
+ * refusal instead of stopping at the first one, printing every refusal it finds
+ * on stderr under [refusal-survey]. The build still fails either way: a
+ * judgement that refused stated no authority, so the plan is incomplete
+ * whatever the rows after it answer. What changes is that one compile says how
+ * many gaps a module has rather than only which one it reaches first, which is
+ * the difference between reading a refusal as "this construct needs a fix" and
+ * as "this construct needs five, and fixing one moves nothing".
+ *
+ * The walk continues over a builder that is missing the authority the refused
+ * row would have stated, so a later refusal can be a consequence of an earlier
+ * one rather than an independent gap. The survey is a census carrying that
+ * bias, not a proof: its count is an upper bound on independent gaps, and what
+ * it establishes firmly is which judgements a module reaches at all.
+ *
+ * Unset, the variable is never read: every call sits on a path that has already
+ * refused, so a compile that succeeds pays nothing. */
+static bool target_survey_enabled(void) {
+    return getenv("XRAY_COLLECT_ALL_REFUSALS") != NULL;
+}
+
+static void target_survey_row(const char *family, const char *detail) {
+    fprintf(stderr, "[refusal-survey] family=%s %s\n", family,
+            detail && detail[0] ? detail : "refused without a detail");
+}
+
 /* Setting XRAY_TARGET_TRACE prints, on stderr, why this pass refused to build a
  * TargetPlan. Unset, the variable is never read and nothing is printed: every
  * call below sits on a path that is already failing the build, so a compile
@@ -4199,9 +4225,16 @@ static bool collect_scalar_intents(XrTargetPlanBuilder *builder,
 
 static bool builder_begin_family(XrTargetPlanBuilder *builder, uint64_t family, char *error,
                                  size_t error_size) {
-    if (!builder || builder->poisoned || builder->materialized || !family ||
+    /* A poisoned builder refuses every family after the one that poisoned it,
+     * which is what keeps a partial plan from reaching a backend. A survey is
+     * asking a different question -- which families this module needs that do
+     * not exist yet -- and one poisoned answer would hide every family after
+     * it, so the survey walks on. Nothing it builds is published: the caller
+     * fails the build on the refusal count regardless. */
+    if (!builder || builder->materialized || !family ||
         (family & ~XR_TARGET_REQUIRED_FAMILIES) != 0 ||
-        (builder->started_family_mask & family) != 0)
+        (builder->started_family_mask & family) != 0 ||
+        (builder->poisoned && !target_survey_enabled()))
         return fail(error, error_size, "XR_TARGET_1001", "target family collector cannot start");
     builder->started_family_mask |= family;
     return true;
@@ -9014,6 +9047,14 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             }
         }
     }
+    /* Every operation this family refuses is one gap, and a module usually has
+     * more than one. Under a survey the walk records each and carries on, so
+     * the run reports the whole set rather than the lowest-numbered member of
+     * it; the first refusal still reaches the caller's error buffer, which is
+     * what a normal build reports. */
+    bool survey = false;
+    uint32_t refused_rows = 0;
+    char first_row[512] = {0};
     for (uint32_t i = 0; i < (uint32_t) operation_count && valid; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, i);
         uint32_t target_index = target_by_operation[i];
@@ -9150,6 +9191,22 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                          argument ? argument->role : 0, argument ? argument->flags : 0);
             valid = false;
         }
+        if (valid)
+            continue;
+        if (refused_rows == 0) {
+            survey = target_survey_enabled();
+            snprintf(first_row, sizeof(first_row), "%s", error && error_size ? error : "");
+        }
+        refused_rows++;
+        if (!survey)
+            break;
+        target_survey_row("calls_and_adapters", error);
+        valid = true;
+    }
+    if (refused_rows) {
+        valid = false;
+        if (error && error_size)
+            snprintf(error, error_size, "%s", first_row);
     }
     xr_free(target_by_operation);
     xr_free(state_by_operation);
@@ -11857,6 +11914,63 @@ static void builder_free(XrTargetPlanBuilder *builder) {
     xr_free(builder);
 }
 
+/* One family states the authority for one construct. They run in the order
+ * their authorities become readable: a family may read what an earlier one
+ * stated and never what a later one will, so the order below is a dependency
+ * order and not a list. */
+typedef bool (*XrTargetFamilyBuild)(XrTargetPlanBuilder *builder, char *error, size_t error_size);
+
+typedef struct {
+    const char *name;
+    XrTargetFamilyBuild build;
+} XrTargetFamily;
+
+static const XrTargetFamily k_target_families[] = {
+    {"scalars", builder_add_scalars},
+    {"direct_local_unit_enum_argument_storage",
+     builder_add_direct_local_unit_enum_argument_storage},
+    {"closure_storage", builder_add_closure_storage},
+    {"array_allocation_storage", builder_add_array_allocation_storage},
+    {"array_intrinsic_storage", builder_add_array_intrinsic_storage},
+    {"array_hof_result_storage", builder_add_array_hof_result_storage},
+    {"direct_local_array_ref_argument_storage",
+     builder_add_direct_local_array_ref_argument_storage},
+    {"nullable_scalar_storage", builder_add_nullable_scalar_storage},
+    {"array_member_result_storage", builder_add_array_member_result_storage},
+    {"source_class_object_storage", builder_add_source_class_object_storage},
+    {"source_class_instance_storage", builder_add_source_class_instance_storage},
+    {"source_class_receiver_storage", builder_add_source_class_receiver_storage},
+    {"source_class_method_receiver_storage", builder_add_source_class_method_receiver_storage},
+    {"source_class_argument_storage", builder_add_source_class_argument_storage},
+    {"string_concat_result_storage", builder_add_string_concat_result_storage},
+    {"panic_catch_storage", builder_add_panic_catch_storage},
+    {"string_literal_storage", builder_add_string_literal_storage},
+    {"string_runes_storage", builder_add_string_runes_storage},
+    {"string_slice_range_storage", builder_add_string_slice_range_storage},
+    {"string_byte_slice_view_storage", builder_add_string_byte_slice_view_storage},
+    {"stringbuilder_append_rune_storage", builder_add_stringbuilder_append_rune_storage},
+    {"stringbuilder_to_string_storage", builder_add_stringbuilder_to_string_storage},
+    {"stringbuilder_append_string_storage", builder_add_stringbuilder_append_string_storage},
+    {"json_namespace_value_storage", builder_add_json_namespace_value_storage},
+    {"direct_local_string_boundary_storage", builder_add_direct_local_string_boundary_storage},
+    {"adt_enum_storage", builder_add_adt_enum_storage},
+    {"direct_local_callee_storage", builder_add_direct_local_callee_storage},
+    {"direct_local_go_callee_storage", builder_add_direct_local_go_callee_storage},
+    {"direct_local_go_task_result_storage", builder_add_direct_local_go_task_result_storage},
+    {"channel_allocation_storage", builder_add_channel_allocation_storage},
+    {"channel_receive_storage", builder_add_channel_receive_storage},
+    {"source_namespace_storage", builder_add_source_namespace_storage},
+    {"native_module_namespace_storage", builder_add_native_module_namespace_storage},
+    {"aggregates", builder_add_aggregates},
+    /* After the aggregate family, whose slots it states the authority for, and
+     * before the call family, which reads that authority to give the call row
+     * its result representation. */
+    {"direct_local_aggregate_result_storage", builder_add_direct_local_aggregate_result_storage},
+    {"calls_and_adapters", builder_add_calls_and_adapters},
+    {"coroutine_state_calls", builder_add_coroutine_state_calls},
+    {"dynamic_entry_expectations", builder_add_dynamic_entry_expectations},
+};
+
 bool xr_target_plan_build(const XrSemanticPlan *semantic_plan, XrTargetProfile *profile,
                           XrTargetPlan **out, char *error, size_t error_size) {
     return xr_target_plan_build_module_set(semantic_plan, NULL, 0, profile, out, error, error_size);
@@ -11872,47 +11986,26 @@ bool xr_target_plan_build_module_set(const XrSemanticPlan *semantic_plan,
     if (!builder_new(semantic_plan, profile, dependencies, dependency_count, &builder, error,
                      error_size))
         return false;
-    if (!builder_add_scalars(builder, error, error_size) ||
-        !builder_add_direct_local_unit_enum_argument_storage(builder, error, error_size) ||
-        !builder_add_closure_storage(builder, error, error_size) ||
-        !builder_add_array_allocation_storage(builder, error, error_size) ||
-        !builder_add_array_intrinsic_storage(builder, error, error_size) ||
-        !builder_add_array_hof_result_storage(builder, error, error_size) ||
-        !builder_add_direct_local_array_ref_argument_storage(builder, error, error_size) ||
-        !builder_add_nullable_scalar_storage(builder, error, error_size) ||
-        !builder_add_array_member_result_storage(builder, error, error_size) ||
-        !builder_add_source_class_object_storage(builder, error, error_size) ||
-        !builder_add_source_class_instance_storage(builder, error, error_size) ||
-        !builder_add_source_class_receiver_storage(builder, error, error_size) ||
-        !builder_add_source_class_method_receiver_storage(builder, error, error_size) ||
-        !builder_add_source_class_argument_storage(builder, error, error_size) ||
-        !builder_add_string_concat_result_storage(builder, error, error_size) ||
-        !builder_add_panic_catch_storage(builder, error, error_size) ||
-        !builder_add_string_literal_storage(builder, error, error_size) ||
-        !builder_add_string_runes_storage(builder, error, error_size) ||
-        !builder_add_string_slice_range_storage(builder, error, error_size) ||
-        !builder_add_string_byte_slice_view_storage(builder, error, error_size) ||
-        !builder_add_stringbuilder_append_rune_storage(builder, error, error_size) ||
-        !builder_add_stringbuilder_to_string_storage(builder, error, error_size) ||
-        !builder_add_stringbuilder_append_string_storage(builder, error, error_size) ||
-        !builder_add_json_namespace_value_storage(builder, error, error_size) ||
-        !builder_add_direct_local_string_boundary_storage(builder, error, error_size) ||
-        !builder_add_adt_enum_storage(builder, error, error_size) ||
-        !builder_add_direct_local_callee_storage(builder, error, error_size) ||
-        !builder_add_direct_local_go_callee_storage(builder, error, error_size) ||
-        !builder_add_direct_local_go_task_result_storage(builder, error, error_size) ||
-        !builder_add_channel_allocation_storage(builder, error, error_size) ||
-        !builder_add_channel_receive_storage(builder, error, error_size) ||
-        !builder_add_source_namespace_storage(builder, error, error_size) ||
-        !builder_add_native_module_namespace_storage(builder, error, error_size) ||
-        !builder_add_aggregates(builder, error, error_size) ||
-        /* After the aggregate family, whose slots it states the authority for,
-         * and before the call family, which reads that authority to give the
-         * call row its result representation. */
-        !builder_add_direct_local_aggregate_result_storage(builder, error, error_size) ||
-        !builder_add_calls_and_adapters(builder, error, error_size) ||
-        !builder_add_coroutine_state_calls(builder, error, error_size) ||
-        !builder_add_dynamic_entry_expectations(builder, error, error_size)) {
+    bool survey = false;
+    uint32_t refused_families = 0;
+    for (size_t i = 0; i < sizeof(k_target_families) / sizeof(k_target_families[0]); i++) {
+        char family_error[512] = {0};
+        if (k_target_families[i].build(builder, family_error, sizeof(family_error)))
+            continue;
+        if (refused_families == 0) {
+            survey = target_survey_enabled();
+            if (error && error_size)
+                snprintf(error, error_size, "%s", family_error);
+        }
+        refused_families++;
+        if (!survey) {
+            builder_free(builder);
+            return false;
+        }
+        target_survey_row(k_target_families[i].name, family_error);
+    }
+    if (refused_families) {
+        fprintf(stderr, "[refusal-survey] target-plan families refused: %u\n", refused_families);
         builder_free(builder);
         return false;
     }
