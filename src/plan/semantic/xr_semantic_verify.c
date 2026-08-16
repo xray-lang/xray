@@ -21,6 +21,7 @@
 #include "xr_semantic_rune_to_uint32_shape.h"
 #include "xr_semantic_rune_is_whitespace_shape.h"
 #include "xr_semantic_string_slice_shape.h"
+#include "xr_semantic_native_module_shape.h"
 #include "../ownership/xr_ownership_check.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
@@ -2408,15 +2409,6 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
  * member.  The registry then names exactly one implementation for that path
  * plus the selector, which is what turns the callsite into an exact target
  * instead of an open method dispatch. */
-static bool semantic_native_module_scalar_type(const XrSemanticTypeRecord *type) {
-    return type &&
-           (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
-            type->kind == XR_KIND_BOOL) &&
-           type->builtin_type == XR_TID_NULL && type->scalar_rep != XR_SCALAR_REP_NONE &&
-           type->flags == 0 && type->child_count == 0 && type->aggregate_extent == 0 &&
-           type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE;
-}
-
 static bool semantic_native_module_import_row(const XrSemanticPlan *plan,
                                               const XrSemanticOperationRecord *record,
                                               const char **out_module_path) {
@@ -2527,25 +2519,26 @@ static bool verify_native_module_scalar_call(const XrSemanticPlan *plan,
         operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
             ? plan->metadata[operation->metadata_begin]
             : NULL;
-    bool exact = operation->opcode == XI_CALL_METHOD && operation->semantic_immediate > 0 &&
-                 (operation->semantic_immediate & 1) == 0 && selector && receiver &&
-                 (operation->flags & XI_FLAG_MAY_SUSPEND) == 0 &&
-                 operation->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
-                 semantic_native_module_scalar_type(operation->result_type < plan->type_count
-                                                        ? &plan->types[operation->result_type]
-                                                        : NULL) &&
-                 operation->result_alias_operand == -1 &&
-                 operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
-                 receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
-                 receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-                 receiver->ownership_action == XR_SEM_OPERAND_BORROW;
+    bool exact =
+        operation->opcode == XI_CALL_METHOD && operation->semantic_immediate > 0 &&
+        (operation->semantic_immediate & 1) == 0 && selector && receiver &&
+        (operation->flags & XI_FLAG_MAY_SUSPEND) == 0 &&
+        operation->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
+        xr_semantic_native_module_boundary_type_is_exact(
+            operation->result_type < plan->type_count ? &plan->types[operation->result_type] : NULL,
+            true) &&
+        operation->result_alias_operand == -1 &&
+        operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+        receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+        receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+        receiver->ownership_action == XR_SEM_OPERAND_BORROW;
     for (uint16_t i = 1; exact && i < operation->operand_count; i++) {
         const XrSemanticOperandRecord *argument = receiver + i;
         exact = argument->role == XR_SEM_OPERAND_ARGUMENT &&
                 argument->parameter == (int16_t) (i - 1) &&
                 argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-                semantic_native_module_scalar_type(
-                    argument->type < plan->type_count ? &plan->types[argument->type] : NULL);
+                xr_semantic_native_module_boundary_type_is_exact(
+                    argument->type < plan->type_count ? &plan->types[argument->type] : NULL, false);
     }
     if (exact) {
         const char *module_path = semantic_native_module_receiver_path(plan, receiver->value);

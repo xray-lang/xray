@@ -32,6 +32,7 @@
 #include "../../plan/semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../../plan/semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../../plan/semantic/xr_semantic_string_slice_shape.h"
+#include "../../plan/semantic/xr_semantic_native_module_shape.h"
 #include "../../plan/semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
@@ -2086,15 +2087,6 @@ invalid_authority:
  * shared slot: its frozen import classification is resolved against the native
  * definition registry, and its metadata pair names the module path with an
  * empty member. */
-static bool aot_native_module_scalar_type_is_exact(const XrSemanticTypeRecord *type) {
-    return type &&
-           (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
-            type->kind == XR_KIND_BOOL) &&
-           type->builtin_type == XR_TID_NULL && type->scalar_rep != XR_SCALAR_REP_NONE &&
-           type->flags == 0 && type->child_count == 0 && type->aggregate_extent == 0 &&
-           type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE;
-}
-
 static bool aot_native_module_import_is_exact(const XrSemanticPlan *semantic,
                                               const XrSemanticOperationRecord *record,
                                               const char **out_module_path) {
@@ -2222,8 +2214,8 @@ static bool aot_native_module_call_shape_is_exact(const XrSemanticPlan *semantic
         operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
         operation->result_alias_operand != -1 ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
-        !aot_native_module_scalar_type_is_exact(
-            xr_semantic_plan_type(semantic, operation->result_type)))
+        !xr_semantic_native_module_boundary_type_is_exact(
+            xr_semantic_plan_type(semantic, operation->result_type), true))
         return false;
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     if (receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
@@ -2234,8 +2226,8 @@ static bool aot_native_module_call_shape_is_exact(const XrSemanticPlan *semantic
         const XrSemanticOperandRecord *argument = receiver + i;
         if (argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) (i - 1) ||
             argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-            !aot_native_module_scalar_type_is_exact(
-                xr_semantic_plan_type(semantic, argument->type)))
+            !xr_semantic_native_module_boundary_type_is_exact(
+                xr_semantic_plan_type(semantic, argument->type), false))
             return false;
     }
     if (out_selector)
@@ -3375,6 +3367,15 @@ static bool oracle_machine_storage(const VerifyAuthority *ctx, uint32_t semantic
             break;
         case XR_MACHINE_REP_RAW_PTR:
             *out_storage = XR_REP_RAWPTR;
+            break;
+        case XR_MACHINE_REP_VOID:
+            /* A value the TargetPlan bound to the void representation carries
+             * nothing: unit is the whole of what it says. That is a named
+             * storage, not a missing one -- the plan binds the rep and
+             * deliberately gives it no slot -- so leaving it out of this switch
+             * made every use of a unit result look like a value whose storage
+             * no oracle knows, which is a different verdict entirely. */
+            *out_storage = XR_REP_VOID;
             break;
         default:
             return false;

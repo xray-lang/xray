@@ -413,7 +413,6 @@ tests/diff/cases/semantics/stdlib/math_random_int_arg_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_bulk_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_cache_maintenance_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_fence_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_fence_unit_binding.xr
 tests/diff/cases/semantics/stdlib/mem_from_address_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_load_store_scalar_shared_core.xr
@@ -421,7 +420,6 @@ tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_nontemporal_store_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_page_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_prefetch_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_volatile_shared_core.xr
 tests/diff/cases/semantics/stdlib/native_tailcall_cfunction_direct.xr
 tests/diff/cases/semantics/stdlib/net_byte_io_direct.xr
 tests/diff/cases/semantics/stdlib/net_copy_bidirectional_cancel.xr

@@ -37,6 +37,7 @@
 #include "../semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
+#include "../semantic/xr_semantic_native_module_shape.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../ownership/xr_ownership_certificate.h"
 #include "../semantic/xr_semantic_graph.h"
@@ -670,7 +671,7 @@ static bool machine_rep_allows_conversion(const XrTargetPlan *plan, uint16_t fro
 /* Independent reconstruction of the raw-pointer SemanticPlan identity.  Keep
  * this separate from the builder so a malformed key or lifecycle row cannot
  * pass because construction and verification shared one classifier. */
-static bool semantic_raw_pointer_type_is_exact(const XrSemanticTypeRecord *type) {
+static bool verifier_raw_pointer_type_is_exact(const XrSemanticTypeRecord *type) {
     unsigned kind = 0, semantic_type = 0, builtin_type = 0;
     unsigned nullable = 0, is_const = 0, is_value = 0, is_literal = 0;
     unsigned cycle_candidate = 0, pointer_mutable = 0, scalar_rep = 0;
@@ -762,7 +763,7 @@ static int semantic_type_expected_rep(const XrSemanticTypeRecord *type, uint16_t
             *out_kind = XR_MACHINE_REP_VOID;
             return 1;
         case XR_KIND_POINTER:
-            if (!semantic_raw_pointer_type_is_exact(type))
+            if (!verifier_raw_pointer_type_is_exact(type))
                 return -1;
             *out_kind = XR_MACHINE_REP_RAW_PTR;
             return 1;
@@ -4621,15 +4622,6 @@ static bool operation_is_exact_array_member_scalar(const XrSemanticPlan *semanti
  * record classifies its resolution against the native definition registry and
  * names the module path with an empty member, and the registry then names one
  * implementation for that path plus the selector. */
-static bool verifier_native_module_scalar_type_is_exact(const XrSemanticTypeRecord *type) {
-    return type &&
-           (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
-            type->kind == XR_KIND_BOOL) &&
-           type->builtin_type == XR_TID_NULL && type->scalar_rep != XR_SCALAR_REP_NONE &&
-           type->flags == 0 && type->child_count == 0 && type->aggregate_extent == 0 &&
-           type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE;
-}
-
 static bool verifier_native_module_import_is_exact(const XrSemanticPlan *semantic,
                                                    const XrSemanticOperationRecord *record,
                                                    const char **out_module_path) {
@@ -4756,8 +4748,8 @@ static bool verifier_native_module_call_shape_is_exact(const XrSemanticPlan *sem
         operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
         operation->result_alias_operand != -1 ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
-        !verifier_native_module_scalar_type_is_exact(
-            xr_semantic_plan_type(semantic, operation->result_type)))
+        !xr_semantic_native_module_boundary_type_is_exact(
+            xr_semantic_plan_type(semantic, operation->result_type), true))
         return false;
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     if (receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
@@ -4768,8 +4760,8 @@ static bool verifier_native_module_call_shape_is_exact(const XrSemanticPlan *sem
         const XrSemanticOperandRecord *argument = receiver + i;
         if (argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) (i - 1) ||
             argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-            !verifier_native_module_scalar_type_is_exact(
-                xr_semantic_plan_type(semantic, argument->type)))
+            !xr_semantic_native_module_boundary_type_is_exact(
+                xr_semantic_plan_type(semantic, argument->type), false))
             return false;
     }
     if (out_selector)

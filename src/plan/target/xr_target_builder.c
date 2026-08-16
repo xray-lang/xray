@@ -38,6 +38,7 @@
 #include "../semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
+#include "../semantic/xr_semantic_native_module_shape.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../ownership/xr_ownership_certificate.h"
 #include "../../runtime/value/xtype.h"
@@ -53,36 +54,6 @@ typedef enum XrTargetScalarEligibility {
     XR_TARGET_SCALAR_NOT_APPLICABLE = 0,
     XR_TARGET_SCALAR_VALUE = 1,
 } XrTargetScalarEligibility;
-
-/* A plain raw-pointer type has one target representation regardless of its
- * pointee or mutability: an address-width, non-owning machine pointer.  The
- * canonical key remains the authority for the Ptr/MutPtr distinction, while
- * this judgement admits only the exact unaliased pointer header emitted by
- * SemanticPlan.  No Xi type is consulted after the plan is frozen. */
-static bool semantic_raw_pointer_type_is_exact(const XrSemanticTypeRecord *type) {
-    unsigned kind = 0, semantic_type = 0, builtin_type = 0;
-    unsigned nullable = 0, is_const = 0, is_value = 0, is_literal = 0;
-    unsigned cycle_candidate = 0, pointer_mutable = 0, scalar_rep = 0;
-    size_t alias_length = 0;
-    int consumed = 0;
-    XrStableId zero = {{0}};
-    return type && type->canonical_key &&
-           sscanf(type->canonical_key, "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:%n", &kind,
-                  &semantic_type, &builtin_type, &nullable, &is_const, &is_value, &is_literal,
-                  &cycle_candidate, &pointer_mutable, &scalar_rep, &alias_length,
-                  &consumed) == 11 &&
-           consumed > 0 && (size_t) consumed == strlen(type->canonical_key) &&
-           kind == XR_KIND_POINTER && semantic_type == 0 && builtin_type == XR_TID_NULL &&
-           nullable == 0 && is_const == 0 && is_value == 0 && is_literal == 0 &&
-           cycle_candidate == 0 && pointer_mutable <= 1 && scalar_rep == XR_SCALAR_REP_NONE &&
-           alias_length == 0 && type->kind == XR_KIND_POINTER &&
-           type->builtin_type == XR_TID_NULL && type->source_class == XR_SEMANTIC_INDEX_NONE &&
-           xr_stable_id_equal(type->source_class_identity, zero) && type->child_count == 0 &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 && type->enum_layout_id == 0 &&
-           type->enum_member_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->flags == 0 && type->enum_flags == 0 && type->reserved_enum == 0 &&
-           !type->source_enum_key && xr_stable_id_equal(type->source_enum_identity, zero);
-}
 
 typedef struct XrTargetRepIntent {
     XrTargetMachineRepRecord record;
@@ -594,7 +565,7 @@ static XrTargetScalarEligibility classify_scalar_type(const XrSemanticTypeRecord
             *out_kind = XR_MACHINE_REP_VOID;
             return XR_TARGET_SCALAR_VALUE;
         case XR_KIND_POINTER:
-            if (!semantic_raw_pointer_type_is_exact(type))
+            if (!xr_semantic_raw_pointer_type_is_exact(type))
                 return XR_TARGET_SCALAR_INVALID;
             *out_kind = XR_MACHINE_REP_RAW_PTR;
             return XR_TARGET_SCALAR_VALUE;
@@ -1545,15 +1516,6 @@ static bool semantic_array_member_scalar_is_exact(const XrSemanticPlan *plan,
 
 static bool stable_id_is_zero(XrStableId id);
 
-static bool semantic_native_module_scalar_type_is_exact(const XrSemanticTypeRecord *type) {
-    return type &&
-           (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT ||
-            type->kind == XR_KIND_BOOL) &&
-           type->builtin_type == XR_TID_NULL && type->scalar_rep != XR_SCALAR_REP_NONE &&
-           type->flags == 0 && type->child_count == 0 && type->aggregate_extent == 0 &&
-           type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE;
-}
-
 /* The module-init import reference of a native stdlib namespace. Its frozen
  * import classification is resolved against the native definition registry
  * rather than against a compiled module, and its metadata pair names the
@@ -1693,8 +1655,8 @@ static bool semantic_native_module_scalar_call_shape_is_exact(
         operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
         operation->result_alias_operand != -1 ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
-        !semantic_native_module_scalar_type_is_exact(
-            xr_semantic_plan_type(plan, operation->result_type)))
+        !xr_semantic_native_module_boundary_type_is_exact(
+            xr_semantic_plan_type(plan, operation->result_type), true))
         return false;
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, operation->function);
@@ -1710,8 +1672,8 @@ static bool semantic_native_module_scalar_call_shape_is_exact(
         const XrSemanticOperandRecord *argument = receiver + i;
         if (argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) (i - 1) ||
             argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-            !semantic_native_module_scalar_type_is_exact(
-                xr_semantic_plan_type(plan, argument->type)))
+            !xr_semantic_native_module_boundary_type_is_exact(
+                xr_semantic_plan_type(plan, argument->type), false))
             return false;
     }
     if (out_selector)
@@ -9207,24 +9169,34 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                         "could not name a callee at all, while a CALL_METHOD means the selector "
                         "belongs to no family this pass describes.\n");
             }
-            if (error && error_size)
-                snprintf(error, error_size,
-                         "XR_TARGET_1003: call-shaped operation has no exact target authority "
-                         "operation=%u function=%u opcode=%u selector=%s intrinsic=%u "
-                         "immediate=%lld result=value:%u,type:%u,ownership:%u,alias:%d "
-                         "operands=%u receiver=value:%u,type:%u,role:%u,flags:%u "
-                         "argument=value:%u,type:%u,role:%u,flags:%u",
-                         i, operation->function, operation->opcode, selector,
-                         operation->intrinsic_kind, (long long) operation->semantic_immediate,
-                         operation->result_value, operation->result_type,
-                         operation->result_ownership, operation->result_alias_operand,
-                         operation->operand_count,
-                         receiver ? receiver->value : XR_SEMANTIC_INDEX_NONE,
-                         receiver ? receiver->type : XR_SEMANTIC_INDEX_NONE,
-                         receiver ? receiver->role : 0, receiver ? receiver->flags : 0,
-                         argument ? argument->value : XR_SEMANTIC_INDEX_NONE,
-                         argument ? argument->type : XR_SEMANTIC_INDEX_NONE,
-                         argument ? argument->role : 0, argument ? argument->flags : 0);
+            if (error && error_size) {
+                /* Type indexes are plan-local, so a refusal that names only
+                 * them says nothing about what the receiver actually was. The
+                 * canonical key is the cross-module identity and is what tells
+                 * a reader whether the uncovered call was on an Array, a Map or
+                 * a source class. */
+                const XrSemanticTypeRecord *receiver_type =
+                    receiver ? xr_semantic_plan_type(plan, receiver->type) : NULL;
+                snprintf(
+                    error, error_size,
+                    "XR_TARGET_1003: call-shaped operation has no exact target authority "
+                    "operation=%u function=%u opcode=%u selector=%s intrinsic=%u "
+                    "immediate=%lld result=value:%u,type:%u,ownership:%u,alias:%d "
+                    "operands=%u receiver=value:%u,type:%u,role:%u,flags:%u "
+                    "argument=value:%u,type:%u,role:%u,flags:%u receiver-type=%s",
+                    i, operation->function, operation->opcode, selector, operation->intrinsic_kind,
+                    (long long) operation->semantic_immediate, operation->result_value,
+                    operation->result_type, operation->result_ownership,
+                    operation->result_alias_operand, operation->operand_count,
+                    receiver ? receiver->value : XR_SEMANTIC_INDEX_NONE,
+                    receiver ? receiver->type : XR_SEMANTIC_INDEX_NONE,
+                    receiver ? receiver->role : 0, receiver ? receiver->flags : 0,
+                    argument ? argument->value : XR_SEMANTIC_INDEX_NONE,
+                    argument ? argument->type : XR_SEMANTIC_INDEX_NONE,
+                    argument ? argument->role : 0, argument ? argument->flags : 0,
+                    receiver_type && receiver_type->canonical_key ? receiver_type->canonical_key
+                                                                  : "<none>");
+            }
             valid = false;
         }
         if (valid)
