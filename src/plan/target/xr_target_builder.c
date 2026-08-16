@@ -1937,12 +1937,27 @@ semantic_direct_local_array_ref_place_is_exact(const XrSemanticPlan *plan,
     return true;
 }
 
-static bool semantic_direct_local_array_ref_shared_value_is_exact(
-    const XrSemanticPlan *plan, uint32_t semantic_value, uint32_t semantic_type,
-    uint32_t semantic_function, uint32_t *operation_index, XrStableId *operation_identity) {
+/* The borrowed read of an `Array<T>` held in a shared cell. A local variable is
+ * a shared cell, so every mention of the array after its binding is a GET_SHARED
+ * whose result is the same allocation the array construction produced. Nothing
+ * in this judgement is about a call boundary: the read is a borrowed dynamic
+ * value wherever it appears, and the ref-argument boundary is only one place
+ * that has to prove it.
+ *
+ * The read type is proved here rather than left to the caller, because the
+ * verifier that re-proves this shape names the Array type itself: a judgement
+ * that admitted every shared read and relied on its one caller to have narrowed
+ * the type would claim String and nested-container reads the moment it was
+ * applied anywhere else. */
+static bool semantic_array_shared_read_is_exact(const XrSemanticPlan *plan, uint32_t semantic_value,
+                                                uint32_t semantic_type,
+                                                uint32_t semantic_function) {
     uint32_t count = (uint32_t) xr_semantic_plan_operation_count(plan);
     const XrSemanticOperationRecord *definition = NULL;
-    uint32_t definition_index = XR_SEMANTIC_INDEX_NONE;
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!semantic_direct_local_array_ref_type_is_exact(plan, semantic_type, &storage) ||
+        storage == XR_TARGET_ARRAY_STORAGE_NONE)
+        return false;
     for (uint32_t i = 0; i < count; i++) {
         const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
         if (!candidate || candidate->result_value != semantic_value)
@@ -1950,7 +1965,6 @@ static bool semantic_direct_local_array_ref_shared_value_is_exact(
         if (definition)
             return false;
         definition = candidate;
-        definition_index = i;
     }
     if (!definition || definition->opcode != XI_GET_SHARED ||
         definition->result_type != semantic_type || definition->function != semantic_function ||
@@ -1967,10 +1981,6 @@ static bool semantic_direct_local_array_ref_shared_value_is_exact(
         definition->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
         definition->semantic_immediate > UINT32_MAX)
         return false;
-    if (operation_index)
-        *operation_index = definition_index;
-    if (operation_identity)
-        *operation_identity = definition->id;
     return true;
 }
 
@@ -4547,6 +4557,25 @@ static bool builder_add_direct_local_array_ref_argument_storage(XrTargetPlanBuil
         analysis.value_types[value->semantic_value] = value->semantic_type;
         analysis.value_functions[value->semantic_value] = value->semantic_function;
     }
+    /* Every exact shared read of an Array, whether or not a call boundary ever
+     * looks at it. This is the family's single application of that judgement:
+     * binding only the reads a ref argument happens to reach would leave an
+     * array bound to a plain local unstated, which is the shape every program
+     * that names an array after building it has. */
+    uint32_t read_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < read_count; i++) {
+        const XrSemanticOperationRecord *read =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!read || read->result_value == XR_SEMANTIC_INDEX_NONE ||
+            read->result_value >= analysis.total_values ||
+            analysis.defined_values[read->result_value] ||
+            !semantic_array_shared_read_is_exact(builder->semantic_plan, read->result_value,
+                                                 read->result_type, read->function))
+            continue;
+        valid = note_direct_local_array_ref_storage(
+            builder, &analysis, read->result_value, read->result_type, read->function, i,
+            XR_TARGET_SLOT_TEMPORARY, read->id, error, error_size);
+    }
     uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
     for (uint32_t i = 0; valid && i < parameter_count; i++) {
         const XrSemanticParameterRecord *parameter =
@@ -4623,41 +4652,19 @@ static bool builder_add_direct_local_array_ref_argument_storage(XrTargetPlanBuil
                              "direct-local Array ref caller storage value is invalid");
                 break;
             }
-            uint32_t definition = XR_SEMANTIC_INDEX_NONE;
-            XrStableId definition_identity;
-            if (!semantic_direct_local_array_ref_shared_value_is_exact(
-                    builder->semantic_plan, caller_storage_value, operand->type, call->function,
-                    &definition, &definition_identity)) {
+            /* The caller storage the boundary reads from must be an exact
+             * shared read, and the sweep above has already bound every one of
+             * those. Proving it again here is what keeps the boundary fail
+             * closed when the caller storage is some other shape. */
+            if (!semantic_array_shared_read_is_exact(builder->semantic_plan, caller_storage_value,
+                                                     operand->type, call->function) ||
+                !analysis.defined_values[caller_storage_value]) {
                 valid = fail(error, error_size, "XR_TARGET_1001",
                              "direct-local Array ref caller has no exact storage producer");
                 break;
             }
-            if (!analysis.defined_values[caller_storage_value]) {
-                valid = note_direct_local_array_ref_storage(
-                    builder, &analysis, caller_storage_value, operand->type, call->function,
-                    definition, XR_TARGET_SLOT_TEMPORARY, definition_identity, error, error_size);
-            }
             uint32_t operation_count =
                 (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
-            const XrSemanticOperationRecord *shared_definition =
-                xr_semantic_plan_operation(builder->semantic_plan, definition);
-            for (uint32_t shared_index = 0; valid && shared_index < operation_count;
-                 shared_index++) {
-                const XrSemanticOperationRecord *candidate =
-                    xr_semantic_plan_operation(builder->semantic_plan, shared_index);
-                if (!candidate ||
-                    candidate->semantic_immediate != shared_definition->semantic_immediate ||
-                    candidate->result_value >= analysis.total_values ||
-                    analysis.defined_values[candidate->result_value] ||
-                    !semantic_direct_local_array_ref_shared_value_is_exact(
-                        builder->semantic_plan, candidate->result_value, operand->type,
-                        call->function, NULL, NULL))
-                    continue;
-                valid = note_direct_local_array_ref_storage(
-                    builder, &analysis, candidate->result_value, candidate->result_type,
-                    candidate->function, shared_index, XR_TARGET_SLOT_TEMPORARY, candidate->id,
-                    error, error_size);
-            }
             for (uint32_t operation_index = 0; valid && operation_index < operation_count;
                  operation_index++) {
                 const XrSemanticOperationRecord *load =

@@ -978,9 +978,16 @@ semantic_direct_local_array_ref_place_is_exact_verify(const XrSemanticPlan *sema
     return true;
 }
 
-static bool semantic_direct_local_array_ref_shared_value_is_exact_verify(
-    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
-    uint32_t semantic_value, uint32_t semantic_type, uint32_t semantic_function) {
+/* The borrowed read of an Array held in a shared cell, re-derived from the
+ * frozen rows. It states nothing about a call boundary, and the builder applies
+ * it to every shared read for that reason: a judgement re-proved here more
+ * widely than it was applied there is what makes an unbound value look like a
+ * missing binding. */
+static bool semantic_array_shared_read_is_exact_verify(const XrSemanticPlan *semantic,
+                                                       const XrSemanticOperationRecord *operation,
+                                                       uint32_t semantic_value,
+                                                       uint32_t semantic_type,
+                                                       uint32_t semantic_function) {
     uint32_t child_count = 0;
     const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
     const XrSemanticTypeRecord *array = xr_semantic_plan_type(semantic, semantic_type);
@@ -3172,7 +3179,7 @@ static bool collect_exact_dynamic_types(
             exact_array_hof_result ||
             semantic_array_fill_scalar_is_exact_verify(plan->semantic_plan, operation, NULL, NULL,
                                                        NULL) ||
-            semantic_direct_local_array_ref_shared_value_is_exact_verify(
+            semantic_array_shared_read_is_exact_verify(
                 plan->semantic_plan, operation, operation->result_value, operation->result_type,
                 operation->function) ||
             semantic_direct_local_array_ref_place_load_is_exact_verify(
@@ -3280,9 +3287,8 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE;
     bool exact_array_fill = semantic_array_fill_scalar_is_exact_verify(plan->semantic_plan,
                                                                        operation, NULL, NULL, NULL);
-    bool exact_array_ref_shared_value =
-        semantic_direct_local_array_ref_shared_value_is_exact_verify(
-            plan->semantic_plan, operation, semantic_value, semantic_type, semantic_function);
+    bool exact_array_shared_read = semantic_array_shared_read_is_exact_verify(
+        plan->semantic_plan, operation, semantic_value, semantic_type, semantic_function);
     bool exact_array_ref_place_load = semantic_direct_local_array_ref_place_load_is_exact_verify(
         plan, operation, semantic_value, semantic_type, semantic_function);
     bool exact_string_literal = semantic_string_literal_is_exact(plan->semantic_plan, operation);
@@ -3413,7 +3419,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     int eligibility =
         operation_result_void || exact_heap_closure || exact_panic_catch ||
                 exact_array_allocation || exact_array_intrinsic || exact_array_hof_result ||
-                exact_array_fill || exact_array_ref_shared_value || exact_array_ref_place_load ||
+                exact_array_fill || exact_array_shared_read || exact_array_ref_place_load ||
                 exact_class_object || exact_class_instance || exact_class_receiver ||
                 exact_string_literal || exact_string_concat || exact_direct_string_result ||
                 exact_stringbuilder || exact_stringbuilder_append ||
@@ -3451,7 +3457,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
             : 0;
     int expected_layout = -1;
     if (exact_heap_closure || exact_panic_catch || exact_array_allocation || exact_class_object ||
-        exact_array_intrinsic || exact_array_hof_result || exact_array_ref_shared_value ||
+        exact_array_intrinsic || exact_array_hof_result || exact_array_shared_read ||
         exact_array_ref_place_load || exact_array_fill || exact_class_instance ||
         exact_class_receiver || exact_string_literal || exact_string_concat ||
         exact_direct_string_result || exact_stringbuilder || exact_stringbuilder_append ||
@@ -3514,14 +3520,14 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     if (expected_kind == XR_MACHINE_REP_DYN_VALUE) {
         /* A nullable scalar carrier holds the null tag or a plain machine
          * scalar, so it claims no allocation, root map, or cleanup. */
-        uint8_t expected_ownership = (exact_direct_callee || exact_go_callee || exact_go_task ||
-                                      exact_source_namespace || exact_native_module_namespace ||
-                                      exact_nullable_scalar || exact_class_instance_borrowed ||
-                                      exact_class_receiver_borrowed || exact_adt_enum_borrowed ||
-                                      exact_array_ref_shared_value || exact_array_ref_place_load ||
-                                      (exact_channel && operation && operation->opcode == XI_COPY))
-                                         ? XR_TARGET_OWNERSHIP_BORROWED
-                                         : XR_TARGET_OWNERSHIP_OWNED;
+        uint8_t expected_ownership =
+            (exact_direct_callee || exact_go_callee || exact_go_task || exact_source_namespace ||
+             exact_native_module_namespace || exact_nullable_scalar ||
+             exact_class_instance_borrowed || exact_class_receiver_borrowed ||
+             exact_adt_enum_borrowed || exact_array_shared_read || exact_array_ref_place_load ||
+             (exact_channel && operation && operation->opcode == XI_COPY))
+                ? XR_TARGET_OWNERSHIP_BORROWED
+                : XR_TARGET_OWNERSHIP_OWNED;
         if (plan->machine_reps[record->register_rep].ownership != expected_ownership ||
             plan->machine_reps[record->memory_rep].ownership != expected_ownership ||
             plan->machine_reps[record->register_rep].root_kind != XR_TARGET_ROOT_DYNAMIC ||
