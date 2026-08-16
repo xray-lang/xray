@@ -370,7 +370,7 @@ XR_FUNC bool xr_aot_rep_adapter_value_is_exact(const XrTargetPlan *target_plan,
         return fail(error, error_size, "backend enum adapter source lacks enum metadata authority");
     const XrSemanticTypeRecord *source_type = semantic_value_type(semantic_plan, source_value);
     bool source_supports_pointer_unbox = xr_semantic_adt_enum_type_is_exact(source_type) ||
-                                         xr_semantic_owned_string_type_is_exact(source_type);
+                                         xr_semantic_tagged_string_type_is_exact(source_type);
     if (!adapter_target_rep_is_exact(target_plan, binding, value, source_supports_pointer_unbox))
         return fail(error, error_size, "backend representation adapter output rep is inconsistent");
     return true;

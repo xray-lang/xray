@@ -516,12 +516,12 @@ Evidence:
   affected site, while ABI, layout, adapter, ownership, and suspend mutations
   are rejected before cache, callback, or generation-pin side effects.
 
-anchor-sha256: src/plan/target/xr_target_plan.h d2f39cf4977a309cb4f8535c5d95b3e5bad3b0f2fd89a631e0bd57ff2133a378
+anchor-sha256: src/plan/target/xr_target_plan.h 23fbf75d5727adf935df85483c2665689c910f1b04da9920f6ad92b5bb6e17e1
 anchor-sha256: src/plan/target/xr_target_plan.c c43c90f7f4b59ad2864b9666863288f030979dd085075dc5c18f98f361334f51
-anchor-sha256: src/plan/target/xr_target_builder.c 27fc8a2e6e785191d0f315b7d058bf01e001a17798f6b393d818d2c1c956aff6
+anchor-sha256: src/plan/target/xr_target_builder.c b9a0b64bcc8c6ef971497e58c8b53adc1178b80dbf7722b2890cd32322cc2f65
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c e617933ea48f4f822d3abaa9400a5112a1eaeb0026d693ef5c678052494bf1c5
-anchor-sha256: src/plan/target/xr_target_verify.c 15a5db9aa6f373c579324af57433343b33fb9abeaeeb498ee4414ca6e697b0e6
+anchor-sha256: src/plan/target/xr_target_verify.c fc4eae2fb6210ae16f9afdd4bb9d38dd1c26878b69a03c39239f4253bcc7cb7a
 anchor-sha256: src/plan/format/xr_xtp_schema.h e452a27b2149e30bbafded2799a0a3e2a51fa9df7ffcdbcd41556bde2f230601
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_row_fields.h 84e5b18d06b0a44e25708b80e0f19ff70918d0babd988d0d9ea7260fcb842f29
@@ -530,7 +530,7 @@ anchor-sha256: src/plan/format/xr_xtp_encode.c c5131d9c1ec60d2d19729d21d95dfc013
 anchor-sha256: src/plan/format/xr_xtp_instruction_stream.h 39a81bcf5b337b7fdbf4aafaa4eb8a6ba575d4a1853f6f86c8dca6d0d2e0579a
 anchor-sha256: src/plan/format/xr_xtp_instruction_stream.c d2c219ad22c0f22193abe31436ba5466f7d60b3c4511628a7fa14a0fb2a98773
 anchor-sha256: src/plan/format/xr_xtp_text.h 63367e2a75cc5e1511d1980cd82f579863cfd86a97cbf47d892f4c945d4ca0e1
-anchor-sha256: src/plan/format/xr_xtp_text.c 5320b5ef1ae7c407dc55419d1c922731f67c9d5bdd8d107badd90c6e7dfffa5a
+anchor-sha256: src/plan/format/xr_xtp_text.c 3fd7546507f2fdd20f92e1151b2a1bb79d11a816d61c9aae2f30d69b9ac8c68b
 anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
 anchor-sha256: src/vm/xr_typed_dispatch.h 3c3adf76ba8478621d9e6b860e98b111599dc9f4149cef433fbc2db8eee1692a

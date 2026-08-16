@@ -389,6 +389,32 @@ static bool machine_reps_have_same_call_abi(const XrTargetMachineRepRecord *call
                   sizeof(caller->legal_conversion_mask)) == 0;
 }
 
+/* A reference-capable container handed over by value.
+ *
+ * The callee always borrows it: the allocation stays the caller's for the
+ * extent of the call and the callee releases nothing. What the caller holds is
+ * its own business -- a freshly built container is owned, a shared read of a
+ * local is borrowed -- so the two sides agree on representation and are allowed
+ * to differ in ownership alone. An Array and a String reach this boundary in
+ * the same tagged carrier, so they are checked by this one judgement rather
+ * than by two copies of the same rep agreement. */
+static bool verify_tagged_container_value_borrow_boundary(const XrTargetPlan *plan,
+                                                          const XrTargetValueRepRecord *caller,
+                                                          const XrTargetValueRepRecord *callee) {
+    return plan && caller && callee && caller->register_rep < plan->machine_reps_count &&
+           caller->memory_rep < plan->machine_reps_count &&
+           callee->register_rep < plan->machine_reps_count &&
+           callee->memory_rep < plan->machine_reps_count &&
+           machine_reps_have_same_call_abi(&plan->machine_reps[caller->register_rep],
+                                           &plan->machine_reps[callee->register_rep]) &&
+           machine_reps_have_same_call_abi(&plan->machine_reps[caller->memory_rep],
+                                           &plan->machine_reps[callee->memory_rep]) &&
+           plan->machine_reps[caller->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+           plan->machine_reps[caller->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+           plan->machine_reps[callee->register_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+           plan->machine_reps[callee->memory_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED;
+}
+
 static bool conversion_mask_is_independently_derived(const XrTargetPlan *plan, uint32_t index) {
     const XrTargetMachineRepRecord *from = &plan->machine_reps[index];
     for (uint32_t to = 0; to < plan->machine_reps_count; to++) {
@@ -1884,7 +1910,7 @@ static bool semantic_direct_local_string_result_is_exact(const XrSemanticPlan *s
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
         operation->return_complete != 1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
-        !xr_semantic_owned_string_type_is_exact(
+        !xr_semantic_tagged_string_type_is_exact(
             xr_semantic_plan_type(semantic, operation->result_type)))
         return false;
     const XrSemanticFunctionRecord *callee =
@@ -3449,6 +3475,13 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         semantic_direct_local_array_value_parameter_is_exact_verify(plan->semantic_plan, parameter,
                                                                     &exact_array_value_storage) &&
         parameter->type == semantic_type;
+    /* A String handed over by value borrows the caller's allocation for the
+     * extent of the call. A String has no carrier other than the outer tagged
+     * value, so this is the same borrowed tagged binding an Array by value
+     * gets. */
+    bool exact_string_value_parameter =
+        xr_semantic_direct_local_string_value_parameter_is_exact(plan->semantic_plan, parameter) &&
+        parameter->type == semantic_type;
     /* An Array a direct-local call returns is a transfer of the outer tagged
      * value, so it is bound exactly as an owned String result is. */
     bool exact_direct_array_result =
@@ -3497,7 +3530,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                 exact_native_module_namespace || exact_string_byte_view ||
                 exact_string_byte_parameter || exact_unit_enum || exact_nullable_scalar ||
                 exact_adt_enum || exact_array_ref_parameter || exact_array_value_parameter ||
-                exact_direct_array_result
+                exact_string_value_parameter || exact_direct_array_result
             ? 1
             : (type ? semantic_type_expected_rep(type, &expected_kind) : -1);
     /* Aggregate bindings in these domains belong to later exact families.
@@ -3533,7 +3566,8 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         exact_string_slice_range || exact_json_namespace_value || exact_array_member_result ||
         exact_direct_callee || exact_go_callee || exact_go_task || exact_channel ||
         exact_source_namespace || exact_native_module_namespace || exact_nullable_scalar ||
-        exact_adt_enum || exact_array_value_parameter || exact_direct_array_result) {
+        exact_adt_enum || exact_array_value_parameter || exact_string_value_parameter ||
+        exact_direct_array_result) {
         expected_kind = XR_MACHINE_REP_DYN_VALUE;
         expected_layout = target_plan_layout_for_type(plan, semantic_type);
         eligibility =
@@ -3593,7 +3627,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
              exact_native_module_namespace || exact_nullable_scalar ||
              exact_class_instance_borrowed || exact_class_receiver_borrowed ||
              exact_adt_enum_borrowed || exact_array_shared_read || exact_array_ref_place_load ||
-             exact_array_value_parameter ||
+             exact_array_value_parameter || exact_string_value_parameter ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
                 : XR_TARGET_OWNERSHIP_OWNED;
@@ -5516,20 +5550,24 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     operand->transfer_mode == XR_TRANSFER_SHARE &&
                     operand->flags == (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) &&
                     argument_array_ref_place;
-                /* An Array handed over by value travels the plain argument
-                 * path: the tagged value is copied and the allocation shared,
-                 * so the row states no place, no element storage, and no
-                 * addressability of its own. */
+                /* An Array or a String handed over by value travels the plain
+                 * argument path: the tagged value is copied and the allocation
+                 * shared, so the row states no place, no element storage, and
+                 * no addressability of its own. Both are reference-capable
+                 * containers carried by that one tagged value, so they are one
+                 * argument shape rather than two. */
                 uint8_t array_value_storage = XR_TARGET_ARRAY_STORAGE_NONE;
-                bool argument_array_value =
+                bool argument_container_value =
                     parameter && parameter->type == operand->type &&
-                    semantic_direct_local_array_value_parameter_is_exact_verify(
-                        semantic, parameter, &array_value_storage) &&
+                    (semantic_direct_local_array_value_parameter_is_exact_verify(
+                         semantic, parameter, &array_value_storage) ||
+                     xr_semantic_direct_local_string_value_parameter_is_exact(semantic,
+                                                                              parameter)) &&
                     operand->ownership_action == XR_SEM_OPERAND_BORROW &&
                     operand->transfer_mode == XR_TRANSFER_SHARE;
                 if (argument_adt_enum)
                     argument_kind = XR_MACHINE_REP_DYN_VALUE;
-                if (argument_array_ref || argument_array_value)
+                if (argument_array_ref || argument_container_value)
                     argument_kind = XR_MACHINE_REP_DYN_VALUE;
                 /* Recomputed through the same shared judgement the callee's own
                  * storage family uses, so an argument this verifier admits can
@@ -5580,30 +5618,15 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         XR_TARGET_OWNERSHIP_BORROWED &&
                     plan->machine_reps[callee_value->memory_rep].ownership ==
                         XR_TARGET_OWNERSHIP_BORROWED;
-                /* The callee always borrows an Array it is handed by value.
+                /* The callee always borrows a container it is handed by value.
                  * What the caller holds is its own business: a freshly built
-                 * array is owned, a shared read of a local is borrowed, and
-                 * both hand over the same tagged carrier. So the two sides
-                 * agree on representation and may differ on ownership. */
-                bool array_value_borrow_boundary =
-                    argument_array_value && caller_value && callee_value &&
-                    caller_value->register_rep < plan->machine_reps_count &&
-                    caller_value->memory_rep < plan->machine_reps_count &&
-                    callee_value->register_rep < plan->machine_reps_count &&
-                    callee_value->memory_rep < plan->machine_reps_count &&
-                    machine_reps_have_same_call_abi(
-                        &plan->machine_reps[caller_value->register_rep],
-                        &plan->machine_reps[callee_value->register_rep]) &&
-                    machine_reps_have_same_call_abi(
-                        &plan->machine_reps[caller_value->memory_rep],
-                        &plan->machine_reps[callee_value->memory_rep]) &&
-                    plan->machine_reps[caller_value->register_rep].kind ==
-                        XR_MACHINE_REP_DYN_VALUE &&
-                    plan->machine_reps[caller_value->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
-                    plan->machine_reps[callee_value->register_rep].ownership ==
-                        XR_TARGET_OWNERSHIP_BORROWED &&
-                    plan->machine_reps[callee_value->memory_rep].ownership ==
-                        XR_TARGET_OWNERSHIP_BORROWED;
+                 * array or a fresh concatenation is owned, a shared read of a
+                 * local is borrowed, and all of them hand over the same tagged
+                 * carrier. So the two sides agree on representation and may
+                 * differ on ownership. */
+                bool container_value_borrow_boundary =
+                    argument_container_value &&
+                    verify_tagged_container_value_borrow_boundary(plan, caller_value, callee_value);
                 const char *argument_identity_domain =
                     argument_array_ref ? "xray-target-direct-array-ref-argument-v1"
                                        : "xray-target-call-argument-v1";
@@ -5615,14 +5638,14 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
                     (argument_scalar == 1 || argument_u8_slice || argument_unit_enum ||
                      argument_adt_enum || argument_class_instance || argument_array_ref ||
-                     argument_array_value) &&
+                     argument_container_value) &&
                     (argument_array_ref ||
                      (parameter->mode == XR_PARAM_READ && operand->access == XR_CALL_ARG_PLAIN &&
                       (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0)) &&
                     (parameter->ownership == XI_OWN_NONE ||
                      (argument_adt_enum && parameter->ownership == XI_OWN_OWNED) ||
                      ((argument_u8_slice || argument_unit_enum || argument_adt_enum ||
-                       argument_class_instance || argument_array_ref || argument_array_value) &&
+                       argument_class_instance || argument_array_ref || argument_container_value) &&
                       parameter->ownership == XI_OWN_BORROWED)) &&
                     caller_value && callee_value &&
                     slot_binds_value_in_function(plan, caller_value, operation->function) &&
@@ -5642,7 +5665,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     ((caller_value->register_rep == callee_value->register_rep &&
                       caller_value->memory_rep == callee_value->memory_rep) ||
                      adt_enum_borrow_boundary || array_ref_borrow_boundary ||
-                     array_value_borrow_boundary) &&
+                     container_value_borrow_boundary) &&
                     plan->machine_reps[argument->register_rep].kind ==
                         (argument_u8_slice         ? XR_MACHINE_REP_VIEW
                          : argument_unit_enum      ? XR_MACHINE_REP_ENUM_ORDINAL

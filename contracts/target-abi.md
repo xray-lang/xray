@@ -288,11 +288,35 @@ transfer, so it is bound to an owned dynamic temporary in the caller's own
 frame, exactly as an owned String result is. SemanticPlan, TargetPlan, and
 representation refinement each rebuild the parameter mode, ownership, transfer,
 and element storage independently rather than reading one another's conclusion.
-Representation selection keeps an Array tagged at every boundary it crosses --
-parameter, argument, and result -- so no compensating BOX/UNBOX adapter is valid
-on any of them. Neither boundary authorizes an owned or moved Array parameter, a
+Neither boundary authorizes an owned or moved Array parameter, a
 ref result, a SOURCE_EXPORT parameter or result, a non-scalar element type, or
 another container.
+
+The same generation binds one exact direct-local `string` boundary: a parameter
+passed by value. A String is immutable and shared, so passing one hands the
+callee a borrow -- it reads the caller's allocation for the extent of the call
+and releases nothing -- and a String carries nothing but the outer tagged value,
+so the parameter is bound to a borrowed dynamic parameter slot and states no
+place and no addressability of its own. The caller may hold that allocation
+owned or borrowed, so the two sides agree on representation and are allowed to
+differ in ownership alone, exactly as they are for an `Array<T>` passed by
+value. The declaration shape such a parameter must have is stated once, in the
+shared String shape judgement; TargetPlan construction, TargetPlan verification
+and representation refinement each ask that one judgement and then prove their
+own slot, representation and call rows against it, and none of them reads
+another's conclusion. Every way a String can reach a use site already holding
+that tagged carrier -- a literal, a concatenation, a direct-local call result, a
+by-value parameter -- is one list, so a carrier the length read admits cannot be
+one a call argument, an equality, or a retain refuses. This boundary does not
+authorize a `ref`, owned, or moved String parameter, a SOURCE_EXPORT String
+parameter, an optional String, or a String reached through a shared read.
+
+Representation selection keeps every reference-capable container -- `Array<T>`
+and `string` alike -- in the tagged carrier at every boundary it crosses:
+parameter, argument, call result, and function return. That is one judgement
+about the kind rather than a special case restated per boundary, so no
+compensating BOX/UNBOX adapter is valid on any of them, and no boundary can
+authorize one by disagreeing with the others.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -553,18 +577,18 @@ anchor-sha256: src/aot/xaot_prepare.c 77d5bce886e498b736557e06ef6e9916e54b27d42c
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 25292ae5579c47ce2272d7aea1f7cad7e9afa1d213efa78feae4a014fcefee27
-anchor-sha256: src/aot/refine/xr_aot_scalar_value.c d31ecffe92a0597d19a132c94caab3fc5a65b7b5a2b1cd01c926a95da92c334c
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 2f68413314f6d613d949b0291bfbf3468ba4c8ed5bbb21e13981b8e9d229f6b9
+anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 092c181dd8674dc8ca75f8328f4e457d1c20a1fb2aa713ad685c428838e49e2d
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
 anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 451163c1d1e5d8af6aabe8ce0d0bab796a7daa7826f0a0143c6101e1dcda6164
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 4a361982499c5d2d2d129e3527c761c0a4821505f2d3d9cb51f5634a00369b3c
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 640a7e586b225005133479d3499af68a6d904eeb6edf8e87397b0a4644e51428
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 9239dc3d2586ec1349b58a6fdb2a6eb59984b7f41489aebc5088494eb4f3bac7
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c ad0d4582896dde9d9f6e82301d349d8b4deb7079764a7ba5dfa9c7ef2f8c6bef
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h abfe201fb679c49334634af0db17ad23152fe896e7f665ae0464f4084505ca65
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 83e9445eb7b1fbf5004cbd198fd0c703839c6ce67f6d6cc34c4f8c78e4938e97
 anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h 9ad3a46f3f41de669f91aa5a6e00452952ef4b0f23c2e9a92ec237a896c5b3b1
-anchor-sha256: src/plan/semantic/xr_semantic_string_shape.h 6eed7b4d30c741b652c083cad837ed0d51c5b5d9d99a9acdc79113508055a9fe
+anchor-sha256: src/plan/semantic/xr_semantic_string_shape.h 484c3541d7a23c3972cc32d3386aefa705ee86108100c15aea5ee3146779b70f
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h bbcaf57e24a92de079a0cefa2bdf5c753327b3c737d656cb57fbe2b6a648616c
 anchor-sha256: src/plan/semantic/xr_semantic_string_slice_shape.h d183211f5001d7cc418b0e95c3d2b7576404593ad454b9d4f777d7cfb57f1ff9
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d19001054ed1aa8334872e2998949bb515a8a2cf46fc2d682a681c82d6529f9d
@@ -578,7 +602,7 @@ anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 00430eeea7c3d16774b427dba6
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 375af2e4b45271d06e6ce6ed798be2e6f9f8786c25e68d38ea3f4ca6f41160c6
 anchor-sha256: src/aot/xi_cgen.c 6792ca08b6332dc98cd716273c848a2fdce26b8b718a37a86ddf26b701c8cbc1
-anchor-sha256: src/ir/xi_opt.c 78cc805b9982a3daf9c704795cdde77f2ba5fd36323a3f481c2f4ab276ec1377
+anchor-sha256: src/ir/xi_opt.c 7a96692685ffe65b8901552d64e7c75e6867fc534124e639e6f13d6b8ef67edb
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
 anchor-sha256: src/aot/xrt_core_freestanding.h 4637d9be259b16363f74d330ad0bc3d016c71f588d418e71ed9a57cffcf6ecfb
 anchor-sha256: src/aot/xrt_method.h 49b124e154a48bc0401fe67e6e3feba34ec57d7791dfb0f8afbc56a3aa9ca06e

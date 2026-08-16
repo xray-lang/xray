@@ -9,12 +9,13 @@
  *
  * KEY CONCEPT:
  *   A String is immutable and shared, so a String value carries exactly one
- *   storage fact: the outer tagged value. A concatenation is the one String
- *   producer that allocates from operands rather than from a constant, and it
- *   consumes every operand it joins. Every layer that has to answer "is this
- *   value a fresh owned String" asks this one judgement, so the target builder,
- *   the target verifier and the AOT representation oracle cannot drift into
- *   three similar-looking rules.
+ *   storage fact: the outer tagged value, whoever holds it. A concatenation is
+ *   the one String producer that allocates from operands rather than from a
+ *   constant, and it consumes every operand it joins. Passing a String by value
+ *   allocates nothing at all: the callee borrows the caller's allocation in that
+ *   same tagged carrier. Every layer that has to answer "which String shape is
+ *   this" asks these judgements, so the target builder, the target verifier and
+ *   the AOT representation oracle cannot drift into three similar-looking rules.
  */
 
 #ifndef XR_SEMANTIC_STRING_SHAPE_H
@@ -23,15 +24,19 @@
 #include "xr_semantic_plan.h"
 #include "xr_semantic_ids.h"
 #include "xr_semantic_allocation_shape.h"
+#include "../../ir/xi_own.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
 #include <string.h>
 
-/* An owned String type row: a reference-capable ownership root with no
- * aggregate geometry, no nullability, no borrow view and no value spelling.
- * These are the only String rows whose storage is the plain tagged value. */
-static inline bool xr_semantic_owned_string_type_is_exact(const XrSemanticTypeRecord *type) {
+/* A String type row whose storage is the plain tagged value: a reference-capable
+ * ownership root with no aggregate geometry, no nullability, no borrow view and
+ * no value spelling. The judgement is about the row, not about who holds the
+ * value -- a freshly concatenated String and a String a callee borrowed from its
+ * caller share one row -- so it says "tagged" rather than naming an ownership
+ * the row cannot know. */
+static inline bool xr_semantic_tagged_string_type_is_exact(const XrSemanticTypeRecord *type) {
     uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
                         XR_SEM_TYPE_AGGREGATE_EXACT;
     uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
@@ -40,6 +45,29 @@ static inline bool xr_semantic_owned_string_type_is_exact(const XrSemanticTypeRe
            type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->source_class == XR_SEMANTIC_INDEX_NONE && (type->flags & forbidden) == 0 &&
            (type->flags & required) == required;
+}
+
+/* A String parameter handed over by value.
+ *
+ * A String is immutable and shared, so passing one by value borrows: the callee
+ * reads the caller's allocation for the extent of the call and releases
+ * nothing. Its one storage fact is the outer tagged value, the same carrier a
+ * String literal, a concatenation result and a direct-local String result all
+ * select, so the parameter needs no place of its own and no addressability. A
+ * `ref` String parameter is a different boundary -- it names the caller's cell
+ * and may rebind it -- and stays unclaimed here.
+ *
+ * TargetPlan construction, TargetPlan verification and representation
+ * refinement all ask this one judgement, so a parameter one layer binds cannot
+ * be one another layer refuses. */
+static inline bool xr_semantic_direct_local_string_value_parameter_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter) {
+    return plan && parameter && parameter->function < xr_semantic_plan_function_count(plan) &&
+           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == XR_PARAM_READ &&
+           parameter->ownership == XI_OWN_BORROWED &&
+           parameter->transfer_mode == XR_TRANSFER_SHARE &&
+           (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 && parameter->reserved == 0 &&
+           xr_semantic_tagged_string_type_is_exact(xr_semantic_plan_type(plan, parameter->type));
 }
 
 /* One exact native unsigned display source. It owns no reference, aggregate,
@@ -88,7 +116,7 @@ static inline bool xr_semantic_string_concat_is_exact(const XrSemanticPlan *plan
         operation->return_complete != 1 || operation->view_complete != 0 ||
         operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
         !xr_semantic_allocation_identity_is_canonical(operation) ||
-        !xr_semantic_owned_string_type_is_exact(
+        !xr_semantic_tagged_string_type_is_exact(
             xr_semantic_plan_type(plan, operation->result_type)) ||
         operation->result_value < function->value_begin ||
         operation->result_value >= function->value_begin + function->value_count)
@@ -101,7 +129,7 @@ static inline bool xr_semantic_string_concat_is_exact(const XrSemanticPlan *plan
             piece->parameter_mode != 0 || piece->access != 0 || piece->origin != 0 ||
             piece->lifetime != 0 || piece->escape != 0 || piece->flags != 0 ||
             !((piece->type == operation->result_type &&
-               xr_semantic_owned_string_type_is_exact(piece_type)) ||
+               xr_semantic_tagged_string_type_is_exact(piece_type)) ||
               xr_semantic_string_concat_direct_u64_type_is_exact(piece_type)))
             return false;
     }

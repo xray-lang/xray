@@ -304,6 +304,9 @@ static bool oracle_array_hof_result_storage(const VerifyAuthority *ctx, uint32_t
                                             XrRep *out_storage, uint16_t *out_machine_kind);
 static bool oracle_array_tagged_carrier_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                                 XrRep *out_storage, uint16_t *out_machine_kind);
+static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
+                                                 uint32_t semantic_value, XrRep *out_storage,
+                                                 uint16_t *out_machine_kind);
 static bool oracle_direct_local_array_value_parameter_storage(const VerifyAuthority *ctx,
                                                               uint32_t semantic_value,
                                                               XrRep *out_storage,
@@ -5534,12 +5537,8 @@ static bool oracle_length_read_is_exact(const VerifyAuthority *ctx, uint32_t ope
                                                      &container_kind) ||
             oracle_array_hof_result_storage(ctx, container->value, &container_storage,
                                             &container_kind) ||
-            oracle_dynamic_string_literal_storage(ctx, container->value, &container_storage,
-                                                  &container_kind) ||
-            oracle_dynamic_string_concat_result_storage(ctx, container->value, &container_storage,
-                                                        &container_kind) ||
-            oracle_dynamic_direct_local_string_result_storage(ctx, container->value,
-                                                              &container_storage, &container_kind));
+            oracle_string_tagged_carrier_storage(ctx, container->value, &container_storage,
+                                                 &container_kind));
 }
 
 /* One equality over two proved String values. String is immutable and shared,
@@ -5579,11 +5578,7 @@ static bool oracle_string_equality_is_exact(const VerifyAuthority *ctx, uint32_t
         uint16_t side_kind = XR_MACHINE_REP_COUNT;
         if (side->role != XR_SEM_OPERAND_VALUE || side->parameter != -1 || side->flags != 0 ||
             side->ownership_action != XR_SEM_OPERAND_BORROW || side->value >= ctx->value_count ||
-            (!oracle_dynamic_string_literal_storage(ctx, side->value, &side_storage, &side_kind) &&
-             !oracle_dynamic_string_concat_result_storage(ctx, side->value, &side_storage,
-                                                          &side_kind) &&
-             !oracle_dynamic_direct_local_string_result_storage(ctx, side->value, &side_storage,
-                                                                &side_kind)))
+            !oracle_string_tagged_carrier_storage(ctx, side->value, &side_storage, &side_kind))
             return false;
     }
     return true;
@@ -5914,6 +5909,41 @@ static bool oracle_direct_local_array_ref_parameter_place_storage(const VerifyAu
     return true;
 }
 
+/* The frozen rows a container parameter borrowed by value must carry: the
+ * borrowed tagged carrier in both the register and the memory position, and a
+ * borrowed dynamic parameter slot that names this value and no operation. An
+ * Array and a String differ only in which declaration shape they accept, so the
+ * rows they must agree with are stated once here rather than twice. */
+static bool
+borrowed_tagged_value_parameter_rows_are_exact(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                               const XrSemanticParameterRecord *parameter) {
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep) : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    return parameter && binding && register_rep && memory_rep && slot &&
+           parameter->value == semantic_value && register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+           memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+           register_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+           memory_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+           register_rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+           memory_rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+           register_rep->null_encoding == XR_TARGET_NULL_TAGGED &&
+           memory_rep->null_encoding == XR_TARGET_NULL_TAGGED &&
+           slot->semantic_value == semantic_value &&
+           slot->semantic_operation == XR_SEMANTIC_INDEX_NONE &&
+           slot->function == parameter->function && slot->role == XR_TARGET_SLOT_PARAMETER &&
+           slot->register_rep == binding->register_rep && slot->memory_rep == binding->memory_rep &&
+           slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+           slot->ownership == XR_TARGET_OWNERSHIP_BORROWED;
+}
+
 /* An `Array<T>` parameter handed over by value. It borrows the caller's
  * allocation for the extent of the call, so it is bound to the same borrowed
  * tagged carrier a shared read of that array gets rather than to the pointer a
@@ -5930,32 +5960,30 @@ static bool oracle_direct_local_array_value_parameter_storage(const VerifyAuthor
             ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
             : NULL;
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
-    const XrTargetMachineRepRecord *register_rep =
-        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
-    const XrTargetMachineRepRecord *memory_rep =
-        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep) : NULL;
-    uint32_t slot_count = 0;
-    const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
-    const XrTargetSlotRecord *slot =
-        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
-    if (!parameter || !binding || !register_rep || !memory_rep || !slot ||
-        !aot_array_value_parameter_is_exact(ctx->semantic, parameter, &storage) ||
-        parameter->value != semantic_value || register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
-        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
-        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-        register_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
-        memory_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
-        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
-        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
-        slot->semantic_value != semantic_value ||
-        slot->semantic_operation != XR_SEMANTIC_INDEX_NONE ||
-        slot->function != parameter->function || slot->role != XR_TARGET_SLOT_PARAMETER ||
-        slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep ||
-        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-        slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+    if (!aot_array_value_parameter_is_exact(ctx->semantic, parameter, &storage) ||
+        !borrowed_tagged_value_parameter_rows_are_exact(ctx, semantic_value, parameter))
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+/* A String parameter handed over by value. A String has no carrier other than
+ * the outer tagged value, so borrowing one for the extent of a call binds
+ * exactly the rows an Array by value binds. */
+static bool oracle_direct_local_string_value_parameter_storage(const VerifyAuthority *ctx,
+                                                               uint32_t semantic_value,
+                                                               XrRep *out_storage,
+                                                               uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t parameter_index = ctx->parameter_by_value[semantic_value];
+    const XrSemanticParameterRecord *parameter =
+        parameter_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
+            : NULL;
+    if (!xr_semantic_direct_local_string_value_parameter_is_exact(ctx->semantic, parameter) ||
+        !borrowed_tagged_value_parameter_rows_are_exact(ctx, semantic_value, parameter))
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -6757,6 +6785,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
         if (oracle_direct_local_array_value_parameter_storage(ctx, semantic_value, out_storage,
                                                               out_machine_kind))
             return true;
+        if (oracle_direct_local_string_value_parameter_storage(ctx, semantic_value, out_storage,
+                                                               out_machine_kind))
+            return true;
         if (oracle_dynamic_source_class_parameter_storage(ctx, semantic_value, out_storage,
                                                           out_machine_kind))
             return true;
@@ -7285,14 +7316,10 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_RETAIN:
         case XI_RELEASE: {
             XrRep literal_storage = XR_REP_TAGGED;
-            if (!oracle_dynamic_string_literal_storage(ctx, source_value, &literal_storage,
-                                                       &ignored_kind) &&
+            if (!oracle_string_tagged_carrier_storage(ctx, source_value, &literal_storage,
+                                                      &ignored_kind) &&
                 !oracle_dynamic_panic_catch_storage(ctx, source_value, &literal_storage,
                                                     &ignored_kind) &&
-                !oracle_dynamic_direct_local_string_result_storage(
-                    ctx, source_value, &literal_storage, &ignored_kind) &&
-                !oracle_dynamic_string_concat_result_storage(ctx, source_value, &literal_storage,
-                                                             &ignored_kind) &&
                 !oracle_array_tagged_carrier_storage(ctx, source_value, &literal_storage,
                                                      &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(ctx, source_value, &literal_storage,
@@ -7514,13 +7541,17 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             }
             /* A class instance argument has no native scalar storage a policy
              * could prefer: it is the tagged carrier its own storage family
-             * bound, whether the caller computed it or received it. An Array
-             * handed over by value is the same case for the same reason. */
+             * bound, whether the caller computed it or received it. An Array or
+             * a String handed over by value is the same case for the same
+             * reason -- each is a reference-capable container whose only
+             * storage fact is that tagged value. */
             if (oracle_dynamic_source_class_instance_storage(ctx, source_value, out_storage,
                                                              &ignored_kind) ||
                 oracle_dynamic_source_class_parameter_storage(ctx, source_value, out_storage,
                                                               &ignored_kind) ||
-                oracle_array_tagged_carrier_storage(ctx, source_value, out_storage, &ignored_kind))
+                oracle_array_tagged_carrier_storage(ctx, source_value, out_storage,
+                                                    &ignored_kind) ||
+                oracle_string_tagged_carrier_storage(ctx, source_value, out_storage, &ignored_kind))
                 return true;
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_CALL_METHOD:
@@ -7893,6 +7924,25 @@ static bool oracle_array_tagged_carrier_storage(const VerifyAuthority *ctx, uint
                                                              out_machine_kind) ||
            oracle_dynamic_direct_local_array_result_storage(ctx, semantic_value, out_storage,
                                                             out_machine_kind);
+}
+
+/* Every way a String can reach a use site already holding its tagged carrier:
+ * a literal, a concatenation the caller just built, a String a direct-local
+ * call handed back, or one borrowed as a by-value parameter. A String has no
+ * other carrier, so every site that accepts one in that carrier asks this one
+ * list, and a String the equality test admits can never be one a call argument
+ * refuses. */
+static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
+                                                 uint32_t semantic_value, XrRep *out_storage,
+                                                 uint16_t *out_machine_kind) {
+    return oracle_dynamic_string_literal_storage(ctx, semantic_value, out_storage,
+                                                 out_machine_kind) ||
+           oracle_dynamic_string_concat_result_storage(ctx, semantic_value, out_storage,
+                                                       out_machine_kind) ||
+           oracle_dynamic_direct_local_string_result_storage(ctx, semantic_value, out_storage,
+                                                             out_machine_kind) ||
+           oracle_direct_local_string_value_parameter_storage(ctx, semantic_value, out_storage,
+                                                              out_machine_kind);
 }
 
 /* The storage a returned value carries. A scalar return keeps its own native

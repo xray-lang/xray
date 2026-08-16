@@ -1845,14 +1845,16 @@ static XrRep sr_type_native_boundary_rep(const struct XrType *type) {
     switch (type->kind) {
         case XR_KIND_POINTER:
             return XR_REP_RAWPTR;
-        /* An Array's one storage fact is the tagged outer value, the same
-         * answer the call-place boundary already gives it. A native pointer
-         * here would be boxed again at every tagged use and would contradict
-         * the single dynamic slot the frozen storage rows name for it, so the
-         * two boundaries agree instead of disagreeing by kind. */
+        /* A reference-capable container carries exactly one storage fact: the
+         * tagged outer value. That is the answer the call-place boundary
+         * already gives it and the single dynamic slot every frozen storage row
+         * names for it, so every boundary it crosses -- parameter, argument,
+         * result, return -- agrees on that carrier. A native pointer here would
+         * be boxed again at each tagged use and would need a representation
+         * adapter no storage row can state. */
         case XR_KIND_ARRAY:
-            return XR_REP_TAGGED;
         case XR_KIND_STRING:
+            return XR_REP_TAGGED;
         case XR_KIND_SLICE:
         case XR_KIND_MAP:
         case XR_KIND_SET:
@@ -1861,18 +1863,6 @@ static XrRep sr_type_native_boundary_rep(const struct XrType *type) {
         default:
             return XR_REP_TAGGED;
     }
-}
-
-/* The return boundary of a String-returning function. String has a single
- * storage fact: the tagged outer value. A native String return would need a
- * representation adapter no frozen storage row can state, so the boundary
- * stays tagged and the callee ABI conversion is left to the emitter. Both the
- * rewrite and the adapter predicate ask this one question so they cannot
- * disagree on which returns carry an adapter. */
-static XrRep sr_type_return_boundary_rep(const struct XrType *type) {
-    if (type && type->kind == XR_KIND_STRING && !type->is_nullable)
-        return XR_REP_TAGGED;
-    return sr_type_native_boundary_rep(type);
 }
 
 /* A call-bound place must use the same pointee representation as its ABI
@@ -2885,12 +2875,6 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_CHAN_TRY_RECV:
             return XR_REP_TAGGED;
         case XI_CALL:
-            /* A String result is stored as the outer tagged value, the same
-             * storage a String constant already selects. A native result here
-             * would be boxed again at every tagged use, while the frozen
-             * storage fact names one tagged owner slot for the call. */
-            if (v->type->kind == XR_KIND_STRING && !v->type->is_nullable)
-                return XR_REP_TAGGED;
             return sr_type_native_boundary_rep(v->type);
         case XI_CALL_METHOD_DIRECT:
             return sr_type_native_boundary_rep(v->type);
@@ -3535,7 +3519,7 @@ XR_FUNC bool xi_opt_rep_adapter_for_return(const XiFunc *function, const XiBlock
     XiRepPolicy local_policy = policy ? *policy : xi_rep_policy_tagged_boundary();
     XrRep required = local_policy.force_return_tagged
                          ? XR_REP_TAGGED
-                         : sr_type_return_boundary_rep(function->return_type);
+                         : sr_type_native_boundary_rep(function->return_type);
     bool erase = sr_conversion_erases_enum_metadata(block->control, function->return_type);
     return xi_opt_rep_adapter_for_boundary(block->control, required, erase, &local_policy, out_kind,
                                            out_input_rep, out_output_rep);
@@ -3714,7 +3698,7 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
         if (blk->kind == XI_BLOCK_RETURN && blk->control && blk->control->op != XI_ERR_RETURN) {
             XrRep ret_rep = local_policy.force_return_tagged
                                 ? XR_REP_TAGGED
-                                : sr_type_return_boundary_rep(f->return_type);
+                                : sr_type_native_boundary_rep(f->return_type);
             bool erase_descriptor =
                 sr_conversion_erases_enum_metadata(blk->control, f->return_type);
             sr_rewrite_arg(f, &blk->control, ret_rep, box_of, erased_box_of, unbox_of, max_id,
