@@ -24,8 +24,8 @@
 #include "../runtime/xexec_state.h"
 #include "../runtime/value/xchunk.h"
 
-static const uint8_t xr_bootstrap_container_magic[XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE] = {
-    'X', 'R', 'A', 'Y'};
+static const uint8_t xr_bootstrap_container_magic[XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE] = {'X', 'R',
+                                                                                        'A', 'Y'};
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../runtime/value/xtype.h"
@@ -725,8 +725,17 @@ static bool bc_write_json_decode_schema(BcWriter *w, const XrJsonDecodeSchema *s
             return schema->target_descriptor &&
                    bc_write_value(w, XR_FROM_PTR(schema->target_descriptor), false, false);
         case XR_JSON_VALUE_CLASS_INSTANCE:
+            /* The descriptor is the interned class name, and a String carries
+             * its heap type in the XrValue rather than in the object header --
+             * XrString begins with the 4-byte runtime header, not the 16-byte
+             * XrObjHeader that XR_FROM_PTR reads a type tag out of. Building
+             * this value with XR_FROM_PTR therefore tagged it with whatever the
+             * refcount word happened to hold, the writer emitted something the
+             * reader could not accept as a String, and every program with a
+             * JSON-derived class failed to load its own embedded bytecode. */
             return schema->target_descriptor &&
-                   bc_write_value(w, XR_FROM_PTR(schema->target_descriptor), false, false);
+                   bc_write_value(w, XR_FROM_STR((const XrString *) schema->target_descriptor),
+                                  false, false);
         default:
             return schema->child == NULL;
     }
@@ -1028,7 +1037,8 @@ static bool bc_read_field_descriptor(BcReader *r, XrFieldDescriptorEntry *field)
     field->type_name = bc_read_optional_string(r);
     field->default_value = bc_read_value(r);
     field->flags = bc_get_u16(r);
-    return r->error == XR_BOOTSTRAP_CONTAINER_OK && bc_read_json_decode_schema(r, &field->json_decode_schema, 0);
+    return r->error == XR_BOOTSTRAP_CONTAINER_OK &&
+           bc_read_json_decode_schema(r, &field->json_decode_schema, 0);
 }
 
 static bool bc_read_method_descriptor(BcReader *r, XrMethodDescriptorEntry *method) {
@@ -1310,7 +1320,8 @@ static XrValue bc_read_enum_type(BcReader *r) {
     xr_free(nominal_owner);
     xr_free(enum_name);
 
-    return (r->error == XR_BOOTSTRAP_CONTAINER_OK && enum_type) ? XR_FROM_PTR(enum_type) : xr_null();
+    return (r->error == XR_BOOTSTRAP_CONTAINER_OK && enum_type) ? XR_FROM_PTR(enum_type)
+                                                                : xr_null();
 }
 
 static void bc_dispose_json_decode_schema(XrJsonDecodeSchema *schema) {
@@ -1427,7 +1438,8 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
         }
         stable_type_keys[i] = bc_get_u64(r);
         shape_field_flags[i] = bc_get_u8(r);
-        if (r->error != XR_BOOTSTRAP_CONTAINER_OK || (shape_field_flags[i] & ~XR_OBJECT_SHAPE_FIELD_READONLY) != 0) {
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK ||
+            (shape_field_flags[i] & ~XR_OBJECT_SHAPE_FIELD_READONLY) != 0) {
             if (r->error == XR_BOOTSTRAP_CONTAINER_OK)
                 r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             goto fail;
@@ -2197,8 +2209,7 @@ static uint8_t *bytecode_write_impl(XrVMRuntime *X, const char *stdlib_module, X
         proto->shared_count > used_shared_count ? proto->shared_count : used_shared_count;
 
     // Write header
-    if (!bc_put_bytes(&w, xr_bootstrap_container_magic,
-                      XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE))
+    if (!bc_put_bytes(&w, xr_bootstrap_container_magic, XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE))
         goto fail;
     if (!bc_put_u16(&w, XR_BOOTSTRAP_CONTAINER_VERSION))
         goto fail;
@@ -2234,17 +2245,19 @@ fail:
     xr_free(w.buf);
     xr_free(w.layouts);
     if (error)
-        *error = w.error == XR_BOOTSTRAP_CONTAINER_OK ? XR_BOOTSTRAP_CONTAINER_ERR_METADATA : w.error;
+        *error =
+            w.error == XR_BOOTSTRAP_CONTAINER_OK ? XR_BOOTSTRAP_CONTAINER_ERR_METADATA : w.error;
     return NULL;
 }
 
 uint8_t *xr_bootstrap_container_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *out_size,
-                           XrBootstrapContainerError *error) {
+                                      XrBootstrapContainerError *error) {
     return bytecode_write_impl(X, NULL, proto, flags, out_size, error);
 }
 
-uint8_t *xr_bootstrap_container_write_stdlib(XrVMRuntime *X, const char *canonical_module, XrProto *proto,
-                                  int flags, size_t *out_size, XrBootstrapContainerError *error) {
+uint8_t *xr_bootstrap_container_write_stdlib(XrVMRuntime *X, const char *canonical_module,
+                                             XrProto *proto, int flags, size_t *out_size,
+                                             XrBootstrapContainerError *error) {
     if (!canonical_module || !canonical_module[0]) {
         if (error)
             *error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
@@ -2255,7 +2268,8 @@ uint8_t *xr_bootstrap_container_write_stdlib(XrVMRuntime *X, const char *canonic
     return bytecode_write_impl(X, canonical_module, proto, flags, out_size, error);
 }
 
-XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBootstrapContainerError *error) {
+XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t size,
+                                     XrBootstrapContainerError *error) {
     if (!X || !data || size == 0) {
         if (error)
             *error = XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED;
@@ -2271,8 +2285,8 @@ XrProto *xr_bootstrap_container_read(XrVMRuntime *X, const uint8_t *data, size_t
             *error = XR_BOOTSTRAP_CONTAINER_ERR_TRUNCATED;
         return NULL;
     }
-    if (memcmp(r.buf + r.pos, xr_bootstrap_container_magic,
-               XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE) != 0) {
+    if (memcmp(r.buf + r.pos, xr_bootstrap_container_magic, XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE) !=
+        0) {
         if (error)
             *error = XR_BOOTSTRAP_CONTAINER_ERR_MAGIC;
         return NULL;
@@ -2383,7 +2397,8 @@ int xr_bootstrap_container_execute(XrVMRuntime *X, const uint8_t *data, size_t s
     XrBootstrapContainerError error;
     XrProto *proto = xr_bootstrap_container_read(X, data, size, &error);
     if (!proto) {
-        xr_log_warning("bytecode", "failed to load: %s", xr_bootstrap_container_error_string(error));
+        xr_log_warning("bytecode", "failed to load: %s",
+                       xr_bootstrap_container_error_string(error));
         return -1;
     }
 
@@ -2441,14 +2456,14 @@ XrProto *xr_bootstrap_container_load(XrVMRuntime *X, const uint8_t *data, size_t
     XrBootstrapContainerError error;
     XrProto *proto = xr_bootstrap_container_read(X, data, size, &error);
     if (!proto) {
-        xr_log_warning("bytecode", "failed to load: %s", xr_bootstrap_container_error_string(error));
+        xr_log_warning("bytecode", "failed to load: %s",
+                       xr_bootstrap_container_error_string(error));
         return NULL;
     }
     return proto;
 }
 
-bool xr_bootstrap_container_emit_c_source(XrVMRuntime *X, XrProto *proto,
-                                          const char *output_file,
+bool xr_bootstrap_container_emit_c_source(XrVMRuntime *X, XrProto *proto, const char *output_file,
                                           const char *var_name, int flags) {
     // Serialize
     size_t bc_size;
