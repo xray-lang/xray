@@ -78,9 +78,19 @@ typedef enum XrTargetExecutionFamily {
     /* Same exact scalar row family, with one or more SOURCE_EXPORT entry
      * calls whose persistent expectations are resolved by the runtime. */
     XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC = UINT64_C(1) << 1,
+    /* A persistent packed scalar frame whose only suspension boundary is an
+     * exact coroutine-state row. Resume enters the frozen continuation block;
+     * no legacy interpreter stack is retained. */
+    XR_TARGET_EXECUTION_SCALAR_I64_COROUTINE = UINT64_C(1) << 2,
 } XrTargetExecutionFamily;
 
 #define XR_TARGET_INSTRUCTION_SLOT_NONE UINT32_MAX
+#define XR_TARGET_INSTRUCTION_SUSPEND_PACK(state, resume)                          \
+    (((uint64_t) (resume) << 32u) | (uint64_t) (state))
+#define XR_TARGET_INSTRUCTION_SUSPEND_STATE(immediate)                             \
+    ((uint32_t) ((immediate) & UINT64_C(0xffffffff)))
+#define XR_TARGET_INSTRUCTION_SUSPEND_RESUME(immediate)                            \
+    ((uint32_t) ((immediate) >> 32u))
 
 /* Argument ordinals are proved dense through a fixed-width bitmap, so the
  * executable family caps its parameter count instead of allocating. */
@@ -704,6 +714,9 @@ typedef struct XrTargetCoroutineStateRecord {
     uint32_t suspend_block;
     uint32_t resume_block;
     uint32_t resume_predecessor;
+    /* Function-local first instruction of the frozen resume block, or NONE
+     * when this state has no executable Target instruction group. */
+    uint32_t resume_instruction;
     uint32_t direct_call;
     uint32_t result_slot;
     uint16_t resume_predecessor_ordinal;

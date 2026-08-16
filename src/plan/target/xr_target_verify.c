@@ -7316,6 +7316,11 @@ static bool verify_coroutines(const XrTargetPlan *plan, char *error, size_t erro
                                            plan->calls_count,
                                            sizeof(*call_state_counts))
                                      : NULL;
+    uint32_t *resume_instruction_by_state = plan->coroutines_count
+        ? (uint32_t *) xr_malloc(
+              (size_t) plan->coroutines_count *
+              sizeof(*resume_instruction_by_state))
+        : NULL;
     uint32_t *edge_by_block = block_count
                                   ? (uint32_t *) xr_malloc(
                                         (size_t) block_count *
@@ -7329,12 +7334,14 @@ static bool verify_coroutines(const XrTargetPlan *plan, char *error, size_t erro
         (operation_count && (!state_by_operation || !call_by_operation ||
                              !expected_by_operation)) ||
         (plan->calls_count && !call_state_counts) ||
+        (plan->coroutines_count && !resume_instruction_by_state) ||
         (block_count && (!edge_by_block || !edge_counts))) {
         xr_free(function_states);
         xr_free(state_by_operation);
         xr_free(call_by_operation);
         xr_free(expected_by_operation);
         xr_free(call_state_counts);
+        xr_free(resume_instruction_by_state);
         xr_free(edge_by_block);
         xr_free(edge_counts);
         return report(error, error_size, "XR_EXEC_5003",
@@ -7346,7 +7353,25 @@ static bool verify_coroutines(const XrTargetPlan *plan, char *error, size_t erro
     }
     for (uint32_t block = 0; block < block_count; block++)
         edge_by_block[block] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t state = 0; state < plan->coroutines_count; state++)
+        resume_instruction_by_state[state] = XR_SEMANTIC_INDEX_NONE;
     bool valid = plan->functions_count == function_count;
+    for (uint32_t instruction = 0;
+         valid && instruction < plan->instructions_count; instruction++) {
+        const XrTargetInstructionRecord *row =
+            &plan->instructions[instruction];
+        if (row->opcode != XR_TARGET_INSTRUCTION_SUSPEND)
+            continue;
+        uint32_t state = XR_TARGET_INSTRUCTION_SUSPEND_STATE(
+            row->immediate_bits);
+        if (state >= plan->coroutines_count ||
+            resume_instruction_by_state[state] != XR_SEMANTIC_INDEX_NONE) {
+            valid = false;
+            break;
+        }
+        resume_instruction_by_state[state] =
+            XR_TARGET_INSTRUCTION_SUSPEND_RESUME(row->immediate_bits);
+    }
     uint32_t semantic_edges = (uint32_t) xr_semantic_plan_edge_count(semantic);
     for (uint32_t edge_index = 0; valid && edge_index < semantic_edges;
          edge_index++) {
@@ -7418,6 +7443,8 @@ static bool verify_coroutines(const XrTargetPlan *plan, char *error, size_t erro
             entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION ||
             state->id != state_index || state->function != operation->function ||
             state->semantic_operation != entity->subject ||
+            state->resume_instruction !=
+                resume_instruction_by_state[state_index] ||
             state->logical_state != entity->ordinal ||
             state->function >= function_count || entity->ordinal == 0 ||
             entity->ordinal > function_states[state->function] ||
@@ -7500,6 +7527,7 @@ static bool verify_coroutines(const XrTargetPlan *plan, char *error, size_t erro
     xr_free(call_by_operation);
     xr_free(expected_by_operation);
     xr_free(call_state_counts);
+    xr_free(resume_instruction_by_state);
     xr_free(edge_by_block);
     xr_free(edge_counts);
     return valid || report(error, error_size, "XR_CORO_4000",

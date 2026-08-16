@@ -10493,6 +10493,7 @@ static bool scalar_block_terminator_row(
 typedef struct XrScalarInstructionAnalysis {
     uint32_t *call_by_operation;
     uint32_t *entry_by_operation;
+    uint32_t *coroutine_by_operation;
     uint8_t *elided_operations;
     uint32_t operation_count;
 } XrScalarInstructionAnalysis;
@@ -10503,6 +10504,7 @@ static void scalar_instruction_analysis_dispose(
         return;
     xr_free(analysis->call_by_operation);
     xr_free(analysis->entry_by_operation);
+    xr_free(analysis->coroutine_by_operation);
     xr_free(analysis->elided_operations);
     memset(analysis, 0, sizeof(*analysis));
 }
@@ -10604,10 +10606,14 @@ static bool scalar_instruction_analysis_init(
         analysis->operation_count, sizeof(*analysis->call_by_operation));
     analysis->entry_by_operation = (uint32_t *) allocate_records(
         analysis->operation_count, sizeof(*analysis->entry_by_operation));
+    analysis->coroutine_by_operation = (uint32_t *) allocate_records(
+        analysis->operation_count,
+        sizeof(*analysis->coroutine_by_operation));
     analysis->elided_operations = (uint8_t *) allocate_records(
         analysis->operation_count, sizeof(*analysis->elided_operations));
     if ((analysis->operation_count &&
-         (!analysis->call_by_operation || !analysis->entry_by_operation)) ||
+         (!analysis->call_by_operation || !analysis->entry_by_operation ||
+          !analysis->coroutine_by_operation)) ||
         (analysis->operation_count && !analysis->elided_operations)) {
         scalar_instruction_analysis_dispose(analysis);
         return false;
@@ -10615,6 +10621,17 @@ static bool scalar_instruction_analysis_init(
     for (uint32_t i = 0; i < analysis->operation_count; i++) {
         analysis->call_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
         analysis->entry_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
+        analysis->coroutine_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
+    }
+    for (uint32_t i = 0; i < materialized->coroutine_count; i++) {
+        uint32_t operation = materialized->coroutines[i].semantic_operation;
+        if (operation >= analysis->operation_count ||
+            analysis->coroutine_by_operation[operation] !=
+                XR_SEMANTIC_INDEX_NONE) {
+            scalar_instruction_analysis_dispose(analysis);
+            return false;
+        }
+        analysis->coroutine_by_operation[operation] = i;
     }
 
     XrTargetValueStorageAnalysis values = {0};
@@ -10792,6 +10809,49 @@ static bool scalar_instruction_analysis_init(
     return true;
 }
 
+/* A suspend row is admitted only when the frozen coroutine record names the
+ * block's sole XI_YIELD operation and the continuation stays in this exact
+ * function. The row carries the state record ID; its resume block remains a
+ * TargetPlan fact and is never reconstructed from a runtime tag. */
+static bool scalar_suspend_block_is_exact(
+    const XrTargetPlanBuilder *builder,
+    const XrTargetMaterializedPlan *materialized, uint32_t function_index,
+    const XrSemanticFunctionRecord *function,
+    const XrSemanticBlockRecord *block,
+    const XrScalarInstructionAnalysis *analysis, uint32_t *state_out) {
+    if (!builder || !materialized || !function || !block || !analysis ||
+        block->function != function_index || block->operation_count != 1 ||
+        block->operation_begin >= analysis->operation_count)
+        return false;
+    uint32_t operation_index = block->operation_begin;
+    uint32_t state_index = analysis->coroutine_by_operation[operation_index];
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan, operation_index);
+    const XrTargetCoroutineStateRecord *state =
+        state_index < materialized->coroutine_count
+            ? &materialized->coroutines[state_index]
+            : NULL;
+    if (!operation || !state || state->id != state_index ||
+        state->function != function_index ||
+        state->semantic_operation != operation_index ||
+        state->suspend_block != operation->block ||
+        state->resume_predecessor != state->suspend_block ||
+        state->resume_predecessor_ordinal != 0 ||
+        state->resume_block < function->block_begin ||
+        state->resume_block - function->block_begin >= function->block_count ||
+        state->direct_call != XR_SEMANTIC_INDEX_NONE ||
+        state->result_slot != XR_SEMANTIC_INDEX_NONE || state->flags != 0 ||
+        operation->function != function_index ||
+        operation->opcode != XI_YIELD || operation->operand_count != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->semantic_immediate != 0 ||
+        operation->effects != xi_generated_op_effects(XI_YIELD))
+        return false;
+    if (state_out)
+        *state_out = state_index;
+    return true;
+}
+
 /*
  * A function is committed only as one complete instruction group. Structural
  * or semantic facts outside this deliberately small closed family make the
@@ -10852,6 +10912,10 @@ static bool materialize_scalar_instruction_function(
                                         &block) ||
             block->operation_count > 40000000u - 1u - group_rows)
             admissible = false;
+        else if (scalar_suspend_block_is_exact(
+                     builder, materialized, function_index, function, block,
+                     analysis, NULL))
+            group_rows++;
         else {
             uint32_t emitted = 0;
             for (uint32_t i = 0; i < block->operation_count; i++)
@@ -10879,6 +10943,27 @@ static bool materialize_scalar_instruction_function(
             next_row != block_row[block_ordinal]) {
             admissible = false;
             break;
+        }
+        uint32_t coroutine_state = XR_SEMANTIC_INDEX_NONE;
+        if (scalar_suspend_block_is_exact(
+                builder, materialized, function_index, function, block,
+                analysis, &coroutine_state)) {
+            XrTargetCoroutineStateRecord *state =
+                &materialized->coroutines[coroutine_state];
+            uint32_t resume_ordinal =
+                state->resume_block - function->block_begin;
+            state->resume_instruction = block_row[resume_ordinal];
+            group[next_row++] = (XrTargetInstructionRecord) {
+                .function = function_index,
+                .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+                .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                                  XR_TARGET_INSTRUCTION_SLOT_NONE},
+                .immediate_bits = XR_TARGET_INSTRUCTION_SUSPEND_PACK(
+                    coroutine_state, state->resume_instruction),
+                .opcode = XR_TARGET_INSTRUCTION_SUSPEND,
+                .operand_count = 0,
+            };
+            continue;
         }
         for (uint32_t ordinal = 0; ordinal < block->operation_count; ordinal++) {
             uint32_t operation_index = block->operation_begin + ordinal;
@@ -11053,7 +11138,8 @@ static bool materialize_scalar_instruction_function(
             materialized->call_arguments,
             materialized->call_argument_count,
             materialized->entry_expectations,
-            materialized->entry_expectation_count)) {
+            materialized->entry_expectation_count,
+            materialized->coroutines, materialized->coroutine_count)) {
         xr_free(group);
         xr_free(block_row);
         return false;
@@ -11125,6 +11211,13 @@ static bool materialize_scalar_instructions(
         }
         instruction_count += function_rows[function];
     }
+    /* Eligibility probes above derive the local continuation in order to run
+     * the same independent row verifier as the final build. Clear those probe
+     * results before publication; only functions that survive call-closure
+     * pruning may publish an executable continuation. */
+    for (uint32_t state = 0; state < materialized->coroutine_count; state++)
+        materialized->coroutines[state].resume_instruction =
+            XR_SEMANTIC_INDEX_NONE;
     materialized->instruction_count = instruction_count;
     materialized->instructions = (XrTargetInstructionRecord *) allocate_records(
         instruction_count, sizeof(*materialized->instructions));
@@ -11669,6 +11762,7 @@ static bool materialize_coroutine_state_calls(
             .suspend_block = suspend_block,
             .resume_block = resume_block,
             .resume_predecessor = suspend_block,
+            .resume_instruction = XR_SEMANTIC_INDEX_NONE,
             .direct_call = direct_call,
             .result_slot = result_slot,
             .resume_predecessor_ordinal = predecessor_ordinal,
@@ -11891,10 +11985,10 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
         !materialize_entry_expectations(builder, materialized, error,
                                         error_size) ||
-        !materialize_scalar_instructions(builder, materialized, error,
-                                         error_size) ||
         !materialize_coroutine_state_calls(builder, materialized, error,
                                            error_size) ||
+        !materialize_scalar_instructions(builder, materialized, error,
+                                         error_size) ||
         !materialize_debug_facts(builder, materialized, error, error_size) ||
         !materialize_foundation_capabilities(builder, materialized, error,
                                              error_size)) {

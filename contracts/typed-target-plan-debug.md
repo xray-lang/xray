@@ -82,7 +82,7 @@ over-budget breakpoint plan or stop fails closed without invoking the callback.
 
 Materialization rechecks the immutable plan and event fingerprint, then copies
 only exact function, instruction, call, entry-expectation, slot, and immutable
-debug-fact rows. TargetPlan schema 39 carries one debug fact for every target
+debug-fact rows. TargetPlan schema 40 carries one debug fact for every target
 instruction. It names the exact SemanticPlan operation and its stable ID; when
 the operation has a verified source span it carries the source-span stable ID
 and coordinates, otherwise it reports context unavailable. It also carries the

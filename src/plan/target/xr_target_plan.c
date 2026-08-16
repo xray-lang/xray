@@ -369,6 +369,7 @@ static void hash_coroutine(XrSHA256Context *ctx,
     hash_u64(ctx, record->suspend_block);
     hash_u64(ctx, record->resume_block);
     hash_u64(ctx, record->resume_predecessor);
+    hash_u64(ctx, record->resume_instruction);
     hash_u64(ctx, record->direct_call);
     hash_u64(ctx, record->result_slot);
     hash_u64(ctx, record->resume_predecessor_ordinal);
@@ -918,15 +919,24 @@ const XrTargetInstructionRecord *xr_target_plan_function_instructions(
 uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
                                                        uint32_t function) {
     uint32_t count = 0;
-    if (!xr_target_plan_function_instructions(plan, function, &count) || !count)
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_function_instructions(plan, function, &count);
+    if (!rows || !count)
         return 0;
+    bool suspends = false;
+    for (uint32_t i = 0; i < count; i++)
+        suspends |= rows[i].opcode == XR_TARGET_INSTRUCTION_SUSPEND;
     for (uint32_t i = 0; i < plan->entry_expectations_count; i++) {
         uint32_t call = plan->entry_expectations[i].call;
         if (call < plan->calls_count &&
             plan->calls[call].caller_function == function)
-            return (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC;
+            return suspends
+                       ? 0
+                       : (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC;
     }
-    return (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_CLOSED;
+    return suspends
+               ? (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_COROUTINE
+               : (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_CLOSED;
 }
 
 #define XR_TARGET_TABLE_ACCESSOR(name, type)                                                       \

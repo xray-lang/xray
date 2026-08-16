@@ -194,3 +194,11 @@
   :effects (may-error) :error entry-call :suspend no
   :immediate entry-expectation :control none
   :semantic xi.call :dispatch entry-call :dispatch-arg none)
+
+(define-target-instruction suspend
+  :id 28 :name "suspend" :arity 0 :terminator yes
+  :result-rep none :operand-reps ()
+  :result-ownership none :operand-ownership none
+  :effects (control may-suspend) :error none :suspend yes
+  :immediate coroutine-state :control suspend
+  :semantic xi.yield :dispatch suspend :dispatch-arg none)

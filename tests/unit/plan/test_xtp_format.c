@@ -1333,10 +1333,11 @@ static void test_coroutine_rows_roundtrip_and_mutate(void) {
         20, /* suspend_block */
         24, /* resume_block */
         28, /* resume_predecessor */
-        32, /* direct_call */
-        36, /* result_slot */
-        40, /* resume_predecessor_ordinal */
-        42, /* flags */
+        32, /* resume_instruction */
+        36, /* direct_call */
+        40, /* result_slot */
+        44, /* resume_predecessor_ordinal */
+        46, /* flags */
     };
     for (size_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
         uint8_t *copy = copy_artifact(&fixture);
@@ -1704,7 +1705,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0, 448, 58, 12, 24, 108, 28, 40, 24, 12,
-        48, 58, 32, 160, 58, 20, 4, 20, 44, 12, 44, 144, 132,
+        48, 58, 32, 160, 58, 20, 4, 20, 44, 12, 48, 144, 132,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {

@@ -196,7 +196,8 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
 #define XR_XTP_COROUTINE_FIELDS(F)                                                                 \
     F(U32, id) F(U32, function) F(U32, semantic_entity) F(U32, semantic_operation)               \
     F(U32, logical_state) F(U32, suspend_block) F(U32, resume_block)                              \
-    F(U32, resume_predecessor) F(U32, direct_call) F(U32, result_slot)                            \
+    F(U32, resume_predecessor) F(U32, resume_instruction) F(U32, direct_call)                     \
+    F(U32, result_slot)                                                                            \
     F(U16, resume_predecessor_ordinal) F(U16, flags)
 #define XR_XTP_ENTRY_EXPECTATION_FIELDS(F)                                                         \
     F(ID, identity) F(U32, id) F(U32, call) F(U32, abi_schema_version)                             \

@@ -3656,9 +3656,9 @@ TARGET_EFFECTS = {'control', 'may-error', 'may-suspend'}
 TARGET_ERRORS = {'none', 'divide-by-zero', 'modulo-by-zero', 'entry-call'}
 TARGET_IMMEDIATE_KINDS = {
     'none', 'i64', 'parameter-ordinal', 'jump-target', 'branch-targets',
-    'call-record', 'entry-expectation',
+    'call-record', 'entry-expectation', 'coroutine-state',
 }
-TARGET_CONTROL_KINDS = {'none', 'return', 'jump', 'branch'}
+TARGET_CONTROL_KINDS = {'none', 'return', 'jump', 'branch', 'suspend'}
 TARGET_DISPATCH_ARGUMENTS = {
     'const': {'none'},
     'param': {'none'},
@@ -3672,6 +3672,7 @@ TARGET_DISPATCH_ARGUMENTS = {
     'branch': {'jump', 'i64', 'bool'},
     'call': {'none'},
     'entry-call': {'none'},
+    'suspend': {'none'},
 }
 
 
@@ -3802,6 +3803,8 @@ def parse_target_instruction_def(text: str,
             die(f"{context}: branch control requires branch target immediates")
         if control == 'return' and immediate != 'none':
             die(f"{context}: return control cannot carry an immediate")
+        if control == 'suspend' and immediate != 'coroutine-state':
+            die(f"{context}: suspend control requires a coroutine state immediate")
 
         seen_source_names.add(source_name)
         seen_names.add(name)
@@ -3892,6 +3895,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_BRANCH_TARGETS,',
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_CALL_RECORD,',
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_ENTRY_EXPECTATION,',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_COROUTINE_STATE,',
         '} XrTargetInstructionImmediateKind;',
         '',
         'typedef enum XrTargetInstructionControlKind {',
@@ -3899,6 +3903,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_CONTROL_RETURN,',
         '    XR_TARGET_INSTRUCTION_CONTROL_JUMP,',
         '    XR_TARGET_INSTRUCTION_CONTROL_BRANCH,',
+        '    XR_TARGET_INSTRUCTION_CONTROL_SUSPEND,',
         '} XrTargetInstructionControlKind;',
         '',
         'typedef enum XrTargetInstructionDispatchKind {',
@@ -3914,6 +3919,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_DISPATCH_BRANCH,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_CALL,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_ENTRY_CALL,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_SUSPEND,',
         '} XrTargetInstructionDispatchKind;',
         '',
         'typedef enum XrTargetInstructionDispatchArgument {',

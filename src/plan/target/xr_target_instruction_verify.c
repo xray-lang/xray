@@ -137,6 +137,11 @@ static bool row_immediate_is_exact(
         case XR_TARGET_INSTRUCTION_IMMEDIATE_CALL_RECORD:
         case XR_TARGET_INSTRUCTION_IMMEDIATE_ENTRY_EXPECTATION:
             return row->immediate_bits <= UINT32_MAX;
+        case XR_TARGET_INSTRUCTION_IMMEDIATE_COROUTINE_STATE:
+            return XR_TARGET_INSTRUCTION_SUSPEND_STATE(
+                       row->immediate_bits) != UINT32_MAX &&
+                   XR_TARGET_INSTRUCTION_SUSPEND_RESUME(
+                       row->immediate_bits) != UINT32_MAX;
         default:
             return false;
     }
@@ -277,7 +282,9 @@ bool xr_target_instruction_rows_control_flow_is_exact(
     const XrTargetCallArgumentRecord *call_arguments,
     uint32_t call_argument_count,
     const XrTargetEntryExpectationRecord *entry_expectations,
-    uint32_t entry_expectation_count) {
+    uint32_t entry_expectation_count,
+    const XrTargetCoroutineStateRecord *coroutines,
+    uint32_t coroutine_count) {
     if (!rows || !row_count || !slot_count ||
         slot_count > UINT32_MAX - slot_begin ||
         !xr_target_instruction_is_terminator(rows[row_count - 1u].opcode))
@@ -347,6 +354,32 @@ bool xr_target_instruction_rows_control_flow_is_exact(
                             XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(immediate),
                             &proof.successors[block * 2u + 1u]);
                 break;
+            case XR_TARGET_INSTRUCTION_CONTROL_SUSPEND: {
+                uint32_t state_index =
+                    XR_TARGET_INSTRUCTION_SUSPEND_STATE(immediate);
+                const XrTargetCoroutineStateRecord *state =
+                    coroutines && state_index < coroutine_count
+                        ? &coroutines[state_index]
+                        : NULL;
+                if (!state || state->id != state_index ||
+                    state->function != rows[0].function ||
+                    state->resume_predecessor != state->suspend_block ||
+                    state->resume_predecessor_ordinal != 0 ||
+                    state->resume_instruction !=
+                        XR_TARGET_INSTRUCTION_SUSPEND_RESUME(immediate) ||
+                    state->direct_call != XR_SEMANTIC_INDEX_NONE ||
+                    state->result_slot != XR_SEMANTIC_INDEX_NONE ||
+                    state->flags != 0) {
+                    valid = false;
+                    break;
+                }
+                if (!control_flow_target_block(
+                        proof.block_start, block_count,
+                        XR_TARGET_INSTRUCTION_SUSPEND_RESUME(immediate),
+                        &proof.successors[block * 2u]))
+                    valid = false;
+                break;
+            }
             default:
                 valid = false;
                 break;
@@ -706,6 +739,28 @@ static bool entry_i64_call_row_is_exact(
     return true;
 }
 
+static bool suspend_row_is_exact(const XrTargetPlan *plan,
+                                 const XrTargetInstructionRecord *row,
+                                 uint32_t function_index) {
+    uint32_t coroutine_count = 0;
+    const XrTargetCoroutineStateRecord *coroutines =
+        xr_target_plan_coroutines(plan, &coroutine_count);
+    uint32_t state_index =
+        XR_TARGET_INSTRUCTION_SUSPEND_STATE(row->immediate_bits);
+    const XrTargetCoroutineStateRecord *state =
+        coroutines && state_index < coroutine_count
+            ? &coroutines[state_index]
+            : NULL;
+    return state && state->id == state_index &&
+           state->function == function_index &&
+           state->resume_predecessor == state->suspend_block &&
+           state->resume_predecessor_ordinal == 0 &&
+           state->resume_instruction ==
+               XR_TARGET_INSTRUCTION_SUSPEND_RESUME(row->immediate_bits) &&
+           state->direct_call == XR_SEMANTIC_INDEX_NONE &&
+           state->result_slot == XR_SEMANTIC_INDEX_NONE && state->flags == 0;
+}
+
 static bool verify_function_group(const XrTargetPlan *plan,
                                   const XrTargetInstructionRecord *rows,
                                   uint32_t row_count, uint32_t function_index,
@@ -732,6 +787,7 @@ static bool verify_function_group(const XrTargetPlan *plan,
     uint32_t parameter_rows = 0;
     bool valid = true;
     bool call_invalid = false;
+    bool suspend_invalid = false;
     for (uint32_t i = 0; i < row_count && valid; i++) {
         const XrTargetInstructionRecord *row = &rows[i];
         bool terminal = i + 1u == row_count;
@@ -769,6 +825,13 @@ static bool verify_function_group(const XrTargetPlan *plan,
             !entry_i64_call_row_is_exact(plan, row, function_index)) {
             valid = false;
             call_invalid = true;
+            break;
+        }
+        if (contract->dispatch_kind ==
+                XR_TARGET_INSTRUCTION_DISPATCH_SUSPEND &&
+            !suspend_row_is_exact(plan, row, function_index)) {
+            valid = false;
+            suspend_invalid = true;
             break;
         }
 
@@ -823,15 +886,22 @@ static bool verify_function_group(const XrTargetPlan *plan,
     uint32_t entry_expectation_count = 0;
     const XrTargetEntryExpectationRecord *entry_expectations =
         xr_target_plan_entry_expectations(plan, &entry_expectation_count);
+    uint32_t coroutine_count = 0;
+    const XrTargetCoroutineStateRecord *coroutines =
+        xr_target_plan_coroutines(plan, &coroutine_count);
     if (call_invalid)
         return report(error, error_size, "XR_TARGET_1003",
                       "instruction call row does not match its exact call record");
+    if (suspend_invalid)
+        return report(error, error_size, "XR_CORO_4000",
+                      "instruction suspend row does not match its exact coroutine state");
     if (!valid || bound_arguments != dense_arguments ||
         function_parameter_slot_count(plan, function) != parameter_rows ||
         !xr_target_instruction_rows_control_flow_is_exact(
             rows, row_count, function->slot_begin, function->slot_count,
             calls, call_count, call_arguments, call_argument_count,
-            entry_expectations, entry_expectation_count))
+            entry_expectations, entry_expectation_count, coroutines,
+            coroutine_count))
         return report(error, error_size, "XR_TARGET_1005",
                       "instruction program is not an exact closed i64 program");
     return true;

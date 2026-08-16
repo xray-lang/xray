@@ -432,6 +432,9 @@ static bool fail_typed_dispatch(XrTypedDispatchStatus status, char *diagnostic,
         case XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5009",
                         "exported function exceeded the executor call-depth budget");
+        case XR_TYPED_DISPATCH_SUSPENDED:
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5000",
+                        "non-suspending export unexpectedly suspended");
         case XR_TYPED_DISPATCH_ENTRY_UNAVAILABLE:
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
                         "exported function dynamic entry is unavailable");

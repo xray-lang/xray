@@ -24,9 +24,10 @@
 #include "../shared/xr_compare_core.h"
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
+#include "../base/xmalloc.h"
 #include <string.h>
 
-_Static_assert(XR_VM_DEBUG_MAX_STACK_DEPTH ==
+_Static_assert(XR_VM_DEBUG_MAX_STACK_DEPTH >=
                    XR_TYPED_DISPATCH_MAX_CALL_DEPTH,
                "debug stack must cover the complete typed call stack");
 
@@ -56,6 +57,31 @@ static bool function_has_zero_lifecycle(const XrTargetPlan *plan,
                coroutine_count - record->coroutine_begin &&
            record->root_count == 0 && record->cleanup_count == 0 &&
            record->coroutine_count == 0;
+}
+
+static bool function_has_zero_managed_lifecycle(
+    const XrTargetPlan *plan, uint32_t function) {
+    uint32_t function_count = 0;
+    uint32_t root_count = 0;
+    uint32_t cleanup_count = 0;
+    uint32_t coroutine_count = 0;
+    const XrTargetFunctionRecord *functions =
+        xr_target_plan_functions(plan, &function_count);
+    (void) xr_target_plan_root_maps(plan, &root_count);
+    (void) xr_target_plan_cleanups(plan, &cleanup_count);
+    (void) xr_target_plan_coroutines(plan, &coroutine_count);
+    const XrTargetFunctionRecord *record =
+        functions && function < function_count ? &functions[function] : NULL;
+    return record && record->id == function &&
+           record->root_begin <= root_count &&
+           record->root_count <= root_count - record->root_begin &&
+           record->cleanup_begin <= cleanup_count &&
+           record->cleanup_count <= cleanup_count - record->cleanup_begin &&
+           record->coroutine_begin < coroutine_count &&
+           record->coroutine_count <=
+               coroutine_count - record->coroutine_begin &&
+           record->root_count == 0 && record->cleanup_count == 0 &&
+           record->coroutine_count != 0;
 }
 
 static XrTypedDispatchStatus free_scalar_frame(XrTypedFrame **frame) {
@@ -178,8 +204,28 @@ typedef struct XrTypedDispatchExecution {
     XrModuleGenerationIdentity generation_identity;
     bool generation_identity_present;
     bool use_dynamic_entry_cache;
+    bool row_suspended;
+    uint32_t row_suspend_state;
+    uint32_t resume_start_instruction;
     XrTypedDispatchProvider provider;
 } XrTypedDispatchExecution;
+
+struct XrTypedCoroutineI64 {
+    XrTargetPlan *plan;
+    XrFingerprint fingerprint;
+    XrVmDecodedCache *cache;
+    XrTypedFrame *frame;
+    int64_t *arguments;
+    XrTypedDispatchExecution execution;
+    uint64_t return_bits;
+    uint32_t function;
+    uint32_t argument_count;
+    uint32_t next_instruction;
+    uint32_t suspended_state;
+    bool started;
+    bool suspended;
+    bool terminal;
+};
 
 static bool bytes_are_zero(const uint8_t *bytes, size_t size) {
     uint8_t combined = 0;
@@ -505,6 +551,23 @@ static XrTypedDispatchStatus execute_return(
     (void) contract;
     *context->returned = true;
     return load_i64_bits(frame, row->operand_slots[0], context->return_bits);
+}
+
+static XrTypedDispatchStatus execute_suspend(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    if (!contract || !context || !context->execution ||
+        contract->control_kind != XR_TARGET_INSTRUCTION_CONTROL_SUSPEND ||
+        xr_typed_frame_bind_coroutine_state(
+            frame, XR_TARGET_INSTRUCTION_SUSPEND_STATE(
+                       row->immediate_bits)) != XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    context->execution->row_suspended = true;
+    context->execution->row_suspend_state =
+        XR_TARGET_INSTRUCTION_SUSPEND_STATE(
+        row->immediate_bits);
+    return XR_TYPED_DISPATCH_OK;
 }
 
 static XrTypedDispatchStatus execute_branch(
@@ -989,12 +1052,15 @@ static XrTypedDispatchStatus execute_function_rows(
     XrVmDebugControl *debug_control = execution->debug_session
                                           ? execution->debug_session->control
                                           : NULL;
-    uint32_t current = 0;
+    uint32_t current = execution->resume_start_instruction;
+    execution->resume_start_instruction = 0;
     bool returned = false;
+    bool suspended = false;
+    uint32_t suspend_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     run->current_instruction = XR_VM_TRACE_ID_NONE;
     run->last_block = XR_VM_TRACE_ID_NONE;
     run->current_opcode = XR_TARGET_INSTRUCTION_INVALID;
-    while (!returned) {
+    while (!returned && !suspended) {
         if (current >= instruction_count)
             return XR_TYPED_DISPATCH_PROGRAM_INVALID;
         if (execution->remaining_steps == 0)
@@ -1061,12 +1127,16 @@ static XrTypedDispatchStatus execute_function_rows(
         if (status != XR_TYPED_DISPATCH_OK)
             return status;
         uint32_t next = current + 1u;
+        execution->row_suspended = false;
+        execution->row_suspend_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
         status = execute_row(
             frame, row, decoded, arguments, argument_count,
             instruction_count, &next, &returned, return_bits, execution,
             parameters_prebound, frame_id);
         if (status != XR_TYPED_DISPATCH_OK)
             return status;
+        suspended = execution->row_suspended;
+        suspend_state = execution->row_suspend_state;
         if (debug_control &&
             xr_typed_debug_control_commit_row(debug_control, row) !=
                 XR_VM_DEBUG_CONTROL_EVENT_OK) {
@@ -1074,7 +1144,9 @@ static XrTypedDispatchStatus execute_function_rows(
         }
         current = next;
     }
-    return XR_TYPED_DISPATCH_OK;
+    execution->row_suspend_state = suspend_state;
+    return suspended ? XR_TYPED_DISPATCH_SUSPENDED
+                     : XR_TYPED_DISPATCH_OK;
 }
 
 static XrTypedDispatchStatus execute_function(
@@ -1312,5 +1384,201 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
     if (status != XR_TYPED_DISPATCH_OK)
         return status;
     memcpy(request->result, &return_bits, sizeof(*request->result));
+    return XR_TYPED_DISPATCH_OK;
+}
+
+XrTypedDispatchStatus xr_typed_coroutine_i64_create(
+    const XrTypedCoroutineI64Request *request,
+    XrTypedCoroutineI64 **coroutine) {
+    if (!coroutine || *coroutine)
+        return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
+    if (!request || !request->verified_plan ||
+        !request->required_plan_fingerprint ||
+        (!request->arguments && request->argument_count) ||
+        (request->provider != XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH &&
+         request->provider !=
+             XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE))
+        return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
+    if (request->argument_count > XR_TARGET_INSTRUCTION_MAX_PARAMETERS)
+        return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
+    if (!xr_target_plan_is_verified(request->verified_plan))
+        return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    if (!xr_fingerprint_equal(
+            xr_target_plan_fingerprint(request->verified_plan),
+            *request->required_plan_fingerprint) ||
+        !xr_target_plan_fingerprint_is_intact(request->verified_plan))
+        return XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
+    if (xr_target_plan_function_execution_family_mask(
+            request->verified_plan, request->function) !=
+            XR_TARGET_EXECUTION_SCALAR_I64_COROUTINE ||
+        !function_has_zero_managed_lifecycle(request->verified_plan,
+                                             request->function))
+        return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+
+    XrTypedCoroutineI64 *created =
+        (XrTypedCoroutineI64 *) xr_calloc(1, sizeof(*created));
+    if (!created)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    created->fingerprint = *request->required_plan_fingerprint;
+    created->function = request->function;
+    created->argument_count = request->argument_count;
+    created->next_instruction = 0;
+    created->suspended_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    created->plan = xr_target_plan_retain(
+        (XrTargetPlan *) request->verified_plan);
+    if (!created->plan)
+        goto allocation_failed;
+    if (xr_typed_decoded_cache_create(
+            created->plan, &created->fingerprint, &created->cache) !=
+        XR_VM_DECODED_CACHE_OK)
+        goto program_invalid;
+    XrVmDecodedFunctionView view = {0};
+    if (!xr_typed_decoded_cache_function(
+            created->cache, created->function, &view) ||
+        view.parameter_count != created->argument_count ||
+        !view.instructions || !view.instruction_count)
+        goto argument_mismatch;
+    if (request->argument_count) {
+        created->arguments = (int64_t *) xr_malloc(
+            (size_t) request->argument_count * sizeof(*created->arguments));
+        if (!created->arguments)
+            goto allocation_failed;
+        memcpy(created->arguments, request->arguments,
+               (size_t) request->argument_count *
+                   sizeof(*created->arguments));
+    }
+    XrTypedFrameLimits limits;
+    xr_typed_frame_limits_default(&limits);
+    if (xr_typed_frame_create(
+            created->plan, &created->fingerprint, created->function,
+            &limits, &created->frame) != XR_TYPED_FRAME_OK)
+        goto allocation_failed;
+    created->execution = (XrTypedDispatchExecution) {
+        .plan = created->plan,
+        .fingerprint = &created->fingerprint,
+        .limits = limits,
+        .remaining_steps = XR_TYPED_DISPATCH_MAX_STEPS,
+        .call_depth = 1,
+        .next_frame_id = 1,
+        .decoded_cache = created->cache,
+        .provider = request->provider,
+    };
+    *coroutine = created;
+    return XR_TYPED_DISPATCH_OK;
+
+argument_mismatch:
+    xr_typed_decoded_cache_free(created->cache);
+    xr_free(created->arguments);
+    xr_target_plan_free(created->plan);
+    xr_free(created);
+    return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
+program_invalid:
+    xr_free(created->arguments);
+    xr_target_plan_free(created->plan);
+    xr_free(created);
+    return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+allocation_failed:
+    xr_typed_decoded_cache_free(created->cache);
+    xr_free(created->arguments);
+    xr_target_plan_free(created->plan);
+    xr_free(created);
+    return XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+XrTypedDispatchStatus xr_typed_coroutine_i64_resume(
+    XrTypedCoroutineI64 *coroutine, int64_t *result,
+    uint32_t *suspended_state) {
+    if (result)
+        *result = 0;
+    if (suspended_state)
+        *suspended_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    if (!coroutine || !result || !suspended_state)
+        return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
+    if (coroutine->terminal)
+        return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+    XrVmDecodedFunctionView view = {0};
+    if (!xr_typed_decoded_cache_function(
+            coroutine->cache, coroutine->function, &view) ||
+        !view.instructions || coroutine->next_instruction >=
+                                  view.instruction_count)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    if (coroutine->suspended &&
+        xr_typed_frame_resume_coroutine_state(
+            coroutine->frame, coroutine->suspended_state) !=
+            XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+
+    XrTypedDispatchFunctionRun run = {
+        XR_VM_TRACE_ID_NONE, XR_VM_TRACE_ID_NONE,
+        XR_TARGET_INSTRUCTION_INVALID};
+    coroutine->execution.resume_start_instruction =
+        coroutine->next_instruction;
+    XrTypedDispatchStatus status = execute_function_rows(
+        &coroutine->execution, coroutine->frame, coroutine->function,
+        coroutine->arguments, coroutine->argument_count, coroutine->started,
+        0, XR_VM_TRACE_ID_NONE, 0, NULL, &view, view.instruction_count,
+        &coroutine->return_bits, &run);
+    uint32_t state = coroutine->execution.row_suspend_state;
+    coroutine->started = true;
+    coroutine->suspended = false;
+    if (status == XR_TYPED_DISPATCH_SUSPENDED) {
+        if (run.current_instruction < view.instructions[0].row.id)
+            return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+        uint32_t local =
+            run.current_instruction - view.instructions[0].row.id;
+        if (local >= view.instruction_count ||
+            view.instructions[local].row.opcode !=
+                XR_TARGET_INSTRUCTION_SUSPEND ||
+            view.instructions[local].target_if_nonzero >=
+                view.instruction_count ||
+            state == XR_TYPED_FRAME_CONTEXT_INDEX_NONE)
+            return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+        coroutine->next_instruction =
+            view.instructions[local].target_if_nonzero;
+        coroutine->suspended_state = state;
+        coroutine->suspended = true;
+        *suspended_state = state;
+        return XR_TYPED_DISPATCH_SUSPENDED;
+    }
+    coroutine->terminal = true;
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    memcpy(result, &coroutine->return_bits, sizeof(*result));
+    return XR_TYPED_DISPATCH_OK;
+}
+
+XrTypedDispatchStatus xr_typed_coroutine_i64_cancel(
+    XrTypedCoroutineI64 *coroutine) {
+    if (!coroutine)
+        return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
+    if (coroutine->terminal)
+        return XR_TYPED_DISPATCH_OK;
+    if (coroutine->suspended &&
+        xr_typed_frame_resume_coroutine_state(
+            coroutine->frame, coroutine->suspended_state) !=
+            XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    coroutine->suspended = false;
+    coroutine->terminal = true;
+    return XR_TYPED_DISPATCH_OK;
+}
+
+XrTypedDispatchStatus xr_typed_coroutine_i64_free(
+    XrTypedCoroutineI64 **coroutine) {
+    if (!coroutine)
+        return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
+    if (!*coroutine)
+        return XR_TYPED_DISPATCH_OK;
+    XrTypedDispatchStatus status =
+        xr_typed_coroutine_i64_cancel(*coroutine);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    if (free_scalar_frame(&(*coroutine)->frame) != XR_TYPED_DISPATCH_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    xr_typed_decoded_cache_free((*coroutine)->cache);
+    xr_free((*coroutine)->arguments);
+    xr_target_plan_free((*coroutine)->plan);
+    xr_free(*coroutine);
+    *coroutine = NULL;
     return XR_TYPED_DISPATCH_OK;
 }

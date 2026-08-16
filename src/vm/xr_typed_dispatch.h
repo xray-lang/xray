@@ -16,6 +16,7 @@
 #include "xr_vm_dynamic_entry.h"
 
 typedef struct XrVmDecodedCache XrVmDecodedCache;
+typedef struct XrTypedCoroutineI64 XrTypedCoroutineI64;
 
 typedef enum XrTypedDispatchProvider {
     XR_TYPED_DISPATCH_PROVIDER_INVALID = 0,
@@ -55,6 +56,7 @@ typedef enum XrTypedDispatchStatus {
     XR_TYPED_DISPATCH_ENTRY_AUTHORITY_MISMATCH,
     XR_TYPED_DISPATCH_ENTRY_BUDGET_EXCEEDED,
     XR_TYPED_DISPATCH_ENTRY_RETIRE_DEFERRED,
+    XR_TYPED_DISPATCH_SUSPENDED,
 } XrTypedDispatchStatus;
 
 /*
@@ -65,7 +67,7 @@ typedef enum XrTypedDispatchStatus {
 #define XR_TYPED_DISPATCH_MAX_STEPS UINT32_C(1048576)
 
 /* Recursive direct-local execution shares one bounded native call stack. */
-#define XR_TYPED_DISPATCH_MAX_CALL_DEPTH UINT32_C(256)
+#define XR_TYPED_DISPATCH_MAX_CALL_DEPTH UINT32_C(128)
 
 /* Arguments are positional signed i64 values. The count must equal the
  * parameter count the verified instruction group binds; a shorter, longer, or
@@ -89,6 +91,22 @@ typedef struct XrTypedDispatchI64Request {
     bool use_dynamic_entry_cache;
 } XrTypedDispatchI64Request;
 
+/* A suspended typed coroutine is single-owner and owns one packed frame and
+ * one immutable decoded program. Resuming reuses those exact objects; no
+ * retained legacy value stack or bytecode frame is created. The initial slice
+ * is deliberately closed to zero-managed-lifecycle scalar i64 programs and
+ * rejects debug, dynamic-entry, and generation services until their suspension
+ * ownership protocols exist.
+ * No API below may be called concurrently for the same coroutine object. */
+typedef struct XrTypedCoroutineI64Request {
+    const XrTargetPlan *verified_plan;
+    const XrFingerprint *required_plan_fingerprint;
+    const int64_t *arguments;
+    XrTypedDispatchProvider provider;
+    uint32_t function;
+    uint32_t argument_count;
+} XrTypedCoroutineI64Request;
+
 /* Proves that one provider's generated binding exactly matches the canonical
  * opcode contract. It grants no authority to verify or execute a plan. */
 XR_FUNC bool xr_typed_dispatch_provider_contract_is_exact(
@@ -96,5 +114,18 @@ XR_FUNC bool xr_typed_dispatch_provider_contract_is_exact(
     const XrTargetInstructionContract *contract);
 XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
     const XrTypedDispatchI64Request *request);
+/* Creation requires an empty owning output slot. Failure preserves that slot;
+ * success transfers the sole coroutine owner into it. Free is the only API
+ * that releases the owned frame/cache/plan and clears the slot. */
+XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_create(
+    const XrTypedCoroutineI64Request *request,
+    XrTypedCoroutineI64 **coroutine);
+XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_resume(
+    XrTypedCoroutineI64 *coroutine, int64_t *result,
+    uint32_t *suspended_state);
+XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_cancel(
+    XrTypedCoroutineI64 *coroutine);
+XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_free(
+    XrTypedCoroutineI64 **coroutine);
 
 #endif  // XR_TYPED_DISPATCH_H

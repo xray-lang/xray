@@ -29,6 +29,7 @@ struct XrTypedFrame {
     uint32_t current_block_instruction;
     uint32_t current_instruction;
     uint32_t coroutine_state;
+    uint32_t pending_resume_instruction;
     uint64_t generation_number;
     XrFingerprint generation_fingerprint;
     struct XrTypedFrame *parent;
@@ -568,6 +569,7 @@ static XrTypedFrameStatus allocate_frame(const XrTargetPlan *plan,
     frame->current_block_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     frame->current_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     frame->coroutine_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    frame->pending_resume_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     frame->allocation_size = shape->arena_allocation_bytes;
     frame->arena_size = shape->function->frame_size;
     frame->slot_begin = shape->function->slot_begin;
@@ -918,6 +920,10 @@ static bool instruction_transition_allowed(
                                      current->immediate_bits) ||
                    next_local == XR_TARGET_INSTRUCTION_TARGET_IF_ZERO(
                                      current->immediate_bits);
+        case XR_TARGET_INSTRUCTION_CONTROL_SUSPEND:
+            return frame->coroutine_state ==
+                       XR_TYPED_FRAME_CONTEXT_INDEX_NONE &&
+                   frame->pending_resume_instruction == rows[next_local].id;
     }
     return false;
 }
@@ -972,6 +978,7 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_enter_instruction(
         return XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID;
     frame->current_instruction = instruction;
     frame->current_block_instruction = instruction_block_entry(rows, local);
+    frame->pending_resume_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     return XR_TYPED_FRAME_OK;
 }
 
@@ -990,8 +997,18 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_enter_decoded_instruction(
         block_entry_instruction == XR_TYPED_FRAME_CONTEXT_INDEX_NONE ||
         block_entry_instruction > instruction)
         return XR_TYPED_FRAME_CONTEXT_UNAVAILABLE;
+    uint32_t count = 0;
+    const XrTargetInstructionRecord *rows =
+        frame_instruction_group(frame, &count);
+    uint32_t local = 0;
+    if (!instruction_local_index(rows, count, instruction, &local) ||
+        instruction_block_entry(rows, local) != block_entry_instruction)
+        return XR_TYPED_FRAME_CONTEXT_UNAVAILABLE;
+    if (!instruction_transition_allowed(frame, rows, count, local))
+        return XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID;
     frame->current_instruction = instruction;
     frame->current_block_instruction = block_entry_instruction;
+    frame->pending_resume_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     return XR_TYPED_FRAME_OK;
 }
 
@@ -1012,6 +1029,23 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_bind_coroutine_state(
         states[coroutine_state].id != coroutine_state ||
         states[coroutine_state].function != frame->function_index)
         return XR_TYPED_FRAME_CONTEXT_UNAVAILABLE;
+    if (xr_target_plan_function_execution_family_mask(
+            frame->plan, frame->function_index) ==
+        XR_TARGET_EXECUTION_SCALAR_I64_COROUTINE) {
+        uint32_t row_count = 0;
+        const XrTargetInstructionRecord *rows =
+            frame_instruction_group(frame, &row_count);
+        uint32_t current_local = 0;
+        if (!instruction_local_index(rows, row_count,
+                                     frame->current_instruction,
+                                     &current_local) ||
+            rows[current_local].opcode != XR_TARGET_INSTRUCTION_SUSPEND ||
+            XR_TARGET_INSTRUCTION_SUSPEND_STATE(
+                rows[current_local].immediate_bits) != coroutine_state ||
+            frame->pending_resume_instruction !=
+                XR_TYPED_FRAME_CONTEXT_INDEX_NONE)
+            return XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID;
+    }
     /* The current TargetPlan freezes state identity but not a complete state
      * transition graph. Bind one verified persisted state and refuse to invent
      * movement between states until that upstream authority exists. */
@@ -1063,6 +1097,32 @@ static const XrTargetCoroutineStateRecord *frame_coroutine_state(
                    states[coroutine_state].function == frame->function_index
                ? &states[coroutine_state]
                : NULL;
+}
+
+static bool frame_resume_instruction(
+    const XrTypedFrame *frame, const XrTargetCoroutineStateRecord *state,
+    uint32_t *instruction) {
+    if (instruction)
+        *instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    uint32_t row_count = 0;
+    const XrTargetInstructionRecord *rows =
+        frame_instruction_group(frame, &row_count);
+    uint32_t current = 0;
+    if (!frame || !state || !instruction || !rows || !row_count ||
+        !instruction_local_index(rows, row_count, frame->current_instruction,
+                                 &current) ||
+        rows[current].opcode != XR_TARGET_INSTRUCTION_SUSPEND ||
+        XR_TARGET_INSTRUCTION_SUSPEND_STATE(
+            rows[current].immediate_bits) != state->id)
+        return false;
+    uint32_t target = XR_TARGET_INSTRUCTION_SUSPEND_RESUME(
+        rows[current].immediate_bits);
+    if (target != state->resume_instruction || target >= row_count ||
+        instruction_block_entry(rows, target) !=
+                                   rows[target].id)
+        return false;
+    *instruction = rows[target].id;
+    return true;
 }
 
 static const XrTargetRootMapRecord *frame_state_root_map(
@@ -1165,7 +1225,16 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_resume_coroutine_state(
     if (!frame_coroutine_state(frame, coroutine_state) ||
         frame->coroutine_state != coroutine_state)
         return XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID;
+    uint32_t resume_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    if (xr_target_plan_function_execution_family_mask(
+            frame->plan, frame->function_index) ==
+            XR_TARGET_EXECUTION_SCALAR_I64_COROUTINE &&
+        !frame_resume_instruction(
+            frame, frame_coroutine_state(frame, coroutine_state),
+            &resume_instruction))
+        return XR_TYPED_FRAME_CONTEXT_UNAVAILABLE;
     frame->coroutine_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    frame->pending_resume_instruction = resume_instruction;
     return XR_TYPED_FRAME_OK;
 }
 
@@ -1272,6 +1341,8 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_execute_cleanups(
     }
     if (event_flags) {
         frame->coroutine_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+        frame->pending_resume_instruction =
+            XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
         frame->terminal = true;
     }
     return XR_TYPED_FRAME_OK;
@@ -1459,6 +1530,7 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_cleanup(XrTypedFrame *frame) {
     frame->current_block_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     frame->current_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     frame->coroutine_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
+    frame->pending_resume_instruction = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
     frame->generation_number = 0;
     memset(&frame->generation_fingerprint, 0,
            sizeof(frame->generation_fingerprint));

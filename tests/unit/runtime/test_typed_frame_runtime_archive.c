@@ -28,6 +28,13 @@ int main(void) {
         .result = &result,
         .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
     };
+    XrTypedCoroutineI64Request coroutine_request = {
+        .required_plan_fingerprint = &fingerprint,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    XrTypedCoroutineI64 *coroutine =
+        (XrTypedCoroutineI64 *) (uintptr_t) 1;
+    uint32_t suspended_state = UINT32_MAX;
     XrVmProfile profile;
     XrVmProfileSnapshot profile_snapshot;
     XrVmTraceEvent trace_storage[1];
@@ -41,7 +48,12 @@ int main(void) {
     XrTypedLifecycleContext lifecycle_context = {0};
     XrVmTraceEvent trace_event = {0};
     uint32_t count = 0;
-    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(39) ||
+    if (xr_typed_coroutine_i64_create(NULL, &coroutine) !=
+            XR_TYPED_DISPATCH_INVALID_ARGUMENT ||
+        coroutine != (XrTypedCoroutineI64 *) (uintptr_t) 1)
+        return 1;
+    coroutine = NULL;
+    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(40) ||
         XR_TYPED_LIFECYCLE_CONTEXT_SCHEMA_VERSION != UINT32_C(2) ||
         XR_VM_DYNAMIC_ENTRY_CONTEXT_SCHEMA_VERSION != UINT32_C(3) ||
         XR_VM_TRACE_SCHEMA_VERSION != UINT32_C(3) ||
@@ -108,12 +120,23 @@ int main(void) {
             XR_VM_MATERIALIZE_INVALID_ARGUMENT ||
         xr_typed_dispatch_execute_i64(&request) !=
             XR_TYPED_DISPATCH_INVALID_ARGUMENT ||
+        xr_typed_coroutine_i64_create(&coroutine_request, &coroutine) !=
+            XR_TYPED_DISPATCH_INVALID_ARGUMENT ||
+        coroutine != NULL ||
+        xr_typed_coroutine_i64_resume(NULL, &result, &suspended_state) !=
+            XR_TYPED_DISPATCH_INVALID_ARGUMENT ||
+        xr_typed_coroutine_i64_cancel(NULL) !=
+            XR_TYPED_DISPATCH_INVALID_ARGUMENT ||
         xr_runtime_dynamic_entry_lease_stats(NULL, &lease_stats) ||
         result != 0) {
         fputs("runtime-only typed frame boundary failed\n", stderr);
         return 1;
     }
     if (xr_typed_frame_free(NULL) != XR_TYPED_FRAME_INVALID_ARGUMENT)
+        return 1;
+    if (xr_typed_coroutine_i64_free(NULL) !=
+            XR_TYPED_DISPATCH_INVALID_ARGUMENT ||
+        xr_typed_coroutine_i64_free(&coroutine) != XR_TYPED_DISPATCH_OK)
         return 1;
     xr_typed_debug_plan_free(NULL);
     xr_typed_debug_session_free(NULL);

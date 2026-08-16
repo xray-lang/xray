@@ -4,6 +4,7 @@
 
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
@@ -41,6 +42,12 @@ typedef struct TypedDispatchFixture {
 } TypedDispatchFixture;
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_unit = {
+    .kind = XR_KIND_UNIT,
+    .id = 4,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 static XrType stub_function = {
     .kind = XR_KIND_FUNCTION,
     .id = 3,
@@ -140,7 +147,8 @@ static void test_generated_instruction_contract(void) {
     REQUIRE(XR_TARGET_INSTRUCTION_BRANCH_IF_TRUE_BOOL == 25);
     REQUIRE(XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 == 26);
     REQUIRE(XR_TARGET_INSTRUCTION_CALL_ENTRY_I64 == 27);
-    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 27u);
+    REQUIRE(XR_TARGET_INSTRUCTION_SUSPEND == 28);
+    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 28u);
     REQUIRE(XR_TEST_VM_DISPATCH_COUNT ==
             XR_TARGET_INSTRUCTION_CONTRACT_COUNT);
     static const XrTypedDispatchProvider providers[] = {
@@ -180,7 +188,7 @@ static void test_generated_instruction_contract(void) {
             REQUIRE(strcmp(contract->name,
                            xr_target_instruction_opcode_name(other)) != 0);
     }
-    REQUIRE(semantic_bindings == 23u);
+    REQUIRE(semantic_bindings == 24u);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_INVALID) ==
             NULL);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_COUNT) ==
@@ -590,6 +598,56 @@ static XrSemanticPlan *build_jump_semantic(void) {
     return semantic;
 }
 
+static XrSemanticPlan *build_scalar_coroutine_semantic(bool divide_by_zero) {
+    XiFunc *function = xi_func_new(
+        divide_by_zero ? "typed_dispatch_coroutine_error"
+                       : "typed_dispatch_coroutine",
+        &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    entry->sealed = true;
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = xi_param(function, entry, 0, &stub_int);
+    XiValue *live_across = function->params[0];
+    XiValue *first_suspend =
+        xi_value_new(function, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *first_increment = xi_const_int(function, entry, 1, &stub_int);
+    XiValue *intermediate =
+        xi_value_new(function, entry, XI_ADD, &stub_int, 2);
+    XiValue *second_suspend =
+        xi_value_new(function, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *second_increment = xi_const_int(
+        function, entry, divide_by_zero ? 0 : 1, &stub_int);
+    XiValue *answer = xi_value_new(
+        function, entry, divide_by_zero ? XI_DIV : XI_ADD, &stub_int, 2);
+    REQUIRE(live_across && first_suspend && first_increment && intermediate &&
+            second_suspend && second_increment && answer);
+    intermediate->args[0] = live_across;
+    intermediate->args[1] = first_increment;
+    answer->args[0] = intermediate;
+    answer->args[1] = second_increment;
+    xi_block_set_return(entry, answer);
+    function->stage = XI_STAGE_SEMANTIC_LOWERED;
+    function->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(function, NULL));
+    REQUIRE(function->coro_plan && function->coro_plan->nstates == 2 &&
+            function->coro_plan->points[0].op == first_suspend &&
+            function->coro_plan->points[0].resume_block != NULL &&
+            function->coro_plan->points[1].op == second_suspend &&
+            function->coro_plan->points[1].resume_block != NULL);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error,
+                                   sizeof(error)));
+    xi_func_free(function);
+    return semantic;
+}
+
 /* fn(first, second) -> if (first REL second) { return first + second }
  *                      return first - second
  *
@@ -809,8 +867,8 @@ static void test_closed_program_and_unavailable_boundary(void) {
     XrSemanticPlan *retained_semantic = fixture.program_plan->semantic_plan;
     fixture.program_plan->semantic_plan = NULL;
     REQUIRE(execute_request_i64(fixture.program_plan, &fingerprint,
-                                          0, NULL, 0,
-                                          &result) == XR_TYPED_DISPATCH_OK);
+                                0, NULL, 0,
+                                &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN);
     fixture.program_plan->semantic_plan = retained_semantic;
 
@@ -2402,6 +2460,308 @@ static void test_backward_jump_stops_at_the_step_budget(void) {
     dispose_fixture(&fixture);
 }
 
+static void test_scalar_coroutine_reuses_one_packed_frame(void) {
+    XrSemanticPlan *semantic = build_scalar_coroutine_semantic(false);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) ==
+            XR_TARGET_EXECUTION_SCALAR_I64_COROUTINE);
+    uint32_t row_count = 0;
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_function_instructions(plan, 0, &row_count);
+    REQUIRE(rows && row_count >= 9 &&
+            rows[0].opcode == XR_TARGET_INSTRUCTION_PARAM_I64 &&
+            rows[row_count - 1u].opcode == XR_TARGET_INSTRUCTION_RETURN_I64);
+    uint32_t suspend_rows[2] = {UINT32_MAX, UINT32_MAX};
+    uint32_t suspend_count = 0;
+    for (uint32_t i = 0; i < row_count; i++) {
+        if (rows[i].opcode == XR_TARGET_INSTRUCTION_SUSPEND) {
+            REQUIRE(suspend_count < 2);
+            suspend_rows[suspend_count++] = i;
+        }
+    }
+    REQUIRE(suspend_count == 2);
+    for (uint32_t i = 0; i < suspend_count; i++) {
+        REQUIRE(XR_TARGET_INSTRUCTION_SUSPEND_STATE(
+                    rows[suspend_rows[i]].immediate_bits) == i);
+        uint32_t resume = XR_TARGET_INSTRUCTION_SUSPEND_RESUME(
+            rows[suspend_rows[i]].immediate_bits);
+        REQUIRE(resume > suspend_rows[i] && resume < row_count &&
+                plan->coroutines[i].resume_instruction == resume);
+    }
+
+    TypedDispatchFixture mutable_source = {
+        .semantic = semantic,
+        .profile = profile,
+        .program_plan = plan,
+        .row_count = row_count,
+    };
+    REQUIRE(row_count <=
+            sizeof(mutable_source.rows) / sizeof(mutable_source.rows[0]));
+    memcpy(mutable_source.rows, rows,
+           (size_t) row_count * sizeof(*mutable_source.rows));
+    XrTargetInstructionRecord mutated[16];
+    XrTargetPlan *refrozen = NULL;
+    memcpy(mutated, rows, (size_t) row_count * sizeof(*mutated));
+    REQUIRE(freeze_with_rows(&mutable_source, mutated, row_count, &refrozen,
+                             error, sizeof(error)));
+    xr_target_plan_free(refrozen);
+
+    /* State identity, continuation block entry, and control reachability are
+     * independently frozen. Re-signing one field cannot redirect resume. */
+    memcpy(mutated, rows, (size_t) row_count * sizeof(*mutated));
+    uint32_t first_suspend = suspend_rows[0];
+    uint32_t first_resume = XR_TARGET_INSTRUCTION_SUSPEND_RESUME(
+        rows[first_suspend].immediate_bits);
+    mutated[first_suspend].immediate_bits =
+        XR_TARGET_INSTRUCTION_SUSPEND_PACK(UINT32_MAX, first_resume);
+    expect_rows_rejected(&mutable_source, mutated);
+    memcpy(mutated, rows, (size_t) row_count * sizeof(*mutated));
+    mutated[first_suspend].immediate_bits =
+        XR_TARGET_INSTRUCTION_SUSPEND_PACK(0, first_resume + 1u);
+    expect_rows_rejected_with_code(&mutable_source, mutated,
+                                   "XR_CORO_4000");
+    memcpy(mutated, rows, (size_t) row_count * sizeof(*mutated));
+    mutated[first_suspend].immediate_bits =
+        XR_TARGET_INSTRUCTION_SUSPEND_PACK(0, first_suspend);
+    expect_rows_rejected_with_code(&mutable_source, mutated,
+                                   "XR_CORO_4000");
+
+    uint32_t saved_resume_instruction = plan->coroutines[0].resume_instruction;
+    plan->coroutines[0].resume_instruction = first_resume + 1u;
+    xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
+    REQUIRE(!xr_target_plan_verify(plan, error, sizeof(error)));
+    plan->coroutines[0].resume_instruction = saved_resume_instruction;
+    xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    XrTypedFrameLimits frame_limits;
+    xr_typed_frame_limits_default(&frame_limits);
+    XrTypedFrame *transition_frame = NULL;
+    REQUIRE(xr_typed_frame_create(plan, &fingerprint, 0, &frame_limits,
+                                  &transition_frame) == XR_TYPED_FRAME_OK);
+    for (uint32_t i = 0; i <= first_suspend; i++)
+        REQUIRE(xr_typed_frame_enter_instruction(transition_frame,
+                                                 rows[i].id) ==
+                XR_TYPED_FRAME_OK);
+    REQUIRE(xr_typed_frame_enter_instruction(
+                transition_frame, rows[first_resume].id) ==
+            XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID);
+    REQUIRE(xr_typed_frame_bind_coroutine_state(transition_frame,
+                                                UINT32_MAX) ==
+            XR_TYPED_FRAME_CONTEXT_UNAVAILABLE);
+    REQUIRE(xr_typed_frame_bind_coroutine_state(transition_frame, 0) ==
+            XR_TYPED_FRAME_OK);
+    REQUIRE(xr_typed_frame_enter_instruction(
+                transition_frame, rows[first_resume].id) ==
+            XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID);
+    REQUIRE(xr_typed_frame_resume_coroutine_state(transition_frame, 0) ==
+            XR_TYPED_FRAME_OK);
+    REQUIRE(xr_typed_frame_resume_coroutine_state(transition_frame, 0) ==
+            XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID);
+    REQUIRE(xr_typed_frame_enter_instruction(
+                transition_frame, rows[first_resume + 1u].id) ==
+            XR_TYPED_FRAME_CONTEXT_TRANSITION_INVALID);
+    REQUIRE(xr_typed_frame_enter_decoded_instruction(
+                transition_frame, rows[first_resume].id,
+                rows[first_resume].id) ==
+            XR_TYPED_FRAME_OK);
+    REQUIRE(xr_typed_frame_free(&transition_frame) == XR_TYPED_FRAME_OK);
+
+    int64_t source_argument = 40;
+    int64_t one_shot_result = 11;
+    REQUIRE(execute_request_i64(plan, &fingerprint, 0, &source_argument, 1,
+                                &one_shot_result) ==
+            XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
+    REQUIRE(one_shot_result == 0);
+
+    int64_t unused_argument = 0;
+    XrTypedCoroutineI64Request oversized_request = {
+        .verified_plan = plan,
+        .required_plan_fingerprint = &fingerprint,
+        .arguments = &unused_argument,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        .function = 0,
+        .argument_count = XR_TARGET_INSTRUCTION_MAX_PARAMETERS + 1u,
+    };
+    XrTypedCoroutineI64 *oversized_coroutine = NULL;
+    REQUIRE(xr_typed_coroutine_i64_create(&oversized_request,
+                                          &oversized_coroutine) ==
+            XR_TYPED_DISPATCH_ARGUMENT_MISMATCH);
+    REQUIRE(oversized_coroutine == NULL);
+
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++) {
+        XrTypedCoroutineI64Request request = {
+            .verified_plan = plan,
+            .required_plan_fingerprint = &fingerprint,
+            .arguments = &source_argument,
+            .provider = providers[i],
+            .function = 0,
+            .argument_count = 1,
+        };
+        XrTypedCoroutineI64 *coroutine = NULL;
+        REQUIRE(xr_typed_coroutine_i64_create(&request, &coroutine) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(coroutine != NULL);
+        XrTypedCoroutineI64 *owned_coroutine = coroutine;
+        REQUIRE(xr_typed_coroutine_i64_create(&request, &coroutine) ==
+                XR_TYPED_DISPATCH_INVALID_ARGUMENT);
+        REQUIRE(coroutine == owned_coroutine);
+        source_argument = 99;
+        int64_t result = 9;
+        uint32_t state = UINT32_MAX;
+        REQUIRE(xr_typed_coroutine_i64_resume(coroutine, &result, &state) ==
+                XR_TYPED_DISPATCH_SUSPENDED);
+        REQUIRE(result == 0 && state == 0);
+        REQUIRE(xr_typed_coroutine_i64_resume(coroutine, &result, &state) ==
+                XR_TYPED_DISPATCH_SUSPENDED);
+        REQUIRE(result == 0 && state == 1);
+        REQUIRE(xr_typed_coroutine_i64_resume(coroutine, &result, &state) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(result == 42 && state == UINT32_MAX);
+        REQUIRE(xr_typed_coroutine_i64_resume(coroutine, &result, &state) ==
+                XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
+        REQUIRE(xr_typed_coroutine_i64_free(&coroutine) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(coroutine == NULL);
+
+        source_argument = 40;
+        REQUIRE(xr_typed_coroutine_i64_create(&request, &coroutine) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(xr_typed_coroutine_i64_resume(coroutine, &result, &state) ==
+                XR_TYPED_DISPATCH_SUSPENDED);
+        REQUIRE(xr_typed_coroutine_i64_cancel(coroutine) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(xr_typed_coroutine_i64_resume(coroutine, &result, &state) ==
+                XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
+        REQUIRE(xr_typed_coroutine_i64_free(&coroutine) ==
+                XR_TYPED_DISPATCH_OK);
+
+        source_argument = 40;
+        REQUIRE(xr_typed_coroutine_i64_create(&request, &coroutine) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(xr_typed_coroutine_i64_cancel(coroutine) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(xr_typed_coroutine_i64_cancel(coroutine) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(xr_typed_coroutine_i64_free(&coroutine) ==
+                XR_TYPED_DISPATCH_OK);
+        REQUIRE(coroutine == NULL);
+        REQUIRE(xr_typed_coroutine_i64_free(&coroutine) ==
+                XR_TYPED_DISPATCH_OK);
+    }
+
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *decoded = NULL;
+    REQUIRE(xr_xtp_encode_plan(plan, &bytes, &size, error, sizeof(error)));
+    REQUIRE(xr_xtp_decode_candidate(bytes, size, &candidate, error,
+                                    sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, semantic, profile,
+                                           &decoded, error, sizeof(error)));
+    REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
+                                 fingerprint));
+    uint32_t decoded_state_count = 0;
+    const XrTargetCoroutineStateRecord *decoded_states =
+        xr_target_plan_coroutines(decoded, &decoded_state_count);
+    REQUIRE(decoded_states && decoded_state_count == 2 &&
+            decoded_states[0].resume_instruction == first_resume &&
+            decoded_states[1].resume_instruction ==
+                XR_TARGET_INSTRUCTION_SUSPEND_RESUME(
+                    rows[suspend_rows[1]].immediate_bits));
+    XrTypedCoroutineI64Request decoded_request = {
+        .verified_plan = decoded,
+        .required_plan_fingerprint = &fingerprint,
+        .arguments = &source_argument,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+        .function = 0,
+        .argument_count = 1,
+    };
+    XrTypedCoroutineI64 *decoded_coroutine = NULL;
+    REQUIRE(xr_typed_coroutine_i64_create(&decoded_request,
+                                          &decoded_coroutine) ==
+            XR_TYPED_DISPATCH_OK);
+    xr_target_plan_free(decoded);
+    decoded = NULL;
+    source_argument = 99;
+    int64_t decoded_result = 0;
+    uint32_t decoded_state = UINT32_MAX;
+    REQUIRE(xr_typed_coroutine_i64_resume(decoded_coroutine, &decoded_result,
+                                          &decoded_state) ==
+            XR_TYPED_DISPATCH_SUSPENDED);
+    REQUIRE(decoded_state == 0 && decoded_result == 0);
+    REQUIRE(xr_typed_coroutine_i64_resume(decoded_coroutine, &decoded_result,
+                                          &decoded_state) ==
+            XR_TYPED_DISPATCH_SUSPENDED);
+    REQUIRE(decoded_state == 1 && decoded_result == 0);
+    REQUIRE(xr_typed_coroutine_i64_resume(decoded_coroutine, &decoded_result,
+                                          &decoded_state) ==
+            XR_TYPED_DISPATCH_OK);
+    REQUIRE(decoded_result == 42 && decoded_state == UINT32_MAX);
+    REQUIRE(xr_typed_coroutine_i64_free(&decoded_coroutine) ==
+            XR_TYPED_DISPATCH_OK);
+    xr_xtp_candidate_release(candidate);
+    xr_xtp_encoded_free(bytes);
+
+    XrSemanticPlan *error_semantic =
+        build_scalar_coroutine_semantic(true);
+    XrTargetPlan *error_plan = NULL;
+    REQUIRE(xr_target_plan_build(error_semantic, profile, &error_plan, error,
+                                 sizeof(error)));
+    XrFingerprint error_fingerprint =
+        xr_target_plan_fingerprint(error_plan);
+    XrTypedCoroutineI64Request error_request = {
+        .verified_plan = error_plan,
+        .required_plan_fingerprint = &error_fingerprint,
+        .arguments = &source_argument,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+        .function = 0,
+        .argument_count = 1,
+    };
+    source_argument = 40;
+    XrTypedCoroutineI64 *error_coroutine = NULL;
+    REQUIRE(xr_typed_coroutine_i64_create(&error_request,
+                                          &error_coroutine) ==
+            XR_TYPED_DISPATCH_OK);
+    int64_t error_result = 9;
+    uint32_t error_state = UINT32_MAX;
+    REQUIRE(xr_typed_coroutine_i64_resume(error_coroutine, &error_result,
+                                          &error_state) ==
+            XR_TYPED_DISPATCH_SUSPENDED);
+    REQUIRE(error_result == 0 && error_state == 0);
+    REQUIRE(xr_typed_coroutine_i64_resume(error_coroutine, &error_result,
+                                          &error_state) ==
+            XR_TYPED_DISPATCH_SUSPENDED);
+    REQUIRE(error_result == 0 && error_state == 1);
+    REQUIRE(xr_typed_coroutine_i64_resume(error_coroutine, &error_result,
+                                          &error_state) ==
+            XR_TYPED_DISPATCH_DIVIDE_BY_ZERO);
+    REQUIRE(error_result == 0 && error_state == UINT32_MAX);
+    REQUIRE(xr_typed_coroutine_i64_resume(error_coroutine, &error_result,
+                                          &error_state) ==
+            XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
+    REQUIRE(xr_typed_coroutine_i64_free(&error_coroutine) ==
+            XR_TYPED_DISPATCH_OK);
+    REQUIRE(error_coroutine == NULL);
+    xr_target_plan_free(error_plan);
+    xr_semantic_plan_free(error_semantic);
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 int main(void) {
     test_generated_instruction_contract();
     test_closed_program_and_unavailable_boundary();
@@ -2422,6 +2782,7 @@ int main(void) {
     test_debug_control_steps_across_direct_call_stack();
     test_direct_local_call_depth_is_globally_bounded();
     test_backward_jump_stops_at_the_step_budget();
+    test_scalar_coroutine_reuses_one_packed_frame();
     puts("typed dispatch tests passed");
     return 0;
 }

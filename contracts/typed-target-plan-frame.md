@@ -1,12 +1,12 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 39 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 40 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
 plan the builder emits.
-Schema 39 is a breaking hard cutover: schema 38 and earlier and a plan missing
+Schema 40 is a breaking hard cutover: schema 39 and earlier and a plan missing
 any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
@@ -142,10 +142,20 @@ frame context; it cannot build a cache, choose a successor, or make an invalid
 plan executable. The frame's supported family mask is the exact
 completed closure the production builder emits, so a plan built for any other
 closure is refused rather than executed against a frame that never saw one of
-its families. Scalar dispatch independently requires zero root-map, cleanup,
-and coroutine rows for the selected function before frame creation, and repeats
-zero lifecycle bytes before every destruction. The coroutine state-call family
-itself still proves only frozen state/resume/direct-call/result relations. A
+its families. One-shot scalar dispatch independently requires zero root-map,
+cleanup, and coroutine rows for the selected function before frame creation,
+and repeats zero lifecycle bytes before every destruction. Persistent scalar
+coroutine dispatch instead requires a nonempty exact coroutine partition and
+zero root-map/cleanup rows. Its frame may enter the resume block only after the
+current `SUSPEND` row binds the same state and resume consumes that binding.
+The state row separately freezes the function-local resume instruction, so a
+row immediate cannot redirect the frame to another block. The permission is
+one-shot: entering early, entering a different instruction, resuming a
+different state, or consuming the same resume twice is rejected. The same
+packed frame remains materializable while suspended and is reused until normal
+return, error, cancellation, or destruction; no legacy value stack or retained
+bytecode frame is attached. The broader coroutine state-call family still
+proves frozen state/resume/direct-call/result relations. A
 separate exact lifecycle relation may additionally name one String-concat
 producer, suspend state, owner, root, and normal release. TargetPlan reconstructs
 that relation as one root map/root slot plus normal and `CANCEL|EXIT` release
@@ -296,10 +306,10 @@ Evidence:
   resolution even when immediate retirement is deferred, so a fallible frame
   cleanup cannot make the generation pin stack-local or unreachable.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 16f1be1bfc85a85eeb663254f08e5f3e0c2c56430ea8f702870cb8cac3303487
-anchor-sha256: src/vm/xr_typed_frame.h 4d6f311477b86539dd14fba88834a89ebc87fced5f031726bc442bf69bc51d06
-anchor-sha256: src/vm/xr_typed_frame.c 80ac935291096963179c8f6c58b3105835426c87b2b693d2a62e1d5c16fc913b
-anchor-sha256: src/vm/xr_typed_dispatch.c c79296a7d62cd0ae42f41e36e67dead23ac3b24095504cbba7ed52fe2a60fe9c
+anchor-sha256: src/plan/target/xr_target_plan.h 60ecded7e07e1c569d1b9ab34c3ffa1de44d778db6ac29210de9f6260d7ead74
+anchor-sha256: src/vm/xr_typed_frame.h fa468887f8d87a5ff1fdf6c82b863cb7a62a204b4a30542f9fd0c62693486196
+anchor-sha256: src/vm/xr_typed_frame.c 397f46fa8647614c06745dc365676989abdc9e079f25a89994b96d9d34fbd405
+anchor-sha256: src/vm/xr_typed_dispatch.c f813ca760ac0be178e9031118b5d144b52f4e6613f5d8bf5f0374eb1bd46b4d0
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 3fd550a0cfcdee2b28a631ef1ef6ae56c5a776c4d380a508d78e6d307bbf1b20
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041

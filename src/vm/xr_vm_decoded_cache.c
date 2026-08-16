@@ -105,6 +105,7 @@ static bool initialize_rows(XrVmDecodedCache *cache,
                 break;
             case XR_TARGET_INSTRUCTION_CONTROL_NONE:
             case XR_TARGET_INSTRUCTION_CONTROL_RETURN:
+            case XR_TARGET_INSTRUCTION_CONTROL_SUSPEND:
                 break;
             default:
                 return false;
@@ -230,6 +231,19 @@ static bool initialize_function_blocks(XrVmDecodedCache *cache,
                                       &metadata->successors[1]))
                     return false;
                 break;
+            case XR_TARGET_INSTRUCTION_CONTROL_SUSPEND: {
+                uint32_t target_row =
+                    XR_TARGET_INSTRUCTION_SUSPEND_RESUME(
+                        terminator->row.immediate_bits);
+                uint32_t target = 0;
+                if (!block_for_target(blocks, function->block_count,
+                                      target_row, &target))
+                    return false;
+                metadata->successor_count = 1;
+                metadata->successors[0] = target;
+                terminator->target_if_nonzero = blocks[target].first_row;
+                break;
+            }
             case XR_TARGET_INSTRUCTION_CONTROL_NONE:
             default:
                 return false;
@@ -281,6 +295,9 @@ XrVmDecodedCacheStatus xr_typed_decoded_cache_create(
     created->instruction_count = instruction_count;
     created->plan_schema_version = xr_target_plan_schema_version(verified_plan);
     created->plan_fingerprint = xr_target_plan_fingerprint(verified_plan);
+    created->plan = xr_target_plan_retain((XrTargetPlan *) verified_plan);
+    if (!created->plan)
+        goto allocation_failed;
     if (function_count) {
         created->functions = (XrVmDecodedFunction *) xr_calloc(
             function_count, sizeof(*created->functions));
@@ -305,12 +322,10 @@ XrVmDecodedCacheStatus xr_typed_decoded_cache_create(
             goto allocation_failed;
     }
     for (uint32_t function = 0; function < created->function_count; function++)
-        if (!initialize_function_blocks(created, &created->functions[function]))
+        if (!initialize_function_blocks(created,
+                                        &created->functions[function]))
             goto invalid_program;
     created->total_bytes = bytes;
-    created->plan = xr_target_plan_retain((XrTargetPlan *) verified_plan);
-    if (!created->plan)
-        goto allocation_failed;
     *cache = created;
     return XR_VM_DECODED_CACHE_OK;
 
