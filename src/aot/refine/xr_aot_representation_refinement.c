@@ -449,6 +449,8 @@ static bool oracle_dynamic_direct_local_array_result_storage(const VerifyAuthori
                                                              uint32_t semantic_value,
                                                              XrRep *out_storage,
                                                              uint16_t *out_machine_kind);
+static bool oracle_resolve_identity_rename(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                           uint32_t *out_value);
 
 static bool verify_charge_work(VerifyAuthority *ctx, uint64_t amount) {
     if (!ctx || amount > XR_AOT_REP_VERIFY_MAX_WORK - ctx->work) {
@@ -3416,7 +3418,16 @@ static bool struct_object_carrier_storage_depth(const VerifyAuthority *ctx, uint
                                                 unsigned depth, XrRep *out_storage,
                                                 uint16_t *out_machine_kind) {
     if (!ctx || depth > XR_AOT_STRUCT_OBJECT_MAX_NESTING || semantic_value >= ctx->value_count ||
-        !out_storage || !out_machine_kind)
+        !out_storage || !out_machine_kind ||
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value) != NULL)
+        return false;
+    /* A second name for the same object is the same allocation, so the family
+     * question is asked of the value the name resolves to. The absence of a
+     * plan binding is demanded of the name as well as of the allocation: this
+     * family exists only where the plan states nothing, and a rename the plan
+     * did bind is not one of its members however its source was built. */
+    if (!oracle_resolve_identity_rename(ctx, semantic_value, &semantic_value) ||
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value) != NULL)
         return false;
     uint32_t operation_index = ctx->operation_by_value[semantic_value];
     const XrSemanticOperationRecord *operation =
@@ -3424,8 +3435,7 @@ static bool struct_object_carrier_storage_depth(const VerifyAuthority *ctx, uint
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
     if (!operation || operation->result_value != semantic_value ||
-        ctx->parameter_by_value[semantic_value] != XR_SEMANTIC_INDEX_NONE ||
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value) != NULL)
+        ctx->parameter_by_value[semantic_value] != XR_SEMANTIC_INDEX_NONE)
         return false;
     bool carrier = aot_struct_object_allocation_is_exact(ctx->semantic, operation) ||
                    aot_struct_object_shared_read_is_exact(ctx->semantic, operation) ||
@@ -6824,6 +6834,46 @@ static bool oracle_raw_pointer_ref_place(const VerifyAuthority *ctx, uint32_t op
 static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                       XrRep *out_storage, uint16_t *out_machine_kind);
 
+/* Resolve the value a name ultimately stands for. An identity COPY is a rename:
+ * it gives a value that already exists a second name and produces no storage of
+ * its own, so every judgement that asks what a value IS -- which storage family
+ * it belongs to, which carrier it already holds -- has to be asked about the
+ * value the name resolves to. Asking it about the rename instead grants a
+ * carrier to a program that says `s` and refuses the same carrier to the same
+ * program written `var t = s`.
+ *
+ * Xi numbers a COPY result above the operand it renames, so following the chain
+ * strictly decreases the index and terminates. A plan that breaks that
+ * numbering is refused rather than walked, which leaves the caller without a
+ * family: the fail-closed answer.
+ *
+ * A value that is not a rename resolves to itself, so a caller asks
+ * unconditionally and never has to test for the shape first. */
+static bool oracle_resolve_identity_rename(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                           uint32_t *out_value) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(ctx ? ctx->semantic : NULL, &operand_count);
+    if (!ctx || !out_value || !ctx->operation_by_value || semantic_value >= ctx->value_count)
+        return false;
+    for (;;) {
+        uint32_t operation_index = ctx->operation_by_value[semantic_value];
+        const XrSemanticOperationRecord *operation =
+            operation_index != XR_SEMANTIC_INDEX_NONE
+                ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+                : NULL;
+        if (!operation || operation->opcode != XI_COPY || operation->operand_count != 1 ||
+            operation->semantic_immediate != XI_COPY_KIND_IDENTITY)
+            break;
+        if (!operands || operation->operand_begin >= operand_count ||
+            operands[operation->operand_begin].value >= semantic_value)
+            return false;
+        semantic_value = operands[operation->operand_begin].value;
+    }
+    *out_value = semantic_value;
+    return true;
+}
+
 /* The caller-side half of the same ref contract.  LOCAL_ADDR is admitted only
  * when it is the exact address view of one frozen raw-pointer local and both
  * the source and result have independent TargetPlan RAW_PTR bindings.  The
@@ -6918,17 +6968,11 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
     if (oracle_dynamic_json_namespace_value_storage(ctx, semantic_value, out_storage,
                                                     out_machine_kind))
         return true;
-    if (operation->opcode == XI_COPY && operation->operand_count == 1 &&
-        operation->semantic_immediate == XI_COPY_KIND_IDENTITY) {
-        uint32_t operand_count = 0;
-        const XrSemanticOperandRecord *operands =
-            xr_semantic_plan_operands(ctx->semantic, &operand_count);
-        if (operation->operand_begin >= operand_count ||
-            operands[operation->operand_begin].value >= semantic_value)
-            return false;
-        return oracle_definition_storage(ctx, operands[operation->operand_begin].value, out_storage,
-                                         out_machine_kind);
-    }
+    uint32_t named_value = semantic_value;
+    if (!oracle_resolve_identity_rename(ctx, semantic_value, &named_value))
+        return false;
+    if (named_value != semantic_value)
+        return oracle_definition_storage(ctx, named_value, out_storage, out_machine_kind);
     switch (operation->opcode) {
         case XI_CATCH:
             return oracle_dynamic_panic_catch_storage(ctx, semantic_value, out_storage,
@@ -7966,6 +8010,8 @@ static bool oracle_array_produced_tagged_carrier_storage(const VerifyAuthority *
                                                          uint32_t semantic_value,
                                                          XrRep *out_storage,
                                                          uint16_t *out_machine_kind) {
+    if (!oracle_resolve_identity_rename(ctx, semantic_value, &semantic_value))
+        return false;
     return oracle_dynamic_array_allocation_storage(ctx, semantic_value, out_storage,
                                                    out_machine_kind) ||
            oracle_dynamic_array_intrinsic_storage(ctx, semantic_value, out_storage,
@@ -7988,6 +8034,8 @@ static bool oracle_array_borrowed_tagged_carrier_storage(const VerifyAuthority *
                                                          uint32_t semantic_value,
                                                          XrRep *out_storage,
                                                          uint16_t *out_machine_kind) {
+    if (!oracle_resolve_identity_rename(ctx, semantic_value, &semantic_value))
+        return false;
     return oracle_dynamic_array_ref_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
            oracle_direct_local_array_value_parameter_storage(ctx, semantic_value, out_storage,
                                                              out_machine_kind);
@@ -7997,7 +8045,10 @@ static bool oracle_array_borrowed_tagged_carrier_storage(const VerifyAuthority *
  * carrier. Each use that has to recognise an Array asks this one judgement
  * instead of respelling the list, so a carrier one use site admits can never be
  * one another refuses; a use that also cares whether the Array was produced
- * here asks the two halves separately rather than writing its own list. */
+ * here asks the two halves separately rather than writing its own list.
+ *
+ * Each half answers about the value a name resolves to, so an Array reached
+ * under a second name keeps the side its allocation came from. */
 static bool oracle_array_tagged_carrier_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                                 XrRep *out_storage, uint16_t *out_machine_kind) {
     return oracle_array_produced_tagged_carrier_storage(ctx, semantic_value, out_storage,
@@ -8011,10 +8062,15 @@ static bool oracle_array_tagged_carrier_storage(const VerifyAuthority *ctx, uint
  * call handed back, one read back out of the shared cell it was bound to, or
  * one borrowed as a by-value parameter. A String has no other carrier, so every
  * site that accepts one in that carrier asks this one list, and a String the
- * equality test admits can never be one a call argument refuses. */
+ * equality test admits can never be one a call argument refuses.
+ *
+ * The list answers about the value a name resolves to, so a String reached
+ * under a second name is the String it renames and not a family of its own. */
 static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
                                                  uint32_t semantic_value, XrRep *out_storage,
                                                  uint16_t *out_machine_kind) {
+    if (!oracle_resolve_identity_rename(ctx, semantic_value, &semantic_value))
+        return false;
     return oracle_dynamic_string_literal_storage(ctx, semantic_value, out_storage,
                                                  out_machine_kind) ||
            oracle_dynamic_string_concat_result_storage(ctx, semantic_value, out_storage,
@@ -8039,10 +8095,16 @@ static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
  * it -- it is a pointer, not a tagged value.
  *
  * The channel and namespace families gate on the indexes their own oracles
- * re-check internally, so no caller repeats the guard. */
+ * re-check internally, so no caller repeats the guard.
+ *
+ * Like the per-container lists it is built from, this one answers about the
+ * value a name resolves to: a reference reached under a second name belongs to
+ * the family of the value it renames. */
 static bool oracle_tagged_reference_carrier_storage(const VerifyAuthority *ctx,
                                                     uint32_t semantic_value, XrRep *out_storage,
                                                     uint16_t *out_machine_kind) {
+    if (!oracle_resolve_identity_rename(ctx, semantic_value, &semantic_value))
+        return false;
     return oracle_string_tagged_carrier_storage(ctx, semantic_value, out_storage,
                                                 out_machine_kind) ||
            oracle_array_tagged_carrier_storage(ctx, semantic_value, out_storage,

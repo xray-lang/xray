@@ -323,10 +323,17 @@ shared cell, or a print refuses. A use that consumes a reference without caring
 which container it is -- a refcount adjustment, a store into a shared cell, a
 print -- asks one further list naming every reference family this authority can
 name, each in the tagged carrier its own family bound, so no such site can
-admit a reference another one refuses either. These bindings do not authorize a
-`ref`, owned, or moved String parameter, a SOURCE_EXPORT String parameter, an
-optional String, a shared read of any other container this generation has not
-bound, or a String reached through a local copy or a slice receiver.
+admit a reference another one refuses either. An identity copy gives a value
+that already exists a second name and allocates nothing, so each of those
+lists, and the definition oracle alike, resolves a value through its chain of
+renames before asking which family it belongs to. That resolution is one shared
+judgement rather than a walk each list repeats: it terminates on the operand
+numbering Xi guarantees, refuses a plan that breaks that numbering, and leaves
+a value that is not a rename standing for itself. A carrier therefore cannot
+depend on which of its names a use site happens to spell. These bindings do not
+authorize a `ref`, owned, or moved String parameter, a SOURCE_EXPORT String
+parameter, an optional String, a shared read of any other container this
+generation has not bound, or a String reached through a slice receiver.
 
 Representation selection keeps every reference-capable container -- `Array<T>`
 and `string` alike -- in the tagged carrier at every boundary it crosses:
@@ -543,13 +550,15 @@ emission rather than falling back to compiler-host layout.
   projection at all. It is reference capable and roots its own ownership, so
   the shared aggregate judgement places it outside every aggregate family and
   the target plan states no representation for it; representation refinement
-  admits such a value only while that absence holds, so a row some other family
-  placed can never be claimed here. The authority is rebuilt independently from
-  the frozen rows rather than read back: the construction proves its canonical
-  allocation identity, its field-name metadata and its field count; a
-  shared-cell read proves the borrowed load that hands the same allocation
-  back; and a field access proves its receiver as one of those two, or as a
-  field read whose own result is an object, within a fixed nesting bound. Every
+  admits such a value only while that absence holds, and demands it of the name
+  it is asked about as well as of the allocation that name resolves to, so a
+  row some other family placed can never be claimed here. The authority is
+  rebuilt independently from the frozen rows rather than read back: the
+  construction proves its canonical allocation identity, its field-name
+  metadata and its field count; a shared-cell read proves the borrowed load
+  that hands the same allocation back; and a field access proves its receiver
+  as one of those two, as a field read whose own result is an object, or as a
+  rename of any of them, within a fixed nesting bound. Every
   field holds a full tagged value, so a write reaches the store in the carrier
   whatever native storage its own definition named, and a read hands the
   carrier back for a native consumer to adapt from. CGen converts on both edges
@@ -594,7 +603,7 @@ anchor-sha256: src/aot/xaot_prepare.c 77d5bce886e498b736557e06ef6e9916e54b27d42c
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 6edea9b557c5a8a8e5bbcfe20fe8b5b8174ffead395bbebdf4ea71555e2036d4
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 3a007efb13826e9b98922883875372adc19dc6b55c074ee88daa5510b8d76c08
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 092c181dd8674dc8ca75f8328f4e457d1c20a1fb2aa713ad685c428838e49e2d
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be

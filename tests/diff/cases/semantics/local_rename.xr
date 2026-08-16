@@ -1,0 +1,49 @@
+// local_rename.xr
+// VM/AOT differential coverage for giving an existing value a second name.
+//
+// `var t = s` lowers to an identity copy: it introduces a name, not a value.
+// The AOT representation authority used to answer the storage question one way
+// when asked where the value is defined and another way when asked where it is
+// used, so a String, an Array or an object that reached a use site under a
+// second name was refused a carrier the same program was granted when it
+// spelled the original name. Every print below consumes a renamed value.
+
+fn strings() {
+    var s = "hi"
+    var t = s
+    print(t)
+    // A chain of renames resolves to one value, not one per link.
+    var u = t
+    var v = u
+    print(v)
+}
+
+fn arrays() {
+    var a = [10, 20, 30]
+    var b = a
+    print(len(b))
+    print(b[1])
+    var c = b
+    print(c[2])
+}
+
+type Pair = { x: int, y: string }
+
+fn objects() {
+    var o = { x: 7, y: "seven" }
+    var p = o
+    // A field read through a renamed receiver, then a rename of the field.
+    var s = p.y
+    var t = s
+    print(t)
+    print(p.x)
+}
+
+strings()
+arrays()
+objects()
+
+// Module level renames are the same shape outside a function body.
+var top = "module"
+var alias = top
+print(alias)
