@@ -3420,15 +3420,15 @@ static bool oracle_machine_storage(const VerifyAuthority *ctx,
     return true;
 }
 
-/* Named value aggregates do not participate in the scalar adapter protocol:
- * the C backend materializes their frozen TargetPlan layout directly. TAGGED
- * is the legacy Xi "no scalar adapter" marker here, not a request to box the
- * value. Requiring the complete named-aggregate binding keeps that marker from
- * becoming a type-shaped fallback for an unplanned aggregate family. */
-static bool oracle_named_value_aggregate_storage(const VerifyAuthority *ctx,
-                                                 uint32_t semantic_value,
-                                                 XrRep *out_storage,
-                                                 uint16_t *out_machine_kind) {
+/* Value aggregates do not participate in the scalar adapter protocol: the C
+ * backend materializes their frozen TargetPlan layout directly. TAGGED is the
+ * legacy Xi "no scalar adapter" marker here, not a request to box the value.
+ * Requiring the complete aggregate binding keeps that marker from becoming a
+ * type-shaped fallback for an unplanned aggregate family. */
+static bool oracle_value_aggregate_storage(const VerifyAuthority *ctx,
+                                           uint32_t semantic_value,
+                                           XrRep *out_storage,
+                                           uint16_t *out_machine_kind) {
     if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
         !out_machine_kind)
         return false;
@@ -3451,13 +3451,18 @@ static bool oracle_named_value_aggregate_storage(const VerifyAuthority *ctx,
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(ctx->semantic, semantic_type);
     XrSemanticValueAggregateShape aggregate_shape = {0};
+    /* The shape judgement is the one the target plan itself applied when it
+     * gave this value an aggregate representation, so refinement cannot admit a
+     * narrower aggregate family than the plan it re-proves. A tuple and a named
+     * value class occupy an aggregate slot the same way; only the named class
+     * carries the extra demand that its field identity be complete, which is
+     * what the plan builder and the plan verifier require of it and of nothing
+     * else. */
     bool exact_shape =
-        type && type->kind == XR_KIND_INSTANCE &&
-        type->scalar_rep == XR_SCALAR_REP_NONE &&
-        (type->flags & (XR_SEM_TYPE_VALUE | XR_SEM_TYPE_AGGREGATE_EXACT)) ==
-            (XR_SEM_TYPE_VALUE | XR_SEM_TYPE_AGGREGATE_EXACT) &&
-        xr_semantic_value_aggregate_shape_for_type(
-            ctx->semantic, semantic_type, &aggregate_shape);
+        type && xr_semantic_aggregate_type_kind(type) == 1 &&
+        (type->kind != XR_KIND_INSTANCE ||
+         xr_semantic_value_aggregate_shape_for_type(
+             ctx->semantic, semantic_type, &aggregate_shape));
     const XrTargetValueRepRecord *binding =
         xr_target_plan_value_rep(ctx->target_plan, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
@@ -3728,10 +3733,14 @@ static bool oracle_aggregate_field_access_is_exact(
     const XrSemanticOperandRecord *operands =
         ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
     XrStableId zero = {{0}};
+    /* A tuple element read is the same field access an aggregate getter is:
+     * one aggregate receiver, one frozen field ordinal, one field type. Only
+     * the Xi spelling differs, so both admit the same proof here. */
+    bool field_read = operation && (operation->opcode == XI_AGG_GET ||
+                                    operation->opcode == XI_TUPLE_GET);
     uint16_t expected_operands =
-        operation && operation->opcode == XI_AGG_GET
-            ? 1u
-            : operation && operation->opcode == XI_AGG_SET ? 2u : 0u;
+        field_read ? 1u
+                   : operation && operation->opcode == XI_AGG_SET ? 2u : 0u;
     if (!operation || expected_operands == 0 ||
         operation->operand_count != expected_operands ||
         operation->operand_begin > operand_count ||
@@ -3759,7 +3768,7 @@ static bool oracle_aggregate_field_access_is_exact(
     uint16_t receiver_kind = XR_MACHINE_REP_COUNT;
     if (receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
         receiver->flags != 0 || receiver->value >= ctx->value_count ||
-        !oracle_named_value_aggregate_storage(
+        !oracle_value_aggregate_storage(
             ctx, receiver->value, &receiver_storage, &receiver_kind) ||
         receiver_storage != XR_REP_TAGGED ||
         receiver_kind != XR_MACHINE_REP_AGGREGATE)
@@ -3803,7 +3812,7 @@ static bool oracle_aggregate_field_access_is_exact(
         child_ordinal >= receiver_type->child_count)
         return false;
     uint32_t field_type = children[receiver_type->child_begin + child_ordinal];
-    if (operation->opcode == XI_AGG_GET)
+    if (field_read)
         return operation->result_type == field_type;
     const XrSemanticOperandRecord *stored = receiver + 1;
     return stored->role == XR_SEM_OPERAND_VALUE && stored->parameter == -1 &&
@@ -7276,7 +7285,7 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
     if (oracle_fixed_array_backing_storage(ctx, semantic_value, out_storage,
                                            out_machine_kind))
         return true;
-    if (oracle_named_value_aggregate_storage(ctx, semantic_value, out_storage,
+    if (oracle_value_aggregate_storage(ctx, semantic_value, out_storage,
                                              out_machine_kind))
         return true;
     if (ctx->parameter_by_value[semantic_value] != XR_SEMANTIC_INDEX_NONE) {
@@ -7426,11 +7435,21 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
         case XI_AGG_GET:
             if (!oracle_aggregate_field_access_is_exact(ctx, operation_index))
                 return false;
-            if (oracle_named_value_aggregate_storage(
+            if (oracle_value_aggregate_storage(
                     ctx, semantic_value, out_storage, out_machine_kind))
                 return true;
             return oracle_machine_storage(ctx, semantic_value, out_storage,
                                           out_machine_kind);
+        case XI_TUPLE_GET:
+            /* A tuple lane is read back as the full tagged value it was stored
+             * as. Unlike a named value class, whose fields the backend reads in
+             * their own native storage, the element read hands out the carrier
+             * and every native consumer adapts from it. */
+            if (!oracle_aggregate_field_access_is_exact(ctx, operation_index))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+            return true;
         case XI_CHAN_RECV:
         case XI_ENUM_DESCRIPTOR_BOX:
             *out_storage = XR_REP_TAGGED;
@@ -7903,7 +7922,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_fixed_array_backing_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
-                !oracle_named_value_aggregate_storage(
+                !oracle_value_aggregate_storage(
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !(ctx->exact_channel_allocation_value &&
                   ctx->exact_channel_allocation_value[source_value] &&
@@ -7961,7 +7980,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_source_class_instance_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
-                !oracle_named_value_aggregate_storage(
+                !oracle_value_aggregate_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_source_namespace_storage(
                     ctx, source_value, &machine_storage, &ignored_kind) &&
@@ -8264,9 +8283,30 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             return oracle_machine_storage(ctx, source_value, out_storage,
                                           &ignored_kind);
         }
+        case XI_TUPLE_NEW: {
+            /* A tuple lane is stored as a full tagged value, so every operand
+             * reaches the construction in the tagged carrier whatever native
+             * scalar storage its own definition named. The aggregate being
+             * built must itself be exact before any lane is claimed. */
+            XrRep aggregate_storage = XR_REP_TAGGED;
+            if (!oracle_value_aggregate_storage(ctx, operation->result_value,
+                                                &aggregate_storage,
+                                                &ignored_kind))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
+        }
+        case XI_TUPLE_GET:
+            /* The receiver of a proved element read stays in its own aggregate
+             * binding, and the read has no other operand. */
+            if (operand_index != 0 ||
+                !oracle_aggregate_field_access_is_exact(ctx, operation_index))
+                return false;
+            return oracle_value_aggregate_storage(ctx, source_value, out_storage,
+                                                  &ignored_kind);
         case XI_AGG_NEW:
             if (operand_index != 0 ||
-                !oracle_named_value_aggregate_storage(
+                !oracle_value_aggregate_storage(
                     ctx, operation->result_value, out_storage, &ignored_kind))
                 return false;
             return oracle_dynamic_source_class_object_storage(
@@ -8277,17 +8317,17 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             if (operand_index != 0 ||
                 !oracle_aggregate_field_access_is_exact(ctx, operation_index))
                 return false;
-            return oracle_named_value_aggregate_storage(
+            return oracle_value_aggregate_storage(
                 ctx, source_value, out_storage, &ignored_kind);
         case XI_AGG_SET:
             if (!oracle_aggregate_field_access_is_exact(ctx, operation_index))
                 return false;
             if (operand_index == 0)
-                return oracle_named_value_aggregate_storage(
+                return oracle_value_aggregate_storage(
                     ctx, source_value, out_storage, &ignored_kind);
             if (operand_index != 1)
                 return false;
-            if (oracle_named_value_aggregate_storage(
+            if (oracle_value_aggregate_storage(
                     ctx, source_value, out_storage, &ignored_kind))
                 return true;
             return oracle_machine_storage(ctx, source_value, out_storage,

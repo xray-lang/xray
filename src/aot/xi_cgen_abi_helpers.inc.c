@@ -79,8 +79,9 @@ static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
 
 /* A frozen named aggregate is identified only by its verified Target/C-emission
  * projection.  The C type spelling is an output of that authority, not an
- * input discriminator.  Fixed-array backing and materialized aggregate
- * recipes deliberately remain outside this consumer. */
+ * input discriminator.  Backing-handle projections, which travel as a tagged
+ * value instead of a named struct, and materialized aggregate recipes
+ * deliberately remain outside this consumer. */
 static bool cg_value_emission_is_named_aggregate(XiCgenCtx *ctx,
                                                   const XiValue *v,
                                                   XrCValueEmissionView *out,
@@ -111,7 +112,8 @@ static bool cg_value_emission_is_named_aggregate(XiCgenCtx *ctx,
     if (out->rep != XR_C_VALUE_REP_AGGREGATE)
         return false;
     if (out->address_projection ==
-        XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING)
+            XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING ||
+        out->address_projection == XR_C_ADDRESS_PROJECTION_TUPLE_BACKING)
         return false;
     if (out->address_projection ==
             XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE &&

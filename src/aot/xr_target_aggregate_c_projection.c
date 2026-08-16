@@ -182,6 +182,76 @@ static bool fixed_array_projection(const XrTargetPlan *target_plan,
     return true;
 }
 
+/* A tuple keeps its lanes in a runtime allocation the construction owns, so its
+ * C identity is the tagged handle to that allocation and not a named struct:
+ * the aggregate layout states how many lanes there are and what each lane's own
+ * representation is, which is what the emitted construction needs, while the
+ * value itself travels as one XrValue. Lanes may each carry their own type,
+ * which is the one thing separating this from the fixed-array backing that also
+ * projects to a handle. */
+static bool tuple_projection(const XrTargetPlan *target_plan,
+                             const XrTargetValueRepRecord *binding,
+                             const XrTargetMachineRepRecord *aggregate_rep,
+                             const XrTargetLayoutRecord *layout,
+                             const XrTargetFieldRecord *fields,
+                             uint32_t field_count,
+                             const XrSemanticTypeRecord *type,
+                             const XrTargetMachineFacts *machine,
+                             XrCAggregateProjection *out) {
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        slots && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    if (!slot || type->kind != XR_KIND_TUPLE || type->child_count == 0 ||
+        type->aggregate_extent != type->child_count ||
+        type->aggregate_extent != layout->field_count ||
+        type->aggregate_align != 0 ||
+        (type->flags & XR_SEM_TYPE_NULLABLE) != 0 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE ||
+        layout->field_begin > field_count ||
+        layout->field_count > field_count - layout->field_begin ||
+        slot->semantic_value != binding->semantic_value ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_NONE ||
+        slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+        return false;
+
+    uint64_t hash = UINT64_C(1469598103934665603);
+    hash = hash_word(hash, machine->data_layout.stable_hash);
+    hash = hash_word(hash, 2); /* tuple backing-handle projection */
+    hash = hash_word(hash, layout->fixed_prefix_size);
+    hash = hash_word(hash, layout->align);
+    hash = hash_word(hash, layout->field_count);
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrTargetFieldRecord *field = &fields[layout->field_begin + i];
+        const XrTargetMachineRepRecord *field_rep =
+            xr_target_plan_machine_rep(target_plan, field->memory_rep);
+        uint8_t field_native_type = 0;
+        if (!field_rep || !scalar_c_type(field_rep->kind) ||
+            !scalar_native_type(field_rep->kind, &field_native_type) ||
+            field->layout != aggregate_rep->detail ||
+            field->semantic_field != i ||
+            field->semantic_name != XR_SEMANTIC_INDEX_NONE ||
+            field->root_kind != XR_TARGET_ROOT_NONE || field->flags != 0 ||
+            field->reserved != 0)
+            return false;
+        hash = hash_word(hash, field->offset);
+        hash = hash_word(hash, field->size);
+        hash = hash_word(hash, field_rep->kind);
+    }
+    if (!hash)
+        hash = UINT64_C(1);
+    out->layout = aggregate_rep->detail;
+    out->backing_value = binding->semantic_value;
+    out->element_count = layout->field_count;
+    out->abi_key = hash;
+    out->kind = XR_C_AGGREGATE_PROJECTION_TUPLE_BACKING;
+    memcpy(out->c_type, "XrValue", sizeof("XrValue"));
+    return true;
+}
+
 bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
                                const XrTargetValueRepRecord *binding,
                                XrCAggregateProjection *out) {
@@ -226,6 +296,9 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
         return fixed_array_projection(target_plan, binding, register_rep, layout,
                                       fields, field_count, semantic, type, machine,
                                       out);
+    if (type->kind == XR_KIND_TUPLE)
+        return tuple_projection(target_plan, binding, register_rep, layout, fields,
+                                field_count, type, machine, out);
     if (!xr_semantic_value_aggregate_shape_for_type(
             semantic, layout->semantic_type, &shape) ||
         shape.field_count != layout->field_count ||

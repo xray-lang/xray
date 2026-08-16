@@ -17,6 +17,7 @@ typedef enum XrCAggregateProjectionKind {
     XR_C_AGGREGATE_PROJECTION_INVALID = 0,
     XR_C_AGGREGATE_PROJECTION_NAMED_STRUCT = 1,
     XR_C_AGGREGATE_PROJECTION_FIXED_ARRAY_BACKING = 2,
+    XR_C_AGGREGATE_PROJECTION_TUPLE_BACKING = 3,
 } XrCAggregateProjectionKind;
 
 typedef struct XrCAggregateProjection {

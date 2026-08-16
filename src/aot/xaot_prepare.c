@@ -238,8 +238,10 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
         out->kind = projection.kind ==
                             XR_C_AGGREGATE_PROJECTION_NAMED_STRUCT
                         ? XAOT_VALUE_AGGREGATE
-                        : projection.kind ==
-                                  XR_C_AGGREGATE_PROJECTION_FIXED_ARRAY_BACKING
+                        : (projection.kind ==
+                               XR_C_AGGREGATE_PROJECTION_FIXED_ARRAY_BACKING ||
+                           projection.kind ==
+                               XR_C_AGGREGATE_PROJECTION_TUPLE_BACKING)
                               ? XAOT_VALUE_TAGGED
                               : XAOT_VALUE_VOID;
         if (out->kind == XAOT_VALUE_VOID)

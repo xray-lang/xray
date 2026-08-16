@@ -3392,6 +3392,16 @@ static bool verify_value(const XrCValueEmissionView *value) {
                     value->backing_native_type == 0 ||
                     !value->backing_c_type || !value->backing_c_type[0])
                     return false;
+            } else if (value->address_projection ==
+                       XR_C_ADDRESS_PROJECTION_TUPLE_BACKING) {
+                /* Tuple lanes may each carry their own type, so the backing
+                 * names no single element type a fixed array would. */
+                if (strcmp(expected_c_type, "XrValue") != 0 ||
+                    value->backing_value != value->semantic_value ||
+                    value->backing_element_count == 0 ||
+                    value->backing_native_type != 0 ||
+                    value->backing_c_type != NULL)
+                    return false;
             } else {
                 return false;
             }

@@ -458,6 +458,15 @@ emission rather than falling back to compiler-host layout.
   fails closed and cannot fall back to selector dispatch or the legacy runtime
   map/filter/reduce helpers. An unused reduce still executes every callback;
   only storing its result may be elided.
+- T17: a tuple receives a C backing-handle projection, never a named C
+  spelling. Its wrapper is `XrValue` because the construction owns a runtime
+  allocation; the aggregate layout, its scalar lane rows, and the trivial slot
+  supply the lane count and per-lane representation, and lanes may differ from
+  one another. Representation refinement admits the same aggregate family the
+  target plan itself admitted, keeps every lane in the tagged carrier across
+  construction, and hands an element read back as the tagged carrier a native
+  consumer adapts from. A non-scalar, nested, rooted, renamed, or stale lane
+  fails closed, and no tuple may enter the named-aggregate path.
 
 The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
@@ -490,20 +499,20 @@ the compiler core does not download a provider.
 
 anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de082761402165a3c36919
 anchor-sha256: src/aot/xaot_callable.c 13d17addb6fe4492d78a2b010bc8329c2bc2bc912a9cd7e7cd8be59269c56d6a
-anchor-sha256: src/aot/xaot_prepare.c 640f6adcf252e0446baf52d8d861bd920ca00ae9339021e6f79eb071f7c4c05f
+anchor-sha256: src/aot/xaot_prepare.c 77d5bce886e498b736557e06ef6e9916e54b27d42cb169bda1e2b840cc7c96bf
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 83b1ff01635b685413b1d7cefaec4eaf9e6b8a188186177525f83d28321e5dc1
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c c76ffd88bab20a516db801af2ef08d58b5d5ab1090ec6a60ac53d3affa9bab50
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c d916f37caa6c7b39245526529555728e551048af64fb559cf10a71b49c439ff7
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
 anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 451163c1d1e5d8af6aabe8ce0d0bab796a7daa7826f0a0143c6101e1dcda6164
-anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 1edbcf73bdd062623c15231d9c7312b025e773b112f9d38483904d61c79064d9
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 27cea072c712ee697f358004e0d726bd75f675b14608271f08a88f1447a7558d
+anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 4a361982499c5d2d2d129e3527c761c0a4821505f2d3d9cb51f5634a00369b3c
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c a5a9ab568afc5fab7eea2e66942ad3844bb0b21d88bbc593891b0408731b8cc1
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c ad0d4582896dde9d9f6e82301d349d8b4deb7079764a7ba5dfa9c7ef2f8c6bef
-anchor-sha256: src/aot/xr_target_aggregate_c_projection.h 1f1ad5d586e66259ba51249f3829ed83cdeac5a0d5d23e5d7152dc9d5c009b29
-anchor-sha256: src/aot/xr_target_aggregate_c_projection.c b323399b0e904047af88cd4224b5281a043dcf75774e0b5a4bf7399712edbc9b
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.h abfe201fb679c49334634af0db17ad23152fe896e7f665ae0464f4084505ca65
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.c b5f5211b942d49596e8e260cf8340e914047e88d60962dc4eac125f6885695a0
 anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h 9ad3a46f3f41de669f91aa5a6e00452952ef4b0f23c2e9a92ec237a896c5b3b1
 anchor-sha256: src/plan/semantic/xr_semantic_string_shape.h 01326febdc3dec61ade7a8ec84567b1a515243483e272dac052da1a84ebf0c28
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h bbcaf57e24a92de079a0cefa2bdf5c753327b3c737d656cb57fbe2b6a648616c
@@ -512,7 +521,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d190
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h d2dff7451f5eb731348efec9541a2b8cbbfbc879e049d163ed46479352a62a1e
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 0bd5c319832db3c5c1067e5ee364135923a15b1e488b5f9ab4fe5fa7bc8e9310
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h ee7409a02d228f10ed8c812c9b9d7f835106067e37d12bc6ed50c6fa48f93e27
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 3a13654d7f163e3dd653e5f497209224b2a0aa77af2de4b21cccaffa47bd0cd1
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 21531ec0fd641f7eaa8269ef0fd43854aaadeb12bc1083ba2c49134de0bc7741
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c f0110919fa8e0b939577fa1ce860249510c887a428bd16b561f4a00b883b1974
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c 24b1741a0e00064a3cae08d7ed59f71e6bd884a40b5982ea752230ee22111cea
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ef5c234df65d6153474a894ed295719935e32a0e9228c1370e43eb1c1c3abbc5

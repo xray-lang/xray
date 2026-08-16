@@ -94,6 +94,7 @@ typedef enum XrCAddressProjection {
     XR_C_ADDRESS_PROJECTION_NONE = 0,
     XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE = 1,
     XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING = 2,
+    XR_C_ADDRESS_PROJECTION_TUPLE_BACKING = 3,
 } XrCAddressProjection;
 
 typedef enum XrCCleanupAction {
