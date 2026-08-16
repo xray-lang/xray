@@ -101,6 +101,10 @@ static bool cg_fixed_array_lane_info_from_emission(XiCgenCtx *ctx,
                                                    const XiValue *value,
                                                    CgFixedArrayLaneInfo *out) {
     XrCValueEmissionView view = {0};
+    /* The lane tag is zero for int64, so its presence cannot be read off a
+     * zero test. The scalar layout it names is the presence test, and the
+     * backing has to spell that layout's C type and no other. */
+    const XaotLayoutInfo *lane = NULL;
     if (!ctx || !function || !value || !out ||
         cg_value_emission_view(ctx, function, value, &view) !=
             CG_VALUE_EMISSION_FOUND ||
@@ -112,10 +116,11 @@ static bool cg_fixed_array_lane_info_from_emission(XiCgenCtx *ctx,
         view.backing_value != view.semantic_value ||
         view.backing_element_count == 0 ||
         view.backing_element_count > XR_ARRAY_REF_MAX_COUNT ||
-        view.backing_native_type == 0 || !view.c_type ||
-        strcmp(view.c_type, "XrValue") != 0 || !view.backing_c_type ||
-        strcmp(view.backing_c_type,
-               cg_struct_native_c_type(view.backing_native_type)) != 0)
+        !(lane = xaot_layout_for_native_type(view.backing_native_type)) ||
+        lane->field_kind != XAOT_LAYOUT_FIELD_SCALAR || !lane->c_type ||
+        !view.c_type || strcmp(view.c_type, "XrValue") != 0 ||
+        !view.backing_c_type ||
+        strcmp(view.backing_c_type, lane->c_type) != 0)
         return false;
     XrRep rep = cg_struct_native_rep(view.backing_native_type);
     if (rep == XR_REP_TAGGED || rep == XR_REP_VOID)

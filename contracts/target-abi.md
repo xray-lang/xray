@@ -246,14 +246,16 @@ proof identities, and evidence without calling the prepare collector. Missing,
 duplicate, swapped, backend-only, or non-durable value authorities fail closed.
 This tightens internal plan verification without changing the public target ABI.
 
-Schema 17 additionally projects a scalar-lane fixed-array allocation as an
-exact backing place. SemanticPlan fixes the allocation and element identity,
-TargetPlan fixes the aggregate layout, and CEmission owns the lane count,
-native kind, C spelling, and producer value whose address is projected. Prepare
-keeps the tagged wrapper ABI while CGen addresses the verified native backing;
-neither may recover this identity from a mutable Xi type, name, arity, or
-representation. This authority excludes object, raw, code, vector, nested,
-nullable, and non-scalar lane families.
+Schema 17 additionally projects a scalar-lane fixed array as an exact backing
+place. TargetPlan fixes the aggregate layout, its uniform lane rows, and the
+trivial slot, and CEmission owns the lane count, native kind, C spelling, and
+value whose address is projected. The allocation identity stays with the
+representation authority that proves the construction, so a fixed array read
+back out of the cell it was stored in projects the same backing place its
+allocation does. Prepare keeps the tagged wrapper ABI while CGen addresses the
+verified native backing; neither may recover this identity from a mutable Xi
+type, name, arity, or representation. This authority excludes object, raw,
+code, vector, nested, nullable, and non-scalar lane families.
 
 Schema 23 additionally projects an ordinary address-taken scalar UNBOX alias as
 an exact materialization recipe. SemanticPlan fixes the alias, LOCAL_ADDR use,
@@ -439,12 +441,24 @@ emission rather than falling back to compiler-host layout.
   verifies it before CGen consumes it. Mutable Xi type, name, and arity facts
   cannot fill a missing row; anonymous, nested, rooted, fixed-array, raw,
   object, code, and vector families remain unsupported and fail closed.
-- T15: a fixed array receives a C backing-place projection only when one exact
-  `XI_FIXED_ARRAY_NEW` result, its scalar element kind and count, every Target
-  field row, the aggregate layout, and the trivial slot all agree. Its wrapper
-  remains `XrValue`, but index and address lowering consume the immutable lane
-  identity directly. A missing, stale, renamed, type-guessed, or non-scalar
-  projection fails closed and cannot enter the named-aggregate path.
+- T15: a fixed array receives a C backing-place projection only when its
+  uniform scalar element kind and count, every Target field row, the aggregate
+  layout, and the trivial slot all agree. Its wrapper remains `XrValue`, but
+  index and address lowering consume the immutable lane identity directly. The
+  projection asks which aggregate slot the value holds, not which instruction
+  defined it, so the same fixed array projects the same backing place at its
+  allocation and at every later read of it; proving one exact
+  `XI_FIXED_ARRAY_NEW` result, its canonical allocation identity, and its
+  declared element kind stays with representation refinement, which is where an
+  allocation is the subject. An element access re-proves its receiver as that
+  same aggregate family and demands the single element type an index names.
+  Representation selection admits one container family for the read and the
+  write of an index, so a fixed-array lane keeps its native index and native
+  element on both and no compensating BOX/UNBOX adapter appears on either. The
+  lane kind is read as the scalar layout it selects and never tested for
+  presence against zero, which is the tag of a 64-bit signed lane. A missing,
+  stale, renamed, type-guessed, or non-scalar projection fails closed and cannot
+  enter the named-aggregate path.
 - T16: direct `Array.map`, `Array.filter`, and `Array.reduce` C lowering is
   authorized only by one verified SemanticPlan HOF operation, its exact
   TargetPlan call/result/storage rows, and one CEmission recipe naming the
@@ -503,16 +517,16 @@ anchor-sha256: src/aot/xaot_prepare.c 77d5bce886e498b736557e06ef6e9916e54b27d42c
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c c76ffd88bab20a516db801af2ef08d58b5d5ab1090ec6a60ac53d3affa9bab50
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 4f904e67e77564ec4a675cb57444bdd8776f450ceb52963c7e0d67fe7d453ff7
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c d916f37caa6c7b39245526529555728e551048af64fb559cf10a71b49c439ff7
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
 anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 451163c1d1e5d8af6aabe8ce0d0bab796a7daa7826f0a0143c6101e1dcda6164
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 4a361982499c5d2d2d129e3527c761c0a4821505f2d3d9cb51f5634a00369b3c
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c a5a9ab568afc5fab7eea2e66942ad3844bb0b21d88bbc593891b0408731b8cc1
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 68772c96356999b768297f8d170521d5fdfc6432cf222e43dd37820b4c06878e
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c ad0d4582896dde9d9f6e82301d349d8b4deb7079764a7ba5dfa9c7ef2f8c6bef
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h abfe201fb679c49334634af0db17ad23152fe896e7f665ae0464f4084505ca65
-anchor-sha256: src/aot/xr_target_aggregate_c_projection.c b5f5211b942d49596e8e260cf8340e914047e88d60962dc4eac125f6885695a0
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 83e9445eb7b1fbf5004cbd198fd0c703839c6ce67f6d6cc34c4f8c78e4938e97
 anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h 9ad3a46f3f41de669f91aa5a6e00452952ef4b0f23c2e9a92ec237a896c5b3b1
 anchor-sha256: src/plan/semantic/xr_semantic_string_shape.h 01326febdc3dec61ade7a8ec84567b1a515243483e272dac052da1a84ebf0c28
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h bbcaf57e24a92de079a0cefa2bdf5c753327b3c737d656cb57fbe2b6a648616c
@@ -523,12 +537,12 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 0bd5c319832d
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h ee7409a02d228f10ed8c812c9b9d7f835106067e37d12bc6ed50c6fa48f93e27
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 21531ec0fd641f7eaa8269ef0fd43854aaadeb12bc1083ba2c49134de0bc7741
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c f0110919fa8e0b939577fa1ce860249510c887a428bd16b561f4a00b883b1974
-anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c 24b1741a0e00064a3cae08d7ed59f71e6bd884a40b5982ea752230ee22111cea
+anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c 1ee9e10ccced6aee0fffa6e23c85708a071dca246ac6101ff653cad03b297c16
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ef5c234df65d6153474a894ed295719935e32a0e9228c1370e43eb1c1c3abbc5
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 375af2e4b45271d06e6ce6ed798be2e6f9f8786c25e68d38ea3f4ca6f41160c6
 anchor-sha256: src/aot/xi_cgen.c 6792ca08b6332dc98cd716273c848a2fdce26b8b718a37a86ddf26b701c8cbc1
-anchor-sha256: src/ir/xi_opt.c 30ce97c77254a30e1c1653fe69eb427b99d955cf27feae172800ac08b6725a5c
+anchor-sha256: src/ir/xi_opt.c 17439608ad8b244d6b3ed72c6ba19f77ff438b4263c20ca8c46e776c48b72f93
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
 anchor-sha256: src/aot/xrt_core_freestanding.h 4637d9be259b16363f74d330ad0bc3d016c71f588d418e71ed9a57cffcf6ecfb
 anchor-sha256: src/aot/xrt_method.h 49b124e154a48bc0401fe67e6e3feba34ec57d7791dfb0f8afbc56a3aa9ca06e

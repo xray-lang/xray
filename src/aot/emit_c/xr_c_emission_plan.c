@@ -9,6 +9,7 @@
  */
 
 #include "xr_c_emission_plan.h"
+#include "../xaot_layout_gen.h"
 #include "../xr_target_aggregate_c_projection.h"
 #include "../../plan/target/xr_target_plan.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
@@ -3386,11 +3387,19 @@ static bool verify_value(const XrCValueEmissionView *value) {
                     return false;
             } else if (value->address_projection ==
                        XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING) {
+                /* Every lane of a fixed array carries the same scalar type, and
+                 * the tag naming that type is zero for int64, so the tag cannot
+                 * be tested for presence against zero. What the tag names is
+                 * the test: a lane tag has to resolve to a scalar layout, and
+                 * the backing has to spell that layout's C type and no other. */
+                const XaotLayoutInfo *lane =
+                    xaot_layout_for_native_type(value->backing_native_type);
                 if (strcmp(expected_c_type, "XrValue") != 0 ||
                     value->backing_value != value->semantic_value ||
-                    value->backing_element_count == 0 ||
-                    value->backing_native_type == 0 ||
-                    !value->backing_c_type || !value->backing_c_type[0])
+                    value->backing_element_count == 0 || !lane ||
+                    lane->field_kind != XAOT_LAYOUT_FIELD_SCALAR ||
+                    !lane->c_type || !value->backing_c_type ||
+                    strcmp(value->backing_c_type, lane->c_type) != 0)
                     return false;
             } else if (value->address_projection ==
                        XR_C_ADDRESS_PROJECTION_TUPLE_BACKING) {

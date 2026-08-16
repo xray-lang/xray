@@ -9,9 +9,7 @@
  */
 
 #include "xr_target_aggregate_c_projection.h"
-#include "../plan/semantic/xr_semantic_allocation_shape.h"
 #include "../plan/semantic/xr_semantic_value_aggregate_shape.h"
-#include "../ir/xi_ops_gen.h"
 #include "../shared/xr_native_type_core.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -82,7 +80,6 @@ static bool fixed_array_projection(const XrTargetPlan *target_plan,
                                    const XrTargetLayoutRecord *layout,
                                    const XrTargetFieldRecord *fields,
                                    uint32_t field_count,
-                                   const XrSemanticPlan *semantic,
                                    const XrSemanticTypeRecord *type,
                                    const XrTargetMachineFacts *machine,
                                    XrCAggregateProjection *out) {
@@ -91,11 +88,7 @@ static bool fixed_array_projection(const XrTargetPlan *target_plan,
         xr_target_plan_slots(target_plan, &slot_count);
     const XrTargetSlotRecord *slot =
         slots && binding->slot < slot_count ? &slots[binding->slot] : NULL;
-    const XrSemanticOperationRecord *operation =
-        slot && slot->semantic_operation < xr_semantic_plan_operation_count(semantic)
-            ? xr_semantic_plan_operation(semantic, slot->semantic_operation)
-            : NULL;
-    if (!slot || !operation || type->kind != XR_KIND_FIXED_ARRAY ||
+    if (!slot || type->kind != XR_KIND_FIXED_ARRAY ||
         type->child_count != 1 || type->aggregate_extent == 0 ||
         type->aggregate_extent > UINT16_MAX ||
         type->aggregate_extent != layout->field_count ||
@@ -103,24 +96,6 @@ static bool fixed_array_projection(const XrTargetPlan *target_plan,
         type->scalar_rep != XR_SCALAR_REP_NONE ||
         layout->field_begin > field_count ||
         layout->field_count > field_count - layout->field_begin ||
-        operation->opcode != XI_FIXED_ARRAY_NEW ||
-        operation->result_value != binding->semantic_value ||
-        operation->result_type != layout->semantic_type ||
-        operation->operand_count != 0 || operation->metadata_count != 0 ||
-        operation->constant != XR_SEMANTIC_INDEX_NONE ||
-        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
-        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
-        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
-        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
-        operation->effects != xi_generated_op_effects(XI_FIXED_ARRAY_NEW) ||
-        operation->flags != xi_generated_op_default_flags(XI_FIXED_ARRAY_NEW) ||
-        operation->ownership_use != xi_generated_op_own_use(XI_FIXED_ARRAY_NEW) ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
-        operation->result_alias_operand != -1 ||
-        operation->return_parameter != -1 ||
-        operation->return_provenance != XR_SEM_RETURN_OWNED ||
-        operation->return_complete != 1 ||
-        !xr_semantic_allocation_identity_is_canonical(operation) ||
         slot->semantic_value != binding->semantic_value ||
         slot->register_rep != binding->register_rep ||
         slot->memory_rep != binding->memory_rep ||
@@ -164,8 +139,6 @@ static bool fixed_array_projection(const XrTargetPlan *target_plan,
         hash = hash_word(hash, field->size);
         hash = hash_word(hash, field_rep->kind);
     }
-    if (operation->semantic_immediate != native_type)
-        return false;
     if (!hash)
         hash = UINT64_C(1);
     out->layout = aggregate_rep->detail;
@@ -294,8 +267,7 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
         return false;
     if (type->kind == XR_KIND_FIXED_ARRAY)
         return fixed_array_projection(target_plan, binding, register_rep, layout,
-                                      fields, field_count, semantic, type, machine,
-                                      out);
+                                      fields, field_count, type, machine, out);
     if (type->kind == XR_KIND_TUPLE)
         return tuple_projection(target_plan, binding, register_rep, layout, fields,
                                 field_count, type, machine, out);

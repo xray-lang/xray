@@ -2174,6 +2174,18 @@ static bool sr_value_has_static_unboxed_array_elem_type(const XiValue *value) {
     return sr_value_typed_array_elem_rep(value) != XR_REP_TAGGED;
 }
 
+/* The container of an index access the backend reaches through static storage.
+ * A read and a write address the same lanes of the same container, so one
+ * judgement answers for both: either the container itself is statically indexed
+ * storage, or its element type has a native representation. The second spelling
+ * is what admits a fixed array held directly rather than through a struct
+ * field, whose lanes are as static as any array's. Asking less on the read than
+ * on the write would leave the read boxing an index the write passes native. */
+static bool sr_value_index_container_is_static(const XiValue *value) {
+    return sr_value_has_static_index_storage(value) ||
+           sr_value_has_static_unboxed_array_elem_type(value);
+}
+
 /* The container operand of an index access. A freshly allocated heap array has
  * a single storage fact, the owned tagged outer value, so a native pointer view
  * of it would need a representation adapter no frozen storage row can state.
@@ -2545,7 +2557,7 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
         return false;
     switch (v->op) {
         case XI_INDEX_GET:
-            *out = v->nargs >= 1 && v->args[0] && sr_value_has_static_index_storage(v->args[0])
+            *out = v->nargs >= 1 && v->args[0] && sr_value_index_container_is_static(v->args[0])
                        ? sr_value_typed_array_elem_rep(v->args[0])
                        : XR_REP_TAGGED;
             return true;
@@ -3007,7 +3019,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
                 return true;
             }
             if (user->nargs >= 2 && user->args[0] &&
-                sr_value_has_static_index_storage(user->args[0])) {
+                sr_value_index_container_is_static(user->args[0])) {
                 if (arg_idx == 0) {
                     *out = sr_container_operand_rep(user->args[0], policy);
                     return true;
@@ -3021,8 +3033,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             return true;
         case XI_INDEX_SET:
             if (user->nargs >= 3 && user->args[0] &&
-                (sr_value_has_static_index_storage(user->args[0]) ||
-                 sr_value_has_static_unboxed_array_elem_type(user->args[0]))) {
+                sr_value_index_container_is_static(user->args[0])) {
                 if (arg_idx == 0) {
                     *out = sr_container_operand_rep(user->args[0], policy);
                     return true;

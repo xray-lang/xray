@@ -3656,6 +3656,42 @@ static bool oracle_fixed_array_backing_storage(const VerifyAuthority *ctx,
     return true;
 }
 
+/* The fixed array an element access reads or writes, whichever instruction
+ * defined the receiver. The backing oracle above proves a construction, so it
+ * answers only for the allocation instruction itself; a fixed array stored into
+ * a local cell and read back out is the same aggregate reaching the same
+ * element access through a different definition, and demanding the allocation
+ * would refuse every fixed array that outlives its own defining instruction.
+ * The aggregate judgement is the one the target plan applied when it gave this
+ * value an aggregate slot, narrowed to the fixed-array family whose single
+ * element type an index names. */
+static bool oracle_fixed_array_value_storage(const VerifyAuthority *ctx,
+                                             uint32_t semantic_value,
+                                             XrRep *out_storage,
+                                             uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    uint32_t parameter_index = ctx->parameter_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    const XrSemanticParameterRecord *parameter =
+        parameter_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
+            : NULL;
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(
+        ctx->semantic, parameter ? parameter->type
+                                 : operation ? operation->result_type
+                                             : XR_SEMANTIC_INDEX_NONE);
+    if (!type || type->kind != XR_KIND_FIXED_ARRAY || type->child_count != 1 ||
+        type->aggregate_extent == 0 || type->aggregate_extent > UINT16_MAX)
+        return false;
+    return oracle_value_aggregate_storage(ctx, semantic_value, out_storage,
+                                          out_machine_kind);
+}
+
 static bool oracle_fixed_array_element_access_is_exact(
     const VerifyAuthority *ctx, uint32_t operation_index) {
     const XrSemanticOperationRecord *operation =
@@ -3700,18 +3736,18 @@ static bool oracle_fixed_array_element_access_is_exact(
         !semantic_exact_i64_type(
             xr_semantic_plan_type(ctx->semantic, index->type)) ||
         receiver->value >= ctx->value_count ||
-        !oracle_fixed_array_backing_storage(ctx, receiver->value, &storage,
-                                            &kind) ||
+        !oracle_fixed_array_value_storage(ctx, receiver->value, &storage,
+                                          &kind) ||
         storage != XR_REP_TAGGED || kind != XR_MACHINE_REP_AGGREGATE)
         return false;
-    uint32_t allocation_index = ctx->operation_by_value[receiver->value];
-    const XrSemanticOperationRecord *allocation =
-        allocation_index < ctx->operation_count
-            ? xr_semantic_plan_operation(ctx->semantic, allocation_index)
+    uint32_t definition_index = ctx->operation_by_value[receiver->value];
+    const XrSemanticOperationRecord *definition =
+        definition_index < ctx->operation_count
+            ? xr_semantic_plan_operation(ctx->semantic, definition_index)
             : NULL;
     const XrSemanticTypeRecord *receiver_type =
         xr_semantic_plan_type(ctx->semantic, receiver->type);
-    if (!allocation || receiver->type != allocation->result_type ||
+    if (!definition || receiver->type != definition->result_type ||
         !receiver_type || receiver_type->kind != XR_KIND_FIXED_ARRAY ||
         receiver_type->child_count != 1 ||
         receiver_type->child_begin >= child_count)
@@ -8382,7 +8418,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
             if (oracle_fixed_array_element_access_is_exact(ctx,
                                                            operation_index)) {
                 if (operand_index == 0)
-                    return oracle_fixed_array_backing_storage(
+                    return oracle_fixed_array_value_storage(
                         ctx, source_value, out_storage, &ignored_kind);
                 return oracle_machine_storage(ctx, source_value, out_storage,
                                               &ignored_kind);
