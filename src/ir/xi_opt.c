@@ -370,16 +370,16 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, bool shr_unsigned
         case XI_DIV:
             if (b == 0)
                 return false;
-            *result = xr_int_div_mod_apply(divmod_unsigned ? XR_INT_DIV_MOD_DIV_U
-                                                           : XR_INT_DIV_MOD_DIV,
-                                           XR_INT_DIV_MOD_PROOF_NONZERO, a, b);
+            *result =
+                xr_int_div_mod_apply(divmod_unsigned ? XR_INT_DIV_MOD_DIV_U : XR_INT_DIV_MOD_DIV,
+                                     XR_INT_DIV_MOD_PROOF_NONZERO, a, b);
             return true;
         case XI_MOD:
             if (b == 0)
                 return false;
-            *result = xr_int_div_mod_apply(divmod_unsigned ? XR_INT_DIV_MOD_MOD_U
-                                                           : XR_INT_DIV_MOD_MOD,
-                                           XR_INT_DIV_MOD_PROOF_NONZERO, a, b);
+            *result =
+                xr_int_div_mod_apply(divmod_unsigned ? XR_INT_DIV_MOD_MOD_U : XR_INT_DIV_MOD_MOD,
+                                     XR_INT_DIV_MOD_PROOF_NONZERO, a, b);
             return true;
         case XI_BAND:
             *result = xr_bitwise_binary_i64(XR_BITWISE_BINARY_AND, a, b);
@@ -394,9 +394,8 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, bool shr_unsigned
             *result = xr_shift_i64(XR_SHIFT_LEFT, a, b);
             return true;
         case XI_SHR:
-            *result = xr_shift_i64(shr_unsigned ? XR_SHIFT_RIGHT_UNSIGNED
-                                                : XR_SHIFT_RIGHT_SIGNED,
-                                   a, b);
+            *result =
+                xr_shift_i64(shr_unsigned ? XR_SHIFT_RIGHT_UNSIGNED : XR_SHIFT_RIGHT_SIGNED, a, b);
             return true;
         default:
             return false;
@@ -750,8 +749,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             /* Fold unary NEG on const float */
             double unary_f = 0.0;
             if (v->op == XI_NEG && v->nargs == 1 && const_float_value(v->args[0], &unary_f)) {
-                rewrite_to_const_float(
-                    v, xr_numeric_neg_eval(XR_NUMERIC_NEG_F64, 0, unary_f).f64);
+                rewrite_to_const_float(v, xr_numeric_neg_eval(XR_NUMERIC_NEG_F64, 0, unary_f).f64);
                 chg.values_changed = true;
                 continue;
             }
@@ -1897,11 +1895,9 @@ static XrRep sr_type_call_place_pointee_rep(const struct XrType *type) {
  * scalar operands in their native representation during refresh; otherwise a
  * selector-generic CALL_BUILTIN rule would synthesize a BOX that has no
  * representation obligation in the frozen Array-intrinsic family. */
-static bool sr_array_intrinsic_operand_rep(const XiValue *value,
-                                           uint16_t argument_index,
+static bool sr_array_intrinsic_operand_rep(const XiValue *value, uint16_t argument_index,
                                            XrRep *out) {
-    if (!value || !out || value->op != XI_CALL_BUILTIN ||
-        argument_index >= value->nargs ||
+    if (!value || !out || value->op != XI_CALL_BUILTIN || argument_index >= value->nargs ||
         value->array_element_storage <= XR_ELEM_ANY ||
         value->array_element_storage >= XR_ELEM_COUNT)
         return false;
@@ -1911,8 +1907,7 @@ static bool sr_array_intrinsic_operand_rep(const XiValue *value,
         *out = XR_REP_I64;
         return true;
     }
-    if (value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_FILLED_NEW ||
-        value->nargs != 2)
+    if (value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_FILLED_NEW || value->nargs != 2)
         return false;
     if (argument_index == 0) {
         *out = XR_REP_I64;
@@ -2194,8 +2189,7 @@ static bool sr_value_index_container_is_static(const XiValue *value) {
  * already carries at its own definition, so no adapter appears there either. */
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy);
 
-static XrRep sr_container_operand_rep(const XiValue *container,
-                                      const XiRepPolicy *policy) {
+static XrRep sr_container_operand_rep(const XiValue *container, const XiRepPolicy *policy) {
     const XiValue *v = sr_unwrap_identity_value(container);
     if (v && v->op == XI_ARRAY_NEW)
         return XR_REP_TAGGED;
@@ -2764,8 +2758,7 @@ typedef struct SrArrayHofIdentity {
 /* Representation selection consumes the already verified SemanticPlan HOF
  * identity.  The analyzer marker is only a live consistency check: no method
  * selector, live type, or argument count can create this authority. */
-static bool sr_array_hof_identity_is_exact(const XiValue *value,
-                                           SrArrayHofIdentity *out) {
+static bool sr_array_hof_identity_is_exact(const XiValue *value, SrArrayHofIdentity *out) {
     const XiFunc *function = value && value->block ? value->block->func : NULL;
     const XrSemanticPlan *plan = function ? function->semantic_plan : NULL;
     if (out)
@@ -2775,20 +2768,16 @@ static bool sr_array_hof_identity_is_exact(const XiValue *value,
         value->op != XI_CALL_METHOD)
         return false;
     const XrSemanticFunctionRecord *semantic_function =
-        xr_semantic_plan_function(plan,
-                                  function->semantic_plan_function_index);
+        xr_semantic_plan_function(plan, function->semantic_plan_function_index);
     if (!semantic_function || value->id >= semantic_function->value_count ||
         semantic_function->value_begin > UINT32_MAX - value->id)
         return false;
     uint32_t semantic_value = semantic_function->value_begin + value->id;
     const XrSemanticOperationRecord *match = NULL;
-    uint32_t operation_count =
-        (uint32_t) xr_semantic_plan_operation_count(plan);
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
     for (uint32_t i = 0; i < operation_count; i++) {
-        const XrSemanticOperationRecord *candidate =
-            xr_semantic_plan_operation(plan, i);
-        if (!candidate || candidate->function !=
-                              function->semantic_plan_function_index ||
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->function != function->semantic_plan_function_index ||
             candidate->result_value != semantic_value)
             continue;
         if (match)
@@ -2811,16 +2800,14 @@ static bool sr_array_hof_identity_is_exact(const XiValue *value,
                 live_kind = XI_ARRAY_HOF_REDUCE;
                 expected_operands = 3;
                 break;
-            default: break;
+            default:
+                break;
         }
     }
     uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands =
-        xr_semantic_plan_operands(plan, &operand_count);
-    if (!match || live_kind == XI_ARRAY_HOF_NONE ||
-        value->array_hof_kind != live_kind ||
-        match->opcode != XI_CALL_METHOD ||
-        match->operand_count != expected_operands ||
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    if (!match || live_kind == XI_ARRAY_HOF_NONE || value->array_hof_kind != live_kind ||
+        match->opcode != XI_CALL_METHOD || match->operand_count != expected_operands ||
         match->operand_begin > operand_count ||
         expected_operands > operand_count - match->operand_begin ||
         value->nargs != expected_operands || !value->args || !operands)
@@ -2924,8 +2911,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_CALL_METHOD: {
             SrArrayHofIdentity hof = {0};
             if (sr_array_hof_identity_is_exact(v, &hof)) {
-                if (hof.kind == XI_ARRAY_HOF_MAP ||
-                    hof.kind == XI_ARRAY_HOF_FILTER)
+                if (hof.kind == XI_ARRAY_HOF_MAP || hof.kind == XI_ARRAY_HOF_FILTER)
                     return XR_REP_TAGGED;
                 return sr_type_native_boundary_rep(v->type);
             }
@@ -3342,8 +3328,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             return XR_REP_TAGGED;
         case XI_CALL_BUILTIN: {
             XrRep array_intrinsic_rep = XR_REP_TAGGED;
-            if (sr_array_intrinsic_operand_rep(user, arg_idx,
-                                               &array_intrinsic_rep))
+            if (sr_array_intrinsic_operand_rep(user, arg_idx, &array_intrinsic_rep))
                 return array_intrinsic_rep;
             if (user->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
@@ -3361,10 +3346,8 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                 if (sr_array_hof_identity_is_exact(user, &hof)) {
                     if (arg_idx < 2)
                         return XR_REP_TAGGED;
-                    return arg_idx == 2 && hof.kind == XI_ARRAY_HOF_REDUCE &&
-                                   user->args[arg_idx]
-                               ? sr_type_native_boundary_rep(
-                                     user->args[arg_idx]->type)
+                    return arg_idx == 2 && hof.kind == XI_ARRAY_HOF_REDUCE && user->args[arg_idx]
+                               ? sr_type_native_boundary_rep(user->args[arg_idx]->type)
                                : XR_REP_TAGGED;
                 }
             }
@@ -3425,9 +3408,8 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
 }
 
 /* Allocate a BOX/UNBOX value in the arena without appending to the block. */
-static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op,
-                                struct XrType *type, XiValue *arg,
-                                XiBackendValueOrigin origin) {
+static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
+                                XiValue *arg, XiBackendValueOrigin origin) {
     XR_DCHECK(f != NULL, "sr_make_convert: NULL func");
     XR_DCHECK(blk != NULL, "sr_make_convert: NULL block");
     XR_DCHECK(arg != NULL, "sr_make_convert: NULL arg");
@@ -3460,10 +3442,8 @@ static bool sr_conversion_erases_enum_metadata(const XiValue *source, const XrTy
 }
 
 XR_FUNC bool xi_opt_rep_adapter_for_use(const XiValue *source, const XiValue *user,
-                                        uint16_t argument_index,
-                                        const XiRepPolicy *policy,
-                                        XiRepAdapterKind *out_kind,
-                                        uint16_t *out_input_rep,
+                                        uint16_t argument_index, const XiRepPolicy *policy,
+                                        XiRepAdapterKind *out_kind, uint16_t *out_input_rep,
                                         uint16_t *out_output_rep) {
     if (out_kind)
         *out_kind = XI_REP_ADAPTER_NONE;
@@ -3482,14 +3462,12 @@ XR_FUNC bool xi_opt_rep_adapter_for_use(const XiValue *source, const XiValue *us
     XiRepAdapterKind kind = XI_REP_ADAPTER_NONE;
     if (input != XR_REP_TAGGED && output == XR_REP_TAGGED) {
         bool erased = false;
-        if ((user->op == XI_COPY || xi_op_is_identity_forward(user->op)) &&
-            argument_index == 0)
+        if ((user->op == XI_COPY || xi_op_is_identity_forward(user->op)) && argument_index == 0)
             erased = sr_conversion_erases_enum_metadata(source, user->type);
         kind = erased ? XI_REP_ADAPTER_ENUM_DESCRIPTOR_BOX : XI_REP_ADAPTER_BOX;
     } else if (input == XR_REP_TAGGED && output != XR_REP_TAGGED) {
-        kind = source->op == XI_ENUM_DESCRIPTOR_BOX
-                   ? XI_REP_ADAPTER_ENUM_DESCRIPTOR_UNBOX
-                   : XI_REP_ADAPTER_UNBOX;
+        kind = source->op == XI_ENUM_DESCRIPTOR_BOX ? XI_REP_ADAPTER_ENUM_DESCRIPTOR_UNBOX
+                                                    : XI_REP_ADAPTER_UNBOX;
     } else {
         return false;
     }
@@ -3499,18 +3477,17 @@ XR_FUNC bool xi_opt_rep_adapter_for_use(const XiValue *source, const XiValue *us
     return true;
 }
 
-XR_FUNC bool xi_opt_rep_adapter_for_boundary(
-    const XiValue *source, uint16_t required_rep, bool erase_enum_descriptor,
-    const XiRepPolicy *policy, XiRepAdapterKind *out_kind,
-    uint16_t *out_input_rep, uint16_t *out_output_rep) {
+XR_FUNC bool xi_opt_rep_adapter_for_boundary(const XiValue *source, uint16_t required_rep,
+                                             bool erase_enum_descriptor, const XiRepPolicy *policy,
+                                             XiRepAdapterKind *out_kind, uint16_t *out_input_rep,
+                                             uint16_t *out_output_rep) {
     if (out_kind)
         *out_kind = XI_REP_ADAPTER_NONE;
     if (out_input_rep)
         *out_input_rep = XR_REP_TAGGED;
     if (out_output_rep)
         *out_output_rep = XR_REP_TAGGED;
-    if (!source || !out_kind || !out_input_rep || !out_output_rep ||
-        required_rep > XR_REP_RAWPTR)
+    if (!source || !out_kind || !out_input_rep || !out_output_rep || required_rep > XR_REP_RAWPTR)
         return false;
     XiRepPolicy local_policy = policy ? *policy : xi_rep_policy_tagged_boundary();
     XrRep input = sr_def_rep(source, &local_policy);
@@ -3518,13 +3495,10 @@ XR_FUNC bool xi_opt_rep_adapter_for_boundary(
     if (input == output)
         return false;
     if (input != XR_REP_TAGGED && output == XR_REP_TAGGED)
-        *out_kind = erase_enum_descriptor
-                        ? XI_REP_ADAPTER_ENUM_DESCRIPTOR_BOX
-                        : XI_REP_ADAPTER_BOX;
+        *out_kind = erase_enum_descriptor ? XI_REP_ADAPTER_ENUM_DESCRIPTOR_BOX : XI_REP_ADAPTER_BOX;
     else if (input == XR_REP_TAGGED && output != XR_REP_TAGGED)
-        *out_kind = source->op == XI_ENUM_DESCRIPTOR_BOX
-                        ? XI_REP_ADAPTER_ENUM_DESCRIPTOR_UNBOX
-                        : XI_REP_ADAPTER_UNBOX;
+        *out_kind = source->op == XI_ENUM_DESCRIPTOR_BOX ? XI_REP_ADAPTER_ENUM_DESCRIPTOR_UNBOX
+                                                         : XI_REP_ADAPTER_UNBOX;
     else
         return false;
     *out_input_rep = input;
@@ -3532,39 +3506,32 @@ XR_FUNC bool xi_opt_rep_adapter_for_boundary(
     return true;
 }
 
-XR_FUNC bool xi_opt_rep_adapter_for_phi(
-    const XiValue *source, const XiPhi *phi, uint16_t argument_index,
-    const XiRepPolicy *policy, XiRepAdapterKind *out_kind,
-    uint16_t *out_input_rep, uint16_t *out_output_rep) {
-    if (!phi || argument_index >= phi->value.nargs ||
-        phi->value.args[argument_index] != source)
+XR_FUNC bool xi_opt_rep_adapter_for_phi(const XiValue *source, const XiPhi *phi,
+                                        uint16_t argument_index, const XiRepPolicy *policy,
+                                        XiRepAdapterKind *out_kind, uint16_t *out_input_rep,
+                                        uint16_t *out_output_rep) {
+    if (!phi || argument_index >= phi->value.nargs || phi->value.args[argument_index] != source)
         return false;
     XiRepPolicy local_policy = policy ? *policy : xi_rep_policy_tagged_boundary();
-    XrRep required = local_policy.force_phi_tagged
-                         ? XR_REP_TAGGED
-                         : sr_type_native_boundary_rep(phi->value.type);
+    XrRep required = local_policy.force_phi_tagged ? XR_REP_TAGGED
+                                                   : sr_type_native_boundary_rep(phi->value.type);
     bool erase = sr_conversion_erases_enum_metadata(source, phi->value.type);
-    return xi_opt_rep_adapter_for_boundary(source, required, erase,
-                                           &local_policy, out_kind,
+    return xi_opt_rep_adapter_for_boundary(source, required, erase, &local_policy, out_kind,
                                            out_input_rep, out_output_rep);
 }
 
-XR_FUNC bool xi_opt_rep_adapter_for_return(
-    const XiFunc *function, const XiBlock *block, const XiRepPolicy *policy,
-    XiRepAdapterKind *out_kind, uint16_t *out_input_rep,
-    uint16_t *out_output_rep) {
-    if (!function || !block || block->func != function ||
-        block->kind != XI_BLOCK_RETURN || !block->control ||
-        block->control->op == XI_ERR_RETURN)
+XR_FUNC bool xi_opt_rep_adapter_for_return(const XiFunc *function, const XiBlock *block,
+                                           const XiRepPolicy *policy, XiRepAdapterKind *out_kind,
+                                           uint16_t *out_input_rep, uint16_t *out_output_rep) {
+    if (!function || !block || block->func != function || block->kind != XI_BLOCK_RETURN ||
+        !block->control || block->control->op == XI_ERR_RETURN)
         return false;
     XiRepPolicy local_policy = policy ? *policy : xi_rep_policy_tagged_boundary();
     XrRep required = local_policy.force_return_tagged
                          ? XR_REP_TAGGED
                          : sr_type_return_boundary_rep(function->return_type);
-    bool erase = sr_conversion_erases_enum_metadata(block->control,
-                                                     function->return_type);
-    return xi_opt_rep_adapter_for_boundary(block->control, required, erase,
-                                           &local_policy, out_kind,
+    bool erase = sr_conversion_erases_enum_metadata(block->control, function->return_type);
+    return xi_opt_rep_adapter_for_boundary(block->control, required, erase, &local_policy, out_kind,
                                            out_input_rep, out_output_rep);
 }
 
@@ -3584,11 +3551,10 @@ static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot, XrRep use_r, XiValue *
         XiValue **cache = erase_enum_descriptor ? erased_box_of : box_of;
         uint16_t op = erase_enum_descriptor ? XI_ENUM_DESCRIPTOR_BOX : XI_BOX;
         if (!cache[arg->id]) {
-            cache[arg->id] = sr_make_convert(
-                f, arg->block, op, arg->type, arg,
-                erase_enum_descriptor
-                    ? XI_BACKEND_VALUE_ENUM_DESCRIPTOR_BOX
-                    : XI_BACKEND_VALUE_REP_BOX);
+            cache[arg->id] =
+                sr_make_convert(f, arg->block, op, arg->type, arg,
+                                erase_enum_descriptor ? XI_BACKEND_VALUE_ENUM_DESCRIPTOR_BOX
+                                                      : XI_BACKEND_VALUE_REP_BOX);
         }
         if (cache[arg->id])
             *arg_slot = cache[arg->id];
@@ -3596,11 +3562,10 @@ static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot, XrRep use_r, XiValue *
         /* Tagged -> unboxed: insert UNBOX */
         if (!unbox_of[arg->id]) {
             uint16_t op = arg->op == XI_ENUM_DESCRIPTOR_BOX ? XI_ENUM_DESCRIPTOR_UNBOX : XI_UNBOX;
-            unbox_of[arg->id] = sr_make_convert(
-                f, arg->block, op, arg->type, arg,
-                op == XI_ENUM_DESCRIPTOR_UNBOX
-                    ? XI_BACKEND_VALUE_ENUM_DESCRIPTOR_UNBOX
-                    : XI_BACKEND_VALUE_REP_UNBOX);
+            unbox_of[arg->id] = sr_make_convert(f, arg->block, op, arg->type, arg,
+                                                op == XI_ENUM_DESCRIPTOR_UNBOX
+                                                    ? XI_BACKEND_VALUE_ENUM_DESCRIPTOR_UNBOX
+                                                    : XI_BACKEND_VALUE_REP_UNBOX);
         }
         if (unbox_of[arg->id])
             *arg_slot = unbox_of[arg->id];
@@ -3951,10 +3916,8 @@ XR_FUNC XiPassChange xi_opt_materialize_enum_descriptor_erasure(XiFunc *f) {
                     source->id >= max_id || !sr_conversion_erases_enum_metadata(source, target))
                     continue;
                 if (!box_of[source->id])
-                    box_of[source->id] =
-                        sr_make_convert(f, source->block,
-                                        XI_ENUM_DESCRIPTOR_BOX, target, source,
-                                        XI_BACKEND_VALUE_NONE);
+                    box_of[source->id] = sr_make_convert(f, source->block, XI_ENUM_DESCRIPTOR_BOX,
+                                                         target, source, XI_BACKEND_VALUE_NONE);
                 if (box_of[source->id]) {
                     v->args[ai] = box_of[source->id];
                     changed = true;
@@ -3969,9 +3932,9 @@ XR_FUNC XiPassChange xi_opt_materialize_enum_descriptor_erasure(XiFunc *f) {
                     !sr_conversion_erases_enum_metadata(source, phi->value.type))
                     continue;
                 if (!box_of[source->id])
-                    box_of[source->id] = sr_make_convert(
-                        f, source->block, XI_ENUM_DESCRIPTOR_BOX,
-                        phi->value.type, source, XI_BACKEND_VALUE_NONE);
+                    box_of[source->id] =
+                        sr_make_convert(f, source->block, XI_ENUM_DESCRIPTOR_BOX, phi->value.type,
+                                        source, XI_BACKEND_VALUE_NONE);
                 if (box_of[source->id]) {
                     phi->value.args[ai] = box_of[source->id];
                     changed = true;
@@ -3984,9 +3947,8 @@ XR_FUNC XiPassChange xi_opt_materialize_enum_descriptor_erasure(XiFunc *f) {
             sr_conversion_erases_enum_metadata(blk->control, f->return_type)) {
             XiValue *source = blk->control;
             if (!box_of[source->id])
-                box_of[source->id] = sr_make_convert(
-                    f, source->block, XI_ENUM_DESCRIPTOR_BOX,
-                    f->return_type, source, XI_BACKEND_VALUE_NONE);
+                box_of[source->id] = sr_make_convert(f, source->block, XI_ENUM_DESCRIPTOR_BOX,
+                                                     f->return_type, source, XI_BACKEND_VALUE_NONE);
             if (box_of[source->id]) {
                 blk->control = box_of[source->id];
                 changed = true;
@@ -4280,17 +4242,15 @@ XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f) {
             if (elim && f->semantic_plan &&
                 f->semantic_plan_function_index != XR_SEMANTIC_INDEX_NONE) {
                 const XrSemanticFunctionRecord *semantic_function =
-                    xr_semantic_plan_function(f->semantic_plan,
-                                              f->semantic_plan_function_index);
+                    xr_semantic_plan_function(f->semantic_plan, f->semantic_plan_function_index);
                 /* A frozen semantic BOX/UNBOX is the prior identity for any
                  * representation adapter wrapped around it.  Rewriting the
                  * adapter to COPY would retain its backend provenance while
                  * erasing the operation that the refinement record names.
                  * Preserve both sides of a frozen boundary; later consumers
                  * can then verify the exact semantic value and adapter kind. */
-                if (semantic_function &&
-                    (v->id < semantic_function->value_count ||
-                     inner->id < semantic_function->value_count))
+                if (semantic_function && (v->id < semantic_function->value_count ||
+                                          inner->id < semantic_function->value_count))
                     elim = false;
             }
             if (elim) {
@@ -4421,8 +4381,8 @@ static const XiPassDesc xi_pass_table[] = {
     XI_REWRITE_PASS("gvn", xi_opt_gvn_pre, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_EVD_ALIAS),
     XI_REWRITE_PASS("loop_rotate", xi_opt_loop_rotate, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
-    XI_REWRITE_PASS("licm", xi_opt_licm, XI_OPT_FULL,
-                    XI_PASS_NEEDS_DOM | XI_PASS_NO_VALUE_COUNTS, XI_EVD_ALIAS),
+    XI_REWRITE_PASS("licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NO_VALUE_COUNTS,
+                    XI_EVD_ALIAS),
     XI_REWRITE_PASS("ivsr", xi_opt_ivsr, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
     XI_REWRITE_PASS("loop_unroll", xi_opt_loop_unroll, XI_OPT_FULL,
                     XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
@@ -4466,8 +4426,7 @@ static void validate_pass_table_once(void) {
         XR_CHECK((d->fn != NULL) != (d->fn_masked != NULL),
                  "pass table entry must publish exactly one entry point");
         XR_DCHECK(d->max_stage >= d->min_stage, "pass has an invalid stage window");
-        XR_CHECK(xi_pass_name_by_id((int) i) != NULL,
-                 "pass table is longer than the pass id list");
+        XR_CHECK(xi_pass_name_by_id((int) i) != NULL, "pass table is longer than the pass id list");
         XR_CHECK(strcmp(d->name, xi_pass_name_by_id((int) i)) == 0,
                  "pass table order diverged from the pass id list");
     }
@@ -5053,8 +5012,7 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
             /* A composite pass gets the same mask the walk above applies, so
              * a pass it re-runs internally is withheld exactly when the
              * driver would have withheld it. */
-            XiPassChange pc =
-                desc->fn_masked ? desc->fn_masked(f, effective_disable) : desc->fn(f);
+            XiPassChange pc = desc->fn_masked ? desc->fn_masked(f, effective_disable) : desc->fn(f);
 
             XiPassOutcome pass_outcome;
             char edit_error[256] = {0};
@@ -5283,8 +5241,8 @@ XR_FUNC void xi_pipeline_stats_dump(const XiPipelineStats *stats, const char *fu
             snprintf(added, sizeof(added), "%5s", "n/a");
             any_unreported = true;
         }
-        fprintf(stderr, "  %-18s  %3u calls  %s rem  %s add  %7.3f ms\n", ps->name,
-                ps->invocations, removed, added, (double) ps->elapsed_ns / 1e6);
+        fprintf(stderr, "  %-18s  %3u calls  %s rem  %s add  %7.3f ms\n", ps->name, ps->invocations,
+                removed, added, (double) ps->elapsed_ns / 1e6);
         total_invocations += ps->invocations;
     }
     if (any_unreported)
