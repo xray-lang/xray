@@ -23,17 +23,15 @@ static XrCompilerSession *g_session = NULL;
 static void setup(void) {
     XrVMConfig vm_config;
     xray_vm_config_init(&vm_config);
-    g_isolate = xray_vm_new(&vm_config);
-    XrCompilerSessionConfig session_config = {.vm_host = g_isolate};
-    g_session = xr_compiler_session_new(&session_config);
-    xr_compiler_session_attach_isolate(g_isolate, g_session);
+    g_isolate = xray_vm_new_full(&vm_config);
+    g_session = xr_compiler_session_current_for_isolate(g_isolate);
+    ASSERT_NOT_NULL(g_session);
 }
 
 static void teardown(void) {
-    xr_compiler_session_delete(g_session);
-    g_session = NULL;
     xray_vm_delete(g_isolate);
     g_isolate = NULL;
+    g_session = NULL;
 }
 
 static AstNode *parse_and_analyze(XaAnalyzer *analyzer, const char *file, const char *source) {

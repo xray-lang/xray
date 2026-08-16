@@ -11,7 +11,8 @@ static XrVMRuntime *X = NULL;
 static XrCoroutine *main_coro = NULL;
 
 static void setup(void) {
-    X = xray_vm_new(NULL);
+    XrVMConfig params = {0};
+    X = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(X);
     main_coro = xr_test_init_coro(X);
     ASSERT_NOT_NULL(main_coro);

@@ -13209,7 +13209,8 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
     assert(contains(code, "xr_aot_runtime_delete(rt);") &&
            "generated main must tear down XrAotRuntime directly");
     assert(!contains(code, "XrVMConfig") && "generated main must not construct VM isolate params");
-    assert(!contains(code, "xray_vm_new(") && "generated main must not construct a VM isolate");
+    assert(!contains(code, "xray_vm_new_full(") &&
+           "generated main must not construct a VM isolate");
     assert(!contains(code, "xr_multicore_init(") &&
            "generated main must not initialize scheduler through isolate");
     assert(!contains(code, "xr_aot_run_main_vm_bridge(") &&
@@ -14072,7 +14073,8 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
            "sync WorkQueue main must create a work-queue-capable AOT runtime");
     assert(contains(code, "xrt_global_ctx.runtime = rt;") &&
            "sync WorkQueue helpers must receive a runtime-backed global context");
-    assert(!contains(code, "xray_vm_new(") && "sync WorkQueue main must not use a VM isolate");
+    assert(!contains(code, "xray_vm_new_full(") &&
+           "sync WorkQueue main must not use a VM isolate");
     assert(!contains(code, "xrt_method_0(") && !contains(code, "xrt_method_1(") &&
            "WorkQueue native methods must not fall back to dynamic method dispatch");
     assert(!contains(code, "xr_aot_work_queue_push_sync(") &&

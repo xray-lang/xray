@@ -88,6 +88,7 @@ TEST(vm_current_ctx_returns_elided_root_ctx) {
     ASSERT_STR_EQ(XR_STRING_CHARS(XR_TO_STRING(values[1])), "beta");
     xray_vm_delete(iso);
 
+    ASSERT_NULL(xray_vm_new_full(NULL));
     params.script_argc = 1;
     params.script_argv = NULL;
     ASSERT_NULL(xray_vm_new_full(&params));

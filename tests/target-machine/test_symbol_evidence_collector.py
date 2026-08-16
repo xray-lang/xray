@@ -141,12 +141,16 @@ def self_test() -> int:
         raise AssertionError("current runtime authority was classified as retired")
     retired_multicore = "".join(("xray_", "vm_", "multicore_", "destroy"))
     retired_script_info = "".join(("xray_", "vm_", "set_", "script_", "info"))
+    retired_minimal_constructor = "".join(("xray_", "vm_", "new"))
     if not collector.retired_runtime.matches(retired_multicore) or not \
        collector.retired_runtime.compiled_pattern().match(retired_multicore):
         raise AssertionError("retired public multicore teardown is not detected")
     if not collector.retired_runtime.matches(retired_script_info) or not \
        collector.retired_runtime.compiled_pattern().match(retired_script_info):
         raise AssertionError("retired public script-info setter is not detected")
+    if not collector.retired_runtime.matches(retired_minimal_constructor) or not \
+       collector.retired_runtime.compiled_pattern().match(retired_minimal_constructor):
+        raise AssertionError("retired public minimal constructor is not detected")
     with tempfile.TemporaryDirectory(prefix="xray-symbol-evidence-") as directory:
         parent = Path(directory)
         root = parent / "repo"
@@ -160,7 +164,8 @@ def self_test() -> int:
         def fixture_symbols(path: Path) -> list[str]:
             content = path.read_text(encoding="utf-8")
             if content == "LEGACY":
-                return [retired_multicore, retired_script_info, "clean_symbol"]
+                return [retired_multicore, retired_script_info,
+                        retired_minimal_constructor, "clean_symbol"]
             symbols = ["clean_symbol"]
             authorities = sorted(collector.REQUIRED_AUTHORITY_SYMBOLS.get(
                 "libxray-compiler", set()
@@ -186,7 +191,7 @@ def self_test() -> int:
             if collector.collect(root, legacy_build, failed_output, "fixture-owner") != 1:
                 raise AssertionError("legacy symbol fixture did not fail honestly")
             failed = validate(failed_output / "symbol.raw.json", root, policy, "failed")
-            if sum(row["forbidden_symbol_count"] for row in failed["payload"]["binaries"]) != 2:
+            if sum(row["forbidden_symbol_count"] for row in failed["payload"]["binaries"]) != 3:
                 raise AssertionError("legacy symbol count is not exact")
 
             missing_build = parent / "missing-authority-build"

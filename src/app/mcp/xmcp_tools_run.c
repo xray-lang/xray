@@ -185,7 +185,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
 
     /* Sandbox configuration. Order matters: the allowlist applies to user
      * imports issued by xr_isolate_dostring(); the isolate's own prelude
-     * bootstrap already ran during xray_vm_new() and is not affected. */
+     * bootstrap already ran during xray_vm_new_full() and is not affected. */
     xr_isolate_set_stdout(iso, capture.file);
     xr_isolate_set_module_allowlist(iso, RUN_ALLOWED_MODULES, RUN_ALLOWED_MODULES_COUNT);
     xr_isolate_set_deadline_ms(iso, timeout_ms);

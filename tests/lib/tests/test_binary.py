@@ -97,10 +97,11 @@ class DefinedSymbolParsingTest(unittest.TestCase):
         )
 
     def test_dumpbin_linker_members(self):
-        text = "      21A xray_vm_new\n      31F _xr_artifact_classify\n"
+        retired_constructor = "".join(("xray_", "vm_", "new"))
+        text = f"      21A {retired_constructor}\n      31F _xr_artifact_classify\n"
         self.assertEqual(
             binary.parse_defined_symbol_names(text, "dumpbin"),
-            ["xr_artifact_classify", "xray_vm_new"],
+            ["xr_artifact_classify", retired_constructor],
         )
 
 

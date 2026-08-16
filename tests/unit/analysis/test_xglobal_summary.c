@@ -74,20 +74,16 @@ static void setup_parser_session(void) {
         return;
     XrVMConfig vm_cfg;
     xray_vm_config_init(&vm_cfg);
-    g_iso = xray_vm_new(&vm_cfg);
-    XrCompilerSessionConfig cfg = {.vm_host = g_iso};
-    g_session = xr_compiler_session_new(&cfg);
-    xr_compiler_session_attach_isolate(g_iso, g_session);
+    g_iso = xray_vm_new_full(&vm_cfg);
+    g_session = xr_compiler_session_current_for_isolate(g_iso);
+    ASSERT_NOT_NULL(g_session);
 }
 
 static void teardown_parser_session(void) {
-    if (g_session) {
-        xr_compiler_session_delete(g_session);
-        g_session = NULL;
-    }
     if (g_iso) {
         xray_vm_delete(g_iso);
         g_iso = NULL;
+        g_session = NULL;
     }
 }
 

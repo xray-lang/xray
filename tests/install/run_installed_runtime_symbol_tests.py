@@ -285,7 +285,8 @@ def resolve_member_source(
 def verify_member_resolution_invariants() -> None:
     retired_multicore = "".join(("xray_", "vm_", "multicore_", "destroy"))
     retired_script_info = "".join(("xray_", "vm_", "set_", "script_", "info"))
-    retired = {retired_multicore, retired_script_info}
+    retired_minimal_constructor = "".join(("xray_", "vm_", "new"))
+    retired = {retired_multicore, retired_script_info, retired_minimal_constructor}
     if legacy_symbols(retired) != retired:
         raise AssertionError("installed archive inventory accepts retired public VM APIs")
     owners = {

@@ -25,7 +25,8 @@ static XrCoroutine *main_coro = NULL;
 /* ========== Setup / Teardown ========== */
 
 static void setup(void) {
-    X = xray_vm_new(NULL);
+    XrVMConfig params = {0};
+    X = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(X);
     // Initialize test coroutine
     main_coro = xr_test_init_coro(X);

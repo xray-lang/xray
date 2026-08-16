@@ -8,12 +8,9 @@
  * xisolate_full.c - Full VM construction (heavy subsystems)
  *
  * KEY CONCEPT:
- *   Implements the explicit full VM constructor that initializes compiler,
- *   analyzer, classes, modules, regex, etc.
- *
- * WHY THIS DESIGN:
- *   This is a separate .o so that bytecode-bundled executables never link
- *   the full compiler/frontend path.
+ *   Implements the sole VM constructor. Base runtime allocation and heavy
+ *   compiler, analyzer, class, and module initialization succeed or fail as
+ *   one operation.
  */
 
 #include "../base/xlog.h"
@@ -29,6 +26,8 @@
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/core/xr_runtime_core.h"
+#include "../runtime/xglobals_table.h"
+#include "../runtime/xisolate_api.h"
 #include "xglobal_object.h"
 #include "../base/xconfig.h"
 #include "../frontend/parser/xparse.h"
@@ -40,6 +39,7 @@
 #include "../runtime/mem/xcycle_detector.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../vm/xvm_internal.h"
+#include "../vm/xvm_profiler.h"
 #include "../coro/xscope_transfer.h"
 
 #include "../base/xmalloc.h"
@@ -52,6 +52,18 @@
 #include <string.h>
 
 void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate);
+
+static bool isolate_config_is_valid(const XrVMConfig *params) {
+    if (!params)
+        return false;
+    if (params->script_argc < 0 || (params->script_argc > 0 && !params->script_argv))
+        return false;
+    for (int i = 0; i < params->script_argc; i++) {
+        if (!params->script_argv[i])
+            return false;
+    }
+    return true;
+}
 
 static bool isolate_materialize_script_info(XrVMRuntime *isolate, const char *script_file,
                                             int argc, char **argv) {
@@ -291,9 +303,43 @@ static void isolate_cleanup_full(XrVMRuntime *isolate) {
 /* ========== Public: Create Full VM Runtime ========== */
 
 XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
-    XrVMRuntime *isolate = xray_vm_new(params);
-    if (!isolate)
+    if (!isolate_config_is_valid(params)) {
+        xr_log_warning("isolate", "invalid VM configuration");
         return NULL;
+    }
+    XrVMRuntime *isolate = (XrVMRuntime *) xr_malloc(sizeof(XrVMRuntime));
+    if (!isolate) {
+        xr_log_warning("isolate", "failed to allocate isolate");
+        return NULL;
+    }
+    memset(isolate, 0, sizeof(XrVMRuntime));
+
+    isolate->params = *params;
+
+    XrRuntimeCoreConfig core_cfg = {
+        .owner_isolate = isolate,
+        .userdata = isolate->params.userdata,
+    };
+    isolate->core_rt = xr_runtime_core_new(&core_cfg);
+    if (!isolate->core_rt)
+        goto fail;
+    xr_runtime_core_enable_basic_destroy_ops(isolate->core_rt);
+    xr_script_info_set(&isolate->core_rt->script_info, isolate->params.script_file,
+                       isolate->params.script_argc, isolate->params.script_argv);
+
+    isolate->globals = xr_globals_create(64);
+    if (!isolate->globals)
+        goto fail;
+    if (xr_execution_engine_init(isolate) != 0)
+        goto fail;
+
+#if XR_ENABLE_VM_PROFILER
+    isolate->profiler = xr_calloc(1, sizeof(VMProfiler));
+    if (!isolate->profiler)
+        goto fail_after_vm;
+#endif
+
+    xr_isolate_enter(isolate);
 
     XrExecutionContext *previous =
         xr_exec_context_enter(xr_runtime_core_module_exec(isolate->core_rt));
@@ -313,4 +359,15 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
     }
     isolate->lifecycle_cleanup = isolate_cleanup_full;
     return isolate;
+
+#if XR_ENABLE_VM_PROFILER
+fail_after_vm:
+#endif
+    xr_execution_engine_cleanup(isolate);
+fail:
+    if (isolate->globals)
+        xr_globals_destroy((XrGlobalsTable *) isolate->globals);
+    xr_runtime_core_delete(isolate->core_rt);
+    xr_free(isolate);
+    return NULL;
 }

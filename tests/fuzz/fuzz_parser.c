@@ -35,13 +35,7 @@ static XrVMRuntime *fuzz_isolate(void) {
     if (!iso) {
         XrVMConfig params;
         xray_vm_config_init(&params);
-        iso = xray_vm_new(&params);
-        if (iso) {
-            XrCompilerSessionConfig cfg = {.vm_host = iso};
-            XrCompilerSession *session = xr_compiler_session_new(&cfg);
-            if (session)
-                xr_compiler_session_attach_isolate(iso, session);
-        }
+        iso = xray_vm_new_full(&params);
     }
     return iso;
 }

@@ -39,22 +39,18 @@ static XrVMRuntime *X = NULL;
 static XrCompilerSession *X_session = NULL;
 
 static void setup(void) {
-    X = xray_vm_new(NULL);
+    XrVMConfig params = {0};
+    X = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(X);
-    XrCompilerSessionConfig cfg = {.vm_host = X};
-    X_session = xr_compiler_session_new(&cfg);
+    X_session = xr_compiler_session_current_for_isolate(X);
     ASSERT_NOT_NULL(X_session);
-    xr_compiler_session_attach_isolate(X, X_session);
 }
 
 static void teardown(void) {
-    if (X_session) {
-        xr_compiler_session_delete(X_session);
-        X_session = NULL;
-    }
     if (X) {
         xray_vm_delete(X);
         X = NULL;
+        X_session = NULL;
     }
 }
 

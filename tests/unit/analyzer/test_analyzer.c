@@ -52,10 +52,9 @@ static void setup_pool(void) {
     if (!g_isolate) {
         XrVMConfig p;
         xray_vm_config_init(&p);
-        g_isolate = xray_vm_new(&p);
-        XrCompilerSessionConfig cfg = {.vm_host = g_isolate};
-        g_session = xr_compiler_session_new(&cfg);
-        xr_compiler_session_attach_isolate(g_isolate, g_session);
+        g_isolate = xray_vm_new_full(&p);
+        g_session = xr_compiler_session_current_for_isolate(g_isolate);
+        assert(g_session != NULL);
     }
     if (!g_analyzer) {
         g_analyzer = xa_analyzer_new(g_session);
@@ -72,12 +71,9 @@ static void teardown_pool(void) {
         g_analyzer = NULL;
     }
     if (g_isolate) {
-        if (g_session) {
-            xr_compiler_session_delete(g_session);
-            g_session = NULL;
-        }
         xray_vm_delete(g_isolate);
         g_isolate = NULL;
+        g_session = NULL;
     }
 }
 

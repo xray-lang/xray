@@ -5,30 +5,17 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xisolate.c - Core Isolate lifecycle (new/delete)
- *
- * KEY CONCEPT:
- *   xray_vm_new() creates a minimal bytecode VM runtime.
- *   Heavy variants use explicit constructors in separate translation units so
- *   bytecode-only embedders do not pull in compiler/frontend code.
- *
- * WHY THIS DESIGN:
- *   The linker resolves symbols at the .o level. If xray_isolate.c directly
- *   calls xr_core_init / xr_module_system_init etc., those .o files get
- *   linked even if the call is behind an if-branch. Keep heavy constructors
- *   in their own files and let them install a private cleanup hook.
+ * xisolate.c - Core isolate teardown
  *
  * RELATED MODULES:
- *   - xisolate_full.c: explicit full VM constructor
+ *   - xisolate_full.c: sole VM constructor
  *   - xisolate_runtime.c: shared runtime prelude enum registration
  *   - xisolate_tls.c: g_current_isolate + enter/exit
  *   - xisolate_params.c: config_init
  *   - xisolate_scripting.c: dostring/dofile (compiler-dependent)
  */
 
-#include "../base/xlog.h"
 #include "../runtime/xisolate_internal.h"
-#include "../base/xchecks.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xobj_destroy_ops.h"
 #include "../runtime/mem/xsystem_heap.h"
@@ -46,7 +33,6 @@
 #include "../os/os_time.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 static bool isolate_teardown_stats_enabled(void) {
     const char *value = getenv("XRAY_SCHED_STATS");
@@ -62,83 +48,6 @@ static bool isolate_teardown_stats_enabled(void) {
 static uint64_t isolate_teardown_elapsed_ms(uint64_t start_ns) {
     uint64_t now_ns = xr_time_monotonic_ns();
     return (now_ns >= start_ns) ? (now_ns - start_ns) / 1000000ULL : 0;
-}
-
-static bool isolate_config_is_valid(const XrVMConfig *params) {
-    if (!params)
-        return true;
-    if (params->script_argc < 0 || (params->script_argc > 0 && !params->script_argv))
-        return false;
-    for (int i = 0; i < params->script_argc; i++) {
-        if (!params->script_argv[i])
-            return false;
-    }
-    return true;
-}
-
-/* ========== Isolate Creation ========== */
-
-XrVMRuntime *xray_vm_new(const XrVMConfig *params) {
-    if (!isolate_config_is_valid(params)) {
-        xr_log_warning("isolate", "invalid script identity in VM configuration");
-        return NULL;
-    }
-    XrVMRuntime *isolate = (XrVMRuntime *) xr_malloc(sizeof(XrVMRuntime));
-    if (!isolate) {
-        xr_log_warning("isolate", "failed to allocate isolate");
-        return NULL;
-    }
-    memset(isolate, 0, sizeof(XrVMRuntime));
-
-    if (params) {
-        isolate->params = *params;
-    } else {
-        // Minimal init — no full-runtime callbacks unless caller sets them
-        xray_vm_config_init(&isolate->params);
-    }
-    XrRuntimeCoreConfig core_cfg = {
-        .owner_isolate = isolate,
-        .userdata = isolate->params.userdata,
-    };
-    isolate->core_rt = xr_runtime_core_new(&core_cfg);
-    if (!isolate->core_rt)
-        goto fail;
-    xr_runtime_core_enable_basic_destroy_ops(isolate->core_rt);
-    xr_script_info_set(&isolate->core_rt->script_info, isolate->params.script_file,
-                       isolate->params.script_argc, isolate->params.script_argv);
-
-    // --- Core: globals table ---
-    isolate->globals = xr_globals_create(64);
-    if (!isolate->globals)
-        goto fail;
-
-    // --- Core: VM engine ---
-    if (xr_execution_engine_init(isolate) != 0)
-        goto fail;
-
-#if XR_ENABLE_VM_PROFILER
-    /* Allocate the per-isolate profiler eagerly when the build opted
-     * in. The struct is small (~5KB) and pre-allocating avoids a
-     * branch on every VM dispatch entry. NULL slot in disabled builds
-     * keeps the field zero-cost. */
-    isolate->profiler = xr_calloc(1, sizeof(VMProfiler));
-    if (!isolate->profiler)
-        goto fail_after_vm;
-#endif
-
-    xr_isolate_enter(isolate);
-    return isolate;
-
-#if XR_ENABLE_VM_PROFILER
-fail_after_vm:
-#endif
-    xr_execution_engine_cleanup(isolate);
-fail:
-    if (isolate->globals)
-        xr_globals_destroy((XrGlobalsTable *) isolate->globals);
-    xr_runtime_core_delete(isolate->core_rt);
-    xr_free(isolate);
-    return NULL;
 }
 
 /* ========== Isolate Deletion ========== */

@@ -109,12 +109,8 @@ static XmcpServer test_server(void) {
     return test_server_with_runner(false);
 }
 
-static XrCompilerSession *attach_test_compiler_session(XrVMRuntime *isolate) {
-    XrCompilerSessionConfig cfg = {.vm_host = isolate};
-    XrCompilerSession *session = xr_compiler_session_new(&cfg);
-    if (session)
-        xr_compiler_session_attach_isolate(isolate, session);
-    return session;
+static XrCompilerSession *test_compiler_session(XrVMRuntime *isolate) {
+    return xr_compiler_session_current_for_isolate(isolate);
 }
 
 static void test_server_load_knowledge(XmcpServer *server) {
@@ -782,9 +778,9 @@ TEST(tools_call_format_returns_structured_content) {
     XmcpServer server = test_server();
     XrVMConfig iso_params;
     xray_vm_config_init(&iso_params);
-    server.isolate = xray_vm_new(&iso_params);
+    server.isolate = xray_vm_new_full(&iso_params);
     ASSERT_NOT_NULL(server.isolate);
-    XrCompilerSession *session = attach_test_compiler_session(server.isolate);
+    XrCompilerSession *session = test_compiler_session(server.isolate);
     ASSERT_NOT_NULL(session);
 
     XrJsonValue *params = xjson_new_object();
@@ -813,7 +809,6 @@ TEST(tools_call_format_returns_structured_content) {
 
     xjson_free(params);
     xjson_free(result);
-    xr_compiler_session_delete(session);
     xray_vm_delete(server.isolate);
 }
 
@@ -821,9 +816,9 @@ TEST(tools_call_format_syntax_errors_are_structured) {
     XmcpServer server = test_server();
     XrVMConfig iso_params;
     xray_vm_config_init(&iso_params);
-    server.isolate = xray_vm_new(&iso_params);
+    server.isolate = xray_vm_new_full(&iso_params);
     ASSERT_NOT_NULL(server.isolate);
-    XrCompilerSession *session = attach_test_compiler_session(server.isolate);
+    XrCompilerSession *session = test_compiler_session(server.isolate);
     ASSERT_NOT_NULL(session);
 
     XrJsonValue *params = xjson_new_object();
@@ -848,7 +843,6 @@ TEST(tools_call_format_syntax_errors_are_structured) {
 
     xjson_free(params);
     xjson_free(result);
-    xr_compiler_session_delete(session);
     xray_vm_delete(server.isolate);
 }
 

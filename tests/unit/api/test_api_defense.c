@@ -60,7 +60,7 @@ TEST(api_isolate_dostring_null_source) {
     // Need a valid isolate to test NULL source
     XrVMConfig params;
     xray_vm_config_init(&params);
-    XrVMRuntime *iso = xray_vm_new(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     if (!iso) {
         ASSERT_TRUE(1);
         return;
@@ -88,7 +88,7 @@ TEST(api_isolate_dofile_null_filename) {
     }
     XrVMConfig params;
     xray_vm_config_init(&params);
-    XrVMRuntime *iso = xray_vm_new(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     if (!iso) {
         ASSERT_TRUE(1);
         return;
@@ -106,7 +106,7 @@ TEST(api_isolate_create_destroy) {
     XrVMConfig params;
     xray_vm_config_init(&params);
 
-    XrVMRuntime *iso = xray_vm_new(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
     ASSERT_TRUE(xr_isolate_current() == iso);
     xr_isolate_exit();

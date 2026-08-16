@@ -38,7 +38,7 @@ typedef enum {
 XR_FUNC void xr_isolate_profile_params(XrIsolateProfile profile, XrVMConfig *out);
 
 /* Create isolate from pre-configured params.
- * Thin wrapper: calls xray_vm_new and logs error on failure.
+ * Thin wrapper: calls xray_vm_new_full and logs error on failure.
  * Returns NULL on failure. */
 XR_FUNC XrVMRuntime *xr_isolate_profile_create(const XrVMConfig *params);
 

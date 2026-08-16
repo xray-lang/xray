@@ -226,11 +226,13 @@ def self_test() -> int:
             if findings:
                 raise AssertionError(f"clean runtime envelope rejected: {findings}")
 
+            retired_constructor = "".join(("xray_", "vm_", "new"))
             for name, runner, symbols in (
                 ("eval", fake_runner("eval"), ["xr_runtime_target_plan_load"]),
                 ("canary", fake_runner("canary"), ["xr_runtime_target_plan_load"]),
                 ("compiler", fake_runner(), ["xr_runtime_target_plan_load", "xi_compile"]),
-                ("legacy", fake_runner(), ["xr_runtime_target_plan_load", "xray_vm_new"]),
+                ("legacy", fake_runner(),
+                 ["xr_runtime_target_plan_load", retired_constructor]),
             ):
                 collector.run_command = runner
                 collector.binlib.defined_symbol_names = lambda path, value=symbols: value

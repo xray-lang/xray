@@ -324,10 +324,10 @@ TEST(graph_parse_failure_is_build_failure) {
 TEST_MAIN_BEGIN()
 
 /* Global isolate for all tests */
-g_iso = xray_vm_new(NULL);
-XrCompilerSessionConfig compiler_cfg = {.vm_host = g_iso};
-g_session = xr_compiler_session_new(&compiler_cfg);
-xr_compiler_session_attach_isolate(g_iso, g_session);
+XrVMConfig vm_config = {0};
+g_iso = xray_vm_new_full(&vm_config);
+g_session = xr_compiler_session_current_for_isolate(g_iso);
+ASSERT_NOT_NULL(g_session);
 
 RUN_TEST_SUITE("Lifecycle");
 RUN_TEST(graph_new_free);
@@ -347,11 +347,8 @@ RUN_TEST(graph_find_by_canonical);
 RUN_TEST(graph_entry_not_found);
 RUN_TEST(graph_parse_failure_is_build_failure);
 
-if (g_session) {
-    xr_compiler_session_delete(g_session);
-    g_session = NULL;
-}
 xray_vm_delete(g_iso);
 g_iso = NULL;
+g_session = NULL;
 
 TEST_MAIN_END()

@@ -31,7 +31,7 @@ static void setup(void) {
     /* Type-system entry points read the active pool from a thread-
      * local slot, and the singletons (int / float / string / unit / ...)
      * are populated by xr_type_global_init. Both are normally driven
-     * by the analyzer/CLI entry points, not by xray_vm_new. */
+     * by the analyzer/CLI entry points, not by VM construction. */
     xr_type_global_init();
     type_pool = xr_type_pool_new();
     ASSERT_NOT_NULL(type_pool);

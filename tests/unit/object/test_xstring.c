@@ -18,7 +18,8 @@ static XrVMRuntime *X = NULL;
 /* ========== Setup / Teardown ========== */
 
 static void setup(void) {
-    X = xray_vm_new(NULL);
+    XrVMConfig params = {0};
+    X = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(X);
     // Initialize test coroutine (needed for some string operations)
     xr_test_init_coro(X);

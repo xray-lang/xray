@@ -66,7 +66,9 @@ def self_test() -> int:
 
         legacy_text = Path(directory) / "legacy-text"
         shutil.copytree(root, legacy_text)
-        write(legacy_text / closure.PRIVATE_ROOTS[0], "void xray_vm_new(void);\n")
+        retired_constructor = "".join(("xray_", "vm_", "new"))
+        write(legacy_text / closure.PRIVATE_ROOTS[0],
+              f"void {retired_constructor}(void);\n")
         expect_rejected(legacy_text, "legacy text")
 
         unsupported = Path(directory) / "unsupported"
