@@ -49,8 +49,7 @@ static XrArtifactProbeResult classify_file_artifact(const char *path) {
     return xr_artifact_probe(path, header, header_size);
 }
 
-static bool read_file_bytes(const char *path, size_t max_size, uint8_t **bytes,
-                            size_t *size) {
+static bool read_file_bytes(const char *path, size_t max_size, uint8_t **bytes, size_t *size) {
     *bytes = NULL;
     *size = 0;
     FILE *file = fopen(path, "rb");
@@ -62,8 +61,7 @@ static bool read_file_bytes(const char *path, size_t max_size, uint8_t **bytes,
     }
     long end = ftell(file);
     if (end < 0 || (uint64_t) end > max_size ||
-        (uint64_t) end > XR_XTP_MAX_RUNTIME_LOAD_PEAK_BYTES / 2u ||
-        fseek(file, 0, SEEK_SET) != 0) {
+        (uint64_t) end > XR_XTP_MAX_RUNTIME_LOAD_PEAK_BYTES / 2u || fseek(file, 0, SEEK_SET) != 0) {
         fclose(file);
         return false;
     }
@@ -84,16 +82,14 @@ static bool read_file_bytes(const char *path, size_t max_size, uint8_t **bytes,
     return true;
 }
 
-static int reject_non_executable_artifact(const char *path,
-                                          XrArtifactProbeResult probe) {
+static int reject_non_executable_artifact(const char *path, XrArtifactProbeResult probe) {
     if (probe.status == XR_ARTIFACT_PROBE_CONFLICT) {
         fprintf(stderr,
                 "XR_ARTIFACT_2006: artifact extension conflicts with its canonical magic\n");
         return XR_CLI_EXIT_FAIL;
     }
     if (probe.status == XR_ARTIFACT_PROBE_NEED_MORE) {
-        fprintf(stderr,
-                "XR_ARTIFACT_2001: artifact header is a truncated reserved prefix\n");
+        fprintf(stderr, "XR_ARTIFACT_2001: artifact header is a truncated reserved prefix\n");
         return XR_CLI_EXIT_FAIL;
     }
     if (probe.status == XR_ARTIFACT_PROBE_UNKNOWN_RESERVED) {
@@ -102,8 +98,8 @@ static int reject_non_executable_artifact(const char *path,
         return XR_CLI_EXIT_FAIL;
     }
     if (probe.kind == XR_ARTIFACT_KIND_XSM) {
-        fprintf(stderr,
-                "XR_ARTIFACT_2005: semantic module artifacts are planning inputs and are not executable\n");
+        fprintf(stderr, "XR_ARTIFACT_2005: semantic module artifacts are planning inputs and are "
+                        "not executable\n");
         return XR_CLI_EXIT_FAIL;
     }
     if (probe.kind != XR_ARTIFACT_KIND_XTP)
@@ -118,18 +114,16 @@ static int reject_non_executable_artifact(const char *path,
     }
     XrXtpCandidate *candidate = NULL;
     char detail[512] = {0};
-    bool decoded = xr_xtp_decode_candidate(bytes, size, &candidate, detail,
-                                           sizeof(detail));
+    bool decoded = xr_xtp_decode_candidate(bytes, size, &candidate, detail, sizeof(detail));
     xr_free(bytes);
     if (!decoded) {
         fprintf(stderr, "%s\n",
-                detail[0] ? detail
-                          : "XR_ARTIFACT_2000: XTP v40 candidate decoding failed");
+                detail[0] ? detail : "XR_ARTIFACT_2000: XTP v40 candidate decoding failed");
         return XR_CLI_EXIT_FAIL;
     }
     xr_xtp_candidate_release(candidate);
-    fprintf(stderr,
-            "XR_ARTIFACT_2007: XTP materialization requires explicit semantic and target authorities\n");
+    fprintf(stderr, "XR_ARTIFACT_2007: XTP materialization requires explicit semantic and target "
+                    "authorities\n");
     return XR_CLI_EXIT_FAIL;
 }
 
@@ -157,30 +151,25 @@ typedef struct {
 static void report_artifact_timings(const ArtifactRunTimings *timings) {
     uint64_t total = xr_time_monotonic_ns() - timings->start;
     fprintf(stderr,
-            "xray-run-timing artifact_read_ns=%" PRIu64
-            " semantic_verify_ns=%" PRIu64 " target_verify_ns=%" PRIu64
-            " activation_ns=%" PRIu64 " entry_output_ns=%" PRIu64
+            "xray-run-timing artifact_read_ns=%" PRIu64 " semantic_verify_ns=%" PRIu64
+            " target_verify_ns=%" PRIu64 " activation_ns=%" PRIu64 " entry_output_ns=%" PRIu64
             " total_ns=%" PRIu64 "\n",
-            timings->artifact_read, timings->semantic_verify,
-            timings->target_verify, timings->activation,
-            timings->entry_output, total);
+            timings->artifact_read, timings->semantic_verify, timings->target_verify,
+            timings->activation, timings->entry_output, total);
 }
 
-static void dispose_artifact_generation(
-    XrLoadedModuleGeneration **generation,
-    XrRuntimeGenerationAuthority **generation_authority) {
+static void dispose_artifact_generation(XrLoadedModuleGeneration **generation,
+                                        XrRuntimeGenerationAuthority **generation_authority) {
     char cleanup_diagnostic[256] = {0};
     if (generation && *generation) {
         XrModuleGenerationSnapshot snapshot = {0};
         if (xr_module_generation_snapshot(*generation, &snapshot)) {
             if (snapshot.state == XR_MODULE_GENERATION_ACTIVE)
-                xr_module_generation_begin_drain(
-                    *generation, cleanup_diagnostic,
-                    sizeof(cleanup_diagnostic));
+                xr_module_generation_begin_drain(*generation, cleanup_diagnostic,
+                                                 sizeof(cleanup_diagnostic));
             else if (snapshot.state < XR_MODULE_GENERATION_ACTIVE)
-                xr_module_generation_rollback(
-                    *generation, cleanup_diagnostic,
-                    sizeof(cleanup_diagnostic));
+                xr_module_generation_rollback(*generation, cleanup_diagnostic,
+                                              sizeof(cleanup_diagnostic));
         }
         if (xr_module_generation_snapshot(*generation, &snapshot) &&
             snapshot.state == XR_MODULE_GENERATION_DRAINING)
@@ -188,17 +177,14 @@ static void dispose_artifact_generation(
                                         sizeof(cleanup_diagnostic));
         if (xr_module_generation_snapshot(*generation, &snapshot) &&
             snapshot.state == XR_MODULE_GENERATION_RETIRED)
-            xr_module_generation_unload(generation, cleanup_diagnostic,
-                                        sizeof(cleanup_diagnostic));
+            xr_module_generation_unload(generation, cleanup_diagnostic, sizeof(cleanup_diagnostic));
     }
     if (generation_authority && *generation_authority)
-        xr_runtime_generation_authority_destroy(
-            generation_authority, cleanup_diagnostic,
-            sizeof(cleanup_diagnostic));
+        xr_runtime_generation_authority_destroy(generation_authority, cleanup_diagnostic,
+                                                sizeof(cleanup_diagnostic));
 }
 
-static int run_exact_target_artifact(const char *xtp_path,
-                                     const char *xsm_path, bool timings) {
+static int run_exact_target_artifact(const char *xtp_path, const char *xsm_path, bool timings) {
     ArtifactRunTimings measured = {.start = xr_time_monotonic_ns()};
     uint8_t *xsm_bytes = NULL;
     size_t xsm_size = 0;
@@ -213,34 +199,29 @@ static int run_exact_target_artifact(const char *xtp_path,
     int exit_code = XR_CLI_EXIT_FAIL;
 
     XrArtifactProbeResult xsm_probe = classify_file_artifact(xsm_path);
-    if (xsm_probe.status != XR_ARTIFACT_PROBE_MATCH ||
-        xsm_probe.kind != XR_ARTIFACT_KIND_XSM) {
-        fprintf(stderr,
-                "XR_ARTIFACT_2006: --semantic-plan must identify exact XSM bytes\n");
+    if (xsm_probe.status != XR_ARTIFACT_PROBE_MATCH || xsm_probe.kind != XR_ARTIFACT_KIND_XSM) {
+        fprintf(stderr, "XR_ARTIFACT_2006: --semantic-plan must identify exact XSM bytes\n");
         goto cleanup;
     }
     uint64_t stage = xr_time_monotonic_ns();
-    if (!read_file_bytes(xsm_path, XR_XSM_MAX_ARTIFACT_SIZE, &xsm_bytes,
-                         &xsm_size) ||
-        !read_file_bytes(xtp_path, XR_XTP_MAX_ARTIFACT_SIZE, &xtp_bytes,
-                         &xtp_size)) {
-        fprintf(stderr,
-                "XR_ARTIFACT_2001: exact XSM/XTP artifacts cannot be read within their byte budgets\n");
+    if (!read_file_bytes(xsm_path, XR_XSM_MAX_ARTIFACT_SIZE, &xsm_bytes, &xsm_size) ||
+        !read_file_bytes(xtp_path, XR_XTP_MAX_ARTIFACT_SIZE, &xtp_bytes, &xtp_size)) {
+        fprintf(
+            stderr,
+            "XR_ARTIFACT_2001: exact XSM/XTP artifacts cannot be read within their byte budgets\n");
         goto cleanup;
     }
     measured.artifact_read = xr_time_monotonic_ns() - stage;
 
     stage = xr_time_monotonic_ns();
-    if (!xr_runtime_artifact_authority_load_xsm(
-            xsm_bytes, xsm_size, &artifact_authority, diagnostic,
-            sizeof(diagnostic)))
+    if (!xr_runtime_artifact_authority_load_xsm(xsm_bytes, xsm_size, &artifact_authority,
+                                                diagnostic, sizeof(diagnostic)))
         goto failed_stage;
     measured.semantic_verify = xr_time_monotonic_ns() - stage;
 
     stage = xr_time_monotonic_ns();
-    if (!xr_runtime_target_plan_load(
-            xtp_bytes, xtp_size, artifact_authority, &target_plan,
-            diagnostic, sizeof(diagnostic)))
+    if (!xr_runtime_target_plan_load(xtp_bytes, xtp_size, artifact_authority, &target_plan,
+                                     diagnostic, sizeof(diagnostic)))
         goto failed_stage;
     measured.target_verify = xr_time_monotonic_ns() - stage;
 
@@ -252,37 +233,29 @@ static int run_exact_target_artifact(const char *xtp_path,
         .max_pins_by_kind = {4, 4, 4, 4, 4},
     };
     stage = xr_time_monotonic_ns();
-    if (!xr_runtime_generation_authority_create(
-            &budget, &generation_authority, diagnostic,
-            sizeof(diagnostic)) ||
+    if (!xr_runtime_generation_authority_create(&budget, &generation_authority, diagnostic,
+                                                sizeof(diagnostic)) ||
         !xr_module_generation_load_verified_target_plan(
-            generation_authority, target_plan, &generation, diagnostic,
-            sizeof(diagnostic)) ||
-        !xr_module_generation_prepare(generation, diagnostic,
-                                      sizeof(diagnostic)) ||
-        !xr_module_generation_activate(generation, diagnostic,
-                                       sizeof(diagnostic)))
+            generation_authority, target_plan, &generation, diagnostic, sizeof(diagnostic)) ||
+        !xr_module_generation_prepare(generation, diagnostic, sizeof(diagnostic)) ||
+        !xr_module_generation_activate(generation, diagnostic, sizeof(diagnostic)))
         goto failed_stage;
     measured.activation = xr_time_monotonic_ns() - stage;
 
     stage = xr_time_monotonic_ns();
-    if (!xr_module_generation_execute_sole_scalar_i64(
-            generation, &result, diagnostic, sizeof(diagnostic)))
+    if (!xr_module_generation_execute_sole_scalar_i64(generation, &result, diagnostic,
+                                                      sizeof(diagnostic)))
         goto failed_stage;
     uint64_t entry_elapsed = xr_time_monotonic_ns() - stage;
-    if (!xr_module_generation_begin_drain(
-            generation, diagnostic, sizeof(diagnostic)) ||
-        !xr_module_generation_retire(
-            generation, diagnostic, sizeof(diagnostic)) ||
-        !xr_module_generation_unload(
-            &generation, diagnostic, sizeof(diagnostic)) ||
-        !xr_runtime_generation_authority_destroy(
-            &generation_authority, diagnostic, sizeof(diagnostic)))
+    if (!xr_module_generation_begin_drain(generation, diagnostic, sizeof(diagnostic)) ||
+        !xr_module_generation_retire(generation, diagnostic, sizeof(diagnostic)) ||
+        !xr_module_generation_unload(&generation, diagnostic, sizeof(diagnostic)) ||
+        !xr_runtime_generation_authority_destroy(&generation_authority, diagnostic,
+                                                 sizeof(diagnostic)))
         goto failed_stage;
     stage = xr_time_monotonic_ns();
     if (printf("%" PRId64 "\n", result) < 0) {
-        snprintf(diagnostic, sizeof(diagnostic),
-                 "XR_EXEC_5000: scalar artifact output failed");
+        snprintf(diagnostic, sizeof(diagnostic), "XR_EXEC_5000: scalar artifact output failed");
         goto failed_stage;
     }
     measured.entry_output = entry_elapsed + xr_time_monotonic_ns() - stage;
@@ -291,9 +264,7 @@ static int run_exact_target_artifact(const char *xtp_path,
 
 failed_stage:
     fprintf(stderr, "%s\n",
-            diagnostic[0]
-                ? diagnostic
-                : "XR_EXEC_5000: exact target artifact execution failed");
+            diagnostic[0] ? diagnostic : "XR_EXEC_5000: exact target artifact execution failed");
 cleanup:
     dispose_artifact_generation(&generation, &generation_authority);
     xr_target_plan_free(target_plan);
@@ -344,8 +315,7 @@ static void fill_run_options(RunOptions *opts, const XrCliInvocation *inv) {
     opts->dump_bytecode = xr_cli_opt_bool(&inv->options, "dump-bytecode");
     opts->dump_ic = xr_cli_opt_bool(&inv->options, "dump-ic");
     opts->timings = xr_cli_opt_bool(&inv->options, "timings");
-    opts->semantic_plan =
-        xr_cli_opt_string(&inv->options, "semantic-plan", NULL);
+    opts->semantic_plan = xr_cli_opt_string(&inv->options, "semantic-plan", NULL);
     opts->num_workers = xr_cli_opt_int(&inv->options, "workers", 0);
     opts->coro_watch_interval = xr_cli_opt_int(&inv->options, "coro-watch", 0);
     opts->coro_http_port = xr_cli_opt_int(&inv->options, "coro-http", 0);
@@ -385,21 +355,19 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
     XrArtifactProbeResult artifact_probe = classify_file_artifact(file);
     XrArtifactKind artifact_kind = artifact_probe.kind;
-    if (opts.semantic_plan &&
-        !(artifact_probe.status == XR_ARTIFACT_PROBE_MATCH &&
-          artifact_kind == XR_ARTIFACT_KIND_XTP)) {
-        fprintf(stderr,
-                "XR_ARTIFACT_2006: --semantic-plan is only valid with exact XTP input\n");
+    if (opts.semantic_plan && !(artifact_probe.status == XR_ARTIFACT_PROBE_MATCH &&
+                                artifact_kind == XR_ARTIFACT_KIND_XTP)) {
+        fprintf(stderr, "XR_ARTIFACT_2006: --semantic-plan is only valid with exact XTP input\n");
         return XR_CLI_EXIT_FAIL;
     }
     if (opts.timings && !opts.semantic_plan) {
-        fprintf(stderr,
-                "XR_ARTIFACT_2004: --timings currently requires an exact XSM/XTP execution route\n");
+        fprintf(
+            stderr,
+            "XR_ARTIFACT_2004: --timings currently requires an exact XSM/XTP execution route\n");
         return XR_CLI_EXIT_FAIL;
     }
     if (opts.semantic_plan)
-        return run_exact_target_artifact(file, opts.semantic_plan,
-                                         opts.timings);
+        return run_exact_target_artifact(file, opts.semantic_plan, opts.timings);
     int artifact_result = reject_non_executable_artifact(file, artifact_probe);
     if (artifact_result >= 0)
         return artifact_result;
@@ -515,14 +483,28 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                             }
                             active_graph_analyzer = analyzer;
                         }
+                    }
 
-                        /* Module preload compiles every dependency through the same
-                         * compiler session. Own one outer transaction before publishing
-                         * the graph so those nested compiler entries borrow it instead
-                         * of treating the graph itself as an unrelated busy session. */
+                    /* Publishing the graph is not a multi-module concern. Global
+                     * evidence is built from whatever graph the session holds, and
+                     * a single-file program that kept its graph private got no
+                     * evidence at all -- so coroutine analysis could not resolve
+                     * its own method callsites and failed closed, while the same
+                     * source compiled fine as soon as it imported anything. One
+                     * file is a one-node graph, not the absence of one.
+                     *
+                     * Module preload compiles every dependency through the same
+                     * compiler session. Own one outer transaction before publishing
+                     * the graph so those nested compiler entries borrow it instead
+                     * of treating the graph itself as an unrelated busy session. */
+                    {
                         if (!xr_compiler_session_operation_begin(session, &graph_operation)) {
-                            xa_analyzer_set_graph(analyzer, NULL);
-                            xa_analyzer_free(analyzer);
+                            if (active_graph_analyzer) {
+                                xa_analyzer_set_graph(active_graph_analyzer, NULL);
+                                xa_analyzer_free(active_graph_analyzer);
+                                active_graph_analyzer = NULL;
+                            }
+                            xr_free(err);
                             xr_module_graph_free(graph);
                             xr_project_free(project);
                             xray_vm_delete(iso);
@@ -578,8 +560,8 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     if (active_graph)
         xr_module_graph_free(active_graph);
 
-    if (graph_operation.active &&
-        !xr_compiler_session_operation_succeed(&graph_operation) && result == 0)
+    if (graph_operation.active && !xr_compiler_session_operation_succeed(&graph_operation) &&
+        result == 0)
         result = -1;
 
     xr_compiler_session_set_native_package_plan(session, NULL);
