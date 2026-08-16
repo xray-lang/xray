@@ -52,9 +52,16 @@ def framed_tree_hash(root: Path) -> str:
 
 def init_repository(root: Path) -> dict[str, str]:
     (root / "contracts/target-machine").mkdir(parents=True)
+    (root / "include").mkdir()
     (root / "scripts").mkdir()
     (root / "src").mkdir()
     (root / "CMakeLists.txt").write_text("# fixture\n", encoding="utf-8")
+    (root / "include/runtime.h").write_text(
+        "/* fixture AOT runtime */\n", encoding="utf-8"
+    )
+    (root / "include/fixture_runtime.h").write_text(
+        "/* fixture public runtime */\n", encoding="utf-8"
+    )
     (root / "src/authority.h").write_text("#define FIXTURE_AUTHORITY 1\n",
                                            encoding="utf-8")
     (root / "scripts/check_target_machine_completion.py").write_bytes(
@@ -139,7 +146,8 @@ def governance(identity_hash: str) -> dict[str, Any]:
         },
         "installed": {
             "forbidden_path_regex": "(?!)", "forbidden_text_regex": "(?!)",
-            "required_deliverables": [], "required_public_headers": [],
+            "required_deliverables": ["fixture-runtime"],
+            "required_public_headers": ["include/xray/fixture_runtime.h"],
         },
         "matrix": {
             "policy": "contracts/target-machine/validation-matrix.json",
@@ -158,15 +166,23 @@ def payload(kind: str, log: str, raw: Path) -> dict[str, Any]:
                 name: {"status": "passed", "legacy_edge_count": 0, "log": log}
                 for name in assembler.completion.GRAPH_KINDS
             },
-            "targets": [],
+            "targets": ["fixture-runtime"],
         }
     if kind == "symbol":
-        return {"binaries": []}
+        binary = raw / "fixture-runtime.bin"
+        binary.write_bytes(b"fixture runtime binary\n")
+        return {"binaries": [{
+            "name": "fixture-runtime", "path": str(binary.resolve()),
+            "sha256": assembler.sha256_file(binary),
+            "forbidden_symbol_count": 0, "symbol_log": log,
+        }]}
     if kind == "installed":
         install_root = raw / "installed"
         header = install_root / "include/xray/runtime.h"
         header.parent.mkdir(parents=True, exist_ok=True)
-        header.write_text("/* fixture runtime API */\n", encoding="utf-8")
+        header.write_text("/* fixture AOT runtime */\n", encoding="utf-8")
+        public_header = install_root / "include/xray/fixture_runtime.h"
+        public_header.write_text("/* fixture public runtime */\n", encoding="utf-8")
         write_json(install_root / "share/xray/install/aot-sdk-closure.json", {
             "schema": 1,
             "generator": "xray-aot-sdk-header-closure/1",
@@ -178,7 +194,8 @@ def payload(kind: str, log: str, raw: Path) -> dict[str, Any]:
         })
         return {
             "empty_stage_replay": "passed", "no_work_replay": "passed",
-            "deliverables": [], "public_headers": [],
+            "deliverables": ["fixture-runtime"],
+            "public_headers": ["include/xray/fixture_runtime.h"],
             "install_root": str(install_root.resolve()), "inventory_log": log,
         }
     if kind == "runtime-reachability":

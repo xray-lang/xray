@@ -99,7 +99,7 @@ def initialize(root: Path) -> dict[str, Any]:
         "installed": {
             "forbidden_path_regex": "(?!)", "forbidden_text_regex": "(?!)",
             "required_deliverables": list(collector.TARGET_AUTHORITIES),
-            "required_public_headers": [],
+            "required_public_headers": ["include/xray/fixture_runtime.h"],
         },
         "matrix": {
             "policy": "contracts/target-machine/validation-matrix.json",

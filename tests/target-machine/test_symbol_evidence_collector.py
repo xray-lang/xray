@@ -76,7 +76,7 @@ def initialize(root: Path) -> dict[str, Any]:
                        "mechanical_adapter": "representation adapter"},
         "installed": {"forbidden_path_regex": "(?!)", "forbidden_text_regex": "(?!)",
                       "required_deliverables": list(collector.TARGET_FILES),
-                      "required_public_headers": []},
+                      "required_public_headers": ["include/xray/fixture_runtime.h"]},
         "matrix": {"policy": "contracts/target-machine/validation-matrix.json",
                    "qualifying_tiers": [], "required_artifact_routes": [],
                    "required_dimensions": []},
