@@ -44,6 +44,46 @@ static bool report(char *error, size_t size, const char *code, const char *detai
     return false;
 }
 
+/* Setting XRAY_COLLECT_ALL_REFUSALS makes this pass keep checking after a
+ * refusal instead of stopping at the first one, printing every refusal it finds
+ * on stderr under [refusal-survey]. The plan is rejected either way: a
+ * judgement that refused stated no authority, so the plan is not verified
+ * whatever the judgements after it answer.
+ *
+ * The same variable drives the same walk in the TargetPlan and representation
+ * passes, so one compile surveys whichever pass a program reaches. Without it
+ * here, a module that stops in this pass reported exactly one gap however many
+ * it has, and every such module looked like an isolated single-cause refusal
+ * purely because nothing downstream of the first refusal was ever asked. That
+ * is a measurement artefact, and it biased the census toward whichever pass
+ * happened to survey itself.
+ *
+ * What the walk can cover is bounded by what this pass is. The judgements below
+ * divide into two kinds. The structural ones establish that the tables are
+ * dense, in range and mutually consistent, and every later judgement indexes
+ * those tables on the strength of that; continuing past a structural refusal
+ * would have the survey read a plan whose bounds nothing has established, so
+ * those keep stopping at the first refusal. The authority ones ask whether a
+ * structurally sound plan states the facts a backend needs, are mutually
+ * independent, and re-derive their own working state, so the survey continues
+ * across them and within their per-operation loops.
+ *
+ * As in the other two passes, the count is a census carrying a bias, not a
+ * proof of independence: a later authority judgement can refuse because an
+ * earlier one stated nothing. What it establishes firmly is which judgements a
+ * module reaches at all.
+ *
+ * Unset, the variable is never read on a path that is not already failing, so a
+ * plan that verifies pays nothing. */
+static bool semantic_survey_enabled(void) {
+    return getenv("XRAY_COLLECT_ALL_REFUSALS") != NULL;
+}
+
+static void semantic_survey_row(const char *family, const char *detail) {
+    fprintf(stderr, "[refusal-survey] family=semantic_%s %s\n", family,
+            detail && detail[0] ? detail : "refused without a detail");
+}
+
 static bool range_valid(uint32_t begin, uint32_t count, uint32_t limit) {
     return begin <= limit && count <= limit - begin;
 }
@@ -3784,7 +3824,8 @@ static void coroutine_authority_work_dispose(XrCoroutineAuthorityWork *work) {
     memset(work, 0, sizeof(*work));
 }
 
-static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, size_t error_size) {
+static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, size_t error_size,
+                                       uint32_t *survey_rows) {
     XrCoroutineAuthorityWork work = {0};
     work.state_counts = (uint8_t *) xr_calloc(plan->operation_count, sizeof(*work.state_counts));
     work.suspendable = (uint8_t *) xr_calloc(plan->function_count, sizeof(*work.suspendable));
@@ -3961,6 +4002,8 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
         }
     }
 
+    const bool survey = semantic_survey_enabled();
+    uint32_t refused = 0;
     for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
         uint32_t target_index = work.target_by_operation[operation];
         bool dynamic_suspend = false;
@@ -4013,12 +4056,23 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
                      "function=%u operation=%u opcode=%u selector=%s expected=%u actual=%u",
                      record->function, operation, record->opcode, selector, expected ? 1u : 0u,
                      work.state_counts[operation]);
-            coroutine_authority_work_dispose(&work);
-            return report(error, error_size, "XR_SEM_0019", detail);
+            /* Each operation carries its own state-count judgement over a plan
+             * this loop only reads, so surveying the rest costs nothing but the
+             * walk and answers how many call sites a module gets wrong rather
+             * than only the lowest-numbered one. */
+            if (refused++ == 0)
+                report(error, error_size, "XR_SEM_0019", detail);
+            if (!survey) {
+                coroutine_authority_work_dispose(&work);
+                return false;
+            }
+            semantic_survey_row("coroutine_state_count", detail);
+            if (survey_rows)
+                (*survey_rows)++;
         }
     }
     coroutine_authority_work_dispose(&work);
-    return true;
+    return refused == 0;
 }
 
 static bool verify_parameter_and_capture_definitions(const XrSemanticPlan *plan,
@@ -4511,6 +4565,87 @@ static bool source_namespace_dependency_row(const XrSemanticPlan *plan,
     return true;
 }
 
+typedef struct XrSemanticAuthorityContext {
+    const XrSemanticPlan *plan;
+    const XrSemanticGraph *graph;
+} XrSemanticAuthorityContext;
+
+/* A check that walks a per-operation loop knows its own refusals apart and
+ * reports each of them, so it returns how many rows it printed and the driver
+ * below adds none of its own. A check that answers once for the whole plan
+ * returns zero and the driver prints the single row. Counting rows rather than
+ * refused checks is what makes the census comparable with the two passes
+ * downstream, which both count individual gaps. */
+static bool semantic_authority_coroutine(const XrSemanticAuthorityContext *ctx, char *error,
+                                         size_t error_size, uint32_t *rows) {
+    return verify_coroutine_authority(ctx->plan, error, error_size, rows);
+}
+
+static bool semantic_authority_dependency_rows(const XrSemanticAuthorityContext *ctx, char *error,
+                                               size_t error_size, uint32_t *rows) {
+    (void) rows;
+    return verify_dependency_rows(ctx->plan, error, error_size);
+}
+
+static bool semantic_authority_constants(const XrSemanticAuthorityContext *ctx, char *error,
+                                         size_t error_size, uint32_t *rows) {
+    (void) rows;
+    return verify_constants(ctx->plan, error, error_size);
+}
+
+static bool semantic_authority_ownership(const XrSemanticAuthorityContext *ctx, char *error,
+                                         size_t error_size, uint32_t *rows) {
+    (void) rows;
+    return xr_ownership_certificate_check(ctx->plan, ctx->graph, error, error_size);
+}
+
+static bool semantic_authority_coroutine_lifecycle(const XrSemanticAuthorityContext *ctx,
+                                                   char *error, size_t error_size, uint32_t *rows) {
+    (void) rows;
+    return verify_coroutine_lifecycle_entities(ctx->plan, ctx->graph, error, error_size);
+}
+
+static const struct {
+    const char *name;
+    bool (*run)(const XrSemanticAuthorityContext *, char *, size_t, uint32_t *);
+} k_semantic_authority_checks[] = {
+    {"coroutine_authority", semantic_authority_coroutine},
+    {"dependency_rows", semantic_authority_dependency_rows},
+    {"constants", semantic_authority_constants},
+    {"ownership_certificate", semantic_authority_ownership},
+    {"coroutine_lifecycle", semantic_authority_coroutine_lifecycle},
+};
+
+static bool run_semantic_authority_checks(const XrSemanticAuthorityContext *ctx, char *error,
+                                          size_t error_size) {
+    bool survey = false;
+    uint32_t refused_rows = 0;
+    size_t count = sizeof(k_semantic_authority_checks) / sizeof(*k_semantic_authority_checks);
+    for (size_t i = 0; i < count; i++) {
+        char detail[512] = {0};
+        uint32_t rows = 0;
+        if (k_semantic_authority_checks[i].run(ctx, detail, sizeof(detail), &rows))
+            continue;
+        if (refused_rows == 0) {
+            survey = semantic_survey_enabled();
+            if (error && error_size)
+                snprintf(error, error_size, "%s", detail);
+        }
+        if (!survey)
+            return false;
+        if (rows == 0) {
+            semantic_survey_row(k_semantic_authority_checks[i].name, detail);
+            rows = 1;
+        }
+        refused_rows += rows;
+    }
+    if (refused_rows) {
+        fprintf(stderr, "[refusal-survey] semantic-plan authority gaps: %u\n", refused_rows);
+        return false;
+    }
+    return true;
+}
+
 bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t error_size) {
     if (!plan || !plan->frozen || plan->schema != XR_SEMANTIC_SCHEMA_VERSION)
         return report(error, error_size, "XR_SEM_0004",
@@ -4542,6 +4677,11 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
         return report(error, error_size, "XR_EXEC_5003", "edge verifier budget exhausted");
     }
     XrSemanticGraph graph = {0};
+    /* Everything up to and including verify_operations establishes that the
+     * tables are dense, in range, and joined by the SSA, operand and
+     * call-target relations the judgements after it read on faith. A survey
+     * cannot continue past a refusal here: the next judgement would index a
+     * plan whose bounds nothing has established. */
     bool verified = xr_semantic_plan_verify_identity_set(plan, error, error_size) &&
                     verify_entities(plan, error, error_size) &&
                     verify_source_classes(plan, error, error_size) &&
@@ -4551,12 +4691,15 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
                     verify_edges(plan, block_edge_mask, operation_edge_mask, error, error_size) &&
                     verify_blocks(plan, block_edge_mask, error, error_size) &&
                     xr_semantic_graph_build(plan, &graph, error, error_size) &&
-                    verify_operations(plan, operation_edge_mask, &graph, error, error_size) &&
-                    verify_coroutine_authority(plan, error, error_size) &&
-                    verify_dependency_rows(plan, error, error_size) &&
-                    verify_constants(plan, error, error_size) &&
-                    xr_ownership_certificate_check(plan, &graph, error, error_size) &&
-                    verify_coroutine_lifecycle_entities(plan, &graph, error, error_size);
+                    verify_operations(plan, operation_edge_mask, &graph, error, error_size);
+    if (verified) {
+        /* These four ask a structurally sound plan whether it states the facts
+         * a backend needs. Each allocates its own working state and reads
+         * nothing the others write, so the survey runs all of them and reports
+         * every one that refused. */
+        const XrSemanticAuthorityContext authority = {plan, &graph};
+        verified = run_semantic_authority_checks(&authority, error, error_size);
+    }
     xr_semantic_graph_dispose(&graph);
     xr_free(block_edge_mask);
     xr_free(operation_edge_mask);
@@ -4650,9 +4793,18 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
         }
         definitions[value] = operation;
     }
-    for (uint32_t target_index = 0; valid && target_index < plan->call_target_count;
+    /* Each call target is judged against its own frozen dependency and reads
+     * nothing the other targets write, so the survey walks them all and reports
+     * every call site that disagrees rather than only the first. A refusal that
+     * is structural rather than an authority gap -- a dependency or operation
+     * index out of range -- still stops the walk, because the reads after it
+     * would have no bound. */
+    const bool survey = semantic_survey_enabled();
+    uint32_t refused_rows = 0;
+    for (uint32_t target_index = 0; (valid || survey) && target_index < plan->call_target_count;
          target_index++) {
         const XrSemanticCallTargetRecord *target = &plan->call_targets[target_index];
+        bool target_valid = true;
         if (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN) {
             if (target->dependency >= dependency_count ||
                 target->operation >= plan->operation_count ||
@@ -4691,8 +4843,17 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
                 (source_class->flags &
                  (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_GENERIC)) != 0 ||
                 !xr_stable_id_equal(source_class->id, receiver_type->source_class_identity)) {
+                snprintf(authority_detail, sizeof(authority_detail),
+                         "open instance-method call disagrees with frozen dependency "
+                         "target=%u operation=%u dependency=%u selector=%s",
+                         target_index, target->operation, target->dependency,
+                         selector ? selector : "");
                 valid = false;
-                break;
+                if (!survey)
+                    break;
+                semantic_survey_row("source_open_method_call", authority_detail);
+                refused_rows++;
+                continue;
             }
             used[target->dependency] = 1;
             continue;
@@ -4760,9 +4921,13 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
                      call_value, call_definition, call_producer ? call_producer->opcode : 0u,
                      (long long) (call_producer ? call_producer->semantic_immediate : 0));
             valid = false;
-            break;
+            if (!survey)
+                break;
+            semantic_survey_row("source_export_call", authority_detail);
+            refused_rows++;
+            continue;
         }
-        for (uint32_t ordinal = 0; valid && ordinal < callee->parameter_count; ordinal++) {
+        for (uint32_t ordinal = 0; target_valid && ordinal < callee->parameter_count; ordinal++) {
             uint32_t parameter_index = callee->parameter_begin + ordinal;
             uint32_t operand_index = operation->operand_begin + ordinal + 1u;
             const XrSemanticParameterRecord *parameter = parameter_index < match->parameter_count
@@ -4810,6 +4975,7 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
                 disagreement = "ref-argument-access";
             if (disagreement) {
                 valid = false;
+                target_valid = false;
                 snprintf(authority_detail, sizeof(authority_detail),
                          "source export call argument disagrees with frozen dependency "
                          "target=%u operation=%u ordinal=%u dependency=%u export=%u failed=%s "
@@ -4826,10 +4992,17 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
                          operand ? (unsigned) operand->flags : 0u);
             }
         }
-        if (!valid)
-            break;
+        if (!target_valid) {
+            if (!survey)
+                break;
+            semantic_survey_row("source_export_call_argument", authority_detail);
+            refused_rows++;
+            continue;
+        }
         used[target->dependency] = 1;
     }
+    if (refused_rows)
+        fprintf(stderr, "[refusal-survey] module-set authority gaps: %u\n", refused_rows);
     xr_free(definitions);
     xr_free(stores.rows);
     for (uint32_t i = 0; valid && i < dependency_count; i++)
