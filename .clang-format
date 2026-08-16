@@ -1,6 +1,6 @@
 # Xray Language - Clang Format Configuration
 # Based on LLVM style with project-specific adjustments
-# Version: clang-format 14+
+# Version: clang-format 22 (pinned; see scripts/pre-commit)
 
 ---
 # Base style

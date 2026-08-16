@@ -6,18 +6,34 @@
 
 set -e
 
-# Find clang-format
-CF=""
-for candidate in clang-format clang-format-18 clang-format-17 clang-format-16 clang-format-15 clang-format-14; do
-    if command -v "$candidate" >/dev/null 2>&1; then
-        CF="$candidate"
-        break
-    fi
-done
+# One version formats this tree. Two clang-format releases do not always agree,
+# so a hook that takes whichever binary the PATH happens to surface first lets
+# each machine reformat what the last one wrote. Pin it and say so.
+REQUIRED_MAJOR=22
 
-if [ -z "$CF" ]; then
-    echo "pre-commit: clang-format not found, skipping format check"
-    exit 0
+CF="clang-format"
+if ! command -v "$CF" >/dev/null 2>&1; then
+    CF="clang-format-$REQUIRED_MAJOR"
+fi
+
+# Not finding it is a failure, not a reason to continue. Skipping silently is
+# how unformatted files reached the tree: three of them accumulated thousands
+# of lines of drift because whoever committed them had no clang-format and the
+# hook waved them through.
+if ! command -v "$CF" >/dev/null 2>&1; then
+    echo "pre-commit: clang-format not found; this tree requires version $REQUIRED_MAJOR." >&2
+    echo "  macOS:  brew install clang-format" >&2
+    echo "  Debian: apt install clang-format-$REQUIRED_MAJOR" >&2
+    echo "  To commit without formatting anyway: git commit --no-verify" >&2
+    exit 1
+fi
+
+FOUND_MAJOR=$("$CF" --version 2>/dev/null | sed -E 's/.*version ([0-9]+).*/\1/')
+if [ "$FOUND_MAJOR" != "$REQUIRED_MAJOR" ]; then
+    echo "pre-commit: found clang-format $FOUND_MAJOR, but this tree formats with $REQUIRED_MAJOR." >&2
+    echo "  Formatting with a different release rewrites files nobody touched." >&2
+    echo "  Install $REQUIRED_MAJOR, or commit with: git commit --no-verify" >&2
+    exit 1
 fi
 
 # Collect staged .c and .h files (excluding deleted)
