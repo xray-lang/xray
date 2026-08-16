@@ -161,9 +161,11 @@ authority.
     The only admitted adapter is an identity adapter whose fingerprint is
     derived from the entry ABI. The expectation binds ABI, adapter, plan,
     generation, binding, and executor identities; any mismatch fails closed
-    before execution. The installed dynamic subset is SOURCE_EXPORT only and
-    still does not claim hosted, FFI, aggregate, ownership-bearing, suspending,
-    or non-identity-adapter calls.
+    before execution. The installed dynamic subset is SOURCE_EXPORT with an
+    exact signed-i64 identity adapter only. It may resolve to the typed VM or a
+    process-local native executor, but still does not claim general hosted
+    calls, FFI, aggregate/Buffer, ownership-bearing, suspending, or
+    non-identity-adapter calls.
 14. An entry cell stores either a verified VM function index or a typed native
     i64 entry. A native code pointer may enter only through process-local runtime
     registration. It has no artifact representation and is never hashed; a
@@ -178,8 +180,9 @@ authority.
     binding and releases its static-root pin. Success, VM/native error, and
     cancellation all retire the token, and an atomic token state permits
     exactly one pin decrement: a duplicate or never-acquired retirement fails
-    without a second decrement. Dynamic context schema 3 has no legacy release
-    callback or untyped lease. Every successful dynamic acquisition first
+    without a second decrement. Dynamic context schema 4 carries one frozen
+    generated adapter binding and has no legacy release callback or untyped
+    lease. Every successful dynamic acquisition first
     registers its opaque lease in an authority-owned ledger bounded by the
     authority's total-pin budget. Retirement consumes and clears the resolution
     on every return. An immediate pin-release refusal leaves the token LIVE,
@@ -238,16 +241,19 @@ anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 2f3570bbfb67a0a73e7d0b2aea41ef422fbf096eac0cc42b1821993d5da4a19b
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 6782160737f7b05ddbc18f43d498524222b9adb5e60f562c6a941d911d09916c
 anchor-sha256: tests/install/run_install_public_surface_tests.py 1bbef0d66f5d0d78dbe41848497b678c02c88fc9663f296d9863571fe20eb38e
 anchor-sha256: include/xray_runtime_api.h b0cff9caa4f70925bba21173b9991a8bca9837f563cd64cfb8dd91206c66b319
 anchor-sha256: src/runtime/xr_runtime_api.c 268bae675264a6b5892dea75ccae248907b6ce97eccf473f8190fac13eca9557
 anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c 36e110b8ef201e1684b5aa3830fa12664381e15e39d4166d6dd06ace0c837255
 anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
-anchor-sha256: src/runtime/xr_entry_cell.c 65446775907bdbef5c293d564b1020861836c9b94c52adf727a3e32dbb49241f
+anchor-sha256: src/runtime/xr_entry_cell.c c2bc18e2eb0c40767bff70b0137387a81d55bbe0b767673befcdc5acce4386a0
 anchor-sha256: tests/unit/runtime/test_entry_cell_runtime_archive.c 34bc22820144f368a5e5914ac387f2a19db85ef4555d458b07215548eef1dca0
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h f922cec7513c0e232d840936820f270d4b8a0c22c23296fe53a45e924ed76ee4
-anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 96cbabf92dc3dc8f4fb279fe85f87ad9b6a6b90f021a689fcf39505257cd8408
-anchor-sha256: src/vm/xr_vm_dynamic_entry.h e365e02d0596394df881026895d127ac54ade9d7bccf5ff272ad6f704a88becf
-anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 119cca4a922e3039c9b57e69102d1fd06b9aaba5cdae55fb10e7fdda0ba9bbb9
+anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c d6cff74156a07c9a7751f3e7d5857f65d3d6d05ca1dbc862605f6cc4fa2c5c16
+anchor-sha256: src/vm/xr_vm_entry_adapter.h 260bca5ab4abcef7cc679f5674e92c0b2c8e95fa04444b73cb1e3f8584b61544
+anchor-sha256: src/vm/xr_vm_entry_adapter.c a18c76b33fa1a35b0b2b756d6eab77de5b7876f58b65bf6c5605a7596e701547
+anchor-sha256: xisa/target/vm_entry_adapters.def db46c172fa847c54cb24d477404f00d74db9996b99be9fa357a3ce0864a9ddb9
+anchor-sha256: src/vm/xr_vm_dynamic_entry.h 50a175071a41a521e11fa672b7f17663b73dda321fd6ab9703196324e642dfda
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c eede18e3210d979c26b0adaca5c5454acdbd609514383d0e285525f69fef9883

@@ -16,6 +16,7 @@
 #include "../plan/target/xr_target_plan.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../vm/xr_typed_dispatch.h"
+#include "../vm/xr_vm_entry_adapter.h"
 #include "xr_module_generation_internal.h"
 #include <stdio.h>
 #include <string.h>
@@ -460,7 +461,11 @@ XrEntryInvokeStatus xr_entry_cell_invoke_i64(
 
     XrEntryInvokeStatus outcome = XR_ENTRY_INVOKE_NATIVE_ERROR;
     int64_t executed = 0;
-    if (token.executor_kind == XR_ENTRY_EXECUTOR_TYPED_VM) {
+    XrVmEntryAdapterI64 adapter;
+    if (!xr_typed_entry_adapter_i64_freeze(
+            expectation, &token, &adapter, diagnostic, diagnostic_size)) {
+        outcome = XR_ENTRY_INVOKE_AUTHORITY_ERROR;
+    } else if (adapter.executor_kind == XR_ENTRY_EXECUTOR_TYPED_VM) {
         XrTypedDispatchI64Request request = {
             .verified_plan = token.plan,
             .required_plan_fingerprint = &token.plan_fingerprint,
@@ -480,10 +485,9 @@ XrEntryInvokeStatus xr_entry_cell_invoke_i64(
         *executor_status = (uint32_t) status;
         outcome = status == XR_TYPED_DISPATCH_OK ? XR_ENTRY_INVOKE_OK
                                                  : XR_ENTRY_INVOKE_VM_ERROR;
-    } else if (token.executor_kind == XR_ENTRY_EXECUTOR_NATIVE_I64 &&
-               token.native_entry) {
-        XrEntryNativeStatus status = token.native_entry(
-            token.native_context, arguments, argument_count, &executed);
+    } else if (adapter.executor_kind == XR_ENTRY_EXECUTOR_NATIVE_I64) {
+        XrEntryNativeStatus status = xr_typed_entry_adapter_i64_invoke_native(
+            &adapter, arguments, argument_count, &executed);
         *executor_status = (uint32_t) status;
         if (status == XR_ENTRY_NATIVE_OK)
             outcome = XR_ENTRY_INVOKE_OK;

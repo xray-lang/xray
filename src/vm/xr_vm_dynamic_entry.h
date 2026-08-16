@@ -13,8 +13,9 @@
 
 #include "../plan/target/xr_target_plan.h"
 #include "../../include/xray_runtime_generation.h"
+#include "xr_vm_entry_adapter.h"
 
-#define XR_VM_DYNAMIC_ENTRY_CONTEXT_SCHEMA_VERSION UINT32_C(3)
+#define XR_VM_DYNAMIC_ENTRY_CONTEXT_SCHEMA_VERSION UINT32_C(4)
 
 typedef struct XrVmDecodedCache XrVmDecodedCache;
 typedef struct XrVmDynamicEntryContext XrVmDynamicEntryContext;
@@ -35,6 +36,7 @@ typedef struct XrVmDynamicEntryResolution {
     const XrVmDynamicEntryContext *dynamic_entries;
     XrFingerprint plan_fingerprint;
     XrModuleGenerationIdentity generation_identity;
+    XrVmEntryAdapterI64 adapter;
     XrVmDynamicEntryLease *lease;
     uint32_t function;
 } XrVmDynamicEntryResolution;

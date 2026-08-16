@@ -76,6 +76,9 @@ struct XrRuntimeEntryHandle {
     XrFingerprint plan_fingerprint;
     XrModuleGenerationIdentity generation_identity;
     XrStableId function_identity;
+    XrStableId native_entry_identity;
+    XrEntryNativeI64 native_entry;
+    void *native_context;
     uint32_t function;
     uint32_t executor_kind;
     bool configured;
@@ -268,6 +271,13 @@ static XrVmDynamicEntryStatus retire_dynamic_entry_lease(
 
 static bool fingerprint_matches(XrFingerprint left, XrFingerprint right) {
     return xr_fingerprint_equal(left, right);
+}
+
+static bool stable_id_is_zero(XrStableId identity) {
+    uint8_t combined = 0;
+    for (size_t i = 0; i < sizeof(identity.bytes); i++)
+        combined |= identity.bytes[i];
+    return combined == 0;
 }
 
 static bool generation_identity_equal(
@@ -485,12 +495,19 @@ bool xr_runtime_entry_handle_bind(
         semantic ? xr_semantic_plan_function(
                        semantic, registration->function)
                  : NULL;
+    bool typed = registration->executor_kind == XR_ENTRY_EXECUTOR_TYPED_VM &&
+                 !registration->native_entry &&
+                 !registration->native_context &&
+                 stable_id_is_zero(registration->native_entry_identity);
+    bool native =
+        registration->executor_kind == XR_ENTRY_EXECUTOR_NATIVE_I64 &&
+        registration->native_entry &&
+        !stable_id_is_zero(registration->native_entry_identity);
     if (!registration->generation || !function ||
         registration->generation->plan != registration->verified_plan ||
-        registration->executor_kind != XR_ENTRY_EXECUTOR_TYPED_VM ||
-        registration->native_entry || registration->native_context)
+        (!typed && !native))
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
-                    "entry handle binding lacks exact typed generation authority");
+                    "entry handle binding lacks exact executor generation authority");
     xr_mutex_lock(&handle->gate);
     if (handle->configured) {
         bool exact =
@@ -498,8 +515,10 @@ bool xr_runtime_entry_handle_bind(
             handle->bound_plan == registration->verified_plan &&
             handle->function == registration->function &&
             handle->executor_kind == registration->executor_kind &&
-            registration->native_entry == NULL &&
-            registration->native_context == NULL;
+            xr_stable_id_equal(handle->native_entry_identity,
+                               registration->native_entry_identity) &&
+            handle->native_entry == registration->native_entry &&
+            handle->native_context == registration->native_context;
         xr_mutex_unlock(&handle->gate);
         if (!exact)
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
@@ -526,6 +545,10 @@ bool xr_runtime_entry_handle_bind(
             registration->verified_plan);
         handle->generation_identity = registration->generation->identity;
         handle->function_identity = function->id;
+        handle->native_entry_identity =
+            registration->native_entry_identity;
+        handle->native_entry = registration->native_entry;
+        handle->native_context = registration->native_context;
         handle->function = registration->function;
         handle->executor_kind = registration->executor_kind;
         handle->configured = true;
@@ -1114,7 +1137,9 @@ bool xr_runtime_entry_registry_publish(
         handle->generation->authority == authority &&
         handle->authority == authority && handle->bound_plan == plan &&
         handle->function == export_record->function &&
-        handle->executor_kind == XR_ENTRY_EXECUTOR_TYPED_VM &&
+        handle->executor_kind > XR_ENTRY_EXECUTOR_INVALID &&
+        handle->executor_kind < XR_ENTRY_EXECUTOR_KIND_COUNT &&
+        handle->expectation.executor_kind == handle->executor_kind &&
         xr_stable_id_equal(handle->function_identity, callee->id) &&
         fingerprint_matches(handle->semantic_fingerprint,
                             semantic_fingerprint) &&
@@ -1516,26 +1541,6 @@ bool xr_runtime_dynamic_entry_retry_pending(
     }
 }
 
-static bool expectation_matches_handle(
-    const XrTargetEntryExpectationRecord *expected,
-    const XrEntryCellExpectation *actual) {
-    return expected && actual &&
-           expected->abi_schema_version == actual->abi.schema_version &&
-           expected->parameter_count == actual->abi.parameter_count &&
-           expected->native_abi == actual->abi.native_abi &&
-           expected->value_kind == actual->abi.value_kind &&
-           expected->target_data_layout == actual->abi.target_data_layout &&
-           fingerprint_matches(expected->target_profile_fingerprint,
-                               actual->abi.target_profile_fingerprint) &&
-           fingerprint_matches(expected->entry_abi_fingerprint,
-                               actual->abi.fingerprint) &&
-           expected->adapter_kind == XR_TARGET_ENTRY_ADAPTER_IDENTITY &&
-           actual->adapter_kind == XR_ENTRY_ADAPTER_IDENTITY &&
-           fingerprint_matches(expected->adapter_fingerprint,
-                               actual->adapter_fingerprint) &&
-           actual->executor_kind == XR_ENTRY_EXECUTOR_TYPED_VM;
-}
-
 static XrRuntimeEntryHandle *registry_lookup(
     XrRuntimeGenerationAuthority *authority, const XrTargetPlan *caller_plan,
     const XrTargetEntryExpectationRecord *expectation,
@@ -1667,7 +1672,8 @@ static XrVmDynamicEntryStatus acquire_dynamic_entry(
     const XrEntryCellExpectation *actual = &handle->expectation;
     XrVmDynamicEntryLease *lease = NULL;
     char diagnostic[512] = {0};
-    bool exact = expectation_matches_handle(expectation, actual);
+    bool exact = actual->executor_kind > XR_ENTRY_EXECUTOR_INVALID &&
+                 actual->executor_kind < XR_ENTRY_EXECUTOR_KIND_COUNT;
     if (exact) {
         lease = reserve_dynamic_entry_lease(handle->authority);
         if (!lease) {
@@ -1677,6 +1683,13 @@ static XrVmDynamicEntryStatus acquire_dynamic_entry(
         }
         exact = xr_entry_cell_acquire(&handle->cell, actual, &lease->token,
                                       diagnostic, sizeof(diagnostic));
+        if (exact) {
+            exact = xr_typed_entry_adapter_i64_freeze(
+                        actual, &lease->token, &resolution->adapter,
+                        diagnostic, sizeof(diagnostic)) &&
+                    xr_typed_entry_adapter_i64_matches_target(
+                        &resolution->adapter, expectation);
+        }
         if (exact)
             activate_dynamic_entry_lease(lease);
     }
@@ -1693,6 +1706,7 @@ static XrVmDynamicEntryStatus acquire_dynamic_entry(
         }
         xr_runtime_entry_handle_release(&handle, diagnostic,
                                         sizeof(diagnostic));
+        memset(resolution, 0, sizeof(*resolution));
         return XR_VM_DYNAMIC_ENTRY_AUTHORITY_MISMATCH;
     }
 

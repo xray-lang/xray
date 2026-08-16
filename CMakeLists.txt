@@ -1421,6 +1421,7 @@ set(XRAY_VM_RUNTIME_SOURCES
     src/vm/xr_typed_frame.c
     src/vm/xr_typed_lifecycle.c
     src/vm/xr_vm_decoded_cache.c
+    src/vm/xr_vm_entry_adapter.c
 )
 list(REMOVE_DUPLICATES XRAY_VM_RUNTIME_SOURCES)
 

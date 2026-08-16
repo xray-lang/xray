@@ -1,0 +1,9 @@
+/* Canonical executable adapters for runtime-resolved typed entries.
+ *
+ * Fields: symbolic name, persistent Target adapter kind, runtime adapter kind,
+ * persistent value kind. Consumers generate validation and dispatch tables
+ * from this list; adding an adapter requires extending the governed Target
+ * contract first. */
+XR_VM_ENTRY_ADAPTER(IDENTITY_I64, XR_TARGET_ENTRY_ADAPTER_IDENTITY,
+                    XR_ENTRY_ADAPTER_IDENTITY,
+                    XR_TARGET_ENTRY_VALUE_EXACT_I64)

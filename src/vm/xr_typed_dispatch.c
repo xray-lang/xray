@@ -790,7 +790,10 @@ static XrTypedDispatchStatus execute_entry_call(
     bool acquired = true;
     XrTypedDispatchStatus status = XR_TYPED_DISPATCH_PROGRAM_INVALID;
     XrTypedFrame *child = NULL;
-    uint32_t child_frame_id = execution->next_frame_id++;
+    uint32_t child_frame_id =
+        resolution.adapter.executor_kind == XR_ENTRY_EXECUTOR_TYPED_VM
+            ? execution->next_frame_id++
+            : XR_VM_TRACE_ID_NONE;
     uint32_t child_function = resolution.function;
     const XrVmDynamicEntryContext *retire_context =
         execution->dynamic_entries;
@@ -801,6 +804,8 @@ static XrTypedDispatchStatus execute_entry_call(
         !xr_fingerprint_equal(xr_target_plan_fingerprint(resolution.plan),
                               resolution.plan_fingerprint) ||
         !xr_target_plan_fingerprint_is_intact(resolution.plan) ||
+        !xr_typed_entry_adapter_i64_matches_target(&resolution.adapter,
+                                                   expectation) ||
         (family != XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
          family != XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC) ||
         !function_has_zero_lifecycle(resolution.plan,
@@ -825,6 +830,29 @@ static XrTypedDispatchStatus execute_entry_call(
     call_enter.related_frame = child_frame_id;
     status = emit_trace_event(execution, &call_enter);
     if (status != XR_TYPED_DISPATCH_OK)
+        goto cleanup;
+    if (resolution.adapter.executor_kind ==
+        XR_ENTRY_EXECUTOR_NATIVE_I64) {
+        int64_t native_result = 0;
+        execution->call_depth++;
+        XrEntryNativeStatus native_status =
+            xr_typed_entry_adapter_i64_invoke_native(
+                &resolution.adapter,
+                call->argument_count ? child_arguments : NULL,
+                call->argument_count, &native_result);
+        execution->call_depth--;
+        if (native_status == XR_ENTRY_NATIVE_OK) {
+            uint64_t native_bits = 0;
+            memcpy(&native_bits, &native_result, sizeof(native_bits));
+            status = store_i64_bits(frame, row->result_slot, native_bits);
+        } else if (native_status == XR_ENTRY_NATIVE_CANCELLED) {
+            status = XR_TYPED_DISPATCH_ENTRY_CANCELLED;
+        } else {
+            status = XR_TYPED_DISPATCH_ENTRY_NATIVE_ERROR;
+        }
+        goto cleanup;
+    }
+    if (resolution.adapter.executor_kind != XR_ENTRY_EXECUTOR_TYPED_VM)
         goto cleanup;
     if (xr_typed_frame_create(resolution.plan, &resolution.plan_fingerprint,
                               resolution.function, &execution->limits,

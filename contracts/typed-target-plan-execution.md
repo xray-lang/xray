@@ -37,8 +37,13 @@ whose adapter is identity. `CALL_ENTRY_I64` names a dense expectation row, not
 a process pointer. That row binds the canonical callee ABI fingerprint, target
 profile, identity-adapter fingerprint, call row, and parameter count. The ABI
 fingerprint has its own entry domain and is never reused from the call-site
-fingerprint. INDIRECT_CALLABLE, native/hosted adapters, owned or object values,
-and suspending calls remain unavailable.
+fingerprint. Runtime resolution may bind that same frozen identity adapter to
+either the typed VM executor or one process-local exact-i64 native executor.
+The native pointer is absent from the artifact and the dispatcher consumes a
+frozen adapter binding copied only after the entry cell has acquired the exact
+generation pin. This is the scalar identity subset of hosted VM/AOT calls:
+native aggregates, Buffer, INDIRECT_CALLABLE, owned or object values,
+non-identity adapters, and suspending calls remain unavailable.
 
 Control flow is proved from the rows, never declared alongside them. There is
 no target-level block table: a basic block begins at the group's first row and
@@ -503,6 +508,13 @@ Evidence:
   bounded authority ledger, preserves the in-flight pin, refuses unload, and
   releases the holder on the deterministic drain retry. The runtime-only archive
   test links the schema and ledger query without compiler builders.
+  It also publishes an exact native-i64 executor through the same registry,
+  drives it from `CALL_ENTRY_I64` through switch and function-table providers
+  in cold, warm, uncached, traced, success, error, and cancellation cases, and
+  proves native-to-VM invocation consumes the same frozen entry ABI and
+  identity-adapter facts. Native/typed hot replacement invalidates only the
+  affected site, while ABI, layout, adapter, ownership, and suspend mutations
+  are rejected before cache, callback, or generation-pin side effects.
 
 anchor-sha256: src/plan/target/xr_target_plan.h 60ecded7e07e1c569d1b9ab34c3ffa1de44d778db6ac29210de9f6260d7ead74
 anchor-sha256: src/plan/target/xr_target_plan.c c43c90f7f4b59ad2864b9666863288f030979dd085075dc5c18f98f361334f51
@@ -531,7 +543,7 @@ anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435
 anchor-sha256: tests/unit/plan/test_xtp_format.c 50cfba1053b1e203996701010e0067915af3ace898e422b5c4ae2de8d9f49c70
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c cfe41d4e83103cadb5e8eabc7a48aef121b5dc5ebdee14939e5c0f80bf955fff
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c cd38c52f605f446123a65b2b0b5cb851fb730fe8354f6e37f1b3c240ee71ebdc
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 11c01eeae38b5613db50ccbeb04881d2624cdc34c5669d4c14ac64eebd001bae
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 7ae4bd7e71bb2c86e94921c05345a8afdd28cd294dc45948ac0bf6f330b43ec9
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: tests/unit/ir/test_xi_cgen.c 5e72c6de3f3c5820822dd1ce15fd11bbd0c1886143ab61e525c45ab83efd3ffa
 anchor-sha256: tests/unit/ir/test_xi_opt.c bffbaaff1b3d6df205eb05ffc4ef3566faff16ff3ac1cd757072c3ee561410cc
@@ -539,15 +551,18 @@ anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 33da22
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation.c a07ba16736dd26135e4256d01092ad7f1be71e29787ef68504cd3f61eb979305
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
-anchor-sha256: CMakeLists.txt cd421dc8805b9b90196b1f991cf6c033c8bc5f3c342ec6e14a84583898bb6c57
+anchor-sha256: CMakeLists.txt 7f0b34bbbe209405f605d9a1a03d83e3913dd641c7a69b78e0faa3d68b439827
 anchor-sha256: xisa/target/vm_ops.def 359a60da3aa91aa5fd8b0569228c29b9590fe5b1e11d77c936b3ef2b36dff6e9
 anchor-sha256: tools/xisagen/xisagen.py 7de42418fd37c55d742b185596c8eec5f709c2de0898e7c9c1b519c0a20d98d3
 anchor-sha256: src/plan/target/xr_target_entry_abi.h 80cd119cbc095ddfddbf95ff5085fbaa23659256feb8d18a36e43416013747ea
 anchor-sha256: src/plan/target/xr_target_entry_abi.c cb5cd57a0b8f3bbfe2123a07f583da997d7d2989e5158fd241406b96ce433b12
 anchor-sha256: src/plan/target/xr_target_instruction_gen.h 065cdbeb39196bf03d8ab21ad0c8bd1e5e6f140d5ffff72008875bbcb284998e
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h e365e02d0596394df881026895d127ac54ade9d7bccf5ff272ad6f704a88becf
+anchor-sha256: src/vm/xr_vm_entry_adapter.h 260bca5ab4abcef7cc679f5674e92c0b2c8e95fa04444b73cb1e3f8584b61544
+anchor-sha256: src/vm/xr_vm_entry_adapter.c a18c76b33fa1a35b0b2b756d6eab77de5b7876f58b65bf6c5605a7596e701547
+anchor-sha256: xisa/target/vm_entry_adapters.def db46c172fa847c54cb24d477404f00d74db9996b99be9fa357a3ce0864a9ddb9
 anchor-sha256: src/vm/xr_vm_ops.def 9ea1657b3d9b6545dd0237cef9ddc490ee9f7efacc6047fe7e7d61cdb7a96eab
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h bfef11f302f449287eb807856c9258c42269cfbb5df041d55d96035a3f391f1a
-anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 27ff412fb778fd0b9ce603e52c44e39763c42bc12e1c099f2c0a747c014299a4
-anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 233b626fd132326e2bc6946fdaed8686e1280f7ebee98fb0f4e9d9acbad317c2
+anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c d6cff74156a07c9a7751f3e7d5857f65d3d6d05ca1dbc862605f6cc4fa2c5c16
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c eede18e3210d979c26b0adaca5c5454acdbd609514383d0e285525f69fef9883
 anchor-sha256: tests/unit/CMakeLists.txt a7c215609f83b49d59a650ebe657636f76a4eeb4f1f30b5fe0b0e73b986fca98
