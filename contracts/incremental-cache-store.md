@@ -126,7 +126,7 @@ anchor-sha256: src/aot/xaot_module_summary.h 356f61d193ecfb05a15c0d4ad14a36df8c5
 anchor-sha256: src/aot/xaot_module_summary.c fb55e5df4fbaeef41931bcc863f3dd36c4e2bc1344d30acac8435a699a4800ba
 anchor-sha256: src/aot/xaot_driver.h 01f022c354d4cfa051fe0feba5fc2f21642e4e102bc7ec7c2a5729d3f6bf26cc
 anchor-sha256: src/aot/xaot_driver.c 86552db21ff043ac092e3f1034dab8b75e427fa37ec8c6629d7ff3b8b180873e
-anchor-sha256: src/os/os_fs.h b1a95259a4952a1e33e1d2c109fd0955f5b00bff4db81e6a21abede9ec07fe84
+anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
 anchor-sha256: tests/unit/CMakeLists.txt 08db8bd5e51152ec5afcc1aff72b9a9c29fea351619522fbbcf340b873a673dd
@@ -136,4 +136,4 @@ anchor-sha256: tests/unit/incremental/test_target_plan_tasks.c 4ea47fb617bb4bed3
 anchor-sha256: tests/unit/incremental/test_module_summary_build.c 661372e5984643a4471383f76014273d45ff4cbe1e1f3e364a3f1ca12417ac89
 anchor-sha256: tests/aot/run_module_summary_determinism.py dac9acac234c65545adb2c3d560d67534cece6ce3b8afb01c5c1c432e119922f
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 5f1c41ca62b2a73941e6494265c830daadd0d2a41548d30d3498a97fc5677f73
-anchor-sha256: tests/unit/os/test_fs_atomic.c f8f6ee065dcb3c4b75ae24edb4e96d95253c540f5a40252cf79a10aa140ddb5f
+anchor-sha256: tests/unit/os/test_fs_atomic.c 3166bf0113590778cf46f874a7205476819e043699bb99d9881549579237ce12

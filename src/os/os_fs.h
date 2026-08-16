@@ -22,7 +22,15 @@
  *       common "ensure dir" pattern; callers can pre-check kind
  *       if they need stricter semantics).
  *     - Classifies symbolic links and Windows reparse points as
- *       XR_FS_OTHER without following them.
+ *       XR_FS_OTHER without following them. This is a rule about
+ *       the *leaf* of a path: it stops the artifact a path ends in
+ *       -- lock file, cache object, the file being read or touched
+ *       -- from being redirected somewhere else. Ancestors are
+ *       followed by ordinary path resolution and always have been,
+ *       so an interior symlink is not something this layer can or
+ *       should refuse. xr_fs_mkdir is the single call that resolves
+ *       its own final component, because the directory it ensures
+ *       is the container for such an artifact, never the artifact.
  *     - Returns 0 / -1 for simple mutating calls. errno is set on
  *       POSIX; on Windows the GetLastError mapping is reflected
  *       through the return code only (callers needing details
@@ -105,6 +113,13 @@ XR_FUNC bool xr_fs_is_dir(const char *path);
 // honoured on POSIX (0755 is the typical value) and ignored on
 // Windows. Returns 0 on success or if `path` already names a
 // directory; -1 on real failure.
+//
+// Unlike the predicates above, this call resolves its final
+// component, so a symlink or directory junction that lands on a
+// directory counts as one -- without that, every path under macOS
+// /tmp -> /private/tmp or /var/folders would be unbuildable even
+// though mkdir(2) creates through those roots happily. A link that
+// dangles or lands on a non-directory is still a failure.
 XR_FUNC int xr_fs_mkdir(const char *path, unsigned int mode);
 
 // Remove a regular file. Returns 0 on success, -1 on error.
