@@ -287,6 +287,151 @@ static bool fail(char *error, size_t error_size, const char *code, const char *d
     return false;
 }
 
+/* Setting XRAY_TARGET_TRACE prints, on stderr, why this pass refused to build a
+ * TargetPlan. Unset, the variable is never read and nothing is printed: every
+ * call below sits on a path that is already failing the build, so a compile
+ * that succeeds pays nothing for it.
+ *
+ * It exists because the refusals this pass emits are one-line verdicts over
+ * compound conditions. "direct-local argument contract needs unsupported
+ * storage or ownership" is a single sentence standing for eight storage
+ * judgements, five contract equalities and an ownership table, and it names
+ * neither the argument that failed nor which of those it failed on. Read alone
+ * it cannot distinguish a String passed where the family binds only scalars
+ * from a scalar passed with the wrong transfer mode. The trace prints the whole
+ * question -- the operation with its source position, every operand under its
+ * role, and each sub-judgement with the answer it gave -- so a refusal can be
+ * classified without adding temporary printfs. */
+static bool target_trace_enabled(void) {
+    return getenv("XRAY_TARGET_TRACE") != NULL;
+}
+
+static const char *target_trace_role_name(uint8_t role) {
+    switch (role) {
+        case XR_SEM_OPERAND_VALUE:
+            return "value";
+        case XR_SEM_OPERAND_CALLEE:
+            return "callee";
+        case XR_SEM_OPERAND_RECEIVER:
+            return "receiver";
+        case XR_SEM_OPERAND_ARGUMENT:
+            return "argument";
+        default:
+            return "unnamed";
+    }
+}
+
+/* The SemanticPlan call-target kinds. Four of them have an adapter family here;
+ * the rest are named so a refusal says which authority went unconsumed rather
+ * than printing a bare number. */
+static const char *target_trace_call_target_kind_name(uint8_t kind) {
+    switch (kind) {
+        case XR_SEM_CALL_TARGET_DIRECT_LOCAL:
+            return "DIRECT_LOCAL";
+        case XR_SEM_CALL_TARGET_NATIVE_YIELDABLE:
+            return "NATIVE_YIELDABLE";
+        case XR_SEM_CALL_TARGET_SOURCE_EXPORT:
+            return "SOURCE_EXPORT";
+        case XR_SEM_CALL_TARGET_INDIRECT_CALLABLE:
+            return "INDIRECT_CALLABLE";
+        case XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE:
+            return "NATIVE_NAMESPACE_YIELDABLE";
+        case XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE:
+            return "BUILTIN_INSTANCE_YIELDABLE";
+        case XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL:
+            return "SOURCE_INSTANCE_METHOD_LOCAL";
+        case XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN:
+            return "SOURCE_INSTANCE_METHOD_OPEN";
+        case XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR:
+            return "SOURCE_CLASS_CONSTRUCTOR";
+        default:
+            return "unnamed";
+    }
+}
+
+/* One sub-judgement of a compound condition: what it asked, and whether the
+ * enclosing condition got the answer it needed. */
+static void target_trace_judgement(const char *question, bool held) {
+    fprintf(stderr, "[target]     %-52s %s\n", question, held ? "yes" : "NO");
+}
+
+/* A semantic type index says nothing on its own, and every storage family in
+ * this pass is selected by what the type is. The canonical key carries the
+ * whole shape, so it is printed verbatim rather than decoded into a name that
+ * would then have to be kept in step with it. */
+static void target_trace_type(const XrSemanticPlan *plan, const char *label, uint32_t type_index) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, type_index);
+    if (!type) {
+        fprintf(stderr, "[target]     %-52s type %u <no record at this index>\n", label,
+                type_index);
+        return;
+    }
+    fprintf(stderr, "[target]     %-52s type %u kind=%u builtin=%u scalar_rep=%u children=%u %s\n",
+            label, type_index, type->kind, type->builtin_type, type->scalar_rep, type->child_count,
+            type->canonical_key ? type->canonical_key : "<no canonical key>");
+}
+
+/* One equality a contract demands, printed as both sides so the reader never
+ * has to guess which number was the requirement. */
+static void target_trace_equality(const char *label, unsigned long long expected,
+                                  unsigned long long actual) {
+    fprintf(stderr, "[target]     %-52s wanted %llu, got %llu%s\n", label, expected, actual,
+            expected == actual ? "" : "   <-- differs");
+}
+
+/* The operation whole: where it is in the source, what it produces, and every
+ * operand under its role. The operand list is the part a one-line refusal
+ * always drops, and it is what decides which family should have claimed the
+ * call. */
+static void target_trace_operation(const XrSemanticPlan *plan, uint32_t operation_index,
+                                   const XrSemanticOperationRecord *operation) {
+    if (!operation) {
+        fprintf(stderr, "[target]   operation=%u      <no record at this index>\n",
+                operation_index);
+        return;
+    }
+    fprintf(stderr, "[target]   operation=%u      %s in function %u, block %u\n", operation_index,
+            xi_generated_op_name(operation->opcode), operation->function, operation->block);
+    if (operation->source_file)
+        fprintf(stderr, "[target]     source                       %s:%u\n", operation->source_file,
+                operation->source_line);
+    fprintf(stderr,
+            "[target]     result                       value %u, semantic type %u, ownership %u, "
+            "alias operand %d\n",
+            operation->result_value, operation->result_type, operation->result_ownership,
+            operation->result_alias_operand);
+    fprintf(stderr,
+            "[target]     op facts                     intrinsic %u, immediate %lld, effects "
+            "0x%08x, import resolution %u, auxiliary %u\n",
+            operation->intrinsic_kind, (long long) operation->semantic_immediate,
+            operation->effects, operation->import_resolution, operation->auxiliary_kind);
+    uint32_t metadata_count = 0;
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    for (uint32_t i = 0; i < operation->metadata_count; i++) {
+        uint32_t index = operation->metadata_begin + i;
+        fprintf(stderr, "[target]     metadata[%u]                  %s\n", i,
+                index < metadata_count && metadata[index] ? metadata[index] : "<out of range>");
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    for (uint32_t i = 0; i < operation->operand_count; i++) {
+        uint32_t index = operation->operand_begin + i;
+        if (index >= operand_count) {
+            fprintf(stderr, "[target]     operand[%u]                   <out of range>\n", i);
+            continue;
+        }
+        const XrSemanticOperandRecord *operand = &operands[index];
+        fprintf(stderr,
+                "[target]     operand[%u]                   role=%s value=%u type=%u parameter=%d "
+                "mode=%u transfer=%u ownership_action=%u access=%u origin=%u lifetime=%u escape=%u "
+                "flags=0x%02x\n",
+                i, target_trace_role_name(operand->role), operand->value, operand->type,
+                operand->parameter, operand->parameter_mode, operand->transfer_mode,
+                operand->ownership_action, operand->access, operand->origin, operand->lifetime,
+                operand->escape, operand->flags);
+    }
+}
+
 static void *allocate_records(uint32_t count, size_t size) {
     if (!count)
         return NULL;
@@ -8264,9 +8409,47 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
          !semantic_direct_local_string_result_is_exact(plan, operation, callee) &&
          !xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee) &&
          !semantic_direct_local_array_result_is_exact(plan, operation, callee) &&
-         !xr_semantic_direct_local_aggregate_result_is_exact(plan, operation, callee)))
+         !xr_semantic_direct_local_aggregate_result_is_exact(plan, operation, callee))) {
+        if (target_trace_enabled()) {
+            fprintf(stderr,
+                    "[target] refused in direct-local signature: the call's arity, its result type "
+                    "or the storage of that result is not one this family binds\n");
+            target_trace_operation(plan, target->operation, operation);
+            fprintf(stderr,
+                    "[target]   callee function=%u, declares %u parameters from parameter %u\n",
+                    target->function, callee->parameter_count, callee->parameter_begin);
+            target_trace_equality("operand count vs declared arity plus callee",
+                                  (unsigned long long) callee->parameter_count + 1u,
+                                  operation->operand_count);
+            target_trace_equality("call result type vs callee return type", callee->return_type,
+                                  operation->result_type);
+            fprintf(stderr,
+                    "[target]   the result type must land in one storage family, and each was "
+                    "asked in turn:\n");
+            target_trace_type(plan, "the type every family below was asked about",
+                              operation->result_type);
+            target_trace_judgement("result is an exact scalar",
+                                   call_type_is_exact_scalar(plan, operation->result_type));
+            target_trace_judgement(
+                "result is an exact String",
+                semantic_direct_local_string_result_is_exact(plan, operation, callee));
+            target_trace_judgement(
+                "result is an exact ADT enum",
+                xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee));
+            target_trace_judgement(
+                "result is an exact Array",
+                semantic_direct_local_array_result_is_exact(plan, operation, callee));
+            target_trace_judgement(
+                "result is an exact aggregate",
+                xr_semantic_direct_local_aggregate_result_is_exact(plan, operation, callee));
+            fprintf(stderr,
+                    "[target]   read it as: an arity or type line marked \"differs\" is the whole "
+                    "refusal; if all of them match, the result type reached no storage family and "
+                    "the last five lines say which families declined it.\n");
+        }
         return fail(error, error_size, "XR_TARGET_1003",
                     "direct-local signature or result storage is incomplete");
+    }
     const XrSemanticOperandRecord *callee_operand = &operands[operation->operand_begin];
     if (callee_operand->role != XR_SEM_OPERAND_CALLEE || callee_operand->parameter != -1 ||
         (callee_operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0)
@@ -8372,9 +8555,78 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
              !(exact_adt_enum && parameter->ownership == XI_OWN_OWNED) &&
              !((exact_u8_slice || exact_unit_enum || exact_adt_enum || exact_class_instance ||
                 exact_array_ref || exact_array_value || exact_string_value) &&
-               parameter->ownership == XI_OWN_BORROWED)))
+               parameter->ownership == XI_OWN_BORROWED))) {
+            if (target_trace_enabled()) {
+                fprintf(stderr,
+                        "[target] refused in direct-local argument contract: argument %u of this "
+                        "call reached no storage family, or reached one whose ownership the "
+                        "parameter does not state\n",
+                        ordinal);
+                target_trace_operation(plan, target->operation, operation);
+                if (!parameter) {
+                    fprintf(stderr, "[target]   parameter=%u      <no record at this index>\n",
+                            parameter_index);
+                } else {
+                    fprintf(stderr,
+                            "[target]   parameter=%u      ordinal %u of callee function %u, "
+                            "semantic type %u, mode %u, transfer %u, ownership %u\n",
+                            parameter_index, parameter->ordinal, parameter->function,
+                            parameter->type, parameter->mode, parameter->transfer_mode,
+                            parameter->ownership);
+                    fprintf(stderr, "[target]   the argument operand and the parameter must agree "
+                                    "exactly:\n");
+                    target_trace_equality("operand type vs parameter type", parameter->type,
+                                          operand->type);
+                    target_trace_equality("operand mode vs parameter mode", parameter->mode,
+                                          operand->parameter_mode);
+                    target_trace_equality("operand transfer vs parameter transfer",
+                                          parameter->transfer_mode, operand->transfer_mode);
+                }
+                target_trace_equality("operand parameter ordinal", ordinal,
+                                      (unsigned long long) (int64_t) operand->parameter);
+                target_trace_judgement("operand role is argument",
+                                       operand->role == XR_SEM_OPERAND_ARGUMENT);
+                target_trace_judgement("operand carries the call contract flag",
+                                       (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0);
+                fprintf(stderr,
+                        "[target]   the argument must land in one storage family, and each was "
+                        "asked in turn:\n");
+                target_trace_type(plan, "the type every family below was asked about",
+                                  operand->type);
+                target_trace_judgement("argument is an exact scalar", exact_scalar);
+                target_trace_judgement("argument is an exact u8 slice", exact_u8_slice);
+                target_trace_judgement("argument is an exact unit enum", exact_unit_enum);
+                target_trace_judgement("argument is an exact ADT enum", exact_adt_enum);
+                target_trace_judgement("argument is an exact class instance", exact_class_instance);
+                target_trace_judgement("argument is an exact Array by reference", exact_array_ref);
+                target_trace_judgement("argument is an exact Array by value", exact_array_value);
+                target_trace_judgement("argument is an exact String by value", exact_string_value);
+                if (parameter && !exact_array_ref) {
+                    fprintf(stderr,
+                            "[target]   everything but an Array by reference travels the plain "
+                            "read path:\n");
+                    target_trace_judgement("parameter mode is READ",
+                                           parameter->mode == XR_PARAM_READ);
+                    target_trace_judgement("operand access is PLAIN",
+                                           operand->access == XR_CALL_ARG_PLAIN);
+                    target_trace_judgement("operand is not addressable",
+                                           (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0);
+                }
+                if (parameter && parameter->ownership != XI_OWN_NONE)
+                    fprintf(stderr,
+                            "[target]   the parameter states ownership %u, which only an ADT enum "
+                            "(as OWNED) or a reference-capable family (as BORROWED) may carry; a "
+                            "plain scalar must state none\n",
+                            parameter->ownership);
+                fprintf(stderr,
+                        "[target]   read it as: ordinal %u is the argument position, not an "
+                        "operand index -- the operand it names is operand[%u] above, because "
+                        "operand[0] is the callee.\n",
+                        ordinal, ordinal + 1u);
+            }
             return fail(error, error_size, "XR_TARGET_1003",
                         "direct-local argument contract needs unsupported storage or ownership");
+        }
         XrTargetCallArgumentIntent argument = {
             .call_intent = call_intent,
             .semantic_operand = semantic_operand,
@@ -8658,6 +8910,49 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                                            operation->metadata_begin < metadata_count
                                        ? metadata[operation->metadata_begin]
                                        : "";
+            if (target_trace_enabled()) {
+                fprintf(stderr,
+                        "[target] refused in call target coverage: SemanticPlan proved a call "
+                        "target of kind %s, and this family consumes only DIRECT_LOCAL, "
+                        "SOURCE_EXPORT, NATIVE_NAMESPACE_YIELDABLE and SOURCE_CLASS_CONSTRUCTOR\n",
+                        target_trace_call_target_kind_name(target ? target->kind : 0u));
+                fprintf(stderr,
+                        "[target]   call target=%u    kind=%s (%u), names function %u, dependency "
+                        "%u\n",
+                        i, target_trace_call_target_kind_name(target ? target->kind : 0u),
+                        target ? target->kind : 0u,
+                        target ? target->function : XR_SEMANTIC_INDEX_NONE,
+                        target ? target->dependency : XR_SEMANTIC_INDEX_NONE);
+                target_trace_operation(plan, target ? target->operation : XR_SEMANTIC_INDEX_NONE,
+                                       operation);
+                target_trace_judgement("the operation record exists", operation != NULL);
+                target_trace_judgement("this family consumes the kind",
+                                       direct || source || native_namespace || class_construction);
+                if (direct)
+                    target_trace_judgement("DIRECT_LOCAL names a function in range",
+                                           target->function < function_count);
+                if (direct)
+                    target_trace_judgement("DIRECT_LOCAL sits on CALL or TAIL_CALL",
+                                           operation && (operation->opcode == XI_CALL ||
+                                                         operation->opcode == XI_TAIL_CALL));
+                if (source)
+                    target_trace_judgement("SOURCE_EXPORT sits on CALL_METHOD or CALL",
+                                           operation && (operation->opcode == XI_CALL_METHOD ||
+                                                         operation->opcode == XI_CALL));
+                if (native_namespace)
+                    target_trace_judgement("NATIVE_NAMESPACE_YIELDABLE sits on CALL_METHOD",
+                                           operation && operation->opcode == XI_CALL_METHOD);
+                if (class_construction)
+                    target_trace_judgement("SOURCE_CLASS_CONSTRUCTOR sits on CALL",
+                                           operation && operation->opcode == XI_CALL);
+                target_trace_judgement("no earlier target already claimed the operation",
+                                       !operation || target_by_operation[target->operation] ==
+                                                         XR_SEMANTIC_INDEX_NONE);
+                fprintf(
+                    stderr,
+                    "[target]   read it as: the semantic layer did prove an exact target here. "
+                    "The gap is this family's adapter coverage, not a missing proof upstream.\n");
+            }
             if (error && error_size)
                 snprintf(error, error_size,
                          "XR_TARGET_1003: call target has no consumable adapter authority "
@@ -8795,6 +9090,28 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 operation->operand_count > 1 && operation->operand_begin + 1u < operand_count
                     ? &operands[operation->operand_begin + 1u]
                     : NULL;
+            if (target_trace_enabled()) {
+                fprintf(stderr,
+                        "[target] refused in call coverage: this operation is call-shaped, "
+                        "SemanticPlan proved no call target for it, and no builtin family here "
+                        "claimed it either\n");
+                target_trace_operation(plan, i, operation);
+                target_trace_judgement("SemanticPlan bound a call target to this operation", false);
+                fprintf(stderr,
+                        "[target]   every builtin family was asked about this operation and each "
+                        "declined; the families are selected by selector and receiver shape, so "
+                        "the selector and the operand list above are what decide which one should "
+                        "have claimed it.\n");
+                target_trace_type(plan, "result type", operation->result_type);
+                if (receiver)
+                    target_trace_type(plan, "type of operand[0]", receiver->type);
+                if (argument)
+                    target_trace_type(plan, "type of operand[1]", argument->type);
+                fprintf(stderr,
+                        "[target]   read it as: a CALL or TAIL_CALL here means the semantic layer "
+                        "could not name a callee at all, while a CALL_METHOD means the selector "
+                        "belongs to no family this pass describes.\n");
+            }
             if (error && error_size)
                 snprintf(error, error_size,
                          "XR_TARGET_1003: call-shaped operation has no exact target authority "
@@ -10898,9 +11215,41 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                                     ((caller->register_rep != callee->register_rep ||
                                       caller->memory_rep != callee->memory_rep) &&
                                      !adt_enum_borrow_boundary && !array_ref_borrow_boundary &&
-                                     !container_value_borrow_boundary))))
+                                     !container_value_borrow_boundary)))) {
+                if (target_trace_enabled()) {
+                    fprintf(stderr,
+                            "[target] refused in call argument materialization: argument %u of "
+                            "call intent %u has no storage both sides agree on\n",
+                            ordinal, i);
+                    target_trace_judgement("the callee parameter record exists", parameter != NULL);
+                    target_trace_judgement("the caller value has a bound slot",
+                                           caller && caller->slot != XR_SEMANTIC_INDEX_NONE);
+                    target_trace_judgement("the callee value has a bound slot",
+                                           source_export ||
+                                               (callee && callee->slot != XR_SEMANTIC_INDEX_NONE));
+                    if (caller && callee) {
+                        target_trace_equality("caller register rep vs callee register rep",
+                                              callee->register_rep, caller->register_rep);
+                        target_trace_equality("caller memory rep vs callee memory rep",
+                                              callee->memory_rep, caller->memory_rep);
+                    }
+                    fprintf(stderr,
+                            "[target]   reps that differ are admitted only by a named boundary, "
+                            "and each was asked in turn:\n");
+                    target_trace_judgement("ADT enum borrow boundary", adt_enum_borrow_boundary);
+                    target_trace_judgement("Array by reference borrow boundary",
+                                           array_ref_borrow_boundary);
+                    target_trace_judgement("tagged container by value boundary",
+                                           container_value_borrow_boundary);
+                    fprintf(stderr,
+                            "[target]   read it as: matching reps need no boundary at all. A "
+                            "boundary is what lets the two sides hold the same carrier under "
+                            "different ownership, so a \"NO\" on all three with differing reps "
+                            "means no family described this hand-over.\n");
+                }
                 return fail(error, error_size, "XR_TARGET_1003",
                             "call argument lacks exact caller/callee storage");
+            }
             materialized->call_arguments[next_argument] = (XrTargetCallArgumentRecord) {
                 .identity = argument_intent->identity,
                 .call = i,
