@@ -302,11 +302,22 @@ static bool oracle_dynamic_array_fill_scalar_storage(const VerifyAuthority *ctx,
                                                      uint16_t *out_machine_kind);
 static bool oracle_array_hof_result_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                             XrRep *out_storage, uint16_t *out_machine_kind);
+static bool oracle_array_produced_tagged_carrier_storage(const VerifyAuthority *ctx,
+                                                         uint32_t semantic_value,
+                                                         XrRep *out_storage,
+                                                         uint16_t *out_machine_kind);
+static bool oracle_array_borrowed_tagged_carrier_storage(const VerifyAuthority *ctx,
+                                                         uint32_t semantic_value,
+                                                         XrRep *out_storage,
+                                                         uint16_t *out_machine_kind);
 static bool oracle_array_tagged_carrier_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                                 XrRep *out_storage, uint16_t *out_machine_kind);
 static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
                                                  uint32_t semantic_value, XrRep *out_storage,
                                                  uint16_t *out_machine_kind);
+static bool oracle_tagged_reference_carrier_storage(const VerifyAuthority *ctx,
+                                                    uint32_t semantic_value, XrRep *out_storage,
+                                                    uint16_t *out_machine_kind);
 static bool oracle_direct_local_array_value_parameter_storage(const VerifyAuthority *ctx,
                                                               uint32_t semantic_value,
                                                               XrRep *out_storage,
@@ -5245,30 +5256,18 @@ static bool oracle_array_element_access_is_exact(const VerifyAuthority *ctx,
     uint16_t container_kind = XR_MACHINE_REP_COUNT;
     /* An owned receiver is one an operation in this function produced, so the
      * operation that produced it is the allocation the checks below compare
-     * against. A direct-local call that returns an Array is such an operation:
-     * the transfer lands in the caller's own temporary. */
-    bool owned_array =
-        oracle_dynamic_array_allocation_storage(ctx, container->value, &container_storage,
-                                                &container_kind) ||
-        oracle_dynamic_array_intrinsic_storage(ctx, container->value, &container_storage,
-                                               &container_kind) ||
-        oracle_dynamic_array_fill_scalar_storage(ctx, container->value, &container_storage,
-                                                 &container_kind) ||
-        oracle_array_hof_result_storage(ctx, container->value, &container_storage,
-                                        &container_kind) ||
-        oracle_dynamic_direct_local_array_result_storage(ctx, container->value, &container_storage,
-                                                         &container_kind);
-    /* A borrowed receiver names an allocation someone else owns: the cell a
-     * ref parameter points at, a shared read of a local, or the tagged value a
-     * by-value parameter was handed. None of them has a producing operation
-     * here, so the type is proved from the receiver's own row. */
+     * against. A borrowed receiver names an allocation someone else owns, plus
+     * the cell a ref parameter points at; none of them has a producing
+     * operation here, so the type is proved from the receiver's own row. The
+     * two halves are the shared carrier list split along that one question,
+     * not a receiver list of this site's own. */
+    bool owned_array = oracle_array_produced_tagged_carrier_storage(
+        ctx, container->value, &container_storage, &container_kind);
     bool borrowed_array =
         !owned_array && (oracle_direct_local_array_ref_parameter_place_storage(
                              ctx, container->value, &container_storage, &container_kind) ||
-                         oracle_direct_local_array_value_parameter_storage(
-                             ctx, container->value, &container_storage, &container_kind) ||
-                         oracle_dynamic_array_ref_storage(ctx, container->value, &container_storage,
-                                                          &container_kind));
+                         oracle_array_borrowed_tagged_carrier_storage(
+                             ctx, container->value, &container_storage, &container_kind));
     if (container->role != XR_SEM_OPERAND_VALUE || container->parameter != -1 ||
         container->flags != 0 || container->ownership_action != XR_SEM_OPERAND_BORROW ||
         index->role != XR_SEM_OPERAND_VALUE || index->parameter != -1 || index->flags != 0 ||
@@ -5520,12 +5519,6 @@ static bool oracle_length_read_is_exact(const VerifyAuthority *ctx, uint32_t ope
            container->value < ctx->value_count &&
            (oracle_array_tagged_carrier_storage(ctx, container->value, &container_storage,
                                                 &container_kind) ||
-            oracle_dynamic_array_intrinsic_storage(ctx, container->value, &container_storage,
-                                                   &container_kind) ||
-            oracle_dynamic_array_fill_scalar_storage(ctx, container->value, &container_storage,
-                                                     &container_kind) ||
-            oracle_array_hof_result_storage(ctx, container->value, &container_storage,
-                                            &container_kind) ||
             oracle_string_tagged_carrier_storage(ctx, container->value, &container_storage,
                                                  &container_kind));
 }
@@ -7310,101 +7303,27 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         }
         case XI_RETAIN:
         case XI_RELEASE: {
-            XrRep literal_storage = XR_REP_TAGGED;
-            if (!oracle_string_tagged_carrier_storage(ctx, source_value, &literal_storage,
-                                                      &ignored_kind) &&
-                !oracle_dynamic_panic_catch_storage(ctx, source_value, &literal_storage,
-                                                    &ignored_kind) &&
-                !oracle_array_tagged_carrier_storage(ctx, source_value, &literal_storage,
-                                                     &ignored_kind) &&
-                !oracle_dynamic_stringbuilder_storage(ctx, source_value, &literal_storage,
-                                                      &ignored_kind) &&
-                !oracle_dynamic_array_intrinsic_storage(ctx, source_value, &literal_storage,
-                                                        &ignored_kind) &&
-                !oracle_dynamic_array_fill_scalar_storage(ctx, source_value, &literal_storage,
-                                                          &ignored_kind) &&
-                !oracle_array_hof_result_storage(ctx, source_value, &literal_storage,
-                                                 &ignored_kind) &&
-                !oracle_dynamic_string_runes_storage(ctx, source_value, &literal_storage,
-                                                     &ignored_kind) &&
-                !oracle_dynamic_string_slice_range_storage(ctx, source_value, &literal_storage,
-                                                           &ignored_kind) &&
-                !oracle_dynamic_json_namespace_value_storage(ctx, source_value, &literal_storage,
-                                                             &ignored_kind) &&
-                !oracle_dynamic_source_class_object_storage(ctx, source_value, &literal_storage,
-                                                            &ignored_kind) &&
-                !oracle_dynamic_source_class_instance_storage(ctx, source_value, &literal_storage,
-                                                              &ignored_kind) &&
-                !oracle_fixed_array_backing_storage(ctx, source_value, &literal_storage,
-                                                    &ignored_kind) &&
-                !oracle_value_aggregate_storage(ctx, source_value, &literal_storage,
-                                                &ignored_kind) &&
-                !oracle_dynamic_struct_object_storage(ctx, source_value, &literal_storage,
-                                                      &ignored_kind) &&
-                !oracle_struct_object_field_read_storage(ctx, source_value, &literal_storage,
-                                                         &ignored_kind) &&
-                !(ctx->exact_channel_allocation_value &&
-                  ctx->exact_channel_allocation_value[source_value] &&
-                  oracle_dynamic_channel_storage(ctx, source_value, &literal_storage,
-                                                 &ignored_kind)) &&
-                !(ctx->exact_source_namespace_value &&
-                  ctx->exact_source_namespace_value[source_value] &&
-                  oracle_source_namespace_storage(ctx, source_value, &literal_storage,
-                                                  &ignored_kind)) &&
-                !oracle_native_module_namespace_storage(ctx, source_value, &literal_storage,
-                                                        &ignored_kind) &&
-                !oracle_dynamic_direct_local_go_task_storage(ctx, source_value, &literal_storage,
-                                                             &ignored_kind))
+            /* A refcount adjustment names no family of its own: it acts on any
+             * reference this authority can name, and each stays in the tagged
+             * carrier its own family bound. A native scalar has no refcount and
+             * is not admitted here. */
+            XrRep carrier_storage = XR_REP_TAGGED;
+            if (!oracle_tagged_reference_carrier_storage(ctx, source_value, &carrier_storage,
+                                                         &ignored_kind))
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
         }
         case XI_SET_SHARED:
         case XI_PRINT: {
-            XrRep machine_storage = XR_REP_TAGGED;
-            if (!oracle_machine_storage(ctx, source_value, &machine_storage, &ignored_kind) &&
-                !oracle_dynamic_closure_storage(ctx, source_value, &machine_storage,
-                                                &ignored_kind) &&
-                !oracle_dynamic_panic_catch_storage(ctx, source_value, &machine_storage,
-                                                    &ignored_kind) &&
-                !oracle_dynamic_string_literal_storage(ctx, source_value, &machine_storage,
-                                                       &ignored_kind) &&
-                !oracle_dynamic_direct_local_string_result_storage(
-                    ctx, source_value, &machine_storage, &ignored_kind) &&
-                !oracle_dynamic_string_concat_result_storage(ctx, source_value, &machine_storage,
-                                                             &ignored_kind) &&
-                !oracle_array_tagged_carrier_storage(ctx, source_value, &machine_storage,
-                                                     &ignored_kind) &&
-                !oracle_dynamic_array_intrinsic_storage(ctx, source_value, &machine_storage,
-                                                        &ignored_kind) &&
-                !oracle_dynamic_array_fill_scalar_storage(ctx, source_value, &machine_storage,
-                                                          &ignored_kind) &&
-                !oracle_array_hof_result_storage(ctx, source_value, &machine_storage,
-                                                 &ignored_kind) &&
-                !oracle_dynamic_stringbuilder_storage(ctx, source_value, &machine_storage,
-                                                      &ignored_kind) &&
-                !oracle_dynamic_string_runes_storage(ctx, source_value, &machine_storage,
-                                                     &ignored_kind) &&
-                !oracle_dynamic_string_slice_range_storage(ctx, source_value, &machine_storage,
-                                                           &ignored_kind) &&
-                !oracle_dynamic_channel_storage(ctx, source_value, &machine_storage,
-                                                &ignored_kind) &&
-                !oracle_dynamic_json_namespace_value_storage(ctx, source_value, &machine_storage,
-                                                             &ignored_kind) &&
-                !oracle_dynamic_source_class_object_storage(ctx, source_value, &machine_storage,
-                                                            &ignored_kind) &&
-                !oracle_dynamic_source_class_instance_storage(ctx, source_value, &machine_storage,
-                                                              &ignored_kind) &&
-                !oracle_value_aggregate_storage(ctx, source_value, &machine_storage,
-                                                &ignored_kind) &&
-                !oracle_dynamic_struct_object_storage(ctx, source_value, &machine_storage,
-                                                      &ignored_kind) &&
-                !oracle_struct_object_field_read_storage(ctx, source_value, &machine_storage,
+            /* A store into a shared cell and a print both consume their operand
+             * as a tagged value, whatever it is: any reference this authority
+             * can name reaches them in its own carrier, and a native scalar
+             * reaches them through the box adapter its machine storage owes. */
+            XrRep carrier_storage = XR_REP_TAGGED;
+            if (!oracle_tagged_reference_carrier_storage(ctx, source_value, &carrier_storage,
                                                          &ignored_kind) &&
-                !oracle_source_namespace_storage(ctx, source_value, &machine_storage,
-                                                 &ignored_kind) &&
-                !oracle_native_module_namespace_storage(ctx, source_value, &machine_storage,
-                                                        &ignored_kind))
+                !oracle_machine_storage(ctx, source_value, &carrier_storage, &ignored_kind))
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
@@ -7793,12 +7712,6 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             if (operand_index == 0)
                 return oracle_array_tagged_carrier_storage(ctx, source_value, out_storage,
                                                            &ignored_kind) ||
-                       oracle_dynamic_array_intrinsic_storage(ctx, source_value, out_storage,
-                                                              &ignored_kind) ||
-                       oracle_dynamic_array_fill_scalar_storage(ctx, source_value, out_storage,
-                                                                &ignored_kind) ||
-                       oracle_array_hof_result_storage(ctx, source_value, out_storage,
-                                                       &ignored_kind) ||
                        oracle_direct_local_array_ref_parameter_place_storage(
                            ctx, source_value, out_storage, &ignored_kind);
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
@@ -7902,23 +7815,52 @@ static bool authority_add_obligation(CollectContext *ctx, const VerifyAuthority 
     return true;
 }
 
-/* Every way an `Array<T>` can reach a use site already holding its tagged
- * carrier: freshly built, read back out of the local it was bound to, handed in
- * as a by-value parameter, or returned by a direct-local call. Each use that
- * has to recognise an Array asks this one judgement instead of respelling the
- * list, so a carrier one use site admits can never be one another refuses.
+/* An `Array<T>` an operation in this function produced, so the operation that
+ * produced it is the allocation a receiver check can compare against: freshly
+ * built, handed back by an intrinsic, filled from a scalar, returned by a
+ * higher-order call, or returned by a direct-local call. */
+static bool oracle_array_produced_tagged_carrier_storage(const VerifyAuthority *ctx,
+                                                         uint32_t semantic_value,
+                                                         XrRep *out_storage,
+                                                         uint16_t *out_machine_kind) {
+    return oracle_dynamic_array_allocation_storage(ctx, semantic_value, out_storage,
+                                                   out_machine_kind) ||
+           oracle_dynamic_array_intrinsic_storage(ctx, semantic_value, out_storage,
+                                                  out_machine_kind) ||
+           oracle_dynamic_array_fill_scalar_storage(ctx, semantic_value, out_storage,
+                                                    out_machine_kind) ||
+           oracle_array_hof_result_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_dynamic_direct_local_array_result_storage(ctx, semantic_value, out_storage,
+                                                            out_machine_kind);
+}
+
+/* An `Array<T>` someone else owns, reaching this function in the tagged carrier:
+ * read back out of the shared cell it was bound to, or borrowed as a by-value
+ * parameter. Neither has a producing operation here, so a receiver check that
+ * needs one proves the type from the value's own row instead.
  *
  * The ref-place carrier is deliberately absent: it is a pointer, not a tagged
  * value, and the sites that accept it name it separately. */
+static bool oracle_array_borrowed_tagged_carrier_storage(const VerifyAuthority *ctx,
+                                                         uint32_t semantic_value,
+                                                         XrRep *out_storage,
+                                                         uint16_t *out_machine_kind) {
+    return oracle_dynamic_array_ref_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_direct_local_array_value_parameter_storage(ctx, semantic_value, out_storage,
+                                                             out_machine_kind);
+}
+
+/* Every way an `Array<T>` can reach a use site already holding its tagged
+ * carrier. Each use that has to recognise an Array asks this one judgement
+ * instead of respelling the list, so a carrier one use site admits can never be
+ * one another refuses; a use that also cares whether the Array was produced
+ * here asks the two halves separately rather than writing its own list. */
 static bool oracle_array_tagged_carrier_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                                 XrRep *out_storage, uint16_t *out_machine_kind) {
-    return oracle_dynamic_array_ref_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
-           oracle_dynamic_array_allocation_storage(ctx, semantic_value, out_storage,
-                                                   out_machine_kind) ||
-           oracle_direct_local_array_value_parameter_storage(ctx, semantic_value, out_storage,
-                                                             out_machine_kind) ||
-           oracle_dynamic_direct_local_array_result_storage(ctx, semantic_value, out_storage,
-                                                            out_machine_kind);
+    return oracle_array_produced_tagged_carrier_storage(ctx, semantic_value, out_storage,
+                                                        out_machine_kind) ||
+           oracle_array_borrowed_tagged_carrier_storage(ctx, semantic_value, out_storage,
+                                                        out_machine_kind);
 }
 
 /* Every way a String can reach a use site already holding its tagged carrier:
@@ -7940,6 +7882,54 @@ static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
                                                      out_machine_kind) ||
            oracle_direct_local_string_value_parameter_storage(ctx, semantic_value, out_storage,
                                                               out_machine_kind);
+}
+
+/* Every reference family this authority can name whose single storage fact is
+ * the tagged carrier. A use site that consumes a reference without caring which
+ * family it belongs to -- a refcount adjustment, a store into a shared cell, a
+ * print -- asks this one judgement instead of respelling the families, so a
+ * reference one such site admits can never be one another refuses.
+ *
+ * Native scalars are deliberately absent: a scalar has its own machine storage
+ * and the sites that also accept one name `oracle_machine_storage` themselves.
+ * The array ref-place carrier is absent for the same reason its own list omits
+ * it -- it is a pointer, not a tagged value.
+ *
+ * The channel and namespace families gate on the indexes their own oracles
+ * re-check internally, so no caller repeats the guard. */
+static bool oracle_tagged_reference_carrier_storage(const VerifyAuthority *ctx,
+                                                    uint32_t semantic_value, XrRep *out_storage,
+                                                    uint16_t *out_machine_kind) {
+    return oracle_string_tagged_carrier_storage(ctx, semantic_value, out_storage,
+                                                out_machine_kind) ||
+           oracle_array_tagged_carrier_storage(ctx, semantic_value, out_storage,
+                                               out_machine_kind) ||
+           oracle_dynamic_closure_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_dynamic_panic_catch_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_dynamic_stringbuilder_storage(ctx, semantic_value, out_storage,
+                                                out_machine_kind) ||
+           oracle_dynamic_string_runes_storage(ctx, semantic_value, out_storage,
+                                               out_machine_kind) ||
+           oracle_dynamic_string_slice_range_storage(ctx, semantic_value, out_storage,
+                                                     out_machine_kind) ||
+           oracle_fixed_array_backing_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_value_aggregate_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_dynamic_struct_object_storage(ctx, semantic_value, out_storage,
+                                                out_machine_kind) ||
+           oracle_struct_object_field_read_storage(ctx, semantic_value, out_storage,
+                                                   out_machine_kind) ||
+           oracle_dynamic_source_class_object_storage(ctx, semantic_value, out_storage,
+                                                      out_machine_kind) ||
+           oracle_dynamic_source_class_instance_storage(ctx, semantic_value, out_storage,
+                                                        out_machine_kind) ||
+           oracle_dynamic_json_namespace_value_storage(ctx, semantic_value, out_storage,
+                                                       out_machine_kind) ||
+           oracle_dynamic_direct_local_go_task_storage(ctx, semantic_value, out_storage,
+                                                       out_machine_kind) ||
+           oracle_dynamic_channel_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_source_namespace_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_native_module_namespace_storage(ctx, semantic_value, out_storage,
+                                                  out_machine_kind);
 }
 
 /* The storage a returned value carries. A scalar return keeps its own native

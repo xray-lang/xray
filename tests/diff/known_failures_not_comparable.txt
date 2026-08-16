@@ -148,9 +148,7 @@ tests/diff/cases/semantics/coro/task_transfer_return_native_class.xr
 tests/diff/cases/semantics/coro/work_queue_native_methods.xr
 tests/diff/cases/semantics/default_params/default_evaluated_per_call.xr
 tests/diff/cases/semantics/default_params/explicit_null_does_not_use_default.xr
-tests/diff/cases/semantics/destructure/object_rename.xr
 tests/diff/cases/semantics/destructure/tuple_fixed_width_unsigned.xr
-tests/diff/cases/semantics/evaluation_order/e1_e3_binary_operand_order.xr
 tests/diff/cases/semantics/evaluation_order/e2_call_argument_order.xr
 tests/diff/cases/semantics/evaluation_order/e4_short_circuit_points.xr
 tests/diff/cases/semantics/evaluation_order/e5_e6_assignment_order.xr
@@ -348,8 +346,6 @@ tests/diff/cases/semantics/ownership/stack_closure_cell_capture.xr
 tests/diff/cases/semantics/ownership/value_struct_alias_copy_param.xr
 tests/diff/cases/semantics/range_inclusive.xr
 tests/diff/cases/semantics/range_value_for_in.xr
-tests/diff/cases/semantics/side_effects/arg_order.xr
-tests/diff/cases/semantics/side_effects/short_circuit.xr
 tests/diff/cases/semantics/slice/array_expression_view.xr
 tests/diff/cases/semantics/slice/array_negative_both.xr
 tests/diff/cases/semantics/slice/array_negative_end.xr

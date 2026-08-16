@@ -318,11 +318,15 @@ slot, representation and call rows against them, and none of them reads
 another's conclusion. Every way a String can reach a use site already holding
 that tagged carrier -- a literal, a concatenation, a direct-local call result, a
 shared read, a by-value parameter -- is one list, so a carrier the length read
-admits cannot be one a call argument, an equality, or a retain refuses. These
-bindings do not authorize a `ref`, owned, or moved String parameter, a
-SOURCE_EXPORT String parameter, an optional String, a shared read of any other
-container this generation has not bound, or a String reached through a local
-copy, a print, or a slice receiver.
+admits cannot be one a call argument, an equality, a retain, a store into a
+shared cell, or a print refuses. A use that consumes a reference without caring
+which container it is -- a refcount adjustment, a store into a shared cell, a
+print -- asks one further list naming every reference family this authority can
+name, each in the tagged carrier its own family bound, so no such site can
+admit a reference another one refuses either. These bindings do not authorize a
+`ref`, owned, or moved String parameter, a SOURCE_EXPORT String parameter, an
+optional String, a shared read of any other container this generation has not
+bound, or a String reached through a local copy or a slice receiver.
 
 Representation selection keeps every reference-capable container -- `Array<T>`
 and `string` alike -- in the tagged carrier at every boundary it crosses:
@@ -590,7 +594,7 @@ anchor-sha256: src/aot/xaot_prepare.c 77d5bce886e498b736557e06ef6e9916e54b27d42c
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 85882366777e3aa0b7d19b3a77216aef18883f81e4bd4e7b33bea75f432e9aa8
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 23a3c49d3e68b57bfeedba8ab8a2ba7e94892207bb7f1a396f2747e418d2e00b
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 092c181dd8674dc8ca75f8328f4e457d1c20a1fb2aa713ad685c428838e49e2d
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
