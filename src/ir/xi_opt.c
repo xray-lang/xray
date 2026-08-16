@@ -1845,8 +1845,14 @@ static XrRep sr_type_native_boundary_rep(const struct XrType *type) {
     switch (type->kind) {
         case XR_KIND_POINTER:
             return XR_REP_RAWPTR;
-        case XR_KIND_STRING:
+        /* An Array's one storage fact is the tagged outer value, the same
+         * answer the call-place boundary already gives it. A native pointer
+         * here would be boxed again at every tagged use and would contradict
+         * the single dynamic slot the frozen storage rows name for it, so the
+         * two boundaries agree instead of disagreeing by kind. */
         case XR_KIND_ARRAY:
+            return XR_REP_TAGGED;
+        case XR_KIND_STRING:
         case XR_KIND_SLICE:
         case XR_KIND_MAP:
         case XR_KIND_SET:

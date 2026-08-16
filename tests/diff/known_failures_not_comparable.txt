@@ -333,10 +333,8 @@ tests/diff/cases/semantics/ownership/in_function_param_copy_escape_allowed.xr
 tests/diff/cases/semantics/ownership/in_function_param_method_copy_escape_allowed.xr
 tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr
 tests/diff/cases/semantics/ownership/in_method_wrapper_param_copy_escape_allowed.xr
-tests/diff/cases/semantics/ownership/in_mutator_scalar_from_borrow.xr
 tests/diff/cases/semantics/ownership/in_readonly_user_method_names.xr
 tests/diff/cases/semantics/ownership/in_ref_heap_borrows.xr
-tests/diff/cases/semantics/ownership/in_return_scalar_from_borrow.xr
 tests/diff/cases/semantics/ownership/in_store_scalar_from_borrow.xr
 tests/diff/cases/semantics/ownership/loop_ref_array_pop_backedge.xr
 tests/diff/cases/semantics/ownership/move_into_go.xr

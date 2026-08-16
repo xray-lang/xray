@@ -302,6 +302,16 @@ static bool oracle_dynamic_array_fill_scalar_storage(const VerifyAuthority *ctx,
                                                      uint16_t *out_machine_kind);
 static bool oracle_array_hof_result_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                             XrRep *out_storage, uint16_t *out_machine_kind);
+static bool oracle_array_tagged_carrier_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                                XrRep *out_storage, uint16_t *out_machine_kind);
+static bool oracle_direct_local_array_value_parameter_storage(const VerifyAuthority *ctx,
+                                                              uint32_t semantic_value,
+                                                              XrRep *out_storage,
+                                                              uint16_t *out_machine_kind);
+static bool oracle_dynamic_direct_local_array_result_storage(const VerifyAuthority *ctx,
+                                                             uint32_t semantic_value,
+                                                             XrRep *out_storage,
+                                                             uint16_t *out_machine_kind);
 
 static bool verify_charge_work(VerifyAuthority *ctx, uint64_t amount) {
     if (!ctx || amount > XR_AOT_REP_VERIFY_MAX_WORK - ctx->work) {
@@ -1096,15 +1106,64 @@ static bool aot_array_ref_type_is_exact(const XrSemanticPlan *semantic, uint32_t
     }
 }
 
-static bool aot_array_ref_parameter_is_exact(const XrSemanticPlan *semantic,
-                                             const XrSemanticParameterRecord *parameter,
-                                             uint8_t *storage) {
+/* A borrowed `Array<T>` parameter in whichever passing mode was declared. Both
+ * modes borrow the caller's allocation and release nothing; they differ only in
+ * whether the callee is handed a pointer to the caller's cell (ref, so it may
+ * rebind) or the tagged value itself. One judgement with the mode as its
+ * parameter, so the two cannot drift apart. */
+static bool aot_array_parameter_is_exact(const XrSemanticPlan *semantic,
+                                         const XrSemanticParameterRecord *parameter, uint8_t mode,
+                                         uint8_t *storage) {
     return parameter && parameter->function < xr_semantic_plan_function_count(semantic) &&
-           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == XR_PARAM_REF &&
+           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == mode &&
            parameter->ownership == XI_OWN_BORROWED &&
            parameter->transfer_mode == XR_TRANSFER_SHARE &&
            (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 && parameter->reserved == 0 &&
            aot_array_ref_type_is_exact(semantic, parameter->type, storage);
+}
+
+static bool aot_array_ref_parameter_is_exact(const XrSemanticPlan *semantic,
+                                             const XrSemanticParameterRecord *parameter,
+                                             uint8_t *storage) {
+    return aot_array_parameter_is_exact(semantic, parameter, XR_PARAM_REF, storage);
+}
+
+static bool aot_array_value_parameter_is_exact(const XrSemanticPlan *semantic,
+                                               const XrSemanticParameterRecord *parameter,
+                                               uint8_t *storage) {
+    return aot_array_parameter_is_exact(semantic, parameter, XR_PARAM_READ, storage);
+}
+
+/* A direct-local call that hands back a freshly owned `Array<T>`. The container
+ * is a dynamic value, so the result is a transfer of the outer tagged value,
+ * exactly as an owned String result is. */
+static bool aot_direct_local_array_result_is_exact(const XrSemanticPlan *semantic,
+                                                   uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, operation_index);
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!semantic || !operation ||
+        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
+        operation->return_complete != 1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        !aot_array_ref_type_is_exact(semantic, operation->result_type, &storage) ||
+        storage == XR_TARGET_ARRAY_STORAGE_NONE)
+        return false;
+    size_t target_count = xr_semantic_plan_call_target_count(semantic);
+    const XrSemanticFunctionRecord *callee = NULL;
+    for (size_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, i);
+        if (!target || target->operation != operation_index ||
+            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            continue;
+        if (callee)
+            return false;
+        callee = xr_semantic_plan_function(semantic, target->function);
+        if (!callee)
+            return false;
+    }
+    return callee && callee->return_type == operation->result_type &&
+           callee->return_parameter == -1 && callee->return_provenance == XR_SEM_RETURN_OWNED;
 }
 
 static bool aot_array_ref_shared_value_is_exact(const XrSemanticPlan *semantic,
@@ -5192,6 +5251,10 @@ static bool oracle_array_element_access_is_exact(const VerifyAuthority *ctx,
     const XrSemanticOperandRecord *index = container + 1;
     XrRep container_storage = XR_REP_TAGGED;
     uint16_t container_kind = XR_MACHINE_REP_COUNT;
+    /* An owned receiver is one an operation in this function produced, so the
+     * operation that produced it is the allocation the checks below compare
+     * against. A direct-local call that returns an Array is such an operation:
+     * the transfer lands in the caller's own temporary. */
     bool owned_array =
         oracle_dynamic_array_allocation_storage(ctx, container->value, &container_storage,
                                                 &container_kind) ||
@@ -5199,9 +5262,18 @@ static bool oracle_array_element_access_is_exact(const VerifyAuthority *ctx,
                                                &container_kind) ||
         oracle_dynamic_array_fill_scalar_storage(ctx, container->value, &container_storage,
                                                  &container_kind) ||
-        oracle_array_hof_result_storage(ctx, container->value, &container_storage, &container_kind);
+        oracle_array_hof_result_storage(ctx, container->value, &container_storage,
+                                        &container_kind) ||
+        oracle_dynamic_direct_local_array_result_storage(ctx, container->value, &container_storage,
+                                                         &container_kind);
+    /* A borrowed receiver names an allocation someone else owns: the cell a
+     * ref parameter points at, a shared read of a local, or the tagged value a
+     * by-value parameter was handed. None of them has a producing operation
+     * here, so the type is proved from the receiver's own row. */
     bool borrowed_array =
         !owned_array && (oracle_direct_local_array_ref_parameter_place_storage(
+                             ctx, container->value, &container_storage, &container_kind) ||
+                         oracle_direct_local_array_value_parameter_storage(
                              ctx, container->value, &container_storage, &container_kind) ||
                          oracle_dynamic_array_ref_storage(ctx, container->value, &container_storage,
                                                           &container_kind));
@@ -5454,16 +5526,14 @@ static bool oracle_length_read_is_exact(const VerifyAuthority *ctx, uint32_t ope
     return container->role == XR_SEM_OPERAND_VALUE && container->parameter == -1 &&
            container->flags == 0 && container->ownership_action == XR_SEM_OPERAND_BORROW &&
            container->value < ctx->value_count &&
-           (oracle_dynamic_array_allocation_storage(ctx, container->value, &container_storage,
-                                                    &container_kind) ||
+           (oracle_array_tagged_carrier_storage(ctx, container->value, &container_storage,
+                                                &container_kind) ||
             oracle_dynamic_array_intrinsic_storage(ctx, container->value, &container_storage,
                                                    &container_kind) ||
             oracle_dynamic_array_fill_scalar_storage(ctx, container->value, &container_storage,
                                                      &container_kind) ||
             oracle_array_hof_result_storage(ctx, container->value, &container_storage,
                                             &container_kind) ||
-            oracle_dynamic_array_ref_storage(ctx, container->value, &container_storage,
-                                             &container_kind) ||
             oracle_dynamic_string_literal_storage(ctx, container->value, &container_storage,
                                                   &container_kind) ||
             oracle_dynamic_string_concat_result_storage(ctx, container->value, &container_storage,
@@ -5841,6 +5911,113 @@ static bool oracle_direct_local_array_ref_parameter_place_storage(const VerifyAu
         return false;
     *out_storage = XR_REP_RAWPTR;
     *out_machine_kind = XR_MACHINE_REP_RAW_PTR;
+    return true;
+}
+
+/* An `Array<T>` parameter handed over by value. It borrows the caller's
+ * allocation for the extent of the call, so it is bound to the same borrowed
+ * tagged carrier a shared read of that array gets rather than to the pointer a
+ * ref parameter needs. */
+static bool oracle_direct_local_array_value_parameter_storage(const VerifyAuthority *ctx,
+                                                              uint32_t semantic_value,
+                                                              XrRep *out_storage,
+                                                              uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t parameter_index = ctx->parameter_by_value[semantic_value];
+    const XrSemanticParameterRecord *parameter =
+        parameter_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
+            : NULL;
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep) : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    if (!parameter || !binding || !register_rep || !memory_rep || !slot ||
+        !aot_array_value_parameter_is_exact(ctx->semantic, parameter, &storage) ||
+        parameter->value != semantic_value || register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != XR_SEMANTIC_INDEX_NONE ||
+        slot->function != parameter->function || slot->role != XR_TARGET_SLOT_PARAMETER ||
+        slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+/* The `Array<T>` a direct-local call hands back. The transfer lands in a
+ * temporary the caller owns, so the row it is rebuilt against is the owned
+ * dynamic one an owned String result gets. */
+static bool oracle_dynamic_direct_local_array_result_storage(const VerifyAuthority *ctx,
+                                                             uint32_t semantic_value,
+                                                             XrRep *out_storage,
+                                                             uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !aot_direct_local_array_result_is_exact(ctx->semantic, operation_index))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep) : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index || slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY || slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep || slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
     return true;
 }
 
@@ -6577,6 +6754,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
         if (oracle_direct_local_array_ref_parameter_place_storage(ctx, semantic_value, out_storage,
                                                                   out_machine_kind))
             return true;
+        if (oracle_direct_local_array_value_parameter_storage(ctx, semantic_value, out_storage,
+                                                              out_machine_kind))
+            return true;
         if (oracle_dynamic_source_class_parameter_storage(ctx, semantic_value, out_storage,
                                                           out_machine_kind))
             return true;
@@ -6839,6 +7019,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
              * construction returns is the other, and it names its own family. */
             if (oracle_dynamic_direct_local_string_result_storage(ctx, semantic_value, out_storage,
                                                                   out_machine_kind))
+                return true;
+            if (oracle_dynamic_direct_local_array_result_storage(ctx, semantic_value, out_storage,
+                                                                 out_machine_kind))
                 return true;
             if (oracle_dynamic_source_class_instance_storage(ctx, semantic_value, out_storage,
                                                              out_machine_kind))
@@ -7110,8 +7293,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                     ctx, source_value, &literal_storage, &ignored_kind) &&
                 !oracle_dynamic_string_concat_result_storage(ctx, source_value, &literal_storage,
                                                              &ignored_kind) &&
-                !oracle_dynamic_array_allocation_storage(ctx, source_value, &literal_storage,
-                                                         &ignored_kind) &&
+                !oracle_array_tagged_carrier_storage(ctx, source_value, &literal_storage,
+                                                     &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(ctx, source_value, &literal_storage,
                                                       &ignored_kind) &&
                 !oracle_dynamic_array_intrinsic_storage(ctx, source_value, &literal_storage,
@@ -7120,8 +7303,6 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                                                           &ignored_kind) &&
                 !oracle_array_hof_result_storage(ctx, source_value, &literal_storage,
                                                  &ignored_kind) &&
-                !oracle_dynamic_array_ref_storage(ctx, source_value, &literal_storage,
-                                                  &ignored_kind) &&
                 !oracle_dynamic_string_runes_storage(ctx, source_value, &literal_storage,
                                                      &ignored_kind) &&
                 !oracle_dynamic_string_slice_range_storage(ctx, source_value, &literal_storage,
@@ -7170,16 +7351,14 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                     ctx, source_value, &machine_storage, &ignored_kind) &&
                 !oracle_dynamic_string_concat_result_storage(ctx, source_value, &machine_storage,
                                                              &ignored_kind) &&
-                !oracle_dynamic_array_allocation_storage(ctx, source_value, &machine_storage,
-                                                         &ignored_kind) &&
+                !oracle_array_tagged_carrier_storage(ctx, source_value, &machine_storage,
+                                                     &ignored_kind) &&
                 !oracle_dynamic_array_intrinsic_storage(ctx, source_value, &machine_storage,
                                                         &ignored_kind) &&
                 !oracle_dynamic_array_fill_scalar_storage(ctx, source_value, &machine_storage,
                                                           &ignored_kind) &&
                 !oracle_array_hof_result_storage(ctx, source_value, &machine_storage,
                                                  &ignored_kind) &&
-                !oracle_dynamic_array_ref_storage(ctx, source_value, &machine_storage,
-                                                  &ignored_kind) &&
                 !oracle_dynamic_stringbuilder_storage(ctx, source_value, &machine_storage,
                                                       &ignored_kind) &&
                 !oracle_dynamic_string_runes_storage(ctx, source_value, &machine_storage,
@@ -7335,11 +7514,13 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             }
             /* A class instance argument has no native scalar storage a policy
              * could prefer: it is the tagged carrier its own storage family
-             * bound, whether the caller computed it or received it. */
+             * bound, whether the caller computed it or received it. An Array
+             * handed over by value is the same case for the same reason. */
             if (oracle_dynamic_source_class_instance_storage(ctx, source_value, out_storage,
                                                              &ignored_kind) ||
                 oracle_dynamic_source_class_parameter_storage(ctx, source_value, out_storage,
-                                                              &ignored_kind))
+                                                              &ignored_kind) ||
+                oracle_array_tagged_carrier_storage(ctx, source_value, out_storage, &ignored_kind))
                 return true;
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_CALL_METHOD:
@@ -7584,8 +7765,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             if (!oracle_array_element_access_is_exact(ctx, operation_index))
                 return false;
             if (operand_index == 0)
-                return oracle_dynamic_array_allocation_storage(ctx, source_value, out_storage,
-                                                               &ignored_kind) ||
+                return oracle_array_tagged_carrier_storage(ctx, source_value, out_storage,
+                                                           &ignored_kind) ||
                        oracle_dynamic_array_intrinsic_storage(ctx, source_value, out_storage,
                                                               &ignored_kind) ||
                        oracle_dynamic_array_fill_scalar_storage(ctx, source_value, out_storage,
@@ -7593,9 +7774,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                        oracle_array_hof_result_storage(ctx, source_value, out_storage,
                                                        &ignored_kind) ||
                        oracle_direct_local_array_ref_parameter_place_storage(
-                           ctx, source_value, out_storage, &ignored_kind) ||
-                       oracle_dynamic_array_ref_storage(ctx, source_value, out_storage,
-                                                        &ignored_kind);
+                           ctx, source_value, out_storage, &ignored_kind);
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_LOAD_FIELD:
             /* The receiver is the tagged instance the construction family
@@ -7697,6 +7876,25 @@ static bool authority_add_obligation(CollectContext *ctx, const VerifyAuthority 
     return true;
 }
 
+/* Every way an `Array<T>` can reach a use site already holding its tagged
+ * carrier: freshly built, read back out of the local it was bound to, handed in
+ * as a by-value parameter, or returned by a direct-local call. Each use that
+ * has to recognise an Array asks this one judgement instead of respelling the
+ * list, so a carrier one use site admits can never be one another refuses.
+ *
+ * The ref-place carrier is deliberately absent: it is a pointer, not a tagged
+ * value, and the sites that accept it name it separately. */
+static bool oracle_array_tagged_carrier_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                                XrRep *out_storage, uint16_t *out_machine_kind) {
+    return oracle_dynamic_array_ref_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_dynamic_array_allocation_storage(ctx, semantic_value, out_storage,
+                                                   out_machine_kind) ||
+           oracle_direct_local_array_value_parameter_storage(ctx, semantic_value, out_storage,
+                                                             out_machine_kind) ||
+           oracle_dynamic_direct_local_array_result_storage(ctx, semantic_value, out_storage,
+                                                            out_machine_kind);
+}
+
 /* The storage a returned value carries. A scalar return keeps its own native
  * storage, and the reference returns this authority can name are tagged: a
  * closure, a string literal, the receiver a constructor hands back, and a
@@ -7718,7 +7916,8 @@ static bool oracle_return_storage(const VerifyAuthority *ctx, uint32_t value, Xr
            oracle_dynamic_source_class_parameter_storage(ctx, value, out_storage,
                                                          out_machine_kind) ||
            oracle_dynamic_direct_local_string_result_storage(ctx, value, out_storage,
-                                                             out_machine_kind);
+                                                             out_machine_kind) ||
+           oracle_array_tagged_carrier_storage(ctx, value, out_storage, out_machine_kind);
 }
 
 static bool authority_collect_obligations_indexed(CollectContext *ctx,

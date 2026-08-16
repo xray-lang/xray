@@ -277,6 +277,23 @@ create or repair this authority. This does not authorize owned/moved Array
 parameters, SOURCE_EXPORT parameters, another container, or general pointer
 ABI inference.
 
+The same generation binds two further exact direct-local `Array<T>` boundaries,
+and both stay in the tagged carrier instead of taking the pointer level a ref
+parameter needs. A borrowed by-value parameter shares the caller's allocation
+for the extent of the call, so it is bound to a borrowed dynamic parameter slot
+and states no place, no element storage, and no addressability of its own; the
+caller may hold that allocation owned or borrowed, so the two sides agree on
+representation and are allowed to differ in ownership alone. A call result is a
+transfer, so it is bound to an owned dynamic temporary in the caller's own
+frame, exactly as an owned String result is. SemanticPlan, TargetPlan, and
+representation refinement each rebuild the parameter mode, ownership, transfer,
+and element storage independently rather than reading one another's conclusion.
+Representation selection keeps an Array tagged at every boundary it crosses --
+parameter, argument, and result -- so no compensating BOX/UNBOX adapter is valid
+on any of them. Neither boundary authorizes an owned or moved Array parameter, a
+ref result, a SOURCE_EXPORT parameter or result, a non-scalar element type, or
+another container.
+
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
 
@@ -536,7 +553,7 @@ anchor-sha256: src/aot/xaot_prepare.c 77d5bce886e498b736557e06ef6e9916e54b27d42c
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
 anchor-sha256: src/aot/xaot_bundle.c 37448526b025ded5537290397a924a6d887f7d9839a4f6758f3306c215f7be34
 anchor-sha256: src/aot/xaot_verify.c 1ebf4bf69fe9938067c7b9fe10cfdd0e90c71d3c0d3f75a0129854b1d509beff
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 167cb9d8fda7ed88101ce2962afa9f847d700559807f5e9d8cd2ed394c8f56ca
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 25292ae5579c47ce2272d7aea1f7cad7e9afa1d213efa78feae4a014fcefee27
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c d916f37caa6c7b39245526529555728e551048af64fb559cf10a71b49c439ff7
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
@@ -561,7 +578,7 @@ anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 00430eeea7c3d16774b427dba6
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 375af2e4b45271d06e6ce6ed798be2e6f9f8786c25e68d38ea3f4ca6f41160c6
 anchor-sha256: src/aot/xi_cgen.c 6792ca08b6332dc98cd716273c848a2fdce26b8b718a37a86ddf26b701c8cbc1
-anchor-sha256: src/ir/xi_opt.c ee92486afbc1bd51f537c6f78b0da9a65310bd8eb98fa3e63f351bae5ec586c3
+anchor-sha256: src/ir/xi_opt.c 78cc805b9982a3daf9c704795cdde77f2ba5fd36323a3f481c2f4ab276ec1377
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
 anchor-sha256: src/aot/xrt_core_freestanding.h 4637d9be259b16363f74d330ad0bc3d016c71f588d418e71ed9a57cffcf6ecfb
 anchor-sha256: src/aot/xrt_method.h 49b124e154a48bc0401fe67e6e3feba34ec57d7791dfb0f8afbc56a3aa9ca06e

@@ -1885,14 +1885,60 @@ static bool append_array_layout_intent(XrTargetPlanBuilder *builder, uint32_t se
     return fail(error, error_size, "XR_TARGET_1002", "Array layout intent is missing");
 }
 
-static bool semantic_direct_local_array_ref_parameter_is_exact(
-    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter, uint8_t *storage) {
+/* A borrowed `Array<T>` parameter, in whichever of the two passing modes the
+ * declaration asked for.
+ *
+ * Both modes borrow, and for the same reason: an Array is a reference-capable
+ * container, so the callee sees the caller's allocation either way and releases
+ * nothing. The modes differ only in what the callee may do to the binding. A
+ * ref parameter names the caller's cell and may rebind it, so it arrives as a
+ * pointer to that cell; a by-value parameter arrives as the tagged value
+ * itself. Everything else the two demand of the declaration is identical, which
+ * is why they are one judgement with the mode as its parameter rather than two
+ * that could drift apart. */
+static bool
+semantic_direct_local_array_parameter_is_exact(const XrSemanticPlan *plan,
+                                               const XrSemanticParameterRecord *parameter,
+                                               uint8_t mode, uint8_t *storage) {
     return parameter && parameter->function < xr_semantic_plan_function_count(plan) &&
-           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == XR_PARAM_REF &&
+           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == mode &&
            parameter->ownership == XI_OWN_BORROWED &&
            parameter->transfer_mode == XR_TRANSFER_SHARE &&
            (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 && parameter->reserved == 0 &&
            semantic_direct_local_array_ref_type_is_exact(plan, parameter->type, storage);
+}
+
+static bool semantic_direct_local_array_ref_parameter_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter, uint8_t *storage) {
+    return semantic_direct_local_array_parameter_is_exact(plan, parameter, XR_PARAM_REF, storage);
+}
+
+static bool semantic_direct_local_array_value_parameter_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter, uint8_t *storage) {
+    return semantic_direct_local_array_parameter_is_exact(plan, parameter, XR_PARAM_READ, storage);
+}
+
+/* A direct-local call that returns a freshly owned `Array<T>`.
+ *
+ * The container is a dynamic value, not an aggregate slot the caller owns, so
+ * the result is a transfer: the callee hands back the allocation and the caller
+ * takes ownership of the outer tagged value, exactly as it does for an owned
+ * String. The return must be fresh and whole -- an aliased or parameter-
+ * forwarded return would hand back a borrow whose extent this plan cannot
+ * state, so it stays fail closed. */
+static bool semantic_direct_local_array_result_is_exact(const XrSemanticPlan *plan,
+                                                        const XrSemanticOperationRecord *operation,
+                                                        const XrSemanticFunctionRecord *callee) {
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    return plan && operation && callee &&
+           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
+           operation->result_type == callee->return_type &&
+           operation->result_value != XR_SEMANTIC_INDEX_NONE &&
+           operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
+           operation->return_complete == 1 && operation->return_provenance == XR_SEM_RETURN_OWNED &&
+           callee->return_parameter == -1 && callee->return_provenance == XR_SEM_RETURN_OWNED &&
+           semantic_direct_local_array_ref_type_is_exact(plan, operation->result_type, &storage) &&
+           storage != XR_TARGET_ARRAY_STORAGE_NONE;
 }
 
 static bool
@@ -4472,10 +4518,26 @@ static bool builder_add_array_hof_result_storage(XrTargetPlanBuilder *builder, c
     return true;
 }
 
-static bool note_direct_local_array_ref_storage(
+/* Which carrier an Array occupies at a direct-local call boundary. The role a
+ * slot plays does not decide this: a by-value parameter and a ref parameter are
+ * both XR_TARGET_SLOT_PARAMETER yet arrive in different carriers, and a call
+ * result and a shared read are both temporaries yet differ in ownership. Naming
+ * the carrier separately is what keeps those four cases from being inferred
+ * from a role that cannot tell them apart. */
+typedef enum XrTargetArrayBoundaryCarrier {
+    /* The tagged outer value, borrowed: one allocation shared for the extent
+     * of the borrow, with nothing to release. */
+    XR_TARGET_ARRAY_CARRIER_BORROWED_VALUE = 0,
+    /* A pointer to the caller's cell, so a ref callee can rebind it. */
+    XR_TARGET_ARRAY_CARRIER_REF_PLACE,
+    /* The tagged outer value, owned: a transfer the caller must release. */
+    XR_TARGET_ARRAY_CARRIER_OWNED_VALUE,
+} XrTargetArrayBoundaryCarrier;
+
+static bool note_direct_local_array_boundary_storage(
     XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis, uint32_t semantic_value,
     uint32_t semantic_type, uint32_t semantic_function, uint32_t semantic_operation, uint8_t role,
-    XrStableId source_identity, char *error, size_t error_size) {
+    uint8_t carrier, XrStableId source_identity, char *error, size_t error_size) {
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
     bool parameter = role == XR_TARGET_SLOT_PARAMETER;
     if (!semantic_direct_local_array_ref_type_is_exact(builder->semantic_plan, semantic_type,
@@ -4487,19 +4549,29 @@ static bool note_direct_local_array_ref_storage(
          semantic_operation >= xr_semantic_plan_operation_count(builder->semantic_plan)) ||
         analysis->defined_values[semantic_value])
         return fail(error, error_size, "XR_TARGET_1001",
-                    "direct-local Array ref parameter storage authority is incomplete");
+                    "direct-local Array boundary storage authority is incomplete");
     XrTargetMachineRepRecord rep;
     XrTargetMachineRepRecord layout_rep;
     const XrTargetMachineFacts *facts = xr_target_profile_machine_facts(builder->profile);
-    bool rep_exact = parameter ? make_machine_rep(facts, XR_MACHINE_REP_RAW_PTR, &rep)
-                               : make_borrowed_dynamic_value_rep(facts, &rep);
-    if (parameter)
-        rep.ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    bool rep_exact;
+    switch (carrier) {
+        case XR_TARGET_ARRAY_CARRIER_REF_PLACE:
+            rep_exact = make_machine_rep(facts, XR_MACHINE_REP_RAW_PTR, &rep);
+            if (rep_exact)
+                rep.ownership = XR_TARGET_OWNERSHIP_BORROWED;
+            break;
+        case XR_TARGET_ARRAY_CARRIER_OWNED_VALUE:
+            rep_exact = make_dynamic_value_rep(facts, &rep);
+            break;
+        default:
+            rep_exact = make_borrowed_dynamic_value_rep(facts, &rep);
+            break;
+    }
     if (!rep_exact || !make_borrowed_dynamic_value_rep(facts, &layout_rep) ||
         !append_rep_intent(builder, &rep, error, error_size) ||
         !append_rep_intent(builder, &layout_rep, error, error_size))
         return fail(error, error_size, "XR_TARGET_1001",
-                    "target profile cannot materialize borrowed Array ref storage");
+                    "target profile cannot materialize Array boundary storage");
     XrStableId slot_identity;
     if (!make_slot_identity(builder->semantic_plan, semantic_function, role, source_identity,
                             XR_SEMANTIC_INDEX_NONE, &slot_identity))
@@ -4572,11 +4644,45 @@ static bool builder_add_direct_local_array_ref_argument_storage(XrTargetPlanBuil
             !semantic_array_shared_read_is_exact(builder->semantic_plan, read->result_value,
                                                  read->result_type, read->function))
             continue;
-        valid = note_direct_local_array_ref_storage(
+        valid = note_direct_local_array_boundary_storage(
             builder, &analysis, read->result_value, read->result_type, read->function, i,
-            XR_TARGET_SLOT_TEMPORARY, read->id, error, error_size);
+            XR_TARGET_SLOT_TEMPORARY, XR_TARGET_ARRAY_CARRIER_BORROWED_VALUE, read->id, error,
+            error_size);
+    }
+    /* An Array a direct-local call hands back. The result is a transfer, so it
+     * is the one Array carrier in this family that owns what it holds. */
+    for (uint32_t i = 0; valid && i < read_count; i++) {
+        const XrSemanticOperationRecord *call =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!call || call->result_value == XR_SEMANTIC_INDEX_NONE ||
+            call->result_value >= analysis.total_values ||
+            analysis.defined_values[call->result_value] ||
+            !semantic_direct_local_array_result_is_exact(
+                builder->semantic_plan, call,
+                semantic_direct_local_callee_for_operation(builder->semantic_plan, i)))
+            continue;
+        valid = note_direct_local_array_boundary_storage(
+            builder, &analysis, call->result_value, call->result_type, call->function, i,
+            XR_TARGET_SLOT_TEMPORARY, XR_TARGET_ARRAY_CARRIER_OWNED_VALUE, call->id, error,
+            error_size);
     }
     uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
+    /* An Array parameter passed by value. It shares the caller's allocation for
+     * the extent of the call, so it borrows the tagged value it is handed and
+     * needs no place of its own. */
+    for (uint32_t i = 0; valid && i < parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(builder->semantic_plan, i);
+        uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        if (!semantic_direct_local_array_value_parameter_is_exact(builder->semantic_plan, parameter,
+                                                                  &storage) ||
+            parameter->value >= analysis.total_values || analysis.defined_values[parameter->value])
+            continue;
+        valid = note_direct_local_array_boundary_storage(
+            builder, &analysis, parameter->value, parameter->type, parameter->function,
+            XR_SEMANTIC_INDEX_NONE, XR_TARGET_SLOT_PARAMETER,
+            XR_TARGET_ARRAY_CARRIER_BORROWED_VALUE, parameter->id, error, error_size);
+    }
     for (uint32_t i = 0; valid && i < parameter_count; i++) {
         const XrSemanticParameterRecord *parameter =
             xr_semantic_plan_parameter(builder->semantic_plan, i);
@@ -4584,9 +4690,10 @@ static bool builder_add_direct_local_array_ref_argument_storage(XrTargetPlanBuil
         if (!semantic_direct_local_array_ref_parameter_is_exact(builder->semantic_plan, parameter,
                                                                 &storage))
             continue;
-        valid = note_direct_local_array_ref_storage(
+        valid = note_direct_local_array_boundary_storage(
             builder, &analysis, parameter->value, parameter->type, parameter->function,
-            XR_SEMANTIC_INDEX_NONE, XR_TARGET_SLOT_PARAMETER, parameter->id, error, error_size);
+            XR_SEMANTIC_INDEX_NONE, XR_TARGET_SLOT_PARAMETER, XR_TARGET_ARRAY_CARRIER_REF_PLACE,
+            parameter->id, error, error_size);
         uint32_t operation_count =
             (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
         for (uint32_t operation_index = 0; valid && operation_index < operation_count;
@@ -4604,9 +4711,10 @@ static bool builder_add_direct_local_array_ref_argument_storage(XrTargetPlanBuil
                 break;
             }
             if (!analysis.defined_values[load->result_value])
-                valid = note_direct_local_array_ref_storage(
+                valid = note_direct_local_array_boundary_storage(
                     builder, &analysis, load->result_value, load->result_type, load->function,
-                    operation_index, XR_TARGET_SLOT_TEMPORARY, load->id, error, error_size);
+                    operation_index, XR_TARGET_SLOT_TEMPORARY,
+                    XR_TARGET_ARRAY_CARRIER_BORROWED_VALUE, load->id, error, error_size);
         }
     }
     uint32_t operand_count = 0;
@@ -4679,9 +4787,10 @@ static bool builder_add_direct_local_array_ref_argument_storage(XrTargetPlanBuil
                     break;
                 }
                 if (!analysis.defined_values[load->result_value])
-                    valid = note_direct_local_array_ref_storage(
+                    valid = note_direct_local_array_boundary_storage(
                         builder, &analysis, load->result_value, load->result_type, load->function,
-                        operation_index, XR_TARGET_SLOT_TEMPORARY, load->id, error, error_size);
+                        operation_index, XR_TARGET_SLOT_TEMPORARY,
+                        XR_TARGET_ARRAY_CARRIER_BORROWED_VALUE, load->id, error, error_size);
             }
         }
     }
@@ -8126,6 +8235,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
         (!call_type_is_exact_scalar(plan, operation->result_type) &&
          !semantic_direct_local_string_result_is_exact(plan, operation, callee) &&
          !xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee) &&
+         !semantic_direct_local_array_result_is_exact(plan, operation, callee) &&
          !xr_semantic_direct_local_aggregate_result_is_exact(plan, operation, callee)))
         return fail(error, error_size, "XR_TARGET_1003",
                     "direct-local signature or result storage is incomplete");
@@ -8148,7 +8258,8 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
         .result_mode = XR_TARGET_CALL_VALUE,
         .result_ownership =
             (semantic_direct_local_string_result_is_exact(plan, operation, callee) ||
-             xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee))
+             xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee) ||
+             semantic_direct_local_array_result_is_exact(plan, operation, callee))
                 ? XR_TARGET_CALL_RETURN_OWNED
                 : XR_TARGET_CALL_NONE,
         .calling_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
@@ -8196,20 +8307,31 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
         bool exact_class_instance = parameter && parameter->type == operand->type &&
                                     xr_semantic_class_argument_source_class(
                                         plan, parameter_index) != XR_SEMANTIC_INDEX_NONE;
+        /* An Array handed over by value. It travels the plain argument path a
+         * scalar takes -- the tagged value is copied, the allocation is shared
+         * -- so it states no place and no element storage of its own. Whatever
+         * produced the value the caller names, a construction or a shared read,
+         * was bound by the family that owns that shape. */
+        uint8_t array_value_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        bool exact_array_value = parameter && parameter->type == operand->type &&
+                                 semantic_direct_local_array_value_parameter_is_exact(
+                                     plan, parameter, &array_value_storage) &&
+                                 operand->ownership_action == XR_SEM_OPERAND_BORROW &&
+                                 operand->transfer_mode == XR_TRANSFER_SHARE;
         if (!parameter || operand->role != XR_SEM_OPERAND_ARGUMENT ||
             operand->parameter != (int16_t) ordinal || operand->type != parameter->type ||
             operand->parameter_mode != parameter->mode ||
             operand->transfer_mode != parameter->transfer_mode ||
             (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
             (!exact_scalar && !exact_u8_slice && !exact_unit_enum && !exact_adt_enum &&
-             !exact_class_instance && !exact_array_ref) ||
+             !exact_class_instance && !exact_array_ref && !exact_array_value) ||
             (!exact_array_ref &&
              (parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
               (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0)) ||
             (parameter->ownership != XI_OWN_NONE &&
              !(exact_adt_enum && parameter->ownership == XI_OWN_OWNED) &&
              !((exact_u8_slice || exact_unit_enum || exact_adt_enum || exact_class_instance ||
-                exact_array_ref) &&
+                exact_array_ref || exact_array_value) &&
                parameter->ownership == XI_OWN_BORROWED)))
             return fail(error, error_size, "XR_TARGET_1003",
                         "direct-local argument contract needs unsupported storage or ownership");
@@ -10658,6 +10780,35 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                     XR_TARGET_OWNERSHIP_BORROWED &&
                 materialized->machine_reps[callee->memory_rep].ownership ==
                     XR_TARGET_OWNERSHIP_BORROWED;
+            /* The callee always borrows an Array it is handed by value, while
+             * the caller holds whatever its own producer bound: a freshly built
+             * array is owned, a shared read of a local is borrowed. So the two
+             * sides share one representation and are allowed to differ in
+             * ownership alone. */
+            uint8_t exact_array_value_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+            bool array_value_borrow_boundary =
+                parameter &&
+                semantic_direct_local_array_value_parameter_is_exact(
+                    builder->semantic_plan, parameter, &exact_array_value_storage) &&
+                argument_intent->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+                argument_intent->mode == XR_TARGET_CALL_VALUE &&
+                argument_intent->transfer_mode == XR_TRANSFER_SHARE &&
+                argument_intent->flags == 0 && caller && callee &&
+                caller->register_rep < materialized->machine_rep_count &&
+                caller->memory_rep < materialized->machine_rep_count &&
+                callee->register_rep < materialized->machine_rep_count &&
+                callee->memory_rep < materialized->machine_rep_count &&
+                machine_reps_have_same_call_abi(
+                    &materialized->machine_reps[caller->register_rep],
+                    &materialized->machine_reps[callee->register_rep]) &&
+                machine_reps_have_same_call_abi(&materialized->machine_reps[caller->memory_rep],
+                                                &materialized->machine_reps[callee->memory_rep]) &&
+                materialized->machine_reps[caller->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+                materialized->machine_reps[caller->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+                materialized->machine_reps[callee->register_rep].ownership ==
+                    XR_TARGET_OWNERSHIP_BORROWED &&
+                materialized->machine_reps[callee->memory_rep].ownership ==
+                    XR_TARGET_OWNERSHIP_BORROWED;
             if (array_intrinsic || array_fill || array_hof) {
                 if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
                     !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE)
@@ -10690,7 +10841,8 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 (!source_export && (!callee || callee->slot == XR_SEMANTIC_INDEX_NONE ||
                                     ((caller->register_rep != callee->register_rep ||
                                       caller->memory_rep != callee->memory_rep) &&
-                                     !adt_enum_borrow_boundary && !array_ref_borrow_boundary))))
+                                     !adt_enum_borrow_boundary && !array_ref_borrow_boundary &&
+                                     !array_value_borrow_boundary))))
                 return fail(error, error_size, "XR_TARGET_1003",
                             "call argument lacks exact caller/callee storage");
             materialized->call_arguments[next_argument] = (XrTargetCallArgumentRecord) {
