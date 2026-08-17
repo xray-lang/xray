@@ -37,16 +37,13 @@ static const XaotValuePlan *cg_value_plan_optional(XiCgenCtx *ctx, const XiValue
 /* Frozen values covered by immutable C emission intentionally have no
  * XaotValuePlan. Only an unsupported verified value family or an exact backend
  * representation adapter may require a Xaot row. */
-static const XaotValuePlan *cg_value_plan_require_legacy(XiCgenCtx *ctx,
-                                                         const XiValue *v) {
+static const XaotValuePlan *cg_value_plan_require_legacy(XiCgenCtx *ctx, const XiValue *v) {
     if (!ctx || !v)
         return NULL;
 
     XrCValueEmissionView emission = {0};
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, NULL, v, &emission);
-    if (emission_status == CG_VALUE_EMISSION_FOUND ||
-        emission_status == CG_VALUE_EMISSION_ERROR)
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, NULL, v, &emission);
+    if (emission_status == CG_VALUE_EMISSION_FOUND || emission_status == CG_VALUE_EMISSION_ERROR)
         return NULL;
     if (emission_status == CG_VALUE_EMISSION_NOT_CONFIGURED) {
         (void) cg_value_emission_fail(ctx, "legacy value lookup has no CGen authority");
@@ -64,13 +61,11 @@ static const XaotValuePlan *cg_value_plan_require_legacy(XiCgenCtx *ctx,
 
 static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
     XrCValueEmissionView emission = {0};
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, NULL, v, &emission);
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, NULL, v, &emission);
     XrRep storage_rep = XR_REP_VOID;
     if (emission_status == CG_VALUE_EMISSION_FOUND)
-        return cg_value_emission_storage_rep(ctx, &emission, &storage_rep)
-                   ? storage_rep
-                   : XR_REP_VOID;
+        return cg_value_emission_storage_rep(ctx, &emission, &storage_rep) ? storage_rep
+                                                                           : XR_REP_VOID;
     if (emission_status == CG_VALUE_EMISSION_ERROR)
         return XR_REP_VOID;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
@@ -82,10 +77,8 @@ static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
  * input discriminator.  Backing-handle projections, which travel as a tagged
  * value instead of a named struct, and materialized aggregate recipes
  * deliberately remain outside this consumer. */
-static bool cg_value_emission_is_named_aggregate(XiCgenCtx *ctx,
-                                                  const XiValue *v,
-                                                  XrCValueEmissionView *out,
-                                                  bool *authoritative) {
+static bool cg_value_emission_is_named_aggregate(XiCgenCtx *ctx, const XiValue *v,
+                                                 XrCValueEmissionView *out, bool *authoritative) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (authoritative)
@@ -93,16 +86,14 @@ static bool cg_value_emission_is_named_aggregate(XiCgenCtx *ctx,
     if (!ctx || !v || !out || !authoritative)
         return false;
 
-    CgValueEmissionStatus status =
-        cg_value_emission_view(ctx, NULL, v, out);
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, NULL, v, out);
     if (status == CG_VALUE_EMISSION_ERROR) {
         *authoritative = true;
         return false;
     }
     if (status == CG_VALUE_EMISSION_NOT_CONFIGURED) {
         *authoritative = true;
-        (void) cg_value_emission_fail(
-            ctx, "named aggregate lookup has no CGen authority");
+        (void) cg_value_emission_fail(ctx, "named aggregate lookup has no CGen authority");
         return false;
     }
     if (status != CG_VALUE_EMISSION_FOUND)
@@ -111,31 +102,25 @@ static bool cg_value_emission_is_named_aggregate(XiCgenCtx *ctx,
     *authoritative = true;
     if (out->rep != XR_C_VALUE_REP_AGGREGATE)
         return false;
-    if (out->address_projection ==
-            XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING ||
+    if (out->address_projection == XR_C_ADDRESS_PROJECTION_FIXED_ARRAY_BACKING ||
         out->address_projection == XR_C_ADDRESS_PROJECTION_TUPLE_BACKING)
         return false;
-    if (out->address_projection ==
-            XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE &&
+    if (out->address_projection == XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE &&
         out->materialization != XR_C_VALUE_MATERIALIZATION_NONE)
         return false;
     if (out->target_register_kind != XR_MACHINE_REP_AGGREGATE ||
         out->target_memory_kind != XR_MACHINE_REP_AGGREGATE ||
-        out->address_projection !=
-            XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE ||
-        out->reserved != 0 || out->recipe_reserved != 0 ||
-        out->projection_reserved != 0 || !out->c_type || !out->c_type[0] ||
-        out->literal_byte_length != 0 || out->literal_bytes != NULL ||
-        out->recipe_operand_value != UINT32_MAX ||
-        out->recipe_argument_value != UINT32_MAX ||
+        out->address_projection != XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE || out->reserved != 0 ||
+        out->recipe_reserved != 0 || out->projection_reserved != 0 || !out->c_type ||
+        !out->c_type[0] || out->literal_byte_length != 0 || out->literal_bytes != NULL ||
+        out->recipe_operand_value != UINT32_MAX || out->recipe_argument_value != UINT32_MAX ||
         out->recipe_layout_id != 0 || out->recipe_discriminant != 0 ||
         out->recipe_argument_count != 0 || out->recipe_arguments != NULL ||
         out->backing_value != 0 || out->backing_element_count != 0 ||
         out->backing_native_type != 0 || out->backing_c_type != NULL ||
         out->recipe_symbol != NULL || out->recipe_type_name != NULL ||
         out->recipe_member_name != NULL) {
-        (void) cg_value_emission_fail(
-            ctx, "named aggregate C emission recipe is inconsistent");
+        (void) cg_value_emission_fail(ctx, "named aggregate C emission recipe is inconsistent");
         return false;
     }
     return true;
@@ -144,8 +129,7 @@ static bool cg_value_emission_is_named_aggregate(XiCgenCtx *ctx,
 static bool cg_value_plan_is_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     XrCValueEmissionView emission = {0};
     bool authoritative = false;
-    bool named_aggregate = cg_value_emission_is_named_aggregate(
-        ctx, v, &emission, &authoritative);
+    bool named_aggregate = cg_value_emission_is_named_aggregate(ctx, v, &emission, &authoritative);
     if (authoritative)
         return named_aggregate;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
@@ -210,8 +194,7 @@ static bool cg_value_plan_is_adt_aggregate(XiCgenCtx *ctx, const XiValue *v) {
 static bool cg_value_plan_is_struct_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     XrCValueEmissionView emission = {0};
     bool authoritative = false;
-    bool named_aggregate = cg_value_emission_is_named_aggregate(
-        ctx, v, &emission, &authoritative);
+    bool named_aggregate = cg_value_emission_is_named_aggregate(ctx, v, &emission, &authoritative);
     if (authoritative)
         return named_aggregate;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
@@ -221,8 +204,7 @@ static bool cg_value_plan_is_struct_aggregate(XiCgenCtx *ctx, const XiValue *v) 
 static bool cg_value_plan_is_span_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     v = cg_unwrap_identity_value(v);
     XrCValueEmissionView emission = {0};
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, NULL, v, &emission);
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, NULL, v, &emission);
     if (emission_status == CG_VALUE_EMISSION_FOUND)
         return emission.rep == XR_C_VALUE_REP_VIEW && emission.c_type &&
                strcmp(emission.c_type, "xr_span_t") == 0;
@@ -285,8 +267,7 @@ static void emit_aggregate_zero_expr(FILE *out, XaotValueRep rep) {
 static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     XrCValueEmissionView emission = {0};
     bool authoritative = false;
-    if (cg_value_emission_is_named_aggregate(
-            ctx, v, &emission, &authoritative)) {
+    if (cg_value_emission_is_named_aggregate(ctx, v, &emission, &authoritative)) {
         fprintf(out, "((%s){0})", emission.c_type);
         return;
     }
@@ -803,12 +784,57 @@ static const char *emit_tagged_to_value_storage_prefix(XiCgenCtx *ctx, FILE *out
     return emit_load_conversion_prefix(ctx, out, v, XR_REP_TAGGED);
 }
 
+/* The signature table's answer for one parameter, when it has one. Ordinal
+ * zero is the return, so a declaration index shifts by one. */
+static bool cg_func_param_abi_emission(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx,
+                                       XrCFunctionAbiEmissionView *out) {
+    char error[256] = {0};
+    const XrCEmissionPlan *emission = cg_function_c_emission_plan(ctx, f);
+    return out && f && emission &&
+           xr_c_emission_plan_function_abi_view(emission, f->semantic_plan_function_index,
+                                                (uint16_t) (param_idx + 1u), out, error,
+                                                sizeof(error));
+}
+
+/* Setting XRAY_ABI_CROSSCHECK reports, on stderr, every parameter where the
+ * signature table and the old model disagree about the C representation. The
+ * table is new and nothing consumes it yet; this is how it earns the right to
+ * become the authority, rather than being trusted the moment it compiles. */
+static void cg_func_param_abi_crosscheck(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx,
+                                         bool legacy_from_type_guess, XaotValueRep legacy) {
+    XrCFunctionAbiEmissionView view;
+    if (!getenv("XRAY_ABI_CROSSCHECK"))
+        return;
+    if (!cg_func_param_abi_emission(ctx, f, param_idx, &view)) {
+        fprintf(stderr, "[abi-check] param %u no-row legacy_source=%s kind=%d\n",
+                (unsigned) param_idx, legacy_from_type_guess ? "type-guess" : "frozen-abi-slot",
+                (int) legacy.kind);
+        return;
+    }
+    bool legacy_tagged = legacy.kind == XAOT_VALUE_TAGGED;
+    bool table_tagged = view.rep == XR_C_VALUE_REP_TAGGED;
+    bool legacy_span = cg_value_rep_is_span_aggregate(legacy);
+    bool table_span =
+        view.rep == XR_C_VALUE_REP_VIEW && view.c_type && strcmp(view.c_type, "xr_span_t") == 0;
+    if (legacy_tagged != table_tagged || legacy_span != table_span)
+        fprintf(stderr,
+                "[abi-check] param %u DISAGREE source=%s tagged=%d/%d span=%d/%d "
+                "legacy_c=%s table_c=%s\n",
+                (unsigned) param_idx, legacy_from_type_guess ? "type-guess" : "frozen-abi-slot",
+                legacy_tagged, table_tagged, legacy_span, table_span,
+                legacy.c_type ? legacy.c_type : "<none>", view.c_type ? view.c_type : "<none>");
+    else
+        fprintf(stderr, "[abi-check] param %u agree\n", (unsigned) param_idx);
+}
+
 static XaotValueRep cg_func_param_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f,
                                                 uint16_t param_idx) {
     const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    if (!plan || param_idx >= plan->abi.nparams || !plan->abi.params)
-        return xaot_value_rep_for_type(cg_func_param_type(f, param_idx));
-    return xaot_abi_slot_value_rep(&plan->abi.params[param_idx]);
+    bool from_fallback = !plan || param_idx >= plan->abi.nparams || !plan->abi.params;
+    XaotValueRep legacy = from_fallback ? xaot_value_rep_for_type(cg_func_param_type(f, param_idx))
+                                        : xaot_abi_slot_value_rep(&plan->abi.params[param_idx]);
+    cg_func_param_abi_crosscheck(ctx, f, param_idx, from_fallback, legacy);
+    return legacy;
 }
 
 static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -1193,12 +1219,10 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     slot = &target_plan->abi.params[arg_index];
     slot_rep = xaot_abi_slot_value_rep(slot);
     XrCCallArgumentEmissionView direct_array_ref_argument = {0};
-    if (cg_direct_local_array_ref_argument_emission(
-            ctx, f, call, arg_index, arg, &direct_array_ref_argument)) {
-        const char *slot_c_type =
-            cg_func_param_abi_c_type(ctx, target, arg_index);
-        if (xaot_value_storage_rep(slot_rep) != XR_REP_RAWPTR ||
-            !slot_c_type ||
+    if (cg_direct_local_array_ref_argument_emission(ctx, f, call, arg_index, arg,
+                                                    &direct_array_ref_argument)) {
+        const char *slot_c_type = cg_func_param_abi_c_type(ctx, target, arg_index);
+        if (xaot_value_storage_rep(slot_rep) != XR_REP_RAWPTR || !slot_c_type ||
             strcmp(slot_c_type, direct_array_ref_argument.c_type) != 0) {
             fprintf(stderr,
                     "[xi_cgen] ERROR: direct-local Array ref emission row "
@@ -1218,29 +1242,22 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         return;
     }
     XrCValueEmissionView arg_emission = {0};
-    CgValueEmissionStatus arg_emission_status =
-        cg_value_emission_view(ctx, f, arg, &arg_emission);
+    CgValueEmissionStatus arg_emission_status = cg_value_emission_view(ctx, f, arg, &arg_emission);
     XaotValueRep frozen_arg_rep = {0};
     bool frozen_arg = arg_emission_status == CG_VALUE_EMISSION_FOUND &&
-                      cg_value_emission_xaot_rep(ctx, &arg_emission,
-                                                 &frozen_arg_rep.rep);
+                      cg_value_emission_xaot_rep(ctx, &arg_emission, &frozen_arg_rep.rep);
     if (frozen_arg) {
         const XaotRepInfo *info = xaot_rep_info(frozen_arg_rep.rep);
-        frozen_arg_rep.kind = frozen_arg_rep.rep == XAOT_REP_SLICE
-                                  ? XAOT_VALUE_AGGREGATE
-                                  : frozen_arg_rep.rep == XAOT_REP_TAGGED
-                                        ? XAOT_VALUE_TAGGED
-                                        : frozen_arg_rep.rep == XAOT_REP_VOID
-                                              ? XAOT_VALUE_VOID
-                                              : XAOT_VALUE_SCALAR;
+        frozen_arg_rep.kind = frozen_arg_rep.rep == XAOT_REP_SLICE    ? XAOT_VALUE_AGGREGATE
+                              : frozen_arg_rep.rep == XAOT_REP_TAGGED ? XAOT_VALUE_TAGGED
+                              : frozen_arg_rep.rep == XAOT_REP_VOID   ? XAOT_VALUE_VOID
+                                                                      : XAOT_VALUE_SCALAR;
         frozen_arg_rep.type = arg->type;
         frozen_arg_rep.c_type = info ? info->c_type : NULL;
         if (frozen_arg_rep.rep == XAOT_REP_SLICE)
             frozen_arg_rep.flags = XAOT_VALUE_FLAG_SLICE;
-        else if (arg_emission.target_register_kind ==
-                     XR_MACHINE_REP_ENUM_ORDINAL &&
-                 arg_emission.target_memory_kind ==
-                     XR_MACHINE_REP_ENUM_ORDINAL &&
+        else if (arg_emission.target_register_kind == XR_MACHINE_REP_ENUM_ORDINAL &&
+                 arg_emission.target_memory_kind == XR_MACHINE_REP_ENUM_ORDINAL &&
                  frozen_arg_rep.rep == XAOT_REP_I64)
             frozen_arg_rep.flags = XAOT_VALUE_FLAG_ENUM;
     }

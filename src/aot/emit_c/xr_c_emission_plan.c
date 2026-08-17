@@ -4785,13 +4785,48 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                             break;
                         }
                     }
-                } else if (!binding || !register_rep || !memory_rep ||
-                           binding->semantic_value != subject ||
-                           !machine_kind_to_c_rep(target_plan, subject, register_rep->kind, &rep,
-                                                  &c_type) ||
-                           !c_type) {
-                    complete = false;
-                    break;
+                } else {
+                    /* A parameter's ABI representation is not the one its value
+                     * carries inside the body: how a subject is held and how it
+                     * crosses a boundary are two facts, and a String is held
+                     * tagged while it is passed as a pointer. The boundary fact
+                     * lives on the call-argument rows, beside the callee slot
+                     * they name, so parameters are read from the calls that
+                     * reach this function for the same reason the return is.
+                     * Disagreeing callers leave the signature unwritten. */
+                    uint32_t call_count = 0;
+                    uint32_t argument_count = 0;
+                    const XrTargetCallRecord *calls =
+                        xr_target_plan_calls(target_plan, &call_count);
+                    const XrTargetCallArgumentRecord *arguments =
+                        xr_target_plan_call_arguments(target_plan, &argument_count);
+                    const XrTargetCallArgumentRecord *agreed = NULL;
+                    for (uint32_t a = 0; calls && arguments && a < argument_count; a++) {
+                        if (arguments[a].ordinal != (uint16_t) (ordinal - 1u) ||
+                            arguments[a].call >= call_count ||
+                            calls[arguments[a].call].callee_function != f)
+                            continue;
+                        if (agreed &&
+                            (agreed->callee_register_rep != arguments[a].callee_register_rep ||
+                             agreed->callee_memory_rep != arguments[a].callee_memory_rep)) {
+                            agreed = NULL;
+                            break;
+                        }
+                        agreed = &arguments[a];
+                    }
+                    const XrTargetMachineRepRecord *boundary =
+                        agreed
+                            ? xr_target_plan_machine_rep(target_plan, agreed->callee_register_rep)
+                            : NULL;
+                    if (!boundary ||
+                        !machine_kind_to_c_rep(target_plan, subject, boundary->kind, &rep,
+                                               &c_type) ||
+                        !c_type) {
+                        complete = false;
+                        break;
+                    }
+                    register_rep = boundary;
+                    memory_rep = xr_target_plan_machine_rep(target_plan, agreed->callee_memory_rep);
                 }
                 plan->function_abis[abi_index++] = (XrCFunctionAbiEmissionView) {
                     .semantic_function = f,
