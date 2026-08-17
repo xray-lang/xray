@@ -65,6 +65,8 @@ struct XrCEmissionPlan {
     uint32_t recipe_argument_count;
     XrCCleanupEmissionView *cleanups;
     uint32_t cleanup_count;
+    XrCFunctionAbiEmissionView *function_abis;
+    uint32_t function_abi_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
     XrFingerprint profile_fingerprint;
@@ -2771,7 +2773,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v23\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v24\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -2783,6 +2785,20 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
     hash_u64(&ctx, plan->call_argument_count);
     hash_u64(&ctx, plan->recipe_argument_count);
     hash_u64(&ctx, plan->cleanup_count);
+    hash_u64(&ctx, plan->function_abi_count);
+    for (uint32_t i = 0; i < plan->function_abi_count; i++) {
+        const XrCFunctionAbiEmissionView *abi = &plan->function_abis[i];
+        hash_u64(&ctx, abi->semantic_function);
+        hash_u64(&ctx, abi->semantic_value);
+        hash_u64(&ctx, abi->ordinal);
+        hash_u64(&ctx, abi->parameter_count);
+        hash_u64(&ctx, abi->target_register_kind);
+        hash_u64(&ctx, abi->target_memory_kind);
+        hash_u64(&ctx, abi->slot_class);
+        hash_u64(&ctx, abi->rep);
+        hash_u64(&ctx, abi->pointee_rep);
+        hash_u64(&ctx, abi->reserved);
+    }
     for (uint32_t i = 0; i < plan->value_count; i++) {
         const XrCValueEmissionView *value = &plan->values[i];
         hash_u64(&ctx, value->semantic_value);
@@ -4664,6 +4680,111 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C call-argument partition is not exact");
     }
+    /* One slot row per signature position, assembled from the frozen semantic
+     * parameter list and the target representation each of those subjects
+     * already carries. A function whose return or a parameter has no bound
+     * representation contributes no rows at all rather than a partial
+     * signature: a caller must not be able to read half a boundary. */
+    {
+        const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+        uint32_t function_count = (uint32_t) xr_semantic_plan_function_count(semantic);
+        uint64_t slot_budget = 0;
+        for (uint32_t f = 0; f < function_count; f++) {
+            const XrSemanticFunctionRecord *function = xr_semantic_plan_function(semantic, f);
+            slot_budget += function ? (uint64_t) function->parameter_count + 1u : 0u;
+        }
+        if (slot_budget > 4000000u) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  "C function-ABI partition budget exhausted");
+        }
+        if (slot_budget) {
+            plan->function_abis = (XrCFunctionAbiEmissionView *) xr_calloc(
+                (size_t) slot_budget, sizeof(*plan->function_abis));
+            if (!plan->function_abis) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(error, error_size, "XR_EXEC_5003",
+                                      "C function-ABI partition allocation failed");
+            }
+        }
+        uint32_t abi_index = 0;
+        for (uint32_t f = 0; f < function_count; f++) {
+            const XrSemanticFunctionRecord *function = xr_semantic_plan_function(semantic, f);
+            if (!function)
+                continue;
+            uint32_t written = abi_index;
+            bool complete = true;
+            for (uint16_t ordinal = 0; complete && ordinal <= function->parameter_count;
+                 ordinal++) {
+                uint32_t subject = XR_SEMANTIC_INDEX_NONE;
+                uint8_t slot_class = XR_C_ABI_SLOT_VALUE;
+                if (ordinal > 0) {
+                    const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(
+                        semantic, function->parameter_begin + (uint32_t) (ordinal - 1u));
+                    if (!parameter || parameter->function != f) {
+                        complete = false;
+                        break;
+                    }
+                    subject = parameter->value;
+                    slot_class = parameter->mode == XR_PARAM_REF ? XR_C_ABI_SLOT_BORROWED_PLACE
+                                                                 : XR_C_ABI_SLOT_VALUE;
+                }
+                const XrTargetValueRepRecord *binding =
+                    subject == XR_SEMANTIC_INDEX_NONE
+                        ? NULL
+                        : xr_target_plan_value_rep(target_plan, subject);
+                const XrTargetMachineRepRecord *register_rep =
+                    binding ? xr_target_plan_machine_rep(target_plan, binding->register_rep) : NULL;
+                const XrTargetMachineRepRecord *memory_rep =
+                    binding ? xr_target_plan_machine_rep(target_plan, binding->memory_rep) : NULL;
+                XrCValueRep rep = XR_C_VALUE_REP_VOID;
+                const char *c_type = NULL;
+                if (ordinal == 0) {
+                    /* A callee's return is not a value inside the callee -- the
+                     * target plan freezes a representation per value, and the
+                     * result of a call is a value in each caller instead. So the
+                     * only return this can state from frozen facts is the one
+                     * that needs no representation. A value-returning signature
+                     * stays unwritten until a return representation is frozen
+                     * once, rather than agreed across call sites here. */
+                    const XrSemanticTypeRecord *return_type =
+                        xr_semantic_plan_type(semantic, function->return_type);
+                    if (!return_type || return_type->kind != XR_KIND_UNIT) {
+                        complete = false;
+                        break;
+                    }
+                    rep = XR_C_VALUE_REP_VOID;
+                    c_type = "void";
+                } else if (!binding || !register_rep || !memory_rep ||
+                           binding->semantic_value != subject ||
+                           !machine_kind_to_c_rep(target_plan, subject, register_rep->kind, &rep,
+                                                  &c_type) ||
+                           !c_type) {
+                    complete = false;
+                    break;
+                }
+                plan->function_abis[abi_index++] = (XrCFunctionAbiEmissionView) {
+                    .semantic_function = f,
+                    .semantic_value = subject,
+                    .ordinal = ordinal,
+                    .parameter_count = function->parameter_count,
+                    .target_register_kind = register_rep ? register_rep->kind : 0u,
+                    .target_memory_kind = memory_rep ? memory_rep->kind : 0u,
+                    .slot_class = slot_class,
+                    .rep = (uint8_t) rep,
+                    .pointee_rep = (uint8_t) (slot_class == XR_C_ABI_SLOT_BORROWED_PLACE
+                                                  ? (uint8_t) rep
+                                                  : (uint8_t) XR_C_VALUE_REP_VOID),
+                    .reserved = 0,
+                    .c_type = c_type,
+                    .pointee_c_type = slot_class == XR_C_ABI_SLOT_BORROWED_PLACE ? c_type : NULL,
+                };
+            }
+            if (!complete)
+                abi_index = written;
+        }
+        plan->function_abi_count = abi_index;
+    }
     compute_fingerprint(plan, &plan->fingerprint);
     if (!xr_c_emission_plan_verify(plan, target_plan, expected_profile_fingerprint, error,
                                    error_size)) {
@@ -4694,6 +4815,7 @@ void xr_c_emission_plan_free(XrCEmissionPlan *plan) {
     for (uint32_t i = 0; i < plan->cleanup_count; i++)
         xr_free((void *) plan->cleanups[i].recipe_symbol);
     xr_free(plan->cleanups);
+    xr_free(plan->function_abis);
     xr_free(plan->recipe_arguments);
     xr_free(plan->call_arguments);
     xr_free(plan->values);
@@ -4754,6 +4876,40 @@ bool xr_c_emission_plan_value_view(const XrCEmissionPlan *plan, uint32_t semanti
     }
     return emission_error(error, error_size, "XR_TARGET_1001",
                           "semantic C value has no immutable C emission binding");
+}
+
+uint32_t xr_c_emission_plan_function_abi_count(const XrCEmissionPlan *plan) {
+    return plan ? plan->function_abi_count : 0u;
+}
+
+/* One slot of one signature, keyed the way it is stored: ordinal 0 is the
+ * return and 1..N the parameters, so a caller asking for a parameter by
+ * declaration index adds one and never has to know where the return sits. */
+bool xr_c_emission_plan_function_abi_view(const XrCEmissionPlan *plan, uint32_t semantic_function,
+                                          uint16_t ordinal, XrCFunctionAbiEmissionView *out,
+                                          char *error, size_t error_size) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!plan || !plan->verified || !out)
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "verified C function-ABI plan input is missing");
+    uint32_t begin = 0;
+    uint32_t end = plan->function_abi_count;
+    while (begin < end) {
+        uint32_t middle = begin + (end - begin) / 2u;
+        const XrCFunctionAbiEmissionView *candidate = &plan->function_abis[middle];
+        if (candidate->semantic_function == semantic_function && candidate->ordinal == ordinal) {
+            *out = *candidate;
+            return true;
+        }
+        if (candidate->semantic_function < semantic_function ||
+            (candidate->semantic_function == semantic_function && candidate->ordinal < ordinal))
+            begin = middle + 1u;
+        else
+            end = middle;
+    }
+    return emission_error(error, error_size, "XR_TARGET_1001",
+                          "semantic function slot has no immutable C emission binding");
 }
 
 bool xr_c_emission_plan_call_argument_view(const XrCEmissionPlan *plan,

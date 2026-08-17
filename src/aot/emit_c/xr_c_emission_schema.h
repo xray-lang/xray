@@ -174,6 +174,45 @@ typedef struct XrCCallArgumentEmissionView {
     const char *c_type;
 } XrCCallArgumentEmissionView;
 
+typedef enum XrCAbiSlotClass {
+    XR_C_ABI_SLOT_INVALID = 0,
+    /* Passed as its own C value. */
+    XR_C_ABI_SLOT_VALUE = 1,
+    /* Passed as a pointer to a caller-owned place the callee only reads or
+     * writes through; `pointee_rep`/`pointee_c_type` describe what it points
+     * at, and the pointer itself is never the value. */
+    XR_C_ABI_SLOT_BORROWED_PLACE = 2,
+} XrCAbiSlotClass;
+
+/* Exact C boundary for one slot of one function signature: ordinal 0 is the
+ * return, ordinals 1..N the parameters in declaration order. One row per slot
+ * rather than a nested signature keeps the table flat and binary-searchable
+ * like every other emission table.
+ *
+ * The target plan has no signature of its own -- its function record carries a
+ * frame, not an ABI -- so these rows are assembled from the frozen semantic
+ * parameter list and the target value representation each of those subjects
+ * already has. That is the same pair the value rows are built from, which is
+ * what keeps a signature and the values crossing it from disagreeing.
+ *
+ * `c_type` is present for the same reason it is on the value row: this plan is
+ * the C-specific projection, and a text emitter must not have to reach for the
+ * old representation model to spell a parameter. */
+typedef struct XrCFunctionAbiEmissionView {
+    uint32_t semantic_function;
+    uint32_t semantic_value;
+    uint16_t ordinal;
+    uint16_t parameter_count;
+    uint16_t target_register_kind;
+    uint16_t target_memory_kind;
+    uint8_t slot_class;
+    uint8_t rep;
+    uint8_t pointee_rep;
+    uint8_t reserved;
+    const char *c_type;
+    const char *pointee_c_type;
+} XrCFunctionAbiEmissionView;
+
 /* Exact C projection of one TargetPlan cleanup.  The operation and slot are
  * frozen numeric identities; recipe_symbol is the only emitter spelling. */
 typedef struct XrCCleanupEmissionView {
