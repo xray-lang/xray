@@ -327,7 +327,15 @@ TEST_MAIN_BEGIN()
 XrVMConfig vm_config = {0};
 g_iso = xray_vm_new_full(&vm_config);
 g_session = xr_compiler_session_current_for_isolate(g_iso);
-ASSERT_NOT_NULL(g_session);
+/* Not ASSERT_NOT_NULL: its bail-out is a bare `return`, which cannot carry an
+ * exit status out of main(). Without a session no test below can run, so report
+ * the failed precondition and leave with the suite's failure status. */
+if (!g_session) {
+    printf("\033[31mFAIL\033[0m no compiler session for the test isolate\n");
+    xray_vm_delete(g_iso);
+    XR_TEST_PROCESS_SHUTDOWN();
+    return 1;
+}
 
 RUN_TEST_SUITE("Lifecycle");
 RUN_TEST(graph_new_free);
