@@ -103,6 +103,16 @@ roots, or general module activation.
    suspension convention and result slot but no backend symbol, source
    dependency, callee function, or argument ABI; missing registry-backed
    identity remains unavailable rather than falling back to selector text.
+   A builtin-instance yieldable call row is derived only from the frozen
+   `BUILTIN_INSTANCE_YIELDABLE` SemanticPlan target. The receiver's frozen
+   builtin identity and the selector's argument count select one entry of the
+   bounded suspending-method roster, so the row compares no spelling and a user
+   class reusing a builtin name carries builtin identity zero and matches
+   nothing. Builder and independent verifier share the one judgement rather
+   than restating it. The row carries the suspension convention and names the
+   receiver type; it grants no backend symbol, callee function, provider
+   spelling, frame layout, argument ABI, or result materialization, and the
+   call stays unavailable until a storage family binds that result.
    Channel-allocation storage covers the owned dynamic outer `XrValue` result
    of an exact frozen `XI_CHAN_NEW` and borrowed dynamic identity-copy aliases.
    It independently binds canonical allocation key/id, exact Channel/capacity
@@ -120,7 +130,10 @@ roots, or general module activation.
    in SemanticPlan. The target row is a trivial signed 64-bit ordinal bound to
    that exact semantic type and direct-local parameter/argument relation. It
    grants no payload enum, boxing, allocation, root, cleanup, or dispatch
-   authority.
+   authority. That ordinal is this family's to bind: the scalar family's
+   result-void shortcut reads the generated opcode table alone, and it stops
+   at a unit-enum type rather than publishing a second, contradictory void
+   storage fact for the same value.
    SOURCE-import storage covers only borrowed dynamic outer `XrValue` tokens
    in either the exact namespace
    `IMPORT_REF -> identity COPY* -> SET_SHARED -> GET_SHARED -> identity COPY*`
@@ -349,10 +362,10 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h 5ea9aa4ff63d88b62db
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 6487ae39149a4ea28fab04bdf2ccbf88c0bccaded75cf20376b38c8447dbdd1c
 anchor-sha256: src/plan/target/xr_target_profile.h 311d38da384e02be242e4025a7d14d7ee253c0a1b71d7af502c937d3ceae30b1
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h e5b38eebeffe4da10e1af9f99d80c3948040bed11b9aa927f3660a763fb0d60e
+anchor-sha256: src/plan/target/xr_target_plan.h e4af616460a925bd1ad679135860ef346d6028c47b2a819ab570ba7a3562cae6
 anchor-sha256: src/plan/target/xr_target_plan.c c43c90f7f4b59ad2864b9666863288f030979dd085075dc5c18f98f361334f51
-anchor-sha256: src/plan/target/xr_target_builder.c 5cf7e0867b3f47de34ec77c9f6400abdfcec06f03ec3f6e1f1ecfebe98a0ef0f
-anchor-sha256: src/plan/target/xr_target_verify.c f167c41e476f83bbc5da5a379d3721208f8cfcb6653f99a84c41e2bc3fc62e66
+anchor-sha256: src/plan/target/xr_target_builder.c c495a5215561d785721672fd584e6290cbbd199704341f1de7717572d693b5c2
+anchor-sha256: src/plan/target/xr_target_verify.c 111e3fa258251bfdd756411f5fd4493f58a011bbe2eb0514a45fdf7cc23373c8
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
