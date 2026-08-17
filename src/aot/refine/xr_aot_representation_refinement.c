@@ -7559,6 +7559,64 @@ static bool oracle_range_slice_result_storage(const VerifyAuthority *ctx, uint32
     return true;
 }
 
+/* An element read through a view a slice produced. The existing arms of the
+ * index branch each name where their receiver came from -- a borrowed parameter,
+ * a fixed array, a dynamic Array -- and a view taken by `container[start:end]`
+ * is a fourth origin none of them covers. The receiver keeps the VIEW pair its
+ * own family bound and the index keeps its native scalar storage, exactly as the
+ * borrowed-parameter arm already reads its own view. */
+static bool oracle_range_slice_element_read_is_exact(const VerifyAuthority *ctx,
+                                                     uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    bool write = operation && operation->opcode == XI_INDEX_SET;
+    uint16_t arity = write ? 3u : 2u;
+    if (!ctx || !operation || !operands ||
+        (operation->opcode != XI_INDEX_GET && operation->opcode != XI_INDEX_SET) ||
+        operation->operand_count != arity || operand_count < arity ||
+        operation->operand_begin > operand_count - arity || operation->auxiliary_kind != 0 ||
+        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE || operation->allocation_key != NULL ||
+        operation->effects != xi_generated_op_effects(operation->opcode) ||
+        operation->result_ownership != xi_generated_op_result_ownership(operation->opcode) ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1)
+        return false;
+    const XrSemanticOperandRecord *view = &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *index = view + 1;
+    const XrSemanticTypeRecord *view_type = xr_semantic_plan_type(ctx->semantic, view->type);
+    /* A write needs a view that is not a read-only borrow, and stores the
+     * element the view's own type names. A read hands that element back. */
+    if (write && (!view_type || (view_type->flags & XR_SEM_TYPE_CONST) != 0))
+        return false;
+    XrRep view_storage = XR_REP_TAGGED;
+    uint16_t view_kind = XR_MACHINE_REP_COUNT;
+    uint32_t element_type = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticTypeRecord *index_type = xr_semantic_plan_type(ctx->semantic, index->type);
+    if (view->role != XR_SEM_OPERAND_VALUE || view->parameter != -1 ||
+        view->ownership_action != XR_SEM_OPERAND_BORROW ||
+        !xr_semantic_slice_view_type_is_exact(ctx->semantic, view->type, &element_type) ||
+        (!write && operation->result_type != element_type) ||
+        !oracle_range_slice_result_storage(ctx, view->value, &view_storage, &view_kind) ||
+        view_storage != XR_REP_PTR || view_kind != XR_MACHINE_REP_VIEW ||
+        index->role != XR_SEM_OPERAND_VALUE || index->parameter != -1 ||
+        index->ownership_action != XR_SEM_OPERAND_BORROW || !index_type ||
+        index_type->kind != XR_KIND_INT || index_type->scalar_rep != XR_NATIVE_I64 ||
+        index_type->flags != 0 || index_type->child_count != 0 ||
+        index_type->builtin_type != XR_TID_NULL)
+        return false;
+    if (write) {
+        const XrSemanticOperandRecord *stored = view + 2;
+        if (stored->role != XR_SEM_OPERAND_VALUE || stored->parameter != -1 ||
+            stored->type != element_type)
+            return false;
+    }
+    return true;
+}
+
 static bool oracle_array_like_receiver_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                                XrRep *out_storage, uint16_t *out_machine_kind) {
     return oracle_u8_slice_parameter_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
@@ -8058,6 +8116,12 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 if (operand_index == 0)
                     return oracle_fixed_array_value_storage(ctx, source_value, out_storage,
                                                             &ignored_kind);
+                return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
+            }
+            if (oracle_range_slice_element_read_is_exact(ctx, operation_index)) {
+                if (operand_index == 0)
+                    return oracle_range_slice_result_storage(ctx, source_value, out_storage,
+                                                             &ignored_kind);
                 return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
             }
             if (!oracle_array_element_access_is_exact(ctx, operation_index))
