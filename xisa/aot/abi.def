@@ -36,8 +36,8 @@
 (define-aot-abi string
   :type-kind XR_KIND_STRING
   :nullable no
-  :abi-class pointer
-  :default-rep ptr
+  :abi-class tagged
+  :default-rep tagged
   :scalar-rep no
   :typed-boundary yes)
 

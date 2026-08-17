@@ -13,9 +13,9 @@
 typedef enum {
     XAOT_ABI_CLASS_SCALAR = 0,
     XAOT_ABI_CLASS_VOID = 1,
-    XAOT_ABI_CLASS_POINTER = 2,
-    XAOT_ABI_CLASS_AGGREGATE = 3,
-    XAOT_ABI_CLASS_TAGGED = 4,
+    XAOT_ABI_CLASS_TAGGED = 2,
+    XAOT_ABI_CLASS_POINTER = 3,
+    XAOT_ABI_CLASS_AGGREGATE = 4,
     XAOT_ABI_CLASS_COUNT
 } XaotAbiClass;
 
@@ -34,7 +34,7 @@ typedef struct {
     X(FLOAT, "float", XR_KIND_FLOAT, XAOT_ABI_CLASS_SCALAR, XAOT_REP_F64, false, true, true) \
     X(BOOL, "bool", XR_KIND_BOOL, XAOT_ABI_CLASS_SCALAR, XAOT_REP_BOOL, false, false, true) \
     X(UNIT, "unit", XR_KIND_UNIT, XAOT_ABI_CLASS_VOID, XAOT_REP_VOID, false, false, false) \
-    X(STRING, "string", XR_KIND_STRING, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
+    X(STRING, "string", XR_KIND_STRING, XAOT_ABI_CLASS_TAGGED, XAOT_REP_TAGGED, false, false, true) \
     X(ARRAY, "array", XR_KIND_ARRAY, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(SLICE, "slice", XR_KIND_SLICE, XAOT_ABI_CLASS_AGGREGATE, XAOT_REP_SLICE, false, false, true) \
     X(MAP, "map", XR_KIND_MAP, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
@@ -63,8 +63,8 @@ static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
          XAOT_REP_VOID, false,
          false, false},
         {"string", XR_KIND_STRING,
-         XAOT_ABI_CLASS_POINTER,
-         XAOT_REP_PTR, false,
+         XAOT_ABI_CLASS_TAGGED,
+         XAOT_REP_TAGGED, false,
          false, true},
         {"array", XR_KIND_ARRAY,
          XAOT_ABI_CLASS_POINTER,
