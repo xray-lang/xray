@@ -2772,6 +2772,16 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
     xr_sha256_update(ctx, encoded, sizeof(encoded));
 }
 
+/* Whether any call in this plan names a result representation for `callee`. */
+static bool target_plan_has_call_result_rep(const XrTargetPlan *target_plan, uint32_t callee) {
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
+    for (uint32_t i = 0; calls && i < call_count; i++)
+        if (calls[i].callee_function == callee)
+            return true;
+    return false;
+}
+
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
     static const uint8_t domain[] = "xray-c-emission-plan-v24\0";
     XrSHA256Context ctx;
@@ -4754,7 +4764,15 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                      * no representation and is stated directly. */
                     const XrSemanticTypeRecord *return_type =
                         xr_semantic_plan_type(semantic, function->return_type);
-                    if (return_type && return_type->kind == XR_KIND_UNIT) {
+                    /* A unit return still crosses whatever boundary its calls
+                     * carry: a function on a tagged convention hands back the
+                     * carrier even when the source says nothing, so the unit
+                     * case reads the call rows like every other slot and only
+                     * falls back to void when no call names a representation. */
+                    if (return_type && return_type->kind == XR_KIND_UNIT &&
+                        target_plan_has_call_result_rep(target_plan, f)) {
+                        /* Calls reach it, so the boundary they carry is the
+                         * answer even though the source returns nothing. */
                         rep = XR_C_VALUE_REP_VOID;
                         c_type = "void";
                     } else {

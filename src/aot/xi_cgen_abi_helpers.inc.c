@@ -369,9 +369,32 @@ static XaotValueRep cg_func_return_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f
                 : xaot_value_rep_for_type(f ? f->return_type : NULL);
 }
 
+/* Setting XRAY_ABI_RETCHECK reports where the signature row and the old model
+ * disagree about a return, the way the parameter check did before parameters
+ * moved. Returns are not the same question: the row states the representation
+ * the boundary carries, the old model states the declared return's C type, and
+ * migrating before measuring that gap cost a hundred and seventeen cases once. */
+static void cg_func_return_abi_crosscheck(XiCgenCtx *ctx, const XiFunc *f, const char *legacy_c) {
+    XrCFunctionAbiEmissionView view;
+    if (!getenv("XRAY_ABI_RETCHECK"))
+        return;
+    if (!cg_func_return_abi_emission(ctx, f, &view)) {
+        fprintf(stderr, "[ret-check] no-row legacy_c=%s\n", legacy_c ? legacy_c : "<none>");
+        return;
+    }
+    const char *table_c = view.c_type ? view.c_type : "<none>";
+    if (!legacy_c || strcmp(legacy_c, table_c) != 0)
+        fprintf(stderr, "[ret-check] DISAGREE legacy_c=%s table_c=%s agg=%u rep=%u\n",
+                legacy_c ? legacy_c : "<none>", table_c, view.aggregate_class, view.rep);
+    else
+        fprintf(stderr, "[ret-check] agree c=%s\n", table_c);
+}
+
 static const char *cg_func_return_abi_c_type(XiCgenCtx *ctx, const XiFunc *f) {
     const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    return plan && plan->abi.ret.c_type ? plan->abi.ret.c_type : "XrValue";
+    const char *legacy = plan && plan->abi.ret.c_type ? plan->abi.ret.c_type : "XrValue";
+    cg_func_return_abi_crosscheck(ctx, f, legacy);
+    return legacy;
 }
 
 /* FFI: a raw pointer (Ptr<T>/MutPtr<T>) is stored as a native pointer in AOT
