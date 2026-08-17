@@ -4769,10 +4769,17 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                      * carrier even when the source says nothing, so the unit
                      * case reads the call rows like every other slot and only
                      * falls back to void when no call names a representation. */
-                    if (return_type && return_type->kind == XR_KIND_UNIT &&
-                        target_plan_has_call_result_rep(target_plan, f)) {
-                        /* Calls reach it, so the boundary they carry is the
-                         * answer even though the source returns nothing. */
+                    if (function->is_module_initializer) {
+                        /* The runtime enters an initializer, so no call site
+                         * witnesses its boundary. The function itself says what
+                         * that boundary is: an initializer is entered on the
+                         * dynamic convention and hands the carrier back, which
+                         * is a fact about the function rather than one inferred
+                         * from the callers it does not have. */
+                        rep = XR_C_VALUE_REP_TAGGED;
+                        c_type = "XrValue";
+                    } else if (return_type && return_type->kind == XR_KIND_UNIT &&
+                               target_plan_has_call_result_rep(target_plan, f)) {
                         rep = XR_C_VALUE_REP_VOID;
                         c_type = "void";
                     } else {

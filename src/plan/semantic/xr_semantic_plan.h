@@ -315,7 +315,11 @@ typedef struct XrSemanticFunctionRecord {
     uint8_t return_provenance;
     uint8_t source_kind;
     uint8_t flags;
-    uint8_t reserved2;
+    /* Whether the runtime enters this function rather than a call in this plan.
+     * A module initializer therefore has a boundary no call site can witness,
+     * which is why the fact is frozen on the function instead of inferred from
+     * the calls that reach it. */
+    uint8_t is_module_initializer;
 } XrSemanticFunctionRecord;
 
 typedef struct XrSemanticParameterRecord {

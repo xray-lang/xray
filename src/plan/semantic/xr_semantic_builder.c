@@ -1185,6 +1185,7 @@ static bool build_source_methods(XrSemanticBuildContext *ctx) {
 
 static void set_function_return_contract(const XiFunc *source, XrSemanticFunctionRecord *record) {
     record->return_parameter = source->arc_return_ownership.param_index;
+    record->is_module_initializer = source->is_module_initializer ? 1u : 0u;
     record->return_provenance = source->arc_return_ownership.kind;
     if (source->return_type && source->return_type->kind == XR_KIND_SLICE) {
         record->return_parameter = -1;

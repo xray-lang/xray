@@ -1226,7 +1226,8 @@ static bool verify_functions(const XrSemanticPlan *plan, char *error, size_t err
         if (!verify_id(function->canonical_key, function->id) ||
             !verify_function_key_exact(plan, i))
             XR_FUNCTION_FAIL("XR_SEM_0002", "function identity is invalid");
-        if (function->reserved2 != 0 || function->source_kind > XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR)
+        if (function->is_module_initializer > 1u ||
+            function->source_kind > XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR)
             XR_FUNCTION_FAIL("XR_SEM_0013", "function source authority is invalid");
         if (function->source_class == XR_SEMANTIC_INDEX_NONE) {
             if (function->source_member_ordinal != UINT16_MAX ||

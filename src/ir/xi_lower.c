@@ -850,8 +850,7 @@ XR_FUNC XiSourceSpan xi_lower_push_source_span(XiLower *l, const AstNode *node) 
         return previous;
     previous = l->func->lowering_source_span;
     XiSourceSpan current = {0};
-    if (node && node->line > 0 && node->column > 0 && node->end_line > 0 &&
-        node->end_column > 0) {
+    if (node && node->line > 0 && node->column > 0 && node->end_line > 0 && node->end_column > 0) {
         current.start_line = (uint32_t) node->line;
         current.start_column = (uint32_t) node->column;
         current.end_line = (uint32_t) node->end_line;
@@ -1014,6 +1013,8 @@ static void xi_lower_bind_current_func_body_id(XiLower *l, XgFuncId body_func_id
 }
 
 XR_FUNC void xi_lower_bind_module_body_id(XiLower *l) {
+    if (l && l->func)
+        l->func->is_module_initializer = true;
     xi_lower_bind_current_func_body_id(l,
                                        xi_lower_find_unique_body_id(l, XG_BODY_MODULE_INIT, 0, 0));
 }

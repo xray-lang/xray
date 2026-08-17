@@ -467,7 +467,7 @@ static void decode_functions(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->return_provenance = xr_xsm_take_u8(reader);
         record->source_kind = xr_xsm_take_u8(reader);
         record->flags = xr_xsm_take_u8(reader);
-        record->reserved2 = xr_xsm_take_u8(reader);
+        record->is_module_initializer = xr_xsm_take_u8(reader);
     }
     for (uint32_t i = 0; i < plan->parameter_count; i++) {
         XrSemanticParameterRecord *record = &plan->parameters[i];

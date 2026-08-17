@@ -1181,19 +1181,19 @@ typedef struct XiValue {
      * seals native member aliases here before SemanticPlan construction so
      * ownership passes never reconstruct the fact from names. */
     int16_t result_alias_operand;
-    struct XiValue **args;    /* operand values (SSA uses) */
-    uint16_t nargs;           /* number of args */
-    int16_t uses;             /* use count (for DCE; -1 = not computed) */
-    uint32_t line;            /* source line number (0 = unknown) */
-    XiSourceSpan source_span; /* exact source range; all zero when unavailable */
-    uint32_t xg_callsite_id;  /* stable XgCallsiteId for evidence-backed calls (0 = none) */
-    uint32_t xa_intrinsic_id; /* stable XaIntrinsicId for canonical semantic operations */
-    uint8_t array_intrinsic_kind; /* XiArrayIntrinsicKind, or NONE */
-    uint8_t array_member_kind; /* XiArrayMemberKind, or NONE */
-    uint8_t array_hof_kind; /* XiArrayHofKind, or NONE */
+    struct XiValue **args;         /* operand values (SSA uses) */
+    uint16_t nargs;                /* number of args */
+    int16_t uses;                  /* use count (for DCE; -1 = not computed) */
+    uint32_t line;                 /* source line number (0 = unknown) */
+    XiSourceSpan source_span;      /* exact source range; all zero when unavailable */
+    uint32_t xg_callsite_id;       /* stable XgCallsiteId for evidence-backed calls (0 = none) */
+    uint32_t xa_intrinsic_id;      /* stable XaIntrinsicId for canonical semantic operations */
+    uint8_t array_intrinsic_kind;  /* XiArrayIntrinsicKind, or NONE */
+    uint8_t array_member_kind;     /* XiArrayMemberKind, or NONE */
+    uint8_t array_hof_kind;        /* XiArrayHofKind, or NONE */
     uint8_t array_element_storage; /* exact XrArrayElemType for a frozen Array operation */
     uint8_t array_result_element_storage; /* exact scalar storage returned by an Array HOF */
-    uint32_t xg_method_id;    /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
+    uint32_t xg_method_id; /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
     uint32_t xg_json_codec_id;    /* stable XgJsonCodecId for evidence-backed Json codec calls */
     uint32_t xg_object_access_id; /* stable XgObjectAccessId for evidence-backed structural object
@@ -1722,10 +1722,10 @@ typedef enum XiInlinePolicy {
 } XiInlinePolicy;
 
 typedef struct XiFunc {
-    const char *name;           /* function name (debug, not owned) */
-    const char *source_file;    /* source path for VM/DAP debug hooks (not owned) */
+    const char *name;                  /* function name (debug, not owned) */
+    const char *source_file;           /* source path for VM/DAP debug hooks (not owned) */
     XiSourceSpan lowering_source_span; /* temporary AST range inherited by new Xi values */
-    struct XrType *return_type; /* return type (from analyzer) */
+    struct XrType *return_type;        /* return type (from analyzer) */
     uint32_t xg_body_func_id;   /* stable global-evidence XgFuncId for this body (0 = none) */
     uint8_t view_return_source; /* XrViewReturnSourceKind symbolic return template */
     int16_t view_return_param;  /* valid only for PARAM */
@@ -1736,6 +1736,14 @@ typedef struct XiFunc {
      * contract lives in one place per parameter with no parallel mode array. */
     XiValue **params;
     uint16_t nparams;
+
+    /* Whether this function is a module initializer. The fact is decided during
+     * lowering, where the body kind is still in hand, and carried here so that
+     * every layer downstream reads it from the frozen function rather than
+     * asking the global summary again. It decides a boundary the function has
+     * whether or not anything calls it: an initializer is entered by the
+     * runtime, so its signature cannot be inferred from call sites. */
+    bool is_module_initializer;
 
     /* Source variable metadata captured during lowering.  XiValue::var_id
      * indexes these arrays; AOT debug codegen uses them to expose stable
