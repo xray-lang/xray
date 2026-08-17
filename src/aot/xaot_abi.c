@@ -70,8 +70,7 @@ static XaotAbiSlot tagged_slot(const XrType *type) {
     return slot;
 }
 
-static bool target_adt_enum_value_uses_tagged_abi(const XaotBundle *bundle,
-                                                  const XiFunc *func,
+static bool target_adt_enum_value_uses_tagged_abi(const XaotBundle *bundle, const XiFunc *func,
                                                   const XiValue *value) {
     const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_func(bundle, func);
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
@@ -79,19 +78,16 @@ static bool target_adt_enum_value_uses_tagged_abi(const XaotBundle *bundle,
     char error[256] = {0};
 
     if (!target_plan || !func || !value ||
-        !xr_aot_scalar_semantic_value_id(target_plan, func, value,
-                                         &semantic_function, &semantic_value,
-                                         error, sizeof(error)))
+        !xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
+                                         &semantic_value, error, sizeof(error)))
         return false;
     const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
     const XrSemanticOperationRecord *definition =
         xr_semantic_enum_value_definition(semantic, semantic_value);
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = xr_target_plan_value_rep(target_plan, semantic_value);
     if (!definition || definition->function != semantic_function || !binding)
         return false;
-    const XrSemanticTypeRecord *type =
-        xr_semantic_plan_type(semantic, definition->result_type);
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, definition->result_type);
     const XrTargetMachineRepRecord *register_rep =
         xr_target_plan_machine_rep(target_plan, binding->register_rep);
     const XrTargetMachineRepRecord *memory_rep =
@@ -101,8 +97,7 @@ static bool target_adt_enum_value_uses_tagged_abi(const XaotBundle *bundle,
            memory_rep->kind == XR_MACHINE_REP_DYN_VALUE;
 }
 
-static bool target_adt_enum_return_uses_tagged_abi(const XaotBundle *bundle,
-                                                   const XiFunc *func) {
+static bool target_adt_enum_return_uses_tagged_abi(const XaotBundle *bundle, const XiFunc *func) {
     bool found = false;
 
     if (!bundle || !func)
@@ -655,8 +650,7 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
         func->native_callback_kind != XI_NATIVE_CALLBACK_NONE && !is_module_init;
     class_native = xaot_class_native_func(bundle, func);
     bool native_constructor = class_native.layout && class_native.is_constructor;
-    bool target_adt_enum_return =
-        target_adt_enum_return_uses_tagged_abi(bundle, func);
+    bool target_adt_enum_return = target_adt_enum_return_uses_tagged_abi(bundle, func);
 
     native_abi = !is_module_init && (native_runtime_callback || func->ncaptures == 0) &&
                  !func_has_op_class(func, XI_GEN_CLASS_COROUTINE) &&
@@ -668,12 +662,21 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
             func_has_op_class(func, XI_GEN_CLASS_COROUTINE) ? XAOT_ABI_CORO : XAOT_ABI_TAGGED;
         abi->boundary_reason = tagged_reason_for_func(func, is_module_init);
         abi->ret = tagged_slot(func->return_type);
+        /* A tagged return says nothing about how a parameter travels. Boxing an
+         * `int` because the result is a String would make a statically typed
+         * slot carry a dynamic value, which is exactly what the AOT purity rule
+         * forbids, and the caller and callee read the same ABI record so a
+         * mixed signature stays consistent by construction. Each slot therefore
+         * keeps the representation its own type admits, and only a type with no
+         * native boundary falls back to the tagged carrier. */
         for (i = 0; i < abi_nparams; i++) {
             const XiValue *param = func->params ? func->params[i] : NULL;
-            abi->params[i] =
-                param_uses_place_abi(func, param, false, NULL)
-                    ? native_slot_for_type(bundle, func, param ? param->type : NULL, param, false)
-                    : tagged_slot(param ? param->type : NULL);
+            const XrType *param_type = param ? param->type : NULL;
+            bool param_native = param_uses_place_abi(func, param, false, NULL) ||
+                                abi_type_can_use_typed_boundary(bundle, param_type);
+            abi->params[i] = param_native
+                                 ? native_slot_for_type(bundle, func, param_type, param, false)
+                                 : tagged_slot(param_type);
         }
         return true;
     }
