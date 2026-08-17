@@ -336,6 +336,14 @@ static bool cg_func_param_abi_emission(XiCgenCtx *ctx, const XiFunc *f, uint16_t
                                                 sizeof(error));
 }
 
+/* Whether a parameter slot of the named function is an aggregate, read from
+ * that function's own signature row. */
+static bool cg_func_param_abi_is_aggregate(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx) {
+    XrCFunctionAbiEmissionView view;
+    return cg_func_param_abi_emission(ctx, f, param_idx, &view) &&
+           view.aggregate_class != XR_C_ABI_AGGREGATE_NONE;
+}
+
 /* A signature row's storage class. The raw-pointer case is deliberately absent:
  * proving one exact needs the value row's own facts, and a boundary that would
  * be a raw pointer keeps the old answer until those facts are on the signature

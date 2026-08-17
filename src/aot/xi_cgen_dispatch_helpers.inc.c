@@ -4967,12 +4967,8 @@ static bool xicgen_direct_call_arg_can_stack_slice_view(XiCgenCtx *ctx, const Xi
     const XiValue *slice = xicgen_stack_slice_source_value(arg);
     if (!slice || !target || arg_index >= target->nparams || !target->params)
         return false;
-    const XaotFuncPlan *target_plan = cg_func_plan(ctx, target);
-    if (target_plan && arg_index < target_plan->abi.nparams && target_plan->abi.params) {
-        XaotValueRep slot_rep = xaot_abi_slot_value_rep(&target_plan->abi.params[arg_index]);
-        if (slot_rep.kind == XAOT_VALUE_AGGREGATE)
-            return false;
-    }
+    if (cg_func_param_abi_is_aggregate(ctx, target, arg_index))
+        return false;
     if (!xicgen_direct_call_param_noescape(ctx, current, target, arg_index, 0))
         return false;
     if (!xicgen_type_is_span_like(slice->type))
