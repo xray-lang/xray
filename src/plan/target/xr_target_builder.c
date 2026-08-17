@@ -8927,6 +8927,20 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             queue[queue_end++] = operation->function;
         }
     }
+    /* Every row this family refuses is one gap, and a module usually has more
+     * than one. Under a survey each walk below records its refusal and carries
+     * on, so the run reports the whole set rather than the lowest-numbered
+     * member of it; the first refusal still reaches the caller's error buffer,
+     * which is what a normal build reports.
+     *
+     * Both walks share this bookkeeping because they refuse the same family for
+     * two different reasons -- a frozen call target this family does not
+     * consume, and a call-shaped operation no family claimed -- and a survey
+     * that stopped at the first of one kind would report the second kind as if
+     * the module had only the calls the first walk happened to reach. */
+    bool survey = false;
+    uint32_t refused_rows = 0;
+    char first_row[512] = {0};
     for (uint32_t i = 0; i < (uint32_t) call_target_count && valid; i++) {
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
         const XrSemanticOperationRecord *operation =
@@ -9009,8 +9023,21 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                          target ? target->operation : XR_SEMANTIC_INDEX_NONE,
                          operation ? operation->opcode : 0u, selector,
                          target ? target->function : XR_SEMANTIC_INDEX_NONE);
-            valid = false;
-            break;
+            if (refused_rows == 0) {
+                survey = target_survey_enabled();
+                snprintf(first_row, sizeof(first_row), "%s", error && error_size ? error : "");
+            }
+            refused_rows++;
+            if (!survey) {
+                valid = false;
+                break;
+            }
+            /* The row stated no authority, so nothing binds this operation and
+             * the operation walk below will reach it as an unclaimed call. That
+             * second refusal is a consequence of this one rather than an
+             * independent gap, which is the bias the survey carries by design. */
+            target_survey_row("calls_and_adapters", error);
+            continue;
         }
         target_by_operation[target->operation] = i;
         reverse_next[i] = XR_SEMANTIC_INDEX_NONE;
@@ -9044,14 +9071,6 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             }
         }
     }
-    /* Every operation this family refuses is one gap, and a module usually has
-     * more than one. Under a survey the walk records each and carries on, so
-     * the run reports the whole set rather than the lowest-numbered member of
-     * it; the first refusal still reaches the caller's error buffer, which is
-     * what a normal build reports. */
-    bool survey = false;
-    uint32_t refused_rows = 0;
-    char first_row[512] = {0};
     for (uint32_t i = 0; i < (uint32_t) operation_count && valid; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, i);
         uint32_t target_index = target_by_operation[i];
