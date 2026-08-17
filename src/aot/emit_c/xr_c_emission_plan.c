@@ -4742,19 +4742,49 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                 if (ordinal == 0) {
                     /* A callee's return is not a value inside the callee -- the
                      * target plan freezes a representation per value, and the
-                     * result of a call is a value in each caller instead. So the
-                     * only return this can state from frozen facts is the one
-                     * that needs no representation. A value-returning signature
-                     * stays unwritten until a return representation is frozen
-                     * once, rather than agreed across call sites here. */
+                     * result of a call is a value in each caller. The call rows
+                     * carry that result representation next to the callee they
+                     * name, so the return is read from the calls that reach this
+                     * function rather than re-derived from its type.
+                     *
+                     * Callers that disagree, and a function no call in this plan
+                     * reaches, leave the signature unwritten: a boundary two
+                     * sides describe differently is not one this plan can state,
+                     * and neither is one nothing pins down. A unit return needs
+                     * no representation and is stated directly. */
                     const XrSemanticTypeRecord *return_type =
                         xr_semantic_plan_type(semantic, function->return_type);
-                    if (!return_type || return_type->kind != XR_KIND_UNIT) {
-                        complete = false;
-                        break;
+                    if (return_type && return_type->kind == XR_KIND_UNIT) {
+                        rep = XR_C_VALUE_REP_VOID;
+                        c_type = "void";
+                    } else {
+                        uint32_t call_count = 0;
+                        const XrTargetCallRecord *calls =
+                            xr_target_plan_calls(target_plan, &call_count);
+                        const XrTargetCallRecord *agreed = NULL;
+                        for (uint32_t c = 0; calls && c < call_count; c++) {
+                            if (calls[c].callee_function != f)
+                                continue;
+                            if (agreed &&
+                                (agreed->result_register_rep != calls[c].result_register_rep ||
+                                 agreed->result_memory_rep != calls[c].result_memory_rep)) {
+                                agreed = NULL;
+                                break;
+                            }
+                            agreed = &calls[c];
+                        }
+                        const XrTargetMachineRepRecord *return_rep =
+                            agreed ? xr_target_plan_machine_rep(target_plan,
+                                                                agreed->result_register_rep)
+                                   : NULL;
+                        if (!return_rep ||
+                            !machine_kind_to_c_rep(target_plan, agreed->result_value,
+                                                   return_rep->kind, &rep, &c_type) ||
+                            !c_type) {
+                            complete = false;
+                            break;
+                        }
                     }
-                    rep = XR_C_VALUE_REP_VOID;
-                    c_type = "void";
                 } else if (!binding || !register_rep || !memory_rep ||
                            binding->semantic_value != subject ||
                            !machine_kind_to_c_rep(target_plan, subject, register_rep->kind, &rep,
