@@ -7085,11 +7085,14 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
         return oracle_definition_storage(ctx, named_value, out_storage, out_machine_kind);
     switch (operation->opcode) {
         case XI_CATCH:
-            return oracle_dynamic_panic_catch_storage(ctx, semantic_value, out_storage,
-                                                      out_machine_kind);
+            if (oracle_dynamic_panic_catch_storage(ctx, semantic_value, out_storage,
+                                                   out_machine_kind))
+                return true;
+            break;
         case XI_CLOSURE_NEW:
-            return oracle_dynamic_closure_storage(ctx, semantic_value, out_storage,
-                                                  out_machine_kind);
+            if (oracle_dynamic_closure_storage(ctx, semantic_value, out_storage, out_machine_kind))
+                return true;
+            break;
         case XI_CHAN_TRY_RECV:
             if (oracle_channel_receive_storage(ctx, semantic_value, out_storage, out_machine_kind))
                 return true;
@@ -7116,88 +7119,73 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             if (aot_array_intrinsic_is_exact(ctx->semantic, operation, NULL, NULL))
                 return oracle_dynamic_array_intrinsic_storage(ctx, semantic_value, out_storage,
                                                               out_machine_kind);
-            return false;
+            break;
         case XI_GET_BUILTIN:
-            if (!aot_json_namespace_global_is_exact(ctx->semantic, operation))
-                return false;
-            *out_storage = XR_REP_TAGGED;
-            *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
-            return true;
+            if (aot_json_namespace_global_is_exact(ctx->semantic, operation)) {
+                *out_storage = XR_REP_TAGGED;
+                *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+                return true;
+            }
+            break;
         case XI_ARRAY_NEW:
-            return oracle_dynamic_array_allocation_storage(ctx, semantic_value, out_storage,
-                                                           out_machine_kind);
+            if (oracle_dynamic_array_allocation_storage(ctx, semantic_value, out_storage,
+                                                        out_machine_kind))
+                return true;
+            break;
         case XI_LOCAL_ADDR:
             if (oracle_direct_local_array_ref_place_storage(ctx, semantic_value, out_storage,
                                                             out_machine_kind))
                 return true;
-            if (!oracle_raw_pointer_local_addr(ctx, operation_index))
-                return false;
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
+            break;
         case XI_PLACE_LOAD:
             if (oracle_dynamic_array_ref_storage(ctx, semantic_value, out_storage,
                                                  out_machine_kind))
                 return true;
-            if (!oracle_raw_pointer_ref_place(ctx, operation_index, NULL, NULL))
-                return false;
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
+            break;
         case XI_STR_CONCAT:
-            return oracle_dynamic_string_concat_result_storage(ctx, semantic_value, out_storage,
-                                                               out_machine_kind);
-        case XI_CLASS_CREATE:
-            return oracle_dynamic_source_class_object_storage(ctx, semantic_value, out_storage,
-                                                              out_machine_kind);
-        case XI_LOAD_FIELD:
-            /* A field read is admitted only against a receiver this authority
-             * already proved to be an exact source-class instance. The read
-             * borrows, so its result keeps the machine storage the target plan
-             * bound for it; a field whose type has no such storage row stays
-             * without authority instead of falling back to a tagged guess. */
-            if (xr_semantic_class_field_read_source_class(ctx->semantic, operation) ==
-                XR_SEMANTIC_INDEX_NONE)
-                return false;
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
-        case XI_INDEX_GET:
-            /* Array allocations and borrowed byte views are disjoint frozen
-             * storage families; both name the same scalar result only after
-             * their receiver identity has been independently re-proved. */
-            if (!oracle_fixed_array_element_access_is_exact(ctx, operation_index) &&
-                !oracle_array_element_access_is_exact(ctx, operation_index) &&
-                !oracle_u8_slice_element_read_is_exact(ctx, operation_index))
-                return false;
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
-        case XI_AGG_GET:
-            if (!oracle_aggregate_field_access_is_exact(ctx, operation_index))
-                return false;
-            if (oracle_value_aggregate_storage(ctx, semantic_value, out_storage, out_machine_kind))
+            if (oracle_dynamic_string_concat_result_storage(ctx, semantic_value, out_storage,
+                                                            out_machine_kind))
                 return true;
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
+            break;
+        case XI_CLASS_CREATE:
+            if (oracle_dynamic_source_class_object_storage(ctx, semantic_value, out_storage,
+                                                           out_machine_kind))
+                return true;
+            break;
         case XI_TUPLE_GET:
             /* A tuple lane is read back as the full tagged value it was stored
              * as. Unlike a named value class, whose fields the backend reads in
              * their own native storage, the element read hands out the carrier
              * and every native consumer adapts from it. */
-            if (!oracle_aggregate_field_access_is_exact(ctx, operation_index))
-                return false;
-            *out_storage = XR_REP_TAGGED;
-            *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
-            return true;
+            if (oracle_aggregate_field_access_is_exact(ctx, operation_index)) {
+                *out_storage = XR_REP_TAGGED;
+                *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+                return true;
+            }
+            break;
         case XI_OBJECT_NEW:
-            return oracle_dynamic_struct_object_storage(ctx, semantic_value, out_storage,
-                                                        out_machine_kind);
+            if (oracle_dynamic_struct_object_storage(ctx, semantic_value, out_storage,
+                                                     out_machine_kind))
+                return true;
+            break;
         case XI_OBJECT_GET_F:
             /* An object field is stored as a full tagged value, so the read
              * hands out that carrier and each native consumer adapts from it,
              * exactly as a tuple lane read does. */
-            return oracle_struct_object_field_read_storage(ctx, semantic_value, out_storage,
-                                                           out_machine_kind);
+            if (oracle_struct_object_field_read_storage(ctx, semantic_value, out_storage,
+                                                        out_machine_kind))
+                return true;
+            break;
         case XI_CHAN_RECV:
         case XI_ENUM_DESCRIPTOR_BOX:
             *out_storage = XR_REP_TAGGED;
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
             return true;
         case XI_GO:
-            return oracle_dynamic_direct_local_go_task_storage(ctx, semantic_value, out_storage,
-                                                               out_machine_kind);
+            if (oracle_dynamic_direct_local_go_task_storage(ctx, semantic_value, out_storage,
+                                                            out_machine_kind))
+                return true;
+            break;
         case XI_GET_SHARED: {
             if (oracle_dynamic_array_ref_storage(ctx, semantic_value, out_storage,
                                                  out_machine_kind))
@@ -7234,16 +7222,7 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
                 return true;
             }
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
-        case XI_SELECT:
-            /* A select is the same merge a phi spells, flattened onto one
-             * block: representation selection binds its result from the two
-             * arms exactly as it binds a phi's, and force_phi_tagged does not
-             * reach it there, so the frozen scalar binding is the whole proof
-             * here too. A merge whose arms carry a reference has no scalar
-             * binding and stays without authority rather than falling back to
-             * a tagged guess. */
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
+            break;
         case XI_BOX:
             *out_storage = XR_REP_TAGGED;
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -7252,7 +7231,7 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             if (semantic_string_literal_is_exact(ctx->semantic, operation))
                 return oracle_dynamic_string_literal_storage(ctx, semantic_value, out_storage,
                                                              out_machine_kind);
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
+            break;
         case XI_CALL_METHOD:
             if (operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF)
                 return oracle_array_hof_result_storage(ctx, semantic_value, out_storage,
@@ -7278,7 +7257,7 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             if (oracle_dynamic_string_runes_storage(ctx, semantic_value, out_storage,
                                                     out_machine_kind))
                 return true;
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
+            break;
         case XI_ADD:
         case XI_SUB:
         case XI_MUL:
@@ -7322,36 +7301,28 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             if (oracle_dynamic_source_class_instance_storage(ctx, semantic_value, out_storage,
                                                              out_machine_kind))
                 return true;
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
-        case XI_CHAN_RECV_STATUS:
-        case XI_CHAN_IS_CLOSED:
-        case XI_CALL_METHOD_DIRECT:
-        case XI_ATOMIC_LOAD:
-        case XI_ATOMIC_RMW:
-        case XI_COPY:
-        case XI_SOURCE_MOVE:
-        case XI_OWNER_FORWARD:
-        case XI_UNBOX:
-        case XI_ENUM_DESCRIPTOR_UNBOX:
-        case XI_CONVERT:
-        case XI_NARROW_I8:
-        case XI_NARROW_U8:
-        case XI_NARROW_I16:
-        case XI_NARROW_U16:
-        case XI_NARROW_I32:
-        case XI_NARROW_U32:
-        case XI_WIDEN_I8:
-        case XI_WIDEN_U8:
-        case XI_WIDEN_I16:
-        case XI_WIDEN_U16:
-        case XI_WIDEN_I32:
-        case XI_WIDEN_U32:
-        case XI_NARROW_F32:
-        case XI_WIDEN_F32:
-            return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
+            break;
         default:
-            return false;
+            break;
     }
+    /* No family named a carrier of its own, so the value is in whatever storage
+     * the TargetPlan already froze for it.
+     *
+     * The TargetPlan binds a scalar representation from a value's semantic
+     * type, uniformly for every operation result and every parameter; it never
+     * consults the opcode to do it. Asking again here, once per defining
+     * opcode, therefore restated a fact the frozen plan already carried -- the
+     * same judgement was written out across sixteen opcodes, and any opcode
+     * nobody had written a branch for yet refused a value whose storage the
+     * plan names exactly.
+     *
+     * This stays fail-closed on the fact rather than on the spelling: a value
+     * the plan bound nothing for, or bound to a representation that names no
+     * storage class -- every object, code, dynamic, aggregate, vector and view
+     * kind, and every nullable or aggregate type -- is refused here exactly as
+     * before. The families that do carry those name their own storage above,
+     * and keep their priority. */
+    return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
 }
 
 static bool oracle_direct_local_array_ref_place_use(const VerifyAuthority *ctx,
@@ -7605,47 +7576,6 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             *out_storage = XR_REP_TAGGED;
             return true;
         }
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_DIV:
-        case XI_MOD:
-        case XI_NEG:
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-        case XI_BNOT:
-        case XI_SHL:
-        case XI_SHR:
-        case XI_BIT_ROTL:
-        case XI_BIT_ROTR:
-        case XI_BIT_BSWAP:
-        case XI_BIT_POPCOUNT:
-        case XI_BIT_CLZ:
-        case XI_BIT_MUL_HIGH:
-        case XI_BIT_CTZ:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-        case XI_NOT:
-        case XI_ISNULL:
-        case XI_IS:
-        case XI_NARROW_I8:
-        case XI_NARROW_U8:
-        case XI_NARROW_I16:
-        case XI_NARROW_U16:
-        case XI_NARROW_I32:
-        case XI_NARROW_U32:
-        case XI_WIDEN_I8:
-        case XI_WIDEN_U8:
-        case XI_WIDEN_I16:
-        case XI_WIDEN_U16:
-        case XI_WIDEN_I32:
-        case XI_WIDEN_U32:
-        case XI_NARROW_F32:
-        case XI_WIDEN_F32:
-            return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_GO:
             if (operand_index == 0) {
                 if (!oracle_direct_local_go_callee_use(ctx, operation_index, operand_index,
@@ -8018,16 +7948,30 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 return oracle_dynamic_source_class_parameter_storage(ctx, source_value, out_storage,
                                                                      &ignored_kind);
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
-        case XI_BOX:
-        case XI_ENUM_DESCRIPTOR_BOX:
-            return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_UNBOX:
         case XI_ENUM_DESCRIPTOR_UNBOX:
             *out_storage = XR_REP_TAGGED;
             return true;
         default:
-            return false;
+            break;
     }
+    /* This use site names no carrier of its own, so it consumes the operand in
+     * the storage the operand already occupies: no adapter, because there are
+     * not two storages to adapt between.
+     *
+     * A carrier a use site does require -- a boxed argument, a tagged channel
+     * payload, a tuple lane -- is stated by that site's own branch above and
+     * keeps its priority. What was left over was the opposite case, an operand
+     * a native operation takes exactly as the TargetPlan already froze it, and
+     * that judgement had been written out once per consuming opcode: thirty-odd
+     * spellings of one rule, with every opcode nobody had reached yet refusing
+     * a native operand for want of a branch naming it.
+     *
+     * Fail-closed is kept on the storage rather than on the opcode. An operand
+     * whose representation the plan never froze, or froze as a class this pass
+     * names no storage for, is refused here exactly as before; the reference
+     * families that carry those answer above. */
+    return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
 }
 
 static bool authority_add_obligation(CollectContext *ctx, const VerifyAuthority *oracle,

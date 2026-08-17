@@ -29,7 +29,6 @@ tests/diff/cases/basic/ranges.xr
 tests/diff/cases/basic/strings.xr
 tests/diff/cases/control/labeled_break_continue.xr
 tests/diff/cases/limits/struct_literal_over_32.xr
-tests/diff/cases/limits/symbol_over_254.xr
 tests/diff/cases/limits/upval_capture_over_254.xr
 tests/diff/cases/match/adt_enum_nonpayload_variant.xr
 tests/diff/cases/match/adt_enum_payload_tostring.xr
@@ -186,7 +185,6 @@ tests/diff/cases/semantics/ffi/mem_with_slice_mut_exception_loan_end.xr
 tests/diff/cases/semantics/ffi/mem_with_slice_mut_extern_layout.xr
 tests/diff/cases/semantics/ffi/ptr_memory.xr
 tests/diff/cases/semantics/ffi/rawptr_copy_nonoverlap_owner.xr
-tests/diff/cases/semantics/ffi/rawptr_static_null.xr
 tests/diff/cases/semantics/float_fmt/ieee_arithmetic.xr
 tests/diff/cases/semantics/float_fmt/rounding_boundary.xr
 tests/diff/cases/semantics/function_value_to_string.xr
@@ -214,13 +212,11 @@ tests/diff/cases/semantics/generic_iterable_constraint.xr
 tests/diff/cases/semantics/generic_type_alias.xr
 tests/diff/cases/semantics/int/contextual_numeric_conversion.xr
 tests/diff/cases/semantics/int/wrapping_fixed_width.xr
-tests/diff/cases/semantics/int_wrap/exact_integer_bit_intrinsics.xr
 tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr
 tests/diff/cases/semantics/int_wrap/int_overflow_predicates.xr
 tests/diff/cases/semantics/int_wrap/int_safe_methods.xr
 tests/diff/cases/semantics/int_wrap/numeric_method_shared_core.xr
 tests/diff/cases/semantics/int_wrap/stringbuilder_numeric_shared_core.xr
-tests/diff/cases/semantics/int_wrap/uint64_divmod_unsigned.xr
 tests/diff/cases/semantics/int_wrap/uint64_print_compare.xr
 tests/diff/cases/semantics/iter_order/map_set_order.xr
 tests/diff/cases/semantics/json/json_decode_nullable_nested_object.xr
@@ -411,7 +407,6 @@ tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr
 tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr
 tests/diff/cases/semantics/stdlib/math_random_int_arg_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_bulk_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_cache_maintenance_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_fence_unit_binding.xr
 tests/diff/cases/semantics/stdlib/mem_from_address_shared_core.xr
@@ -419,7 +414,6 @@ tests/diff/cases/semantics/stdlib/mem_load_store_scalar_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_nontemporal_store_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_page_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_prefetch_shared_core.xr
 tests/diff/cases/semantics/stdlib/native_tailcall_cfunction_direct.xr
 tests/diff/cases/semantics/stdlib/net_byte_io_direct.xr
 tests/diff/cases/semantics/stdlib/net_copy_bidirectional_cancel.xr
@@ -442,7 +436,6 @@ tests/diff/cases/semantics/stdlib/path_isabsolute.xr
 tests/diff/cases/semantics/stdlib/path_module.xr
 tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr
 tests/diff/cases/semantics/stdlib/path_string_ops.xr
-tests/diff/cases/semantics/stdlib/pointer_foreign_offset_lifetime_shared_core.xr
 tests/diff/cases/semantics/stdlib/pointer_provenance_lifetime_shared_core.xr
 tests/diff/cases/semantics/stdlib/prelude_contract_direct.xr
 tests/diff/cases/semantics/stdlib/probe_module_shapes.xr
