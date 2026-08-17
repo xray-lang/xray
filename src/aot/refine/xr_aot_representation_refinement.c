@@ -7538,11 +7538,21 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             return true;
         }
         case XI_RETAIN:
-        case XI_RELEASE: {
+        case XI_RELEASE:
+        case XI_THROW: {
             /* A refcount adjustment names no family of its own: it acts on any
              * reference this authority can name, and each stays in the tagged
              * carrier its own family bound. A native scalar has no refcount and
-             * is not admitted here. */
+             * is not admitted here.
+             *
+             * A throw consumes its operand on the same terms. The exception
+             * carrier the runtime raises is one tagged value, and every panic
+             * reaches it as a reference the front end already built: a
+             * constructed PanicInfo, a message String, or the value a catch
+             * handed back for a cleanup path to re-raise. Each of those is a
+             * family this authority names, and each is already in the tagged
+             * carrier the throw wants, so the site records no adapter. A native
+             * scalar stays refused because no throw produces one. */
             XrRep carrier_storage = XR_REP_TAGGED;
             if (!oracle_tagged_reference_carrier_storage(ctx, source_value, &carrier_storage,
                                                          &ignored_kind))
