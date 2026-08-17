@@ -824,7 +824,8 @@ static void cg_func_param_abi_crosscheck(XiCgenCtx *ctx, const XiFunc *f, uint16
                 legacy_tagged, table_tagged, legacy_span, table_span,
                 legacy.c_type ? legacy.c_type : "<none>", view.c_type ? view.c_type : "<none>");
     else
-        fprintf(stderr, "[abi-check] param %u agree\n", (unsigned) param_idx);
+        fprintf(stderr, "[abi-check] param %u agree c=%s\n", (unsigned) param_idx,
+                view.c_type ? view.c_type : "<none>");
 }
 
 static XaotValueRep cg_func_param_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f,
