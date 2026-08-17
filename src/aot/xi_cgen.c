@@ -319,17 +319,15 @@ static bool cg_type_has_no_aot_arc_header(const XrType *type) {
     return type && type->kind == XR_KIND_FIXED_ARRAY;
 }
 
-static bool cg_fixed_array_backing_ownership_is_exact(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value);
+static bool cg_fixed_array_backing_ownership_is_exact(XiCgenCtx *ctx, const XiFunc *function,
+                                                      const XiValue *value);
 
 static bool cg_ownership_op_is_noop(XiCgenCtx *ctx, const XiFunc *function,
-                                    bool freestanding_profile,
-                                    const XiValue *v) {
+                                    bool freestanding_profile, const XiValue *v) {
     if (!v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
         return false;
     if (v->args[0] && v->args[0]->op == XI_FIXED_ARRAY_NEW)
-        return cg_fixed_array_backing_ownership_is_exact(ctx, function,
-                                                         v->args[0]);
+        return cg_fixed_array_backing_ownership_is_exact(ctx, function, v->args[0]);
     const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
     if (freestanding_profile && arg && arg->type)
         return !xr_type_is_builtin_named_class(arg->type, "Buffer");
@@ -2530,15 +2528,13 @@ static CgValueEmissionStatus cg_value_emission_fail(XiCgenCtx *ctx, const char *
  * exact TargetPlan/C-emission pair, even when the value belongs to a family
  * that still lowers through Xaot. */
 static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc *function,
-                                                      const XiValue *value,
-                                                      XrCValueEmissionView *out) {
+                                                    const XiValue *value,
+                                                    XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
-    if (!ctx || (!ctx->value_emission_registry &&
-                 ctx->value_emission_registry_count == 0))
+    if (!ctx || (!ctx->value_emission_registry && ctx->value_emission_registry_count == 0))
         return CG_VALUE_EMISSION_NOT_CONFIGURED;
-    if (!ctx->value_emission_registry ||
-        ctx->value_emission_registry_count == 0 || !value || !out)
+    if (!ctx->value_emission_registry || ctx->value_emission_registry_count == 0 || !value || !out)
         return cg_value_emission_fail(ctx, "C value emission consumer input is missing");
 
     if (!function && value->block)
@@ -2547,12 +2543,10 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
         function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
         return CG_VALUE_EMISSION_BACKEND_ONLY;
 
-    const CgValueEmissionRegistryEntry *entry =
-        ctx->value_emission_registry_last;
+    const CgValueEmissionRegistryEntry *entry = ctx->value_emission_registry_last;
     if (!entry || entry->semantic_plan != function->semantic_plan) {
         entry = NULL;
-        for (uint32_t module_index = 0;
-             module_index < ctx->value_emission_registry_count;
+        for (uint32_t module_index = 0; module_index < ctx->value_emission_registry_count;
              module_index++) {
             if (ctx->value_emission_registry[module_index].semantic_plan ==
                 function->semantic_plan) {
@@ -2568,32 +2562,27 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     const XrTargetPlan *target_plan = entry->target_plan;
     const XrCEmissionPlan *emission_plan = entry->emission_plan;
 
-    const XrSemanticPlan *semantic_plan =
-        xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticPlan *semantic_plan = xr_target_plan_semantic_plan(target_plan);
     if (!semantic_plan || semantic_plan != function->semantic_plan)
-        return cg_value_emission_fail(
-            ctx, "Xi function does not carry the module TargetPlan authority");
+        return cg_value_emission_fail(ctx,
+                                      "Xi function does not carry the module TargetPlan authority");
 
-    const XrSemanticFunctionRecord *semantic_function = xr_semantic_plan_function(
-        semantic_plan, function->semantic_plan_function_index);
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(semantic_plan, function->semantic_plan_function_index);
     if (!semantic_function)
         return cg_value_emission_fail(ctx, "C value semantic function record is missing");
     if (value->id >= semantic_function->value_count) {
-        const XaotValuePlan *adapter =
-            xaot_bundle_find_value_plan(ctx->aot_bundle, value);
-        if (adapter &&
-            xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter))
+        const XaotValuePlan *adapter = xaot_bundle_find_value_plan(ctx->aot_bundle, value);
+        if (adapter && xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter))
             return CG_VALUE_EMISSION_BACKEND_ONLY;
-        return cg_value_emission_fail(
-            ctx, "post-freeze Xi value has no semantic authority");
+        return cg_value_emission_fail(ctx, "post-freeze Xi value has no semantic authority");
     }
 
     uint32_t semantic_function_id = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     char error[256] = {0};
-    if (!xr_aot_scalar_semantic_value_id(target_plan, function, value,
-                                         &semantic_function_id, &semantic_value, error,
-                                         sizeof(error)))
+    if (!xr_aot_scalar_semantic_value_id(target_plan, function, value, &semantic_function_id,
+                                         &semantic_value, error, sizeof(error)))
         return cg_value_emission_fail(ctx, error[0] ? error : "C value identity lookup failed");
     if (semantic_function_id != function->semantic_plan_function_index)
         return cg_value_emission_fail(ctx, "C value semantic function identity changed");
@@ -2603,35 +2592,29 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     /* Registry installation independently proved exact supported-row coverage.
      * Absence here therefore identifies the verified unsupported partition; it
      * cannot hide a missing numeric, void, or tagged row. */
-    if (!xr_c_emission_plan_value_view(emission_plan, semantic_value, out, error,
-                                       sizeof(error)))
+    if (!xr_c_emission_plan_value_view(emission_plan, semantic_value, out, error, sizeof(error)))
         return CG_VALUE_EMISSION_NOT_COVERED;
     return CG_VALUE_EMISSION_FOUND;
 }
 
-static bool cg_panic_catch_emission_authority(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
-    return out &&
-           cg_value_emission_view(ctx, function, value, out) ==
-               CG_VALUE_EMISSION_FOUND &&
+static bool cg_panic_catch_emission_authority(XiCgenCtx *ctx, const XiFunc *function,
+                                              const XiValue *value, XrCValueEmissionView *out) {
+    return out && cg_value_emission_view(ctx, function, value, out) == CG_VALUE_EMISSION_FOUND &&
            out->rep == XR_C_VALUE_REP_TAGGED &&
            out->target_register_kind == XR_MACHINE_REP_DYN_VALUE &&
            out->target_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
-           out->materialization == XR_C_VALUE_MATERIALIZATION_PANIC_CATCH &&
-           out->c_type && strcmp(out->c_type, "XrValue") == 0 &&
-           out->literal_byte_length == 0 && out->literal_bytes == NULL &&
-           out->recipe_operand_value == UINT32_MAX &&
-           out->recipe_argument_value == UINT32_MAX &&
-           out->recipe_argument_count == 0 && out->recipe_arguments == NULL &&
-           out->recipe_symbol == NULL;
+           out->materialization == XR_C_VALUE_MATERIALIZATION_PANIC_CATCH && out->c_type &&
+           strcmp(out->c_type, "XrValue") == 0 && out->literal_byte_length == 0 &&
+           out->literal_bytes == NULL && out->recipe_operand_value == UINT32_MAX &&
+           out->recipe_argument_value == UINT32_MAX && out->recipe_argument_count == 0 &&
+           out->recipe_arguments == NULL && out->recipe_symbol == NULL;
 }
 
 /* Resolve an uncovered operand's frozen semantic identity without treating
  * the absence of a C projection row as authority. Recipe consumers use this
  * only to compare the operand with a verifier-checked recipe operand. */
-static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function,
-                                 const XiValue *value, uint32_t *out) {
+static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+                                 uint32_t *out) {
     if (out)
         *out = XR_SEMANTIC_INDEX_NONE;
     if (!ctx || !function || !value || !out || !function->semantic_plan)
@@ -2648,19 +2631,15 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function,
     char error[256] = {0};
     if (!entry)
         return false;
-    if (xr_aot_scalar_semantic_value_id(
-            entry->target_plan, function, value, &semantic_function, out,
-            error, sizeof(error)))
+    if (xr_aot_scalar_semantic_value_id(entry->target_plan, function, value, &semantic_function,
+                                        out, error, sizeof(error)))
         return semantic_function == function->semantic_plan_function_index;
-    const XaotValuePlan *adapter =
-        xaot_bundle_find_value_plan(ctx->aot_bundle, value);
-    if (!adapter ||
-        !xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter) ||
+    const XaotValuePlan *adapter = xaot_bundle_find_value_plan(ctx->aot_bundle, value);
+    if (!adapter || !xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter) ||
         value->nargs != 1 || !value->args || !value->args[0])
         return false;
-    return xr_aot_scalar_semantic_value_id(
-               entry->target_plan, function, value->args[0],
-               &semantic_function, out, error, sizeof(error)) &&
+    return xr_aot_scalar_semantic_value_id(entry->target_plan, function, value->args[0],
+                                           &semantic_function, out, error, sizeof(error)) &&
            semantic_function == function->semantic_plan_function_index;
 }
 
@@ -2668,62 +2647,51 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function,
  * immutable C projection.  Absence means that the release belongs to an
  * unmigrated family; disagreement between the two frozen plans is a hard
  * error. */
-static CgValueEmissionStatus cg_cleanup_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCCleanupEmissionView *out) {
+static CgValueEmissionStatus cg_cleanup_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                                      const XiValue *value,
+                                                      XrCCleanupEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
-    if (!ctx || (!ctx->value_emission_registry &&
-                 ctx->value_emission_registry_count == 0))
+    if (!ctx || (!ctx->value_emission_registry && ctx->value_emission_registry_count == 0))
         return CG_VALUE_EMISSION_NOT_CONFIGURED;
-    if (!ctx->value_emission_registry || !function || !value || !out ||
-        !function->semantic_plan)
-        return cg_value_emission_fail(ctx,
-                                      "C cleanup emission input is missing");
+    if (!ctx->value_emission_registry || !function || !value || !out || !function->semantic_plan)
+        return cg_value_emission_fail(ctx, "C cleanup emission input is missing");
     const CgValueEmissionRegistryEntry *entry = NULL;
     for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
-        if (ctx->value_emission_registry[i].semantic_plan !=
-            function->semantic_plan)
+        if (ctx->value_emission_registry[i].semantic_plan != function->semantic_plan)
             continue;
         if (entry)
-            return cg_value_emission_fail(
-                ctx, "C cleanup SemanticPlan authority is duplicated");
+            return cg_value_emission_fail(ctx, "C cleanup SemanticPlan authority is duplicated");
         entry = &ctx->value_emission_registry[i];
     }
     uint32_t cleanup_count = 0;
     uint32_t function_count = 0;
-    const XrTargetCleanupRecord *cleanups = entry
-        ? xr_target_plan_cleanups(entry->target_plan, &cleanup_count) : NULL;
-    const XrTargetFunctionRecord *functions = entry
-        ? xr_target_plan_functions(entry->target_plan, &function_count) : NULL;
+    const XrTargetCleanupRecord *cleanups =
+        entry ? xr_target_plan_cleanups(entry->target_plan, &cleanup_count) : NULL;
+    const XrTargetFunctionRecord *functions =
+        entry ? xr_target_plan_functions(entry->target_plan, &function_count) : NULL;
     uint32_t function_index = function->semantic_plan_function_index;
     if (entry && functions && function_index < function_count &&
         functions[function_index].cleanup_count == 0)
         return CG_VALUE_EMISSION_NOT_COVERED;
-    if (!entry || !functions || function_index >= function_count ||
-        !cleanups || cleanup_count == 0)
-        return entry ? cg_value_emission_fail(
-                           ctx, "C cleanup function partition is invalid")
-                     : cg_value_emission_fail(
-                           ctx, "C cleanup SemanticPlan authority is missing");
+    if (!entry || !functions || function_index >= function_count || !cleanups || cleanup_count == 0)
+        return entry ? cg_value_emission_fail(ctx, "C cleanup function partition is invalid")
+                     : cg_value_emission_fail(ctx, "C cleanup SemanticPlan authority is missing");
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     if (!cg_value_semantic_id(ctx, function, value, &semantic_value))
-        return cg_value_emission_fail(
-            ctx, "C cleanup semantic operation identity is missing");
+        return cg_value_emission_fail(ctx, "C cleanup semantic operation identity is missing");
     const XrSemanticOperationRecord *operation = NULL;
     uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
-    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(
-        function->semantic_plan);
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(function->semantic_plan);
     for (uint32_t i = 0; i < operation_count; i++) {
         const XrSemanticOperationRecord *candidate =
             xr_semantic_plan_operation(function->semantic_plan, i);
-        if (!candidate ||
-            candidate->function != function->semantic_plan_function_index ||
+        if (!candidate || candidate->function != function->semantic_plan_function_index ||
             candidate->result_value != semantic_value)
             continue;
         if (operation)
-            return cg_value_emission_fail(
-                ctx, "C cleanup semantic operation identity is ambiguous");
+            return cg_value_emission_fail(ctx,
+                                          "C cleanup semantic operation identity is ambiguous");
         operation = candidate;
         operation_index = i;
     }
@@ -2734,21 +2702,17 @@ static CgValueEmissionStatus cg_cleanup_emission_view(
         if (cleanups[i].semantic_operation != operation_index)
             continue;
         if (target)
-            return cg_value_emission_fail(
-                ctx, "C cleanup TargetPlan identity is duplicated");
+            return cg_value_emission_fail(ctx, "C cleanup TargetPlan identity is duplicated");
         target = &cleanups[i];
     }
     if (!target)
         return CG_VALUE_EMISSION_NOT_COVERED;
     char error[256] = {0};
-    if (!xr_c_emission_plan_cleanup_view(
-            entry->emission_plan, operation_index, out, error,
-            sizeof(error)) ||
-        out->target_slot != target->slot ||
-        out->action != XR_C_CLEANUP_RELEASE || out->flags != 0 ||
-        out->reserved != 0 || !out->recipe_symbol)
-        return cg_value_emission_fail(
-            ctx, error[0] ? error : "C cleanup projection is stale");
+    if (!xr_c_emission_plan_cleanup_view(entry->emission_plan, operation_index, out, error,
+                                         sizeof(error)) ||
+        out->target_slot != target->slot || out->action != XR_C_CLEANUP_RELEASE ||
+        out->flags != 0 || out->reserved != 0 || !out->recipe_symbol)
+        return cg_value_emission_fail(ctx, error[0] ? error : "C cleanup projection is stale");
     return CG_VALUE_EMISSION_FOUND;
 }
 
@@ -2768,21 +2732,18 @@ static bool cg_array_reserve_target_authority(XiCgenCtx *ctx, const XiFunc *func
             return false;
         entry = &ctx->value_emission_registry[i];
     }
-    if (!entry || !entry->target_plan ||
-        !xr_target_plan_is_verified(entry->target_plan))
+    if (!entry || !entry->target_plan || !xr_target_plan_is_verified(entry->target_plan))
         return false;
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     char error[256] = {0};
-    if (!xr_aot_scalar_semantic_value_id(entry->target_plan, function, value,
-                                         &semantic_function, &semantic_value, error,
-                                         sizeof(error)) ||
+    if (!xr_aot_scalar_semantic_value_id(entry->target_plan, function, value, &semantic_function,
+                                         &semantic_value, error, sizeof(error)) ||
         semantic_function != function->semantic_plan_function_index)
         return false;
     const XrSemanticOperationRecord *operation = NULL;
     uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
-    uint32_t operation_count =
-        (uint32_t) xr_semantic_plan_operation_count(function->semantic_plan);
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(function->semantic_plan);
     for (uint32_t i = 0; i < operation_count; i++) {
         const XrSemanticOperationRecord *candidate =
             xr_semantic_plan_operation(function->semantic_plan, i);
@@ -2799,11 +2760,11 @@ static bool cg_array_reserve_target_authority(XiCgenCtx *ctx, const XiFunc *func
         xr_semantic_plan_operands(function->semantic_plan, &operand_count);
     if (!operation || !operands ||
         operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR ||
-        operation->evidence[1] != XA_INTRINSIC_ARRAY_RESERVE ||
-        operation->operand_count != 2 || operation->operand_begin > operand_count ||
+        operation->evidence[1] != XA_INTRINSIC_ARRAY_RESERVE || operation->operand_count != 2 ||
+        operation->operand_begin > operand_count ||
         operation->operand_count > operand_count - operation->operand_begin ||
-        value->xa_intrinsic_id != XA_INTRINSIC_ARRAY_RESERVE || value->nargs != 2 ||
-        !value->args || !value->args[0] || !value->args[1])
+        value->xa_intrinsic_id != XA_INTRINSIC_ARRAY_RESERVE || value->nargs != 2 || !value->args ||
+        !value->args[0] || !value->args[1])
         return false;
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
     uint32_t capacity = XR_SEMANTIC_INDEX_NONE;
@@ -2813,8 +2774,7 @@ static bool cg_array_reserve_target_authority(XiCgenCtx *ctx, const XiFunc *func
         capacity != operands[operation->operand_begin + 1u].value)
         return false;
     uint32_t call_count = 0;
-    const XrTargetCallRecord *calls =
-        xr_target_plan_calls(entry->target_plan, &call_count);
+    const XrTargetCallRecord *calls = xr_target_plan_calls(entry->target_plan, &call_count);
     const XrTargetCallRecord *match = NULL;
     for (uint32_t i = 0; calls && i < call_count; i++) {
         if (calls[i].semantic_operation != operation_index)
@@ -2834,17 +2794,15 @@ static bool cg_array_reserve_target_authority(XiCgenCtx *ctx, const XiFunc *func
 /* Resolve a C-emission recipe operand back to the unique frozen Xi member.
  * The lookup is numeric SemanticPlan identity only: no mutable type, spelling,
  * opcode, arity, or backend representation participates. */
-static const XiValue *cg_frozen_value_for_semantic_id(
-    XiCgenCtx *ctx, const XiFunc *function, uint32_t semantic_value) {
+static const XiValue *cg_frozen_value_for_semantic_id(XiCgenCtx *ctx, const XiFunc *function,
+                                                      uint32_t semantic_value) {
     if (!ctx || !function || !function->semantic_plan ||
         function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
         return NULL;
     const XrSemanticFunctionRecord *semantic_function =
-        xr_semantic_plan_function(function->semantic_plan,
-                                  function->semantic_plan_function_index);
+        xr_semantic_plan_function(function->semantic_plan, function->semantic_plan_function_index);
     if (!semantic_function || semantic_value < semantic_function->value_begin ||
-        semantic_value - semantic_function->value_begin >=
-            semantic_function->value_count)
+        semantic_value - semantic_function->value_begin >= semantic_function->value_count)
         return NULL;
     uint32_t local_value = semantic_value - semantic_function->value_begin;
     const XiValue *match = NULL;
@@ -2869,58 +2827,51 @@ static const XiValue *cg_frozen_value_for_semantic_id(
         }
     }
     uint32_t actual = XR_SEMANTIC_INDEX_NONE;
-    return match && cg_value_semantic_id(ctx, function, match, &actual) &&
-                   actual == semantic_value
+    return match && cg_value_semantic_id(ctx, function, match, &actual) && actual == semantic_value
                ? match
                : NULL;
 }
 
-static bool cg_scalar_addressable_alias_recipe_source(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    const XiValue **out_source) {
+static bool cg_scalar_addressable_alias_recipe_source(XiCgenCtx *ctx, const XiFunc *function,
+                                                      const XiValue *value,
+                                                      const XiValue **out_source) {
     if (out_source)
         *out_source = NULL;
     if (!ctx || !function || !value || !out_source)
         return false;
     XrCValueEmissionView alias = {0};
-    CgValueEmissionStatus status =
-        cg_value_emission_view(ctx, function, value, &alias);
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, &alias);
     if (status == CG_VALUE_EMISSION_BACKEND_ONLY)
         return true;
     if (status != CG_VALUE_EMISSION_FOUND)
         return false;
-    if (alias.materialization !=
-        XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS)
+    if (alias.materialization != XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS)
         return true;
-    const XiValue *source = cg_frozen_value_for_semantic_id(
-        ctx, function, alias.recipe_operand_value);
+    const XiValue *source =
+        cg_frozen_value_for_semantic_id(ctx, function, alias.recipe_operand_value);
     XrCValueEmissionView source_emission = {0};
-    if (!source || cg_value_emission_view(ctx, function, source,
-                                          &source_emission) !=
-                       CG_VALUE_EMISSION_FOUND ||
+    if (!source ||
+        cg_value_emission_view(ctx, function, source, &source_emission) !=
+            CG_VALUE_EMISSION_FOUND ||
         alias.target_register_rep != source_emission.target_register_rep ||
         alias.target_memory_rep != source_emission.target_memory_rep ||
         alias.target_register_kind != source_emission.target_register_kind ||
         alias.target_memory_kind != source_emission.target_memory_kind ||
-        alias.rep != source_emission.rep || !alias.c_type ||
-        !source_emission.c_type ||
+        alias.rep != source_emission.rep || !alias.c_type || !source_emission.c_type ||
         strcmp(alias.c_type, source_emission.c_type) != 0) {
-        (void) cg_value_emission_fail(
-            ctx, "scalar addressable alias recipe source is not exact");
+        (void) cg_value_emission_fail(ctx, "scalar addressable alias recipe source is not exact");
         return false;
     }
     *out_source = source;
     return true;
 }
 
-static const XrCEmissionPlan *cg_function_c_emission_plan(
-    XiCgenCtx *ctx, const XiFunc *function) {
+static const XrCEmissionPlan *cg_function_c_emission_plan(XiCgenCtx *ctx, const XiFunc *function) {
     if (!ctx || !function || !function->semantic_plan)
         return NULL;
     const XrCEmissionPlan *match = NULL;
     for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
-        const CgValueEmissionRegistryEntry *entry =
-            &ctx->value_emission_registry[i];
+        const CgValueEmissionRegistryEntry *entry = &ctx->value_emission_registry[i];
         if (entry->semantic_plan != function->semantic_plan)
             continue;
         if (match)
@@ -2930,38 +2881,32 @@ static const XrCEmissionPlan *cg_function_c_emission_plan(
     return match;
 }
 
-static bool cg_direct_local_array_ref_argument_emission(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *call,
-    uint16_t ordinal, const XiValue *argument,
-    XrCCallArgumentEmissionView *out) {
+static bool cg_direct_local_array_ref_argument_emission(XiCgenCtx *ctx, const XiFunc *function,
+                                                        const XiValue *call, uint16_t ordinal,
+                                                        const XiValue *argument,
+                                                        XrCCallArgumentEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     uint32_t semantic_call = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_argument = XR_SEMANTIC_INDEX_NONE;
-    const XrCEmissionPlan *plan =
-        cg_function_c_emission_plan(ctx, function);
+    const XrCEmissionPlan *plan = cg_function_c_emission_plan(ctx, function);
     char error[256] = {0};
-    if (!out || !plan || !cg_value_semantic_id(ctx, function, call,
-                                               &semantic_call) ||
-        !cg_value_semantic_id(ctx, function, argument,
-                              &semantic_argument) ||
-        !xr_c_emission_plan_call_argument_view(
-            plan, semantic_call, ordinal, out, error, sizeof(error)))
+    if (!out || !plan || !cg_value_semantic_id(ctx, function, call, &semantic_call) ||
+        !cg_value_semantic_id(ctx, function, argument, &semantic_argument) ||
+        !xr_c_emission_plan_call_argument_view(plan, semantic_call, ordinal, out, error,
+                                               sizeof(error)))
         return false;
-    if (out->semantic_call_value != semantic_call ||
-        out->semantic_value != semantic_argument || out->ordinal != ordinal ||
-        out->caller_register_kind != XR_MACHINE_REP_DYN_VALUE ||
+    if (out->semantic_call_value != semantic_call || out->semantic_value != semantic_argument ||
+        out->ordinal != ordinal || out->caller_register_kind != XR_MACHINE_REP_DYN_VALUE ||
         out->caller_memory_kind != XR_MACHINE_REP_DYN_VALUE ||
         out->callee_register_kind != XR_MACHINE_REP_RAW_PTR ||
         out->callee_memory_kind != XR_MACHINE_REP_RAW_PTR ||
-        out->mode != XR_TARGET_CALL_REFERENCE ||
-        out->ownership != XR_TARGET_CALL_BORROW ||
+        out->mode != XR_TARGET_CALL_REFERENCE || out->ownership != XR_TARGET_CALL_BORROW ||
         out->transfer_mode != XR_TRANSFER_SHARE ||
         out->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
         out->array_element_storage <= XR_TARGET_ARRAY_STORAGE_NONE ||
-        out->array_element_storage >= XR_TARGET_ARRAY_STORAGE_COUNT ||
-        out->reserved[0] != 0 || out->reserved[1] != 0 ||
-        out->reserved[2] != 0 || !out->c_type ||
+        out->array_element_storage >= XR_TARGET_ARRAY_STORAGE_COUNT || out->reserved[0] != 0 ||
+        out->reserved[1] != 0 || out->reserved[2] != 0 || !out->c_type ||
         strcmp(out->c_type, "XrValue *") != 0) {
         ctx->error = true;
         return false;
@@ -2969,22 +2914,18 @@ static bool cg_direct_local_array_ref_argument_emission(
     return true;
 }
 
-static bool cg_raw_pointer_emission_is_exact(
-    const XrCValueEmissionView *view) {
+static bool cg_raw_pointer_emission_is_exact(const XrCValueEmissionView *view) {
     if (!view || !view->c_type)
         return false;
-    if (view->materialization ==
-        XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER)
+    if (view->materialization == XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER)
         return view->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
                view->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
                view->recipe_discriminant > XR_TARGET_ARRAY_STORAGE_NONE &&
                view->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_COUNT &&
                strcmp(view->c_type, "XrValue *") == 0;
     return view->materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
-           (strcmp(view->c_type, "const void *") == 0 ||
-            strcmp(view->c_type, "void *") == 0 ||
-            strcmp(view->c_type, "const void * *") == 0 ||
-            strcmp(view->c_type, "void * *") == 0);
+           (strcmp(view->c_type, "const void *") == 0 || strcmp(view->c_type, "void *") == 0 ||
+            strcmp(view->c_type, "const void * *") == 0 || strcmp(view->c_type, "void * *") == 0);
 }
 
 /* Reconstruct the pointee carrier for a local Array ref place only from the
@@ -2992,9 +2933,9 @@ static bool cg_raw_pointer_emission_is_exact(
  * The PLACE_LOAD after the call must dereference an XrValue slot; consulting
  * Xi's Array type or the legacy raw-pointer plan would instead read the tag
  * word as a pointer. */
-static bool cg_direct_local_array_ref_place_emission(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *place,
-    XrCCallArgumentEmissionView *out) {
+static bool cg_direct_local_array_ref_place_emission(XiCgenCtx *ctx, const XiFunc *function,
+                                                     const XiValue *place,
+                                                     XrCCallArgumentEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (!ctx || !function || !place || !out)
@@ -3016,8 +2957,7 @@ static bool cg_direct_local_array_ref_place_emission(
                     continue;
                 XrCCallArgumentEmissionView candidate = {0};
                 if (!cg_direct_local_array_ref_argument_emission(
-                        ctx, function, user, (uint16_t) (ordinal - 1u),
-                        place, &candidate))
+                        ctx, function, user, (uint16_t) (ordinal - 1u), place, &candidate))
                     continue;
                 if (have) {
                     ctx->error = true;
@@ -3034,9 +2974,8 @@ static bool cg_direct_local_array_ref_place_emission(
     return true;
 }
 
-static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx,
-                                        const XrCValueEmissionView *view,
-                                        XaotRep *out) {
+static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx, const XrCValueEmissionView *view,
+                                       XaotRep *out) {
     if (!view || !out)
         return false;
     switch ((XrCValueRep) view->rep) {
@@ -3099,21 +3038,20 @@ static bool cg_value_emission_xaot_rep(XiCgenCtx *ctx,
         case XR_C_VALUE_REP_VOID:
             *out = XAOT_REP_VOID;
             return true;
-        case XR_C_VALUE_REP_COUNT: break;
+        case XR_C_VALUE_REP_COUNT:
+            break;
     }
     (void) cg_value_emission_fail(ctx, "immutable C value representation is invalid");
     return false;
 }
 
 static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
-                                           const XrCValueEmissionView *right) {
-    if (!left || !right ||
-        left->target_register_rep != right->target_register_rep ||
+                                          const XrCValueEmissionView *right) {
+    if (!left || !right || left->target_register_rep != right->target_register_rep ||
         left->target_memory_rep != right->target_memory_rep ||
         left->target_register_kind != right->target_register_kind ||
         left->target_memory_kind != right->target_memory_kind ||
-        left->register_bits != right->register_bits ||
-        left->memory_align != right->memory_align ||
+        left->register_bits != right->register_bits || left->memory_align != right->memory_align ||
         left->memory_size != right->memory_size || left->rep != right->rep ||
         left->materialization != right->materialization ||
         left->literal_byte_length != right->literal_byte_length ||
@@ -3131,8 +3069,7 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
             right->recipe_hof_callback_parameter_reps[0] ||
         left->recipe_hof_callback_parameter_reps[1] !=
             right->recipe_hof_callback_parameter_reps[1] ||
-        left->recipe_hof_callback_return_rep !=
-            right->recipe_hof_callback_return_rep ||
+        left->recipe_hof_callback_return_rep != right->recipe_hof_callback_return_rep ||
         left->recipe_hof_reserved != right->recipe_hof_reserved ||
         left->backing_value != right->backing_value ||
         left->backing_element_count != right->backing_element_count ||
@@ -3143,44 +3080,36 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
         strcmp(left->c_type, right->c_type) != 0 ||
         ((!left->backing_c_type && right->backing_c_type) ||
          (left->backing_c_type && !right->backing_c_type)) ||
-        (left->backing_c_type &&
-         strcmp(left->backing_c_type, right->backing_c_type) != 0) ||
+        (left->backing_c_type && strcmp(left->backing_c_type, right->backing_c_type) != 0) ||
         ((!left->recipe_symbol && right->recipe_symbol) ||
          (left->recipe_symbol && !right->recipe_symbol)) ||
-        (left->recipe_symbol &&
-         strcmp(left->recipe_symbol, right->recipe_symbol) != 0) ||
+        (left->recipe_symbol && strcmp(left->recipe_symbol, right->recipe_symbol) != 0) ||
         ((!left->recipe_type_name && right->recipe_type_name) ||
          (left->recipe_type_name && !right->recipe_type_name)) ||
-        (left->recipe_type_name &&
-         strcmp(left->recipe_type_name, right->recipe_type_name) != 0) ||
+        (left->recipe_type_name && strcmp(left->recipe_type_name, right->recipe_type_name) != 0) ||
         ((!left->recipe_member_name && right->recipe_member_name) ||
          (left->recipe_member_name && !right->recipe_member_name)) ||
         (left->recipe_member_name &&
          strcmp(left->recipe_member_name, right->recipe_member_name) != 0) ||
         (left->literal_byte_length != 0 &&
          (!left->literal_bytes || !right->literal_bytes ||
-          memcmp(left->literal_bytes, right->literal_bytes,
-                 left->literal_byte_length) != 0)))
+          memcmp(left->literal_bytes, right->literal_bytes, left->literal_byte_length) != 0)))
         return false;
     for (uint16_t i = 0; i < left->recipe_argument_count; i++) {
         if (!left->recipe_arguments || !right->recipe_arguments ||
-            left->recipe_arguments[i].semantic_value !=
-                right->recipe_arguments[i].semantic_value ||
+            left->recipe_arguments[i].semantic_value != right->recipe_arguments[i].semantic_value ||
             left->recipe_arguments[i].source_semantic_value !=
                 right->recipe_arguments[i].source_semantic_value ||
-            left->recipe_arguments[i].kind !=
-                right->recipe_arguments[i].kind ||
-            memcmp(left->recipe_arguments[i].reserved,
-                   right->recipe_arguments[i].reserved,
+            left->recipe_arguments[i].kind != right->recipe_arguments[i].kind ||
+            memcmp(left->recipe_arguments[i].reserved, right->recipe_arguments[i].reserved,
                    sizeof(left->recipe_arguments[i].reserved)) != 0)
             return false;
     }
     return true;
 }
 
-static bool cg_value_emission_storage_rep(XiCgenCtx *ctx,
-                                           const XrCValueEmissionView *view,
-                                           XrRep *out) {
+static bool cg_value_emission_storage_rep(XiCgenCtx *ctx, const XrCValueEmissionView *view,
+                                          XrRep *out) {
     if (!view || !out)
         return false;
     switch ((XrCValueRep) view->rep) {
@@ -3224,254 +3153,205 @@ static bool cg_value_emission_storage_rep(XiCgenCtx *ctx,
                 break;
             *out = XR_REP_RAWPTR;
             return true;
-        case XR_C_VALUE_REP_COUNT: break;
+        case XR_C_VALUE_REP_COUNT:
+            break;
     }
     (void) cg_value_emission_fail(ctx, "immutable C value representation is invalid");
     return false;
 }
 
-static bool cg_channel_receive_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
+static bool cg_channel_receive_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                             const XiValue *value, XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
-    if (!ctx || !function || !value || !out ||
-        value->op != XI_CHAN_TRY_RECV || value->nargs != 1 ||
+    if (!ctx || !function || !value || !out || value->op != XI_CHAN_TRY_RECV || value->nargs != 1 ||
         !value->args[0]) {
-        (void) cg_value_emission_fail(
-            ctx, "channel receive C emission input is incomplete");
+        (void) cg_value_emission_fail(ctx, "channel receive C emission input is incomplete");
         return false;
     }
     XrCValueEmissionView receiver = {0};
-    if (cg_value_emission_view(ctx, function, value, out) !=
-            CG_VALUE_EMISSION_FOUND ||
+    if (cg_value_emission_view(ctx, function, value, out) != CG_VALUE_EMISSION_FOUND ||
         cg_value_emission_view(ctx, function, value->args[0], &receiver) !=
             CG_VALUE_EMISSION_FOUND ||
-        out->materialization !=
-            XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD ||
-        out->recipe_operand_value != receiver.semantic_value ||
-        !out->recipe_symbol || !out->recipe_symbol[0] ||
-        out->rep == XR_C_VALUE_REP_VOID ||
+        out->materialization != XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD ||
+        out->recipe_operand_value != receiver.semantic_value || !out->recipe_symbol ||
+        !out->recipe_symbol[0] || out->rep == XR_C_VALUE_REP_VOID ||
         out->rep == XR_C_VALUE_REP_TAGGED) {
-        (void) cg_value_emission_fail(
-            ctx, "channel receive has no exact immutable payload recipe");
+        (void) cg_value_emission_fail(ctx, "channel receive has no exact immutable payload recipe");
         return false;
     }
     return true;
 }
 
-static bool cg_string_runes_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
+static bool cg_string_runes_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                          const XiValue *value, XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (!ctx || !function || !value || !out)
         return false;
-    CgValueEmissionStatus status =
-        cg_value_emission_view(ctx, function, value, out);
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, out);
     if (status != CG_VALUE_EMISSION_FOUND ||
         out->materialization != XR_C_VALUE_MATERIALIZATION_STRING_RUNES)
         return false;
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
-    if (!value->args || !value->args[0] ||
-        out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol ||
-        !out->recipe_symbol[0] ||
-        !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
-        receiver != out->recipe_operand_value) {
-        (void) cg_value_emission_fail(
-            ctx, "String.runes has no exact immutable C recipe");
-        return false;
-    }
-    return true;
-}
-
-static bool cg_iterator_rune_has_next_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
-    if (out)
-        memset(out, 0, sizeof(*out));
-    if (!ctx || !function || !value || !out)
-        return false;
-    CgValueEmissionStatus status =
-        cg_value_emission_view(ctx, function, value, out);
-    if (status != CG_VALUE_EMISSION_FOUND ||
-        out->materialization !=
-            XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_HAS_NEXT)
-        return false;
-    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
-    if (!value->args || !value->args[0] || out->rep != XR_C_VALUE_REP_BOOL ||
+    if (!value->args || !value->args[0] || out->rep != XR_C_VALUE_REP_TAGGED ||
         !out->recipe_symbol || !out->recipe_symbol[0] ||
         !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
         receiver != out->recipe_operand_value) {
-        (void) cg_value_emission_fail(
-            ctx, "Iterator<rune>.hasNext has no exact immutable C recipe");
+        (void) cg_value_emission_fail(ctx, "String.runes has no exact immutable C recipe");
         return false;
     }
     return true;
 }
 
-static bool cg_iterator_rune_next_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
+static bool cg_iterator_rune_has_next_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                                    const XiValue *value,
+                                                    XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (!ctx || !function || !value || !out)
         return false;
-    CgValueEmissionStatus status =
-        cg_value_emission_view(ctx, function, value, out);
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, out);
     if (status != CG_VALUE_EMISSION_FOUND ||
-        out->materialization !=
-            XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NEXT)
+        out->materialization != XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_HAS_NEXT)
         return false;
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
-    if (value->nargs != 1 || !value->args || !value->args[0] ||
-        out->rep != XR_C_VALUE_REP_RUNE ||
+    if (!value->args || !value->args[0] || out->rep != XR_C_VALUE_REP_BOOL || !out->recipe_symbol ||
+        !out->recipe_symbol[0] || !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
+        receiver != out->recipe_operand_value) {
+        (void) cg_value_emission_fail(ctx,
+                                      "Iterator<rune>.hasNext has no exact immutable C recipe");
+        return false;
+    }
+    return true;
+}
+
+static bool cg_iterator_rune_next_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                                const XiValue *value, XrCValueEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !value || !out)
+        return false;
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, out);
+    if (status != CG_VALUE_EMISSION_FOUND ||
+        out->materialization != XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NEXT)
+        return false;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    if (value->nargs != 1 || !value->args || !value->args[0] || out->rep != XR_C_VALUE_REP_RUNE ||
         !out->recipe_symbol || !out->recipe_symbol[0] ||
         !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
         receiver != out->recipe_operand_value) {
-        (void) cg_value_emission_fail(
-            ctx, "Iterator<rune>.next has no exact immutable C recipe");
+        (void) cg_value_emission_fail(ctx, "Iterator<rune>.next has no exact immutable C recipe");
         return false;
     }
     return true;
 }
 
-static bool cg_rune_to_uint32_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
+static bool cg_rune_to_uint32_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                            const XiValue *value, XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (!ctx || !function || !value || !out)
         return false;
-    CgValueEmissionStatus status =
-        cg_value_emission_view(ctx, function, value, out);
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, out);
     if (status != CG_VALUE_EMISSION_FOUND ||
         out->materialization != XR_C_VALUE_MATERIALIZATION_RUNE_TO_UINT32)
         return false;
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
-    if (value->nargs != 1 || !value->args || !value->args[0] ||
-        out->rep != XR_C_VALUE_REP_U32 || !out->recipe_symbol ||
-        !out->recipe_symbol[0] ||
+    if (value->nargs != 1 || !value->args || !value->args[0] || out->rep != XR_C_VALUE_REP_U32 ||
+        !out->recipe_symbol || !out->recipe_symbol[0] ||
         !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
         receiver != out->recipe_operand_value) {
-        (void) cg_value_emission_fail(
-            ctx, "rune.toUInt32 has no exact immutable C recipe");
+        (void) cg_value_emission_fail(ctx, "rune.toUInt32 has no exact immutable C recipe");
         return false;
     }
     return true;
 }
 
-static bool cg_rune_is_whitespace_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
+static bool cg_rune_is_whitespace_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                                const XiValue *value, XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (!ctx || !function || !value || !out)
         return false;
-    CgValueEmissionStatus status =
-        cg_value_emission_view(ctx, function, value, out);
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, out);
     if (status != CG_VALUE_EMISSION_FOUND ||
-        out->materialization !=
-            XR_C_VALUE_MATERIALIZATION_RUNE_IS_WHITESPACE)
+        out->materialization != XR_C_VALUE_MATERIALIZATION_RUNE_IS_WHITESPACE)
         return false;
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
-    if (value->nargs != 1 || !value->args || !value->args[0] ||
-        out->rep != XR_C_VALUE_REP_BOOL || !out->recipe_symbol ||
-        !out->recipe_symbol[0] ||
+    if (value->nargs != 1 || !value->args || !value->args[0] || out->rep != XR_C_VALUE_REP_BOOL ||
+        !out->recipe_symbol || !out->recipe_symbol[0] ||
         !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
         receiver != out->recipe_operand_value) {
-        (void) cg_value_emission_fail(
-            ctx, "rune.isWhitespace has no exact immutable C recipe");
+        (void) cg_value_emission_fail(ctx, "rune.isWhitespace has no exact immutable C recipe");
         return false;
     }
     return true;
 }
 
-static bool cg_string_slice_range_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
+static bool cg_string_slice_range_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                                const XiValue *value, XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (!ctx || !function || !value || !out)
         return false;
-    CgValueEmissionStatus status =
-        cg_value_emission_view(ctx, function, value, out);
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, out);
     if (status != CG_VALUE_EMISSION_FOUND ||
-        out->materialization !=
-            XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE)
+        out->materialization != XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE)
         return false;
-    if (value->nargs != 3 || !value->args || !value->args[0] ||
-        !value->args[1] || !value->args[2] ||
-        out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol ||
-        !out->recipe_symbol[0] || out->recipe_argument_count != 2 ||
-        !out->recipe_arguments) {
-        (void) cg_value_emission_fail(
-            ctx, "String.slice has no exact immutable C recipe");
+    if (value->nargs != 3 || !value->args || !value->args[0] || !value->args[1] ||
+        !value->args[2] || out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol ||
+        !out->recipe_symbol[0] || out->recipe_argument_count != 2 || !out->recipe_arguments) {
+        (void) cg_value_emission_fail(ctx, "String.slice has no exact immutable C recipe");
         return false;
     }
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
     if (!cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
         receiver != out->recipe_operand_value) {
-        (void) cg_value_emission_fail(
-            ctx, "String.slice receiver identity changed");
+        (void) cg_value_emission_fail(ctx, "String.slice receiver identity changed");
         return false;
     }
     for (uint16_t i = 0; i < 2; i++) {
         uint32_t bound = XR_SEMANTIC_INDEX_NONE;
-        if (out->recipe_arguments[i].kind !=
-                XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND ||
-            !cg_value_semantic_id(ctx, function, value->args[i + 1u],
-                                  &bound) ||
+        if (out->recipe_arguments[i].kind != XR_C_RECIPE_ARGUMENT_STRING_SLICE_BOUND ||
+            !cg_value_semantic_id(ctx, function, value->args[i + 1u], &bound) ||
             bound != out->recipe_arguments[i].semantic_value) {
-            (void) cg_value_emission_fail(
-                ctx, "String.slice bound identity changed");
+            (void) cg_value_emission_fail(ctx, "String.slice bound identity changed");
             return false;
         }
     }
     return true;
 }
 
-static void cg_emit_channel_receive_payload_expression(
-    FILE *out, const XrCValueEmissionView *view, uint32_t value_id,
-    bool coroutine) {
+static void cg_emit_channel_receive_payload_expression(FILE *out, const XrCValueEmissionView *view,
+                                                       uint32_t value_id, bool coroutine) {
     fprintf(out, "%s(", view->recipe_symbol);
     if (coroutine)
         fprintf(out, "_chan_try_payload_%u", value_id);
     else
-        fprintf(out,
-                "xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(_chan_try_%u))",
-                value_id);
+        fprintf(out, "xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(_chan_try_%u))", value_id);
     fprintf(out, ")");
 }
 
-static const XiValue *cg_string_concat_direct_u64_source(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *live_argument,
-    const XrCRecipeArgumentView *argument) {
+static const XiValue *cg_string_concat_direct_u64_source(XiCgenCtx *ctx, const XiFunc *function,
+                                                         const XiValue *live_argument,
+                                                         const XrCRecipeArgumentView *argument) {
     if (!ctx || !function || !live_argument || !argument ||
         argument->kind != XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64)
         return NULL;
-    const XaotValuePlan *adapter =
-        xaot_bundle_find_value_plan(ctx->aot_bundle, live_argument);
+    const XaotValuePlan *adapter = xaot_bundle_find_value_plan(ctx->aot_bundle, live_argument);
     uint32_t logical_semantic_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t source_semantic_value = XR_SEMANTIC_INDEX_NONE;
     const XiValue *source =
-        live_argument->nargs == 1u && live_argument->args
-            ? live_argument->args[0]
-            : NULL;
+        live_argument->nargs == 1u && live_argument->args ? live_argument->args[0] : NULL;
     XrCValueEmissionView source_view = {0};
-    return adapter &&
-                   xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle,
-                                                        adapter) &&
+    return adapter && xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter) &&
                    live_argument->op == XI_BOX && source &&
-                   cg_value_semantic_id(ctx, function, live_argument,
-                                        &logical_semantic_value) &&
+                   cg_value_semantic_id(ctx, function, live_argument, &logical_semantic_value) &&
                    logical_semantic_value == argument->semantic_value &&
-                   cg_value_semantic_id(ctx, function, source,
-                                        &source_semantic_value) &&
-                   source_semantic_value ==
-                       argument->source_semantic_value &&
-                   cg_value_emission_view(ctx, function, source,
-                                          &source_view) ==
+                   cg_value_semantic_id(ctx, function, source, &source_semantic_value) &&
+                   source_semantic_value == argument->source_semantic_value &&
+                   cg_value_emission_view(ctx, function, source, &source_view) ==
                        CG_VALUE_EMISSION_FOUND &&
                    source_view.rep == XR_C_VALUE_REP_U64 &&
                    source_view.target_register_kind == XR_MACHINE_REP_U64 &&
@@ -3482,53 +3362,43 @@ static const XiValue *cg_string_concat_direct_u64_source(
                : NULL;
 }
 
-static bool cg_string_concat_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
+static bool cg_string_concat_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                           const XiValue *value, XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (!ctx || !function || !value || !out)
         return false;
-    CgValueEmissionStatus status =
-        cg_value_emission_view(ctx, function, value, out);
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, out);
     if (status != CG_VALUE_EMISSION_FOUND ||
         out->materialization != XR_C_VALUE_MATERIALIZATION_STRING_CONCAT)
         return false;
-    if (out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol ||
-        !out->recipe_symbol[0] || out->recipe_argument_count < 2u ||
-        out->recipe_argument_count != value->nargs ||
+    if (out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol || !out->recipe_symbol[0] ||
+        out->recipe_argument_count < 2u || out->recipe_argument_count != value->nargs ||
         !out->recipe_arguments) {
-        (void) cg_value_emission_fail(
-            ctx, "string concat has no exact immutable C recipe");
+        (void) cg_value_emission_fail(ctx, "string concat has no exact immutable C recipe");
         return false;
     }
     for (uint16_t i = 0; i < out->recipe_argument_count; i++) {
-        const XrCRecipeArgumentView *argument =
-            &out->recipe_arguments[i];
+        const XrCRecipeArgumentView *argument = &out->recipe_arguments[i];
         const XiValue *live_argument = value->args[i];
-        if (!live_argument ||
-            (argument->kind != XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
-             argument->kind != XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64)) {
-            (void) cg_value_emission_fail(
-                ctx, "string concat C recipe argument identity changed");
+        if (!live_argument || (argument->kind != XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
+                               argument->kind != XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64)) {
+            (void) cg_value_emission_fail(ctx, "string concat C recipe argument identity changed");
             return false;
         }
         if (argument->kind == XR_C_RECIPE_ARGUMENT_STRING_VALUE) {
             uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
-            if (argument->source_semantic_value !=
-                    argument->semantic_value ||
-                !cg_value_semantic_id(ctx, function, live_argument,
-                                      &semantic_value) ||
+            if (argument->source_semantic_value != argument->semantic_value ||
+                !cg_value_semantic_id(ctx, function, live_argument, &semantic_value) ||
                 semantic_value != argument->semantic_value) {
-                (void) cg_value_emission_fail(
-                    ctx, "string concat tagged argument identity changed");
+                (void) cg_value_emission_fail(ctx,
+                                              "string concat tagged argument identity changed");
                 return false;
             }
         } else {
-            if (!cg_string_concat_direct_u64_source(
-                    ctx, function, live_argument, argument)) {
-                (void) cg_value_emission_fail(
-                    ctx, "string concat direct-u64 source authority changed");
+            if (!cg_string_concat_direct_u64_source(ctx, function, live_argument, argument)) {
+                (void) cg_value_emission_fail(ctx,
+                                              "string concat direct-u64 source authority changed");
                 return false;
             }
         }
@@ -3536,47 +3406,38 @@ static bool cg_string_concat_emission_view(
     return true;
 }
 
-static bool cg_adt_enum_constructor_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
+static bool cg_adt_enum_constructor_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                                  const XiValue *value, XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (!ctx || !function || !value || !out)
         return false;
-    CgValueEmissionStatus status =
-        cg_value_emission_view(ctx, function, value, out);
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, out);
     if (status != CG_VALUE_EMISSION_FOUND ||
-        out->materialization !=
-            XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR)
+        out->materialization != XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR)
         return false;
-    if (out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol ||
-        !out->recipe_symbol[0] || !out->recipe_type_name ||
-        !out->recipe_type_name[0] || !out->recipe_member_name ||
+    if (out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol || !out->recipe_symbol[0] ||
+        !out->recipe_type_name || !out->recipe_type_name[0] || !out->recipe_member_name ||
         !out->recipe_member_name[0] || out->recipe_layout_id == 0 ||
         out->recipe_argument_count == 0 || !out->recipe_arguments ||
-        value->nargs != (uint16_t) (out->recipe_argument_count + 1u) ||
-        !value->args || !value->args[0]) {
-        (void) cg_value_emission_fail(
-            ctx, "ADT enum constructor has no exact immutable C recipe");
+        value->nargs != (uint16_t) (out->recipe_argument_count + 1u) || !value->args ||
+        !value->args[0]) {
+        (void) cg_value_emission_fail(ctx, "ADT enum constructor has no exact immutable C recipe");
         return false;
     }
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
     if (!cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
         receiver != out->recipe_operand_value) {
-        (void) cg_value_emission_fail(
-            ctx, "ADT enum constructor receiver identity changed");
+        (void) cg_value_emission_fail(ctx, "ADT enum constructor receiver identity changed");
         return false;
     }
     for (uint16_t i = 0; i < out->recipe_argument_count; i++) {
         uint32_t payload = XR_SEMANTIC_INDEX_NONE;
         if (!value->args[i + 1u] ||
-            out->recipe_arguments[i].kind !=
-                XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD ||
-            !cg_value_semantic_id(ctx, function, value->args[i + 1u],
-                                  &payload) ||
+            out->recipe_arguments[i].kind != XR_C_RECIPE_ARGUMENT_ENUM_PAYLOAD ||
+            !cg_value_semantic_id(ctx, function, value->args[i + 1u], &payload) ||
             payload != out->recipe_arguments[i].semantic_value) {
-            (void) cg_value_emission_fail(
-                ctx, "ADT enum constructor payload identity changed");
+            (void) cg_value_emission_fail(ctx, "ADT enum constructor payload identity changed");
             return false;
         }
     }
@@ -3968,8 +3829,8 @@ static const char *cg_byte_array_repeat_adapter_name(XiCgenCtx *ctx);
 
 #include "xi_cgen_array_helpers.inc.c"
 
-static bool cg_fixed_array_backing_ownership_is_exact(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value) {
+static bool cg_fixed_array_backing_ownership_is_exact(XiCgenCtx *ctx, const XiFunc *function,
+                                                      const XiValue *value) {
     CgFixedArrayLaneInfo info = {0};
     return cg_fixed_array_lane_info_from_emission(ctx, function, value, &info);
 }
@@ -4957,8 +4818,7 @@ static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const Xi
     if (cg_array_value_uses_native_local(ctx, f, v))
         return "xrt_array_t *";
     XrCValueEmissionView emission = {0};
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, f, v, &emission);
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, f, v, &emission);
     if (emission_status == CG_VALUE_EMISSION_FOUND)
         return emission.c_type;
     if (emission_status == CG_VALUE_EMISSION_ERROR)
@@ -4996,13 +4856,10 @@ static const char *cg_coro_decl_ctype(XiCgenCtx *ctx, const XiFunc *f, const XiV
     if (cg_value_type_is_bool(v) && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
         return ctype_str(XR_REP_I64);
     XrCValueEmissionView emission = {0};
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, f, v, &emission);
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, f, v, &emission);
     if (emission_status == CG_VALUE_EMISSION_ERROR)
         return "XrValue";
-    const char *t = emission_status == CG_VALUE_EMISSION_FOUND
-                        ? emission.c_type
-                        : NULL;
+    const char *t = emission_status == CG_VALUE_EMISSION_FOUND ? emission.c_type : NULL;
     if (!t) {
         const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
         t = (plan && plan->rep.c_type) ? plan->rep.c_type : local_ctype_str(v);
@@ -5048,8 +4905,7 @@ static bool cg_value_narrow_int_rep(XiCgenCtx *ctx, const XiFunc *f, const XiVal
         return false;
     XaotRep rep = XAOT_REP_VOID;
     XrCValueEmissionView emission = {0};
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, f, v, &emission);
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, f, v, &emission);
     if (emission_status == CG_VALUE_EMISSION_FOUND) {
         if (!cg_value_emission_xaot_rep(ctx, &emission, &rep))
             return false;
@@ -5127,8 +4983,8 @@ static const char *cg_bitwise_binary_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI, XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: bitwise-binary owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5145,8 +5001,8 @@ static const char *cg_numeric_neg_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: numeric-neg owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5177,8 +5033,7 @@ static const char *cg_int_div_mod_adapter_name(XiCgenCtx *ctx) {
  * stable owner ID rather than named locally. */
 static const char *cg_compare_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,
-                                        XR_SEM_OWNER_ID_SHARED_COMPARE_LO,
-                                        XR_SEM_CONSUMER_CGEN)) {
+                                        XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: compare owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
@@ -5195,14 +5050,13 @@ static const char *cg_compare_adapter_name(XiCgenCtx *ctx) {
 
 static const char *cg_regex_compile_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_REGEX_HI,
-                                        XR_SEM_OWNER_ID_SHARED_REGEX_LO,
-                                        XR_SEM_CONSUMER_CGEN)) {
+                                        XR_SEM_OWNER_ID_SHARED_REGEX_LO, XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: regex owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_REGEX_HI, XR_SEM_OWNER_ID_SHARED_REGEX_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_REGEX_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_REGEX_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: regex owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5211,8 +5065,7 @@ static const char *cg_regex_compile_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
-static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                    const char *kind) {
+static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *kind) {
     const char *adapter = cg_bitwise_binary_adapter_name(ctx);
     if (!adapter || !kind || !kind[0] || !v || v->nargs != 2 || !v->args[0] || !v->args[1] ||
         (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)) {
@@ -5257,14 +5110,13 @@ static bool cg_type_is_unsigned_int(const XrType *type) {
 
 static const char *cg_shift_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_SHIFT_HI,
-                                        XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
-                                        XR_SEM_CONSUMER_CGEN)) {
+                                        XR_SEM_OWNER_ID_SHARED_SHIFT_LO, XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: shift owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_SHIFT_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_SHIFT_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: shift owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5316,8 +5168,8 @@ static const char *cg_truthiness_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI, XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: truthiness owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5335,8 +5187,7 @@ static const char *cg_assert_condition_adapter_name(XiCgenCtx *ctx) {
         return NULL;
     }
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI,
-        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO);
+        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI, XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: assert-condition owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5353,9 +5204,8 @@ static const char *cg_owner_forward_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI,
-        XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO);
     if (!adapter || strcmp(adapter, "xr_owner_forward_plan_core") != 0) {
         fprintf(stderr, "[xi_cgen] ERROR: owner-forward owner has no exact CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5372,9 +5222,8 @@ static const char *cg_codegen_opaque_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI,
-        XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_CODEGEN_OPAQUE_LO);
     if (!adapter || strcmp(adapter, "xr_codegen_opaque_plan_core") != 0) {
         fprintf(stderr, "[xi_cgen] ERROR: codegen-opaque owner has no exact CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5385,14 +5234,13 @@ static const char *cg_codegen_opaque_adapter_name(XiCgenCtx *ctx) {
 
 static const char *cg_copy_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_COPY_HI,
-                                        XR_SEM_OWNER_ID_SHARED_COPY_LO,
-                                        XR_SEM_CONSUMER_CGEN)) {
+                                        XR_SEM_OWNER_ID_SHARED_COPY_LO, XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: copy owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_COPY_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_COPY_LO);
     if (!adapter || strcmp(adapter, "xr_copy_plan_core") != 0) {
         fprintf(stderr, "[xi_cgen] ERROR: copy owner has no exact CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5409,9 +5257,8 @@ static const char *cg_static_address_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_HI,
-        XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_STATIC_ADDRESS_LO);
     if (!adapter || strcmp(adapter, "xr_static_address_plan_core") != 0) {
         fprintf(stderr, "[xi_cgen] ERROR: static-address owner has no exact CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5428,9 +5275,8 @@ static const char *cg_reference_count_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_HI,
-        XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_REFERENCE_COUNT_LO);
     if (!adapter || strcmp(adapter, "xr_reference_count_plan_core") != 0) {
         fprintf(stderr, "[xi_cgen] ERROR: reference-count owner has no exact CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5447,8 +5293,8 @@ static const char *cg_atomic_load_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_LO);
     if (!adapter || strcmp(adapter, "xr_atomic_load_plan_core") != 0) {
         fprintf(stderr, "[xi_cgen] ERROR: atomic-load owner has no exact CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5465,8 +5311,8 @@ static const char *cg_atomic_store_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO);
     if (!adapter || strcmp(adapter, "xr_atomic_store_plan_core") != 0) {
         fprintf(stderr, "[xi_cgen] ERROR: atomic-store owner has no exact CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5477,14 +5323,13 @@ static const char *cg_atomic_store_adapter_name(XiCgenCtx *ctx) {
 
 static const char *cg_range_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_RANGE_HI,
-                                        XR_SEM_OWNER_ID_SHARED_RANGE_LO,
-                                        XR_SEM_CONSUMER_CGEN)) {
+                                        XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: Range owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_RANGE_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_RANGE_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: Range owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5502,8 +5347,7 @@ static const char *cg_type_identity_adapter_name(XiCgenCtx *ctx) {
         return NULL;
     }
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
-        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO);
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI, XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: type-identity owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5514,14 +5358,13 @@ static const char *cg_type_identity_adapter_name(XiCgenCtx *ctx) {
 
 static const char *cg_exact_bits_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BITS_HI,
-                                        XR_SEM_OWNER_ID_SHARED_BITS_LO,
-                                        XR_SEM_CONSUMER_CGEN)) {
+                                        XR_SEM_OWNER_ID_SHARED_BITS_LO, XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: exact-width bits owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BITS_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BITS_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: exact-width bits owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5532,14 +5375,13 @@ static const char *cg_exact_bits_adapter_name(XiCgenCtx *ctx) {
 
 static const char *cg_bits_not_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,
-                                        XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO,
-                                        XR_SEM_CONSUMER_CGEN)) {
+                                        XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO, XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: bitwise-not owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI, XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: bitwise-not owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5557,8 +5399,7 @@ static const char *cg_numeric_width_adapter_name(XiCgenCtx *ctx) {
         return NULL;
     }
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
-        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO);
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: numeric width owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5576,8 +5417,7 @@ static const char *cg_byte_slice_scalar_adapter_name(XiCgenCtx *ctx) {
         return NULL;
     }
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO);
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: byte-slice scalar owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5595,8 +5435,7 @@ static const char *cg_byte_slice_compare_adapter_name(XiCgenCtx *ctx) {
         return NULL;
     }
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO);
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: byte-slice compare owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5613,9 +5452,8 @@ static const char *cg_byte_slice_fill_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: byte-slice fill owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5632,9 +5470,8 @@ static const char *cg_byte_slice_copy_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: byte-slice copy owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5652,8 +5489,7 @@ static const char *cg_byte_slice_repeat_adapter_name(XiCgenCtx *ctx) {
         return NULL;
     }
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO);
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: byte-slice repeat owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5670,9 +5506,8 @@ static const char *cg_byte_array_copy_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: byte-array copy owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5690,8 +5525,7 @@ static const char *cg_byte_array_append_adapter_name(XiCgenCtx *ctx) {
         return NULL;
     }
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO);
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI, XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: byte-array append owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5709,8 +5543,7 @@ static const char *cg_byte_array_repeat_adapter_name(XiCgenCtx *ctx) {
         return NULL;
     }
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_LO);
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_HI, XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: byte-array repeat owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5720,16 +5553,16 @@ static const char *cg_byte_array_repeat_adapter_name(XiCgenCtx *ctx) {
 }
 
 static const char *cg_target_layout_query_adapter_name(XiCgenCtx *ctx) {
-    if (!xr_semantic_owner_has_consumer(
-            XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI,
-            XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO, XR_SEM_CONSUMER_CGEN)) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI,
+                                        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: target-layout query owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI,
-        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO);
+    const char *adapter =
+        xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI,
+                                       XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: target-layout query owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5757,20 +5590,18 @@ static const char *cg_target_simd_query_adapter_name(XiCgenCtx *ctx) {
 }
 
 static const char *cg_byte_slice_common_prefix_adapter_name(XiCgenCtx *ctx) {
-    if (!xr_semantic_owner_has_consumer(
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO, XR_SEM_CONSUMER_CGEN)) {
-        fprintf(stderr,
-                "[xi_cgen] ERROR: byte-slice common-prefix owner has no CGen consumer\n");
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
+                                        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: byte-slice common-prefix owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO);
+    const char *adapter =
+        xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
+                                       XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO);
     if (!adapter || !adapter[0]) {
-        fprintf(stderr,
-                "[xi_cgen] ERROR: byte-slice common-prefix owner has no CGen adapter\n");
+        fprintf(stderr, "[xi_cgen] ERROR: byte-slice common-prefix owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
@@ -5785,9 +5616,8 @@ static const char *cg_pod_slice_copy_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: POD-slice copy owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5804,9 +5634,8 @@ static const char *cg_pod_slice_fill_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI,
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: POD-slice fill owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5824,8 +5653,7 @@ static const char *cg_pod_slice_compare_adapter_name(XiCgenCtx *ctx) {
         return NULL;
     }
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO);
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: POD-slice compare owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5842,9 +5670,8 @@ static const char *cg_pod_slice_view_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI,
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: POD-slice view owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5872,16 +5699,15 @@ static const char *cg_slice_window_adapter_name(XiCgenCtx *ctx) {
 }
 
 static const char *cg_raw_memory_copy_adapter_name(XiCgenCtx *ctx) {
-    if (!xr_semantic_owner_has_consumer(
-            XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
-            XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO, XR_SEM_CONSUMER_CGEN)) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+                                        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: raw-memory-copy owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
-        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: raw-memory-copy owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5898,8 +5724,8 @@ static const char *cg_data_pointer_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI, XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: data-pointer owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5909,16 +5735,15 @@ static const char *cg_data_pointer_adapter_name(XiCgenCtx *ctx) {
 }
 
 static const char *cg_raw_scalar_access_adapter_name(XiCgenCtx *ctx) {
-    if (!xr_semantic_owner_has_consumer(
-            XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,
-            XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_CGEN)) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,
+                                        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: raw-scalar-access owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO);
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: raw-scalar-access owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5928,16 +5753,16 @@ static const char *cg_raw_scalar_access_adapter_name(XiCgenCtx *ctx) {
 }
 
 static const char *cg_enum_metadata_access_adapter_name(XiCgenCtx *ctx) {
-    if (!xr_semantic_owner_has_consumer(
-            XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
-            XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO, XR_SEM_CONSUMER_CGEN)) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+                                        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
         fprintf(stderr, "[xi_cgen] ERROR: enum-metadata-access owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
-        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO);
+    const char *adapter =
+        xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+                                       XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: enum-metadata-access owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5954,8 +5779,8 @@ static const char *cg_cell_access_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: cell-access owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -5972,8 +5797,8 @@ static const char *cg_null_test_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI, XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: null-test owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
@@ -6691,27 +6516,22 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     if (v->op == XI_CHAN_NEW) {
         XrCValueEmissionView emission = {0};
         XrCValueEmissionView capacity = {0};
-        CgValueEmissionStatus status =
-            cg_value_emission_view(ctx, f, v, &emission);
+        CgValueEmissionStatus status = cg_value_emission_view(ctx, f, v, &emission);
         CgValueEmissionStatus capacity_status =
-            v->nargs == 1
-                ? cg_value_emission_view(ctx, f, v->args[0], &capacity)
-                : CG_VALUE_EMISSION_ERROR;
-        if (status != CG_VALUE_EMISSION_FOUND ||
-            capacity_status != CG_VALUE_EMISSION_FOUND ||
+            v->nargs == 1 ? cg_value_emission_view(ctx, f, v->args[0], &capacity)
+                          : CG_VALUE_EMISSION_ERROR;
+        if (status != CG_VALUE_EMISSION_FOUND || capacity_status != CG_VALUE_EMISSION_FOUND ||
             emission.rep != XR_C_VALUE_REP_TAGGED ||
-            emission.materialization !=
-                XR_C_VALUE_MATERIALIZATION_CHANNEL_NEW ||
-            !emission.recipe_symbol ||
-            emission.recipe_operand_value != capacity.semantic_value ||
+            emission.materialization != XR_C_VALUE_MATERIALIZATION_CHANNEL_NEW ||
+            !emission.recipe_symbol || emission.recipe_operand_value != capacity.semantic_value ||
             v->nargs != 1) {
-            fprintf(stderr, "[xi_cgen] ERROR: immutable channel materialization recipe is missing\n");
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: immutable channel materialization recipe is missing\n");
             emit_codegen_abort_expr(out);
             ctx->error = true;
             return;
         }
-        fprintf(out, "%s(%s, ", emission.recipe_symbol,
-                xicgen_aot_context_expr(ctx, f));
+        fprintf(out, "%s(%s, ", emission.recipe_symbol, xicgen_aot_context_expr(ctx, f));
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
         fprintf(out, ")");
         return;
@@ -6998,7 +6818,7 @@ static bool emit_class_native_ref_stack_return_stmt(XiCgenCtx *ctx, FILE *out, c
 
 static void emit_default_return_for_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
     if (cg_func_return_abi_is_aggregate(ctx, f)) {
-        emit_aggregate_zero_expr(out, cg_func_return_abi_value_rep(ctx, f));
+        cg_emit_return_aggregate_zero(ctx, out, f);
         return;
     }
     XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
@@ -7195,8 +7015,7 @@ static const char *cg_debug_value_ctype(XiCgenCtx *ctx, const XiFunc *f, const X
     if (cg_array_value_uses_native_local(ctx, f, v))
         return "xrt_array_t *";
     XrCValueEmissionView emission = {0};
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, f, v, &emission);
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, f, v, &emission);
     if (emission_status == CG_VALUE_EMISSION_FOUND)
         return emission.c_type;
     if (emission_status == CG_VALUE_EMISSION_ERROR)
@@ -7211,24 +7030,20 @@ static XrRep cg_debug_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, co
     if (cg_array_value_uses_native_local(ctx, f, v))
         return XR_REP_PTR;
     XrCValueEmissionView emission = {0};
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, f, v, &emission);
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, f, v, &emission);
     XrRep storage_rep = XR_REP_VOID;
     if (emission_status == CG_VALUE_EMISSION_FOUND)
-        return cg_value_emission_storage_rep(ctx, &emission, &storage_rep)
-                   ? storage_rep
-                   : XR_REP_VOID;
+        return cg_value_emission_storage_rep(ctx, &emission, &storage_rep) ? storage_rep
+                                                                           : XR_REP_VOID;
     if (emission_status == CG_VALUE_EMISSION_ERROR)
         return XR_REP_VOID;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
 
-static bool cg_debug_value_has_storage_binding(XiCgenCtx *ctx, const XiFunc *f,
-                                               const XiValue *v) {
+static bool cg_debug_value_has_storage_binding(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     XrCValueEmissionView emission = {0};
-    CgValueEmissionStatus emission_status =
-        cg_value_emission_view(ctx, f, v, &emission);
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, f, v, &emission);
     if (emission_status == CG_VALUE_EMISSION_FOUND)
         return emission.rep != XR_C_VALUE_REP_VOID;
     if (emission_status == CG_VALUE_EMISSION_ERROR ||
@@ -8640,8 +8455,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
             /* Every field-store backend converts the stored value with the
              * literal-aware representation emitter. */
             return arg_index == 1 && user->nargs >= 2;
-        case XI_STR_CONCAT:
-        {
+        case XI_STR_CONCAT: {
             XrCValueEmissionView concat = {0};
             return cg_string_concat_emission_view(ctx, f, user, &concat);
         }
@@ -8653,20 +8467,18 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT: {
             XrCValueEmissionView enum_constructor = {0};
-            if (cg_adt_enum_constructor_emission_view(
-                    ctx, f, user, &enum_constructor))
+            if (cg_adt_enum_constructor_emission_view(ctx, f, user, &enum_constructor))
                 return arg_index > 0;
             XrCValueEmissionView runes = {0};
             if (cg_string_runes_emission_view(ctx, f, user, &runes))
                 return arg_index == 0;
             XrCValueEmissionView string_slice = {0};
-            if (cg_string_slice_range_emission_view(
-                    ctx, f, user, &string_slice))
+            if (cg_string_slice_range_emission_view(ctx, f, user, &string_slice))
                 return arg_index < 3;
             /* The runtime string-slice helper and float formatting helper
              * render their scalar arguments with emit_value_as_rep_ctx(). */
-            if (arg_index == 1 && user->nargs == 2 && user->args[0] &&
-                user->args[0]->type && user->aux &&
+            if (arg_index == 1 && user->nargs == 2 && user->args[0] && user->args[0]->type &&
+                user->aux &&
                 (user->args[0]->type->kind == XR_KIND_STRING ||
                  user->args[0]->type->kind == XR_KIND_UNKNOWN) &&
                 strcmp((const char *) user->aux, "slice") == 0)
@@ -8801,17 +8613,14 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
                 if (v->type->kind == XR_KIND_STRING) {
                     XrCValueEmissionView concat = {0};
                     bool allowed_string_use =
-                        cg_string_concat_emission_view(ctx, f, user,
-                                                       &concat) ||
+                        cg_string_concat_emission_view(ctx, f, user, &concat) ||
                         (user->op == XI_SET_SHARED && a == 0);
                     XrCValueEmissionView runes = {0};
-                    if (!allowed_string_use &&
-                        cg_string_runes_emission_view(ctx, f, user, &runes))
+                    if (!allowed_string_use && cg_string_runes_emission_view(ctx, f, user, &runes))
                         allowed_string_use = a == 0;
                     XrCValueEmissionView string_slice = {0};
                     if (!allowed_string_use &&
-                        cg_string_slice_range_emission_view(
-                            ctx, f, user, &string_slice))
+                        cg_string_slice_range_emission_view(ctx, f, user, &string_slice))
                         allowed_string_use = a == 0;
                     if (!allowed_string_use)
                         return false;
@@ -9608,8 +9417,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST) {
         CgFixedArrayLaneInfo fixed = {0};
         bool have_fixed = v->op == XI_FIXED_ARRAY_NEW
-                              ? cg_fixed_array_lane_info_from_emission(ctx, f, v,
-                                                                       &fixed)
+                              ? cg_fixed_array_lane_info_from_emission(ctx, f, v, &fixed)
                               : cg_fixed_array_lane_info_from_value(v, &fixed);
         uint8_t native = fixed.native_type;
         uint32_t count = fixed.count;
@@ -9784,8 +9592,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             emit_vref(out, v);
             fprintf(out, " = ");
         }
-        cg_emit_channel_receive_payload_expression(out, &emission, v->id,
-                                                   false);
+        cg_emit_channel_receive_payload_expression(out, &emission, v->id, false);
         fprintf(out, ";\n");
         emit_value_generated_line_reset(ctx, out, v);
         return;
@@ -10627,7 +10434,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                                 "[xi_cgen] ERROR: struct aggregate return from non-aggregate v%u\n",
                                 blk->control ? blk->control->id : 0);
                         ctx->error = true;
-                        emit_aggregate_zero_expr(out, cg_func_return_abi_value_rep(ctx, f));
+                        cg_emit_return_aggregate_zero(ctx, out, f);
                     } else {
                         XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
                         emit_adt_base_to_value_rep_prefix(out, ret_value_rep);
@@ -10645,7 +10452,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
             } else {
                 if (cg_func_return_abi_is_aggregate(ctx, f)) {
                     fprintf(out, "    return ");
-                    emit_aggregate_zero_expr(out, cg_func_return_abi_value_rep(ctx, f));
+                    cg_emit_return_aggregate_zero(ctx, out, f);
                     fprintf(out, ";\n");
                 } else if (cg_func_return_abi_rep(ctx, f) == XR_REP_VOID)
                     fprintf(out, "    return;\n");
@@ -10929,11 +10736,9 @@ static bool cg_value_traces_to_explicit_vector(const XiValue *value) {
  * Debug source variables still synchronize at the alias statement.  Only the
  * redundant C declaration/assignment disappears.
  */
-static bool cg_rep_alias_source_relation_is_exact(XiCgenCtx *ctx,
-                                                  const XiValue *alias,
+static bool cg_rep_alias_source_relation_is_exact(XiCgenCtx *ctx, const XiValue *alias,
                                                   const XiValue *source) {
-    if (!ctx || !alias || !source || alias->nargs != 1 || !alias->args ||
-        !alias->args[0])
+    if (!ctx || !alias || !source || alias->nargs != 1 || !alias->args || !alias->args[0])
         return false;
     if (alias->args[0] == source)
         return true;
@@ -10942,26 +10747,20 @@ static bool cg_rep_alias_source_relation_is_exact(XiCgenCtx *ctx,
                     adapter->backend_origin == XI_BACKEND_VALUE_REP_BOX) ||
                    (alias->op == XI_BOX && adapter->op == XI_UNBOX &&
                     adapter->backend_origin == XI_BACKEND_VALUE_REP_UNBOX);
-    if (!inverse || adapter->nargs != 1 || !adapter->args ||
-        adapter->args[0] != source)
+    if (!inverse || adapter->nargs != 1 || !adapter->args || adapter->args[0] != source)
         return false;
-    const XaotValuePlan *adapter_plan =
-        xaot_bundle_find_value_plan(ctx->aot_bundle, adapter);
-    return adapter_plan &&
-           xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter_plan);
+    const XaotValuePlan *adapter_plan = xaot_bundle_find_value_plan(ctx->aot_bundle, adapter);
+    return adapter_plan && xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter_plan);
 }
 
-static const XiValue *cg_rep_alias_exact_source(XiCgenCtx *ctx,
-                                                const XiValue *alias) {
-    if (!ctx || !alias || alias->nargs != 1 || !alias->args ||
-        !alias->args[0])
+static const XiValue *cg_rep_alias_exact_source(XiCgenCtx *ctx, const XiValue *alias) {
+    if (!ctx || !alias || alias->nargs != 1 || !alias->args || !alias->args[0])
         return NULL;
     const XiValue *source = alias->args[0];
     if ((alias->op == XI_UNBOX && source->op == XI_BOX) ||
         (alias->op == XI_BOX && source->op == XI_UNBOX)) {
         if (source->nargs == 1 && source->args && source->args[0] &&
-            cg_rep_alias_source_relation_is_exact(ctx, alias,
-                                                  source->args[0]))
+            cg_rep_alias_source_relation_is_exact(ctx, alias, source->args[0]))
             return source->args[0];
     }
     return source;
@@ -10979,21 +10778,15 @@ static bool cg_rep_identical_alias_can_share_c_local(XiCgenCtx *ctx, const XiFun
         return false;
     XrCValueEmissionView alias_emission = {0};
     XrCValueEmissionView source_emission = {0};
-    CgValueEmissionStatus alias_status =
-        cg_value_emission_view(ctx, f, alias, &alias_emission);
-    CgValueEmissionStatus source_status =
-        cg_value_emission_view(ctx, f, source, &source_emission);
-    if (alias_status == CG_VALUE_EMISSION_ERROR ||
-        source_status == CG_VALUE_EMISSION_ERROR ||
+    CgValueEmissionStatus alias_status = cg_value_emission_view(ctx, f, alias, &alias_emission);
+    CgValueEmissionStatus source_status = cg_value_emission_view(ctx, f, source, &source_emission);
+    if (alias_status == CG_VALUE_EMISSION_ERROR || source_status == CG_VALUE_EMISSION_ERROR ||
         alias_status == CG_VALUE_EMISSION_NOT_CONFIGURED ||
         source_status == CG_VALUE_EMISSION_NOT_CONFIGURED)
         return false;
-    if (alias_status == CG_VALUE_EMISSION_FOUND ||
-        source_status == CG_VALUE_EMISSION_FOUND) {
-        if (alias_status != CG_VALUE_EMISSION_FOUND ||
-            source_status != CG_VALUE_EMISSION_FOUND ||
-            !cg_value_emission_views_equal(&alias_emission,
-                                            &source_emission))
+    if (alias_status == CG_VALUE_EMISSION_FOUND || source_status == CG_VALUE_EMISSION_FOUND) {
+        if (alias_status != CG_VALUE_EMISSION_FOUND || source_status != CG_VALUE_EMISSION_FOUND ||
+            !cg_value_emission_views_equal(&alias_emission, &source_emission))
             return false;
     } else {
         const XaotValuePlan *alias_plan = cg_value_plan_require_legacy(ctx, alias);
@@ -11226,14 +11019,12 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 bool debug_only_fixed_wrapper = false;
                 if (v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST) {
                     CgFixedArrayLaneInfo fixed = {0};
-                    bool have_fixed = v->op == XI_FIXED_ARRAY_NEW
-                                          ? cg_fixed_array_lane_info_from_emission(
-                                                ctx, f, v, &fixed)
-                                          : cg_fixed_array_lane_info_from_value(v,
-                                                                                &fixed);
+                    bool have_fixed =
+                        v->op == XI_FIXED_ARRAY_NEW
+                            ? cg_fixed_array_lane_info_from_emission(ctx, f, v, &fixed)
+                            : cg_fixed_array_lane_info_from_value(v, &fixed);
                     if (have_fixed) {
-                        fprintf(out, "    %s _fa%u[%u];\n", fixed.ctype,
-                                v->id,
+                        fprintf(out, "    %s _fa%u[%u];\n", fixed.ctype, v->id,
                                 (unsigned) (fixed.count > 0 ? fixed.count : 1));
                     }
                     debug_only_fixed_wrapper = cg_fixed_array_wrapper_has_no_release_use(ctx, f, v);
@@ -11609,9 +11400,7 @@ static bool cg_func_has_unelided_closure_value_use(XiCgenCtx *ctx, const XiFunc 
                             cg_func_needs_aot_coro_ctx(ctx, owner) ? 1 : 0,
                             cg_shared_static_function_closure_is_elided(ctx, owner, v) ? 1 : 0,
                             xicgen_par_for_stack_closure_value_is_elided(ctx, owner, v) ? 1 : 0,
-                            cg_array_hof_callback_is_elided(ctx, owner, v)
-                                ? 1
-                                : 0);
+                            cg_array_hof_callback_is_elided(ctx, owner, v) ? 1 : 0);
                 }
                 return true;
             }

@@ -369,32 +369,35 @@ static XaotValueRep cg_func_return_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f
                 : xaot_value_rep_for_type(f ? f->return_type : NULL);
 }
 
-/* Setting XRAY_ABI_RETCHECK reports where the signature row and the old model
- * disagree about a return, the way the parameter check did before parameters
- * moved. Returns are not the same question: the row states the representation
- * the boundary carries, the old model states the declared return's C type, and
- * migrating before measuring that gap cost a hundred and seventeen cases once. */
-static void cg_func_return_abi_crosscheck(XiCgenCtx *ctx, const XiFunc *f, const char *legacy_c) {
+/* The zero of a return whose slot is an aggregate, written from the signature
+ * row. A typed ADT enum wraps the shared zero in its own base conversion; an
+ * untyped one is that zero. */
+static void cg_emit_return_aggregate_zero(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
     XrCFunctionAbiEmissionView view;
-    if (!getenv("XRAY_ABI_RETCHECK"))
-        return;
     if (!cg_func_return_abi_emission(ctx, f, &view)) {
-        fprintf(stderr, "[ret-check] no-row legacy_c=%s\n", legacy_c ? legacy_c : "<none>");
+        fprintf(out, "xrt_enum_aggregate_zero()");
         return;
     }
-    const char *table_c = view.c_type ? view.c_type : "<none>";
-    if (!legacy_c || strcmp(legacy_c, table_c) != 0)
-        fprintf(stderr, "[ret-check] DISAGREE legacy_c=%s table_c=%s agg=%u rep=%u\n",
-                legacy_c ? legacy_c : "<none>", table_c, view.aggregate_class, view.rep);
-    else
-        fprintf(stderr, "[ret-check] agree c=%s\n", table_c);
+    if (view.aggregate_class == XR_C_ABI_AGGREGATE_SLICE) {
+        fprintf(out, "xrt_span_empty()");
+        return;
+    }
+    if (view.aggregate_class == XR_C_ABI_AGGREGATE_STRUCT) {
+        fprintf(out, "((%s){0})", view.c_type ? view.c_type : "XrValue");
+        return;
+    }
+    bool typed_adt = view.aggregate_class == XR_C_ABI_AGGREGATE_ADT_ENUM && view.c_type &&
+                     strcmp(view.c_type, "XrAotEnumAggregate") != 0;
+    if (typed_adt)
+        fprintf(out, "%s_from_base(", view.c_type);
+    fprintf(out, "xrt_enum_aggregate_zero()");
+    if (typed_adt)
+        fprintf(out, ")");
 }
 
 static const char *cg_func_return_abi_c_type(XiCgenCtx *ctx, const XiFunc *f) {
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    const char *legacy = plan && plan->abi.ret.c_type ? plan->abi.ret.c_type : "XrValue";
-    cg_func_return_abi_crosscheck(ctx, f, legacy);
-    return legacy;
+    XrCFunctionAbiEmissionView view;
+    return cg_func_return_abi_emission(ctx, f, &view) && view.c_type ? view.c_type : "XrValue";
 }
 
 /* FFI: a raw pointer (Ptr<T>/MutPtr<T>) is stored as a native pointer in AOT
