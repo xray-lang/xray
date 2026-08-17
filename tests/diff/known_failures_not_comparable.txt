@@ -179,7 +179,6 @@ tests/diff/cases/semantics/ffi/mem_view_packed_nested_native_size.xr
 tests/diff/cases/semantics/ffi/mem_with_slice_mut_exception_loan_end.xr
 tests/diff/cases/semantics/ffi/mem_with_slice_mut_extern_layout.xr
 tests/diff/cases/semantics/ffi/ptr_memory.xr
-tests/diff/cases/semantics/ffi/rawptr_copy_nonoverlap_owner.xr
 tests/diff/cases/semantics/float_fmt/ieee_arithmetic.xr
 tests/diff/cases/semantics/float_fmt/rounding_boundary.xr
 tests/diff/cases/semantics/function_value_to_string.xr
@@ -302,7 +301,6 @@ tests/diff/cases/semantics/optimizer/known_struct_copy_is_not_an_alias.xr
 tests/diff/cases/semantics/optimizer/pass_const_fixpoint_folded_chain.xr
 tests/diff/cases/semantics/optimizer/pass_ifconv_select_shape.xr
 tests/diff/cases/semantics/optimizer/pass_inline_small_callee.xr
-tests/diff/cases/semantics/optimizer/tbaa_raw_pointer_store_kills_array_load.xr
 tests/diff/cases/semantics/optional_call.xr
 tests/diff/cases/semantics/ownership/auto_borrow_class_alias_return_downgrade.xr
 tests/diff/cases/semantics/ownership/auto_borrow_class_readonly_param.xr

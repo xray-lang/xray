@@ -7470,6 +7470,25 @@ static bool oracle_array_hof_use_storage(const VerifyAuthority *ctx, uint32_t op
            oracle_machine_storage(ctx, source_value, out_storage, &machine_kind);
 }
 
+/* The three containers whose elements this authority can name, each answered in
+ * the storage its own family bound: a byte view in the frozen VIEW its slice
+ * parameter carries, a fixed array in its aggregate lane, and a dynamic Array
+ * in its tagged allocation. A read that borrows a container without asking it
+ * to change storage -- an element access, a data-pointer projection -- asks
+ * this one judgement, so a receiver one such read admits can never be one
+ * another refuses. The order is the containers' own: a value belongs to exactly
+ * one of the three families, and each judgement re-proves its own membership.
+ *
+ * Being a container is the whole requirement. These reads impose no carrier, so
+ * there is nothing else for them to check, and a value none of the three names
+ * has no proved element storage to point into. */
+static bool oracle_array_like_receiver_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                               XrRep *out_storage, uint16_t *out_machine_kind) {
+    return oracle_u8_slice_parameter_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_fixed_array_value_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_array_tagged_carrier_storage(ctx, semantic_value, out_storage, out_machine_kind);
+}
+
 static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_index,
                                uint16_t operand_index, uint32_t source_value, XrRep *out_storage) {
     const XrSemanticOperationRecord *operation =
@@ -7892,6 +7911,27 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
+        }
+        case XI_ARRAY_DATA_PTR: {
+            /* A data-pointer read borrows the container it is given and hands
+             * back a raw pointer into that container's own elements. It asks
+             * nothing of the container's storage: C emission reads a byte view
+             * through its span, a fixed array through its aggregate lane, and a
+             * dynamic Array through the allocation its tagged carrier holds,
+             * each in the storage that family already bound.
+             *
+             * So the site names no carrier of its own, and the storage it
+             * consumes is the one the definition already stated -- which is
+             * what makes it adapter-free by construction rather than by two
+             * judgements happening to agree. What it does require is that the
+             * operand be one of the three containers; a value none of them
+             * names has no proved elements to point into, and the read stays
+             * refused. */
+            XrRep container_storage = XR_REP_TAGGED;
+            if (operand_index != 0 || !oracle_array_like_receiver_storage(
+                                          ctx, source_value, &container_storage, &ignored_kind))
+                return false;
+            return oracle_definition_storage(ctx, source_value, out_storage, &ignored_kind);
         }
         case XI_INDEX_SET:
         case XI_INDEX_GET:
