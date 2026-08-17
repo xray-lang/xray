@@ -23,11 +23,6 @@ static XrRep cg_abi_slot_storage_rep(const XaotAbiSlot *slot) {
     return xaot_value_storage_rep(xaot_abi_slot_value_rep(slot));
 }
 
-static bool cg_abi_slot_is_aggregate(const XaotAbiSlot *slot) {
-    XaotValueRep rep = xaot_abi_slot_value_rep(slot);
-    return rep.kind == XAOT_VALUE_AGGREGATE;
-}
-
 static const XaotValuePlan *cg_value_plan_optional(XiCgenCtx *ctx, const XiValue *v) {
     if (!ctx || !v)
         return NULL;
@@ -329,11 +324,57 @@ static bool cg_func_uses_typed_abi(XiCgenCtx *ctx, const XiFunc *f) {
     return plan && plan->abi.kind == XAOT_ABI_NATIVE;
 }
 
-static XrRep cg_func_return_abi_rep(XiCgenCtx *ctx, const XiFunc *f) {
-    if (cg_class_func_is_native_constructor(ctx, f))
-        return XR_REP_PTR;
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    return plan ? cg_abi_slot_storage_rep(&plan->abi.ret) : XR_REP_TAGGED;
+/* The signature table's answer for one parameter, when it has one. Ordinal
+ * zero is the return, so a declaration index shifts by one. */
+static bool cg_func_param_abi_emission(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx,
+                                       XrCFunctionAbiEmissionView *out) {
+    char error[256] = {0};
+    const XrCEmissionPlan *emission = cg_function_c_emission_plan(ctx, f);
+    return out && f && emission &&
+           xr_c_emission_plan_function_abi_view(emission, f->semantic_plan_function_index,
+                                                (uint16_t) (param_idx + 1u), out, error,
+                                                sizeof(error));
+}
+
+/* A signature row's storage class. The raw-pointer case is deliberately absent:
+ * proving one exact needs the value row's own facts, and a boundary that would
+ * be a raw pointer keeps the old answer until those facts are on the signature
+ * row too. */
+static bool cg_abi_emission_storage_rep(const XrCFunctionAbiEmissionView *view, XrRep *out) {
+    if (!view || !out)
+        return false;
+    switch ((XrCValueRep) view->rep) {
+        case XR_C_VALUE_REP_VOID:
+            *out = XR_REP_VOID;
+            return true;
+        case XR_C_VALUE_REP_F32:
+        case XR_C_VALUE_REP_F64:
+            *out = XR_REP_F64;
+            return true;
+        case XR_C_VALUE_REP_I8:
+        case XR_C_VALUE_REP_U8:
+        case XR_C_VALUE_REP_I16:
+        case XR_C_VALUE_REP_U16:
+        case XR_C_VALUE_REP_I32:
+        case XR_C_VALUE_REP_U32:
+        case XR_C_VALUE_REP_I64:
+        case XR_C_VALUE_REP_U64:
+        case XR_C_VALUE_REP_ISIZE:
+        case XR_C_VALUE_REP_USIZE:
+        case XR_C_VALUE_REP_BOOL:
+        case XR_C_VALUE_REP_RUNE:
+            *out = XR_REP_I64;
+            return true;
+        case XR_C_VALUE_REP_TAGGED:
+        case XR_C_VALUE_REP_AGGREGATE:
+            *out = XR_REP_TAGGED;
+            return true;
+        case XR_C_VALUE_REP_VIEW:
+            *out = XR_REP_PTR;
+            return true;
+        default:
+            return false;
+    }
 }
 
 /* The signature table's row for a return is ordinal zero. */
@@ -344,6 +385,17 @@ static bool cg_func_return_abi_emission(XiCgenCtx *ctx, const XiFunc *f,
     return out && f && emission &&
            xr_c_emission_plan_function_abi_view(emission, f->semantic_plan_function_index, 0u, out,
                                                 error, sizeof(error));
+}
+
+static XrRep cg_func_return_abi_rep(XiCgenCtx *ctx, const XiFunc *f) {
+    if (cg_class_func_is_native_constructor(ctx, f))
+        return XR_REP_PTR;
+    XrCFunctionAbiEmissionView view;
+    XrRep rep = XR_REP_TAGGED;
+    if (cg_func_return_abi_emission(ctx, f, &view) && cg_abi_emission_storage_rep(&view, &rep))
+        return rep;
+    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
+    return plan ? cg_abi_slot_storage_rep(&plan->abi.ret) : XR_REP_TAGGED;
 }
 
 static bool cg_func_return_abi_is_aggregate(XiCgenCtx *ctx, const XiFunc *f) {
@@ -572,6 +624,11 @@ static void emit_cfn_pointer_type(XiCgenCtx *ctx, FILE *out, const XrType *fn_ty
 }
 
 static XrRep cg_func_param_abi_rep(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx) {
+    XrCFunctionAbiEmissionView view;
+    XrRep rep = XR_REP_TAGGED;
+    if (cg_func_param_abi_emission(ctx, f, param_idx, &view) &&
+        cg_abi_emission_storage_rep(&view, &rep))
+        return rep;
     const XaotFuncPlan *plan = cg_func_plan(ctx, f);
     if (!plan || param_idx >= plan->abi.nparams || !plan->abi.params)
         return XR_REP_TAGGED;
@@ -850,18 +907,6 @@ static const char *emit_load_conversion_prefix(XiCgenCtx *ctx, FILE *out, const 
 static const char *emit_tagged_to_value_storage_prefix(XiCgenCtx *ctx, FILE *out,
                                                        const XiValue *v) {
     return emit_load_conversion_prefix(ctx, out, v, XR_REP_TAGGED);
-}
-
-/* The signature table's answer for one parameter, when it has one. Ordinal
- * zero is the return, so a declaration index shifts by one. */
-static bool cg_func_param_abi_emission(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx,
-                                       XrCFunctionAbiEmissionView *out) {
-    char error[256] = {0};
-    const XrCEmissionPlan *emission = cg_function_c_emission_plan(ctx, f);
-    return out && f && emission &&
-           xr_c_emission_plan_function_abi_view(emission, f->semantic_plan_function_index,
-                                                (uint16_t) (param_idx + 1u), out, error,
-                                                sizeof(error));
 }
 
 /* The two questions the emitter actually asks about a parameter's boundary,
