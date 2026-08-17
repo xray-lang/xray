@@ -5534,6 +5534,102 @@ static bool builder_add_string_concat_result_storage(XrTargetPlanBuilder *builde
     return true;
 }
 
+/* Binds the String a `string(x)` conversion allocates to its own owned dynamic
+ * slot, which is the same storage fact a concatenation result, a String literal
+ * and the owned String a direct-local call returns already carry: String is
+ * immutable and shared, so the outer tagged value is the whole fact. The
+ * conversion borrows its scalar source, whose own representation the scalar
+ * family froze, so this row states no borrow of its own. */
+static bool builder_add_string_convert_result_storage(XrTargetPlanBuilder *builder, char *error,
+                                                      size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRING_CONVERT_RESULT_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    /* A value another family already bound is not this family's to claim. */
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values)
+            analysis.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation) {
+            valid = fail(error, error_size, "XR_TARGET_1001", "semantic operation is missing");
+            break;
+        }
+        if (!xr_semantic_string_convert_is_exact(builder->semantic_plan, operation))
+            continue;
+        if (operation->result_value >= analysis.total_values ||
+            operation->result_type >= analysis.type_count ||
+            operation->function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
+            analysis.defined_values[operation->result_value]) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "string conversion storage identity is ambiguous");
+            break;
+        }
+        if (analysis.type_rep_kinds[operation->result_type] != XR_MACHINE_REP_COUNT &&
+            analysis.type_rep_kinds[operation->result_type] != XR_MACHINE_REP_DYN_VALUE) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "semantic string type has conflicting storage representations");
+            break;
+        }
+        XrTargetMachineRepRecord rep;
+        XrStableId slot_identity;
+        valid = make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) &&
+                append_rep_intent(builder, &rep, error, error_size) &&
+                make_slot_identity(builder->semantic_plan, operation->function,
+                                   XR_TARGET_SLOT_TEMPORARY, operation->id, XR_SEMANTIC_INDEX_NONE,
+                                   &slot_identity);
+        if (!valid)
+            break;
+        XrTargetSlotIntent slot = {
+            .identity = slot_identity,
+            .function = operation->function,
+            .semantic_value = operation->result_value,
+            .semantic_operation = i,
+            .logical_slot = XR_SEMANTIC_INDEX_NONE,
+            .register_rep = rep,
+            .memory_rep = rep,
+            .role = XR_TARGET_SLOT_TEMPORARY,
+            .root_kind = XR_TARGET_ROOT_DYNAMIC,
+            .ownership = XR_TARGET_OWNERSHIP_OWNED,
+            .debug_variable = XR_SEMANTIC_INDEX_NONE,
+        };
+        XrTargetValueIntent value = {
+            .semantic_value = operation->result_value,
+            .semantic_function = operation->function,
+            .semantic_type = operation->result_type,
+            .register_rep = rep,
+            .memory_rep = rep,
+            .slot_identity = slot_identity,
+            .has_slot = true,
+        };
+        valid = append_slot_intent(builder, &slot, error, error_size) &&
+                (analysis.used_types[operation->result_type] ||
+                 append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0,
+                                      &rep, error, error_size)) &&
+                append_value_intent(builder, &value, error, error_size);
+        if (valid) {
+            analysis.defined_values[operation->result_value] = 1;
+            analysis.used_types[operation->result_type] = 1;
+            analysis.value_types[operation->result_value] = operation->result_type;
+            analysis.value_functions[operation->result_value] = operation->function;
+            analysis.type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+        }
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_STRING_CONVERT_RESULT_STORAGE;
+    return true;
+}
+
 static bool builder_add_panic_catch_storage(XrTargetPlanBuilder *builder, char *error,
                                             size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_PANIC_CATCH_STORAGE, error, error_size))
@@ -11876,6 +11972,7 @@ static const XrTargetFamily k_target_families[] = {
     {"source_class_method_receiver_storage", builder_add_source_class_method_receiver_storage},
     {"source_class_argument_storage", builder_add_source_class_argument_storage},
     {"string_concat_result_storage", builder_add_string_concat_result_storage},
+    {"string_convert_result_storage", builder_add_string_convert_result_storage},
     {"panic_catch_storage", builder_add_panic_catch_storage},
     {"string_literal_storage", builder_add_string_literal_storage},
     {"string_runes_storage", builder_add_string_runes_storage},

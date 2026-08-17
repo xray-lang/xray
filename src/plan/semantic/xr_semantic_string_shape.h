@@ -178,4 +178,89 @@ static inline bool xr_semantic_string_concat_is_exact(const XrSemanticPlan *plan
     return true;
 }
 
+/* One exact scalar display source for `string(x)`. The scalar families already
+ * froze a machine representation for every row this admits, so the conversion
+ * reads a storage fact that exists rather than inventing one. A reference,
+ * aggregate, nullable, nominal, enum-keyed or child-carrying row needs a
+ * different display recipe and stays unclaimed. */
+static inline bool
+xr_semantic_string_convert_source_type_is_exact(const XrSemanticTypeRecord *type) {
+    XrStableId zero = {{0}};
+    if (!type || type->builtin_type != XR_TID_NULL || type->flags != 0 || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(type->source_class_identity, zero) || type->source_enum_key ||
+        type->enum_layout_id != 0 || type->enum_member_count != 0 || type->enum_flags != 0 ||
+        type->reserved_enum != 0)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+            return type->scalar_rep == XR_NATIVE_I8 || type->scalar_rep == XR_NATIVE_U8 ||
+                   type->scalar_rep == XR_NATIVE_I16 || type->scalar_rep == XR_NATIVE_U16 ||
+                   type->scalar_rep == XR_NATIVE_I32 || type->scalar_rep == XR_NATIVE_U32 ||
+                   type->scalar_rep == XR_NATIVE_I64 || type->scalar_rep == XR_NATIVE_U64 ||
+                   type->scalar_rep == XR_NATIVE_ISIZE || type->scalar_rep == XR_NATIVE_USIZE;
+        case XR_KIND_FLOAT:
+            return type->scalar_rep == XR_NATIVE_F32 || type->scalar_rep == XR_NATIVE_F64;
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return type->scalar_rep == XR_SCALAR_REP_NONE;
+        default:
+            return false;
+    }
+}
+
+/* One judgement for `string(x)`: a conversion whose result type is String
+ * allocates a fresh owned String from one borrowed scalar, exactly as a
+ * concatenation does from its operands. The conversion is not registered as an
+ * allocation site -- its effect row is the opcode's own, witness-dependent one
+ * -- so this judgement requires the absence of an allocation identity instead
+ * of its presence, and states the storage the result already has rather than
+ * the site that produced it.
+ *
+ * A conversion between numbers, a conversion that renames a reference, and any
+ * conversion carrying metadata, a constant, a callable, an intrinsic or a view
+ * stay unclaimed: they are different results with different storage. */
+static inline bool xr_semantic_string_convert_is_exact(const XrSemanticPlan *plan,
+                                                       const XrSemanticOperationRecord *operation) {
+    XrStableId zero = {{0}};
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const XrSemanticFunctionRecord *function =
+        operation ? xr_semantic_plan_function(plan, operation->function) : NULL;
+    if (!plan || !operation || !operands || !function || operation->opcode != XI_CONVERT ||
+        operation->operand_count != 1u || operation->operand_begin >= operand_count ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 || operation->auxiliary_kind != 0 ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CONVERT) ||
+        operation->flags != xi_generated_op_default_flags(XI_CONVERT) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CONVERT) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->result_ownership != xi_generated_op_result_ownership(XI_CONVERT) ||
+        operation->transfer_mode != 0 || operation->parameter_mode != 0 ||
+        operation->parameter_ownership != 0 || operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED || operation->return_parameter != -1 ||
+        operation->return_complete != 1 || operation->view_complete != 0 ||
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
+        operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_element_type != XR_SEMANTIC_INDEX_NONE || operation->allocation_key ||
+        !xr_stable_id_equal(operation->allocation_id, zero) ||
+        !xr_semantic_tagged_string_type_is_exact(
+            xr_semantic_plan_type(plan, operation->result_type)) ||
+        operation->result_value < function->value_begin ||
+        operation->result_value >= function->value_begin + function->value_count)
+        return false;
+    const XrSemanticOperandRecord *source = &operands[operation->operand_begin];
+    return source->role == XR_SEM_OPERAND_VALUE && source->parameter == -1 &&
+           source->transfer_mode == 0 && source->ownership_action == XR_SEM_OPERAND_BORROW &&
+           source->parameter_mode == 0 && source->access == 0 && source->origin == 0 &&
+           source->lifetime == 0 && source->escape == 0 && source->flags == 0 &&
+           xr_semantic_string_convert_source_type_is_exact(
+               xr_semantic_plan_type(plan, source->type));
+}
+
 #endif  // XR_SEMANTIC_STRING_SHAPE_H

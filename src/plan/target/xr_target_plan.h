@@ -69,6 +69,7 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION (UINT64_C(1) << 35)
 #define XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE (UINT64_C(1) << 36)
 #define XR_TARGET_FAMILY_DIRECT_LOCAL_AGGREGATE_RESULT_STORAGE (UINT64_C(1) << 37)
+#define XR_TARGET_FAMILY_STRING_CONVERT_RESULT_STORAGE (UINT64_C(1) << 38)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -145,7 +146,8 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE |                              \
                  XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION |                                      \
                  XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE |                                       \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_AGGREGATE_RESULT_STORAGE))
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_AGGREGATE_RESULT_STORAGE |                          \
+                 XR_TARGET_FAMILY_STRING_CONVERT_RESULT_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,

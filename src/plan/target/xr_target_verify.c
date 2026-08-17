@@ -3189,6 +3189,7 @@ static bool collect_exact_dynamic_types(
             xr_semantic_class_instance_value_is_exact(plan->semantic_plan, operation, NULL) ||
             semantic_string_literal_is_exact(plan->semantic_plan, operation) ||
             xr_semantic_string_concat_is_exact(plan->semantic_plan, operation) ||
+            xr_semantic_string_convert_is_exact(plan->semantic_plan, operation) ||
             semantic_direct_local_string_result_is_exact(plan->semantic_plan, i) ||
             semantic_direct_local_array_result_is_exact_verify(plan->semantic_plan, i) ||
             semantic_direct_local_adt_enum_result_is_exact(plan->semantic_plan, i) ||
@@ -3306,6 +3307,12 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     bool exact_string_concat = xr_semantic_string_concat_is_exact(plan->semantic_plan, operation) &&
                                operation && operation->result_value == semantic_value &&
                                operation->result_type == semantic_type;
+    /* Rebuilt the same way and for the same reason: the String a `string(x)`
+     * conversion allocates is a fresh owner whose only storage fact is the
+     * outer tagged value. */
+    bool exact_string_convert =
+        xr_semantic_string_convert_is_exact(plan->semantic_plan, operation) && operation &&
+        operation->result_value == semantic_value && operation->result_type == semantic_type;
     /* Recomputed from the plan through the shared judgement rather than read
      * back from the builder, so a builder row this verifier cannot re-derive
      * stays unproven. */
@@ -3460,9 +3467,10 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                 exact_array_fill || exact_array_shared_read || exact_string_shared_read ||
                 exact_array_ref_place_load || exact_class_object || exact_class_instance ||
                 exact_class_receiver || exact_string_literal || exact_string_concat ||
-                exact_direct_string_result || exact_stringbuilder || exact_stringbuilder_append ||
-                exact_stringbuilder_to_string || exact_stringbuilder_append_string ||
-                exact_string_runes || exact_string_slice_range || exact_json_namespace_value ||
+                exact_string_convert || exact_direct_string_result || exact_stringbuilder ||
+                exact_stringbuilder_append || exact_stringbuilder_to_string ||
+                exact_stringbuilder_append_string || exact_string_runes ||
+                exact_string_slice_range || exact_json_namespace_value ||
                 exact_array_member_result || exact_direct_callee || exact_go_callee ||
                 exact_go_task || exact_channel || exact_source_namespace ||
                 exact_native_module_namespace || exact_string_byte_view ||
@@ -3499,8 +3507,8 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         exact_array_intrinsic || exact_array_hof_result || exact_array_shared_read ||
         exact_string_shared_read || exact_array_ref_place_load || exact_array_fill ||
         exact_class_instance || exact_class_receiver || exact_string_literal ||
-        exact_string_concat || exact_direct_string_result || exact_stringbuilder ||
-        exact_stringbuilder_append || exact_stringbuilder_to_string ||
+        exact_string_concat || exact_string_convert || exact_direct_string_result ||
+        exact_stringbuilder || exact_stringbuilder_append || exact_stringbuilder_to_string ||
         exact_stringbuilder_append_string || exact_string_runes || exact_string_slice_range ||
         exact_json_namespace_value || exact_array_member_result || exact_direct_callee ||
         exact_go_callee || exact_go_task || exact_channel || exact_source_namespace ||

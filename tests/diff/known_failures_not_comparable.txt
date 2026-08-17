@@ -27,7 +27,6 @@ tests/diff/cases/basic/range_precedence.xr
 tests/diff/cases/basic/range_precedence_arithmetic.xr
 tests/diff/cases/basic/ranges.xr
 tests/diff/cases/basic/strings.xr
-tests/diff/cases/control/labeled_break_continue.xr
 tests/diff/cases/limits/struct_literal_over_32.xr
 tests/diff/cases/limits/upval_capture_over_254.xr
 tests/diff/cases/match/adt_enum_nonpayload_variant.xr
@@ -149,7 +148,6 @@ tests/diff/cases/semantics/evaluation_order/e7_literal_element_order.xr
 tests/diff/cases/semantics/evaluation_order/e8_interpolation_order.xr
 tests/diff/cases/semantics/evaluation_order/e9_e10_match_slice_range.xr
 tests/diff/cases/semantics/exception/array_class_throw_cleanup_lifetime.xr
-tests/diff/cases/semantics/exception/catch_panic.xr
 tests/diff/cases/semantics/exception/defer_nested_function_call.xr
 tests/diff/cases/semantics/exception/fixed_array_index_oob_panic_shape.xr
 tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr
@@ -226,7 +224,6 @@ tests/diff/cases/semantics/json/json_parse_value_invalid_panic.xr
 tests/diff/cases/semantics/json/json_typed_root_values.xr
 tests/diff/cases/semantics/json/json_with_rest_and_path.xr
 tests/diff/cases/semantics/json/object_json_codec_bridge.xr
-tests/diff/cases/semantics/loop_invariant_rc_value.xr
 tests/diff/cases/semantics/modules/cleanup_init_error.xr
 tests/diff/cases/semantics/modules/cleanup_init_import_once.xr
 tests/diff/cases/semantics/modules/cleanup_init_panic.xr
@@ -298,7 +295,6 @@ tests/diff/cases/semantics/optimizer/continue_inside_match_arm.xr
 tests/diff/cases/semantics/optimizer/known_empty_call_result_is_null.xr
 tests/diff/cases/semantics/optimizer/known_nullable_never_assigned_keeps_type.xr
 tests/diff/cases/semantics/optimizer/known_struct_copy_is_not_an_alias.xr
-tests/diff/cases/semantics/optimizer/pass_const_fixpoint_folded_chain.xr
 tests/diff/cases/semantics/optimizer/pass_ifconv_select_shape.xr
 tests/diff/cases/semantics/optimizer/pass_inline_small_callee.xr
 tests/diff/cases/semantics/optional_call.xr

@@ -5708,6 +5708,32 @@ static bool oracle_dynamic_string_concat_result_storage(const VerifyAuthority *c
     return true;
 }
 
+/* The String a `string(x)` conversion allocates materializes an owned dynamic
+ * value in its own temporary slot, the same rows a concatenation result carries
+ * and for the same reason: the runtime display helper returns a boxed object.
+ * The scalar it converts keeps whatever native storage its own definition
+ * named; C emission adapts it at the call. */
+static bool oracle_dynamic_string_convert_result_storage(const VerifyAuthority *ctx,
+                                                         uint32_t semantic_value,
+                                                         XrRep *out_storage,
+                                                         uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !xr_semantic_string_convert_is_exact(ctx->semantic, operation) ||
+        !tagged_value_temporary_rows_are_exact(ctx, semantic_value, operation, operation_index,
+                                               XR_TARGET_OWNERSHIP_OWNED))
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 /* A length read borrows one container and yields the plain machine integer the
  * language types it. The receiver keeps the single tagged storage fact its own
  * family already proved: the owned array allocation, the string literal, or the
@@ -7135,6 +7161,11 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                                                             out_machine_kind))
                 return true;
             break;
+        case XI_CONVERT:
+            if (oracle_dynamic_string_convert_result_storage(ctx, semantic_value, out_storage,
+                                                             out_machine_kind))
+                return true;
+            break;
         case XI_CLASS_CREATE:
             if (oracle_dynamic_source_class_object_storage(ctx, semantic_value, out_storage,
                                                            out_machine_kind))
@@ -8167,6 +8198,8 @@ static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
                                                  out_machine_kind) ||
            oracle_dynamic_string_concat_result_storage(ctx, semantic_value, out_storage,
                                                        out_machine_kind) ||
+           oracle_dynamic_string_convert_result_storage(ctx, semantic_value, out_storage,
+                                                        out_machine_kind) ||
            oracle_dynamic_direct_local_string_result_storage(ctx, semantic_value, out_storage,
                                                              out_machine_kind) ||
            oracle_dynamic_string_shared_read_storage(ctx, semantic_value, out_storage,
@@ -8246,6 +8279,8 @@ static bool oracle_return_storage(const VerifyAuthority *ctx, uint32_t value, Xr
            oracle_dynamic_string_runes_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_string_slice_range_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_string_concat_result_storage(ctx, value, out_storage, out_machine_kind) ||
+           oracle_dynamic_string_convert_result_storage(ctx, value, out_storage,
+                                                        out_machine_kind) ||
            oracle_array_hof_result_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_source_class_parameter_storage(ctx, value, out_storage,
                                                          out_machine_kind) ||
