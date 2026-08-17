@@ -174,6 +174,17 @@ typedef struct XrCCallArgumentEmissionView {
     const char *c_type;
 } XrCCallArgumentEmissionView;
 
+/* What an aggregate slot aggregates. The C representation says only that a
+ * slot is an aggregate; the emitter needs to know which one, and the frozen
+ * semantic type already says so, so the projection carries the answer rather
+ * than leaving the emitter to recognise a C spelling. */
+typedef enum XrCAbiAggregateClass {
+    XR_C_ABI_AGGREGATE_NONE = 0,
+    XR_C_ABI_AGGREGATE_STRUCT = 1,
+    XR_C_ABI_AGGREGATE_ADT_ENUM = 2,
+    XR_C_ABI_AGGREGATE_SLICE = 3,
+} XrCAbiAggregateClass;
+
 typedef enum XrCAbiSlotClass {
     XR_C_ABI_SLOT_INVALID = 0,
     /* Passed as its own C value. */
@@ -208,7 +219,7 @@ typedef struct XrCFunctionAbiEmissionView {
     uint8_t slot_class;
     uint8_t rep;
     uint8_t pointee_rep;
-    uint8_t reserved;
+    uint8_t aggregate_class;
     const char *c_type;
     const char *pointee_c_type;
 } XrCFunctionAbiEmissionView;

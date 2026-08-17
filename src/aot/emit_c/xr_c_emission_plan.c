@@ -2797,7 +2797,7 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
         hash_u64(&ctx, abi->slot_class);
         hash_u64(&ctx, abi->rep);
         hash_u64(&ctx, abi->pointee_rep);
-        hash_u64(&ctx, abi->reserved);
+        hash_u64(&ctx, abi->aggregate_class);
     }
     for (uint32_t i = 0; i < plan->value_count; i++) {
         const XrCValueEmissionView *value = &plan->values[i];
@@ -4828,6 +4828,25 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     register_rep = boundary;
                     memory_rep = xr_target_plan_machine_rep(target_plan, agreed->callee_memory_rep);
                 }
+                /* Which aggregate this is, read from the frozen semantic type
+                 * rather than recognised from the C spelling later. */
+                uint8_t aggregate_class = XR_C_ABI_AGGREGATE_NONE;
+                if (rep == XR_C_VALUE_REP_AGGREGATE || rep == XR_C_VALUE_REP_VIEW) {
+                    const XrSemanticTypeRecord *slot_type = xr_semantic_plan_type(
+                        semantic, ordinal == 0 ? function->return_type
+                                               : xr_semantic_plan_parameter(
+                                                     semantic, function->parameter_begin +
+                                                                   (uint32_t) (ordinal - 1u))
+                                                     ->type);
+                    if (slot_type) {
+                        if (slot_type->kind == XR_KIND_SLICE)
+                            aggregate_class = XR_C_ABI_AGGREGATE_SLICE;
+                        else if (slot_type->kind == XR_KIND_ENUM)
+                            aggregate_class = XR_C_ABI_AGGREGATE_ADT_ENUM;
+                        else
+                            aggregate_class = XR_C_ABI_AGGREGATE_STRUCT;
+                    }
+                }
                 plan->function_abis[abi_index++] = (XrCFunctionAbiEmissionView) {
                     .semantic_function = f,
                     .semantic_value = subject,
@@ -4840,7 +4859,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     .pointee_rep = (uint8_t) (slot_class == XR_C_ABI_SLOT_BORROWED_PLACE
                                                   ? (uint8_t) rep
                                                   : (uint8_t) XR_C_VALUE_REP_VOID),
-                    .reserved = 0,
+                    .aggregate_class = aggregate_class,
                     .c_type = c_type,
                     .pointee_c_type = slot_class == XR_C_ABI_SLOT_BORROWED_PLACE ? c_type : NULL,
                 };

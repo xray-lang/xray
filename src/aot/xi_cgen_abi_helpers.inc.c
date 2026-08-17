@@ -341,14 +341,26 @@ static bool cg_func_return_abi_is_aggregate(XiCgenCtx *ctx, const XiFunc *f) {
     return plan && cg_abi_slot_is_aggregate(&plan->abi.ret);
 }
 
+/* The signature table's row for a return is ordinal zero. */
+static bool cg_func_return_abi_emission(XiCgenCtx *ctx, const XiFunc *f,
+                                        XrCFunctionAbiEmissionView *out) {
+    char error[256] = {0};
+    const XrCEmissionPlan *emission = cg_function_c_emission_plan(ctx, f);
+    return out && f && emission &&
+           xr_c_emission_plan_function_abi_view(emission, f->semantic_plan_function_index, 0u, out,
+                                                error, sizeof(error));
+}
+
 static bool cg_func_return_abi_is_adt_aggregate(XiCgenCtx *ctx, const XiFunc *f) {
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    return plan && cg_value_rep_is_adt_aggregate(xaot_abi_slot_value_rep(&plan->abi.ret));
+    XrCFunctionAbiEmissionView view;
+    return cg_func_return_abi_emission(ctx, f, &view) &&
+           view.aggregate_class == XR_C_ABI_AGGREGATE_ADT_ENUM;
 }
 
 static bool cg_func_return_abi_is_struct_aggregate(XiCgenCtx *ctx, const XiFunc *f) {
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    return plan && cg_value_rep_is_struct_aggregate(xaot_abi_slot_value_rep(&plan->abi.ret));
+    XrCFunctionAbiEmissionView view;
+    return cg_func_return_abi_emission(ctx, f, &view) &&
+           view.aggregate_class == XR_C_ABI_AGGREGATE_STRUCT;
 }
 
 static XaotValueRep cg_func_return_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f) {
