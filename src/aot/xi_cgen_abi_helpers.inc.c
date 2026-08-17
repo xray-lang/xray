@@ -1204,9 +1204,14 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
     call_plan = cg_value_plan_require_legacy(ctx, call);
     if (call_plan && (target_plan->abi.ret.rep.kind == XAOT_VALUE_AGGREGATE ||
                       call_plan->rep.kind == XAOT_VALUE_AGGREGATE)) {
+        /* The callee hands back a carrier rather than an aggregate, so a boxed
+         * aggregate has to be taken out of it. Both halves come from the
+         * callee's own signature row; the mismatch report below still reads the
+         * old slot, because it exists to describe a disagreement between the
+         * two models and has to name what each of them said. */
         XaotValueRep target_rep = xaot_abi_slot_value_rep(&target_plan->abi.ret);
-        if (target_rep.kind != XAOT_VALUE_AGGREGATE &&
-            xaot_value_storage_rep(target_rep) == XR_REP_TAGGED &&
+        if (!cg_func_return_abi_is_aggregate(ctx, target) &&
+            cg_func_return_abi_rep(ctx, target) == XR_REP_TAGGED &&
             cg_value_rep_is_adt_aggregate(call_plan->rep)) {
             if (cg_value_rep_is_typed_adt_aggregate(call_plan->rep)) {
                 fprintf(out, "%s_from_base(xrt_enum_aggregate_take_from_boxed(",
@@ -1216,13 +1221,15 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
             fprintf(out, "xrt_enum_aggregate_take_from_boxed(");
             return ")";
         }
-        if (target_rep.kind == XAOT_VALUE_AGGREGATE &&
+        /* The mirror: the callee hands back an aggregate and the call value is
+         * a carrier, so the aggregate is boxed into it. */
+        const char *target_adt_c_type = NULL;
+        if (cg_func_return_abi_is_adt_aggregate(ctx, target) &&
             call_plan->rep.kind != XAOT_VALUE_AGGREGATE &&
-            xaot_value_storage_rep(call_plan->rep) == XR_REP_TAGGED &&
-            cg_value_rep_is_adt_aggregate(target_rep)) {
+            xaot_value_storage_rep(call_plan->rep) == XR_REP_TAGGED) {
             fprintf(out, "xrt_enum_aggregate_box(");
-            if (cg_value_rep_is_typed_adt_aggregate(target_rep)) {
-                fprintf(out, "%s_to_base(", target_rep.c_type);
+            if (cg_func_return_abi_is_typed_adt(ctx, target, &target_adt_c_type)) {
+                fprintf(out, "%s_to_base(", target_adt_c_type);
                 return "))";
             }
             return ")";
