@@ -4431,8 +4431,7 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
     /* Unit-returning methods have no C result to capture; call as a
      * statement and hand back null (ctype_str(VOID) would otherwise
      * mistype `XrValue _result = <void call>`). */
-    XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
-    bool ret_is_aggregate = ret_value_rep.kind == XAOT_VALUE_AGGREGATE;
+    bool ret_is_aggregate = cg_func_return_abi_is_aggregate(ctx, f);
     if (ret_rep == XR_REP_VOID) {
         fprintf(out, "    ");
     } else if (ret_is_aggregate) {
@@ -4458,7 +4457,7 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
         fprintf(out, "}\n\n");
         return;
     }
-    if (ret_is_aggregate && cg_value_rep_is_span_aggregate(ret_value_rep)) {
+    if (ret_is_aggregate && cg_func_return_abi_is_span(ctx, f)) {
         fprintf(out, "    return xrt_span_box_value(_result);\n");
         fprintf(out, "}\n\n");
         return;
@@ -4547,8 +4546,7 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
     }
 
     XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
-    XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
-    bool ret_is_aggregate = ret_value_rep.kind == XAOT_VALUE_AGGREGATE;
+    bool ret_is_aggregate = cg_func_return_abi_is_aggregate(ctx, f);
     /* Unit-returning functions: call as a statement and return null —
      * ctype_str(VOID) would otherwise mistype `XrValue _result = <void>`. */
     if (ret_rep == XR_REP_VOID)
@@ -4592,7 +4590,7 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
         fprintf(out, "}\n\n");
         return true;
     }
-    if (ret_is_aggregate && cg_value_rep_is_span_aggregate(ret_value_rep)) {
+    if (ret_is_aggregate && cg_func_return_abi_is_span(ctx, f)) {
         fprintf(out, "    return xrt_span_box_value(_result);\n");
         fprintf(out, "}\n\n");
         return true;

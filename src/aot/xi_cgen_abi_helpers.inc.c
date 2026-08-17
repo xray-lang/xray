@@ -363,10 +363,39 @@ static bool cg_func_return_abi_is_struct_aggregate(XiCgenCtx *ctx, const XiFunc 
            view.aggregate_class == XR_C_ABI_AGGREGATE_STRUCT;
 }
 
-static XaotValueRep cg_func_return_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f) {
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    return plan ? xaot_abi_slot_value_rep(&plan->abi.ret)
-                : xaot_value_rep_for_type(f ? f->return_type : NULL);
+/* The base conversion a typed ADT return needs before a boxed aggregate is
+ * taken into it, and whether the return slot is a span. Both read the signature
+ * row rather than reconstructing anything from a C spelling. */
+static bool cg_func_return_abi_is_span(XiCgenCtx *ctx, const XiFunc *f) {
+    XrCFunctionAbiEmissionView view;
+    return cg_func_return_abi_emission(ctx, f, &view) &&
+           view.aggregate_class == XR_C_ABI_AGGREGATE_SLICE;
+}
+
+/* Whether a typed ADT return needs a base conversion, and the two halves of
+ * that conversion. All three read the signature row rather than recognising a
+ * C spelling on a legacy representation. */
+static bool cg_func_return_abi_is_typed_adt(XiCgenCtx *ctx, const XiFunc *f,
+                                            const char **out_c_type) {
+    XrCFunctionAbiEmissionView view;
+    if (!cg_func_return_abi_emission(ctx, f, &view) ||
+        view.aggregate_class != XR_C_ABI_AGGREGATE_ADT_ENUM || !view.c_type ||
+        strcmp(view.c_type, "XrAotEnumAggregate") == 0)
+        return false;
+    if (out_c_type)
+        *out_c_type = view.c_type;
+    return true;
+}
+
+static void cg_emit_return_adt_base_prefix(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+    const char *c_type = NULL;
+    if (cg_func_return_abi_is_typed_adt(ctx, f, &c_type))
+        fprintf(out, "%s_from_base(", c_type);
+}
+
+static void cg_emit_return_adt_base_suffix(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+    if (cg_func_return_abi_is_typed_adt(ctx, f, NULL))
+        fprintf(out, ")");
 }
 
 /* The zero of a return whose slot is an aggregate, written from the signature

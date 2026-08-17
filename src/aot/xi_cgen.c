@@ -10436,12 +10436,11 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                         ctx->error = true;
                         cg_emit_return_aggregate_zero(ctx, out, f);
                     } else {
-                        XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
-                        emit_adt_base_to_value_rep_prefix(out, ret_value_rep);
+                        cg_emit_return_adt_base_prefix(ctx, out, f);
                         fprintf(out, "xrt_enum_aggregate_take_from_boxed(");
                         emit_value_as_rep_ctx(ctx, out, blk->control, XR_REP_TAGGED);
                         fprintf(out, ")");
-                        emit_adt_base_to_value_rep_suffix(out, ret_value_rep);
+                        cg_emit_return_adt_base_suffix(ctx, out, f);
                     }
                     fprintf(out, ";\n");
                 } else {
@@ -14463,8 +14462,8 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
                 fprintf(out, ", XrValue p%u", i);
             fprintf(out, ") {\n");
             bool ret_is_aggregate = cg_func_return_abi_is_aggregate(ctx, f);
+            const char *adt_c_type = NULL;
             XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
-            XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
             bool ret_is_struct_aggregate =
                 ret_is_aggregate && cg_func_return_abi_is_struct_aggregate(ctx, f);
             if (ret_is_struct_aggregate) {
@@ -14493,12 +14492,12 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
                 fprintf(out, "    return ");
             }
             const char *conv_suffix = NULL;
-            if (ret_is_aggregate && cg_value_rep_is_span_aggregate(ret_value_rep)) {
+            if (ret_is_aggregate && cg_func_return_abi_is_span(ctx, f)) {
                 fprintf(out, "xrt_span_box_value(");
             } else if (ret_is_aggregate) {
                 fprintf(out, "xrt_enum_aggregate_box(");
-                if (cg_value_rep_is_typed_adt_aggregate(ret_value_rep))
-                    fprintf(out, "%s_to_base(", ret_value_rep.c_type);
+                if (cg_func_return_abi_is_typed_adt(ctx, f, &adt_c_type))
+                    fprintf(out, "%s_to_base(", adt_c_type);
             } else if (ret_rep != XR_REP_VOID)
                 conv_suffix =
                     emit_conversion_prefix_ctx(ctx, out, f->return_type, ret_rep, XR_REP_TAGGED);
@@ -14511,11 +14510,10 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
                 emit_boxed_value_as_func_param_abi(ctx, out, f, i, param_expr);
             }
             fprintf(out, ")");
-            if (ret_is_aggregate && cg_value_rep_is_span_aggregate(ret_value_rep)) {
+            if (ret_is_aggregate && cg_func_return_abi_is_span(ctx, f)) {
                 fprintf(out, ")");
             } else if (ret_is_aggregate) {
-                if (cg_value_rep_is_typed_adt_aggregate(ret_value_rep))
-                    fprintf(out, ")");
+                cg_emit_return_adt_base_suffix(ctx, out, f);
                 fprintf(out, ")");
             } else if (ret_rep != XR_REP_VOID)
                 emit_conversion_suffix(out, conv_suffix);
