@@ -8470,6 +8470,35 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
                           "storage it is already in",
                     source_value, i, a, has_definition ? input_storage : XR_REP_COUNT,
                     XR_REP_COUNT);
+                /* A definition refusal has two very different causes and the
+                 * sentence above cannot tell them apart. Either the TargetPlan
+                 * bound this value nothing at all -- the gap is a missing
+                 * storage family one layer up, and no oracle here can close it
+                 * -- or it bound a row this pass declines to read as a scalar
+                 * carrier, which is a gap in this pass. Naming which one turns
+                 * a refusal into a work item for the right layer. */
+                if (!has_definition && rep_trace_enabled()) {
+                    const XrTargetValueRepRecord *bound =
+                        xr_target_plan_value_rep(ctx->target_plan, source_value);
+                    const XrTargetMachineRepRecord *bound_rep =
+                        bound ? xr_target_plan_machine_rep(ctx->target_plan, bound->register_rep)
+                              : NULL;
+                    uint32_t definition = ctx->operation_by_value[source_value];
+                    const XrSemanticOperationRecord *producer =
+                        definition != XR_SEMANTIC_INDEX_NONE
+                            ? xr_semantic_plan_operation(ctx->semantic, definition)
+                            : NULL;
+                    const XrSemanticTypeRecord *value_type = xr_semantic_plan_type(
+                        ctx->semantic, producer ? producer->result_type : XR_SEMANTIC_INDEX_NONE);
+                    fprintf(stderr,
+                            "[aot-refine]   definition gap: bound=%s rep_kind=%u type_kind=%u "
+                            "children=%u aggregate=%u flags=%u\n",
+                            bound ? "target-plan" : "NONE", bound_rep ? bound_rep->kind : 9999u,
+                            value_type ? value_type->kind : 9999u,
+                            value_type ? value_type->child_count : 9999u,
+                            value_type ? value_type->aggregate_extent : 9999u,
+                            value_type ? value_type->flags : 9999u);
+                }
                 set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                          ctx->record_count, source_value, i);
                 refused_operands++;
