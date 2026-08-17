@@ -11,6 +11,7 @@
 #include "xr_semantic_verify.h"
 #include "xr_semantic_allocation_shape.h"
 #include "xr_semantic_array_element_storage_shape.h"
+#include "xr_semantic_type_admission_shape.h"
 #include "xr_semantic_builtin_identity_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_coroutine_lifecycle_shape.h"
@@ -4443,6 +4444,8 @@ static bool parameter_type_admits_argument(const XrSemanticPlan *callee,
         return false;
     if (xr_stable_id_equal(operand_type->id, parameter_type->id))
         return true;
+    if (xr_semantic_type_is_nullable_widening(operand_type, parameter_type))
+        return true;
     if (parameter_type->kind != (uint32_t) XR_KIND_UNION)
         return false;
     for (uint16_t member = 0; member < parameter_type->child_count; member++) {
@@ -4939,6 +4942,21 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
                          operand ? (unsigned) operand->access : 0u, addressable ? 1u : 0u,
                          operand ? (unsigned) operand->ownership_action : 0u,
                          operand ? (unsigned) operand->flags : 0u);
+                /* The two rows come from two plans, so an argument-type
+                 * disagreement is either a real type mismatch or one type
+                 * spelled the same and keyed differently across the module
+                 * boundary. Only the two canonical keys tell those apart. */
+                if (disagreement && strcmp(disagreement, "argument-type") == 0) {
+                    size_t used = strlen(authority_detail);
+                    snprintf(authority_detail + used, sizeof(authority_detail) - used,
+                             " caller_key=%s callee_key=%s",
+                             operand_type && operand_type->canonical_key
+                                 ? operand_type->canonical_key
+                                 : "<none>",
+                             parameter_type && parameter_type->canonical_key
+                                 ? parameter_type->canonical_key
+                                 : "<none>");
+                }
             }
         }
         if (!target_valid) {

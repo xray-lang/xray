@@ -1476,18 +1476,6 @@ static bool semantic_nullable_scalar_type_is_exact(const XrSemanticTypeRecord *t
     }
 }
 
-static bool semantic_unit_enum_type_is_exact(const XrSemanticTypeRecord *type) {
-    XrStableId zero = {{0}};
-    return type && type->kind == XR_KIND_ENUM && type->source_enum_key &&
-           !xr_stable_id_equal(type->source_enum_identity, zero) && type->enum_layout_id != 0 &&
-           type->enum_member_count != 0 &&
-           type->enum_flags == (XR_SEM_ENUM_DECLARATION_EXACT | XR_SEM_ENUM_UNIT) &&
-           type->reserved_enum == 0 && type->builtin_type == XR_TID_NULL &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE && type->child_count == 0 &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE && (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
-}
-
 static int semantic_aggregate_eligibility(const XrSemanticPlan *plan, uint32_t semantic_type,
                                           uint32_t *stack, uint32_t depth) {
     if (semantic_type >= xr_semantic_plan_type_count(plan) || depth >= 64)
@@ -3269,11 +3257,14 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         operation && operation->opcode < XI_OP_COUNT &&
         xi_generated_op_result_kind(operation->opcode) == XI_GEN_RESULT_VOID;
     bool operation_result_void =
-        generated_result_void && operation->function == semantic_function &&
-        operation->result_value == semantic_value && operation->result_type == semantic_type &&
+        xr_semantic_operation_result_void_governs_storage(
+            plan->semantic_plan, operation, semantic_value, semantic_type, semantic_function) &&
         operation->effects == xi_generated_op_effects(operation->opcode) &&
         operation->result_ownership == xi_generated_op_result_ownership(operation->opcode);
-    if (generated_result_void && !operation_result_void)
+    /* A unit enum reaches the table's result-void opcode legitimately and its
+     * own family binds the ordinal, so it is not the inconsistency this catches. */
+    if (generated_result_void && !operation_result_void &&
+        !xr_semantic_unit_enum_type_is_exact(type))
         XR_VALUE_BINDING_FAIL(1);
     bool exact_heap_closure = semantic_heap_closure_is_exact(plan->semantic_plan, operation);
     bool exact_panic_catch = semantic_panic_catch_is_exact(plan->semantic_plan, operation) &&
@@ -3453,7 +3444,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
      * ownership, never a property of the family. */
     bool exact_class_receiver_borrowed =
         exact_class_receiver && receiver_record->ownership == XI_OWN_BORROWED;
-    bool exact_unit_enum = semantic_unit_enum_type_is_exact(type);
+    bool exact_unit_enum = xr_semantic_unit_enum_type_is_exact(type);
     bool exact_nullable_scalar = semantic_nullable_scalar_type_is_exact(type);
     uint16_t receive_scalar_kind = XR_MACHINE_REP_COUNT;
     bool scalar_channel_receive = operation && operation->opcode == XI_CHAN_TRY_RECV && type &&
@@ -3878,7 +3869,7 @@ static bool verify_layouts(const XrTargetPlan *plan, const uint8_t *exact_dynami
                           "layout element storage disagrees with its semantic type");
         uint16_t expected_rep = XR_MACHINE_REP_COUNT;
         int scalar = semantic_type ? semantic_type_expected_rep(semantic_type, &expected_rep) : -1;
-        if (semantic_unit_enum_type_is_exact(semantic_type)) {
+        if (xr_semantic_unit_enum_type_is_exact(semantic_type)) {
             scalar = 1;
             expected_rep = XR_MACHINE_REP_ENUM_ORDINAL;
         }
@@ -5482,7 +5473,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     semantic_u8_slice_parameter_is_exact(semantic, parameter) &&
                     semantic_u8_slice_type_is_exact(semantic, operand->type);
                 bool argument_unit_enum = parameter && parameter->type == operand->type &&
-                                          semantic_unit_enum_type_is_exact(
+                                          xr_semantic_unit_enum_type_is_exact(
                                               xr_semantic_plan_type(semantic, operand->type));
                 bool argument_adt_enum = parameter && parameter->type == operand->type &&
                                          xr_semantic_adt_enum_type_is_exact(

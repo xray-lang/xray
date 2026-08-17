@@ -150,6 +150,16 @@ such a plan fails closed; module-set decoding requires the exact canonical
 ordered vector of verified dependency plans and repeats every relation. This
 follows a public Xray wrapper such as
 `net.writeBytes`; it never reinterprets it as private native `net.__writeBytes`.
+Caller and callee rows come from two plans, so an argument is admitted by the
+canonical type key rather than by one shared stable id. Beyond an exact key
+match and membership of a union parameter, the caller may hand a definite value
+to a parameter that only widens it to the nullable form of the same type, which
+is the language's own rule. The widening is offered only where null is already
+one of the values the representation encodes, so a reference-capable type is
+admitted and a nullable scalar, which carries a separate discriminant, is not:
+admitting one here would drop the adapter its call needs. Every remaining field
+of the two keys must match, so a difference in constness, value semantics,
+element, name or declaring class stays inadmissible.
 Schema 17 also freezes one `INDIRECT_CALLABLE` row for an ordinary `XI_CALL`
 whose callee operand has an exact frozen function type but whose runtime
 function-value producer is open. The row records only that function-type stable
@@ -446,7 +456,7 @@ anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189
 anchor-sha256: src/plan/semantic/xr_semantic_builder.c ec36d442aea8ea48cb6c51019fa276bd42e12d51c1d6647e02b20b93128650b7
 anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
 anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 759cc4d7eaff12a36365922674ea9195b612f4c089222280a0aff70c86e27b38
-anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h b5b4f4d0956a4795f90c9b51335cfa6cabbc46207a818883cea79ad50eb704f9
+anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h 8b450efae3b52075df50abe1fc9a34cf28d2851c4f63c2609ab93446abdb3f3c
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h e5e4ab9800169889becffe95cb1127a8ffea102c45f6448f9db98c4c06d8b266
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 561eaae59525ba3d0b57e9adcfc3bb6e970bc9be2bac3b750af58653a237dbae
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h b9acf595d2daebbb52de16b65889745264d07cf7bb35eda11afc7af4e8edf1c9
@@ -457,7 +467,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h d190
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h d2dff7451f5eb731348efec9541a2b8cbbfbc879e049d163ed46479352a62a1e
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 0bd5c319832db3c5c1067e5ee364135923a15b1e488b5f9ab4fe5fa7bc8e9310
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h ee7409a02d228f10ed8c812c9b9d7f835106067e37d12bc6ed50c6fa48f93e27
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 4a423401e396827657ad8b423e01b09303961acb1a7a4320e2840028c5199c6f
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 30473d7e8359458dd77e0ed14cdb1b13baaba314eff0f73ecdb8ed15fae6a31d
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: src/stdlib/xstdlib_metadata.h fea5c1b87e5cf4650f62720540f9728ac71dc475fdab683ba30b6458d3e3902b
 anchor-sha256: tests/unit/plan/test_semantic_plan.c dcfaad89412986d4bac2730b2d4d45f2dc0fc198403dd59cf76eb4dbe69d93e7

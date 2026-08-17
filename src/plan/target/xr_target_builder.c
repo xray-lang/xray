@@ -721,23 +721,11 @@ static bool make_machine_rep(const XrTargetMachineFacts *profile, uint16_t kind,
     return true;
 }
 
-static bool semantic_unit_enum_type_is_exact(const XrSemanticTypeRecord *type) {
-    XrStableId zero = {{0}};
-    return type && type->kind == XR_KIND_ENUM && type->source_enum_key &&
-           !xr_stable_id_equal(type->source_enum_identity, zero) && type->enum_layout_id != 0 &&
-           type->enum_member_count != 0 &&
-           type->enum_flags == (XR_SEM_ENUM_DECLARATION_EXACT | XR_SEM_ENUM_UNIT) &&
-           type->reserved_enum == 0 && type->builtin_type == XR_TID_NULL &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE && type->child_count == 0 &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE && (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
-}
-
 static bool make_unit_enum_rep(const XrTargetPlanBuilder *builder, uint32_t semantic_type,
                                XrTargetMachineRepRecord *out) {
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(builder ? builder->semantic_plan : NULL, semantic_type);
-    if (!semantic_unit_enum_type_is_exact(type) ||
+    if (!xr_semantic_unit_enum_type_is_exact(type) ||
         !make_machine_rep(xr_target_profile_machine_facts(builder->profile),
                           XR_MACHINE_REP_ENUM_ORDINAL, out))
         return false;
@@ -3072,20 +3060,8 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetValueStorage
         semantic_operation < xr_semantic_plan_operation_count(builder->semantic_plan)
             ? xr_semantic_plan_operation(builder->semantic_plan, semantic_operation)
             : NULL;
-    /* An opcode the generated table declares result-void stores nothing, and the
-     * value it names takes the void representation whatever its type spells.
-     * That shortcut must stop at a type another family already owns: a unit
-     * enum still carries the ordinal a direct-local argument hands to its
-     * callee, so erasing it to void here would publish a second, contradictory
-     * storage fact for the same value and leave the two families to disagree at
-     * materialization instead of here. */
-    bool operation_result_void =
-        operation && operation->function == semantic_function &&
-        operation->result_value == semantic_value && operation->result_type == semantic_type &&
-        operation->opcode < XI_OP_COUNT &&
-        xi_generated_op_result_kind(operation->opcode) == XI_GEN_RESULT_VOID &&
-        !semantic_unit_enum_type_is_exact(
-            xr_semantic_plan_type(builder->semantic_plan, semantic_type));
+    bool operation_result_void = xr_semantic_operation_result_void_governs_storage(
+        builder->semantic_plan, operation, semantic_value, semantic_type, semantic_function);
     if (operation_result_void &&
         (operation->effects != xi_generated_op_effects(operation->opcode) ||
          operation->result_ownership != xi_generated_op_result_ownership(operation->opcode)))
@@ -4174,7 +4150,7 @@ static bool note_direct_local_unit_enum_value(
     XrStableId source_identity, char *error, size_t error_size) {
     if (semantic_value >= analysis->total_values || semantic_type >= analysis->type_count ||
         semantic_function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
-        !semantic_unit_enum_type_is_exact(
+        !xr_semantic_unit_enum_type_is_exact(
             xr_semantic_plan_type(builder->semantic_plan, semantic_type)))
         return fail(error, error_size, "XR_TARGET_1001", "unit-enum value identity is not exact");
     if (analysis->defined_values[semantic_value]) {
@@ -4245,7 +4221,7 @@ static bool builder_add_direct_local_unit_enum_argument_storage(XrTargetPlanBuil
     for (uint32_t i = 0; valid && i < parameter_count; i++) {
         const XrSemanticParameterRecord *parameter =
             xr_semantic_plan_parameter(builder->semantic_plan, i);
-        if (!parameter || !semantic_unit_enum_type_is_exact(
+        if (!parameter || !xr_semantic_unit_enum_type_is_exact(
                               xr_semantic_plan_type(builder->semantic_plan, parameter->type)))
             continue;
         valid = note_direct_local_unit_enum_value(
@@ -4257,7 +4233,7 @@ static bool builder_add_direct_local_unit_enum_argument_storage(XrTargetPlanBuil
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(builder->semantic_plan, i);
         if (!operation || operation->opcode == XI_PARAM ||
-            !semantic_unit_enum_type_is_exact(
+            !xr_semantic_unit_enum_type_is_exact(
                 xr_semantic_plan_type(builder->semantic_plan, operation->result_type)))
             continue;
         valid = note_direct_local_unit_enum_value(
@@ -8547,7 +8523,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                               semantic_u8_slice_type_is_exact(plan, operand->type);
         bool exact_unit_enum =
             parameter && parameter->type == operand->type &&
-            semantic_unit_enum_type_is_exact(xr_semantic_plan_type(plan, operand->type));
+            xr_semantic_unit_enum_type_is_exact(xr_semantic_plan_type(plan, operand->type));
         bool exact_adt_enum =
             parameter && parameter->type == operand->type &&
             xr_semantic_adt_enum_type_is_exact(xr_semantic_plan_type(plan, operand->type));

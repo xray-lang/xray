@@ -37,37 +37,65 @@ typedef struct XrSemanticAdtEnumConstructorShape {
     const char *member_name;
 } XrSemanticAdtEnumConstructorShape;
 
-static inline bool xr_semantic_adt_enum_type_is_exact(
-    const XrSemanticTypeRecord *type) {
+static inline bool xr_semantic_adt_enum_type_is_exact(const XrSemanticTypeRecord *type) {
     XrStableId zero = {{0}};
     return type && type->kind == XR_KIND_ENUM && type->source_enum_key &&
-           !xr_stable_id_equal(type->source_enum_identity, zero) &&
-           type->enum_layout_id != 0 && type->enum_member_count != 0 &&
-           type->enum_flags == XR_SEM_ENUM_DECLARATION_EXACT &&
+           !xr_stable_id_equal(type->source_enum_identity, zero) && type->enum_layout_id != 0 &&
+           type->enum_member_count != 0 && type->enum_flags == XR_SEM_ENUM_DECLARATION_EXACT &&
            type->reserved_enum == 0 && type->builtin_type == XR_TID_NULL &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE &&
-           type->scalar_rep == XR_SCALAR_REP_NONE &&
-           (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_BORROW_VIEW |
-                           XR_SEM_TYPE_AGGREGATE_EXACT)) == 0 &&
-           (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE |
-                           XR_SEM_TYPE_OWNERSHIP_ROOT)) ==
+           type->source_class == XR_SEMANTIC_INDEX_NONE && type->scalar_rep == XR_SCALAR_REP_NONE &&
+           (type->flags &
+            (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) == 0 &&
+           (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) ==
                (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT);
 }
 
-static inline bool xr_semantic_direct_local_adt_enum_result_is_exact(
-    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
-    const XrSemanticFunctionRecord *callee) {
+/* The payload-free sibling of the judgement above. Its members carry nothing,
+ * so the value is the ordinal alone and the enum flags say so; every other
+ * field is pinned exactly as the ADT form pins it. Both layers read this one
+ * copy: the target builder and the independent verifier each used to carry a
+ * byte-identical private one, which is how a rule can be tightened on one side
+ * and left behind on the other. */
+static inline bool xr_semantic_unit_enum_type_is_exact(const XrSemanticTypeRecord *type) {
+    XrStableId zero = {{0}};
+    return type && type->kind == XR_KIND_ENUM && type->source_enum_key &&
+           !xr_stable_id_equal(type->source_enum_identity, zero) && type->enum_layout_id != 0 &&
+           type->enum_member_count != 0 &&
+           type->enum_flags == (XR_SEM_ENUM_DECLARATION_EXACT | XR_SEM_ENUM_UNIT) &&
+           type->reserved_enum == 0 && type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
+}
+
+/* Whether the generated opcode table's result-void declaration governs where
+ * this value is stored. The table is authority on the opcode, not on the type:
+ * a unit enum still carries the ordinal a direct-local argument hands to its
+ * callee, and its own family binds that. Erasing it to void here would publish
+ * a second, contradictory storage fact for one value and leave the two families
+ * to disagree at materialization rather than at the judgement. */
+static inline bool xr_semantic_operation_result_void_governs_storage(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation, uint32_t semantic_value,
+    uint32_t semantic_type, uint32_t semantic_function) {
+    return operation && operation->opcode < XI_OP_COUNT &&
+           xi_generated_op_result_kind(operation->opcode) == XI_GEN_RESULT_VOID &&
+           operation->function == semantic_function && operation->result_value == semantic_value &&
+           operation->result_type == semantic_type &&
+           !xr_semantic_unit_enum_type_is_exact(xr_semantic_plan_type(plan, semantic_type));
+}
+
+static inline bool
+xr_semantic_direct_local_adt_enum_result_is_exact(const XrSemanticPlan *plan,
+                                                  const XrSemanticOperationRecord *operation,
+                                                  const XrSemanticFunctionRecord *callee) {
     return plan && operation && callee &&
            (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
            operation->result_type == callee->return_type &&
            operation->result_value != XR_SEMANTIC_INDEX_NONE &&
-           operation->result_alias_operand == -1 &&
-           operation->return_parameter == -1 && operation->return_complete == 1 &&
-           operation->return_provenance == XR_SEM_RETURN_OWNED &&
-           callee->return_parameter == -1 &&
-           callee->return_provenance == XR_SEM_RETURN_OWNED &&
-           xr_semantic_adt_enum_type_is_exact(
-               xr_semantic_plan_type(plan, operation->result_type));
+           operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
+           operation->return_complete == 1 && operation->return_provenance == XR_SEM_RETURN_OWNED &&
+           callee->return_parameter == -1 && callee->return_provenance == XR_SEM_RETURN_OWNED &&
+           xr_semantic_adt_enum_type_is_exact(xr_semantic_plan_type(plan, operation->result_type));
 }
 
 static inline bool xr_semantic_enum_take_u32(const char *text, uint32_t *out) {
@@ -101,11 +129,11 @@ static inline bool xr_semantic_enum_key_take_u32(const char **cursor, uint32_t *
     return true;
 }
 
-static inline bool xr_semantic_enum_key_take_component(
-    const char **cursor, const char **text, size_t *length) {
+static inline bool xr_semantic_enum_key_take_component(const char **cursor, const char **text,
+                                                       size_t *length) {
     uint32_t width = 0;
-    if (!cursor || !*cursor || !text || !length ||
-        !xr_semantic_enum_key_take_u32(cursor, &width) || **cursor != ':')
+    if (!cursor || !*cursor || !text || !length || !xr_semantic_enum_key_take_u32(cursor, &width) ||
+        **cursor != ':')
         return false;
     (*cursor)++;
     size_t remaining = strlen(*cursor);
@@ -117,13 +145,12 @@ static inline bool xr_semantic_enum_key_take_component(
     return true;
 }
 
-static inline const XrSemanticOperationRecord *xr_semantic_enum_value_definition(
-    const XrSemanticPlan *plan, uint32_t semantic_value) {
+static inline const XrSemanticOperationRecord *
+xr_semantic_enum_value_definition(const XrSemanticPlan *plan, uint32_t semantic_value) {
     const XrSemanticOperationRecord *match = NULL;
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
     for (uint32_t i = 0; i < operation_count; i++) {
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(plan, i);
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, i);
         if (!operation || operation->result_value != semantic_value)
             continue;
         if (match)
@@ -136,11 +163,10 @@ static inline const XrSemanticOperationRecord *xr_semantic_enum_value_definition
 /* Enum namespaces may be hoisted through the module shared table before a
  * constructor use. Follow only a unique frozen COPY or SET_SHARED/GET_SHARED
  * chain; any second writer, malformed operand, or cycle refuses authority. */
-static inline const XrSemanticOperationRecord *xr_semantic_enum_namespace_definition(
-    const XrSemanticPlan *plan, uint32_t semantic_value) {
+static inline const XrSemanticOperationRecord *
+xr_semantic_enum_namespace_definition(const XrSemanticPlan *plan, uint32_t semantic_value) {
     uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands =
-        xr_semantic_plan_operands(plan, &operand_count);
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
     if (!plan || !operands)
         return NULL;
@@ -152,11 +178,9 @@ static inline const XrSemanticOperationRecord *xr_semantic_enum_namespace_defini
         if (definition->opcode == XI_CONST)
             return definition;
         if (definition->opcode == XI_COPY) {
-            if (definition->operand_count != 1 ||
-                definition->operand_begin >= operand_count)
+            if (definition->operand_count != 1 || definition->operand_begin >= operand_count)
                 return NULL;
-            const XrSemanticOperandRecord *source =
-                &operands[definition->operand_begin];
+            const XrSemanticOperandRecord *source = &operands[definition->operand_begin];
             if (source->role != XR_SEM_OPERAND_VALUE || source->parameter != -1 ||
                 source->flags != 0)
                 return NULL;
@@ -164,13 +188,11 @@ static inline const XrSemanticOperationRecord *xr_semantic_enum_namespace_defini
             continue;
         }
         if (definition->opcode != XI_GET_SHARED || definition->operand_count != 0 ||
-            definition->semantic_immediate < 0 ||
-            definition->semantic_immediate > UINT16_MAX)
+            definition->semantic_immediate < 0 || definition->semantic_immediate > UINT16_MAX)
             return NULL;
         const XrSemanticOperationRecord *store = NULL;
         for (uint32_t i = 0; i < operation_count; i++) {
-            const XrSemanticOperationRecord *candidate =
-                xr_semantic_plan_operation(plan, i);
+            const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
             if (!candidate || candidate->opcode != XI_SET_SHARED ||
                 candidate->semantic_immediate != definition->semantic_immediate)
                 continue;
@@ -178,22 +200,20 @@ static inline const XrSemanticOperationRecord *xr_semantic_enum_namespace_defini
                 return NULL;
             store = candidate;
         }
-        if (!store || store->operand_count != 1 ||
-            store->operand_begin >= operand_count)
+        if (!store || store->operand_count != 1 || store->operand_begin >= operand_count)
             return NULL;
         const XrSemanticOperandRecord *source = &operands[store->operand_begin];
-        if (source->role != XR_SEM_OPERAND_VALUE || source->parameter != -1 ||
-            source->flags != 0)
+        if (source->role != XR_SEM_OPERAND_VALUE || source->parameter != -1 || source->flags != 0)
             return NULL;
         semantic_value = source->value;
     }
     return NULL;
 }
 
-static inline bool xr_semantic_enum_source_key_matches(
-    const XrSemanticTypeRecord *type, const char *enum_name,
-    const char *const *metadata, uint32_t metadata_count,
-    uint32_t member_metadata_begin, uint32_t member_count) {
+static inline bool
+xr_semantic_enum_source_key_matches(const XrSemanticTypeRecord *type, const char *enum_name,
+                                    const char *const *metadata, uint32_t metadata_count,
+                                    uint32_t member_metadata_begin, uint32_t member_count) {
     static const char prefix[] = "source-enum-v1:schema=34:owner=";
     if (!type || !type->source_enum_key || !enum_name || !metadata ||
         strncmp(type->source_enum_key, prefix, sizeof(prefix) - 1u) != 0)
@@ -201,16 +221,13 @@ static inline bool xr_semantic_enum_source_key_matches(
     const char *cursor = type->source_enum_key + sizeof(prefix) - 1u;
     const char *component = NULL;
     size_t component_length = 0;
-    if (!xr_semantic_enum_key_take_component(&cursor, &component,
-                                              &component_length) ||
+    if (!xr_semantic_enum_key_take_component(&cursor, &component, &component_length) ||
         component_length == 0 || strncmp(cursor, ":name=", 6) != 0)
         return false;
     cursor += 6;
-    if (!xr_semantic_enum_key_take_component(&cursor, &component,
-                                              &component_length) ||
+    if (!xr_semantic_enum_key_take_component(&cursor, &component, &component_length) ||
         strlen(enum_name) != component_length ||
-        memcmp(enum_name, component, component_length) != 0 ||
-        strncmp(cursor, ":members=", 9) != 0)
+        memcmp(enum_name, component, component_length) != 0 || strncmp(cursor, ":members=", 9) != 0)
         return false;
     cursor += 9;
     uint32_t key_member_count = 0;
@@ -223,19 +240,14 @@ static inline bool xr_semantic_enum_source_key_matches(
         int marker_length = snprintf(marker, sizeof(marker), ":m%u=", i);
         uint32_t ordinal = 0;
         uint32_t payload_count = 0;
-        if (metadata_cursor > metadata_count ||
-            metadata_count - metadata_cursor < 3u || marker_length <= 0 ||
-            (size_t) marker_length >= sizeof(marker) ||
-            strncmp(cursor, marker, (size_t) marker_length) != 0 ||
-            !metadata[metadata_cursor] ||
-            !xr_semantic_enum_take_u32(metadata[metadata_cursor + 1u], &ordinal) ||
-            ordinal != i ||
-            !xr_semantic_enum_take_u32(metadata[metadata_cursor + 2u],
-                                       &payload_count))
+        if (metadata_cursor > metadata_count || metadata_count - metadata_cursor < 3u ||
+            marker_length <= 0 || (size_t) marker_length >= sizeof(marker) ||
+            strncmp(cursor, marker, (size_t) marker_length) != 0 || !metadata[metadata_cursor] ||
+            !xr_semantic_enum_take_u32(metadata[metadata_cursor + 1u], &ordinal) || ordinal != i ||
+            !xr_semantic_enum_take_u32(metadata[metadata_cursor + 2u], &payload_count))
             return false;
         cursor += marker_length;
-        if (!xr_semantic_enum_key_take_component(&cursor, &component,
-                                                  &component_length) ||
+        if (!xr_semantic_enum_key_take_component(&cursor, &component, &component_length) ||
             strlen(metadata[metadata_cursor]) != component_length ||
             memcmp(metadata[metadata_cursor], component, component_length) != 0 ||
             strncmp(cursor, ":payloads=", 10) != 0)
@@ -255,16 +267,16 @@ static inline bool xr_semantic_enum_source_key_matches(
  * rows. The enum-v2 namespace table and the exact source-enum type identity
  * must describe the same declaration and every payload operand must match the
  * selected member's frozen payload type. */
-static inline bool xr_semantic_adt_enum_constructor_is_exact(
-    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
-    XrSemanticAdtEnumConstructorShape *out) {
+static inline bool
+xr_semantic_adt_enum_constructor_is_exact(const XrSemanticPlan *plan,
+                                          const XrSemanticOperationRecord *operation,
+                                          XrSemanticAdtEnumConstructorShape *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     uint32_t operand_count = 0;
     uint32_t metadata_count = 0;
     uint32_t constant_count = 0;
-    const XrSemanticOperandRecord *operands =
-        xr_semantic_plan_operands(plan, &operand_count);
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
     const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
     constant_count = (uint32_t) xr_semantic_plan_constant_count(plan);
     const XrSemanticFunctionRecord *function =
@@ -274,8 +286,7 @@ static inline bool xr_semantic_adt_enum_constructor_is_exact(
         operation->operand_begin > operand_count ||
         operation->operand_count > operand_count - operation->operand_begin ||
         operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
-        !metadata[operation->metadata_begin] ||
-        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        !metadata[operation->metadata_begin] || operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->result_type >= xr_semantic_plan_type_count(plan) ||
         operation->constant != XR_SEMANTIC_INDEX_NONE ||
         operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
@@ -287,16 +298,14 @@ static inline bool xr_semantic_adt_enum_constructor_is_exact(
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
         operation->transfer_mode != 0 || operation->parameter_mode != 0 ||
         operation->parameter_ownership != 0 || operation->result_alias_operand != -1 ||
-        operation->return_provenance != XR_SEM_RETURN_OWNED ||
-        operation->return_parameter != -1 || operation->return_complete != 1 ||
-        operation->view_complete != 0 || operation->view_source_operand != -1 ||
-        operation->view_source_parameter != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED || operation->return_parameter != -1 ||
+        operation->return_complete != 1 || operation->view_complete != 0 ||
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
         operation->result_value < function->value_begin ||
         operation->result_value >= function->value_begin + function->value_count)
         return false;
 
-    const XrSemanticOperandRecord *receiver =
-        &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     if (receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
         receiver->transfer_mode != XR_TRANSFER_SHARE ||
         receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
@@ -319,8 +328,8 @@ static inline bool xr_semantic_adt_enum_constructor_is_exact(
     uint32_t layout_id = 0;
     uint32_t is_adt = 0;
     uint32_t type_parameter_count = 0;
-    if (!enum_metadata[0] || strcmp(enum_metadata[0], "enum-v2") != 0 ||
-        !enum_metadata[1] || !xr_semantic_enum_take_u32(enum_metadata[2], &layout_id) ||
+    if (!enum_metadata[0] || strcmp(enum_metadata[0], "enum-v2") != 0 || !enum_metadata[1] ||
+        !xr_semantic_enum_take_u32(enum_metadata[2], &layout_id) ||
         !xr_semantic_enum_take_u32(enum_metadata[3], &is_adt) || is_adt != 1u ||
         !xr_semantic_enum_take_u32(enum_metadata[4], &type_parameter_count) ||
         type_parameter_count > enum_metadata_count - 6u)
@@ -331,21 +340,18 @@ static inline bool xr_semantic_adt_enum_constructor_is_exact(
         member_count == 0 || member_count > UINT16_MAX)
         return false;
     uint32_t member_metadata_begin = member_count_index + 1u;
-    const XrSemanticTypeRecord *result_type =
-        xr_semantic_plan_type(plan, operation->result_type);
+    const XrSemanticTypeRecord *result_type = xr_semantic_plan_type(plan, operation->result_type);
     XrStableId zero = {{0}};
     if (!xr_semantic_adt_enum_type_is_exact(result_type) ||
         xr_stable_id_equal(result_type->source_enum_identity, zero) ||
         result_type->enum_layout_id != layout_id ||
-        result_type->enum_member_count != member_count ||
-        !constant ||
-        result_type->reserved_enum != 0 ||
-        constant->kind != XR_SEM_CONST_ENUM_NAMESPACE ||
+        result_type->enum_member_count != member_count || !constant ||
+        result_type->reserved_enum != 0 || constant->kind != XR_SEM_CONST_ENUM_NAMESPACE ||
         constant->type != receiver->type || constant->integer != (int64_t) layout_id ||
         !constant->string || strcmp(constant->string, enum_metadata[1]) != 0 ||
-        !xr_semantic_enum_source_key_matches(
-            result_type, enum_metadata[1], enum_metadata, enum_metadata_count,
-            member_metadata_begin, member_count))
+        !xr_semantic_enum_source_key_matches(result_type, enum_metadata[1], enum_metadata,
+                                             enum_metadata_count, member_metadata_begin,
+                                             member_count))
         return false;
 
     uint32_t cursor = member_metadata_begin;
@@ -379,15 +385,13 @@ static inline bool xr_semantic_adt_enum_constructor_is_exact(
     for (uint32_t i = 0; i < selected_payload_count; i++) {
         const XrSemanticOperandRecord *payload = receiver + 1u + i;
         uint32_t payload_type = 0;
-        if (!xr_semantic_enum_take_u32(
-                enum_metadata[selected_payload_begin + i * 2u + 1u], &payload_type) ||
+        if (!xr_semantic_enum_take_u32(enum_metadata[selected_payload_begin + i * 2u + 1u],
+                                       &payload_type) ||
             payload_type != payload->type || payload->role != XR_SEM_OPERAND_ARGUMENT ||
-            payload->parameter != (int16_t) i ||
-            payload->transfer_mode != XR_TRANSFER_SHARE ||
+            payload->parameter != (int16_t) i || payload->transfer_mode != XR_TRANSFER_SHARE ||
             payload->ownership_action != XR_SEM_OPERAND_CONSUME ||
-            payload->parameter_mode != XR_PARAM_READ ||
-            payload->access != XR_CALL_ARG_PLAIN || payload->origin != 0 ||
-            payload->lifetime != 0 || payload->escape != 0 ||
+            payload->parameter_mode != XR_PARAM_READ || payload->access != XR_CALL_ARG_PLAIN ||
+            payload->origin != 0 || payload->lifetime != 0 || payload->escape != 0 ||
             payload->flags != XR_SEM_OPERAND_CALL_CONTRACT)
             return false;
     }
