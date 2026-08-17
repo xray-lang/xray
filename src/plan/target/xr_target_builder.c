@@ -77,6 +77,10 @@ typedef struct XrTargetValueIntent {
     XrStableId slot_identity;
     bool has_slot;
     bool resolve_type_rep;
+    /* The family that claimed this value. Two families that each prove storage
+     * for the same value are a coverage overlap, not an allocation failure, and
+     * the refusal can only say which two if the claim carries its author. */
+    uint64_t family;
 } XrTargetValueIntent;
 
 typedef struct XrTargetSlotIntent {
@@ -241,6 +245,7 @@ struct XrTargetPlanBuilder {
     XrTargetValueIntent *value_intents;
     uint32_t value_intent_count;
     uint32_t value_intent_capacity;
+    uint64_t active_family;
     XrTargetSlotIntent *slot_intents;
     uint32_t slot_intent_count;
     uint32_t slot_intent_capacity;
@@ -915,7 +920,8 @@ static bool append_value_intent(XrTargetPlanBuilder *builder, const XrTargetValu
                          sizeof(*builder->value_intents)))
         return fail(error, error_size, "XR_EXEC_5003",
                     "value representation intent budget exhausted");
-    builder->value_intents[builder->value_intent_count++] = *intent;
+    builder->value_intents[builder->value_intent_count] = *intent;
+    builder->value_intents[builder->value_intent_count++].family = builder->active_family;
     return true;
 }
 
@@ -3066,11 +3072,20 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetValueStorage
         semantic_operation < xr_semantic_plan_operation_count(builder->semantic_plan)
             ? xr_semantic_plan_operation(builder->semantic_plan, semantic_operation)
             : NULL;
+    /* An opcode the generated table declares result-void stores nothing, and the
+     * value it names takes the void representation whatever its type spells.
+     * That shortcut must stop at a type another family already owns: a unit
+     * enum still carries the ordinal a direct-local argument hands to its
+     * callee, so erasing it to void here would publish a second, contradictory
+     * storage fact for the same value and leave the two families to disagree at
+     * materialization instead of here. */
     bool operation_result_void =
         operation && operation->function == semantic_function &&
         operation->result_value == semantic_value && operation->result_type == semantic_type &&
         operation->opcode < XI_OP_COUNT &&
-        xi_generated_op_result_kind(operation->opcode) == XI_GEN_RESULT_VOID;
+        xi_generated_op_result_kind(operation->opcode) == XI_GEN_RESULT_VOID &&
+        !semantic_unit_enum_type_is_exact(
+            xr_semantic_plan_type(builder->semantic_plan, semantic_type));
     if (operation_result_void &&
         (operation->effects != xi_generated_op_effects(operation->opcode) ||
          operation->result_ownership != xi_generated_op_result_ownership(operation->opcode)))
@@ -4130,6 +4145,7 @@ static bool builder_begin_family(XrTargetPlanBuilder *builder, uint64_t family, 
         (builder->poisoned && !target_survey_enabled()))
         return fail(error, error_size, "XR_TARGET_1001", "target family collector cannot start");
     builder->started_family_mask |= family;
+    builder->active_family = family;
     return true;
 }
 
@@ -8857,6 +8873,52 @@ static bool collect_native_namespace_yieldable_call_intent(XrTargetPlanBuilder *
     return append_call_intent(builder, &call, error, error_size);
 }
 
+/* The suspending method of a frozen builtin instance. The SemanticPlan target
+ * names the receiver type and the roster entry its builtin id and arity select;
+ * it names no callee function, so the intent carries none either. The call
+ * always parks its caller -- the roster admits nothing that does not -- so the
+ * suspension flag is the judgement's own consequence rather than a separate
+ * fact rebuilt here. The receiver is the dispatch target, not an argument, and
+ * the arguments the roster allows after it are plain scalars the generic
+ * argument walk already binds. */
+static bool collect_builtin_instance_yieldable_call_intent(XrTargetPlanBuilder *builder,
+                                                           uint32_t target_index,
+                                                           const XrSemanticCallTargetRecord *target,
+                                                           bool suspends, char *error,
+                                                           size_t error_size) {
+    const XrSemanticPlan *plan = builder ? builder->semantic_plan : NULL;
+    const XrSemanticOperationRecord *operation =
+        target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+    uint32_t receiver_type = XR_SEMANTIC_INDEX_NONE;
+    if (!suspends || !xr_semantic_builtin_instance_yieldable_call_is_exact(plan, target, operation,
+                                                                           &receiver_type))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "builtin instance yieldable call authority is incomplete");
+    const XrSemanticTypeRecord *receiver = xr_semantic_plan_type(plan, receiver_type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = target_index,
+        .semantic_operation = target->operation,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_BUILTIN_INSTANCE_YIELDABLE,
+        .target_kind = XR_TARGET_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE,
+        .suspends = true,
+    };
+    if (!receiver ||
+        !stable_identity_from_pair("xray-target-builtin-instance-yieldable-v1", target->id,
+                                   receiver->id, operation->operand_count - 1u, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "builtin instance yieldable call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *error,
                                            size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_CALL_ADAPTER, error, error_size))
@@ -8956,13 +9018,16 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         bool class_construction =
             target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
+        bool builtin_instance =
+            target && target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE;
         if (!target || !operation ||
-            (!direct && !source && !native_namespace && !class_construction) ||
+            (!direct && !source && !native_namespace && !class_construction && !builtin_instance) ||
             (direct && target->function >= function_count) ||
             (direct && operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
             (source && operation->opcode != XI_CALL_METHOD && operation->opcode != XI_CALL) ||
             (native_namespace && operation->opcode != XI_CALL_METHOD) ||
             (class_construction && operation->opcode != XI_CALL) ||
+            (builtin_instance && operation->opcode != XI_CALL_METHOD) ||
             target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE) {
             /* A SemanticPlan call-target kind this family does not yet consume
              * is a coverage limit, not an internal inconsistency.  Name the
@@ -8979,7 +9044,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 fprintf(stderr,
                         "[target] refused in call target coverage: SemanticPlan proved a call "
                         "target of kind %s, and this family consumes only DIRECT_LOCAL, "
-                        "SOURCE_EXPORT, NATIVE_NAMESPACE_YIELDABLE and SOURCE_CLASS_CONSTRUCTOR\n",
+                        "SOURCE_EXPORT, NATIVE_NAMESPACE_YIELDABLE, BUILTIN_INSTANCE_YIELDABLE "
+                        "and SOURCE_CLASS_CONSTRUCTOR\n",
                         target_trace_call_target_kind_name(target ? target->kind : 0u));
                 fprintf(stderr,
                         "[target]   call target=%u    kind=%s (%u), names function %u, dependency "
@@ -8992,7 +9058,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                                        operation);
                 target_trace_judgement("the operation record exists", operation != NULL);
                 target_trace_judgement("this family consumes the kind",
-                                       direct || source || native_namespace || class_construction);
+                                       direct || source || native_namespace || class_construction ||
+                                           builtin_instance);
                 if (direct)
                     target_trace_judgement("DIRECT_LOCAL names a function in range",
                                            target->function < function_count);
@@ -9010,6 +9077,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 if (class_construction)
                     target_trace_judgement("SOURCE_CLASS_CONSTRUCTOR sits on CALL",
                                            operation && operation->opcode == XI_CALL);
+                if (builtin_instance)
+                    target_trace_judgement("BUILTIN_INSTANCE_YIELDABLE sits on CALL_METHOD",
+                                           operation && operation->opcode == XI_CALL_METHOD);
                 target_trace_judgement("no earlier target already claimed the operation",
                                        !operation || target_by_operation[target->operation] ==
                                                          XR_SEMANTIC_INDEX_NONE);
@@ -9090,6 +9160,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                                                                      error, error_size);
             } else if (target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE) {
                 valid = collect_native_namespace_yieldable_call_intent(
+                    builder, target_index, target, state_by_operation[i] != 0, error, error_size);
+            } else if (target && target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE) {
+                valid = collect_builtin_instance_yieldable_call_intent(
                     builder, target_index, target, state_by_operation[i] != 0, error, error_size);
             } else {
                 valid = target && collect_source_export_call_intent(builder, target_index, target,
@@ -9678,11 +9751,28 @@ static bool materialize_values(XrTargetPlanBuilder *builder, XrTargetMaterialize
             if (error && error_size)
                 snprintf(error, error_size,
                          "XR_TARGET_1001: value representation intent is duplicated "
-                         "(value=%u types=%u/%u aggregate=%u/%u)",
+                         "(value=%u types=%u/%u aggregate=%u/%u families=0x%llx/0x%llx "
+                         "reg=%u:%u/%u:%u mem=%u:%u/%u:%u slot=%u/%u equal=%u)",
                          intent->semantic_value, builder->value_intents[i - 1u].semantic_type,
                          intent->semantic_type,
                          builder->value_intents[i - 1u].resolve_type_rep ? 1u : 0u,
-                         intent->resolve_type_rep ? 1u : 0u);
+                         intent->resolve_type_rep ? 1u : 0u,
+                         (unsigned long long) builder->value_intents[i - 1u].family,
+                         (unsigned long long) intent->family,
+                         builder->value_intents[i - 1u].register_rep.kind,
+                         builder->value_intents[i - 1u].register_rep.register_bits,
+                         intent->register_rep.kind, intent->register_rep.register_bits,
+                         builder->value_intents[i - 1u].memory_rep.kind,
+                         builder->value_intents[i - 1u].memory_rep.memory_size,
+                         intent->memory_rep.kind, intent->memory_rep.memory_size,
+                         builder->value_intents[i - 1u].has_slot ? 1u : 0u,
+                         intent->has_slot ? 1u : 0u,
+                         memcmp(&builder->value_intents[i - 1u].register_rep, &intent->register_rep,
+                                sizeof(intent->register_rep)) == 0 &&
+                                 memcmp(&builder->value_intents[i - 1u].memory_rep,
+                                        &intent->memory_rep, sizeof(intent->memory_rep)) == 0
+                             ? 1u
+                             : 0u);
             return false;
         }
         int register_rep = -1;

@@ -5116,13 +5116,16 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         bool class_construction =
             target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
+        bool builtin_instance =
+            target && target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE;
         if (!target || !operation ||
-            (!direct && !source && !native_namespace && !class_construction) ||
+            (!direct && !source && !native_namespace && !class_construction && !builtin_instance) ||
             (direct && target->function >= semantic_functions) ||
             (direct && operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
             (source && operation->opcode != XI_CALL_METHOD && operation->opcode != XI_CALL) ||
             (native_namespace && operation->opcode != XI_CALL_METHOD) ||
-            (class_construction && operation->opcode != XI_CALL)) {
+            (class_construction && operation->opcode != XI_CALL) ||
+            (builtin_instance && operation->opcode != XI_CALL_METHOD)) {
             valid = false;
             break;
         }
@@ -5177,6 +5180,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
             xr_semantic_class_construction_source_class(semantic, operation) !=
                 XR_SEMANTIC_INDEX_NONE;
+        /* Re-proved from the same shared judgement the builder used, so a row
+         * naming a roster entry this plan cannot re-prove is rejected here. */
+        uint32_t builtin_receiver_type = XR_SEMANTIC_INDEX_NONE;
+        bool builtin_instance = target && xr_semantic_builtin_instance_yieldable_call_is_exact(
+                                              semantic, target, operation, &builtin_receiver_type);
         const XrSemanticFunctionRecord *callee =
             direct ? xr_semantic_plan_function(semantic, target->function) : NULL;
         const XrSemanticPlan *dependency =
@@ -5742,6 +5750,29 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 call->flags == XR_TARGET_CALL_SUSPEND &&
                 call->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_NAMESPACE_YIELDABLE &&
                 call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+            if (!valid)
+                break;
+        } else if (builtin_instance) {
+            /* The roster entry the receiver's frozen builtin id and arity select
+             * is the whole authority: the row names no callee, no dependency and
+             * no export, it always suspends, and the receiver is the dispatch
+             * target rather than an argument the row would have to bind. */
+            const XrSemanticTypeRecord *receiver_record =
+                xr_semantic_plan_type(semantic, builtin_receiver_type);
+            valid =
+                suspends && receiver_record &&
+                reconstruct_call_identity("xray-target-builtin-instance-yieldable-v1", target->id,
+                                          receiver_record->id, operation->operand_count - 1u,
+                                          &expected_identity) &&
+                xr_stable_id_equal(call->identity, expected_identity) &&
+                call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                stable_id_is_zero(call->source_export_identity) &&
+                stable_id_is_zero(call->source_callee_identity) && call->argument_count == 0 &&
+                call->flags == XR_TARGET_CALL_SUSPEND &&
+                call->calling_convention == XR_TARGET_CALL_CONVENTION_BUILTIN_INSTANCE_YIELDABLE &&
+                call->target_kind == XR_TARGET_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE;
             if (!valid)
                 break;
         } else if (class_construction) {

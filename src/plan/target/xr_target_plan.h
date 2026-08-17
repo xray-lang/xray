@@ -282,6 +282,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_STRING_SLICE_RANGE,
     XR_TARGET_CALL_CONVENTION_ARRAY_FILL_SCALAR,
     XR_TARGET_CALL_CONVENTION_ARRAY_HOF,
+    XR_TARGET_CALL_CONVENTION_BUILTIN_INSTANCE_YIELDABLE,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -305,7 +306,13 @@ typedef enum XrTargetCallConvention {
  * name; it names no callee function and carries no argument, and it never
  * suspends. ADT_ENUM_CONSTRUCTOR names one payload-bearing member of an exact
  * source enum through its frozen enum namespace; its ordered payload recipe is
- * projected by CEmissionPlan rather than reconstructed by CGen. */
+ * projected by CEmissionPlan rather than reconstructed by CGen.
+ * BUILTIN_INSTANCE_YIELDABLE names one suspending method of a frozen builtin
+ * instance, taken from the SemanticPlan call target of the same name. The
+ * receiver's frozen builtin id and the selector's arity select the roster entry,
+ * so the row names no callee function and no provider spelling; it always
+ * suspends, and its result is the tagged value the runtime hands back on
+ * resume. */
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
@@ -331,6 +338,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_STRING_SLICE_RANGE,
     XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR,
     XR_TARGET_CALL_TARGET_ARRAY_HOF,
+    XR_TARGET_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetArrayHofKind {
