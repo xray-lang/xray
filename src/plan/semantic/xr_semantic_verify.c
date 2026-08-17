@@ -10,6 +10,8 @@
 
 #include "xr_semantic_verify.h"
 #include "xr_semantic_allocation_shape.h"
+#include "xr_semantic_array_element_storage_shape.h"
+#include "xr_semantic_builtin_identity_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_coroutine_lifecycle_shape.h"
 #include "xr_semantic_graph.h"
@@ -92,27 +94,6 @@ static bool is_power_of_two_u32(uint32_t value) {
     return value != 0 && (value & (value - 1u)) == 0;
 }
 
-static const char *frozen_builtin_type_name(uint32_t builtin_type) {
-    switch (builtin_type) {
-        case XR_TID_STRINGBUILDER:
-            return "StringBuilder";
-        case XR_TID_COROUTINE:
-            return "Task";
-        case XR_TID_WORKQUEUE:
-            return "WorkQueue";
-        case XR_TID_RESULTGROUP:
-            return "ResultGroup";
-        case XR_TID_COUNTDOWNLATCH:
-            return "CountdownLatch";
-        case XR_TID_SEMAPHORE:
-            return "Semaphore";
-        case XR_TID_EVENTCOUNT:
-            return "EventCount";
-        default:
-            return NULL;
-    }
-}
-
 static bool semantic_builtin_type_identity_exact(const XrSemanticTypeRecord *type) {
     if (!type || !type->canonical_key)
         return false;
@@ -130,7 +111,7 @@ static bool semantic_builtin_type_identity_exact(const XrSemanticTypeRecord *typ
         return false;
     if (type->builtin_type == XR_TID_NULL)
         return true;
-    const char *name = frozen_builtin_type_name(type->builtin_type);
+    const char *name = xr_semantic_frozen_builtin_name(type->builtin_type);
     uint8_t expected_flags =
         (uint8_t) ((nullable ? XR_SEM_TYPE_NULLABLE : 0u) | (is_const ? XR_SEM_TYPE_CONST : 0u) |
                    (is_value ? XR_SEM_TYPE_VALUE : 0u) | (is_literal ? XR_SEM_TYPE_LITERAL : 0u) |
@@ -1996,39 +1977,6 @@ static bool verify_array_reserve(const XrSemanticPlan *plan,
            capacity->ownership_action == XR_SEM_OPERAND_CONSUME;
 }
 
-static uint8_t semantic_array_element_storage(const XrSemanticTypeRecord *type) {
-    if (!type || type->child_count != 0 || type->flags != 0)
-        return XR_ELEM_ANY;
-    if (type->kind == XR_KIND_BOOL)
-        return XR_ELEM_BOOL;
-    if (type->kind == XR_KIND_RUNE)
-        return XR_ELEM_RUNE;
-    switch (type->scalar_rep) {
-        case XR_NATIVE_I8:
-            return XR_ELEM_I8;
-        case XR_NATIVE_U8:
-            return XR_ELEM_U8;
-        case XR_NATIVE_I16:
-            return XR_ELEM_I16;
-        case XR_NATIVE_U16:
-            return XR_ELEM_U16;
-        case XR_NATIVE_I32:
-            return XR_ELEM_I32;
-        case XR_NATIVE_U32:
-            return XR_ELEM_U32;
-        case XR_NATIVE_I64:
-            return XR_ELEM_I64;
-        case XR_NATIVE_U64:
-            return XR_ELEM_U64;
-        case XR_NATIVE_F32:
-            return XR_ELEM_F32;
-        case XR_NATIVE_F64:
-            return XR_ELEM_F64;
-        default:
-            return XR_ELEM_ANY;
-    }
-}
-
 static bool semantic_array_fill_type_is_exact(const XrSemanticTypeRecord *type,
                                               uint8_t element_storage) {
     if (!type || type->builtin_type != XR_TID_NULL || type->child_count != 0 ||
@@ -2039,7 +1987,7 @@ static bool semantic_array_fill_type_is_exact(const XrSemanticTypeRecord *type,
     if (element_storage <= XR_ELEM_ANY || element_storage >= XR_ELEM_RAWPTR)
         return false;
     return ((type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT) &&
-            semantic_array_element_storage(type) != XR_ELEM_ANY) ||
+            xr_semantic_array_element_storage(type) != XR_ELEM_ANY) ||
            (type->kind == XR_KIND_BOOL && type->scalar_rep == XR_SCALAR_REP_NONE);
 }
 
@@ -2066,7 +2014,7 @@ static bool verify_array_fill_scalar(const XrSemanticPlan *plan,
                                  : XR_SEMANTIC_INDEX_NONE;
     const XrSemanticTypeRecord *element =
         element_index < plan->type_count ? &plan->types[element_index] : NULL;
-    uint8_t storage = semantic_array_element_storage(element);
+    uint8_t storage = xr_semantic_array_element_storage(element);
     bool exact =
         operation->opcode == XI_CALL_METHOD && receiver && fill &&
         semantic_type_is_exact_member_array(receiver_type) && fill->type == element_index &&
@@ -2132,7 +2080,8 @@ static bool verify_array_hof(const XrSemanticPlan *plan, const XrSemanticOperati
         callee->parameter_begin <= plan->parameter_count &&
         callee->parameter_count <= plan->parameter_count - callee->parameter_begin &&
         receiver_element_type &&
-        semantic_array_element_storage(receiver_element_type) == operation->array_element_storage &&
+        xr_semantic_array_element_storage(receiver_element_type) ==
+            operation->array_element_storage &&
         operation->array_element_storage > XR_ELEM_ANY &&
         operation->array_element_storage < XR_ELEM_RAWPTR &&
         operation->array_result_element_storage > XR_ELEM_ANY &&
@@ -2174,7 +2123,7 @@ static bool verify_array_hof(const XrSemanticPlan *plan, const XrSemanticOperati
     const XrSemanticTypeRecord *result_element_type =
         result_element < plan->type_count ? &plan->types[result_element] : NULL;
     if (exact)
-        exact = result_element_type && semantic_array_element_storage(result_element_type) ==
+        exact = result_element_type && xr_semantic_array_element_storage(result_element_type) ==
                                            operation->array_result_element_storage;
     if (exact && operation->array_hof_kind == XR_SEM_ARRAY_HOF_FILTER)
         exact = callee->return_type < plan->type_count &&
@@ -2253,7 +2202,7 @@ static bool verify_array_allocation_storage(const XrSemanticPlan *plan,
         element_index < plan->type_count ? &plan->types[element_index] : NULL;
     const XrSemanticTypeRecord *capacity_type =
         capacity && capacity->type < plan->type_count ? &plan->types[capacity->type] : NULL;
-    uint8_t expected_storage = semantic_array_element_storage(element);
+    uint8_t expected_storage = xr_semantic_array_element_storage(element);
     bool candidate = expected_storage > XR_ELEM_ANY && expected_storage < XR_ELEM_RAWPTR;
     if (!candidate)
         return operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR ||
@@ -2327,7 +2276,7 @@ static bool verify_array_intrinsic(const XrSemanticPlan *plan,
     bool exact =
         operation->opcode == XI_CALL_BUILTIN && operands &&
         semantic_type_is_exact_member_array(array_type) && element && count &&
-        semantic_array_element_storage(element) == operation->array_element_storage &&
+        xr_semantic_array_element_storage(element) == operation->array_element_storage &&
         operation->array_element_storage > XR_ELEM_ANY &&
         operation->array_element_storage < XR_ELEM_RAWPTR &&
         semantic_type_is_exact_member_i64(count) && operation->metadata_count == 0 &&
@@ -3348,7 +3297,7 @@ static const char *resolve_frozen_builtin_instance_yieldable_target(const XrSema
     if (!exact)
         return NULL;
     *receiver_type = receiver->type;
-    return frozen_builtin_type_name(type->builtin_type);
+    return xr_semantic_frozen_builtin_name(type->builtin_type);
 }
 
 static bool stable_id_zero(XrStableId id) {

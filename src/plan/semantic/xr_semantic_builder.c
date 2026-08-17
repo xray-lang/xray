@@ -9,6 +9,8 @@
  */
 
 #include "xr_semantic_builder.h"
+#include "xr_semantic_array_element_storage_shape.h"
+#include "xr_semantic_builtin_identity_shape.h"
 #include "xr_semantic_coroutine_lifecycle_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_string_runes_shape.h"
@@ -238,24 +240,6 @@ static bool source_class_identity_for_type(const XrSemanticBuildContext *ctx, co
                                            XrStableId *out);
 static uint8_t classify_import_resolution(const XiImportRef *ref);
 
-static uint32_t frozen_builtin_type(const XrType *type) {
-    if (xr_type_is_builtin_named_class(type, "StringBuilder"))
-        return XR_TID_STRINGBUILDER;
-    if (xr_type_is_builtin_named_class(type, "Task"))
-        return XR_TID_COROUTINE;
-    if (xr_type_is_builtin_named_class(type, "WorkQueue"))
-        return XR_TID_WORKQUEUE;
-    if (xr_type_is_builtin_named_class(type, "ResultGroup"))
-        return XR_TID_RESULTGROUP;
-    if (xr_type_is_builtin_named_class(type, "CountdownLatch"))
-        return XR_TID_COUNTDOWNLATCH;
-    if (xr_type_is_builtin_named_class(type, "Semaphore"))
-        return XR_TID_SEMAPHORE;
-    if (xr_type_is_builtin_named_class(type, "EventCount"))
-        return XR_TID_EVENTCOUNT;
-    return XR_TID_NULL;
-}
-
 static bool source_enum_key(const XrType *type, XrTextBuilder *key, XrStableId *identity,
                             uint8_t *flags) {
     if (!type || type->kind != XR_KIND_ENUM || !type->enum_type.layout ||
@@ -355,7 +339,7 @@ static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stac
     }
     stack[depth] = type;
     if (!text_append_format(key, "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:", (unsigned) type->kind,
-                            type->semantic_type_id, frozen_builtin_type(type),
+                            type->semantic_type_id, xr_semantic_frozen_builtin_type(type),
                             type->is_nullable ? 1u : 0u, type->is_const ? 1u : 0u,
                             type->is_value_type ? 1u : 0u, type->is_literal ? 1u : 0u,
                             type->is_cycle_candidate ? 1u : 0u, type->ptr_is_mut ? 1u : 0u,
@@ -603,7 +587,7 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
         !xr_stable_id_from_key(record->canonical_key, &record->id, &(XrFingerprint) {{0}}))
         return fail(ctx, "XR_EXEC_5003", "semantic type identity allocation failed");
     record->kind = (uint32_t) type->kind;
-    record->builtin_type = frozen_builtin_type(type);
+    record->builtin_type = xr_semantic_frozen_builtin_type(type);
     record->source_class = source_class_for_type(ctx, type);
     (void) source_class_identity_for_type(ctx, type, &record->source_class_identity);
     if (type->kind == XR_KIND_ENUM) {
@@ -621,7 +605,8 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
         }
     }
     record->scalar_rep = type->scalar_rep;
-    bool reference_capable = frozen_builtin_type(type) != XR_TID_NULL || xi_own_type_is_rc(type);
+    bool reference_capable =
+        xr_semantic_frozen_builtin_type(type) != XR_TID_NULL || xi_own_type_is_rc(type);
     bool borrow_view = type->kind == XR_KIND_SLICE;
     record->flags =
         (uint8_t) ((type->is_nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
@@ -2355,30 +2340,16 @@ static bool append_native_namespace_call_target(XrSemanticBuildContext *ctx, con
     return true;
 }
 
+/* Name the frozen builtin class whose method parks the caller, resolving the
+ * live receiver type against the shared roster. A receiver that is not a frozen
+ * builtin, or whose selector and arity name no suspending method, yields no
+ * name and therefore no call target. */
 static const char *builtin_instance_yieldable_name(const XrType *type, const char *selector,
                                                    uint16_t argument_count) {
-    if (!type || !selector || type->kind != XR_KIND_INSTANCE)
-        return NULL;
-    if (xr_type_is_builtin_named_class(type, "Task") &&
-        ((strcmp(selector, "awaitResult") == 0 && argument_count == 0) ||
-         (strcmp(selector, "awaitTimeout") == 0 && argument_count == 1)))
-        return "Task";
-    if (xr_type_is_builtin_named_class(type, "WorkQueue") && strcmp(selector, "pop") == 0 &&
-        argument_count <= 1)
-        return "WorkQueue";
-    if (xr_type_is_builtin_named_class(type, "ResultGroup") && strcmp(selector, "recv") == 0 &&
-        argument_count == 0)
-        return "ResultGroup";
-    if (xr_type_is_builtin_named_class(type, "CountdownLatch") && strcmp(selector, "wait") == 0 &&
-        argument_count == 0)
-        return "CountdownLatch";
-    if (xr_type_is_builtin_named_class(type, "Semaphore") && strcmp(selector, "acquire") == 0 &&
-        argument_count == 0)
-        return "Semaphore";
-    if (xr_type_is_builtin_named_class(type, "EventCount") && strcmp(selector, "wait") == 0 &&
-        argument_count >= 1 && argument_count <= 2)
-        return "EventCount";
-    return NULL;
+    uint32_t builtin_type = xr_semantic_frozen_builtin_type(type);
+    return xr_semantic_builtin_instance_yieldable(builtin_type, selector, argument_count)
+               ? xr_semantic_frozen_builtin_name(builtin_type)
+               : NULL;
 }
 
 static bool append_builtin_instance_yieldable_call_target(XrSemanticBuildContext *ctx,
@@ -3158,40 +3129,6 @@ static bool semantic_array_reserve_exact(const XrSemanticBuildContext *ctx,
            capacity->ownership_action == XR_SEM_OPERAND_CONSUME;
 }
 
-static uint8_t semantic_array_member_scalar_storage(const XrSemanticTypeRecord *type) {
-    if (!type || type->builtin_type != XR_TID_NULL || type->child_count != 0 ||
-        type->aggregate_extent != 0 || type->aggregate_align != 0 || type->flags != 0)
-        return XR_ELEM_ANY;
-    if (type->kind == XR_KIND_BOOL && type->scalar_rep == XR_SCALAR_REP_NONE)
-        return XR_ELEM_BOOL;
-    if (type->kind == XR_KIND_RUNE && type->scalar_rep == XR_SCALAR_REP_NONE)
-        return XR_ELEM_RUNE;
-    switch (type->scalar_rep) {
-        case XR_NATIVE_I8:
-            return XR_ELEM_I8;
-        case XR_NATIVE_U8:
-            return XR_ELEM_U8;
-        case XR_NATIVE_I16:
-            return XR_ELEM_I16;
-        case XR_NATIVE_U16:
-            return XR_ELEM_U16;
-        case XR_NATIVE_I32:
-            return XR_ELEM_I32;
-        case XR_NATIVE_U32:
-            return XR_ELEM_U32;
-        case XR_NATIVE_I64:
-            return XR_ELEM_I64;
-        case XR_NATIVE_U64:
-            return XR_ELEM_U64;
-        case XR_NATIVE_F32:
-            return XR_ELEM_F32;
-        case XR_NATIVE_F64:
-            return XR_ELEM_F64;
-        default:
-            return XR_ELEM_ANY;
-    }
-}
-
 static uint8_t semantic_array_hof_kind_from_xi(uint8_t kind) {
     switch (kind) {
         case XI_ARRAY_HOF_MAP:
@@ -3248,7 +3185,7 @@ static bool semantic_array_hof_exact(const XrSemanticBuildContext *ctx, const Xi
     const XrSemanticTypeRecord *receiver_element_type =
         receiver_element < ctx->plan->type_count ? &ctx->plan->types[receiver_element] : NULL;
     if (!receiver_element_type ||
-        semantic_array_member_scalar_storage(receiver_element_type) != value->array_element_storage)
+        xr_semantic_array_element_storage(receiver_element_type) != value->array_element_storage)
         return false;
     uint32_t result_element = record->result_type;
     if (kind != XR_SEM_ARRAY_HOF_REDUCE) {
@@ -3267,7 +3204,7 @@ static bool semantic_array_hof_exact(const XrSemanticBuildContext *ctx, const Xi
     }
     const XrSemanticTypeRecord *result_element_type =
         result_element < ctx->plan->type_count ? &ctx->plan->types[result_element] : NULL;
-    if (!result_element_type || semantic_array_member_scalar_storage(result_element_type) !=
+    if (!result_element_type || xr_semantic_array_element_storage(result_element_type) !=
                                     value->array_result_element_storage)
         return false;
     if (kind == XR_SEM_ARRAY_HOF_FILTER) {
@@ -3369,7 +3306,7 @@ static bool semantic_array_fill_scalar_exact(const XrSemanticBuildContext *ctx,
     const XrSemanticTypeRecord *element =
         element_index < ctx->plan->type_count ? &ctx->plan->types[element_index] : NULL;
     return element && fill->type == element_index &&
-           semantic_array_member_scalar_storage(element) == storage &&
+           xr_semantic_array_element_storage(element) == storage &&
            record->result_type == receiver->type && record->semantic_immediate == 0 &&
            record->auxiliary_kind == XI_AUX_KIND_NONE &&
            record->constant == XR_SEMANTIC_INDEX_NONE &&
