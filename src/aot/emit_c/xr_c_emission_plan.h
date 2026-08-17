@@ -41,6 +41,8 @@ XR_FUNC bool xr_c_emission_plan_value_view(const XrCEmissionPlan *plan, uint32_t
                                            XrCValueEmissionView *out, char *error,
                                            size_t error_size);
 XR_FUNC uint32_t xr_c_emission_plan_function_abi_count(const XrCEmissionPlan *plan);
+XR_FUNC bool xr_c_emission_plan_function_abi_at(const XrCEmissionPlan *plan, uint32_t index,
+                                                XrCFunctionAbiEmissionView *out);
 XR_FUNC bool xr_c_emission_plan_function_abi_view(const XrCEmissionPlan *plan,
                                                   uint32_t semantic_function, uint16_t ordinal,
                                                   XrCFunctionAbiEmissionView *out, char *error,

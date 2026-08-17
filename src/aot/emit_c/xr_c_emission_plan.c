@@ -4991,6 +4991,20 @@ uint32_t xr_c_emission_plan_function_abi_count(const XrCEmissionPlan *plan) {
     return plan ? plan->function_abi_count : 0u;
 }
 
+/* Row by position, for callers that sweep every signature rather than asking
+ * about one function -- emitting the typedefs a module's boundaries mention,
+ * for instance. Keyed lookup stays the way to answer a question about a known
+ * function; this is for the walks. */
+bool xr_c_emission_plan_function_abi_at(const XrCEmissionPlan *plan, uint32_t index,
+                                        XrCFunctionAbiEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!plan || !plan->verified || !out || index >= plan->function_abi_count)
+        return false;
+    *out = plan->function_abis[index];
+    return true;
+}
+
 /* One slot of one signature, keyed the way it is stored: ordinal 0 is the
  * return and 1..N the parameters, so a caller asking for a parameter by
  * declaration index adds one and never has to know where the return sits. */
