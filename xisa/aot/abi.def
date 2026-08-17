@@ -44,8 +44,8 @@
 (define-aot-abi array
   :type-kind XR_KIND_ARRAY
   :nullable no
-  :abi-class pointer
-  :default-rep ptr
+  :abi-class tagged
+  :default-rep tagged
   :scalar-rep no
   :typed-boundary yes)
 
