@@ -335,7 +335,16 @@ static bool rep_survey_enabled(void) {
  * the opcode of the operation that DEFINED the value (which is the branch a
  * definition-side fix extends) and the opcode consuming it (the branch a
  * use-side fix extends). The two are different operations, and naming only one
- * of them is what makes the bare diagnostic unreadable. */
+ * of them is what makes the bare diagnostic unreadable.
+ *
+ * The opcode pair alone cannot say whether two refusals are two obligations or
+ * one obligation spelled twice, and counting rows by that pair overstates the
+ * work by the number of spellings. The representation the TargetPlan already
+ * froze for the value, and the shape of its semantic type, are what an
+ * obligation actually turns on, so both are printed beside the opcodes: rows
+ * that agree on those and differ only in opcode are one rule, and a row whose
+ * value carries no frozen representation at all is a gap in the pass upstream
+ * of this one rather than a missing branch here. */
 static void rep_survey_row(const CollectContext *ctx, const char *side, uint32_t source_value,
                            uint32_t use_operation, uint16_t operand) {
     uint32_t definer = ctx && ctx->operation_by_value && source_value < ctx->semantic_value_count
@@ -350,10 +359,35 @@ static void rep_survey_row(const CollectContext *ctx, const char *side, uint32_t
     const char *selector = use && use->metadata_count == 1 && use->metadata_begin < metadata_count
                                ? metadata[use->metadata_begin]
                                : "";
+    const XrTargetValueRepRecord *binding =
+        ctx ? xr_target_plan_value_rep(ctx->target_plan, source_value) : NULL;
+    const XrTargetMachineRepRecord *machine =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
+    uint32_t parameter_index =
+        ctx && ctx->parameter_by_value && source_value < ctx->semantic_value_count
+            ? ctx->parameter_by_value[source_value]
+            : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticParameterRecord *parameter =
+        parameter_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
+            : NULL;
+    uint32_t type_index = parameter ? parameter->type
+                          : def     ? def->result_type
+                                    : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(ctx->semantic, type_index);
+    /* XR_MACHINE_REP_COUNT means the plan bound no representation for the
+     * value; one past it means it bound one this pass could not resolve. */
     fprintf(stderr,
             "[refusal-survey] family=refinement_%s_oracle definer-opcode=%u use-opcode=%u "
-            "selector=%s operand=%u\n",
-            side, def ? def->opcode : 9999u, use ? use->opcode : 9999u, selector, operand);
+            "selector=%s operand=%u value-machine=%u value-shape=%u value-flags=%u\n",
+            side, def ? def->opcode : 9999u, use ? use->opcode : 9999u, selector, operand,
+            machine   ? (unsigned) machine->kind
+            : binding ? (unsigned) XR_MACHINE_REP_COUNT + 1u
+                      : (unsigned) XR_MACHINE_REP_COUNT,
+            type ? (unsigned) (type->child_count != 0 ? 1u : 0u) |
+                       (unsigned) (type->aggregate_extent != 0 ? 2u : 0u)
+                 : 4u,
+            type ? (unsigned) type->flags : 0u);
 }
 
 /* XR_REP_COUNT stands for "this side never named a storage". */
