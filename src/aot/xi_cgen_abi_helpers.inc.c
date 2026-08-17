@@ -796,46 +796,20 @@ static bool cg_func_param_abi_emission(XiCgenCtx *ctx, const XiFunc *f, uint16_t
                                                 sizeof(error));
 }
 
-/* Setting XRAY_ABI_CROSSCHECK reports, on stderr, every parameter where the
- * signature table and the old model disagree about the C representation. The
- * table is new and nothing consumes it yet; this is how it earns the right to
- * become the authority, rather than being trusted the moment it compiles. */
-static void cg_func_param_abi_crosscheck(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx,
-                                         bool legacy_from_type_guess, XaotValueRep legacy) {
+/* The two questions the emitter actually asks about a parameter's boundary,
+ * each answered from the signature table rather than the old model. Without a
+ * row neither special path is taken: an unproven boundary is not a span and not
+ * a carrier, which is the fail-closed answer rather than a guess. */
+static bool cg_func_param_abi_is_span(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx) {
     XrCFunctionAbiEmissionView view;
-    if (!getenv("XRAY_ABI_CROSSCHECK"))
-        return;
-    if (!cg_func_param_abi_emission(ctx, f, param_idx, &view)) {
-        fprintf(stderr, "[abi-check] param %u no-row legacy_source=%s kind=%d\n",
-                (unsigned) param_idx, legacy_from_type_guess ? "type-guess" : "frozen-abi-slot",
-                (int) legacy.kind);
-        return;
-    }
-    bool legacy_tagged = legacy.kind == XAOT_VALUE_TAGGED;
-    bool table_tagged = view.rep == XR_C_VALUE_REP_TAGGED;
-    bool legacy_span = cg_value_rep_is_span_aggregate(legacy);
-    bool table_span =
-        view.rep == XR_C_VALUE_REP_VIEW && view.c_type && strcmp(view.c_type, "xr_span_t") == 0;
-    if (legacy_tagged != table_tagged || legacy_span != table_span)
-        fprintf(stderr,
-                "[abi-check] param %u DISAGREE source=%s tagged=%d/%d span=%d/%d "
-                "legacy_c=%s table_c=%s\n",
-                (unsigned) param_idx, legacy_from_type_guess ? "type-guess" : "frozen-abi-slot",
-                legacy_tagged, table_tagged, legacy_span, table_span,
-                legacy.c_type ? legacy.c_type : "<none>", view.c_type ? view.c_type : "<none>");
-    else
-        fprintf(stderr, "[abi-check] param %u agree c=%s\n", (unsigned) param_idx,
-                view.c_type ? view.c_type : "<none>");
+    return cg_func_param_abi_emission(ctx, f, param_idx, &view) &&
+           view.rep == XR_C_VALUE_REP_VIEW && view.c_type && strcmp(view.c_type, "xr_span_t") == 0;
 }
 
-static XaotValueRep cg_func_param_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f,
-                                                uint16_t param_idx) {
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    bool from_fallback = !plan || param_idx >= plan->abi.nparams || !plan->abi.params;
-    XaotValueRep legacy = from_fallback ? xaot_value_rep_for_type(cg_func_param_type(f, param_idx))
-                                        : xaot_abi_slot_value_rep(&plan->abi.params[param_idx]);
-    cg_func_param_abi_crosscheck(ctx, f, param_idx, from_fallback, legacy);
-    return legacy;
+static bool cg_func_param_abi_is_tagged(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx) {
+    XrCFunctionAbiEmissionView view;
+    return cg_func_param_abi_emission(ctx, f, param_idx, &view) &&
+           view.rep == XR_C_VALUE_REP_TAGGED;
 }
 
 static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -846,8 +820,7 @@ static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const 
         func_plan && func_plan->abi.params && param_idx < func_plan->abi.nparams
             ? &func_plan->abi.params[param_idx]
             : NULL;
-    XaotValueRep param_value_rep = cg_func_param_abi_value_rep(ctx, f, param_idx);
-    if (cg_value_rep_is_span_aggregate(param_value_rep)) {
+    if (cg_func_param_abi_is_span(ctx, f, param_idx)) {
         fprintf(out, "xrt_span_from_value_ref(%s)", boxed_expr ? boxed_expr : "XR_NULL_VAL");
         return;
     }
