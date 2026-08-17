@@ -20,6 +20,7 @@
 #include "../../ir/xi_op_name.h"
 #include "../../ir/xi_module.h"
 #include "../../ir/xi_value_query.h"
+#include "../../plan/semantic/xr_semantic_range_slice_shape.h"
 #include "../../plan/semantic/xr_semantic_graph.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
 #include "../../plan/semantic/xr_semantic_class_shape.h"
@@ -6957,6 +6958,8 @@ static bool oracle_raw_pointer_ref_place(const VerifyAuthority *ctx, uint32_t op
 
 static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                       XrRep *out_storage, uint16_t *out_machine_kind);
+static bool oracle_range_slice_result_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                              XrRep *out_storage, uint16_t *out_machine_kind);
 
 /* Resolve the value a name ultimately stands for. An identity COPY is a rename:
  * it gives a value that already exists a second name and produces no storage of
@@ -7144,6 +7147,11 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
         case XI_ARRAY_NEW:
             if (oracle_dynamic_array_allocation_storage(ctx, semantic_value, out_storage,
                                                         out_machine_kind))
+                return true;
+            break;
+        case XI_SLICE:
+            if (oracle_range_slice_result_storage(ctx, semantic_value, out_storage,
+                                                  out_machine_kind))
                 return true;
             break;
         case XI_LOCAL_ADDR:
@@ -7513,6 +7521,39 @@ static bool oracle_array_hof_use_storage(const VerifyAuthority *ctx, uint32_t op
  * Being a container is the whole requirement. These reads impose no carrier, so
  * there is nothing else for them to check, and a value none of the three names
  * has no proved element storage to point into. */
+/* The view a range slice produces. It borrows part of a container it did not
+ * allocate, so it owns nothing and its storage is the same VIEW pair a borrowed
+ * Slice parameter carries: a two-word pointer/length pair, never a tagged
+ * carrier. The result type must say the same thing -- a borrow view over an
+ * exact element -- and the TargetPlan must already have bound that exact
+ * subject, because this pass re-proves storage rather than choosing it. */
+static bool oracle_range_slice_result_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                              XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !xr_semantic_range_slice_is_exact(ctx->semantic, operation, NULL))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->memory_rep) : NULL;
+    if (!binding || !register_rep || !memory_rep || binding->semantic_value != semantic_value ||
+        register_rep->id != binding->register_rep || memory_rep->id != binding->memory_rep ||
+        register_rep->kind != XR_MACHINE_REP_VIEW || memory_rep->kind != XR_MACHINE_REP_VIEW)
+        return false;
+    *out_storage = XR_REP_PTR;
+    *out_machine_kind = XR_MACHINE_REP_VIEW;
+    return true;
+}
+
 static bool oracle_array_like_receiver_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                                XrRep *out_storage, uint16_t *out_machine_kind) {
     return oracle_u8_slice_parameter_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
@@ -7530,6 +7571,15 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
     /* A nullable scalar operand stays in the tagged carrier its definition
      * already named, so no use of it can request an adapter. */
     if (oracle_nullable_scalar_storage(ctx, source_value, out_storage, &ignored_kind))
+        return true;
+    /* The view a range slice produced stays in the VIEW pair its definition
+     * named, for the same reason and on the same terms: a borrowed pointer and
+     * length has no tagged form to be boxed into, so every reader of it -- a
+     * length read, a byte load or store, a window, a comparison, a
+     * reinterpretation, a further slice -- takes exactly the pair that already
+     * exists. Stating that once here is what keeps the twelve consuming opcodes
+     * from each having to name the same storage and drift apart later. */
+    if (oracle_range_slice_result_storage(ctx, source_value, out_storage, &ignored_kind))
         return true;
     switch (operation->opcode) {
         case XI_PLACE_LOAD:
@@ -7963,6 +8013,28 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                                           ctx, source_value, &container_storage, &ignored_kind))
                 return false;
             return oracle_definition_storage(ctx, source_value, out_storage, &ignored_kind);
+        }
+        case XI_SLICE: {
+            /* A range slice borrows the container it is given and hands back a
+             * view over part of the same elements. Like a data-pointer read it
+             * asks nothing of the container's storage -- a byte view, a fixed
+             * array and a dynamic Array each stay in the carrier their own
+             * family bound -- so the site names no carrier of its own and is
+             * adapter-free by construction rather than by two judgements
+             * happening to agree. The operand must still be one of those three
+             * containers: a value none of them names has no proved elements to
+             * take a window of. The two bounds are ordinary native integers and
+             * keep the scalar storage bound for their own subject. */
+            if (operand_index == 0) {
+                XrRep container_storage = XR_REP_TAGGED;
+                if (!oracle_array_like_receiver_storage(ctx, source_value, &container_storage,
+                                                        &ignored_kind))
+                    return false;
+                return oracle_definition_storage(ctx, source_value, out_storage, &ignored_kind);
+            }
+            if (operand_index > 2u)
+                return false;
+            return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         }
         case XI_INDEX_SET:
         case XI_INDEX_GET:

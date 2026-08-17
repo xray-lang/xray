@@ -125,6 +125,17 @@ roots, or general module activation.
    that `Channel<T>`'s sole frozen child is the result type. The row does not
    authorize Channel object layout, receive scheduling, ownership transfer,
    aggregate payloads, tuple payloads, roots, or cleanup.
+   Range-slice view storage covers the borrowed view `container[start:end]`
+   produces. The view holds a pointer and a length and never a tagged carrier:
+   it borrows part of a container it did not allocate, so there is no allocation
+   behind it to hold and no tagged form to box it into. The element must be an
+   exact scalar, because its stride is what turns the length into bytes and a
+   reference-carrying element would leave a reference-count obligation behind
+   the borrow that this family does not discharge. The container operand keeps
+   whatever carrier its own family bound, which is what leaves the row
+   adapter-free. Builder, independent verifier, and AOT representation
+   refinement read one judgement. The family grants no container allocation,
+   bounds check, element traffic, root, or cleanup authority.
    Direct-local unit-enum argument storage covers only source-backed, payload-
    free enum ordinals whose declaration identity and nominal layout are frozen
    in SemanticPlan. The target row is a trivial signed 64-bit ordinal bound to
@@ -362,10 +373,10 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h 5ea9aa4ff63d88b62db
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 6487ae39149a4ea28fab04bdf2ccbf88c0bccaded75cf20376b38c8447dbdd1c
 anchor-sha256: src/plan/target/xr_target_profile.h 311d38da384e02be242e4025a7d14d7ee253c0a1b71d7af502c937d3ceae30b1
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h e4af616460a925bd1ad679135860ef346d6028c47b2a819ab570ba7a3562cae6
+anchor-sha256: src/plan/target/xr_target_plan.h 7c57a1c1c60ef8421d4adb410137dfde3af5639fafb2cf67a9fe22efacb9dca4
 anchor-sha256: src/plan/target/xr_target_plan.c c43c90f7f4b59ad2864b9666863288f030979dd085075dc5c18f98f361334f51
-anchor-sha256: src/plan/target/xr_target_builder.c 770ffc0b0eef39706ce824ca79fa042aaa1f9dc0c093a909a2da2e7992e40b4d
-anchor-sha256: src/plan/target/xr_target_verify.c bf304afc834f4f08f9fdcded3ab176df619754daa02c737d8e728878324c7ac8
+anchor-sha256: src/plan/target/xr_target_builder.c 42b1e2d79cc6cab4b8ef59de4aa3e31c0c9e52154e08616f68a482ecec1d64e4
+anchor-sha256: src/plan/target/xr_target_verify.c 6ea8dbc56dad1c2bc7902155e2ebb9fe2e571ad5b3d4fb373bde81eb8f4b7124
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317

@@ -18,6 +18,7 @@
 #include "xr_target_entry_abi.h"
 #include "xr_target_plan_internal.h"
 #include "../semantic/xr_semantic_enum_shape.h"
+#include "../semantic/xr_semantic_range_slice_shape.h"
 #include "xr_target_profile_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
@@ -5762,6 +5763,93 @@ static bool builder_add_string_byte_slice_view_storage(XrTargetPlanBuilder *buil
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE;
+    return true;
+}
+
+/* The view `container[start:end]` produces. It borrows part of a container it
+ * did not allocate, so it takes the same two-word VIEW pair a borrowed Slice
+ * parameter carries and never a tagged carrier: there is no allocation behind
+ * it to hold. The container operand keeps whatever carrier its own family bound,
+ * which is what leaves this row adapter-free. */
+static bool note_range_slice_view_storage_value(XrTargetPlanBuilder *builder,
+                                                XrTargetValueStorageAnalysis *analysis,
+                                                uint32_t semantic_operation, char *error,
+                                                size_t error_size) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
+    if (!xr_semantic_range_slice_is_exact(builder->semantic_plan, operation, NULL) ||
+        operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >= xr_semantic_plan_function_count(builder->semantic_plan))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "range slice view storage requires exact authority");
+    if (analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1001", "range slice view storage is duplicated");
+    XrTargetMachineRepRecord rep;
+    if (!make_string_byte_slice_view_rep(xr_target_profile_machine_facts(builder->profile), &rep))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize range slice view ABI");
+    rep.detail = operation->result_type;
+    if (!append_rep_intent(builder, &rep, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
+                            operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "range slice view slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = rep.root_kind,
+        .ownership = rep.ownership,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    return append_slot_intent(builder, &slot, error, error_size) &&
+           append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_VIEW, 0, &rep,
+                                error, error_size) &&
+           append_value_intent(builder, &value, error, error_size);
+}
+
+static bool builder_add_range_slice_view_storage(XrTargetPlanBuilder *builder, char *error,
+                                                 size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_RANGE_SLICE_VIEW_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    size_t operation_count = xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; i < (uint32_t) operation_count && valid; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation || operation->opcode != XI_SLICE ||
+            !xr_semantic_range_slice_is_exact(builder->semantic_plan, operation, NULL))
+            continue;
+        valid = note_range_slice_view_storage_value(builder, &analysis, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_RANGE_SLICE_VIEW_STORAGE;
     return true;
 }
 
@@ -12044,6 +12132,7 @@ static const XrTargetFamily k_target_families[] = {
     {"string_runes_storage", builder_add_string_runes_storage},
     {"string_slice_range_storage", builder_add_string_slice_range_storage},
     {"string_byte_slice_view_storage", builder_add_string_byte_slice_view_storage},
+    {"range_slice_view_storage", builder_add_range_slice_view_storage},
     {"stringbuilder_append_rune_storage", builder_add_stringbuilder_append_rune_storage},
     {"stringbuilder_to_string_storage", builder_add_stringbuilder_to_string_storage},
     {"stringbuilder_append_string_storage", builder_add_stringbuilder_append_string_storage},

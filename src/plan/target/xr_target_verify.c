@@ -28,6 +28,7 @@
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_coroutine_lifecycle_shape.h"
 #include "../semantic/xr_semantic_enum_shape.h"
+#include "../semantic/xr_semantic_range_slice_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_cleanup_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
@@ -3369,6 +3370,12 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         exact_native_module_namespaces && exact_native_module_namespaces[semantic_value] != 0;
     bool exact_string_byte_view =
         semantic_string_byte_slice_view_is_exact(plan->semantic_plan, operation);
+    /* The view a range slice produces takes the same VIEW pair, re-proved from
+     * the one judgement the builder published it from. */
+    bool exact_range_slice_view =
+        operation && operation->result_value == semantic_value &&
+        operation->result_type == semantic_type && operation->function == semantic_function &&
+        xr_semantic_range_slice_is_exact(plan->semantic_plan, operation, NULL);
     const XrSemanticParameterRecord *parameter =
         operation
             ? NULL
@@ -3464,7 +3471,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                 exact_string_slice_range || exact_json_namespace_value ||
                 exact_array_member_result || exact_direct_callee || exact_go_callee ||
                 exact_go_task || exact_channel || exact_source_namespace ||
-                exact_native_module_namespace || exact_string_byte_view ||
+                exact_native_module_namespace || exact_string_byte_view || exact_range_slice_view ||
                 exact_string_byte_parameter || exact_unit_enum || exact_nullable_scalar ||
                 exact_adt_enum || exact_array_ref_parameter || exact_array_value_parameter ||
                 exact_string_value_parameter || exact_direct_array_result
@@ -3514,7 +3521,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     } else if (exact_array_ref_parameter) {
         expected_kind = XR_MACHINE_REP_RAW_PTR;
         eligibility = 1;
-    } else if (exact_string_byte_view || exact_string_byte_parameter) {
+    } else if (exact_string_byte_view || exact_string_byte_parameter || exact_range_slice_view) {
         expected_kind = XR_MACHINE_REP_VIEW;
         expected_layout = target_plan_layout_for_type(plan, semantic_type);
         eligibility =
