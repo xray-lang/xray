@@ -5839,7 +5839,7 @@ static bool builder_add_range_slice_view_storage(XrTargetPlanBuilder *builder, c
     for (uint32_t i = 0; i < (uint32_t) operation_count && valid; i++) {
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(builder->semantic_plan, i);
-        if (!operation || operation->opcode != XI_SLICE ||
+        if (!operation ||
             !xr_semantic_range_slice_is_exact(builder->semantic_plan, operation, NULL))
             continue;
         valid = note_range_slice_view_storage_value(builder, &analysis, i, error, error_size);

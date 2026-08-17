@@ -7150,6 +7150,11 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 return true;
             break;
         case XI_SLICE:
+        case XI_SLICE_WINDOW:
+        case XI_SLICE_REINTERPRET:
+        case XI_SLICE_COPY:
+        case XI_SLICE_AS_BYTES:
+        case XI_BYTE_SLICE_COPY:
             if (oracle_range_slice_result_storage(ctx, semantic_value, out_storage,
                                                   out_machine_kind))
                 return true;

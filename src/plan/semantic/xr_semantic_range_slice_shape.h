@@ -81,28 +81,72 @@ static inline bool xr_semantic_slice_view_type_is_exact(const XrSemanticPlan *pl
  * The builder publishes the view's storage from this judgement, the independent
  * verifier rebuilds from it, and the AOT representation pass re-proves the same
  * relation, so no layer can widen the family on its own. */
+/* The bounded roster of operations that hand back a borrowed view. A window, a
+ * reinterpretation and a copy each derive one view from another and are views
+ * on exactly the terms `container[start:end]` is; listing them here is what
+ * keeps "produces a view" from widening into "declares a borrowed result",
+ * which many unrelated operations also do. The arity is part of the identity:
+ * a row outside the declared count is a different operation. */
+static inline bool xr_semantic_slice_view_producer_arity(uint16_t opcode, uint16_t *out_arity) {
+    switch (opcode) {
+        case XI_SLICE:
+        case XI_SLICE_WINDOW:
+            *out_arity = 3u;
+            return true;
+        case XI_SLICE_COPY:
+        case XI_BYTE_SLICE_COPY:
+            *out_arity = 2u;
+            return true;
+        case XI_SLICE_REINTERPRET:
+        case XI_SLICE_AS_BYTES:
+            *out_arity = 1u;
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* Whether the two trailing operands of a range form are its exact native
+ * bounds. Only the two three-operand producers carry them. */
+static inline bool xr_semantic_slice_bounds_are_exact(const XrSemanticPlan *plan,
+                                                      const XrSemanticOperandRecord *operands,
+                                                      uint32_t begin) {
+    for (uint16_t i = 1; i < 3u; i++) {
+        const XrSemanticOperandRecord *bound = &operands[begin + i];
+        const XrSemanticTypeRecord *bound_type = xr_semantic_plan_type(plan, bound->type);
+        if (bound->role != XR_SEM_OPERAND_VALUE || bound->parameter != -1 ||
+            bound->ownership_action != XR_SEM_OPERAND_BORROW || !bound_type ||
+            bound_type->kind != XR_KIND_INT || bound_type->scalar_rep != XR_NATIVE_I64 ||
+            bound_type->flags != 0 || bound_type->child_count != 0 ||
+            bound_type->builtin_type != XR_TID_NULL)
+            return false;
+    }
+    return true;
+}
+
 static inline bool xr_semantic_range_slice_is_exact(const XrSemanticPlan *plan,
                                                     const XrSemanticOperationRecord *operation,
                                                     uint32_t *out_element_type) {
     XrStableId zero = {{0}};
     uint32_t operand_count = 0;
+    uint16_t expected_arity = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
     const XrSemanticFunctionRecord *function =
         operation ? xr_semantic_plan_function(plan, operation->function) : NULL;
-    if (!plan || !operation || !operands || !function || operation->opcode != XI_SLICE ||
-        operation->operand_count != 3u || operation->operand_begin >= operand_count ||
+    if (!plan || !operation || !operands || !function ||
+        !xr_semantic_slice_view_producer_arity(operation->opcode, &expected_arity) ||
+        operation->operand_count != expected_arity || operation->operand_begin >= operand_count ||
         operation->operand_count > operand_count - operation->operand_begin ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE || operation->metadata_count != 0 ||
-        operation->semantic_immediate != 0 || operation->auxiliary_kind != 0 ||
-        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != 0 || operation->constant != XR_SEMANTIC_INDEX_NONE ||
         operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
         operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
         operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
-        operation->effects != xi_generated_op_effects(XI_SLICE) ||
-        operation->flags != xi_generated_op_default_flags(XI_SLICE) ||
-        operation->ownership_use != xi_generated_op_own_use(XI_SLICE) ||
+        operation->effects != xi_generated_op_effects(operation->opcode) ||
+        operation->flags != xi_generated_op_default_flags(operation->opcode) ||
+        operation->ownership_use != xi_generated_op_own_use(operation->opcode) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
-        operation->result_ownership != xi_generated_op_result_ownership(XI_SLICE) ||
+        operation->result_ownership != xi_generated_op_result_ownership(operation->opcode) ||
         operation->transfer_mode != 0 || operation->parameter_mode != 0 ||
         operation->parameter_ownership != 0 || operation->return_parameter != -1 ||
         operation->allocation_key || !xr_stable_id_equal(operation->allocation_id, zero) ||
@@ -114,14 +158,15 @@ static inline bool xr_semantic_range_slice_is_exact(const XrSemanticPlan *plan,
     if (source->role != XR_SEM_OPERAND_VALUE || source->parameter != -1 ||
         source->ownership_action != XR_SEM_OPERAND_BORROW)
         return false;
-    for (uint16_t i = 1; i < 3u; i++) {
-        const XrSemanticOperandRecord *bound = &operands[operation->operand_begin + i];
-        const XrSemanticTypeRecord *bound_type = xr_semantic_plan_type(plan, bound->type);
-        if (bound->role != XR_SEM_OPERAND_VALUE || bound->parameter != -1 ||
-            bound->ownership_action != XR_SEM_OPERAND_BORROW || !bound_type ||
-            bound_type->kind != XR_KIND_INT || bound_type->scalar_rep != XR_NATIVE_I64 ||
-            bound_type->flags != 0 || bound_type->child_count != 0 ||
-            bound_type->builtin_type != XR_TID_NULL)
+    /* A reinterpretation names its target element in the immediate; the range
+     * forms carry none, and their two bounds have to be exact instead. */
+    if (expected_arity == 3u)
+        return operation->semantic_immediate == 0 &&
+               xr_semantic_slice_bounds_are_exact(plan, operands, operation->operand_begin);
+    for (uint16_t i = 1; i < expected_arity; i++) {
+        const XrSemanticOperandRecord *rest = &operands[operation->operand_begin + i];
+        if (rest->role != XR_SEM_OPERAND_VALUE || rest->parameter != -1 ||
+            rest->ownership_action != XR_SEM_OPERAND_BORROW)
             return false;
     }
     return true;
