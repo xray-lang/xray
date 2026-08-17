@@ -107,8 +107,15 @@ static bool source_type_matches(const XrType *live, const XrSemanticTypeRecord *
     return (semantic->flags & ~XR_SEM_TYPE_AGGREGATE_EXACT) == flags;
 }
 
-static bool storage_matches_machine(XrRep storage, uint16_t machine) {
-    switch (machine) {
+/* The single place a machine representation names the storage class that holds
+ * it.  Every judgement about such a pair is this one judgement, so no second
+ * derivation can fall behind it: while a second copy existed the two disagreed
+ * about the void representation, and a channel receive carrying unit was
+ * refused for that disagreement rather than for anything about the receive.  A
+ * kind this switch does not name has no storage class at all, which every
+ * caller must take as a refusal. */
+static bool machine_storage_class(uint16_t machine, XrRep *out_storage) {
+    switch ((XrMachineRepKind) machine) {
         case XR_MACHINE_REP_I1:
         case XR_MACHINE_REP_I8:
         case XR_MACHINE_REP_U8:
@@ -122,14 +129,24 @@ static bool storage_matches_machine(XrRep storage, uint16_t machine) {
         case XR_MACHINE_REP_ISIZE:
         case XR_MACHINE_REP_USIZE:
         case XR_MACHINE_REP_RUNE:
-            return storage == XR_REP_I64;
+            *out_storage = XR_REP_I64;
+            return true;
         case XR_MACHINE_REP_F32:
         case XR_MACHINE_REP_F64:
-            return storage == XR_REP_F64;
-        case XR_MACHINE_REP_OBJECT_REF:
-            return storage == XR_REP_PTR;
+            *out_storage = XR_REP_F64;
+            return true;
         case XR_MACHINE_REP_RAW_PTR:
-            return storage == XR_REP_RAWPTR;
+            *out_storage = XR_REP_RAWPTR;
+            return true;
+        case XR_MACHINE_REP_VOID:
+            /* A value the TargetPlan bound to the void representation carries
+             * nothing: unit is the whole of what it says.  That is a named
+             * storage, not a missing one -- the plan binds the rep and
+             * deliberately gives it no slot -- so leaving it out of this switch
+             * made every use of a unit result look like a value whose storage
+             * no oracle knows, which is a different verdict entirely. */
+            *out_storage = XR_REP_VOID;
+            return true;
         default:
             return false;
     }
@@ -3380,41 +3397,8 @@ static bool oracle_machine_storage(const VerifyAuthority *ctx, uint32_t semantic
         type->child_count != 0 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
         (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_AGGREGATE_EXACT)) != 0)
         return false;
-    switch ((XrMachineRepKind) machine->kind) {
-        case XR_MACHINE_REP_I1:
-        case XR_MACHINE_REP_I8:
-        case XR_MACHINE_REP_U8:
-        case XR_MACHINE_REP_I16:
-        case XR_MACHINE_REP_U16:
-        case XR_MACHINE_REP_I32:
-        case XR_MACHINE_REP_U32:
-        case XR_MACHINE_REP_I64:
-        case XR_MACHINE_REP_ENUM_ORDINAL:
-        case XR_MACHINE_REP_U64:
-        case XR_MACHINE_REP_ISIZE:
-        case XR_MACHINE_REP_USIZE:
-        case XR_MACHINE_REP_RUNE:
-            *out_storage = XR_REP_I64;
-            break;
-        case XR_MACHINE_REP_F32:
-        case XR_MACHINE_REP_F64:
-            *out_storage = XR_REP_F64;
-            break;
-        case XR_MACHINE_REP_RAW_PTR:
-            *out_storage = XR_REP_RAWPTR;
-            break;
-        case XR_MACHINE_REP_VOID:
-            /* A value the TargetPlan bound to the void representation carries
-             * nothing: unit is the whole of what it says. That is a named
-             * storage, not a missing one -- the plan binds the rep and
-             * deliberately gives it no slot -- so leaving it out of this switch
-             * made every use of a unit result look like a value whose storage
-             * no oracle knows, which is a different verdict entirely. */
-            *out_storage = XR_REP_VOID;
-            break;
-        default:
-            return false;
-    }
+    if (!machine_storage_class(machine->kind, out_storage))
+        return false;
     *out_machine_kind = machine->kind;
     return true;
 }
@@ -6801,10 +6785,14 @@ static bool oracle_channel_receive_storage(const VerifyAuthority *ctx, uint32_t 
         !aot_channel_type_is_exact(ctx->semantic, receiver->type, &element_type) ||
         element_type != operation->result_type)
         return false;
+    /* The machine oracle refuses a kind that names no storage class and reports
+     * the class every named kind resolves to, so asking a second time could
+     * only restate that answer -- or, once the two derivations drifted,
+     * contradict it.  One judgement settles the destination; the receive then
+     * reports the tagged runtime payload over it. */
     XrRep native_storage = XR_REP_TAGGED;
     uint16_t machine_kind = XR_MACHINE_REP_COUNT;
-    if (!oracle_machine_storage(ctx, semantic_value, &native_storage, &machine_kind) ||
-        native_storage == XR_REP_TAGGED || !storage_matches_machine(native_storage, machine_kind))
+    if (!oracle_machine_storage(ctx, semantic_value, &native_storage, &machine_kind))
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = machine_kind;
