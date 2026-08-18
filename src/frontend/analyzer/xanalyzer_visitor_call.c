@@ -1099,6 +1099,32 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
     call->semantic_type_arg_count = type_param_count;
 }
 
+/* Zero-value construction fills every field with its zero bit pattern; a
+ * non-nullable string field has no such value, so `T()` on a struct carrying
+ * one would materialize an unusable hole typed as non-null. Returns the first
+ * blocking field name, or NULL when the zero value is total. */
+static const char *xa_struct_zero_value_blocker(XaInferContext *ctx, XrClassInfo *info, int depth) {
+    if (!ctx || !info || depth > 16)
+        return NULL;
+    for (int i = 0; i < info->field_count; i++) {
+        XaSymbol *field = info->fields[i];
+        XaSymbolLinks *fl = field ? xa_analyzer_get_links(ctx->analyzer, field) : NULL;
+        XrType *ft = fl ? fl->type : NULL;
+        if (!ft)
+            continue;
+        XrType *probe = ft;
+        if (probe->kind == XR_KIND_FIXED_ARRAY && probe->fixed_array.element_type)
+            probe = probe->fixed_array.element_type;
+        if (probe->kind == XR_KIND_STRING && !probe->is_nullable)
+            return field->name;
+        if ((probe->kind == XR_KIND_INSTANCE || probe->kind == XR_KIND_CLASS) &&
+            probe->instance.class_ref && probe->instance.class_ref->struct_layout &&
+            xa_struct_zero_value_blocker(ctx, probe->instance.class_ref, depth + 1))
+            return field->name;
+    }
+    return NULL;
+}
+
 static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *node,
                                                   CallExprNode *call, const char *class_name,
                                                   XaSymbolLinks *class_links,
@@ -1107,6 +1133,44 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
         return xr_type_new_error(NULL);
 
     xa_check_constructor_visibility(ctx, node, class_info);
+
+    /* Structs have no constructors. `P(1, 2)` used to be accepted and its
+     * arguments silently discarded; `P()` with a non-nullable string field
+     * used to materialize a null hole behind a non-null type. Both are
+     * rejected here. */
+    if (class_info->struct_layout) {
+        if (call && call->arg_count > 0) {
+            for (int i = 0; i < call->arg_count; i++) {
+                if (call->arguments && call->arguments[i])
+                    xa_visit_infer_expr(ctx, call->arguments[i]);
+            }
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = node ? node->line : 0,
+                              .column = node ? node->column : 0};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "struct '%s' takes no constructor arguments; use the literal form "
+                     "'%s{field: value, ...}' to set fields",
+                     class_name ? class_name : "?", class_name ? class_name : "?");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+            return xr_type_new_error(ctx->analyzer->isolate);
+        }
+        const char *blocker = xa_struct_zero_value_blocker(ctx, class_info, 0);
+        if (blocker) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = node ? node->line : 0,
+                              .column = node ? node->column : 0};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "cannot zero-construct struct '%s': field '%s' has no zero value "
+                     "(non-nullable string); use the literal form and initialize it",
+                     class_name ? class_name : "?", blocker);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+            return xr_type_new_error(ctx->analyzer->isolate);
+        }
+    }
     XaSemanticTypeId semantic_type_id =
         xa_class_constructor_semantic_type(call, class_name, class_links);
 
@@ -1277,6 +1341,32 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                     if (inferred != inferred_buf)
                         xr_free(inferred);
                 }
+            }
+        }
+
+        /* Context direction: `var b: Box<int> = Box()` and a `-> Box<int>`
+         * return position determine the instantiation from the expected
+         * type, the same bidirectional rule generic functions already have. */
+        XrType *expected = ctx->expected_type;
+        if (expected && (expected->kind == XR_KIND_INSTANCE || expected->kind == XR_KIND_CLASS) &&
+            expected->instance.class_name && class_name &&
+            strcmp(expected->instance.class_name, class_name) == 0 &&
+            expected->instance.type_arg_count == type_param_count && expected->instance.type_args) {
+            xa_check_span_generic_class_type_args(ctx, node, class_name,
+                                                  expected->instance.type_args, type_param_count);
+            xa_check_class_constructor_args(ctx, node, call, class_name, class_links, class_info,
+                                            expected->instance.type_args, type_param_count);
+            XrType *inst =
+                xr_type_new_generic_instance(ctx->analyzer->isolate, class_name, class_info,
+                                             expected->instance.type_args, type_param_count);
+            if (inst) {
+                if (is_value_type)
+                    inst->is_value_type = true;
+                if (semantic_type_id != XA_SEMANTIC_TYPE_NONE)
+                    inst->semantic_type_id = (uint32_t) semantic_type_id;
+                xa_writeback_inferred_type_args(ctx->analyzer->compiler_session, call,
+                                                expected->instance.type_args, type_param_count);
+                return inst;
             }
         }
 
@@ -7042,15 +7132,18 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     /* Resolve symbol_ids in arguments before any early-return path.  Values whose type is
      * supplied by the parameter contract must wait for the detailed loop below; eagerly
      * visiting an empty container (like a lambda) loses that context and emits a spurious
-     * inference diagnostic even though the call signature is authoritative. */
+     * inference diagnostic even though the call signature is authoritative.
+     * move/ref/copy arguments on a slot with a known contract also wait: the
+     * detailed loop revisits them with the parameter mode, and an eager visit
+     * here would run the ownership checks twice and double every diagnostic. */
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *arg = call->arguments[i];
         if (!arg || xa_expr_needs_parameter_context(arg))
             continue;
         XrCallArgAccess access = xa_call_arg_access(call, i);
         if (access != XR_CALL_ARG_PLAIN &&
-            !xa_call_slot_has_function_param_contract(callee_type, i) &&
-            xa_call_direct_variable_type_without_read(ctx, arg))
+            (xa_call_slot_has_function_param_contract(callee_type, i) ||
+             xa_call_direct_variable_type_without_read(ctx, arg)))
             continue;
         if (call->arguments[i])
             xa_visit_infer_expr(ctx, call->arguments[i]);
