@@ -4692,6 +4692,16 @@ static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **o
 
     if (node->type == AST_FUNCTION_DECL || node->type == AST_METHOD_DECL) {
         XaSymbol *sym = resolve_func_symbol(analyzer, node);
+        /* Rejected duplicate declarations resolve to the first symbol through
+         * the by-name fallback. Two bodies feeding one summary would make the
+         * fixpoint oscillate forever, so only the first body per symbol is
+         * inferred; the redefinition diagnostic already rejects the program. */
+        for (int k = 0; sym && k < *count; k++) {
+            if ((*out)[k].sym == sym) {
+                sym = NULL;
+                break;
+            }
+        }
         if (sym) {
             if (*count >= *cap) {
                 int new_cap = *cap == 0 ? 32 : *cap * 2;
