@@ -36,8 +36,7 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
     return false;
 }
 
-static bool verify_target_plan_bindings(const XaotBundle *bundle, char *errbuf,
-                                        size_t errbuf_len) {
+static bool verify_target_plan_bindings(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     char target_error[256] = {0};
 
     if (!bundle || !bundle->modules || !bundle->target_plans)
@@ -63,8 +62,7 @@ static bool verify_target_plan_bindings(const XaotBundle *bundle, char *errbuf,
 static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *func,
                                         const XiValue *value,
                                         const XrTargetValueRepRecord **out_binding,
-                                        bool *out_rep_adapter,
-                                        char *errbuf, size_t errbuf_len) {
+                                        bool *out_rep_adapter, char *errbuf, size_t errbuf_len) {
     const XrTargetPlan *target_plan;
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
@@ -76,13 +74,10 @@ static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *
         *out_rep_adapter = false;
     target_plan = xaot_bundle_target_plan_for_func(bundle, func);
     if (!func || !value || !out_binding || !out_rep_adapter || !target_plan)
-        return set_error(errbuf, errbuf_len,
-                         "AOT value lacks exact TargetPlan semantic identity");
-    if (!xr_aot_scalar_semantic_value_id(target_plan, func, value,
-                                         &semantic_function, &semantic_value,
-                                         target_error, sizeof(target_error))) {
-        if (!xr_aot_rep_adapter_value_is_exact(target_plan, func, value,
-                                               target_error,
+        return set_error(errbuf, errbuf_len, "AOT value lacks exact TargetPlan semantic identity");
+    if (!xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
+                                         &semantic_value, target_error, sizeof(target_error))) {
+        if (!xr_aot_rep_adapter_value_is_exact(target_plan, func, value, target_error,
                                                sizeof(target_error)))
             return set_error(errbuf, errbuf_len,
                              "AOT value lacks exact TargetPlan semantic identity");
@@ -107,41 +102,79 @@ static bool verify_target_machine_value_rep(const XrTargetPlan *target_plan,
     if (!machine)
         return false;
     switch ((XrMachineRepKind) machine->kind) {
-        case XR_MACHINE_REP_VOID: rep = XAOT_REP_VOID; break;
-        case XR_MACHINE_REP_I1: rep = XAOT_REP_BOOL; break;
-        case XR_MACHINE_REP_I8: rep = XAOT_REP_I8; break;
-        case XR_MACHINE_REP_U8: rep = XAOT_REP_U8; break;
-        case XR_MACHINE_REP_I16: rep = XAOT_REP_I16; break;
-        case XR_MACHINE_REP_U16: rep = XAOT_REP_U16; break;
-        case XR_MACHINE_REP_I32: rep = XAOT_REP_I32; break;
-        case XR_MACHINE_REP_U32: rep = XAOT_REP_U32; break;
-        case XR_MACHINE_REP_I64: rep = XAOT_REP_I64; break;
-        case XR_MACHINE_REP_ENUM_ORDINAL: rep = XAOT_REP_I64; break;
-        case XR_MACHINE_REP_U64: rep = XAOT_REP_U64; break;
-        case XR_MACHINE_REP_ISIZE: rep = XAOT_REP_ISIZE; break;
-        case XR_MACHINE_REP_USIZE: rep = XAOT_REP_USIZE; break;
-        case XR_MACHINE_REP_F32: rep = XAOT_REP_F32; break;
-        case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
-        case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
-        case XR_MACHINE_REP_RAW_PTR: rep = XAOT_REP_RAWPTR; break;
-        case XR_MACHINE_REP_DYN_VALUE: rep = XAOT_REP_TAGGED; break;
-        case XR_MACHINE_REP_VIEW: rep = XAOT_REP_SLICE; break;
-        default: return false;
+        case XR_MACHINE_REP_VOID:
+            rep = XAOT_REP_VOID;
+            break;
+        case XR_MACHINE_REP_I1:
+            rep = XAOT_REP_BOOL;
+            break;
+        case XR_MACHINE_REP_I8:
+            rep = XAOT_REP_I8;
+            break;
+        case XR_MACHINE_REP_U8:
+            rep = XAOT_REP_U8;
+            break;
+        case XR_MACHINE_REP_I16:
+            rep = XAOT_REP_I16;
+            break;
+        case XR_MACHINE_REP_U16:
+            rep = XAOT_REP_U16;
+            break;
+        case XR_MACHINE_REP_I32:
+            rep = XAOT_REP_I32;
+            break;
+        case XR_MACHINE_REP_U32:
+            rep = XAOT_REP_U32;
+            break;
+        case XR_MACHINE_REP_I64:
+            rep = XAOT_REP_I64;
+            break;
+        case XR_MACHINE_REP_ENUM_ORDINAL:
+            rep = XAOT_REP_I64;
+            break;
+        case XR_MACHINE_REP_U64:
+            rep = XAOT_REP_U64;
+            break;
+        case XR_MACHINE_REP_ISIZE:
+            rep = XAOT_REP_ISIZE;
+            break;
+        case XR_MACHINE_REP_USIZE:
+            rep = XAOT_REP_USIZE;
+            break;
+        case XR_MACHINE_REP_F32:
+            rep = XAOT_REP_F32;
+            break;
+        case XR_MACHINE_REP_F64:
+            rep = XAOT_REP_F64;
+            break;
+        case XR_MACHINE_REP_RUNE:
+            rep = XAOT_REP_RUNE;
+            break;
+        case XR_MACHINE_REP_RAW_PTR:
+            rep = XAOT_REP_RAWPTR;
+            break;
+        case XR_MACHINE_REP_DYN_VALUE:
+            rep = XAOT_REP_TAGGED;
+            break;
+        case XR_MACHINE_REP_VIEW:
+            rep = XAOT_REP_SLICE;
+            break;
+        default:
+            return false;
     }
     info = xaot_rep_info(rep);
     if (!info)
         return false;
     memset(out, 0, sizeof(*out));
-    out->kind = rep == XAOT_REP_VOID    ? XAOT_VALUE_VOID
+    out->kind = rep == XAOT_REP_VOID     ? XAOT_VALUE_VOID
                 : rep == XAOT_REP_TAGGED ? XAOT_VALUE_TAGGED
                 : rep == XAOT_REP_SLICE  ? XAOT_VALUE_AGGREGATE
                 : rep == XAOT_REP_RAWPTR ? XAOT_VALUE_PTR
-                                          : XAOT_VALUE_SCALAR;
+                                         : XAOT_VALUE_SCALAR;
     out->rep = rep;
     out->type = value->type;
-    out->c_type = machine->kind == XR_MACHINE_REP_RAW_PTR
-                      ? xaot_raw_pointer_c_type(value->type)
-                      : info->c_type;
+    out->c_type = machine->kind == XR_MACHINE_REP_RAW_PTR ? xaot_raw_pointer_c_type(value->type)
+                                                          : info->c_type;
     if (!out->c_type)
         return false;
     if (machine->kind == XR_MACHINE_REP_ENUM_ORDINAL)
@@ -150,29 +183,26 @@ static bool verify_target_machine_value_rep(const XrTargetPlan *target_plan,
 }
 
 static bool verify_effective_value_rep(const XaotBundle *bundle, const XiFunc *func,
-                                       const XiValue *value, XaotValueRep *out,
-                                       char *errbuf, size_t errbuf_len) {
+                                       const XiValue *value, XaotValueRep *out, char *errbuf,
+                                       size_t errbuf_len) {
     const XrTargetValueRepRecord *binding;
     const XaotValuePlan *legacy;
     bool rep_adapter = false;
 
-    if (!verify_target_value_binding(bundle, func, value, &binding,
-                                     &rep_adapter, errbuf, errbuf_len))
+    if (!verify_target_value_binding(bundle, func, value, &binding, &rep_adapter, errbuf,
+                                     errbuf_len))
         return false;
     if (binding) {
         if (!verify_target_machine_value_rep(xaot_bundle_target_plan_for_func(bundle, func),
                                              binding, value, out))
-            return set_error(errbuf, errbuf_len,
-                             "AOT TargetPlan binding has invalid C value rep");
+            return set_error(errbuf, errbuf_len, "AOT TargetPlan binding has invalid C value rep");
         return true;
     }
     legacy = xaot_bundle_find_value_plan(bundle, value);
     if (!legacy)
-        return set_error(errbuf, errbuf_len,
-                         "AOT unmigrated value has no legacy value plan");
+        return set_error(errbuf, errbuf_len, "AOT unmigrated value has no legacy value plan");
     if (rep_adapter && !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
-        return set_error(errbuf, errbuf_len,
-                         "AOT representation adapter has no exact legacy row");
+        return set_error(errbuf, errbuf_len, "AOT representation adapter has no exact legacy row");
     *out = xaot_value_rep_borrow(legacy->rep);
     return true;
 }
@@ -413,21 +443,17 @@ static bool verify_value_plan(const XaotBundle *bundle, const XaotValuePlan *pla
         return set_error(errbuf, errbuf_len, "AOT value plan has no Xi value");
     if (!plan->func)
         return set_error(errbuf, errbuf_len, "AOT value plan has no Xi function");
-    if (!verify_target_value_binding(bundle, plan->func, plan->value, &binding,
-                                     &rep_adapter, errbuf, errbuf_len))
+    if (!verify_target_value_binding(bundle, plan->func, plan->value, &binding, &rep_adapter,
+                                     errbuf, errbuf_len))
         return false;
     if ((plan->value->backend_origin != XI_BACKEND_VALUE_NONE) != rep_adapter ||
-        (rep_adapter &&
-         !xaot_value_plan_is_exact_rep_adapter(bundle, plan)))
-        return set_error(errbuf, errbuf_len,
-                         "AOT representation adapter row is inexact");
+        (rep_adapter && !xaot_value_plan_is_exact_rep_adapter(bundle, plan)))
+        return set_error(errbuf, errbuf_len, "AOT representation adapter row is inexact");
     if (binding)
         return set_error(errbuf, errbuf_len,
                          "AOT scalar value retains a forbidden legacy value plan");
-    if ((plan->rep.kind == XAOT_VALUE_SCALAR ||
-         plan->rep.kind == XAOT_VALUE_VOID) &&
-        !xaot_value_plan_is_exact_enum_ordinal_family(bundle, plan) &&
-        !rep_adapter)
+    if ((plan->rep.kind == XAOT_VALUE_SCALAR || plan->rep.kind == XAOT_VALUE_VOID) &&
+        !xaot_value_plan_is_exact_enum_ordinal_family(bundle, plan) && !rep_adapter)
         return set_error(errbuf, errbuf_len,
                          "AOT bundle retains a forbidden legacy scalar value row");
     if (!plan->rep.c_type)
@@ -668,8 +694,8 @@ static uint32_t verify_enum_xg_metadata_bits(uint32_t descriptor_bits) {
     return bits;
 }
 
-XR_FUNC bool xaot_verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan *plan,
-                                   char *errbuf, size_t errbuf_len) {
+XR_FUNC bool xaot_verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan *plan, char *errbuf,
+                                   size_t errbuf_len) {
     const XiEnumData *ed;
     uint16_t expected_max_payload;
 
@@ -728,8 +754,8 @@ static bool verify_array_storage_plan(const XaotBundle *bundle, const XaotArrayS
         return set_error(errbuf, errbuf_len, "AOT array storage plan has no access flags");
     if (!verify_container_elem_plan(&plan->elem, errbuf, errbuf_len))
         return false;
-    if (!verify_effective_value_rep(bundle, plan->func, plan->value, &value_rep,
-                                    errbuf, errbuf_len) ||
+    if (!verify_effective_value_rep(bundle, plan->func, plan->value, &value_rep, errbuf,
+                                    errbuf_len) ||
         (value_rep.rep != XAOT_REP_SLICE && value_rep.rep != XAOT_REP_TAGGED))
         return set_error(errbuf, errbuf_len,
                          "AOT array storage value has no exact representation authority");
@@ -1060,13 +1086,12 @@ static bool verify_closure_plan(const XaotBundle *bundle, const XaotClosurePlan 
         return set_error(errbuf, errbuf_len, "AOT closure plan lacks func or value");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT closure plan func has no func plan");
-    if (!verify_effective_value_rep(bundle, plan->func, plan->value,
-                                    &value_rep, errbuf, errbuf_len))
+    if (!verify_effective_value_rep(bundle, plan->func, plan->value, &value_rep, errbuf,
+                                    errbuf_len))
         return false;
     if (xaot_bundle_find_closure_plan(bundle, plan->value) != plan)
         return set_error(errbuf, errbuf_len, "AOT closure plan index mismatch");
-    if (!xaot_prepare_closure_plan_for_value(bundle, plan->func, plan->value,
-                                             &derived))
+    if (!xaot_prepare_closure_plan_for_value(bundle, plan->func, plan->value, &derived))
         return set_error(errbuf, errbuf_len, "AOT closure plan value no longer re-derives");
     if (plan->target_func != derived.target_func)
         return set_error(errbuf, errbuf_len, "AOT closure plan target does not re-derive");
@@ -1081,8 +1106,7 @@ static bool verify_closure_plan(const XaotBundle *bundle, const XaotClosurePlan 
     return true;
 }
 
-static uint32_t verify_transfer_legacy_row_count(const XaotBundle *bundle,
-                                                 const XiFunc *func,
+static uint32_t verify_transfer_legacy_row_count(const XaotBundle *bundle, const XiFunc *func,
                                                  const XiValue *value,
                                                  const XaotValuePlan **out_row) {
     uint32_t count = 0;
@@ -1102,18 +1126,16 @@ static uint32_t verify_transfer_legacy_row_count(const XaotBundle *bundle,
     return count;
 }
 
-static bool verify_transfer_value_authority(const XaotBundle *bundle,
-                                            const XiFunc *func,
-                                            const XiValue *value,
-                                            char *errbuf, size_t errbuf_len) {
+static bool verify_transfer_value_authority(const XaotBundle *bundle, const XiFunc *func,
+                                            const XiValue *value, char *errbuf, size_t errbuf_len) {
     const XrTargetValueRepRecord *binding = NULL;
     const XaotValuePlan *legacy = NULL;
     XaotValueRep ignored_rep;
     bool rep_adapter = false;
     uint32_t legacy_count;
 
-    if (!verify_target_value_binding(bundle, func, value, &binding,
-                                     &rep_adapter, errbuf, errbuf_len))
+    if (!verify_target_value_binding(bundle, func, value, &binding, &rep_adapter, errbuf,
+                                     errbuf_len))
         return false;
     legacy_count = verify_transfer_legacy_row_count(bundle, func, value, &legacy);
     if (binding) {
@@ -1121,9 +1143,8 @@ static bool verify_transfer_value_authority(const XaotBundle *bundle,
             return set_error(errbuf, errbuf_len,
                              "AOT transfer Target-bound value also has legacy authority");
         if (rep_adapter ||
-            !verify_target_machine_value_rep(
-                xaot_bundle_target_plan_for_func(bundle, func), binding, value,
-                &ignored_rep))
+            !verify_target_machine_value_rep(xaot_bundle_target_plan_for_func(bundle, func),
+                                             binding, value, &ignored_rep))
             return set_error(errbuf, errbuf_len,
                              "AOT transfer Target-bound value has invalid machine rep");
         return true;
@@ -1140,14 +1161,13 @@ static bool verify_transfer_value_authority(const XaotBundle *bundle,
         bool source_adapter = false;
         uint32_t source_legacy_count;
 
-        if (!verify_target_value_binding(bundle, func, source, &source_binding,
-                                         &source_adapter, errbuf, errbuf_len))
+        if (!verify_target_value_binding(bundle, func, source, &source_binding, &source_adapter,
+                                         errbuf, errbuf_len))
             return false;
-        source_legacy_count = verify_transfer_legacy_row_count(
-            bundle, func, source, &source_legacy);
+        source_legacy_count =
+            verify_transfer_legacy_row_count(bundle, func, source, &source_legacy);
         (void) source_legacy;
-        if (source_adapter ||
-            (source_binding && source_legacy_count != 0) ||
+        if (source_adapter || (source_binding && source_legacy_count != 0) ||
             (!source_binding && source_legacy_count != 1))
             return set_error(errbuf, errbuf_len,
                              "AOT transfer adapter source authority is ambiguous");
@@ -1155,8 +1175,7 @@ static bool verify_transfer_value_authority(const XaotBundle *bundle,
             return set_error(errbuf, errbuf_len,
                              "AOT transfer representation adapter row is inexact");
     } else if (!xaot_value_plan_is_exact_enum_ordinal_family(bundle, legacy)) {
-        return set_error(errbuf, errbuf_len,
-                         "AOT transfer value uses a non-durable legacy family");
+        return set_error(errbuf, errbuf_len, "AOT transfer value uses a non-durable legacy family");
     }
     return verify_value_plan(bundle, legacy, errbuf, errbuf_len);
 }
@@ -1165,8 +1184,7 @@ static const XiValue *verify_transfer_unwrap_identity(const XiValue *value) {
     const XiValue *current = value;
     while (current && current->nargs >= 1 &&
            (current->op == XI_BOX || current->op == XI_UNBOX ||
-            xi_copy_is_identity_alias(current) ||
-            xi_op_is_identity_forward(current->op)))
+            xi_copy_is_identity_alias(current) || xi_op_is_identity_forward(current->op)))
         current = current->args[0];
     return current;
 }
@@ -1180,8 +1198,7 @@ static uint8_t verify_transfer_channel_site_kind(const XiValue *site) {
         return XAOT_TRANSFER_CHAN_SEND;
     if (site->op == XI_CHAN_TRY_SEND)
         return XAOT_TRANSFER_CHAN_TRY_SEND;
-    if (site->op != XI_CALL_METHOD || site->nargs < 2 ||
-        !xi_value_type_is_channel(site->args[0]))
+    if (site->op != XI_CALL_METHOD || site->nargs < 2 || !xi_value_type_is_channel(site->args[0]))
         return 0;
     method = (const char *) site->aux;
     if (!method)
@@ -1199,15 +1216,14 @@ static const XiValue *verify_transfer_source_move(const XiValue *value) {
     const XiValue *current = value;
     while (current && current->nargs >= 1 &&
            (current->op == XI_BOX || current->op == XI_UNBOX ||
-            xi_copy_is_identity_alias(current) ||
-            current->op == XI_OWNER_FORWARD))
+            xi_copy_is_identity_alias(current) || current->op == XI_OWNER_FORWARD))
         current = current->args[0];
     return current && current->op == XI_SOURCE_MOVE ? current : NULL;
 }
 
 static bool verify_transfer_type_is_sync_handle(const XrType *type) {
-    return xi_type_is_channel(type) || xi_type_is_task(type) ||
-           xi_type_is_thread(type) || xi_type_is_named_instance(type, "Atomic") ||
+    return xi_type_is_channel(type) || xi_type_is_task(type) || xi_type_is_thread(type) ||
+           xi_type_is_named_instance(type, "Atomic") ||
            xi_type_is_named_instance(type, "WorkQueue") ||
            xi_type_is_named_instance(type, "ResultGroup") ||
            xi_type_is_named_instance(type, "CountdownLatch") ||
@@ -1229,21 +1245,22 @@ static bool verify_transfer_type_is_inline(const XrType *type) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_RUNE:
-        case XR_KIND_ENUM: return true;
+        case XR_KIND_ENUM:
+            return true;
         case XR_KIND_UNION:
             for (uint8_t i = 0; i < type->union_type.member_count; i++) {
                 if (!verify_transfer_type_is_inline(type->union_type.members[i]))
                     return false;
             }
             return true;
-        default: return false;
+        default:
+            return false;
     }
 }
 
 static uint8_t verify_transfer_action(const XiValue *value, uint8_t mode) {
     const XiValue *origin = verify_transfer_unwrap_identity(value);
-    const XrType *type = value && value->type ? value->type
-                                              : (origin ? origin->type : NULL);
+    const XrType *type = value && value->type ? value->type : (origin ? origin->type : NULL);
     switch ((XrTransferMode) mode) {
         case XR_TRANSFER_SHARE:
             if (type && (verify_transfer_type_is_sync_handle(type) ||
@@ -1253,15 +1270,16 @@ static uint8_t verify_transfer_action(const XiValue *value, uint8_t mode) {
                 return XR_TRANSFER_INLINE_COPY;
             if (type && xr_type_is_const((XrType *) type))
                 return XR_TRANSFER_CONST_SHARE;
-            if (origin && origin->op == XI_CONST && type &&
-                type->kind == XR_KIND_STRING)
+            if (origin && origin->op == XI_CONST && type && type->kind == XR_KIND_STRING)
                 return XR_TRANSFER_CONST_SHARE;
             return XR_TRANSFER_REJECT;
-        case XR_TRANSFER_COPY: return XR_TRANSFER_EXPLICIT_COPY;
+        case XR_TRANSFER_COPY:
+            return XR_TRANSFER_EXPLICIT_COPY;
         case XR_TRANSFER_MOVE:
             return verify_transfer_source_move(value) ? XR_TRANSFER_MOVE_UNIQUE
-                                                       : XR_TRANSFER_REJECT;
-        default: return XR_TRANSFER_REJECT;
+                                                      : XR_TRANSFER_REJECT;
+        default:
+            return XR_TRANSFER_REJECT;
     }
 }
 
@@ -1275,10 +1293,8 @@ static XaotTypeKey verify_transfer_type_key(const XrType *type) {
     return key;
 }
 
-static bool verify_transfer_plan_for_site(const XiFunc *func,
-                                          const XiValue *site,
-                                          uint16_t transfer_index,
-                                          XaotTransferPlan *out) {
+static bool verify_transfer_plan_for_site(const XiFunc *func, const XiValue *site,
+                                          uint16_t transfer_index, XaotTransferPlan *out) {
     const XiValue *value = NULL;
     const XiValue *move = NULL;
     const XrType *value_type = NULL;
@@ -1293,8 +1309,7 @@ static bool verify_transfer_plan_for_site(const XiFunc *func,
     if (site->op == XI_GO || site->op == XI_THREAD_SPAWN) {
         if ((uint32_t) transfer_index + 1u >= site->nargs)
             return false;
-        site_kind = site->op == XI_GO ? XAOT_TRANSFER_GO_ARG
-                                      : XAOT_TRANSFER_THREAD_ARG;
+        site_kind = site->op == XI_GO ? XAOT_TRANSFER_GO_ARG : XAOT_TRANSFER_THREAD_ARG;
         value = site->args[transfer_index + 1u];
         mode = xi_go_arg_transfer_mode(site, transfer_index);
     } else {
@@ -1361,8 +1376,7 @@ static bool verify_transfer_plan_for_site(const XiFunc *func,
     } else if (action == XR_TRANSFER_EXPLICIT_COPY) {
         out->source_domain = XR_STORAGE_EXEC_LOCAL;
         out->drop_action = XAOT_TRANSFER_DROP_CLONE;
-        out->cost_class = needs_boundary_clone ? XAOT_TRANSFER_COST_ON
-                                               : XAOT_TRANSFER_COST_O1;
+        out->cost_class = needs_boundary_clone ? XAOT_TRANSFER_COST_ON : XAOT_TRANSFER_COST_O1;
         evidence |= XAOT_TRANSFER_EV_DOMAIN;
     } else if (action == XR_TRANSFER_CONST_SHARE) {
         out->source_domain = XR_STORAGE_CONST_SHARED;
@@ -1382,9 +1396,8 @@ static bool verify_transfer_plan_for_site(const XiFunc *func,
         out->cost_class = XAOT_TRANSFER_COST_O1;
         evidence |= XAOT_TRANSFER_EV_DOMAIN;
     } else if (out->unproven_reason == XAOT_TRANSFER_UNPROVEN_NONE) {
-        out->unproven_reason = mode == XR_TRANSFER_MOVE
-                                   ? XAOT_TRANSFER_UNPROVEN_NO_MOVE_PROOF
-                                   : XAOT_TRANSFER_UNPROVEN_CAPABILITY;
+        out->unproven_reason = mode == XR_TRANSFER_MOVE ? XAOT_TRANSFER_UNPROVEN_NO_MOVE_PROOF
+                                                        : XAOT_TRANSFER_UNPROVEN_CAPABILITY;
     }
     out->action = action;
     out->evidence = evidence;
@@ -1403,16 +1416,13 @@ static bool verify_transfer_plan(const XaotBundle *bundle, const XaotTransferPla
         return set_error(errbuf, errbuf_len, "AOT transfer plan lacks func or site");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT transfer plan func has no func plan");
-    if (!verify_transfer_value_authority(bundle, plan->func, plan->site,
-                                         errbuf, errbuf_len) ||
+    if (!verify_transfer_value_authority(bundle, plan->func, plan->site, errbuf, errbuf_len) ||
         (plan->value &&
-         !verify_transfer_value_authority(bundle, plan->func, plan->value,
-                                          errbuf, errbuf_len)))
+         !verify_transfer_value_authority(bundle, plan->func, plan->value, errbuf, errbuf_len)))
         return false;
     if (xaot_bundle_find_transfer_plan(bundle, plan->site, plan->transfer_index) != plan)
         return set_error(errbuf, errbuf_len, "AOT transfer plan index mismatch");
-    if (!verify_transfer_plan_for_site(plan->func, plan->site,
-                                       plan->transfer_index, &derived))
+    if (!verify_transfer_plan_for_site(plan->func, plan->site, plan->transfer_index, &derived))
         return set_error(errbuf, errbuf_len, "AOT transfer plan site no longer re-derives");
     if (plan->value != derived.value)
         return set_error(errbuf, errbuf_len, "AOT transfer plan value does not re-derive");
@@ -3532,9 +3542,8 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                  * method identity here would mean a body the kind denies. */
                 if (call->static_target_func_id != XG_NO_ID ||
                     call->receiver_static_class_id == XG_NO_ID ||
-                    call->receiver_static_interface_id != XG_NO_ID ||
-                    call->method_id != XG_NO_ID || call->method_name_id != 0 ||
-                    call->method_signature_key != 0)
+                    call->receiver_static_interface_id != XG_NO_ID || call->method_id != XG_NO_ID ||
+                    call->method_name_id != 0 || call->method_signature_key != 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence class allocation callsite identity is "
                                      "stale");
@@ -3600,10 +3609,9 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         }
         switch ((XgBodyKind) body->kind) {
             case XG_BODY_MODULE_INIT:
-                if (body->lexical_parent_func_id != XG_NO_ID ||
-                    body->source_node_id != 0 || body->owner_decl_id != XG_NO_ID ||
-                    body->owner_class_id != XG_NO_ID || body->owner_method_id != XG_NO_ID ||
-                    body->signature_key != 0)
+                if (body->lexical_parent_func_id != XG_NO_ID || body->source_node_id != 0 ||
+                    body->owner_decl_id != XG_NO_ID || body->owner_class_id != XG_NO_ID ||
+                    body->owner_method_id != XG_NO_ID || body->signature_key != 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence module body has stale owner identity");
                 break;
@@ -3613,14 +3621,12 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence function body identity is stale");
                 if (body->lexical_parent_func_id != XG_NO_ID) {
-                    const XgBodySummary *parent = verify_find_evidence_body_by_func(
-                        ev, body->lexical_parent_func_id);
-                    if (!parent || parent == body ||
-                        parent->module_id != body->module_id ||
+                    const XgBodySummary *parent =
+                        verify_find_evidence_body_by_func(ev, body->lexical_parent_func_id);
+                    if (!parent || parent == body || parent->module_id != body->module_id ||
                         body->owner_decl_id != XG_NO_ID)
-                        return set_error(
-                            errbuf, errbuf_len,
-                            "AOT global evidence lexical parent does not re-derive");
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT global evidence lexical parent does not re-derive");
                 }
                 if (body->owner_decl_id != XG_NO_ID) {
                     if (body->lexical_parent_func_id != XG_NO_ID)
@@ -3650,10 +3656,9 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 }
                 break;
             case XG_BODY_METHOD:
-                if (body->lexical_parent_func_id != XG_NO_ID ||
-                    body->source_node_id == 0 || body->owner_decl_id == XG_NO_ID ||
-                    body->owner_class_id == XG_NO_ID || body->owner_method_id == XG_NO_ID ||
-                    body->source_span_id == 0)
+                if (body->lexical_parent_func_id != XG_NO_ID || body->source_node_id == 0 ||
+                    body->owner_decl_id == XG_NO_ID || body->owner_class_id == XG_NO_ID ||
+                    body->owner_method_id == XG_NO_ID || body->source_span_id == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence method body identity is stale");
                 owner_decl = verify_find_evidence_decl(ev, body->owner_decl_id);
@@ -4136,28 +4141,9 @@ static uint32_t verify_capability_profile_action(const XaotBundle *bundle, uint3
     if (profile == XG_BUILD_FREESTANDING) {
         if ((bundle->target_provider.provided_capability_bits & capability) != 0)
             return XAOT_CAPABILITY_ACTION_LINK;
-        switch (capability) {
-            case XG_CAP_COROUTINE:
-            case XG_CAP_CHANNEL:
-            case XG_CAP_EXCEPTION:
-            case XG_CAP_SYS_THREAD:
-            case XG_CAP_SCOPE:
-            case XG_CAP_TIMER:
-            case XG_CAP_NETPOLL:
-            case XG_CAP_TASK:
-            case XG_CAP_ATOMIC:
-            case XG_CAP_WORK_QUEUE:
-            case XG_CAP_RESULT_GROUP:
-            case XG_CAP_COUNTDOWN_LATCH:
-            case XG_CAP_SEMAPHORE:
-            case XG_CAP_EVENT_COUNT:
-            case XG_CAP_GENERATOR:
-            case XG_CAP_STACKTRACE:
-            case XG_CAP_DEEP_COPY:
-                return XAOT_CAPABILITY_ACTION_REJECT;
-            default:
-                return XAOT_CAPABILITY_ACTION_LINK;
-        }
+        if ((xr_freestanding_hosted_only_capabilities() & capability) != 0)
+            return XAOT_CAPABILITY_ACTION_REJECT;
+        return XAOT_CAPABILITY_ACTION_LINK;
     }
     return XAOT_CAPABILITY_ACTION_LINK;
 }
@@ -7322,17 +7308,15 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
             const XrTargetValueRepRecord *binding = NULL;
             bool rep_adapter = false;
             const XaotValuePlan *legacy = xaot_bundle_find_value_plan(bundle, &phi->value);
-            if (!verify_target_value_binding(bundle, func, &phi->value, &binding,
-                                             &rep_adapter, errbuf, errbuf_len))
+            if (!verify_target_value_binding(bundle, func, &phi->value, &binding, &rep_adapter,
+                                             errbuf, errbuf_len))
                 return false;
             if (binding && legacy)
                 return set_error(errbuf, errbuf_len,
                                  "Xi scalar phi retains a legacy AOT value plan");
             if (!binding && !legacy)
-                return set_error(errbuf, errbuf_len,
-                                 "Xi unmigrated phi has no AOT value plan");
-            if (rep_adapter &&
-                !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
+                return set_error(errbuf, errbuf_len, "Xi unmigrated phi has no AOT value plan");
+            if (rep_adapter && !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
                 return set_error(errbuf, errbuf_len,
                                  "Xi phi representation adapter row is inexact");
         }
@@ -7340,18 +7324,15 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
             const XrTargetValueRepRecord *binding = NULL;
             bool rep_adapter = false;
             const XaotValuePlan *legacy = xaot_bundle_find_value_plan(bundle, blk->values[vi]);
-            if (!verify_target_value_binding(bundle, func, blk->values[vi],
-                                             &binding, &rep_adapter, errbuf,
-                                             errbuf_len))
+            if (!verify_target_value_binding(bundle, func, blk->values[vi], &binding, &rep_adapter,
+                                             errbuf, errbuf_len))
                 return false;
             if (binding && legacy)
                 return set_error(errbuf, errbuf_len,
                                  "Xi scalar value retains a legacy AOT value plan");
             if (!binding && !legacy)
-                return set_error(errbuf, errbuf_len,
-                                 "Xi unmigrated value has no AOT value plan");
-            if (rep_adapter &&
-                !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
+                return set_error(errbuf, errbuf_len, "Xi unmigrated value has no AOT value plan");
+            if (rep_adapter && !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
                 return set_error(errbuf, errbuf_len,
                                  "Xi value representation adapter row is inexact");
         }
@@ -7503,8 +7484,7 @@ static bool verify_direct_call_arg_step(const XaotBundle *bundle, const XaotBoun
         return set_error(errbuf, errbuf_len, "AOT direct call argument target has no ABI plan");
     if (step->arg_index >= target_plan->abi.nparams || !target_plan->abi.params)
         return set_error(errbuf, errbuf_len, "AOT direct call argument index is out of range");
-    if (!verify_effective_value_rep(bundle, step->func, step->input, &arg_rep, errbuf,
-                                    errbuf_len))
+    if (!verify_effective_value_rep(bundle, step->func, step->input, &arg_rep, errbuf, errbuf_len))
         return false;
     if (!storage_reps_equal(step->from_rep, arg_rep))
         return set_error(errbuf, errbuf_len, "AOT direct call argument from-rep mismatch");
@@ -7535,8 +7515,7 @@ static bool verify_direct_call_ret_step(const XaotBundle *bundle, const XaotBoun
     target_plan = xaot_bundle_find_func_plan(bundle, step->target_func);
     if (!target_plan)
         return set_error(errbuf, errbuf_len, "AOT direct call return target has no ABI plan");
-    if (!verify_effective_value_rep(bundle, step->func, step->value, &call_rep, errbuf,
-                                    errbuf_len))
+    if (!verify_effective_value_rep(bundle, step->func, step->value, &call_rep, errbuf, errbuf_len))
         return false;
     if (!storage_reps_equal(step->from_rep, target_plan->abi.ret.rep))
         return set_error(errbuf, errbuf_len, "AOT direct call return from-rep mismatch");
@@ -7697,8 +7676,7 @@ static bool verify_func_closure_plans_recursive(const XaotBundle *bundle, const 
         for (vi = 0; vi < blk->nvalues; vi++) {
             XaotClosurePlan derived;
             const XiValue *value = blk->values[vi];
-            if (!xaot_prepare_closure_plan_for_value(bundle, func, value,
-                                                     &derived))
+            if (!xaot_prepare_closure_plan_for_value(bundle, func, value, &derived))
                 continue;
             if (out_count)
                 (*out_count)++;
@@ -7799,8 +7777,7 @@ static bool verify_func_transfer_plans_recursive(const XaotBundle *bundle, const
                 for (uint16_t ai = 1; ai < site->nargs; ai++) {
                     XaotTransferPlan derived;
                     uint16_t transfer_index = (uint16_t) (ai - 1);
-                    if (!verify_transfer_plan_for_site(func, site, transfer_index,
-                                                       &derived))
+                    if (!verify_transfer_plan_for_site(func, site, transfer_index, &derived))
                         continue;
                     if (out_count)
                         (*out_count)++;

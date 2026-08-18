@@ -38,6 +38,20 @@ typedef enum XrRuntimeCapability {
     XR_CAP_PARALLEL = 1u << 21,
 } XrRuntimeCapability;
 
+/* Capabilities whose lowering needs a hosted runtime. A freestanding image can
+ * only obtain them from a declared target runtime provider. Everything else -
+ * including native units, extern symbol calls and atomics - lowers to plain
+ * generated code plus audited link inputs, so a freestanding target supplies it
+ * on its own. The bundle planner, the verifier and the entry plan all read this
+ * mask so one profile decision cannot drift into three copies. */
+static inline uint32_t xr_freestanding_hosted_only_capabilities(void) {
+    return (uint32_t) (XR_CAP_COROUTINE | XR_CAP_CHANNEL | XR_CAP_EXCEPTION | XR_CAP_DEEP_COPY |
+                       XR_CAP_SYS_THREAD | XR_CAP_SCOPE | XR_CAP_TIMER | XR_CAP_NETPOLL |
+                       XR_CAP_TASK | XR_CAP_WORK_QUEUE | XR_CAP_RESULT_GROUP |
+                       XR_CAP_COUNTDOWN_LATCH | XR_CAP_SEMAPHORE | XR_CAP_EVENT_COUNT |
+                       XR_CAP_GENERATOR | XR_CAP_STACKTRACE | XR_CAP_PARALLEL);
+}
+
 typedef enum XrReachableEffect {
     XR_EFFECT_MAY_ERROR = 1u << 0,
     XR_EFFECT_MAY_SUSPEND = 1u << 1,

@@ -12,12 +12,7 @@
 #include <string.h>
 
 static uint32_t xaot_freestanding_core_capabilities(void) {
-    const uint32_t hosted_only = XG_CAP_COROUTINE | XG_CAP_CHANNEL | XG_CAP_SYS_THREAD |
-                                 XG_CAP_SCOPE | XG_CAP_TIMER | XG_CAP_NETPOLL | XG_CAP_TASK |
-                                 XG_CAP_WORK_QUEUE | XG_CAP_RESULT_GROUP | XG_CAP_COUNTDOWN_LATCH |
-                                 XG_CAP_SEMAPHORE | XG_CAP_EVENT_COUNT | XG_CAP_GENERATOR |
-                                 XG_CAP_PARALLEL;
-    return UINT32_MAX & ~hosted_only;
+    return UINT32_MAX & ~xr_freestanding_hosted_only_capabilities();
 }
 
 bool xaot_bundle_uses_parallel_intrinsic(const XaotBundle *bundle) {
