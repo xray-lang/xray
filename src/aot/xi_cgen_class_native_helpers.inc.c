@@ -1805,7 +1805,7 @@ static bool emit_class_native_map_get_nullable_direct_expr(XiCgenCtx *ctx, FILE 
     fprintf(out, "({ xrt_map_t *_xrm = ");
     emit_class_native_guarded_field_ref(ctx, out, f, info->class_data, v->args[0], field_idx);
     fprintf(out, "; %s _xrk = ", ctype_str(map_info->key.rep));
-    emit_value_as_rep(out, v->args[1], map_info->key.rep);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], map_info->key.rep);
     fprintf(out, "; int64_t _xri = %s(_xrm, _xrk, %s, %s); _xri >= 0 ? ", find_helper,
             map_info->key.elem_name, map_info->value.elem_name);
     if (map_info->value.rep == XR_REP_F64) {
@@ -1839,7 +1839,7 @@ static bool emit_class_native_map_get_present_direct_expr(XiCgenCtx *ctx, FILE *
     fprintf(out, "({ xrt_map_t *_xrm = ");
     emit_class_native_guarded_field_ref(ctx, out, f, info->class_data, v->args[0], field_idx);
     fprintf(out, "; %s _xrk = ", ctype_str(map_info->key.rep));
-    emit_value_as_rep(out, v->args[1], map_info->key.rep);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], map_info->key.rep);
     fprintf(out, "; int64_t _xri = %s(_xrm, _xrk, %s, %s); %s(_xrm, _xri, %s); })", find_helper,
             map_info->key.elem_name, map_info->value.elem_name, value_helper,
             map_info->value.elem_name);
@@ -1905,7 +1905,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, "%s(", helper);
                 emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
-                emit_value_as_rep(out, v->args[1], map_info.key.rep);
+                emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
                 fprintf(out, ", %s, %s)", map_info.key.elem_name, map_info.value.elem_name);
                 emit_conversion_suffix(out, conv_suffix);
                 return true;
@@ -1934,7 +1934,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             fprintf(out, "((_mf%u = %s(", v->id, cg_map_find_helper(&map_info));
             emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
             fprintf(out, ", %s, %s)) >= 0)", map_info.key.elem_name, map_info.value.elem_name);
             emit_conversion_suffix(out, conv_suffix);
             return true;
@@ -1944,7 +1944,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             fprintf(out, "(int64_t)%s(", helper);
             emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
             fprintf(out, ", %s, %s)", map_info.key.elem_name, map_info.value.elem_name);
             emit_conversion_suffix(out, conv_suffix);
             return true;
@@ -1952,7 +1952,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "(int64_t)xrt_map_has(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -1974,10 +1974,10 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
         if (helper) {
-            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
             fprintf(out, ", %s, %s", map_info.key.elem_name, map_info.value.elem_name);
         } else {
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         }
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
@@ -2000,9 +2000,9 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             fprintf(out, "(%s(", helper);
             emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[2], map_info.value.rep);
+            emit_value_as_rep_ctx(ctx, out, v->args[2], map_info.value.rep);
             fprintf(out, ", %s, %s), XR_NULL_VAL)", map_info.key.elem_name,
                     map_info.value.elem_name);
             emit_conversion_suffix(out, conv_suffix);
@@ -2011,9 +2011,9 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "(xrt_map_set(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, "), XR_NULL_VAL)");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2043,9 +2043,9 @@ static bool cg_class_native_map_method_call_is_direct(XiCgenCtx *ctx, const XiFu
 /* Receiver pointer for a local/param boxed typed map: (xrt_map_t *)recv.ptr.
  * Unlike a class field (stored unboxed as xrt_map_t*), a local map is a tagged
  * XrValue, so the underlying map pointer is read from the value payload. */
-static void cg_emit_local_map_recv(FILE *out, const XiValue *recv) {
+static void cg_emit_local_map_recv(XiCgenCtx *ctx, FILE *out, const XiValue *recv) {
     fprintf(out, "((xrt_map_t *)(");
-    emit_value_as_rep(out, recv, XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, recv, XR_REP_TAGGED);
     fprintf(out, ").ptr)");
 }
 
@@ -2212,9 +2212,9 @@ static bool cg_emit_tagged_map_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     if (op == XG_KEY_ACCESS_GET) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_map_get_owned(");
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2223,9 +2223,9 @@ static bool cg_emit_tagged_map_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
         const char *helper = op == XG_KEY_ACCESS_HAS ? "xrt_map_has" : "xrt_map_delete";
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, "(int64_t)%s(", helper);
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2233,11 +2233,11 @@ static bool cg_emit_tagged_map_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     if (op == XG_KEY_ACCESS_SET && nargs == 2 && v->nargs >= 3) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_map_set(");
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, "), XR_NULL_VAL)");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2245,7 +2245,7 @@ static bool cg_emit_tagged_map_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     return false;
 }
 
-static void cg_emit_local_set_recv(FILE *out, const XiValue *recv);
+static void cg_emit_local_set_recv(XiCgenCtx *ctx, FILE *out, const XiValue *recv);
 
 static bool cg_emit_tagged_set_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
                                                       const XiValue *recv, const XiValue *v,
@@ -2257,9 +2257,9 @@ static bool cg_emit_tagged_set_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     if (op == XG_KEY_ACCESS_ADD) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_set_add(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, "), XR_NULL_VAL)");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2268,9 +2268,9 @@ static bool cg_emit_tagged_set_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
         const char *helper = op == XG_KEY_ACCESS_HAS ? "xrt_set_has" : "xrt_set_delete";
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, "(int64_t)%s(", helper);
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2346,7 +2346,7 @@ static bool cg_emit_tagged_map_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     if (op == XG_KEY_ACCESS_GET) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_map_get_user_hash_eq_owned(");
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
         cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
         if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
@@ -2362,7 +2362,7 @@ static bool cg_emit_tagged_map_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
             op == XG_KEY_ACCESS_HAS ? "xrt_map_has_user_hash_eq" : "xrt_map_delete_user_hash_eq";
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, "(int64_t)%s(", helper);
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
         cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
         if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
@@ -2376,11 +2376,11 @@ static bool cg_emit_tagged_map_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     if (op == XG_KEY_ACCESS_SET && nargs == 2) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_map_set_user_hash_eq(");
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
         cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
             emit_conversion_suffix(out, conv_suffix);
             return true;
@@ -2408,7 +2408,7 @@ static bool cg_emit_tagged_set_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     if (op == XG_KEY_ACCESS_ADD) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_set_add_user_hash_eq(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
         cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
         if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
@@ -2424,7 +2424,7 @@ static bool cg_emit_tagged_set_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
             op == XG_KEY_ACCESS_HAS ? "xrt_set_has_user_hash_eq" : "xrt_set_delete_user_hash_eq";
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, "(int64_t)%s(", helper);
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
         cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
         if (!cg_emit_derived_hash_eq_args(ctx, out, &derived_hash_eq)) {
@@ -2459,7 +2459,7 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return false;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_map_clear(");
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, "), XR_NULL_VAL)");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2477,9 +2477,9 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             const char *conv_suffix =
                 emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
             fprintf(out, "xrt_boolmap_get_v((xrt_boolmap_t*)");
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
             fprintf(out, ")");
             emit_conversion_suffix(out, conv_suffix);
             return true;
@@ -2487,9 +2487,9 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         if (op == XG_KEY_ACCESS_HAS) {
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
             fprintf(out, "(int64_t)xrt_boolmap_has_v((xrt_boolmap_t*)");
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
             fprintf(out, ")");
             emit_conversion_suffix(out, conv_suffix);
             return true;
@@ -2506,9 +2506,9 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
                 emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
             fprintf(out,
                     dense_enum ? "xrt_map_get_dense_enum_owned(" : "xrt_map_get_dense_i64_owned(");
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
             fprintf(out, ")");
             emit_conversion_suffix(out, conv_suffix);
             return true;
@@ -2517,9 +2517,9 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
             fprintf(out, dense_enum ? "(int64_t)xrt_map_has_dense_enum("
                                     : "(int64_t)xrt_map_has_dense_i64(");
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
             fprintf(out, ")");
             emit_conversion_suffix(out, conv_suffix);
             return true;
@@ -2530,9 +2530,9 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             const char *conv_suffix =
                 emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
             fprintf(out, "xrt_map_get_small_owned(");
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
             fprintf(out, ")");
             emit_conversion_suffix(out, conv_suffix);
             return true;
@@ -2540,9 +2540,9 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         if (op == XG_KEY_ACCESS_HAS) {
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
             fprintf(out, "(int64_t)xrt_map_has_small(");
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
             fprintf(out, ")");
             emit_conversion_suffix(out, conv_suffix);
             return true;
@@ -2556,7 +2556,7 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             const char *conv_suffix =
                 emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
             fprintf(out, "xrt_map_get_user_hash_eq_owned(");
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
             cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
             if (!cg_emit_user_hash_eq_direct_args(ctx, out, &user_hash_eq)) {
@@ -2572,7 +2572,7 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
                                                          : "xrt_map_delete_user_hash_eq";
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
             fprintf(out, "(int64_t)%s(", helper);
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
             cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
             if (!cg_emit_user_hash_eq_direct_args(ctx, out, &user_hash_eq)) {
@@ -2587,11 +2587,11 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             const char *conv_suffix =
                 emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
             fprintf(out, "(xrt_map_set_user_hash_eq(");
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
             cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
             if (!cg_emit_user_hash_eq_direct_args(ctx, out, &user_hash_eq)) {
                 emit_conversion_suffix(out, conv_suffix);
                 return true;
@@ -2615,9 +2615,9 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
     if (op == XG_KEY_ACCESS_GET) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_map_get_prehashed_owned(");
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", UINT32_C(0x%08" PRIx32 "))", (uint32_t) key_plan->key_prehash);
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2627,9 +2627,9 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             op == XG_KEY_ACCESS_HAS ? "xrt_map_has_prehashed" : "xrt_map_delete_prehashed";
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, "(int64_t)%s(", helper);
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", UINT32_C(0x%08" PRIx32 "))", (uint32_t) key_plan->key_prehash);
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2637,11 +2637,11 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
     if (op == XG_KEY_ACCESS_SET && nargs == 2) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_map_set_prehashed(");
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ", UINT32_C(0x%08" PRIx32 ")), XR_NULL_VAL)",
                 (uint32_t) key_plan->key_prehash);
         emit_conversion_suffix(out, conv_suffix);
@@ -2707,7 +2707,7 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         bool boolmap = cg_map_info_is_boolmap(&map_info);
         if (boolmap)
             fprintf(out, "xrt_boolmap_len((xrt_boolmap_t*)");
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, "%s", boolmap ? ")" : "->len");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2722,7 +2722,7 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_map_clear(");
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, "), XR_NULL_VAL)");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2745,14 +2745,14 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             const XiValue *fuse_has = cg_map_get_fusion_has(ctx, v);
             if (fuse_has) {
                 fprintf(out, "%s(", value_helper);
-                cg_emit_local_map_recv(out, recv);
+                cg_emit_local_map_recv(ctx, out, recv);
                 fprintf(out, ", _mf%u, %s)", fuse_has->id, map_info.value.elem_name);
                 return true;
             }
             fprintf(out, "({ xrt_map_t *_xrm = ");
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, "; %s _xrk = ", ctype_str(map_info.key.rep));
-            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
             fprintf(out, "; int64_t _xri = %s(_xrm, _xrk, %s, %s); %s(_xrm, _xri, %s); })",
                     find_helper, map_info.key.elem_name, map_info.value.elem_name, value_helper,
                     map_info.value.elem_name);
@@ -2760,9 +2760,9 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         }
         if (cg_rep(v) == XR_REP_TAGGED) {
             fprintf(out, "({ xrt_map_t *_xrm = ");
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, "; %s _xrk = ", ctype_str(map_info.key.rep));
-            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
             fprintf(out, "; int64_t _xri = %s(_xrm, _xrk, %s, %s); _xri >= 0 ? ", find_helper,
                     map_info.key.elem_name, map_info.value.elem_name);
             if (map_info.value.rep == XR_REP_F64)
@@ -2794,9 +2794,9 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         if (cg_map_fusable_get_for_has(ctx, v)) {
             fprintf(out, "((_mf%u = %s(", v->id, cg_map_find_helper(&map_info));
-            cg_emit_local_map_recv(out, recv);
+            cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
             fprintf(out, ", %s, %s)) >= 0)", map_info.key.elem_name, map_info.value.elem_name);
             emit_conversion_suffix(out, conv_suffix);
             return true;
@@ -2805,9 +2805,9 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         if (!helper)
             return false;
         fprintf(out, "(int64_t)%s(", helper);
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], map_info.key.rep);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
         fprintf(out, ", %s, %s)", map_info.key.elem_name, map_info.value.elem_name);
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2829,9 +2829,9 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return false;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, "(int64_t)%s(", helper);
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], map_info.key.rep);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
         fprintf(out, ", %s, %s)", map_info.key.elem_name, map_info.value.elem_name);
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2853,11 +2853,11 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return false;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(%s(", helper);
-        cg_emit_local_map_recv(out, recv);
+        cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], map_info.key.rep);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], map_info.value.rep);
+        emit_value_as_rep_ctx(ctx, out, v->args[2], map_info.value.rep);
         fprintf(out, ", %s, %s), XR_NULL_VAL)", map_info.key.elem_name, map_info.value.elem_name);
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -2905,18 +2905,18 @@ static bool emit_class_native_map_method_call_stmt(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "    %s(", helper);
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], map_info.key.rep);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], map_info.value.rep);
+        emit_value_as_rep_ctx(ctx, out, v->args[2], map_info.value.rep);
         fprintf(out, ", %s, %s);\n", map_info.key.elem_name, map_info.value.elem_name);
         return true;
     }
     fprintf(out, "    xrt_map_set(");
     emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
     fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
     fprintf(out, ");\n");
     return true;
 }
@@ -2951,9 +2951,9 @@ static bool emit_local_typed_map_get_stmt(XiCgenCtx *ctx, FILE *out, const XiFun
         fprintf(out, ";\n");
     }
     fprintf(out, "    {\n        xrt_map_t *_xrm = ");
-    cg_emit_local_map_recv(out, v->args[0]);
+    cg_emit_local_map_recv(ctx, out, v->args[0]);
     fprintf(out, ";\n        %s _xrk = ", ctype_str(map_info.key.rep));
-    emit_value_as_rep(out, v->args[1], map_info.key.rep);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], map_info.key.rep);
     const char *find_helper = cg_map_find_helper(&map_info);
     const char *value_helper = cg_map_value_helper(&map_info);
     fprintf(out, ";\n        int64_t _xri = %s(_xrm, _xrk, %s, %s);\n        ", find_helper,
@@ -3109,7 +3109,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                                                                        : "xrt_set_add_i64_typed");
                 emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
-                emit_value_as_rep(out, v->args[1], XR_REP_I64);
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
                     fprintf(out, ", %s", set_info.elem_name);
                 fprintf(out, "), XR_NULL_VAL)");
@@ -3120,7 +3120,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, "(xrt_set_add_f64_typed(");
                 emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
-                emit_value_as_rep(out, v->args[1], XR_REP_F64);
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s), XR_NULL_VAL)", set_info.elem_name);
                 emit_conversion_suffix(out, conv_suffix);
                 return true;
@@ -3129,7 +3129,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "(xrt_set_add(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, "), XR_NULL_VAL)");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3150,7 +3150,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                                                                        : "xrt_set_has_i64_typed");
                 emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
-                emit_value_as_rep(out, v->args[1], XR_REP_I64);
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
                     fprintf(out, ", %s", set_info.elem_name);
                 fprintf(out, ")");
@@ -3161,7 +3161,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, "(int64_t)xrt_set_has_f64_typed(");
                 emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
-                emit_value_as_rep(out, v->args[1], XR_REP_F64);
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s)", set_info.elem_name);
                 emit_conversion_suffix(out, conv_suffix);
                 return true;
@@ -3170,7 +3170,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "(int64_t)xrt_set_has(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3192,7 +3192,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                             : "xrt_set_delete_i64_typed");
                 emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
-                emit_value_as_rep(out, v->args[1], XR_REP_I64);
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
                     fprintf(out, ", %s", set_info.elem_name);
                 fprintf(out, ")");
@@ -3203,7 +3203,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, "(int64_t)xrt_set_delete_f64_typed(");
                 emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
-                emit_value_as_rep(out, v->args[1], XR_REP_F64);
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s)", set_info.elem_name);
                 emit_conversion_suffix(out, conv_suffix);
                 return true;
@@ -3212,7 +3212,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "(int64_t)xrt_set_delete(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3238,9 +3238,9 @@ static bool cg_class_native_set_method_call_is_direct(XiCgenCtx *ctx, const XiFu
 }
 
 /* Receiver pointer for a local/param boxed typed set: (xrt_set_t *)recv.ptr. */
-static void cg_emit_local_set_recv(FILE *out, const XiValue *recv) {
+static void cg_emit_local_set_recv(XiCgenCtx *ctx, FILE *out, const XiValue *recv) {
     fprintf(out, "((xrt_set_t *)(");
-    emit_value_as_rep(out, recv, XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, recv, XR_REP_TAGGED);
     fprintf(out, ").ptr)");
 }
 
@@ -3265,7 +3265,7 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return false;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_set_clear(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, "), XR_NULL_VAL)");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3287,9 +3287,9 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, dense_enum ? "(int64_t)xrt_set_has_dense_enum("
                                 : "(int64_t)xrt_set_has_dense_i64(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3297,9 +3297,9 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
     if (cg_key_access_plan_is_small_scan(key_plan) && op == XG_KEY_ACCESS_HAS) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, "(int64_t)xrt_set_has_small(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3312,7 +3312,7 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             const char *conv_suffix =
                 emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
             fprintf(out, "(xrt_set_add_user_hash_eq(");
-            cg_emit_local_set_recv(out, recv);
+            cg_emit_local_set_recv(ctx, out, recv);
             fprintf(out, ", ");
             cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
             if (!cg_emit_user_hash_eq_direct_args(ctx, out, &user_hash_eq)) {
@@ -3328,7 +3328,7 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
                                                          : "xrt_set_delete_user_hash_eq";
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
             fprintf(out, "(int64_t)%s(", helper);
-            cg_emit_local_set_recv(out, recv);
+            cg_emit_local_set_recv(ctx, out, recv);
             fprintf(out, ", ");
             cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
             if (!cg_emit_user_hash_eq_direct_args(ctx, out, &user_hash_eq)) {
@@ -3354,9 +3354,9 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
     if (op == XG_KEY_ACCESS_ADD) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_set_add_prehashed(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", UINT32_C(0x%08" PRIx32 ")), XR_NULL_VAL)",
                 (uint32_t) key_plan->key_prehash);
         emit_conversion_suffix(out, conv_suffix);
@@ -3367,9 +3367,9 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             op == XG_KEY_ACCESS_HAS ? "xrt_set_has_prehashed" : "xrt_set_delete_prehashed";
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, "(int64_t)%s(", helper);
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", UINT32_C(0x%08" PRIx32 "))", (uint32_t) key_plan->key_prehash);
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3424,7 +3424,7 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
 
     if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, "->len");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3439,7 +3439,7 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_set_clear(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, "), XR_NULL_VAL)");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3447,7 +3447,7 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
     if (nargs == 0 && strcmp(method, "values") == 0) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_set_values(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3469,9 +3469,9 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             fprintf(out, "(%s(",
                     strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_add_i64"
                                                                    : "xrt_set_add_i64_typed");
-            cg_emit_local_set_recv(out, recv);
+            cg_emit_local_set_recv(ctx, out, recv);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
                 fprintf(out, ", %s", set_info.elem_name);
             fprintf(out, "), XR_NULL_VAL)");
@@ -3479,9 +3479,9 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         }
         fprintf(out, "(xrt_set_add_f64_typed(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_F64);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
         fprintf(out, ", %s), XR_NULL_VAL)", set_info.elem_name);
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3503,9 +3503,9 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             fprintf(out, "(int64_t)%s(",
                     strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_has_i64"
                                                                    : "xrt_set_has_i64_typed");
-            cg_emit_local_set_recv(out, recv);
+            cg_emit_local_set_recv(ctx, out, recv);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
                 fprintf(out, ", %s", set_info.elem_name);
             fprintf(out, ")");
@@ -3513,9 +3513,9 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         }
         fprintf(out, "(int64_t)xrt_set_has_f64_typed(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_F64);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
         fprintf(out, ", %s)", set_info.elem_name);
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3537,9 +3537,9 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             fprintf(out, "(int64_t)%s(",
                     strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_delete_i64"
                                                                    : "xrt_set_delete_i64_typed");
-            cg_emit_local_set_recv(out, recv);
+            cg_emit_local_set_recv(ctx, out, recv);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
                 fprintf(out, ", %s", set_info.elem_name);
             fprintf(out, ")");
@@ -3547,9 +3547,9 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         }
         fprintf(out, "(int64_t)xrt_set_delete_f64_typed(");
-        cg_emit_local_set_recv(out, recv);
+        cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_F64);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
         fprintf(out, ", %s)", set_info.elem_name);
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3585,7 +3585,7 @@ static bool emit_class_native_set_method_call_stmt(XiCgenCtx *ctx, FILE *out, co
                                                                        : "xrt_set_add_i64_typed");
                 emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
-                emit_value_as_rep(out, v->args[1], XR_REP_I64);
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
                     fprintf(out, ", %s", set_info.elem_name);
                 fprintf(out, ");\n");
@@ -3595,7 +3595,7 @@ static bool emit_class_native_set_method_call_stmt(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, "    (void)xrt_set_add_f64_typed(");
                 emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
-                emit_value_as_rep(out, v->args[1], XR_REP_F64);
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s);\n", set_info.elem_name);
                 return true;
             }
@@ -3603,7 +3603,7 @@ static bool emit_class_native_set_method_call_stmt(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "    (void)xrt_set_add(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ");\n");
     } else {
         const XaotKeyAccessPlan *key_plan = cg_verified_key_access_plan(
@@ -4239,7 +4239,7 @@ static bool emit_class_native_receiver_field_store_expr(XiCgenCtx *ctx, FILE *ou
     emit_class_native_receiver_field_ref(ctx, out, f, info.class_data, v->args[0], (uint16_t) idx);
     if (field && cg_class_native_ref_field_tag_name(field->native_type)) {
         fprintf(out, " = (%s)(", cg_struct_field_c_type(info.layout, idx));
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ").ptr");
     } else {
         fprintf(out, " = (%s)", cg_struct_field_c_type(info.layout, idx));
