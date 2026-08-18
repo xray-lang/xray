@@ -545,3 +545,10 @@ tests/regression/11_coroutine/1165_result_group_native.xr
 tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr
 tests/regression/11_coroutine/1167_channel_explicit_transfer.xr
 tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr
+
+# --- Indirect call through a function-typed parameter ---------------------
+# The case was written to pin this exact gap: the closed-world target planner
+# cannot name the callee of a call made through a function-typed parameter, so
+# it refuses with "call target has no consumable adapter authority". The VM
+# runs it. Listed here rather than as a divergence because AOT never built.
+tests/diff/cases/semantics/closure/call_through_function_parameter.xr
