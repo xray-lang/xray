@@ -146,6 +146,11 @@ XR_FUNC const XaBuiltinType *xa_builtin_get_type_info(XrType *type);
 // Get built-in type info by name
 XR_FUNC const XaBuiltinType *xa_builtin_get_by_name(const char *name);
 
+/* Full function type of a builtin static member (string.fromUtf8, ...), or
+ * NULL when the type or member is unknown. */
+XR_FUNC XrType *xa_builtin_static_member_type(struct XrVMRuntime *X, const char *type_name,
+                                              const char *member_name);
+
 // Create fake symbols for built-in members (for LSP)
 XR_FUNC XaSymbol **xa_builtin_get_members(XrType *type, int *count);
 

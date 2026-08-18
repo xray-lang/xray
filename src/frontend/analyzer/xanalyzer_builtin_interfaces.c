@@ -401,6 +401,17 @@ static void init_builtin_interface_methods(void) {
     }
 }
 
+const XaInterfaceDefinition *xa_builtin_interface_definition(const char *name) {
+    if (!name)
+        return NULL;
+    xr_once_call(&builtin_interface_methods_once, init_builtin_interface_methods);
+    for (int i = 0; i < XA_IFACE_COUNT; i++) {
+        if (builtin_interfaces[i].name && strcmp(builtin_interfaces[i].name, name) == 0)
+            return &builtin_interfaces[i];
+    }
+    return NULL;
+}
+
 // ============================================================================
 // Built-in Type Implementation Matrix
 // ============================================================================

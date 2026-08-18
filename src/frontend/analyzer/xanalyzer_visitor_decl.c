@@ -2448,6 +2448,22 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     XaSymbol *sym = NULL;
     if (fn->symbol_id != 0)
         sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, fn->symbol_id);
+    /* A second declaration under an already-bound name is rejected wholesale:
+     * two bodies feeding one name make the error-set fixpoint oscillate and
+     * never converge, so the duplicate must not register a symbol, links, or
+     * an analyzable body at all. The re-analysis path (symbol_id already
+     * bound to this declaration) is exempt — that is the same declaration. */
+    if (!sym && fn->name && ctx->analyzer && ctx->analyzer->current_scope) {
+        XaSymbol *bound = xa_scope_lookup_local(ctx->analyzer->current_scope, fn->name);
+        if (bound && bound->kind == XA_SYM_FUNCTION && (int) bound->location.line != node->line) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "Symbol '%s' is redefined in the same scope", fn->name);
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_CMP_REDEFINED_VAR,
+                                       msg, &loc);
+            return;
+        }
+    }
     if (!sym || sym->kind != XA_SYM_FUNCTION)
         sym = xa_symbol_new(fn->name, XA_SYM_FUNCTION);
     sym->location.line = node->line;
@@ -3418,6 +3434,64 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
                 }
+                continue;
+            }
+            /* Every other builtin interface declares its contract in the
+             * method table; a declared implementation is held to it the same
+             * way user interfaces are. Types stay unchecked here (generic
+             * slots have no concrete instantiation at this point); presence,
+             * instance-ness and arity already catch the silent no-op case. */
+            const XaInterfaceDefinition *def = xa_builtin_interface_definition(iface_name);
+            for (int j = 0; def && def->methods && j < def->method_count; j++) {
+                const XaInterfaceMethod *required = &def->methods[j];
+                if (!required->name)
+                    continue;
+                XaSymbol *found = xa_class_info_lookup_member(cls_info, required->name);
+                XaSymbolLinks *found_links =
+                    found ? xa_analyzer_get_links(ctx->analyzer, found) : NULL;
+                XrType *signature = found_links ? found_links->type : NULL;
+                bool valid = found && found->kind == XA_SYM_METHOD && !found->is_static &&
+                             signature && signature->kind == XR_KIND_FUNCTION &&
+                             signature->function.param_count == required->param_count;
+                if (!valid) {
+                    char msg[320];
+                    snprintf(msg, sizeof(msg),
+                             "Class '%s' does not implement method '%s' required by interface "
+                             "'%s'",
+                             cls_info->name ? cls_info->name : "?", required->name, iface_name);
+                    XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+                }
+            }
+            continue;
+        }
+
+        // Iterator is the one spec-level interface represented as a sealed
+        // native class, so it never resolves through the interface path.
+        // Hold implementors to its three-method protocol here.
+        if (strcmp(iface_name, "Iterator") == 0) {
+            static const struct {
+                const char *name;
+                int param_count;
+            } iterator_protocol[] = {{"hasNext", 0}, {"next", 0}, {"nth", 1}};
+            for (size_t j = 0; j < sizeof(iterator_protocol) / sizeof(iterator_protocol[0]); j++) {
+                XaSymbol *found = xa_class_info_lookup_member(cls_info, iterator_protocol[j].name);
+                XaSymbolLinks *fl = found ? xa_analyzer_get_links(ctx->analyzer, found) : NULL;
+                XrType *signature = fl ? fl->type : NULL;
+                bool valid = found && found->kind == XA_SYM_METHOD && !found->is_static &&
+                             signature && signature->kind == XR_KIND_FUNCTION &&
+                             signature->function.param_count == iterator_protocol[j].param_count;
+                if (!valid) {
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "Class '%s' does not implement method '%s' required by interface "
+                             "'Iterator'",
+                             cls_info->name ? cls_info->name : "?", iterator_protocol[j].name);
+                    XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+                }
             }
             continue;
         }
@@ -3429,12 +3503,20 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
         if (!iface_links || !iface_links->class_info)
             continue;
         XrClassInfo *iface_info = iface_links->class_info;
-        // Only interfaces — never classes — should drive this audit; a real
-        // class will not appear in an `implements` clause once the parser is
-        // happy, but guard against it anyway by skipping types that look
-        // like ordinary classes (links->type kind == XR_KIND_CLASS).
-        if (iface_links->type && iface_links->type->kind != XR_KIND_INTERFACE)
+        if (iface_links->type && iface_links->type->kind != XR_KIND_INTERFACE) {
+            // Anything else that resolves to a non-interface is a user
+            // error; skipping it silently made the clause look verified
+            // when nothing was checked.
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "'%s' is not an interface; only interfaces can appear in an implements "
+                     "clause",
+                     iface_name);
+            XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
             continue;
+        }
 
         // Required methods
         for (int j = 0; j < iface_info->method_count; j++) {
@@ -4201,6 +4283,28 @@ skip_layout:
         AstNode *method = cls->methods[i];
         if (method && method->type == AST_METHOD_DECL) {
             MethodDeclNode *md = &method->as.method_decl;
+            /* A duplicate method name is rejected wholesale: two bodies under
+             * one name make the error-set fixpoint oscillate. The duplicate
+             * neither registers a symbol nor an analyzable body. */
+            bool duplicate = false;
+            for (int j = 0; j < i; j++) {
+                AstNode *prior = cls->methods[j];
+                if (prior && prior->type == AST_METHOD_DECL && prior->as.method_decl.name &&
+                    md->name && strcmp(prior->as.method_decl.name, md->name) == 0) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate) {
+                char msg[256];
+                snprintf(msg, sizeof(msg), "Symbol '%s' is redefined in the same scope",
+                         md->name ? md->name : "?");
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = method->line, .column = method->column};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_CMP_REDEFINED_VAR, msg, &loc);
+                continue;
+            }
             XaSymbol *method_sym = xa_symbol_new(md->name, XA_SYM_METHOD);
             method_sym->location.line = method->line;
             method_sym->is_static = md->is_static;
@@ -4983,6 +5087,14 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
         if (!links || !links->class_info)
             continue;
 
+        /* Only the declaring module owns its class graph. Imported symbols
+         * are views sharing the owner's XrClassInfo pointer; resolving the
+         * base name in the importer's scope (where it may not be visible)
+         * used to overwrite the owner's already-linked base with NULL and
+         * sever inheritance for every module, including the owner. */
+        if (!links->owns_class_info)
+            continue;
+
         XrClassInfo *info = links->class_info;
         if (!info->base_name)
             continue;
@@ -5008,7 +5120,10 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
             if (links->type && base_type) {
                 links->type->instance.superclass = base_type;
             }
-        } else {
+        } else if (!info->base) {
+            /* Unresolved here and never linked anywhere: leave it NULL. A
+             * link already established by the owning module must survive a
+             * later module's failed re-resolution. */
             info->base = NULL;
         }
     }
@@ -5020,7 +5135,7 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
             continue;
 
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
-        if (!links || !links->class_info)
+        if (!links || !links->class_info || !links->owns_class_info)
             continue;
 
         validate_method_override_graph(analyzer, links->class_info);
@@ -5033,7 +5148,7 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
             continue;
 
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
-        if (!links || !links->class_info)
+        if (!links || !links->class_info || !links->owns_class_info)
             continue;
 
         build_class_vtable(analyzer, links->class_info);

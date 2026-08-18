@@ -185,6 +185,18 @@ static const XaBuiltinMember *xa_builtin_find_named_type_member(const XaBuiltinT
     return NULL;
 }
 
+// Full function type of a builtin static member (string.fromUtf8, ...), or
+// NULL when the type or member is unknown. Gives static-call sites a real
+// callee contract instead of the unknown type that skipped argument checks.
+XrType *xa_builtin_static_member_type(XrVMRuntime *X, const char *type_name,
+                                      const char *member_name) {
+    const XaBuiltinType *bt = xa_builtin_get_by_name(type_name);
+    const XaBuiltinMember *m = xa_builtin_find_named_type_member(bt, member_name, true);
+    if (!m || !m->signature)
+        return NULL;
+    return xa_builtin_parse_full_signature(X, m->signature);
+}
+
 // Get member signature for instance access and hover
 const char *xa_builtin_get_member_signature(XrType *type, const char *member_name) {
     const XaBuiltinMember *m = xa_builtin_find_instance_member(type, member_name);

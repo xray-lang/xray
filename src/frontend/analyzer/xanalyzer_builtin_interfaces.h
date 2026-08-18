@@ -66,6 +66,10 @@ typedef struct {
 // Check if a name is a built-in interface (pure name match, no type state)
 XR_FUNC bool xa_is_builtin_interface_name(const char *name);
 
+/* Method table of a builtin interface, or NULL for unknown names. The Error
+ * marker interface has a NULL method list and a zero count. */
+XR_FUNC const XaInterfaceDefinition *xa_builtin_interface_definition(const char *name);
+
 // Check if a built-in type implements an interface
 XR_FUNC bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface);
 
