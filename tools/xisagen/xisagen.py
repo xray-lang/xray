@@ -1839,13 +1839,13 @@ XI_VM_TEMPLATE_UNARY = {
 }
 
 XI_VM_TEMPLATE_ARITH_BINARY = {
-    'xi.add': ('XVM_TEMPLATE_ARITH_ADD_CASE', '+', '+', 'xr_bigint_add',
+    'xi.add': ('XVM_TEMPLATE_ARITH_ADD_CASE', 'xr_i64_add_wrap', '+', 'xr_bigint_add',
                'XR_OP_ADD_FLAG', 'SYMBOL_OP_ADD', '"+"',
                '"operator \'+\' requires both operands to be numeric or both string, got \'%s\' and \'%s\'"'),
-    'xi.sub': ('XVM_TEMPLATE_ARITH_NUMERIC_CASE', '-', '-', 'xr_bigint_sub',
+    'xi.sub': ('XVM_TEMPLATE_ARITH_NUMERIC_CASE', 'xr_i64_sub_wrap', '-', 'xr_bigint_sub',
                'XR_OP_SUB_FLAG', 'SYMBOL_OP_SUB', '"-"',
                '"subtraction requires numeric types"'),
-    'xi.mul': ('XVM_TEMPLATE_ARITH_MUL_CASE', '*', '*', 'xr_bigint_mul',
+    'xi.mul': ('XVM_TEMPLATE_ARITH_MUL_CASE', 'xr_i64_mul_wrap', '*', 'xr_bigint_mul',
                'XR_OP_MUL_FLAG', 'SYMBOL_OP_MUL', '"*"',
                '"multiplication requires numeric types"'),
     'xi.div': ('XVM_TEMPLATE_ARITH_DIV_CASE', 'xr_bigint_div',
