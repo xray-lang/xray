@@ -2526,6 +2526,10 @@ static void capture_scan_node(XgCaptureScan *scan, const AstNode *node) {
                                        node->as.array_literal.count);
             }
             break;
+        case AST_TEMPLATE_STRING:
+            capture_scan_node_list(scan, node->as.template_str.parts,
+                                   node->as.template_str.part_count);
+            break;
         case AST_TUPLE_LITERAL:
             capture_scan_node_list(scan, node->as.tuple_literal.elements,
                                    node->as.tuple_literal.count);
@@ -9547,6 +9551,17 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             walk_body_for_calls(bc, node->as.array_literal.repeat_value);
             walk_body_for_calls(bc, node->as.array_literal.repeat_count);
+            break;
+        case AST_TEMPLATE_STRING:
+            /* Interpolation parts carry ordinary expressions -- calls, member
+             * projections, enum metadata reads. Skipping them starved the
+             * evidence of everything the lowering later planned for. The
+             * allocation effect of the formatting itself stays with the
+             * existing shape classification. */
+            if (node->as.template_str.parts) {
+                for (int i = 0; i < node->as.template_str.part_count; i++)
+                    walk_body_for_calls(bc, node->as.template_str.parts[i]);
+            }
             break;
         case AST_TUPLE_LITERAL:
             if (node->as.tuple_literal.elements) {
