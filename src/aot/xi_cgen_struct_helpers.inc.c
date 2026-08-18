@@ -2915,7 +2915,8 @@ static bool emit_struct_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, co
         ctx, ref, &static_struct_layout, &static_struct_slot, &static_struct_field_idx, NULL,
         &static_struct_module);
     bool unchecked = cg_fixed_array_index_bounds_proven(v, field->elem_count);
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, elem_rep, cg_rep(v));
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, elem_rep, cg_value_plan_storage_rep(ctx, v));
     if (!unchecked) {
         /* OOB (incl. negative) throws E0430, catchable + matching the VM, rather
          * than abort()'ing the process. */

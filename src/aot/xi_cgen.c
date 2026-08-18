@@ -4945,7 +4945,7 @@ static const XiValue *cg_arith_narrow_src(XiCgenCtx *ctx, const XiFunc *f, const
 }
 
 static bool cg_arith_is_clean_narrow(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64)
+    if (!v || v->nargs < 2 || cg_value_plan_storage_rep(ctx, v) != XR_REP_I64)
         return false;
     if (v->op != XI_ADD && v->op != XI_SUB && v->op != XI_MUL)
         return false;
@@ -8045,7 +8045,7 @@ static const XiValue *cg_aot_present_direct_bool_map_get(XiCgenCtx *ctx, const X
     const XiValue *v = cg_unwrap_identity_value(value);
     if (v && v->op == XI_BOX && v->nargs >= 1)
         v = cg_unwrap_identity_value(v->args[0]);
-    if (!v || !cg_value_is_map_method(v, "get") || cg_rep(v) != XR_REP_I64)
+    if (!v || !cg_value_is_map_method(v, "get") || cg_value_plan_storage_rep(ctx, v) != XR_REP_I64)
         return NULL;
 
     CgMapElemInfo info;
@@ -8338,29 +8338,33 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
 
     const char *template_op = xi_to_c_template_arith_native_op(user->op);
     if (template_op && *template_op) {
-        if (user->nargs >= 2 && cg_rep(user) == XR_REP_RAWPTR &&
+        if (user->nargs >= 2 && cg_value_plan_storage_rep(ctx, user) == XR_REP_RAWPTR &&
             (user->op == XI_ADD || user->op == XI_SUB)) {
-            XrRep r0 = cg_rep(user->args[0]);
-            XrRep r1 = cg_rep(user->args[1]);
+            XrRep r0 = cg_value_plan_storage_rep(ctx, user->args[0]);
+            XrRep r1 = cg_value_plan_storage_rep(ctx, user->args[1]);
             if (r0 == XR_REP_RAWPTR && (r1 == XR_REP_I64 || r1 == XR_REP_TAGGED))
                 return arg_index == 1;
             if (user->op == XI_ADD && r1 == XR_REP_RAWPTR &&
                 (r0 == XR_REP_I64 || r0 == XR_REP_TAGGED))
                 return arg_index == 0;
         }
-        return arg_index < 2 && user->nargs >= 2 && cg_rep(user) == XR_REP_I64 &&
-               cg_rep(user->args[0]) == XR_REP_I64 && cg_rep(user->args[1]) == XR_REP_I64 &&
+        return arg_index < 2 && user->nargs >= 2 &&
+               cg_value_plan_storage_rep(ctx, user) == XR_REP_I64 &&
+               cg_value_plan_storage_rep(ctx, user->args[0]) == XR_REP_I64 &&
+               cg_value_plan_storage_rep(ctx, user->args[1]) == XR_REP_I64 &&
                !cg_arith_is_clean_narrow(ctx, f, user);
     }
 
     const char *template_fn = xi_to_c_template_div_mod_runtime_fn(user->op);
     if (template_fn && *template_fn) {
         int64_t divisor = 0;
-        if (arg_index == 1 && user->nargs >= 2 && cg_rep(user) == XR_REP_I64 &&
-            cg_rep(user->args[0]) == XR_REP_I64 &&
+        if (arg_index == 1 && user->nargs >= 2 &&
+            cg_value_plan_storage_rep(ctx, user) == XR_REP_I64 &&
+            cg_value_plan_storage_rep(ctx, user->args[0]) == XR_REP_I64 &&
             cg_const_int_value_in_func(ctx, f, user->args[1], &divisor) && divisor != 0)
             return true;
-        return arg_index < 2 && user->nargs >= 2 && cg_rep(user) == XR_REP_I64 &&
+        return arg_index < 2 && user->nargs >= 2 &&
+               cg_value_plan_storage_rep(ctx, user) == XR_REP_I64 &&
                cg_type_is_unsigned_int(user->type);
     }
 
@@ -9242,8 +9246,10 @@ static bool cg_u64_mul_wide_operand_is_constant(const XiValue *v) {
 static bool cg_u64_mul_wide_value_is_eligible(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (!ctx || !f || !v || (v->op != XI_MUL && v->op != XI_BIT_MUL_HIGH) || v->nargs != 2 ||
         !v->args[0] || !v->args[1] || !v->type || v->type->kind != XR_KIND_INT ||
-        v->type->is_nullable || v->type->scalar_rep != XR_NATIVE_U64 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64 ||
+        v->type->is_nullable || v->type->scalar_rep != XR_NATIVE_U64 ||
+        cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[1]) != XR_REP_I64 ||
         cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
         strcmp(local_ctype_str_ctx(ctx, f, v), "uint64_t") != 0)
         return false;
@@ -9920,7 +9926,8 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             continue;
         fprintf(out, "    ");
         emit_vref(out, incoming);
-        fprintf(out, " = %s;\n", cg_rep(incoming) == XR_REP_PTR ? "NULL" : "XR_NULL_VAL");
+        fprintf(out, " = %s;\n",
+                cg_value_plan_storage_rep(ctx, incoming) == XR_REP_PTR ? "NULL" : "XR_NULL_VAL");
     }
 }
 

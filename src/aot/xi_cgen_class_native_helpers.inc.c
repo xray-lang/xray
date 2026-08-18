@@ -1693,7 +1693,8 @@ static bool emit_class_native_map_length_expr(XiCgenCtx *ctx, FILE *out, const X
     uint16_t idx = 0;
     if (!cg_class_native_receiver_ref_field(ctx, f, v->args[0], XR_NATIVE_MAP_REF, &info, &idx))
         return false;
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
     bool boolmap = cg_map_type_is_boolmap_ctx(ctx, v->args[0]->type);
     if (boolmap)
         fprintf(out, "xrt_boolmap_len((xrt_boolmap_t*)");
@@ -1773,7 +1774,7 @@ static const XiValue *cg_map_fusable_get_for_has(XiCgenCtx *ctx, const XiValue *
         CgMapElemInfo mi;
         if (!cg_map_type_direct_info_ctx(ctx, g->args[0]->type, &mi))
             continue;
-        if (cg_rep(g) == mi.value.rep)
+        if (cg_value_plan_storage_rep(ctx, g) == mi.value.rep)
             return g; /* present-direct get: fuse */
     }
     return NULL;
@@ -1798,7 +1799,7 @@ static bool emit_class_native_map_get_nullable_direct_expr(XiCgenCtx *ctx, FILE 
                                                            const CgClassNativeFunc *info,
                                                            uint16_t field_idx,
                                                            const CgMapElemInfo *map_info) {
-    if (!info || !map_info || cg_rep(v) != XR_REP_TAGGED)
+    if (!info || !map_info || cg_value_plan_storage_rep(ctx, v) != XR_REP_TAGGED)
         return false;
     const char *find_helper = cg_map_find_helper(map_info);
     const char *value_helper = cg_map_value_helper(map_info);
@@ -1825,7 +1826,7 @@ static bool emit_class_native_map_get_present_direct_expr(XiCgenCtx *ctx, FILE *
                                                           const CgClassNativeFunc *info,
                                                           uint16_t field_idx,
                                                           const CgMapElemInfo *map_info) {
-    if (!info || !map_info || cg_rep(v) != map_info->value.rep)
+    if (!info || !map_info || cg_value_plan_storage_rep(ctx, v) != map_info->value.rep)
         return false;
     const XiValue *fuse_has = cg_map_get_fusion_has(ctx, v);
     if (fuse_has) {
@@ -1858,7 +1859,8 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         return false;
 
     if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         bool boolmap = cg_map_type_is_boolmap_ctx(ctx, v->args[0]->type);
         if (boolmap)
             fprintf(out, "xrt_boolmap_len((xrt_boolmap_t*)");
@@ -1875,7 +1877,8 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_map_clear(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, "), XR_NULL_VAL)");
@@ -1897,11 +1900,11 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             emit_class_native_map_get_nullable_direct_expr(ctx, out, f, v, &info, idx, &map_info))
             return true;
         if (hash_helper && cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info) &&
-            cg_rep(v) == map_info.value.rep) {
+            cg_value_plan_storage_rep(ctx, v) == map_info.value.rep) {
             const char *helper = cg_map_direct_get_helper(&map_info);
             if (helper) {
-                const char *conv_suffix =
-                    emit_conversion_prefix(out, v->type, map_info.value.rep, cg_rep(v));
+                const char *conv_suffix = emit_conversion_prefix(out, v->type, map_info.value.rep,
+                                                                 cg_value_plan_storage_rep(ctx, v));
                 fprintf(out, "%s(", helper);
                 emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
@@ -1911,7 +1914,8 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 return true;
             }
         }
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_map_get_owned(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
@@ -1927,7 +1931,8 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Map.containsKey");
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         CgMapElemInfo map_info;
         bool direct = cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info);
         if (hash_helper && direct && cg_map_fusable_get_for_has(ctx, v)) {
@@ -1964,7 +1969,8 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Map.delete");
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         CgMapElemInfo map_info;
         const char *helper =
             hash_helper && cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info)
@@ -1990,7 +1996,8 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Map.set");
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         CgMapElemInfo map_info;
         const char *helper =
             hash_helper && cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info)
@@ -2210,7 +2217,8 @@ static bool cg_emit_tagged_map_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
         v->nargs < 2)
         return false;
     if (op == XG_KEY_ACCESS_GET) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_map_get_owned(");
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2221,7 +2229,8 @@ static bool cg_emit_tagged_map_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     }
     if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
         const char *helper = op == XG_KEY_ACCESS_HAS ? "xrt_map_has" : "xrt_map_delete";
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(int64_t)%s(", helper);
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2231,7 +2240,8 @@ static bool cg_emit_tagged_map_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
         return true;
     }
     if (op == XG_KEY_ACCESS_SET && nargs == 2 && v->nargs >= 3) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_map_set(");
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2255,7 +2265,8 @@ static bool cg_emit_tagged_set_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
         v->nargs < 2)
         return false;
     if (op == XG_KEY_ACCESS_ADD) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_set_add(");
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2266,7 +2277,8 @@ static bool cg_emit_tagged_set_builtin_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     }
     if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
         const char *helper = op == XG_KEY_ACCESS_HAS ? "xrt_set_has" : "xrt_set_delete";
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(int64_t)%s(", helper);
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2319,7 +2331,7 @@ static bool cg_emit_derived_hash_eq_args(XiCgenCtx *ctx, FILE *out,
 }
 
 static void cg_emit_user_hash_eq_tagged_key(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
-    XrRep rep = ctx ? cg_value_plan_storage_rep(ctx, value) : cg_rep(value);
+    XrRep rep = ctx ? cg_value_plan_storage_rep(ctx, value) : cg_value_plan_storage_rep(ctx, value);
     if (rep == XR_REP_TAGGED) {
         emit_vref(out, value);
         return;
@@ -2344,7 +2356,8 @@ static bool cg_emit_tagged_map_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
         return false;
     }
     if (op == XG_KEY_ACCESS_GET) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_map_get_user_hash_eq_owned(");
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2360,7 +2373,8 @@ static bool cg_emit_tagged_map_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
         const char *helper =
             op == XG_KEY_ACCESS_HAS ? "xrt_map_has_user_hash_eq" : "xrt_map_delete_user_hash_eq";
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(int64_t)%s(", helper);
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2374,7 +2388,8 @@ static bool cg_emit_tagged_map_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
         return true;
     }
     if (op == XG_KEY_ACCESS_SET && nargs == 2) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_map_set_user_hash_eq(");
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2406,7 +2421,8 @@ static bool cg_emit_tagged_set_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
         return false;
     }
     if (op == XG_KEY_ACCESS_ADD) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_set_add_user_hash_eq(");
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2422,7 +2438,8 @@ static bool cg_emit_tagged_set_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
     if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
         const char *helper =
             op == XG_KEY_ACCESS_HAS ? "xrt_set_has_user_hash_eq" : "xrt_set_delete_user_hash_eq";
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(int64_t)%s(", helper);
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2441,7 +2458,7 @@ static bool cg_emit_tagged_set_derived_hash_eq_method(XiCgenCtx *ctx, FILE *out,
 static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux || !v->args[0] ||
         !v->args[0]->type || v->args[0]->type->kind != XR_KIND_MAP ||
-        cg_rep(v->args[0]) != XR_REP_TAGGED)
+        cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_TAGGED)
         return false;
     const XiValue *recv = v->args[0];
     const char *method = (const char *) v->aux;
@@ -2457,7 +2474,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         if (!key_plan)
             return false;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_map_clear(");
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, "), XR_NULL_VAL)");
@@ -2474,8 +2492,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         return true;
     if (cg_key_access_plan_is_bool_direct_lookup(key_plan)) {
         if (op == XG_KEY_ACCESS_GET) {
-            const char *conv_suffix =
-                emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "xrt_boolmap_get_v((xrt_boolmap_t*)");
             cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
@@ -2485,7 +2503,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
         if (op == XG_KEY_ACCESS_HAS) {
-            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "(int64_t)xrt_boolmap_has_v((xrt_boolmap_t*)");
             cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
@@ -2502,8 +2521,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
         if (op == XG_KEY_ACCESS_GET) {
-            const char *conv_suffix =
-                emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
             fprintf(out,
                     dense_enum ? "xrt_map_get_dense_enum_owned(" : "xrt_map_get_dense_i64_owned(");
             cg_emit_local_map_recv(ctx, out, recv);
@@ -2514,7 +2533,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
         if (op == XG_KEY_ACCESS_HAS) {
-            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
             fprintf(out, dense_enum ? "(int64_t)xrt_map_has_dense_enum("
                                     : "(int64_t)xrt_map_has_dense_i64(");
             cg_emit_local_map_recv(ctx, out, recv);
@@ -2527,8 +2547,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
     }
     if (cg_key_access_plan_is_small_scan(key_plan)) {
         if (op == XG_KEY_ACCESS_GET) {
-            const char *conv_suffix =
-                emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "xrt_map_get_small_owned(");
             cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
@@ -2538,7 +2558,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
         if (op == XG_KEY_ACCESS_HAS) {
-            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "(int64_t)xrt_map_has_small(");
             cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
@@ -2553,8 +2574,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
     CgUserHashEqDirectPlan user_hash_eq;
     if (cg_user_hash_eq_direct_plan(ctx, key_plan, v->args[1], &user_hash_eq, method)) {
         if (op == XG_KEY_ACCESS_GET) {
-            const char *conv_suffix =
-                emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "xrt_map_get_user_hash_eq_owned(");
             cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
@@ -2570,7 +2591,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
             const char *helper = op == XG_KEY_ACCESS_HAS ? "xrt_map_has_user_hash_eq"
                                                          : "xrt_map_delete_user_hash_eq";
-            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "(int64_t)%s(", helper);
             cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
@@ -2584,8 +2606,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
         if (op == XG_KEY_ACCESS_SET && nargs == 2) {
-            const char *conv_suffix =
-                emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "(xrt_map_set_user_hash_eq(");
             cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, ", ");
@@ -2613,7 +2635,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         return false;
 
     if (op == XG_KEY_ACCESS_GET) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_map_get_prehashed_owned(");
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2625,7 +2648,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
     if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
         const char *helper =
             op == XG_KEY_ACCESS_HAS ? "xrt_map_has_prehashed" : "xrt_map_delete_prehashed";
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(int64_t)%s(", helper);
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2635,7 +2659,8 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         return true;
     }
     if (op == XG_KEY_ACCESS_SET && nargs == 2) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_map_set_prehashed(");
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2656,7 +2681,7 @@ static bool emit_tagged_map_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
  * routing them through the typed-direct helpers removes both. */
 static bool cg_local_typed_map_receiver(XiCgenCtx *ctx, const XiFunc *f, const XiValue *recv,
                                         CgMapElemInfo *map_info) {
-    if (!recv || !recv->type || cg_rep(recv) != XR_REP_TAGGED)
+    if (!recv || !recv->type || cg_value_plan_storage_rep(ctx, recv) != XR_REP_TAGGED)
         return false;
     if (cg_class_native_receiver_ref_field(ctx, f, recv, XR_NATIVE_MAP_REF, NULL, NULL))
         return false; /* class-field receivers use the class-native fast path */
@@ -2681,7 +2706,8 @@ static bool cg_local_typed_map_method_call_is_direct(XiCgenCtx *ctx, const XiFun
         if (strcmp(method, "delete") == 0)
             return cg_map_direct_delete_helper(&map_info) != NULL;
         if (strcmp(method, "get") == 0)
-            return cg_rep(v) == map_info.value.rep || cg_rep(v) == XR_REP_TAGGED;
+            return cg_value_plan_storage_rep(ctx, v) == map_info.value.rep ||
+                   cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
         return false;
     }
     if (nargs == 2 && strcmp(method, "set") == 0)
@@ -2703,7 +2729,8 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
     uint16_t nargs = (uint16_t) (v->nargs - 1);
 
     if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         bool boolmap = cg_map_info_is_boolmap(&map_info);
         if (boolmap)
             fprintf(out, "xrt_boolmap_len((xrt_boolmap_t*)");
@@ -2720,7 +2747,8 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_map_clear(");
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, "), XR_NULL_VAL)");
@@ -2741,7 +2769,7 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return false;
         const char *find_helper = cg_map_find_helper(&map_info);
         const char *value_helper = cg_map_value_helper(&map_info);
-        if (cg_rep(v) == map_info.value.rep) {
+        if (cg_value_plan_storage_rep(ctx, v) == map_info.value.rep) {
             const XiValue *fuse_has = cg_map_get_fusion_has(ctx, v);
             if (fuse_has) {
                 fprintf(out, "%s(", value_helper);
@@ -2758,7 +2786,7 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
                     map_info.value.elem_name);
             return true;
         }
-        if (cg_rep(v) == XR_REP_TAGGED) {
+        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED) {
             fprintf(out, "({ xrt_map_t *_xrm = ");
             cg_emit_local_map_recv(ctx, out, recv);
             fprintf(out, "; %s _xrk = ", ctype_str(map_info.key.rep));
@@ -2791,7 +2819,8 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
             cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
             return false;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         if (cg_map_fusable_get_for_has(ctx, v)) {
             fprintf(out, "((_mf%u = %s(", v->id, cg_map_find_helper(&map_info));
             cg_emit_local_map_recv(ctx, out, recv);
@@ -2827,7 +2856,8 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         const char *helper = cg_map_direct_delete_helper(&map_info);
         if (!helper)
             return false;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(int64_t)%s(", helper);
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2851,7 +2881,8 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         const char *helper = cg_map_direct_set_helper(&map_info);
         if (!helper)
             return false;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(%s(", helper);
         cg_emit_local_map_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -2939,7 +2970,7 @@ static bool emit_local_typed_map_get_stmt(XiCgenCtx *ctx, FILE *out, const XiFun
          cg_key_access_receiver_is_readonly_static_table(ctx, key_plan)))
         return false;
 
-    XrRep result_rep = cg_rep(v);
+    XrRep result_rep = cg_value_plan_storage_rep(ctx, v);
     if (result_rep != map_info.value.rep && result_rep != XR_REP_TAGGED)
         return false;
     if (result_rep == map_info.value.rep && cg_map_get_fusion_has(ctx, v))
@@ -3045,7 +3076,8 @@ static bool emit_class_native_set_length_expr(XiCgenCtx *ctx, FILE *out, const X
     uint16_t idx = 0;
     if (!cg_class_native_receiver_ref_field(ctx, f, v->args[0], XR_NATIVE_SET_REF, &info, &idx))
         return false;
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
     emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
     fprintf(out, "->len");
     emit_conversion_suffix(out, conv_suffix);
@@ -3064,7 +3096,8 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         return false;
 
     if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, "->len");
         emit_conversion_suffix(out, conv_suffix);
@@ -3078,7 +3111,8 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_set_clear(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, "), XR_NULL_VAL)");
@@ -3086,7 +3120,8 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         return true;
     }
     if (nargs == 0 && strcmp(method, "values") == 0) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_set_values(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ")");
@@ -3100,7 +3135,8 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Set.add");
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         CgSetElemInfo set_info;
         if (hash_helper && cg_set_type_direct_info_ctx(ctx, v->args[0]->type, &set_info)) {
             if (set_info.rep == XR_REP_I64) {
@@ -3141,7 +3177,8 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Set.contains");
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         CgSetElemInfo set_info;
         if (hash_helper && cg_set_type_direct_info_ctx(ctx, v->args[0]->type, &set_info)) {
             if (set_info.rep == XR_REP_I64) {
@@ -3182,7 +3219,8 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             cg_key_access_plan_action_allows_hash_helper(ctx, key_plan, v, "Set.delete");
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         CgSetElemInfo set_info;
         if (hash_helper && cg_set_type_direct_info_ctx(ctx, v->args[0]->type, &set_info)) {
             if (set_info.rep == XR_REP_I64) {
@@ -3247,7 +3285,7 @@ static void cg_emit_local_set_recv(XiCgenCtx *ctx, FILE *out, const XiValue *rec
 static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux || !v->args[0] ||
         !v->args[0]->type || v->args[0]->type->kind != XR_KIND_SET ||
-        cg_rep(v->args[0]) != XR_REP_TAGGED)
+        cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_TAGGED)
         return false;
     const XiValue *recv = v->args[0];
     const char *method = (const char *) v->aux;
@@ -3263,7 +3301,8 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         if (!key_plan)
             return false;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_set_clear(");
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, "), XR_NULL_VAL)");
@@ -3284,7 +3323,8 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
             emit_codegen_abort_expr(out);
             return true;
         }
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, dense_enum ? "(int64_t)xrt_set_has_dense_enum("
                                 : "(int64_t)xrt_set_has_dense_i64(");
         cg_emit_local_set_recv(ctx, out, recv);
@@ -3295,7 +3335,8 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         return true;
     }
     if (cg_key_access_plan_is_small_scan(key_plan) && op == XG_KEY_ACCESS_HAS) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(int64_t)xrt_set_has_small(");
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -3309,8 +3350,8 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
     CgUserHashEqDirectPlan user_hash_eq;
     if (cg_user_hash_eq_direct_plan(ctx, key_plan, v->args[1], &user_hash_eq, method)) {
         if (op == XG_KEY_ACCESS_ADD) {
-            const char *conv_suffix =
-                emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "(xrt_set_add_user_hash_eq(");
             cg_emit_local_set_recv(ctx, out, recv);
             fprintf(out, ", ");
@@ -3326,7 +3367,8 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
             const char *helper = op == XG_KEY_ACCESS_HAS ? "xrt_set_has_user_hash_eq"
                                                          : "xrt_set_delete_user_hash_eq";
-            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "(int64_t)%s(", helper);
             cg_emit_local_set_recv(ctx, out, recv);
             fprintf(out, ", ");
@@ -3352,7 +3394,8 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
         return false;
 
     if (op == XG_KEY_ACCESS_ADD) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_set_add_prehashed(");
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -3365,7 +3408,8 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
     if (op == XG_KEY_ACCESS_HAS || op == XG_KEY_ACCESS_DELETE) {
         const char *helper =
             op == XG_KEY_ACCESS_HAS ? "xrt_set_has_prehashed" : "xrt_set_delete_prehashed";
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(int64_t)%s(", helper);
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ", ");
@@ -3382,7 +3426,7 @@ static bool emit_tagged_set_method_key_access_expr(XiCgenCtx *ctx, FILE *out, co
  * typed-direct helpers instead of boxed generic dispatch + pending-error check. */
 static bool cg_local_typed_set_receiver(XiCgenCtx *ctx, const XiFunc *f, const XiValue *recv,
                                         CgSetElemInfo *set_info) {
-    if (!recv || !recv->type || cg_rep(recv) != XR_REP_TAGGED)
+    if (!recv || !recv->type || cg_value_plan_storage_rep(ctx, recv) != XR_REP_TAGGED)
         return false;
     if (cg_class_native_receiver_ref_field(ctx, f, recv, XR_NATIVE_SET_REF, NULL, NULL))
         return false; /* class-field receivers use the class-native fast path */
@@ -3423,7 +3467,8 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
     uint16_t nargs = (uint16_t) (v->nargs - 1);
 
     if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, "->len");
         emit_conversion_suffix(out, conv_suffix);
@@ -3437,7 +3482,8 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "(xrt_set_clear(");
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, "), XR_NULL_VAL)");
@@ -3445,7 +3491,8 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         return true;
     }
     if (nargs == 0 && strcmp(method, "values") == 0) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_set_values(");
         cg_emit_local_set_recv(ctx, out, recv);
         fprintf(out, ")");
@@ -3464,7 +3511,8 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
             cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
             return false;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         if (set_info.rep == XR_REP_I64) {
             fprintf(out, "(%s(",
                     strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_add_i64"
@@ -3498,7 +3546,8 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
             cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
             return false;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         if (set_info.rep == XR_REP_I64) {
             fprintf(out, "(int64_t)%s(",
                     strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_has_i64"
@@ -3532,7 +3581,8 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
             cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
             return false;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         if (set_info.rep == XR_REP_I64) {
             fprintf(out, "(int64_t)%s(",
                     strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_delete_i64"

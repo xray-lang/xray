@@ -4596,7 +4596,8 @@ static bool emit_class_native_array_length_expr(XiCgenCtx *ctx, FILE *out, const
     uint16_t idx = 0;
     if (!cg_class_native_array_receiver_ref_field(ctx, f, v->args[0], &info, &idx))
         return false;
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
     emit_class_native_receiver_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
     fprintf(out, "->length");
     emit_conversion_suffix(out, conv_suffix);
@@ -4655,7 +4656,8 @@ static bool emit_class_native_array_method_call_expr(XiCgenCtx *ctx, FILE *out, 
     uint16_t nargs = (uint16_t) (v->nargs - 1);
     if (nargs > 3)
         return false;
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
     /* Same ownership rule as the general runtime dispatch: a result nobody
      * consumes has to be released, not just cast away.  See xrt_method_0. */
     const char *dispatch =
@@ -5391,7 +5393,8 @@ static bool emit_typed_array_resize_zero_expr(XiCgenCtx *ctx, FILE *out, const X
     if (!cg_array_value_has_fresh_owned_origin(ctx, call->args[0]))
         return false;
 
-    const char *conv_suffix = emit_conversion_prefix(out, call->type, XR_REP_TAGGED, cg_rep(call));
+    const char *conv_suffix = emit_conversion_prefix(out, call->type, XR_REP_TAGGED,
+                                                     cg_value_plan_storage_rep(ctx, call));
     fprintf(out, "({ xrt_array_t *_a = ");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
     fprintf(out, "; _a->length = 0");
@@ -5453,7 +5456,7 @@ static bool emit_byte_array_append_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
         emit_codegen_abort_expr(out);
         return true;
     }
-    bool boxed = cg_rep(call) == XR_REP_TAGGED;
+    bool boxed = cg_value_plan_storage_rep(ctx, call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
     fprintf(out, "%s(", adapter);
@@ -5494,7 +5497,7 @@ static bool emit_byte_array_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
         return true;
     }
 
-    bool boxed = cg_rep(call) == XR_REP_TAGGED;
+    bool boxed = cg_value_plan_storage_rep(ctx, call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
     fprintf(out, "%s(", adapter);
@@ -5887,7 +5890,8 @@ static bool emit_typed_array_fill_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return true;
     }
 
-    const char *conv_suffix = emit_conversion_prefix(out, call->type, XR_REP_TAGGED, cg_rep(call));
+    const char *conv_suffix = emit_conversion_prefix(out, call->type, XR_REP_TAGGED,
+                                                     cg_value_plan_storage_rep(ctx, call));
     fprintf(out, "({ xrt_array_t *_a = ");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
     bool zero_bits = cg_array_fill_value_is_zero_bits_literal(call->args[1]);
@@ -6118,7 +6122,8 @@ static bool emit_typed_array_length_expr(XiCgenCtx *ctx, FILE *out, const XiFunc
         !cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ))
         return false;
 
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
     emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
     fprintf(out, "->length");
     emit_conversion_suffix(out, conv_suffix);
@@ -6476,7 +6481,8 @@ static bool emit_typed_array_for_each_expr(XiCgenCtx *ctx, FILE *out, const XiFu
     if (!v || v->nargs != 2 || !v->args[0] || !v->args[0]->type ||
         v->args[0]->type->kind != XR_KIND_ARRAY)
         return false;
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
     fprintf(out, cg_array_hof_callback_wants_index(v->args[1], 1)
                      ? "xrt_array_for_each_indexed_typed("
                      : "xrt_array_for_each_typed(");
@@ -6502,7 +6508,8 @@ static bool emit_typed_array_predicate_hof_expr(XiCgenCtx *ctx, FILE *out, const
     if (!v || v->nargs != 2 || !v->args[0] || !v->args[0]->type ||
         v->args[0]->type->kind != XR_KIND_ARRAY)
         return false;
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
     fprintf(out, "%s(", helper);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");

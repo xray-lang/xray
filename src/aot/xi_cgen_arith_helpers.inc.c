@@ -76,7 +76,8 @@ static bool emit_int_div_mod_proven_head(XiCgenCtx *ctx, FILE *out, const XiValu
 
 static bool emit_native_const_div_mod_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *v) {
-    if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64)
+    if (!v || v->nargs < 2 || cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_I64)
         return false;
     if (v->op != XI_DIV && v->op != XI_MOD)
         return false;
@@ -94,8 +95,9 @@ static bool emit_native_const_div_mod_expr(XiCgenCtx *ctx, FILE *out, const XiFu
 
 static bool emit_native_positive_divisor_div_mod_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                       const XiValue *v) {
-    if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
-        cg_rep(v->args[1]) != XR_REP_I64)
+    if (!v || v->nargs < 2 || cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[1]) != XR_REP_I64)
         return false;
     if (v->op != XI_DIV && v->op != XI_MOD)
         return false;
@@ -146,23 +148,25 @@ static bool emit_native_unsigned_div_mod_expr(FILE *out, const XiValue *v) {
 }
 
 static bool cg_div_mod_is_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    if (!v || (v->op != XI_DIV && v->op != XI_MOD) || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64)
+    if (!v || (v->op != XI_DIV && v->op != XI_MOD) || v->nargs < 2 ||
+        cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_I64)
         return false;
 
     int64_t divisor = 0;
     if (cg_const_int_value_in_func(ctx, f, v->args[1], &divisor))
         return divisor != 0;
 
-    if (cg_rep(v->args[1]) != XR_REP_I64)
+    if (cg_value_plan_storage_rep(ctx, v->args[1]) != XR_REP_I64)
         return false;
 
     return xi_value_known_positive_at(f, v->args[1], v->block);
 }
 
 static bool emit_native_unsigned_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (!ctx || !out || !v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
+    if (!ctx || !out || !v || v->nargs < 2 || cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[1]) != XR_REP_I64)
         return false;
     if (!cg_type_is_unsigned_int(v->type))
         return false;
@@ -208,8 +212,9 @@ static bool emit_native_unsigned_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, cons
 }
 
 static bool emit_native_i64_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (!ctx || !out || !v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
+    if (!ctx || !out || !v || v->nargs < 2 || cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[1]) != XR_REP_I64)
         return false;
 
     const char *op = NULL;
@@ -236,7 +241,7 @@ static bool emit_native_i64_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, const XiV
 }
 
 static bool emit_native_rawptr_arith_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (!out || !v || v->nargs < 2 || cg_rep(v) != XR_REP_RAWPTR)
+    if (!out || !v || v->nargs < 2 || cg_value_plan_storage_rep(ctx, v) != XR_REP_RAWPTR)
         return false;
     if (v->op != XI_ADD && v->op != XI_SUB)
         return false;
@@ -251,8 +256,8 @@ static bool emit_native_rawptr_arith_expr(XiCgenCtx *ctx, FILE *out, const XiVal
      * the generic xrt_add, which cannot take a raw pointer as an XrValue
      * argument (that fallback emits illegal C). The offset rep is restricted to
      * i64/tagged so a managed pointer never masquerades as an offset. */
-    XrRep r0 = cg_rep(v->args[0]);
-    XrRep r1 = cg_rep(v->args[1]);
+    XrRep r0 = cg_value_plan_storage_rep(ctx, v->args[0]);
+    XrRep r1 = cg_value_plan_storage_rep(ctx, v->args[1]);
     if (r0 == XR_REP_RAWPTR && (r1 == XR_REP_I64 || r1 == XR_REP_TAGGED)) {
         ptr = v->args[0];
         offset = v->args[1];
