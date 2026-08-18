@@ -333,11 +333,47 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
                     }
                     return;
                 }
-                ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
-                              "go closure cannot capture mutable variable '%s'\n"
-                              "hint: bind a Channel/Atomic/Mutex handle as const, or "
-                              "transfer one owner with go worker(move %s)",
-                              name);
+                {
+                    /* The hint must match the cause. Scalars have no ownership
+                     * root, so suggesting `move` would send the user straight
+                     * into E0391; a copy(...) snapshot only needs rebinding as
+                     * const; managed values get the full menu. */
+                    XrType *type = ea_entry_type(ctx, entry);
+                    bool scalar = type && (XR_TYPE_IS_INT(type) || XR_TYPE_IS_FLOAT(type) ||
+                                           XR_TYPE_IS_BOOL(type) || XR_TYPE_IS_RUNE(type));
+                    if (scalar) {
+                        ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                                      "go closure cannot capture mutable variable '%s'\n"
+                                      "hint: declare '%s' as const, or pass the value as an "
+                                      "explicit go argument (go worker(%s))",
+                                      name);
+                        return;
+                    }
+                    AstNode *init = (entry->decl_node && (entry->decl_node->type == AST_VAR_DECL ||
+                                                          entry->decl_node->type == AST_CONST_DECL))
+                                        ? entry->decl_node->as.var_decl.initializer
+                                        : NULL;
+                    bool copy_init =
+                        init && init->type == AST_CALL_EXPR && init->as.call_expr.callee &&
+                        init->as.call_expr.callee->type == AST_VARIABLE &&
+                        init->as.call_expr.callee->as.variable.name &&
+                        strcmp(init->as.call_expr.callee->as.variable.name, "copy") == 0;
+                    if (copy_init) {
+                        ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                                      "go closure cannot capture mutable variable '%s'\n"
+                                      "hint: a copy(...) snapshot is captured only through a "
+                                      "const binding (const %s = copy(...)), or pass copy(...) "
+                                      "as an explicit go argument",
+                                      name);
+                        return;
+                    }
+                    ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                                  "go closure cannot capture mutable variable '%s'\n"
+                                  "hint: bind a Channel/Atomic/Mutex handle as const, snapshot "
+                                  "with const %s = copy(...), or transfer one owner with go "
+                                  "worker(move %s)",
+                                  name);
+                }
                 return;
             }
         }

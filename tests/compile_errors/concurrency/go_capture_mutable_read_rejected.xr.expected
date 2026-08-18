@@ -1,2 +1,2 @@
 go closure cannot capture mutable variable 'answer'
-hint: bind a Channel/Atomic/Mutex handle as const, or transfer one owner with go worker(move answer)
+hint: declare 'answer' as const, or pass the value as an explicit go argument (go worker(answer))

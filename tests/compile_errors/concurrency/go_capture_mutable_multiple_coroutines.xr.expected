@@ -1,2 +1,2 @@
 go closure cannot capture mutable variable 'counter'
-hint: bind a Channel/Atomic/Mutex handle as const, or transfer one owner with go worker(move counter)
+hint: declare 'counter' as const, or pass the value as an explicit go argument (go worker(counter))
