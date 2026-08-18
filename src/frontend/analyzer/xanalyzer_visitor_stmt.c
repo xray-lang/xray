@@ -9300,12 +9300,13 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
         loop_scope.continue_flow_target = continue_label;
         loop_scope.break_flow_target = break_label;
     }
-    /* NOT xa_visit_infer_stmt: Pass 1 keys the body's declarations on the for
-     * statement node, not the body node, so routing through the block visitor
-     * opens a scope Pass 1 never filled and the body's own bindings stop
-     * resolving. Giving the body a real scope means changing Pass 1 too. */
+    /* Analyze body. A block body goes through xa_visit_block_stmt so it gets
+     * its own scope keyed on the body node, matching Pass 1 and `while`. The
+     * loop-scope entry point must stay one level above the body scope: the
+     * move-in-loop check distinguishes bindings declared per iteration (in
+     * the body scope) from bindings the backedge would consume again. */
     if (for_stmt->body)
-        xa_visit_inline_statement_sequence_with_cursor(ctx, for_stmt->body);
+        xa_visit_infer_stmt(ctx, for_stmt->body);
     xa_loop_scope_pop(ctx, &loop_scope);
 
     /* `continue` skips the rest of the body but still runs the increment, so

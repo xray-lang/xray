@@ -2826,6 +2826,13 @@ XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, 
                               .column = (int) symbol->location.column};
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_CMP_REDEFINED_VAR,
                                        msg, &loc);
+            /* A duplicate function or method must stay out of the scope: two
+             * bodies under one name make the error-set fixpoint oscillate
+             * between them and never converge. Analysis proceeds on the first
+             * definition alone; the diagnostic above already rejects the
+             * program. */
+            if (symbol->kind == XA_SYM_FUNCTION || symbol->kind == XA_SYM_METHOD)
+                return;
         }
     }
     xa_scope_add_symbol(scope, symbol);
@@ -3721,8 +3728,16 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 if (val_links)
                     val_links->is_definitely_assigned = true;
             }
+            /* The body is its own block scope in Pass 2 (via
+             * xa_visit_block_stmt), keeping per-iteration bindings apart from
+             * the loop header. Pass 1 must mirror that. */
             if (fi->body) {
+                bool is_block = fi->body->type == AST_BLOCK;
+                if (is_block)
+                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, fi->body);
                 xa_visit_collect(ctx, fi->body);
+                if (is_block)
+                    xa_analyzer_exit_scope(ctx->analyzer);
             }
             xa_analyzer_exit_scope(ctx->analyzer);
             break;
@@ -3743,8 +3758,17 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
             if (fs->initializer)
                 xa_visit_collect(ctx, fs->initializer);
-            if (fs->body)
+            /* The body is its own block scope in Pass 2 (via
+             * xa_visit_block_stmt), keeping per-iteration bindings apart from
+             * the loop header. Pass 1 must mirror that. */
+            if (fs->body) {
+                bool is_block = fs->body->type == AST_BLOCK;
+                if (is_block)
+                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, fs->body);
                 xa_visit_collect(ctx, fs->body);
+                if (is_block)
+                    xa_analyzer_exit_scope(ctx->analyzer);
+            }
             xa_analyzer_exit_scope(ctx->analyzer);
             break;
         }
@@ -5784,6 +5808,50 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 break;
             }
 
+            /* A value-struct temporary vanishes at the end of the statement,
+             * so a field write into it can never be observed. Only named
+             * places (variables, this, field paths, index slots) accept the
+             * write; calls and literals do not. Classes are reference types
+             * and stay unaffected — their temporaries alias live objects. */
+            if (obj_type &&
+                (obj_type->kind == XR_KIND_INSTANCE || obj_type->kind == XR_KIND_CLASS) &&
+                obj_type->instance.class_ref && obj_type->instance.class_ref->struct_layout) {
+                AstNode *root = ms->object;
+                bool is_place = false;
+                while (root) {
+                    if (root->type == AST_VARIABLE || root->type == AST_THIS_EXPR) {
+                        is_place = true;
+                        break;
+                    }
+                    if (root->type == AST_MEMBER_ACCESS) {
+                        root = root->as.member_access.object;
+                        continue;
+                    }
+                    if (root->type == AST_INDEX_GET) {
+                        root = root->as.index_get.array;
+                        continue;
+                    }
+                    if (root->type == AST_GROUPING) {
+                        root = root->as.grouping;
+                        continue;
+                    }
+                    break;
+                }
+                if (!is_place) {
+                    xa_visit_infer_expr(ctx, ms->value);
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    char msg[224];
+                    snprintf(msg, sizeof(msg),
+                             "cannot assign to field '%s' of a struct temporary: the value is "
+                             "discarded at the end of the statement; bind it to a variable first",
+                             ms->member ? ms->member : "?");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+                    break;
+                }
+            }
+
             // Bidirectional inference: propagate field declared type to value
             XrType *saved_expected = ctx->expected_type;
             XrType *member_type = NULL;
@@ -6494,10 +6562,20 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     fi->domain_kind = XR_FOR_IN_DOMAIN_ENUM_PAYLOADS;
                     item_type = xr_type_new_enum_metadata(ctx->analyzer->isolate,
                                                           XR_ENUM_PAYLOAD_FIELD_TYPE_NAME, owner);
-                } else if (XR_TYPE_IS_ARRAY(coll_type) || XR_TYPE_IS_SLICE(coll_type) ||
-                           XR_TYPE_IS_SLICE(coll_type)) {
+                } else if (XR_TYPE_IS_ARRAY(coll_type) || XR_TYPE_IS_SLICE(coll_type)) {
                     if (coll_type->container.element_type) {
                         item_type = coll_type->container.element_type;
+                    }
+                    if (fi->is_keyvalue) {
+                        value_type = item_type;
+                        item_type = xr_type_new_int(NULL);  // key is index
+                    }
+                } else if (coll_type->kind == XR_KIND_FIXED_ARRAY) {
+                    /* [T; N] iterates like any other indexed sequence; the
+                     * length is a compile-time constant, elements come back
+                     * by the same read semantics as indexing. */
+                    if (coll_type->fixed_array.element_type) {
+                        item_type = coll_type->fixed_array.element_type;
                     }
                     if (fi->is_keyvalue) {
                         value_type = item_type;
@@ -6652,9 +6730,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
             }
 
-            // Infer body - process block statements inline (without xa_visit_block_stmt)
-            // to match Pass 1 scope structure: Pass 1 processes for-in body block
-            // statements in the for-in scope, so Pass 2 must do the same.
+            /* Infer body through xa_visit_block_stmt so it gets its own scope
+             * keyed on the body node, matching Pass 1 and `while`. The
+             * loop-scope entry point stays one level above the body scope:
+             * the move-in-loop check distinguishes bindings declared per
+             * iteration from bindings the backedge would consume again. */
 
             /* Loop header carries the entry edge and every back edge (spec
              * §2.13 N-10). for-in exposes no user-visible condition, so the
@@ -6682,7 +6762,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 loop_scope.break_flow_target = break_label;
             }
             if (fi->body)
-                xa_visit_inline_statement_sequence_with_cursor(ctx, fi->body);
+                xa_visit_infer_stmt(ctx, fi->body);
             xa_loop_scope_pop(ctx, &loop_scope);
 
             /* `continue` edges rejoin ahead of the back edge (spec §2.13
