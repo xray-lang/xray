@@ -218,26 +218,28 @@ static bool emit_native_i64_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, const XiV
         cg_value_plan_storage_rep(ctx, v->args[1]) != XR_REP_I64)
         return false;
 
-    const char *op = NULL;
+    /* The wrapping semantics belong to one owner. Emitting the unsigned round
+     * trip inline stated them a second time; calling the kernel names it. */
+    const char *fn = NULL;
     switch (v->op) {
         case XI_ADD:
-            op = "+";
+            fn = "xr_i64_add_wrap";
             break;
         case XI_SUB:
-            op = "-";
+            fn = "xr_i64_sub_wrap";
             break;
         case XI_MUL:
-            op = "*";
+            fn = "xr_i64_mul_wrap";
             break;
         default:
             return false;
     }
 
-    fprintf(out, "(int64_t)((uint64_t)(");
+    fprintf(out, "%s(", fn);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, ") %s (uint64_t)(", op);
+    fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    fprintf(out, "))");
+    fprintf(out, ")");
     return true;
 }
 

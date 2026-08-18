@@ -36,148 +36,139 @@
 #ifndef XRT_H
 #define XRT_H
 
-#include "../shared/xr_data_pointer_core.h" // L0: borrowed data-pointer projection
-#include "../shared/xr_raw_scalar_core.h"  // L0: unsafe raw scalar load/store
-#include "../shared/xr_raw_memory_core.h"  // L0: unsafe non-overlapping memory copy
-#include "../shared/xr_bits_core.h"        // L0: exact-width compiler bit intrinsics
-#include "../shared/xr_range_core.h"       // L0: canonical Range semantics
-#include "../shared/xr_enum_metadata_core.h" // L0: checked enum metadata views
-#include "../shared/xr_numeric_core.h"     // L0: canonical numeric negation
-#include "../shared/xr_null_test_core.h"   // L0: canonical tagged/pointer null observation
-#include "../shared/xr_assert_condition_core.h" // L0: canonical assertion decision
+#include "../shared/xr_data_pointer_core.h"        // L0: borrowed data-pointer projection
+#include "../shared/xr_raw_scalar_core.h"          // L0: unsafe raw scalar load/store
+#include "../shared/xr_raw_memory_core.h"          // L0: unsafe non-overlapping memory copy
+#include "../shared/xr_bits_core.h"                // L0: exact-width compiler bit intrinsics
+#include "../shared/xr_int_arith_core.h"           // L0: wrapping integer arithmetic owner
+#include "../shared/xr_range_core.h"               // L0: canonical Range semantics
+#include "../shared/xr_enum_metadata_core.h"       // L0: checked enum metadata views
+#include "../shared/xr_numeric_core.h"             // L0: canonical numeric negation
+#include "../shared/xr_null_test_core.h"           // L0: canonical tagged/pointer null observation
+#include "../shared/xr_assert_condition_core.h"    // L0: canonical assertion decision
 #include "../shared/xr_numeric_conversion_core.h"  // L0: deterministic scalar narrowing
-#include "../shared/xr_slice_window_core.h" // L0: canonical strict contiguous window
-#define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
-    XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
-                              XR_SEM_OWNER_ID_SHARED_BITS_LO,                                     \
+#include "../shared/xr_slice_window_core.h"        // L0: canonical strict contiguous window
+#define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                         \
+    XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO,      \
                               XR_SEM_CONSUMER_AOT_HOSTED, kernel, lhs, rhs, native_type)
-#define xrt_bits_not_eval(value)                                                                  \
-    XR_BITS_NOT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,                                  \
-                            XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO,                                  \
-                            XR_SEM_CONSUMER_AOT_HOSTED, value)
-#define xrt_bitwise_binary_eval(kind, lhs, rhs)                                                   \
-    XR_BITWISE_BINARY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,                       \
-                                   XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,                      \
-                                   XR_SEM_CONSUMER_AOT_HOSTED, kind, lhs, rhs)
-#define xrt_shift_eval(kind, value, count)                                                        \
-    XR_SHIFT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_SHIFT_HI,                                        \
-                         XR_SEM_OWNER_ID_SHARED_SHIFT_LO, XR_SEM_CONSUMER_AOT_HOSTED, kind,       \
-                         value, count)
+#define xrt_bits_not_eval(value)                                                                   \
+    XR_BITS_NOT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,                                    \
+                            XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO, XR_SEM_CONSUMER_AOT_HOSTED, value)
+#define xrt_bitwise_binary_eval(kind, lhs, rhs)                                                    \
+    XR_BITWISE_BINARY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,                        \
+                                  XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,                        \
+                                  XR_SEM_CONSUMER_AOT_HOSTED, kind, lhs, rhs)
+#define xrt_shift_eval(kind, value, count)                                                         \
+    XR_SHIFT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,         \
+                         XR_SEM_CONSUMER_AOT_HOSTED, kind, value, count)
 #define xrt_numeric_width_eval(kernel, value)                                                      \
-    XR_NUMERIC_WIDTH_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,                    \
-                                 XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,                    \
+    XR_NUMERIC_WIDTH_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,                     \
+                                 XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,                     \
                                  XR_SEM_CONSUMER_AOT_HOSTED, kernel, value)
-#define xrt_range_semantics(start, end, inclusive_end)                                            \
-    XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI,                                        \
-                         XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_AOT_HOSTED, start, end, \
-                         inclusive_end)
+#define xrt_range_semantics(start, end, inclusive_end)                                             \
+    XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO,         \
+                         XR_SEM_CONSUMER_AOT_HOSTED, start, end, inclusive_end)
 #define xrt_numeric_neg_eval(kind, i64, f64)                                                       \
-    XR_NUMERIC_NEG_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI,                             \
-                               XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,                             \
-                               XR_SEM_CONSUMER_AOT_HOSTED, kind, i64, f64)
-#define xrt_int_div_mod_eval(kind, proof, lhs, rhs)                                               \
-    XR_INT_DIV_MOD_OWNER_APPLY_PROVEN(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                      \
-                                      XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,                      \
+    XR_NUMERIC_NEG_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI,                              \
+                               XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO, XR_SEM_CONSUMER_AOT_HOSTED,  \
+                               kind, i64, f64)
+#define xrt_int_div_mod_eval(kind, proof, lhs, rhs)                                                \
+    XR_INT_DIV_MOD_OWNER_APPLY_PROVEN(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                       \
+                                      XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,                       \
                                       XR_SEM_CONSUMER_AOT_HOSTED, (kind), (proof), (lhs), (rhs))
 /* Generated C asks the window owner through this name; the proof token decides
  * whether the admissibility probe is still the kernel's job. */
 #define xrt_slice_window_plan(proof, length, start, count, data, element_size)                     \
-    XR_SLICE_WINDOW_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_HI,                           \
-                                XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_LO,                           \
-                                XR_SEM_CONSUMER_AOT_HOSTED, (proof), (length), (start), (count),  \
-                                (data), (element_size))
-#define xrt_null_test_tagged(tag)                                                                 \
-    XR_NULL_TEST_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,                                \
-                             XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,                                \
-                             XR_SEM_CONSUMER_AOT_HOSTED,                                        \
+    XR_SLICE_WINDOW_OWNER_APPLY(                                                                   \
+        XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_HI, XR_SEM_OWNER_ID_SHARED_SLICE_WINDOW_LO,            \
+        XR_SEM_CONSUMER_AOT_HOSTED, (proof), (length), (start), (count), (data), (element_size))
+#define xrt_null_test_tagged(tag)                                                                  \
+    XR_NULL_TEST_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,                                  \
+                             XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO, XR_SEM_CONSUMER_AOT_HOSTED,      \
                              xr_null_test_tagged_core((uint8_t) (tag)))
-#define xrt_null_test_pointer(pointer)                                                            \
-    XR_NULL_TEST_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,                                \
-                             XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,                                \
-                             XR_SEM_CONSUMER_AOT_HOSTED,                                        \
+#define xrt_null_test_pointer(pointer)                                                             \
+    XR_NULL_TEST_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,                                  \
+                             XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO, XR_SEM_CONSUMER_AOT_HOSTED,      \
                              xr_null_test_pointer_is_null_core((const void *) (pointer)))
-#define xrt_assert_condition_failed(truthy, expected_truthy)                                      \
-    XR_ASSERT_CONDITION_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI,                                              \
-        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO, XR_SEM_CONSUMER_AOT_HOSTED,                  \
-        (truthy), (expected_truthy))
-#define xrt_data_pointer_project(address, lifetime)                                               \
-    XR_DATA_POINTER_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI,                           \
-                                XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO,                           \
+#define xrt_assert_condition_failed(truthy, expected_truthy)                                       \
+    XR_ASSERT_CONDITION_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI,                    \
+                                    XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO,                    \
+                                    XR_SEM_CONSUMER_AOT_HOSTED, (truthy), (expected_truthy))
+#define xrt_data_pointer_project(address, lifetime)                                                \
+    XR_DATA_POINTER_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI,                            \
+                                XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO,                            \
                                 XR_SEM_CONSUMER_AOT_HOSTED, address, lifetime)
-#define xrt_raw_memory_copy_nonoverlap(dst, src, count)                                           \
-    XR_RAW_MEMORY_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,                     \
-                                   XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,                     \
+#define xrt_raw_memory_copy_nonoverlap(dst, src, count)                                            \
+    XR_RAW_MEMORY_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,                      \
+                                   XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,                      \
                                    XR_SEM_CONSUMER_AOT_HOSTED, dst, src, count)
 #define xrt_raw_scalar_access_load_i64(ptr, kind, pointer_width, endian)                           \
-    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
         xr_raw_scalar_load_i64((ptr), (kind), (pointer_width), (endian)))
 #define xrt_raw_scalar_access_load_f64(ptr, kind, pointer_width, endian)                           \
-    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
         xr_raw_scalar_load_f64((ptr), (kind), (pointer_width), (endian)))
 #define xrt_raw_scalar_access_load_pointer(ptr, kind, pointer_width, endian)                       \
-    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
         xr_raw_scalar_load_pointer((ptr), (kind), (pointer_width), (endian)))
 #define xrt_raw_scalar_access_store_i64(ptr, kind, pointer_width, endian, value)                   \
-    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
         xr_raw_scalar_store_i64((ptr), (kind), (pointer_width), (endian), (value)))
 #define xrt_raw_scalar_access_store_f64(ptr, kind, pointer_width, endian, value)                   \
-    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
         xr_raw_scalar_store_f64((ptr), (kind), (pointer_width), (endian), (value)))
 #define xrt_raw_scalar_access_store_pointer(ptr, kind, pointer_width, endian, value)               \
-    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
         xr_raw_scalar_store_pointer((ptr), (kind), (pointer_width), (endian), (value)))
-#define xrt_raw_scalar_access(type, ptr)                                                          \
-    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
-        xr_raw_scalar_load_aggregate(type, ptr))
-#define xrt_raw_scalar_access_store(type, ptr, value)                                             \
-    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
-        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
-        xr_raw_scalar_store_aggregate(type, ptr, value))
+#define xrt_raw_scalar_access(type, ptr)                                                           \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED, xr_raw_scalar_load_aggregate(type, ptr))
+#define xrt_raw_scalar_access_store(type, ptr, value)                                              \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED, xr_raw_scalar_store_aggregate(type, ptr, value))
 #ifndef xrt_byte_slice_scalar_eval
 #define xrt_byte_slice_scalar_eval(expression)                                                     \
-    XR_BYTE_SLICE_SCALAR_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                 \
-                                     XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO,                 \
+    XR_BYTE_SLICE_SCALAR_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                  \
+                                     XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO,                  \
                                      XR_SEM_CONSUMER_AOT_HOSTED, expression)
 #endif
 #define xrt_byte_slice_compare_semantics(left_data, left_length, right_data, right_length, ok)     \
-    XR_BYTE_SLICE_COMPARE_OWNER_APPLY(                                                            \
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,                                             \
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
-        xr_byte_slice_compare_core((left_data), (left_length), XR_ELEM_U8, (right_data),          \
+    XR_BYTE_SLICE_COMPARE_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,                                              \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,                  \
+        xr_byte_slice_compare_core((left_data), (left_length), XR_ELEM_U8, (right_data),           \
                                    (right_length), XR_ELEM_U8, (ok)))
 #define xrt_byte_slice_fill_semantics(data, length, elem_type, value)                              \
-    XR_BYTE_SLICE_FILL_OWNER_APPLY(                                                               \
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO,    \
-        XR_SEM_CONSUMER_AOT_HOSTED,                                                               \
+    XR_BYTE_SLICE_FILL_OWNER_APPLY(                                                                \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO,      \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
         xr_byte_slice_fill_core((data), (length), (elem_type), (value)))
 #define xrt_byte_slice_copy_semantics(dst_data, dst_length, src_data, src_length)                  \
-    XR_BYTE_SLICE_COPY_OWNER_APPLY(                                                               \
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO,    \
-        XR_SEM_CONSUMER_AOT_HOSTED,                                                               \
-        xr_byte_slice_copy_core((dst_data), (dst_length), XR_ELEM_U8, (src_data), (src_length),  \
-                                XR_ELEM_U8))
+    XR_BYTE_SLICE_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,                      \
+                                   XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO,                      \
+                                   XR_SEM_CONSUMER_AOT_HOSTED,                                     \
+                                   xr_byte_slice_copy_core((dst_data), (dst_length), XR_ELEM_U8,   \
+                                                           (src_data), (src_length), XR_ELEM_U8))
 #define xrt_byte_slice_repeat_semantics(data, length, dst_offset, distance, count)                 \
-    XR_BYTE_SLICE_REPEAT_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,                                             \
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
-        xr_byte_slice_repeat_core((data), (length), XR_ELEM_U8, (dst_offset), (distance),        \
-                                  (count)))
+    XR_BYTE_SLICE_REPEAT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,                  \
+                                     XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO,                  \
+                                     XR_SEM_CONSUMER_AOT_HOSTED,                                   \
+                                     xr_byte_slice_repeat_core((data), (length), XR_ELEM_U8,       \
+                                                               (dst_offset), (distance), (count)))
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
 #include "xrt_arc.h"        // L1: execution arena, xrt_str_alloc, xrt_str_concat
 #include "xrt_net.h"        // L1: hosted TCP handle helpers
