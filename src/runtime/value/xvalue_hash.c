@@ -9,6 +9,7 @@
  */
 
 #include "xvalue_hash.h"
+#include "../class/xenum.h"
 #include "../../base/xchecks.h"
 #include "../../shared/xr_hash_core.h"
 #include "../class/xclass.h"
@@ -59,6 +60,30 @@ static uint32_t xr_hash_value_depth(XrValue val, uint32_t depth) {
             if (val.heap_type == XR_TINSTANCE && val.ptr) {
                 XrInstance *instance = (XrInstance *) val.ptr;
                 XrClass *cls = instance->klass;
+                /* ADT enum aggregates key by content -- nominal identity, member
+                 * index, then payloads -- so content-equal enum values land in
+                 * the same bucket regardless of which allocation carries them.
+                 * Must stay consistent with the aggregate branch in
+                 * value_eq_core below. */
+                if (cls && cls->builtin_kind == XR_BK_ADT_ENUM) {
+                    const XrEnumAggregateValue *agg = (const XrEnumAggregateValue *) val.ptr;
+                    const XrEnumType *et = xr_enum_aggregate_type(agg);
+                    uint32_t layout_id = (et && et->layout) ? et->layout->layout_id : 0;
+                    uint64_t nominal = layout_id
+                                           ? (((uint64_t) layout_id << 32) | agg->member_index)
+                                           : (((uint64_t) (uintptr_t) et) ^ agg->member_index);
+                    uint64_t hash = xr_hash_core_mix_u64(nominal);
+                    if (depth < XR_DERIVED_HASH_MAX_DEPTH) {
+                        for (uint32_t i = 0; i < agg->payload_count; i++) {
+                            uint32_t payload_hash =
+                                xr_hash_value_depth(agg->payloads[i], depth + 1u);
+                            hash ^= (uint64_t) payload_hash + UINT64_C(0x9e3779b97f4a7c15) +
+                                    (hash << 6) + (hash >> 2);
+                        }
+                    }
+                    uint32_t folded = (uint32_t) (hash ^ (hash >> 32));
+                    return folded ? folded : 1u;
+                }
                 /* A hand-written hash() keys by value. It is invoked through the
                  * hook (only the VM can run it) and takes precedence over the
                  * pointer fallback; @derive(Hash) classes declare no such method
@@ -144,6 +169,23 @@ static bool value_eq_core(XrValue a, XrValue b, bool key_equivalence) {
         if (a.heap_type == XR_TINSTANCE && b.heap_type == XR_TINSTANCE && a.ptr && b.ptr) {
             XrInstance *ia = (XrInstance *) a.ptr;
             XrInstance *ib = (XrInstance *) b.ptr;
+            /* ADT enum aggregates compare by content: nominal identity, member
+             * index, then payloads. Mirrors the hash branch above so a payload
+             * enum behaves the same as a container key and under `==`. */
+            if (ia->klass && ia->klass->builtin_kind == XR_BK_ADT_ENUM && ib->klass &&
+                ib->klass->builtin_kind == XR_BK_ADT_ENUM) {
+                const XrEnumAggregateValue *ea = (const XrEnumAggregateValue *) a.ptr;
+                const XrEnumAggregateValue *eb = (const XrEnumAggregateValue *) b.ptr;
+                if (!xr_enum_type_same_nominal(xr_enum_aggregate_type(ea),
+                                               xr_enum_aggregate_type(eb)) ||
+                    ea->member_index != eb->member_index || ea->payload_count != eb->payload_count)
+                    return false;
+                for (uint32_t i = 0; i < ea->payload_count; i++) {
+                    if (!value_eq_core(ea->payloads[i], eb->payloads[i], key_equivalence))
+                        return false;
+                }
+                return true;
+            }
             /* A hand-written operator == decides equality by value; the hook
              * runs it (VM only) and takes precedence over the address compare,
              * mirroring the hash hook so a user Hashable key round-trips. */

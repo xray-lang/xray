@@ -562,3 +562,17 @@ tests/diff/cases/semantics/closure/call_through_function_parameter.xr
 # exist cannot be decided from here while the shallower layer refuses.
 tests/diff/cases/semantics/collections/array_fill_ref_cross_module.xr
 tests/diff/cases/semantics/ownership/ref_param_write_invalidates_prior_copy.xr
+
+# --- cases ported ahead of their AOT support ------------------------------
+# Each pins a construct the VM already runs and the target plan still refuses:
+# enum payload equality, iteration through an interface-typed iterator, match
+# arms without a separator, derived JSON struct encoding, cross-module
+# subclassing, and `is` on a generic instance. They are listed as build
+# refusals so the backend work that makes each one build has a case waiting
+# for it -- deleting a line here is how that work reports itself.
+tests/diff/cases/semantics/collections/enum_payload_equality.xr
+tests/diff/cases/semantics/collections/for_in_interface_iterator.xr
+tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr
+tests/diff/cases/semantics/json/json_derive_struct_encode.xr
+tests/diff/cases/semantics/modules/xmod_inherit_lib_subclass.xr
+tests/diff/cases/semantics/type/is_generic_instance_target.xr

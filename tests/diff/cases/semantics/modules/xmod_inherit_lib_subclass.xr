@@ -1,0 +1,13 @@
+// Subclass declared in the library module (not the entry): inherited field
+// access, own methods and overridden dispatch must all survive the import.
+// The importing module's view once severed the owner's base link, which lost
+// inherited fields on both backends and broke AOT typedef emission.
+import { Base, Sub } from "./_inherit_lib"
+
+var s = Sub()
+print(s.b)
+print(s.s)
+print(s.own())
+print(s.tag())
+var up: Base = s
+print(up.b)

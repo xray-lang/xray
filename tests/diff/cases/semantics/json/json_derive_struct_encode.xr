@@ -1,0 +1,26 @@
+// @derive(JSON) value structs must encode their field values on both
+// backends. The VM encoder once read the tagged ownership slots instead of
+// the native body, producing all-null values silently.
+@derive(JSON)
+struct S {
+    i: int
+    f: float
+    b: bool
+    s: string
+}
+
+@derive(JSON)
+struct Inner { v: int }
+
+@derive(JSON)
+struct Outer {
+    a: int
+    inner: Inner
+}
+
+fn main() {
+    print(JSON.stringify(JSON.value(S{i: 42, f: 1.5, b: true, s: "hi"})))
+    print(JSON.stringify(JSON.value(Outer{a: 7, inner: Inner{v: 9}})))
+    print(JSON.stringify(JSON.value([Inner{v: 1}, Inner{v: 2}])))
+}
+main()

@@ -1,0 +1,27 @@
+// Payload enum equality is nominal identity plus payload-wise comparison on
+// both backends. The hosted AOT runtime once compared identity only, so equal
+// tags with different payloads answered true and Map/Set keys merged.
+enum E { A(int), B(string), C }
+enum K { Id(int), Name(string) }
+
+fn main() {
+    print(E.A(1) == E.A(1))
+    print(E.A(1) == E.A(2))
+    print(E.B("x") == E.B("x"))
+    print(E.B("x") == E.B("y"))
+    print(E.A(1) == E.C)
+
+    var m: Map<K, string> = #{}
+    m[K.Id(1)] = "one"
+    m[K.Id(2)] = "two"
+    print(len(m))
+    print(m[K.Id(1)])
+    print(m[K.Id(2)])
+
+    var s: Set<K> = #[]
+    s.add(K.Id(1))
+    s.add(K.Id(2))
+    s.add(K.Id(1))
+    print(len(s))
+}
+main()
