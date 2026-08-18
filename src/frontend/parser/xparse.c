@@ -279,6 +279,12 @@ static bool line_break_ends_expr(const Parser *parser) {
         return false;
     if (!xr_token_can_end_expr(parser->previous.type))
         return false;
+    /* Inside a match arm's expression body, a line starting with `is` opens
+     * the next arm's type pattern. `is` is infix-only (no prefix rule), so
+     * the generic check below would otherwise glue it onto the previous arm
+     * body as an infix type test. */
+    if (parser->match_arm_body_depth > 0 && parser->current.type == TK_IS)
+        return !xr_parser_in_group(parser);
     if (xr_get_rule(parser->current.type)->prefix == NULL)
         return false;
     return !xr_parser_in_group(parser);
@@ -1233,6 +1239,7 @@ static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, 
     parser->recursion_depth = 0;
     parser->bracket_bits = 0;
     parser->bracket_depth = 0;
+    parser->match_arm_body_depth = 0;
     parser->expr_value_observed = false;
 }
 

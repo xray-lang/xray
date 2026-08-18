@@ -119,6 +119,13 @@ struct Parser {
     // is not a discarded result and E0208 must not fire. False for scripts and
     // modules, where a bare expression really is dead code.
     bool expr_value_observed;
+
+    // Nesting count of match-arm expression bodies currently being parsed.
+    // `is` has no prefix rule (it is infix-only), so a line break before a
+    // leading `is` would not normally terminate the previous expression; when
+    // the previous arm body is still open, that leading `is` starts the next
+    // arm's type pattern and must end the body instead.
+    int match_arm_body_depth;
 };
 
 // Maximum nesting depth for expressions / types / match patterns. Chosen to

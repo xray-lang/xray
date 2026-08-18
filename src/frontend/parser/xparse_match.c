@@ -441,8 +441,11 @@ static AstNode *parse_match_arm(Parser *parser) {
         // Code block
         body = xr_parse_block(parser);
     } else {
-        // Single expression
+        // Single expression; a line break followed by `is` ends the body and
+        // starts the next arm's type pattern (see line_break_ends_expr).
+        parser->match_arm_body_depth++;
         body = xr_parse_expression(parser);
+        parser->match_arm_body_depth--;
     }
 
     if (!body) {
