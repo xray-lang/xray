@@ -64,6 +64,21 @@ static const XiClassData *cg_class_native_data_by_name(const XiCgenCtx *ctx, con
                    (cd->generic_origin_name && strcmp(cd->generic_origin_name, name) == 0)))
             return cd;
     }
+    /* Base classes of imported classes need not be imported by name in this
+     * unit; resolve them across the whole program so an inheriting class's
+     * `base` member always has a typedef to point at. */
+    for (int m = 0; m < ctx->all_nmodules; m++) {
+        const XiModule *mod = ctx->all_modules ? ctx->all_modules[m] : NULL;
+        if (!mod || !mod->classes)
+            continue;
+        for (uint16_t i = 0; i < mod->nclasses; i++) {
+            const XiClassData *cd = mod->classes[i];
+            if (cd && ((cd->class_name && strcmp(cd->class_name, name) == 0) ||
+                       (cd->display_name && strcmp(cd->display_name, name) == 0) ||
+                       (cd->generic_origin_name && strcmp(cd->generic_origin_name, name) == 0)))
+                return cd;
+        }
+    }
     return NULL;
 }
 
