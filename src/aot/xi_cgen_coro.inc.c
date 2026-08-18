@@ -61,10 +61,10 @@ static bool cg_coro_box_only_feeds_typed_send(const XiFunc *f, const XiValue *ta
     return seen_use;
 }
 
-static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
+static bool cg_coro_value_has_storage(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (!v)
         return false;
-    if (cg_value_is_elided_i64_optional_blocking_result(f, v))
+    if (cg_value_is_elided_i64_optional_blocking_result(ctx, f, v))
         return false;
     if (v->op == XI_PARAM)
         return false;
@@ -97,7 +97,7 @@ static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
  * explicit instead of assigning two physical representations to one C local. */
 static bool cg_coro_await_needs_tagged_boundary_temp(XiCgenCtx *ctx, const XiFunc *f,
                                                      const XiValue *v) {
-    return v && v->op == XI_AWAIT && cg_coro_value_has_storage(f, v) &&
+    return v && v->op == XI_AWAIT && cg_coro_value_has_storage(ctx, f, v) &&
            cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED &&
            cg_value_plan_storage_rep(ctx, v) != XR_REP_TAGGED;
 }
@@ -106,14 +106,16 @@ static void emit_coro_await_boundary_temp_ref(FILE *out, const XiValue *v) {
     fprintf(out, "_xr_await_boundary_v%u", v->id);
 }
 
-static void emit_coro_clear_inline_await_all_task_handles(FILE *out, const XiFunc *f,
+static void emit_coro_clear_inline_await_all_task_handles(XiCgenCtx *ctx, FILE *out,
+                                                          const XiFunc *f,
                                                           const CgInlineAwaitAllLiteral *literal) {
     if (!out || !literal)
         return;
     for (uint32_t i = 0; i < literal->count; i++) {
         const XiValue *cur = literal->tasks[i];
         for (uint8_t depth = 0; cur && depth < 8; depth++) {
-            if (cg_coro_value_has_storage(f, cur) && cg_rep(cur) == XR_REP_TAGGED) {
+            if (cg_coro_value_has_storage(ctx, f, cur) &&
+                cg_value_plan_storage_rep(ctx, cur) == XR_REP_TAGGED) {
                 fprintf(out, "    ");
                 emit_vref(out, cur);
                 fprintf(out, " = XR_NULL_VAL;\n");
@@ -551,7 +553,7 @@ static void emit_coro_call_error_channel_dispatch(FILE *out, uint32_t id, int si
     fprintf(out, "        return _call_%u;\n", id);
 }
 
-static void emit_aot_coro_op_stmt(FILE *out, const XiFunc *f, const XiValue *v) {
+static void emit_aot_coro_op_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
     char args_name[64];
     char tmp_name[64];
     snprintf(args_name, sizeof(args_name), "_coro_args_%u", v->id);
@@ -562,14 +564,14 @@ static void emit_aot_coro_op_stmt(FILE *out, const XiFunc *f, const XiValue *v) 
         for (uint16_t i = 0; i < v->nargs; i++) {
             if (i > 0)
                 fprintf(out, ", ");
-            emit_boxed_value_ref(out, v->args[i]);
+            emit_boxed_value_ref(ctx, out, v->args[i]);
         }
         fprintf(out, "};\n");
     }
 
     fprintf(out, "    XrValue %s = xr_aot_coro_op(ctx, %d, %s, %u);\n", tmp_name, (int) v->aux_int,
             v->nargs > 0 ? args_name : "NULL", (unsigned) v->nargs);
-    if (cg_coro_value_has_storage(f, v))
+    if (cg_coro_value_has_storage(ctx, f, v))
         emit_assign_from_xrvalue_temp(out, v, tmp_name);
 }
 
@@ -662,22 +664,23 @@ static void emit_coro_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 
 static void emit_coro_optional_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                         const char *prefix, const XiValue *v) {
-    if (cg_coro_value_has_storage(f, v)) {
+    if (cg_coro_value_has_storage(ctx, f, v)) {
         emit_coro_slot_ref(ctx, out, f, prefix, v);
         return;
     }
     fprintf(out, "xr_slot_none()");
 }
 
-static bool cg_coro_can_use_xvalue_result_ptr(const XiFunc *f, const XiValue *v) {
-    return cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED;
+static bool cg_coro_can_use_xvalue_result_ptr(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    return cg_coro_value_has_storage(ctx, f, v) &&
+           cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
 }
 
 static const XiCoroPlan *cg_coro_plan(XiCgenCtx *ctx, const XiFunc *f);
 
 static bool cg_coro_i64_optional_needs_frame(XiCgenCtx *ctx, const XiFunc *f, const XiValue *root) {
     return root && cg_value_is_i64_optional_blocking_result_root(root) &&
-           cg_value_is_elided_i64_optional_blocking_result(f, root) &&
+           cg_value_is_elided_i64_optional_blocking_result(ctx, f, root) &&
            xi_coro_plan_is_logical_member(cg_coro_plan(ctx, f), root);
 }
 
@@ -710,7 +713,7 @@ static void emit_coro_await_result_slot(XiCgenCtx *ctx, FILE *out, const XiFunc 
         fprintf(out, ")");
         return;
     }
-    if (cg_coro_value_has_storage(f, await_value)) {
+    if (cg_coro_value_has_storage(ctx, f, await_value)) {
         if (cg_value_plan_storage_rep(ctx, await_value) == XR_REP_TAGGED) {
             fprintf(out, "xr_slot_xvalue_ptr(&");
             emit_vref(out, await_value);
@@ -880,7 +883,7 @@ static bool cg_coro_value_live_across_suspend(XiCgenCtx *ctx, const XiFunc *f,
 /* Physical frame membership: a value occupies a frame slot iff it has backend
  * storage and the shared IR plan lists it as a logical member. */
 static bool cg_coro_value_needs_frame(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    return cg_coro_value_has_storage(f, v) &&
+    return cg_coro_value_has_storage(ctx, f, v) &&
            xi_coro_plan_is_logical_member(cg_coro_plan(ctx, f), v);
 }
 
@@ -2185,13 +2188,13 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
                 fprintf(out, " = XR_NULL_VAL;\n");
             }
             if (cg_value_is_i64_optional_blocking_result_root(v) &&
-                cg_value_is_elided_i64_optional_blocking_result(f, v) &&
+                cg_value_is_elided_i64_optional_blocking_result(ctx, f, v) &&
                 !cg_coro_i64_optional_needs_frame(ctx, f, v)) {
                 fprintf(out, "    bool v%u_opt_has = false;\n", v->id);
                 fprintf(out, "    int64_t v%u_opt_value = 0;\n", v->id);
                 continue;
             }
-            if (!cg_coro_value_has_storage(f, v) || cg_coro_value_needs_frame(ctx, f, v))
+            if (!cg_coro_value_has_storage(ctx, f, v) || cg_coro_value_needs_frame(ctx, f, v))
                 continue;
             XrRep rep = cg_coro_decl_rep(ctx, f, v);
             const char *ctype = cg_coro_decl_ctype(ctx, f, v);
@@ -2299,13 +2302,13 @@ static void emit_coro_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
 
 static bool cg_coro_direct_call_frame_reusable(XiCgenCtx *ctx, const XiFunc *target);
 
-static const XiValue *cg_coro_i64_optional_null_compare_root(const XiValue *v) {
+static const XiValue *cg_coro_i64_optional_null_compare_root(XiCgenCtx *ctx, const XiValue *v) {
     if (!v || (v->op != XI_EQ && v->op != XI_NE) || v->nargs < 2)
         return NULL;
     if (cg_value_is_null_const(v->args[0]))
-        return cg_i64_optional_blocking_result_root(v->args[1]);
+        return cg_i64_optional_blocking_result_root(ctx, v->args[1]);
     if (cg_value_is_null_const(v->args[1]))
-        return cg_i64_optional_blocking_result_root(v->args[0]);
+        return cg_i64_optional_blocking_result_root(ctx, v->args[0]);
     return NULL;
 }
 
@@ -2313,8 +2316,8 @@ static bool emit_coro_i64_optional_native_stmt(XiCgenCtx *ctx, FILE *out, const 
                                                const XiValue *v) {
     if (!ctx || !out || !f || !v)
         return false;
-    const XiValue *root = cg_i64_optional_blocking_result_root(v);
-    if (root && root != v && cg_value_is_elided_i64_optional_blocking_result(f, root) &&
+    const XiValue *root = cg_i64_optional_blocking_result_root(ctx, v);
+    if (root && root != v && cg_value_is_elided_i64_optional_blocking_result(ctx, f, root) &&
         ((xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op)) || v->op == XI_UNBOX) &&
         cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED) {
         return true;
@@ -2322,9 +2325,9 @@ static bool emit_coro_i64_optional_native_stmt(XiCgenCtx *ctx, FILE *out, const 
 
     root = NULL;
     if (v->op == XI_ISNULL && v->nargs >= 1)
-        root = cg_i64_optional_blocking_result_root(v->args[0]);
-    if (root && cg_value_is_elided_i64_optional_blocking_result(f, root)) {
-        if (cg_coro_value_has_storage(f, v)) {
+        root = cg_i64_optional_blocking_result_root(ctx, v->args[0]);
+    if (root && cg_value_is_elided_i64_optional_blocking_result(ctx, f, root)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = !");
@@ -2335,9 +2338,9 @@ static bool emit_coro_i64_optional_native_stmt(XiCgenCtx *ctx, FILE *out, const 
         return true;
     }
 
-    root = cg_coro_i64_optional_null_compare_root(v);
-    if (root && cg_value_is_elided_i64_optional_blocking_result(f, root)) {
-        if (cg_coro_value_has_storage(f, v)) {
+    root = cg_coro_i64_optional_null_compare_root(ctx, v);
+    if (root && cg_value_is_elided_i64_optional_blocking_result(ctx, f, root)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = ");
@@ -2351,9 +2354,9 @@ static bool emit_coro_i64_optional_native_stmt(XiCgenCtx *ctx, FILE *out, const 
     }
 
     if (v->op == XI_UNBOX && v->nargs >= 1) {
-        root = cg_i64_optional_blocking_result_root(v->args[0]);
-        if (root && cg_value_is_elided_i64_optional_blocking_result(f, root)) {
-            if (cg_coro_value_has_storage(f, v)) {
+        root = cg_i64_optional_blocking_result_root(ctx, v->args[0]);
+        if (root && cg_value_is_elided_i64_optional_blocking_result(ctx, f, root)) {
+            if (cg_coro_value_has_storage(ctx, f, v)) {
                 fprintf(out, "    ");
                 emit_vref(out, v);
                 fprintf(out, " = ");
@@ -2367,9 +2370,9 @@ static bool emit_coro_i64_optional_native_stmt(XiCgenCtx *ctx, FILE *out, const 
 
     if ((xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op)) && v->nargs >= 1 &&
         cg_value_plan_storage_rep(ctx, v) != XR_REP_TAGGED) {
-        root = cg_i64_optional_blocking_result_root(v->args[0]);
-        if (root && cg_value_is_elided_i64_optional_blocking_result(f, root)) {
-            if (cg_coro_value_has_storage(f, v)) {
+        root = cg_i64_optional_blocking_result_root(ctx, v->args[0]);
+        if (root && cg_value_is_elided_i64_optional_blocking_result(ctx, f, root)) {
+            if (cg_coro_value_has_storage(ctx, f, v)) {
                 fprintf(out, "    ");
                 emit_vref(out, v);
                 fprintf(out, " = ");
@@ -2482,7 +2485,7 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
                 emit_value_as_rep_ctx(ctx, out, v->args[ai], XR_REP_TAGGED);
             }
             fprintf(out, ");\n");
-            if (cg_coro_value_has_storage(f, v)) {
+            if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[40];
                 snprintf(tmp, sizeof(tmp), "_call_value_%u", v->id);
                 emit_assign_from_owned_xrvalue_temp_ctx(ctx, out, v, tmp);
@@ -2525,7 +2528,7 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
     emit_coro_callable_switch_release(ctx, out, plan, v, "        ");
     fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
     fprintf(out, "        f->call_target_id_%u = 0;\n", v->id);
-    if (cg_coro_value_has_storage(f, v)) {
+    if (cg_coro_value_has_storage(ctx, f, v)) {
         char tmp[40];
         snprintf(tmp, sizeof(tmp), "_call_value_%u", v->id);
         emit_assign_from_owned_xrvalue_temp_ctx(ctx, out, v, tmp);
@@ -2888,16 +2891,16 @@ static bool emit_coro_test_yield_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFu
     emit_value_generated_line_reset(ctx, out, v);
     fprintf(out, "S%d:;\n", sid);
     fprintf(out, "    f->state = 0;\n");
-    if (cg_coro_value_has_storage(f, v) && strcmp(method, "add") == 0) {
+    if (cg_coro_value_has_storage(ctx, f, v) && strcmp(method, "add") == 0) {
         char temp[48];
         snprintf(temp, sizeof(temp), "f->test_yield_value_%u", v->id);
         emit_assign_from_i64_temp(out, v, temp);
-    } else if (cg_coro_value_has_storage(f, v) && strcmp(method, "simple") == 0) {
+    } else if (cg_coro_value_has_storage(ctx, f, v) && strcmp(method, "simple") == 0) {
         fprintf(out, "    int64_t _test_yield_value_%u = xr_aot_test_yield_simple();\n", v->id);
         char temp[48];
         snprintf(temp, sizeof(temp), "_test_yield_value_%u", v->id);
         emit_assign_from_i64_temp(out, v, temp);
-    } else if (cg_coro_value_has_storage(f, v) && strcmp(method, "counter_inc") == 0) {
+    } else if (cg_coro_value_has_storage(ctx, f, v) && strcmp(method, "counter_inc") == 0) {
         fprintf(out, "    int64_t _test_yield_value_%u = xr_aot_test_yield_counter_get();\n",
                 v->id);
         char temp[48];
@@ -3091,7 +3094,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_PARAM) {
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = p%u;\n", (unsigned) v->aux_int);
@@ -3217,7 +3220,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             cg_await_all_inline_scalar_result_collect(f, v, &scalar_await_all_result);
         bool dynamic_await_all_xrt_result =
             await_all && !await_into_result && !inline_await_all_tasks &&
-            cg_coro_value_has_storage(f, v) && cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED &&
+            cg_coro_value_has_storage(ctx, f, v) &&
+            cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED &&
             !cg_coro_await_all_result_needs_boundary_clone(await_all_elem_name);
         if ((await_all || await_any) && !inline_await_all_tasks &&
             cg_coro_aggregate_await_tasks_need_heap_clone(v->args[0])) {
@@ -3408,14 +3412,14 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
         if (one_shot_await && !await_all && !await_any &&
-            cg_coro_value_has_storage(f, v->args[0]) &&
+            cg_coro_value_has_storage(ctx, f, v->args[0]) &&
             cg_value_plan_storage_rep(ctx, v->args[0]) == XR_REP_TAGGED) {
             fprintf(out, "    ");
             emit_vref(out, v->args[0]);
             fprintf(out, " = XR_NULL_VAL;\n");
         }
         if (inline_await_all_tasks && aggregate_one_shot)
-            emit_coro_clear_inline_await_all_task_handles(out, f, &inline_await_all_literal);
+            emit_coro_clear_inline_await_all_task_handles(ctx, out, f, &inline_await_all_literal);
         if (dynamic_await_all_xrt_result) {
             fprintf(out, "    int64_t _await_count_%u = xr_aot_await_all_tasks_count(ctx, ", v->id);
             emit_vref(out, v->args[0]);
@@ -3448,7 +3452,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_conversion_suffix(out, suffix);
             fprintf(out, ";\n");
         } else if (!scalarize_await_all_result && !dynamic_await_all_xrt_result &&
-                   !await_into_result && cg_coro_value_has_storage(f, v) &&
+                   !await_into_result && cg_coro_value_has_storage(ctx, f, v) &&
                    cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED) {
             fprintf(out, "    ");
             emit_vref(out, v);
@@ -3458,7 +3462,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         bool await_all_skip_scalar_result_clone =
             await_all && !cg_coro_await_all_result_needs_boundary_clone(await_all_elem_name);
-        if (!scalarize_await_all_result && cg_coro_value_has_storage(f, v) &&
+        if (!scalarize_await_all_result && cg_coro_value_has_storage(ctx, f, v) &&
             cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED &&
             xi_coro_value_needs_boundary_clone(v) && !await_all_skip_scalar_result_clone) {
             fprintf(out, "    ");
@@ -3544,7 +3548,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
             fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
         }
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_call_value_%u", v->id);
             emit_assign_from_owned_xrvalue_temp_ctx(ctx, out, v, tmp);
@@ -3585,7 +3589,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
             fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
         }
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_call_value_%u", v->id);
             emit_assign_from_owned_xrvalue_temp_ctx(ctx, out, v, tmp);
@@ -3610,7 +3614,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_CORO_OP) {
-        emit_aot_coro_op_stmt(out, f, v);
+        emit_aot_coro_op_stmt(ctx, out, f, v);
         return;
     }
 
@@ -3635,7 +3639,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             fprintf(out, "    XrValue _sleep_value_%u = XR_NULL_VAL;\n", v->id);
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_sleep_value_%u", v->id);
@@ -3657,7 +3661,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_time_module_helper_has_tagged_arg(time_helper))
             emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_time_method_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -3682,7 +3686,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         /* A scope block is a statement — scope exit yields no value.  When the
          * frame still reserves a slot for the unit result, park a null in it;
          * nothing ever reads it. */
-        bool has_storage = cg_coro_value_has_storage(f, v);
+        bool has_storage = cg_coro_value_has_storage(ctx, f, v);
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrAotResult _scope_exit_%u = xr_aot_scope_exit(ctx, %u);\n", v->id,
@@ -3733,7 +3737,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _timer_ch_%u = xr_aot_time_after(ctx, ", v->id);
         emit_int64_arg(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_timer_ch_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -3794,7 +3798,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (v->op == XI_UNBOX && v->nargs >= 1 &&
         cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_TAGGED) {
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = ");
@@ -3823,7 +3827,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _chan_%u = %s(ctx, ", v->id, emission.recipe_symbol);
         emit_int64_arg(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -3867,7 +3871,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, ", %s", bridge_mode);
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_try_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -3891,7 +3895,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 "    XrValue _chan_try_payload_%u = "
                 "xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(_chan_try_%u));\n",
                 v->id, v->id);
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = ");
@@ -3911,7 +3915,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         if (v->args[0] && v->args[0]->op == XI_CHAN_RECV)
             return;
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             // CHAN_RECV_STATUS carries an unboxed i64 rep (sr_def_rep), so the C
             // bool from xr_aot_recv_is_value assigns straight into the i64 slot;
             // no XrValue boxing is needed, matching the runtime helper and ISNULL.
@@ -3930,7 +3934,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_ISNULL && v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CHAN_TRY_RECV) {
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = !xr_aot_recv_is_value(_chan_try_%u);\n", v->args[0]->id);
@@ -3949,7 +3953,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _chan_closed_%u = xr_aot_chan_is_closed(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_chan_closed_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -3967,7 +3971,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _tuple_get_%u = xrt_tuple_get(", v->id);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %u);\n", (unsigned) v->aux_int);
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_tuple_get_%u", v->id);
             emit_assign_from_xrvalue_temp_ctx(ctx, out, v, tmp);
@@ -3988,7 +3992,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 fprintf(out,
                         "    _builtin_field_%u = xr_aot_bridge_value_to_xrt(_builtin_field_%u);\n",
                         v->id, v->id);
-            if (cg_coro_value_has_storage(f, v)) {
+            if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_builtin_field_%u", v->id);
                 emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4010,7 +4014,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _task_field_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_task_field_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4031,7 +4035,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _chan_field_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_field_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4052,7 +4056,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _wq_field_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_wq_field_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4073,7 +4077,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _rg_field_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_rg_field_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4094,7 +4098,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _latch_field_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_latch_field_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4115,7 +4119,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _sem_field_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_sem_field_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4136,7 +4140,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _event_count_field_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[56];
             snprintf(tmp, sizeof(tmp), "_event_count_field_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4148,7 +4152,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _task_method_%u = xr_aot_task_cancel(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_task_method_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4161,7 +4165,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _task_method_%u = xr_aot_task_poll(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_task_method_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4212,7 +4216,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    }\n");
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
-        if (cg_coro_value_has_storage(f, v))
+        if (cg_coro_value_has_storage(ctx, f, v))
             emit_bridge_stored_tagged_value(out, v);
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
@@ -4238,7 +4242,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         else
             fprintf(out, "-1");
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_wq_push_%u", v->id);
             emit_assign_from_bool_temp(out, v, tmp);
@@ -4261,7 +4265,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         else
             fprintf(out, "-1");
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_wq_push_range_%u", v->id);
             emit_assign_from_i64_temp(out, v, tmp);
@@ -4273,7 +4277,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    xr_aot_work_queue_close_void(ctx, ");
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             XrRep rep = cg_value_plan_storage_rep(ctx, v);
             if (rep != XR_REP_VOID) {
                 fprintf(out, "    ");
@@ -4306,7 +4310,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             "    XrValue _wq_try_pop_%u = xrt_tuple_make_consuming(2, (XrValue[]){"
             "xr_aot_bridge_value_to_xrt(_wq_try_pop_val_%u), XR_FROM_BOOL(_wq_try_pop_ok_%u)});\n",
             v->id, v->id, v->id);
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_wq_try_pop_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4318,8 +4322,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_value_generated_line_reset(ctx, out, v);
         int sid = cg_coro_claim_state(ctx, f, v, state_id);
         bool direct_i64_optional = cg_value_is_i64_optional_blocking_result_root(v) &&
-                                   cg_value_is_elided_i64_optional_blocking_result(f, v);
-        bool direct_xvalue = !direct_i64_optional && cg_coro_can_use_xvalue_result_ptr(f, v);
+                                   cg_value_is_elided_i64_optional_blocking_result(ctx, f, v);
+        bool direct_xvalue = !direct_i64_optional && cg_coro_can_use_xvalue_result_ptr(ctx, f, v);
         if (!direct_i64_optional && !direct_xvalue) {
             fprintf(out, "    XrSlotRef _wq_pop_slot_%u = ", v->id);
             emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
@@ -4412,7 +4416,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ", ");
         emit_int64_arg(out, v->args[1]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_rg_add_%u", v->id);
             emit_assign_from_bool_temp(out, v, tmp);
@@ -4424,7 +4428,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    xr_aot_result_group_flush_void(ctx, ");
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             XrRep rep = cg_value_plan_storage_rep(ctx, v);
             if (rep != XR_REP_VOID) {
                 fprintf(out, "    ");
@@ -4443,7 +4447,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ", ");
         emit_int64_arg(out, v->args[1]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_rg_reset_%u", v->id);
             emit_assign_from_bool_temp(out, v, tmp);
@@ -4461,7 +4465,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 "(XrValue[]){_rg_try_recv_val_%u, "
                 "XR_FROM_BOOL(_rg_try_recv_ok_%u)});\n",
                 v->id, v->id, v->id);
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_rg_try_recv_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -4473,7 +4477,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    xr_aot_result_group_close_void(ctx, ");
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             XrRep rep = cg_value_plan_storage_rep(ctx, v);
             if (rep != XR_REP_VOID) {
                 fprintf(out, "    ");
@@ -4490,8 +4494,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_value_generated_line_reset(ctx, out, v);
         int sid = cg_coro_claim_state(ctx, f, v, state_id);
         bool direct_i64_optional = cg_value_is_i64_optional_blocking_result_root(v) &&
-                                   cg_value_is_elided_i64_optional_blocking_result(f, v);
-        bool direct_xvalue = !direct_i64_optional && cg_coro_can_use_xvalue_result_ptr(f, v);
+                                   cg_value_is_elided_i64_optional_blocking_result(ctx, f, v);
+        bool direct_xvalue = !direct_i64_optional && cg_coro_can_use_xvalue_result_ptr(ctx, f, v);
         if (!direct_i64_optional && !direct_xvalue) {
             fprintf(out, "    XrSlotRef _rg_recv_slot_%u = ", v->id);
             emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
@@ -4581,7 +4585,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ", ");
         emit_int64_arg(out, v->args[1]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_latch_reset_%u", v->id);
             emit_assign_from_bool_temp(out, v, tmp);
@@ -4599,7 +4603,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         else
             fprintf(out, "1");
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_latch_done_%u", v->id);
             emit_assign_from_i64_temp(out, v, tmp);
@@ -4612,7 +4616,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[48];
             snprintf(tmp, sizeof(tmp), "_latch_try_wait_%u", v->id);
             emit_assign_from_bool_temp(out, v, tmp);
@@ -4624,7 +4628,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    xr_aot_countdown_latch_close_void(ctx, ");
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             XrRep rep = cg_value_plan_storage_rep(ctx, v);
             if (rep != XR_REP_VOID) {
                 fprintf(out, "    ");
@@ -4699,7 +4703,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         else
             fprintf(out, "1");
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_sem_release_%u", v->id);
             emit_assign_from_i64_temp(out, v, tmp);
@@ -4712,7 +4716,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[48];
             snprintf(tmp, sizeof(tmp), "_sem_try_acquire_%u", v->id);
             emit_assign_from_bool_temp(out, v, tmp);
@@ -4724,7 +4728,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    xr_aot_semaphore_close_void(ctx, ");
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             XrRep rep = cg_value_plan_storage_rep(ctx, v);
             if (rep != XR_REP_VOID) {
                 fprintf(out, "    ");
@@ -4800,7 +4804,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         else
             fprintf(out, "1");
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[56];
             snprintf(tmp, sizeof(tmp), "_event_count_advance_%u", v->id);
             emit_assign_from_i64_temp(out, v, tmp);
@@ -4812,7 +4816,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    xr_aot_event_count_close_void(ctx, ");
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             XrRep rep = cg_value_plan_storage_rep(ctx, v);
             if (rep != XR_REP_VOID) {
                 fprintf(out, "    ");
@@ -4975,7 +4979,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_chan_recv_timeout_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_recv_timeout_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
-        if (result_observed && cg_coro_value_has_storage(f, v))
+        if (result_observed && cg_coro_value_has_storage(ctx, f, v))
             emit_bridge_stored_owned_tagged_value(out, v);
         if (result_observed)
             emit_coro_debug_result_source_var_sync(ctx, out, f, v);
@@ -5040,7 +5044,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_chan_send_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_send_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             fprintf(out, "    XrValue _chan_send_value_%u = XR_NULL_VAL;\n", v->id);
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_chan_send_value_%u", v->id);
@@ -5110,7 +5114,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_chan_recv_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
-        if (cg_coro_value_has_storage(f, v))
+        if (cg_coro_value_has_storage(ctx, f, v))
             emit_bridge_stored_tagged_value(out, v);
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         if (status)
@@ -5155,7 +5159,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_chan_recv_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
-        if (result_observed && cg_coro_value_has_storage(f, v))
+        if (result_observed && cg_coro_value_has_storage(ctx, f, v))
             emit_bridge_stored_owned_tagged_value(out, v);
         if (result_observed)
             emit_coro_debug_result_source_var_sync(ctx, out, f, v);
@@ -5205,7 +5209,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_chan_recv_or_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_recv_or_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
-        if (cg_coro_value_has_storage(f, v))
+        if (cg_coro_value_has_storage(ctx, f, v))
             emit_bridge_stored_tagged_value(out, v);
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
@@ -5241,7 +5245,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 fprintf(out, ", %s", bridge_mode);
             fprintf(out, ");\n");
             emit_value_generated_line_reset(ctx, out, v);
-            if (cg_coro_value_has_storage(f, v)) {
+            if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
                 emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -5255,7 +5259,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_vref(out, v->args[0]);
             fprintf(out, ");\n");
             emit_value_generated_line_reset(ctx, out, v);
-            if (cg_coro_value_has_storage(f, v)) {
+            if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
                 emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -5268,7 +5272,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "    XrValue _chan_method_%u = xr_aot_chan_close(ctx, ", v->id);
             emit_vref(out, v->args[0]);
             fprintf(out, ");\n");
-            if (cg_coro_value_has_storage(f, v)) {
+            if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
                 emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -5279,7 +5283,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "    XrValue _chan_method_%u = xr_aot_chan_is_closed(ctx, ", v->id);
             emit_vref(out, v->args[0]);
             fprintf(out, ");\n");
-            if (cg_coro_value_has_storage(f, v)) {
+            if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
                 emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -5301,7 +5305,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
          * Generating nothing for the unit form is how a value error raised
          * across a coroutine boundary used to vanish. */
         if (cg_value_type_is_bool(v)) {
-            if (cg_coro_value_has_storage(f, v)) {
+            if (cg_coro_value_has_storage(ctx, f, v)) {
                 fprintf(out, "    ");
                 emit_vref(out, v);
                 if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
@@ -5323,7 +5327,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (v->op == XI_ERR_CATCH) {
         fprintf(out, "    XrValue _err_catch_%u = xrt_pending_error;\n", v->id);
         fprintf(out, "    xrt_pending_error = XR_NULL_VAL;\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_err_catch_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -5368,7 +5372,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         fprintf(out, "    XrValue _cleanup_catch_%u = f->cleanup_exception;\n", v->id);
         fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_cleanup_catch_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
@@ -5438,7 +5442,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_GET_BUILTIN) {
-        if (cg_coro_value_has_storage(f, v)) {
+        if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[64];
             snprintf(tmp, sizeof(tmp), "_builtin_value_%u", v->id);
             fprintf(out, "    XrValue %s = xr_aot_get_builtin(ctx, %d);\n", tmp, (int) v->aux_int);
@@ -5780,15 +5784,15 @@ static uint32_t cg_coro_net_async_state_count(XiCgenCtx *ctx, const XiFunc *f) {
 /* A logical frame slot occupies a physical AOT slot iff it is a parameter/phi
  * or a value that passes the storage test; this mirrors the slot set the frame
  * type / trace / release emitters walk. */
-static bool cg_coro_plan_slot_is_physical(const XiFunc *f, const XiCoroSlot *s) {
-    return s->kind != XI_CORO_SLOT_VALUE || cg_coro_value_has_storage(f, s->value);
+static bool cg_coro_plan_slot_is_physical(XiCgenCtx *ctx, const XiFunc *f, const XiCoroSlot *s) {
+    return s->kind != XI_CORO_SLOT_VALUE || cg_coro_value_has_storage(ctx, f, s->value);
 }
 
 static uint16_t cg_coro_plan_slot_physical_root_width(XiCgenCtx *ctx, const XiFunc *f,
                                                       const XiCoroSlot *s) {
     if (s && s->kind == XI_CORO_SLOT_PARAM)
         return 0;
-    return s && s->frame_root && cg_coro_plan_slot_is_physical(f, s) &&
+    return s && s->frame_root && cg_coro_plan_slot_is_physical(ctx, f, s) &&
                    cg_coro_value_can_trace_frame_slot(ctx, f, s->value)
                ? cg_coro_value_frame_root_width(ctx, f, s->value)
                : 0;
@@ -5798,7 +5802,7 @@ static uint16_t cg_coro_plan_slot_physical_release_width(XiCgenCtx *ctx, const X
                                                          const XiCoroSlot *s) {
     if (s && s->kind == XI_CORO_SLOT_PARAM)
         return 0;
-    return s && s->frame_release && cg_coro_plan_slot_is_physical(f, s) &&
+    return s && s->frame_release && cg_coro_plan_slot_is_physical(ctx, f, s) &&
                    cg_coro_value_frame_root_width(ctx, f, s->value) > 0
                ? cg_coro_value_frame_root_width(ctx, f, s->value)
                : 0;

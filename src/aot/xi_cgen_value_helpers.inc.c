@@ -35,13 +35,13 @@ static bool cg_value_type_is_unsigned_int(const XiValue *v) {
     }
 }
 
-static void emit_boxed_value_ref(FILE *out, const XiValue *v) {
+static void emit_boxed_value_ref(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (v && v->type && v->type->kind == XR_KIND_NULL) {
         fprintf(out, "XR_NULL_VAL");
         return;
     }
 
-    XrRep rep = cg_rep(v);
+    XrRep rep = cg_value_plan_storage_rep(ctx, v);
     if (rep == XR_REP_TAGGED) {
         emit_vref(out, v);
     } else if (rep == XR_REP_PTR || rep == XR_REP_RAWPTR) {
@@ -1182,17 +1182,15 @@ static void emit_adt_enum_construct_expr(XiCgenCtx *ctx, FILE *out, const XiEnum
     fprintf(out, ")");
 }
 
-static void emit_adt_enum_constructor_recipe_expr(
-    XiCgenCtx *ctx, FILE *out, const XiValue *value,
-    const XrCValueEmissionView *recipe) {
-    if (!ctx || !out || !value || !recipe || !recipe->recipe_symbol ||
-        !recipe->recipe_type_name || !recipe->recipe_member_name) {
+static void emit_adt_enum_constructor_recipe_expr(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                                  const XrCValueEmissionView *recipe) {
+    if (!ctx || !out || !value || !recipe || !recipe->recipe_symbol || !recipe->recipe_type_name ||
+        !recipe->recipe_member_name) {
         emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "%s(XRT_ENUM_AGGREGATE_MAKE(%u, %u, %u, ",
-            recipe->recipe_symbol, recipe->recipe_layout_id,
-            recipe->recipe_discriminant,
+    fprintf(out, "%s(XRT_ENUM_AGGREGATE_MAKE(%u, %u, %u, ", recipe->recipe_symbol,
+            recipe->recipe_layout_id, recipe->recipe_discriminant,
             (unsigned) recipe->recipe_argument_count);
     emit_c_string_literal(out, recipe->recipe_type_name);
     fprintf(out, ", ");
@@ -1220,8 +1218,7 @@ static void emit_call_hidden_closure(FILE *out, const XiFunc *current, const XiF
     fprintf(out, ".ptr");
 }
 
-static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out,
-                                 const XiFunc *function,
+static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *function,
                                  const XiValue *v) {
     XrCValueEmissionView recipe = {0};
     if (!cg_string_concat_emission_view(ctx, function, v, &recipe)) {
@@ -1231,23 +1228,19 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out,
 
     fprintf(out, "({ xrt_strpart_t _scp_%u[%u]; ", v->id, (unsigned) v->nargs);
     for (uint16_t i = 0; i < v->nargs; i++) {
-        const XrCRecipeArgumentView *argument =
-            &recipe.recipe_arguments[i];
+        const XrCRecipeArgumentView *argument = &recipe.recipe_arguments[i];
         if (argument->kind == XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64) {
-            const XiValue *source = cg_string_concat_direct_u64_source(
-                ctx, function, v->args[i], argument);
-            fprintf(out, "xrt_strpart_init_u64(&_scp_%u[%u], (uint64_t)",
-                    v->id, (unsigned) i);
+            const XiValue *source =
+                cg_string_concat_direct_u64_source(ctx, function, v->args[i], argument);
+            fprintf(out, "xrt_strpart_init_u64(&_scp_%u[%u], (uint64_t)", v->id, (unsigned) i);
             emit_value_as_rep_ctx(ctx, out, source, XR_REP_I64);
         } else {
-            fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id,
-                    (unsigned) i);
+            fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
             emit_value_as_display_tagged(ctx, out, v->args[i]);
         }
         fprintf(out, "); ");
     }
-    fprintf(out, "%s(%u, _scp_%u); })", recipe.recipe_symbol,
-            (unsigned) v->nargs, v->id);
+    fprintf(out, "%s(%u, _scp_%u); })", recipe.recipe_symbol, (unsigned) v->nargs, v->id);
 }
 
 static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -1267,18 +1260,15 @@ static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
     }
     fprintf(out, "    {\n        xrt_strpart_t _scp_%u[%u];\n", v->id, (unsigned) v->nargs);
     for (uint16_t i = 0; i < v->nargs; i++) {
-        const XrCRecipeArgumentView *argument =
-            &recipe.recipe_arguments[i];
+        const XrCRecipeArgumentView *argument = &recipe.recipe_arguments[i];
         if (argument->kind == XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64) {
-            const XiValue *source = cg_string_concat_direct_u64_source(
-                ctx, f, v->args[i], argument);
-            fprintf(out,
-                    "        xrt_strpart_init_u64(&_scp_%u[%u], (uint64_t)",
-                    v->id, (unsigned) i);
+            const XiValue *source =
+                cg_string_concat_direct_u64_source(ctx, f, v->args[i], argument);
+            fprintf(out, "        xrt_strpart_init_u64(&_scp_%u[%u], (uint64_t)", v->id,
+                    (unsigned) i);
             emit_value_as_rep_ctx(ctx, out, source, XR_REP_I64);
         } else {
-            fprintf(out, "        xrt_strpart_init(&_scp_%u[%u], ", v->id,
-                    (unsigned) i);
+            fprintf(out, "        xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
             emit_value_as_display_tagged(ctx, out, v->args[i]);
         }
         fprintf(out, ");\n");
@@ -1288,8 +1278,7 @@ static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
     fprintf(out, " = ");
     const char *suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_decl_storage_rep(ctx, f, v));
-    fprintf(out, "%s(%u, _scp_%u)", recipe.recipe_symbol,
-            (unsigned) v->nargs, v->id);
+    fprintf(out, "%s(%u, _scp_%u)", recipe.recipe_symbol, (unsigned) v->nargs, v->id);
     emit_conversion_suffix(out, suffix);
     fprintf(out, ";\n    }\n");
     emit_value_generated_line_reset(ctx, out, v);

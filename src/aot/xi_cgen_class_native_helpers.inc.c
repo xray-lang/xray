@@ -6421,13 +6421,14 @@ static bool cg_class_native_const_int_value(const XiValue *value, int64_t *out) 
     return true;
 }
 
-static bool cg_class_native_value_is_nothrow_native_scalar(const XiValue *v) {
-    if (!v || v->nargs < 2 || cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
+static bool cg_class_native_value_is_nothrow_native_scalar(XiCgenCtx *ctx, const XiValue *v) {
+    if (!v || v->nargs < 2 || cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[1]) != XR_REP_I64)
         return false;
     if (v->op == XI_EQ || v->op == XI_NE || v->op == XI_LT || v->op == XI_LE || v->op == XI_GT ||
         v->op == XI_GE)
         return true;
-    if (cg_rep(v) != XR_REP_I64)
+    if (cg_value_plan_storage_rep(ctx, v) != XR_REP_I64)
         return false;
     if (v->op == XI_ADD || v->op == XI_SUB || v->op == XI_MUL)
         return true;
@@ -6458,7 +6459,7 @@ static bool cg_class_native_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f,
             if (v->flags & XI_FLAG_MAY_THROW) {
                 if (cg_class_native_value_is_nothrow_lowlevel(ctx, f, v, (uint8_t) (depth + 1)))
                     continue;
-                if (cg_class_native_value_is_nothrow_native_scalar(v))
+                if (cg_class_native_value_is_nothrow_native_scalar(ctx, v))
                     continue;
                 if (!cg_class_native_call_is_nothrow_direct_depth(ctx, f, v, depth))
                     return true;

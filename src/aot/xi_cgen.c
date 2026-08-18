@@ -93,6 +93,10 @@ static inline XrRep cg_rep(const XiValue *v) {
     return v ? (XrRep) v->rep : XR_REP_TAGGED;
 }
 
+/* Defined in xi_cgen_abi_helpers.inc.c, which is included below. Declared here
+ * because the value predicates above it already read the frozen plan. */
+static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v);
+
 static bool cg_func_needs_sync_go_wrapper_ctx(XiCgenCtx *ctx, const XiFunc *f);
 static bool cg_func_needs_sync_backedge_heartbeat_ctx(XiCgenCtx *ctx, const XiFunc *f);
 static bool cg_sync_go_param_needs_release(const XiFunc *f, uint16_t index);
@@ -136,9 +140,9 @@ static bool cg_const_int_fits_scalar_rep(int64_t value, uint8_t scalar_rep) {
     return xaot_native_int_const_fits(scalar_rep, value);
 }
 
-static bool cg_value_narrow_local_scalar_rep(const XiValue *v, uint8_t depth,
+static bool cg_value_narrow_local_scalar_rep(XiCgenCtx *ctx, const XiValue *v, uint8_t depth,
                                              uint8_t *out_scalar_rep) {
-    if (!v || cg_rep(v) != XR_REP_I64 || depth > 8)
+    if (!v || cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 || depth > 8)
         return false;
 
     uint8_t op_width = cg_narrow_int_scalar_rep(v);
@@ -163,7 +167,7 @@ static bool cg_value_narrow_local_scalar_rep(const XiValue *v, uint8_t depth,
         if (arg->op == XI_CONST)
             continue;
         uint8_t arg_width = 0;
-        if (!cg_value_narrow_local_scalar_rep(arg, (uint8_t) (depth + 1), &arg_width) ||
+        if (!cg_value_narrow_local_scalar_rep(ctx, arg, (uint8_t) (depth + 1), &arg_width) ||
             !cg_native_int_ctype(arg_width))
             return false;
         if (phi_width == XR_SCALAR_REP_NONE)
@@ -186,14 +190,14 @@ static bool cg_value_narrow_local_scalar_rep(const XiValue *v, uint8_t depth,
     return true;
 }
 
-static const char *local_ctype_str(const XiValue *v) {
+static const char *local_ctype_str(XiCgenCtx *ctx, const XiValue *v) {
     uint8_t scalar_rep = XR_SCALAR_REP_NONE;
-    if (cg_value_narrow_local_scalar_rep(v, 0, &scalar_rep)) {
+    if (cg_value_narrow_local_scalar_rep(ctx, v, 0, &scalar_rep)) {
         const char *ctype = cg_native_int_ctype(scalar_rep);
         if (ctype)
             return ctype;
     }
-    return ctype_str(cg_rep(v));
+    return ctype_str(cg_value_plan_storage_rep(ctx, v));
 }
 
 static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
@@ -221,14 +225,15 @@ static bool cg_value_is_i64_optional_blocking_result_root(const XiValue *v) {
            xi_value_is_blocking_result_group_method_call(v);
 }
 
-static const XiValue *cg_i64_optional_blocking_result_root(const XiValue *v) {
+static const XiValue *cg_i64_optional_blocking_result_root(XiCgenCtx *ctx, const XiValue *v) {
     const XiValue *cur = v;
     for (uint8_t depth = 0; cur && depth < 16; depth++) {
         if (cg_value_is_i64_optional_blocking_result_root(cur))
             return cur;
         if (((xi_copy_is_identity_alias(cur) || xi_op_is_identity_forward(cur->op)) &&
-             cg_rep(cur) == XR_REP_TAGGED && cur->nargs >= 1) ||
-            (cur->op == XI_UNBOX && cg_rep(cur) == XR_REP_TAGGED && cur->nargs >= 1)) {
+             cg_value_plan_storage_rep(ctx, cur) == XR_REP_TAGGED && cur->nargs >= 1) ||
+            (cur->op == XI_UNBOX && cg_value_plan_storage_rep(ctx, cur) == XR_REP_TAGGED &&
+             cur->nargs >= 1)) {
             cur = cur->args[0];
             continue;
         }
@@ -244,8 +249,8 @@ static bool cg_i64_optional_null_compare(const XiValue *user, const XiValue *tar
            (user->args[1] == target && cg_value_is_null_const(user->args[0]));
 }
 
-static bool cg_i64_optional_value_uses_are_native(const XiFunc *f, const XiValue *target,
-                                                  uint8_t depth) {
+static bool cg_i64_optional_value_uses_are_native(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *target, uint8_t depth) {
     if (!f || !target || depth > 16)
         return false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -277,8 +282,9 @@ static bool cg_i64_optional_value_uses_are_native(const XiFunc *f, const XiValue
                     case XI_UNBOX:
                         if (ai != 0)
                             return false;
-                        if (cg_rep(user) == XR_REP_TAGGED &&
-                            !cg_i64_optional_value_uses_are_native(f, user, (uint8_t) (depth + 1)))
+                        if (cg_value_plan_storage_rep(ctx, user) == XR_REP_TAGGED &&
+                            !cg_i64_optional_value_uses_are_native(ctx, f, user,
+                                                                   (uint8_t) (depth + 1)))
                             return false;
                         break;
                     case XI_COPY:
@@ -286,8 +292,9 @@ static bool cg_i64_optional_value_uses_are_native(const XiFunc *f, const XiValue
                     case XI_OWNER_FORWARD:
                         if (ai != 0)
                             return false;
-                        if (cg_rep(user) == XR_REP_TAGGED &&
-                            !cg_i64_optional_value_uses_are_native(f, user, (uint8_t) (depth + 1)))
+                        if (cg_value_plan_storage_rep(ctx, user) == XR_REP_TAGGED &&
+                            !cg_i64_optional_value_uses_are_native(ctx, f, user,
+                                                                   (uint8_t) (depth + 1)))
                             return false;
                         break;
                     default:
@@ -307,9 +314,10 @@ static bool cg_i64_optional_value_uses_are_native(const XiFunc *f, const XiValue
     return true;
 }
 
-static bool cg_value_is_elided_i64_optional_blocking_result(const XiFunc *f, const XiValue *v) {
-    const XiValue *root = cg_i64_optional_blocking_result_root(v);
-    return root && cg_i64_optional_value_uses_are_native(f, root, 0);
+static bool cg_value_is_elided_i64_optional_blocking_result(XiCgenCtx *ctx, const XiFunc *f,
+                                                            const XiValue *v) {
+    const XiValue *root = cg_i64_optional_blocking_result_root(ctx, v);
+    return root && cg_i64_optional_value_uses_are_native(ctx, f, root, 0);
 }
 
 static bool cg_type_has_no_aot_arc_header(const XrType *type) {
@@ -4826,7 +4834,7 @@ static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const Xi
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     if (plan && plan->rep.c_type)
         return plan->rep.c_type;
-    return local_ctype_str(v);
+    return local_ctype_str(ctx, v);
 }
 
 /* Storage representation of v's declared C local. Must stay in sync with
@@ -4862,7 +4870,7 @@ static const char *cg_coro_decl_ctype(XiCgenCtx *ctx, const XiFunc *f, const XiV
     const char *t = emission_status == CG_VALUE_EMISSION_FOUND ? emission.c_type : NULL;
     if (!t) {
         const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
-        t = (plan && plan->rep.c_type) ? plan->rep.c_type : local_ctype_str(v);
+        t = (plan && plan->rep.c_type) ? plan->rep.c_type : local_ctype_str(ctx, v);
     }
     return (t && strcmp(t, "void") == 0) ? "XrValue" : t;
 }
@@ -6603,7 +6611,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             for (uint16_t i = 0; i < v->nargs; i++) {
                 if (i > 0)
                     fprintf(out, ", ");
-                emit_boxed_value_ref(out, v->args[i]);
+                emit_boxed_value_ref(ctx, out, v->args[i]);
             }
             fprintf(out, "}");
         }
@@ -7024,7 +7032,7 @@ static const char *cg_debug_value_ctype(XiCgenCtx *ctx, const XiFunc *f, const X
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     if (plan && plan->rep.c_type)
         return plan->rep.c_type;
-    return local_ctype_str(v);
+    return local_ctype_str(ctx, v);
 }
 
 static XrRep cg_debug_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
@@ -7142,7 +7150,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         return false;
     if (cg_is_void_like(v) || v->op == XI_TRY || v->op == XI_END_TRY)
         return false;
-    if (cg_value_is_elided_i64_optional_blocking_result(f, v))
+    if (cg_value_is_elided_i64_optional_blocking_result(ctx, f, v))
         return false;
     if (xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v))
         return false;
@@ -8393,7 +8401,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
             return true;
         if (xicgen_compare_uses_unsigned(user))
             return true;
-        if (xicgen_compare_uses_rawptr(user))
+        if (xicgen_compare_uses_rawptr(ctx, user))
             return true;
         XrRep a0 = cg_value_plan_storage_rep(ctx, user->args[0]);
         XrRep a1 = cg_value_plan_storage_rep(ctx, user->args[1]);
@@ -9237,10 +9245,10 @@ static bool cg_u64_mul_wide_operand_equivalent(const XiValue *a, const XiValue *
            a->type->kind == XR_KIND_INT && b->type->kind == XR_KIND_INT && a->aux_int == b->aux_int;
 }
 
-static bool cg_u64_mul_wide_operand_is_constant(const XiValue *v) {
+static bool cg_u64_mul_wide_operand_is_constant(XiCgenCtx *ctx, const XiValue *v) {
     v = cg_unwrap_identity_value(v);
     return v && v->op == XI_CONST && v->type && v->type->kind == XR_KIND_INT &&
-           cg_rep(v) == XR_REP_I64;
+           cg_value_plan_storage_rep(ctx, v) == XR_REP_I64;
 }
 
 static bool cg_u64_mul_wide_value_is_eligible(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
@@ -9268,8 +9276,8 @@ static bool cg_u64_mul_wide_pair(XiCgenCtx *ctx, const XiFunc *f, const XiValue 
                                  const XiValue **out_partner, bool *out_is_first) {
     if (!out_partner || !out_is_first || !cg_u64_mul_wide_value_is_eligible(ctx, f, v) ||
         !v->block ||
-        (!cg_u64_mul_wide_operand_is_constant(v->args[0]) &&
-         !cg_u64_mul_wide_operand_is_constant(v->args[1])))
+        (!cg_u64_mul_wide_operand_is_constant(ctx, v->args[0]) &&
+         !cg_u64_mul_wide_operand_is_constant(ctx, v->args[1])))
         return false;
 
     const XiValue *partner = NULL;

@@ -133,9 +133,10 @@ static bool cg_divmod_uses_unsigned(const XiValue *v) {
  * throw as the signed path; clang folds the check and constant divisors after
  * inlining). Must be tried before the signed const / positive-divisor paths,
  * which select the signed owner kinds. */
-static bool emit_native_unsigned_div_mod_expr(FILE *out, const XiValue *v) {
-    if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
-        cg_rep(v->args[1]) != XR_REP_I64)
+static bool emit_native_unsigned_div_mod_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (!v || v->nargs < 2 || cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v->args[1]) != XR_REP_I64)
         return false;
     if (!cg_divmod_uses_unsigned(v))
         return false;

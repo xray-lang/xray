@@ -1061,7 +1061,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         }
     } else if (result_rep == XR_REP_I64) {
-        if (!emit_native_unsigned_div_mod_expr(out, v) &&
+        if (!emit_native_unsigned_div_mod_expr(ctx, out, v) &&
             !emit_native_positive_divisor_div_mod_expr(ctx, out, f, v)) {
             const char *fn = xi_to_c_template_div_mod_int_fn(v->op);
             fprintf(out, "%s(", fn);
@@ -5927,10 +5927,11 @@ static void xicgen_emit_uintptr_compare_arg(XiCgenCtx *ctx, FILE *out, const XiV
     fprintf(out, ")");
 }
 
-static bool xicgen_compare_uses_rawptr(const XiValue *v) {
+static bool xicgen_compare_uses_rawptr(XiCgenCtx *ctx, const XiValue *v) {
     if (!v || v->nargs < 2)
         return false;
-    return cg_rep(v->args[0]) == XR_REP_RAWPTR || cg_rep(v->args[1]) == XR_REP_RAWPTR;
+    return cg_value_plan_storage_rep(ctx, v->args[0]) == XR_REP_RAWPTR ||
+           cg_value_plan_storage_rep(ctx, v->args[1]) == XR_REP_RAWPTR;
 }
 
 static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc *f,
@@ -7041,11 +7042,11 @@ static void xicgen_emit_math_arg(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     emit_value_as_rep_ctx(ctx, out, v, XR_REP_F64);
 }
 
-static bool xicgen_math_all_args_rep(const XiValue *v, XrRep rep) {
+static bool xicgen_math_all_args_rep(XiCgenCtx *ctx, const XiValue *v, XrRep rep) {
     if (!v || v->nargs == 0)
         return false;
     for (uint16_t i = 0; i < v->nargs; i++) {
-        if (!v->args[i] || cg_rep(v->args[i]) != rep)
+        if (!v->args[i] || cg_value_plan_storage_rep(ctx, v->args[i]) != rep)
             return false;
     }
     return true;
@@ -7195,7 +7196,7 @@ static bool xicgen_emit_math_raw_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
             return true;
         }
         if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 &&
-            xicgen_math_all_args_rep(v, XR_REP_I64))
+            xicgen_math_all_args_rep(ctx, v, XR_REP_I64))
             xicgen_emit_math_i64_minmax(ctx, out, v, true, 0);
         else
             xicgen_emit_math_f64_minmax(ctx, out, v, true, 0);
@@ -7211,7 +7212,7 @@ static bool xicgen_emit_math_raw_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
             return true;
         }
         if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 &&
-            xicgen_math_all_args_rep(v, XR_REP_I64))
+            xicgen_math_all_args_rep(ctx, v, XR_REP_I64))
             xicgen_emit_math_i64_minmax(ctx, out, v, false, 0);
         else
             xicgen_emit_math_f64_minmax(ctx, out, v, false, 0);
@@ -7219,7 +7220,7 @@ static bool xicgen_emit_math_raw_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
     }
     if (strcmp(name, "clamp") == 0 && v->nargs == 3) {
         if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 &&
-            xicgen_math_all_args_rep(v, XR_REP_I64))
+            xicgen_math_all_args_rep(ctx, v, XR_REP_I64))
             xicgen_emit_math_i64_clamp(ctx, out, v->args[0], v->args[1], v->args[2]);
         else
             xicgen_emit_math_f64_clamp(ctx, out, v->args[0], v->args[1], v->args[2]);
@@ -7316,10 +7317,10 @@ static bool xicgen_emit_math_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         expr_rep = XR_REP_TAGGED;
     } else if ((strcmp(name, "min") == 0 || strcmp(name, "max") == 0) && v &&
                cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 &&
-               xicgen_math_all_args_rep(v, XR_REP_I64)) {
+               xicgen_math_all_args_rep(ctx, v, XR_REP_I64)) {
         expr_rep = XR_REP_I64;
     } else if (strcmp(name, "clamp") == 0 && v && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 &&
-               xicgen_math_all_args_rep(v, XR_REP_I64)) {
+               xicgen_math_all_args_rep(ctx, v, XR_REP_I64)) {
         expr_rep = XR_REP_I64;
     } else if ((strcmp(name, "min") == 0 || strcmp(name, "max") == 0) && v && v->nargs == 0 &&
                cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED) {
@@ -7478,7 +7479,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     } else if (strcmp(bn, "chr") == 0) {
         XR_DCHECK(v->nargs >= 1, "builtin chr: need arg");
         fprintf(out, "xrt_chr(");
-        emit_boxed_value_ref(out, v->args[0]);
+        emit_boxed_value_ref(ctx, out, v->args[0]);
         fprintf(out, ")");
     } else if (strcmp(bn, "iter_new") == 0) {
         XR_DCHECK(v->nargs >= 1, "builtin iter_new: need arg");
@@ -12559,7 +12560,7 @@ static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         fprintf(out, ")");
         return;
     }
-    if (xicgen_compare_uses_rawptr(v)) {
+    if (xicgen_compare_uses_rawptr(ctx, v)) {
         fprintf(out, "%s(%s, ", adapter, relation);
         xicgen_emit_uintptr_compare_arg(ctx, out, v->args[0]);
         fprintf(out, ", ");
