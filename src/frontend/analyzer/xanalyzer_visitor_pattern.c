@@ -336,6 +336,48 @@ static void xa_check_array_pattern_elements(XaInferContext *ctx, AstNode *patter
     }
 }
 
+// Range patterns cover integer subjects only: floating-point endpoints have
+// no exact-step semantics and NaN breaks the ordering the lowering relies on,
+// so they are rejected instead of silently accepted.
+static void xa_check_range_pattern_endpoint(XaInferContext *ctx, AstNode *endpoint) {
+    if (!ctx || !endpoint)
+        return;
+    XrType *t = xa_visit_infer_expr(ctx, endpoint);
+    if (t && XR_TYPE_IS_FLOAT(t)) {
+        XrLocation loc = {
+            .file = ctx->file_path, .line = endpoint->line, .column = endpoint->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   "range pattern endpoints must be integers; use an `if` guard "
+                                   "for floating-point comparisons",
+                                   &loc);
+    }
+}
+
+static void xa_check_range_pattern_operands(XaInferContext *ctx, AstNode *pattern) {
+    if (!ctx || !pattern)
+        return;
+    switch (pattern->type) {
+        case AST_PATTERN_RANGE:
+            xa_check_range_pattern_endpoint(ctx, pattern->as.pattern_range.start);
+            xa_check_range_pattern_endpoint(ctx, pattern->as.pattern_range.end);
+            break;
+        case AST_PATTERN_MULTI: {
+            PatternMultiNode *mp = &pattern->as.pattern_multi;
+            for (int i = 0; i < mp->count; i++)
+                xa_check_range_pattern_operands(ctx, mp->patterns[i]);
+            break;
+        }
+        case AST_PATTERN_TUPLE: {
+            PatternTupleNode *tp = &pattern->as.pattern_tuple;
+            for (int i = 0; i < tp->count; i++)
+                xa_check_range_pattern_operands(ctx, tp->patterns[i]);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
 // Recursively register binding symbols introduced by `pattern` into the
 // current scope. `slot_type` is the static type of the value flowing
 // into this position; for tuple sub-slots it's drawn from the tuple's
@@ -496,6 +538,7 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
         // captured by a tuple destructure (`(x, _) => x + 1`) need
         // fresh scoped symbols typed from the matching subject slot.
         xa_check_array_pattern_elements(ctx, arm_node->pattern);
+        xa_check_range_pattern_operands(ctx, arm_node->pattern);
 
         bool has_binding = xa_pattern_has_binding(arm_node->pattern);
         if (has_binding) {
