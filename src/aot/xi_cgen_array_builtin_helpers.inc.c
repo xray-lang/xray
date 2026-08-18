@@ -32,8 +32,8 @@ static bool cg_array_builtin_resize_zero_is_trusted(XiCgenCtx *ctx, const XiFunc
 static bool cg_array_builtin_fresh_storage_is_trusted(XiCgenCtx *ctx, const XiFunc *f,
                                                       const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
-    if (!v || v->op != XI_CALL_BUILTIN || v->nargs < 1 || !v->args[0] ||
-        !v->args[0]->type || !XR_TYPE_IS_INT(v->args[0]->type))
+    if (!v || v->op != XI_CALL_BUILTIN || v->nargs < 1 || !v->args[0] || !v->args[0]->type ||
+        !XR_TYPE_IS_INT(v->args[0]->type))
         return false;
     (void) ctx;
     (void) f;
@@ -64,91 +64,131 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         XrCValueEmissionView emission = {0};
         uint32_t count_semantic = XR_SEMANTIC_INDEX_NONE;
         uint32_t fill_semantic = XR_SEMANTIC_INDEX_NONE;
-        bool with_capacity =
-            v->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY;
+        bool with_capacity = v->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY;
         bool filled = v->array_intrinsic_kind == XI_ARRAY_INTRINSIC_FILLED_NEW;
         uint8_t expected_materialization = with_capacity
-            ? XR_C_VALUE_MATERIALIZATION_ARRAY_WITH_CAPACITY
-            : XR_C_VALUE_MATERIALIZATION_ARRAY_FILLED_NEW;
-        const char *expected_symbol = with_capacity
-            ? "xrt_array_with_capacity_value"
-            : "xrt_array_new_filled_value";
+                                               ? XR_C_VALUE_MATERIALIZATION_ARRAY_WITH_CAPACITY
+                                               : XR_C_VALUE_MATERIALIZATION_ARRAY_FILLED_NEW;
+        const char *expected_symbol =
+            with_capacity ? "xrt_array_with_capacity_value" : "xrt_array_new_filled_value";
         const char *storage_symbol = NULL;
         uint8_t xi_storage = XR_TARGET_ARRAY_STORAGE_NONE;
-        CgValueEmissionStatus status =
-            cg_value_emission_view(ctx, f, v, &emission);
-        bool count_identity = v->nargs > 0 && v->args[0] &&
-            cg_value_semantic_id(ctx, f, v->args[0], &count_semantic);
-        bool fill_identity = !filled ||
-            (v->nargs > 1 && v->args[1] &&
-             cg_value_semantic_id(ctx, f, v->args[1], &fill_semantic));
+        CgValueEmissionStatus status = cg_value_emission_view(ctx, f, v, &emission);
+        bool count_identity =
+            v->nargs > 0 && v->args[0] && cg_value_semantic_id(ctx, f, v->args[0], &count_semantic);
+        bool fill_identity = !filled || (v->nargs > 1 && v->args[1] &&
+                                         cg_value_semantic_id(ctx, f, v->args[1], &fill_semantic));
         switch (v->array_element_storage) {
-            case XR_ELEM_I8: xi_storage = XR_TARGET_ARRAY_STORAGE_I8; break;
-            case XR_ELEM_U8: xi_storage = XR_TARGET_ARRAY_STORAGE_U8; break;
-            case XR_ELEM_I16: xi_storage = XR_TARGET_ARRAY_STORAGE_I16; break;
-            case XR_ELEM_U16: xi_storage = XR_TARGET_ARRAY_STORAGE_U16; break;
-            case XR_ELEM_I32: xi_storage = XR_TARGET_ARRAY_STORAGE_I32; break;
-            case XR_ELEM_U32: xi_storage = XR_TARGET_ARRAY_STORAGE_U32; break;
-            case XR_ELEM_I64: xi_storage = XR_TARGET_ARRAY_STORAGE_I64; break;
-            case XR_ELEM_U64: xi_storage = XR_TARGET_ARRAY_STORAGE_U64; break;
-            case XR_ELEM_F32: xi_storage = XR_TARGET_ARRAY_STORAGE_F32; break;
-            case XR_ELEM_F64: xi_storage = XR_TARGET_ARRAY_STORAGE_F64; break;
-            case XR_ELEM_BOOL: xi_storage = XR_TARGET_ARRAY_STORAGE_BOOL; break;
-            case XR_ELEM_RUNE: xi_storage = XR_TARGET_ARRAY_STORAGE_RUNE; break;
-            default: break;
+            case XR_ELEM_I8:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_I8;
+                break;
+            case XR_ELEM_U8:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_U8;
+                break;
+            case XR_ELEM_I16:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_I16;
+                break;
+            case XR_ELEM_U16:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_U16;
+                break;
+            case XR_ELEM_I32:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_I32;
+                break;
+            case XR_ELEM_U32:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_U32;
+                break;
+            case XR_ELEM_I64:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_I64;
+                break;
+            case XR_ELEM_U64:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_U64;
+                break;
+            case XR_ELEM_F32:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_F32;
+                break;
+            case XR_ELEM_F64:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_F64;
+                break;
+            case XR_ELEM_BOOL:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_BOOL;
+                break;
+            case XR_ELEM_RUNE:
+                xi_storage = XR_TARGET_ARRAY_STORAGE_RUNE;
+                break;
+            default:
+                break;
         }
         switch (emission.recipe_discriminant) {
-            case XR_TARGET_ARRAY_STORAGE_I8: storage_symbol = "XR_ELEM_I8"; break;
-            case XR_TARGET_ARRAY_STORAGE_U8: storage_symbol = "XR_ELEM_U8"; break;
-            case XR_TARGET_ARRAY_STORAGE_I16: storage_symbol = "XR_ELEM_I16"; break;
-            case XR_TARGET_ARRAY_STORAGE_U16: storage_symbol = "XR_ELEM_U16"; break;
-            case XR_TARGET_ARRAY_STORAGE_I32: storage_symbol = "XR_ELEM_I32"; break;
-            case XR_TARGET_ARRAY_STORAGE_U32: storage_symbol = "XR_ELEM_U32"; break;
-            case XR_TARGET_ARRAY_STORAGE_I64: storage_symbol = "XR_ELEM_I64"; break;
-            case XR_TARGET_ARRAY_STORAGE_U64: storage_symbol = "XR_ELEM_U64"; break;
-            case XR_TARGET_ARRAY_STORAGE_F32: storage_symbol = "XR_ELEM_F32"; break;
-            case XR_TARGET_ARRAY_STORAGE_F64: storage_symbol = "XR_ELEM_F64"; break;
-            case XR_TARGET_ARRAY_STORAGE_BOOL: storage_symbol = "XR_ELEM_BOOL"; break;
-            case XR_TARGET_ARRAY_STORAGE_RUNE: storage_symbol = "XR_ELEM_RUNE"; break;
-            default: break;
+            case XR_TARGET_ARRAY_STORAGE_I8:
+                storage_symbol = "XR_ELEM_I8";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_U8:
+                storage_symbol = "XR_ELEM_U8";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_I16:
+                storage_symbol = "XR_ELEM_I16";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_U16:
+                storage_symbol = "XR_ELEM_U16";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_I32:
+                storage_symbol = "XR_ELEM_I32";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_U32:
+                storage_symbol = "XR_ELEM_U32";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_I64:
+                storage_symbol = "XR_ELEM_I64";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_U64:
+                storage_symbol = "XR_ELEM_U64";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_F32:
+                storage_symbol = "XR_ELEM_F32";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_F64:
+                storage_symbol = "XR_ELEM_F64";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_BOOL:
+                storage_symbol = "XR_ELEM_BOOL";
+                break;
+            case XR_TARGET_ARRAY_STORAGE_RUNE:
+                storage_symbol = "XR_ELEM_RUNE";
+                break;
+            default:
+                break;
         }
-        if ((!with_capacity && !filled) ||
-            v->nargs != (with_capacity ? 1u : 2u) ||
-            status != CG_VALUE_EMISSION_FOUND ||
-            emission.rep != XR_C_VALUE_REP_TAGGED ||
+        if ((!with_capacity && !filled) || v->nargs != (with_capacity ? 1u : 2u) ||
+            status != CG_VALUE_EMISSION_FOUND || emission.rep != XR_C_VALUE_REP_TAGGED ||
             emission.target_register_kind != XR_MACHINE_REP_DYN_VALUE ||
             emission.target_memory_kind != XR_MACHINE_REP_DYN_VALUE ||
-            emission.materialization != expected_materialization ||
-            !emission.c_type || strcmp(emission.c_type, "XrValue") != 0 ||
-            !emission.recipe_symbol ||
-            strcmp(emission.recipe_symbol, expected_symbol) != 0 ||
-            !storage_symbol || xi_storage != emission.recipe_discriminant ||
-            !count_identity || !fill_identity ||
+            emission.materialization != expected_materialization || !emission.c_type ||
+            strcmp(emission.c_type, "XrValue") != 0 || !emission.recipe_symbol ||
+            strcmp(emission.recipe_symbol, expected_symbol) != 0 || !storage_symbol ||
+            xi_storage != emission.recipe_discriminant || !count_identity || !fill_identity ||
             emission.recipe_operand_value != count_semantic ||
-            emission.recipe_argument_value !=
-                (filled ? fill_semantic : UINT32_MAX) ||
-            emission.recipe_argument_count != 0 ||
-            emission.recipe_arguments != NULL ||
+            emission.recipe_argument_value != (filled ? fill_semantic : UINT32_MAX) ||
+            emission.recipe_argument_count != 0 || emission.recipe_arguments != NULL ||
             emission.recipe_layout_id != 0 ||
             xi_value_allocation_storage_mode(v) != XR_OBJ_STORAGE_NORMAL) {
-            (void) cg_value_emission_fail(
-                ctx, "Array intrinsic C emission recipe is missing or stale");
+            (void) cg_value_emission_fail(ctx,
+                                          "Array intrinsic C emission recipe is missing or stale");
             emit_codegen_abort_expr(out);
             return true;
         }
         fprintf(out, "%s(", emission.recipe_symbol);
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         if (filled) {
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         }
         fprintf(out, ", %s)", storage_symbol);
         return true;
     }
     if (v && v->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE) {
         if (!cg_array_reserve_target_authority(ctx, f, v)) {
-            (void) cg_value_emission_fail(
-                ctx, "Array.reserve TargetPlan authority is missing or stale");
+            (void) cg_value_emission_fail(ctx,
+                                          "Array.reserve TargetPlan authority is missing or stale");
             emit_codegen_abort_expr(out);
             return true;
         }
@@ -159,20 +199,19 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
             fprintf(out, "xrt_array_reserve_trusted_raw(");
             emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             fprintf(out, ")");
             emit_conversion_suffix(out, suffix);
             return true;
         }
-        if (cg_array_value_storage_info(ctx, f, v->args[0], &info,
-                                        CG_ARRAY_STORAGE_MUTABLE)) {
+        if (cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_MUTABLE)) {
             bool boxed = target_rep == XR_REP_TAGGED;
             if (boxed)
                 fprintf(out, "xr_mkptr(");
             fprintf(out, "xrt_array_reserve_trusted_raw(");
             emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             fprintf(out, ")");
             if (boxed)
                 fprintf(out, ", XR_TAG_ARRAY)");
@@ -180,9 +219,9 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         }
         const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
         fprintf(out, "xrt_array_reserve_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, suffix);
         return true;
@@ -201,7 +240,7 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         if (storage_rep == XR_REP_PTR)
             fprintf(out, "((xrt_array_t*)");
         fprintf(out, "xrt_array_new_copy_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %s)", elem_name);
         if (storage_rep == XR_REP_PTR)
             fprintf(out, ".ptr)");
@@ -211,7 +250,7 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
     }
     if (strcmp(name, "array_clear") == 0) {
         fprintf(out, "xrt_array_clear_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
         return true;
     }
@@ -231,17 +270,17 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
             }
             const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
             fprintf(out, "({ XrValue _arr = ");
-            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, "; ((xrt_array_t*)_arr.ptr)->length = 0; _arr; })");
             emit_conversion_suffix(out, suffix);
             return true;
         }
         fprintf(out, "xrt_array_resize_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ")");
         return true;
     }
@@ -253,15 +292,15 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
  * converting the returned array pointer back to a tagged value serves no C
  * consumer. Emit the raw effect statement only after the frozen reserve call
  * authority has fixed the tagged receiver and native capacity operands. */
-static bool emit_unused_array_reserve_effect_stmt(
-    XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
+static bool emit_unused_array_reserve_effect_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                  const XiValue *v) {
     if (!ctx || !out || !f || !v || cg_value_has_actual_ir_use(f, v) ||
         !cg_array_reserve_target_authority(ctx, f, v) || !v->args)
         return false;
     fprintf(out, "    (void)(xrt_array_reserve_trusted_raw(");
     emit_typed_array_ptr_expr(ctx, out, f, v->args[0], NULL);
     fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[1], XR_REP_I64);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out, "));\n");
     return true;
 }

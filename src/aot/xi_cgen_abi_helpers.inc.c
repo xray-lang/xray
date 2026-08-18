@@ -1072,10 +1072,6 @@ static void emit_value_as_rep(FILE *out, const XiValue *v, XrRep target_rep) {
 
 static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, XrRep target_rep) {
     XrRep inner_rep;
-    if (cg_is_void_like(v)) {
-        emit_unit_materialized_as_rep(out, target_rep);
-        return;
-    }
     const XiFunc *literal_func = v && v->block ? v->block->func : NULL;
     const XiValue *literal = v;
     while (literal && literal->nargs >= 1 && literal_func && literal_func->phi_coalesce &&
