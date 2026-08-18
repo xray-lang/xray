@@ -389,8 +389,21 @@ XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, AstNode *node) {
         return NULL;
     v->args[0] = val;
     v->line = (uint32_t) node->line;
-    if (me->expr && me->expr->type == AST_VARIABLE && me->expr->as.variable.symbol_id != 0 &&
-        l->analyzer) {
+    if (me->move_evidence_id != 0) {
+        /* The analyzer snapshots the consumed generation on the node: the
+         * per-binding evidence slots may describe a later generation when the
+         * binding was rebound after this consume. */
+        v->move_evidence_id = me->move_evidence_id;
+        v->move_source_root_id = me->move_root_id;
+        v->move_source_symbol_id = me->move_source_symbol_id;
+        v->move_storage_plan_id = me->move_storage_plan_id;
+        v->move_evidence_bits = me->move_evidence_bits;
+        v->move_source_capability = me->move_capability;
+        v->move_target_capability = me->move_capability;
+        v->move_source_domain = me->move_storage_domain;
+        v->move_target_domain = me->move_storage_domain;
+    } else if (me->expr && me->expr->type == AST_VARIABLE && me->expr->as.variable.symbol_id != 0 &&
+               l->analyzer) {
         XaSymbol *symbol =
             xa_scope_lookup_by_id(l->analyzer->global_scope, me->expr->as.variable.symbol_id);
         XaSymbolLinks *links = symbol ? xa_analyzer_get_links(l->analyzer, symbol) : NULL;

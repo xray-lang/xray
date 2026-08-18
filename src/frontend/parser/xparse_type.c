@@ -1004,6 +1004,18 @@ XrGenericParam **xr_parse_generic_params(Parser *parser, int *out_count) {
         xr_type_scope_define(generic_scope, param_name,
                              xr_tref_type_param(parser->compiler_session, param_name));
 
+        /* Higher-kinded type parameters are a permanent non-feature
+         * (LANGUAGE_SPEC 9.6.1). Name the decision instead of letting the
+         * list parser report a missing '>' at the inner '<'. */
+        if (xr_parser_check(parser, TK_LT)) {
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "type parameter '%s' cannot take its own type parameters: Xray does not "
+                     "provide higher-kinded types; take a concrete instantiation instead",
+                     param_name);
+            xr_parser_error_at_current(parser, msg);
+        }
+
         XrTypeRef **constraints = NULL;
         int constraint_count = 0;
         if (xr_parser_match(parser, TK_COLON))
