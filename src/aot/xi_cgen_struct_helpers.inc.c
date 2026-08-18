@@ -2359,7 +2359,7 @@ static void emit_struct_set_result_value(XiCgenCtx *ctx, FILE *out, const XiValu
         emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         return;
     }
-    emit_value_as_rep_ctx(ctx, out, value, cg_rep(value));
+    emit_value_as_rep_ctx(ctx, out, value, cg_value_plan_storage_rep(ctx, value));
 }
 
 static void emit_struct_inline_field_set_expr(XiCgenCtx *ctx, FILE *out,
@@ -2524,7 +2524,7 @@ static void emit_struct_runtime_field_set(XiCgenCtx *ctx, FILE *out, const XrAgg
     fprintf(out, ", ");
     emit_struct_field_boxed_value(ctx, out, sl, idx, value);
     fprintf(out, "), ");
-    emit_value_as_rep_ctx(ctx, out, value, cg_rep(value));
+    emit_value_as_rep_ctx(ctx, out, value, cg_value_plan_storage_rep(ctx, value));
     fprintf(out, ")");
 }
 

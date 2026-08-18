@@ -447,7 +447,8 @@ static bool emit_class_cached_field_load_expr(XiCgenCtx *ctx, FILE *out, const X
     if (index < 0)
         return false;
     CgClassFieldCacheEntry *entry = &cache->fields[index];
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, entry->rep, cg_rep(v));
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, entry->rep, cg_value_plan_storage_rep(ctx, v));
     emit_class_field_cache_var(out, (uint16_t) index);
     emit_conversion_suffix(out, conv_suffix);
     return true;

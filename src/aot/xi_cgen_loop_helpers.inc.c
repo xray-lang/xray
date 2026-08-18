@@ -186,8 +186,8 @@ static bool emit_structured_loop_condition_expr(XiCgenCtx *ctx, FILE *out, const
     const char *relation = xi_to_c_template_compare_relation(control->op);
     if (!relation || !relation[0])
         return false;
-    XrRep lhs_rep = cg_rep(control->args[0]);
-    XrRep rhs_rep = cg_rep(control->args[1]);
+    XrRep lhs_rep = cg_value_plan_storage_rep(ctx, control->args[0]);
+    XrRep rhs_rep = cg_value_plan_storage_rep(ctx, control->args[1]);
     if (lhs_rep == XR_REP_TAGGED || rhs_rep == XR_REP_TAGGED)
         return false;
     XrRep rep = (lhs_rep == XR_REP_F64 || rhs_rep == XR_REP_F64) ? XR_REP_F64 : XR_REP_I64;

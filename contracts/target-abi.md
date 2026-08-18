@@ -661,7 +661,7 @@ anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c e7f5e8b4f022b37f39753b
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c 970f07e40e43373527032c9ff90d839b46efc47bf0c6289f747001b71b2af655
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 0ee0d1cdd4e71c41331146decf8212ea4f3c4c17bd4625c4f6151f6b1e574abc
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
-anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c addb56e386e393756e95ef85a37139318f2b534175012417fd30c44602bbc43e
+anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 2589d83ef995a2b0039751d69337495b3f159a0fc97d095e3889f4865910c389
 anchor-sha256: src/aot/xi_cgen.c dfeac524946c1d0b4daf618f3c5e3c3878142d2bc04d943452565cf1e2a7f451
 anchor-sha256: src/ir/xi_opt.c 7a96692685ffe65b8901552d64e7c75e6867fc534124e639e6f13d6b8ef67edb
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
@@ -675,5 +675,5 @@ anchor-sha256: src/app/toolchain/xtc_probe.c 8d1cb7212b432a7cefe7e3e3d202509c75d
 anchor-sha256: src/ir/xi.h 86444a22fe2f4cb29b0d49a7bbb246ecaa6b49888331a7241dc960d2dad5bb1d
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24
 anchor-sha256: src/aot/xaot_coro.h 51edaa56bb72326f5bacd0998b00d505e0c0533190f4ba0289c10ee954049995
-anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 495a6b15c1a963c95bc26d98f4791adf0b6d16c1b33660900587a07bf738d7a1
+anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 0488c328fc9d2eda313728e80c1ebe380363e08e367a588194d1061ae1bdfcec
 anchor-sha256: src/aot/xrt_provider_abi.h 4deebceb145b02ba5c5836c8688b9c4788a130ab9fd0856d7ecc21dbcd5ce840
