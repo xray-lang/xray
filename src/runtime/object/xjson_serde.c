@@ -1535,7 +1535,7 @@ static void stringify_instance(JsonWriter *w, XrInstance *inst) {
             writer_char(w, ' ');
 
         // Field value (access by index)
-        XrValue field_val = xr_instance_get_field_fast(inst, i);
+        XrValue field_val = xr_instance_load_field(w->isolate, inst, i);
         stringify_value(w, field_val);
         output_count++;
         if (w->has_error)
@@ -1704,7 +1704,7 @@ static void encode_object_fields(JsonEncoder *e, XrInstance *inst, bool dynamic_
             continue;
 
         XrValue field = dynamic_fields ? xr_instance_get_dynamic_field(inst, i)
-                                       : xr_instance_get_field_fast(inst, i);
+                                       : xr_instance_load_field(e->isolate, inst, i);
         XrValue encoded = xr_null();
         encode_value(e, field, &encoded);
         if (!e->has_error) {

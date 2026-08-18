@@ -216,7 +216,7 @@ static void format_inspect_instance(XrVMRuntime *isolate, XrStrBuf *sb, XrInstan
             xr_strbuf_append_cstr(sb, buf, (size_t) n);
         }
         xr_strbuf_append_cstr(sb, ": ", 2);
-        xr_value_to_strbuf(isolate, sb, xr_instance_get_field_fast(inst, i), depth + 1);
+        xr_value_to_strbuf(isolate, sb, xr_instance_load_field(isolate, inst, i), depth + 1);
         emitted++;
     }
     if (cls && cls->field_count > XR_FORMAT_MAX_ELEMENTS)

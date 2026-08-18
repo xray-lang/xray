@@ -285,7 +285,7 @@ static void dump_instance(XrInstance *inst, DumpContext *ctx) {
         const char *name = cls->fields[i].name;
         printf("%s: ", name ? name : "?");
 
-        XrValue field_val = xr_instance_get_field_fast(inst, i);
+        XrValue field_val = xr_instance_load_field(NULL, inst, i);
         dump_value_internal(field_val, ctx);
     }
     ctx->depth--;
