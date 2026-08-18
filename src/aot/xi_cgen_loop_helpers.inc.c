@@ -22,7 +22,7 @@ typedef struct CgStructuredArrayFillLoop {
     CgArrayFillLoop fill;
 } CgStructuredArrayFillLoop;
 
-static bool emit_structured_loop_condition_expr(FILE *out, const XiValue *control);
+static bool emit_structured_loop_condition_expr(XiCgenCtx *ctx, FILE *out, const XiValue *control);
 static bool emit_structured_loop_condition_expr_ctx(XiCgenCtx *ctx, FILE *out,
                                                     const XiValue *control);
 
@@ -108,13 +108,14 @@ static bool cg_structured_counted_loop_from_preheader(const XiBlock *preheader,
     return true;
 }
 
-static bool cg_structured_counted_loop_block_is_elided(const XiFunc *f, const XiBlock *blk) {
+static bool cg_structured_counted_loop_block_is_elided(XiCgenCtx *ctx, const XiFunc *f,
+                                                       const XiBlock *blk) {
     if (!f || !blk)
         return false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         CgStructuredLoop loop;
         if (!cg_structured_counted_loop_from_preheader(f->blocks[bi], &loop) ||
-            !emit_structured_loop_condition_expr(NULL, loop.guard->control) ||
+            !emit_structured_loop_condition_expr(ctx, NULL, loop.guard->control) ||
             (blk != loop.guard && blk != loop.body))
             continue;
         bool preheader_is_elided = false;
@@ -123,7 +124,7 @@ static bool cg_structured_counted_loop_block_is_elided(const XiFunc *f, const Xi
             if (f->blocks[pi] == loop.preheader)
                 continue;
             if (cg_structured_counted_loop_from_preheader(f->blocks[pi], &parent) &&
-                emit_structured_loop_condition_expr(NULL, parent.guard->control) &&
+                emit_structured_loop_condition_expr(ctx, NULL, parent.guard->control) &&
                 (loop.preheader == parent.guard || loop.preheader == parent.body)) {
                 preheader_is_elided = true;
                 break;
@@ -179,7 +180,7 @@ static bool cg_structured_array_fill_loop_block_is_elided(XiCgenCtx *ctx, const 
            blk == loop.body;
 }
 
-static bool emit_structured_loop_condition_expr(FILE *out, const XiValue *control) {
+static bool emit_structured_loop_condition_expr(XiCgenCtx *ctx, FILE *out, const XiValue *control) {
     if (!control || control->nargs < 2)
         return false;
     const char *relation = xi_to_c_template_compare_relation(control->op);
@@ -195,9 +196,9 @@ static bool emit_structured_loop_condition_expr(FILE *out, const XiValue *contro
         return false;
     if (out) {
         fprintf(out, "%s(%s, ", adapter, relation);
-        emit_value_as_rep(out, control->args[0], rep);
+        emit_value_as_rep_ctx(ctx, out, control->args[0], rep);
         fprintf(out, ", ");
-        emit_value_as_rep(out, control->args[1], rep);
+        emit_value_as_rep_ctx(ctx, out, control->args[1], rep);
         fprintf(out, ")");
     }
     return true;

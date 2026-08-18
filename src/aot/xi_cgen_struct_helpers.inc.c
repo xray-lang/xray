@@ -2453,11 +2453,11 @@ static bool cg_value_is_elided_nested_struct_ref(const XiFunc *f, const XiValue 
            cg_nested_struct_ref_safe_uses(f, target, 0);
 }
 
-static void emit_struct_field_boxed_value(FILE *out, const XrAggregateLayout *sl, int64_t idx,
-                                          const XiValue *value) {
+static void emit_struct_field_boxed_value(XiCgenCtx *ctx, FILE *out, const XrAggregateLayout *sl,
+                                          int64_t idx, const XiValue *value) {
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
     if (!field) {
-        emit_value_as_rep(out, value, XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         return;
     }
 
@@ -2465,12 +2465,12 @@ static void emit_struct_field_boxed_value(FILE *out, const XrAggregateLayout *sl
         case XR_NATIVE_F32:
         case XR_NATIVE_F64:
             fprintf(out, "XR_FROM_FLOAT(");
-            emit_value_as_rep(out, value, XR_REP_F64);
+            emit_value_as_rep_ctx(ctx, out, value, XR_REP_F64);
             fprintf(out, ")");
             break;
         case XR_NATIVE_BOOL:
             fprintf(out, "XR_FROM_BOOL(");
-            emit_value_as_rep(out, value, XR_REP_I64);
+            emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
             fprintf(out, ")");
             break;
         case XR_NATIVE_I8:
@@ -2484,16 +2484,16 @@ static void emit_struct_field_boxed_value(FILE *out, const XrAggregateLayout *sl
         case XR_NATIVE_ISIZE:
         case XR_NATIVE_USIZE:
             fprintf(out, "XR_FROM_INT(");
-            emit_value_as_rep(out, value, XR_REP_I64);
+            emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
             fprintf(out, ")");
             break;
         case XR_NATIVE_POINTER:
             fprintf(out, "xr_mkptr(");
-            emit_value_as_rep(out, value, XR_REP_RAWPTR);
+            emit_value_as_rep_ctx(ctx, out, value, XR_REP_RAWPTR);
             fprintf(out, ", XR_TAG_PTR)");
             break;
         default:
-            emit_value_as_rep(out, value, XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
             break;
     }
 }
@@ -2522,9 +2522,9 @@ static void emit_struct_runtime_field_set(XiCgenCtx *ctx, FILE *out, const XrAgg
     fprintf(out, ".ptr, ");
     cg_emit_str_value(ctx, out, fname ? fname : "?");
     fprintf(out, ", ");
-    emit_struct_field_boxed_value(out, sl, idx, value);
+    emit_struct_field_boxed_value(ctx, out, sl, idx, value);
     fprintf(out, "), ");
-    emit_value_as_rep(out, value, cg_rep(value));
+    emit_value_as_rep_ctx(ctx, out, value, cg_rep(value));
     fprintf(out, ")");
 }
 
@@ -2920,7 +2920,7 @@ static bool emit_struct_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, co
         /* OOB (incl. negative) throws E0430, catchable + matching the VM, rather
          * than abort()'ing the process. */
         fprintf(out, "({ int64_t _idx = ");
-        emit_value_as_rep(out, v->args[1], XR_REP_I64);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) xrt_fixed_index_oob(_idx, %u); ",
                 (unsigned) field->elem_count, (unsigned) field->elem_count);
     }
@@ -2936,7 +2936,7 @@ static bool emit_struct_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, co
         emit_struct_field_lvalue(ctx, out, f, sl, ref->aux_int, ref->args[0], prefix);
     fprintf(out, "[");
     if (unchecked)
-        emit_value_as_rep(out, v->args[1], XR_REP_I64);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     else
         fprintf(out, "_idx");
     fprintf(out, "]");
@@ -2962,18 +2962,18 @@ static bool emit_struct_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "(");
     } else {
         fprintf(out, "({ int64_t _idx = ");
-        emit_value_as_rep(out, v->args[1], XR_REP_I64);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) xrt_fixed_index_oob(_idx, %u); ",
                 (unsigned) field->elem_count, (unsigned) field->elem_count);
     }
     emit_struct_field_lvalue(ctx, out, f, sl, ref->aux_int, ref->args[0], prefix);
     fprintf(out, "[");
     if (unchecked)
-        emit_value_as_rep(out, v->args[1], XR_REP_I64);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     else
         fprintf(out, "_idx");
     fprintf(out, "] = (%s)", cg_struct_native_c_type(field->elem_native_type));
-    emit_value_as_rep(out, v->args[2], cg_struct_native_rep(field->elem_native_type));
+    emit_value_as_rep_ctx(ctx, out, v->args[2], cg_struct_native_rep(field->elem_native_type));
     fprintf(out, unchecked ? ")" : "; })");
     return true;
 }

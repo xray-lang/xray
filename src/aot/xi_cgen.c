@@ -8321,7 +8321,8 @@ static bool cg_native_box_value_is_elided_in_aot(XiCgenCtx *ctx, const XiFunc *f
 
 static bool emit_structured_loop_condition_expr_ctx(XiCgenCtx *ctx, FILE *out,
                                                     const XiValue *control);
-static bool cg_structured_counted_loop_block_is_elided(const XiFunc *f, const XiBlock *blk);
+static bool cg_structured_counted_loop_block_is_elided(XiCgenCtx *ctx, const XiFunc *f,
+                                                       const XiBlock *blk);
 
 /* A scalar/null constant, or a string literal used only by a multi-part
  * concat, has no required C storage when every consumer
@@ -8383,7 +8384,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
          * `while` condition, whose ctx emitter prints scalar operands through
          * emit_value_as_rep_ctx(). */
         if (user->block && user->block->kind == XI_BLOCK_IF && user->block->control == user &&
-            cg_structured_counted_loop_block_is_elided(f, user->block) &&
+            cg_structured_counted_loop_block_is_elided(ctx, f, user->block) &&
             emit_structured_loop_condition_expr_ctx(ctx, NULL, user))
             return true;
         if (xicgen_compare_uses_unsigned(user))
@@ -14436,7 +14437,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
     /* Blocks in order */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        if (f->blocks[bi] && !cg_structured_counted_loop_block_is_elided(f, f->blocks[bi]) &&
+        if (f->blocks[bi] && !cg_structured_counted_loop_block_is_elided(ctx, f, f->blocks[bi]) &&
             !cg_structured_array_fill_loop_block_is_elided(ctx, f, f->blocks[bi]))
             emit_block(ctx, out, f, f->blocks[bi], prefix);
     }

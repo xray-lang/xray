@@ -456,8 +456,7 @@ static void emit_assign_from_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, const X
                                               const char *temp_name) {
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, dst);
     if (!plan || !cg_value_rep_is_adt_aggregate(plan->rep)) {
-        emit_assign_from_xrvalue_temp_rep(out, dst, temp_name,
-                                          cg_value_plan_storage_rep(ctx, dst));
+        emit_assign_from_xrvalue_temp_rep(out, dst, temp_name, cg_value_plan_storage_rep(ctx, dst));
         return;
     }
     fprintf(out, "    ");
@@ -475,8 +474,7 @@ static void emit_assign_from_owned_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, c
                                                     const char *temp_name) {
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, dst);
     if (!plan || !cg_value_rep_is_adt_aggregate(plan->rep)) {
-        emit_assign_from_xrvalue_temp_rep(out, dst, temp_name,
-                                          cg_value_plan_storage_rep(ctx, dst));
+        emit_assign_from_xrvalue_temp_rep(out, dst, temp_name, cg_value_plan_storage_rep(ctx, dst));
         return;
     }
     fprintf(out, "    ");
@@ -853,10 +851,9 @@ static int cg_coro_claim_state(XiCgenCtx *ctx, const XiFunc *f, const XiValue *o
             fprintf(stderr,
                     "[xi_cgen] ERROR: coroutine '%s' cannot claim op v%u "
                     "(plan=%u active=%u point=%u state=%u states=%u seen=%u)\n",
-                    f && f->name ? f->name : "?", op ? op->id : UINT32_MAX,
-                    plan ? 1u : 0u, plan && ctx->coro_emit_plan == plan ? 1u : 0u,
-                    point ? 1u : 0u, point ? point->state_id : 0u,
-                    plan ? plan->nstates : 0u,
+                    f && f->name ? f->name : "?", op ? op->id : UINT32_MAX, plan ? 1u : 0u,
+                    plan && ctx->coro_emit_plan == plan ? 1u : 0u, point ? 1u : 0u,
+                    point ? point->state_id : 0u, plan ? plan->nstates : 0u,
                     point && point->state_id < ctx->coro_emit_seen_cap
                         ? ctx->coro_emit_seen[point->state_id]
                         : 0u);
@@ -1183,10 +1180,8 @@ static const XaotCallableInvokePlan *cg_coro_callable_target_switch_plan(XiCgenC
     const XaotCallableInvokePlan *plan = xaot_bundle_find_callable_invoke_plan(bundle, v);
     const XiCoroSuspendPoint *point =
         ctx && ctx->coro_emit_plan ? xi_coro_plan_find_point(ctx->coro_emit_plan, v) : NULL;
-    uint32_t required_evidence = XAOT_CALLABLE_EV_CLOSED_TARGET_SET |
-                                 XAOT_CALLABLE_EV_SIGNATURE |
-                                 XAOT_CALLABLE_EV_TARGET_EFFECTS |
-                                 XAOT_CALLABLE_EV_XI_FLOW;
+    uint32_t required_evidence = XAOT_CALLABLE_EV_CLOSED_TARGET_SET | XAOT_CALLABLE_EV_SIGNATURE |
+                                 XAOT_CALLABLE_EV_TARGET_EFFECTS | XAOT_CALLABLE_EV_XI_FLOW;
     if (!point || !plan || plan->target_count == 0 ||
         plan->unproven_reason != XAOT_CALLABLE_PROVEN ||
         (plan->evidence & required_evidence) != required_evidence ||
@@ -3805,26 +3800,20 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (v->op == XI_CHAN_NEW) {
         XrCValueEmissionView emission = {0};
         XrCValueEmissionView capacity = {0};
-        CgValueEmissionStatus status =
-            cg_value_emission_view(ctx, f, v, &emission);
+        CgValueEmissionStatus status = cg_value_emission_view(ctx, f, v, &emission);
         CgValueEmissionStatus capacity_status =
-            v->nargs == 1
-                ? cg_value_emission_view(ctx, f, v->args[0], &capacity)
-                : CG_VALUE_EMISSION_ERROR;
-        if (status != CG_VALUE_EMISSION_FOUND ||
-            capacity_status != CG_VALUE_EMISSION_FOUND ||
+            v->nargs == 1 ? cg_value_emission_view(ctx, f, v->args[0], &capacity)
+                          : CG_VALUE_EMISSION_ERROR;
+        if (status != CG_VALUE_EMISSION_FOUND || capacity_status != CG_VALUE_EMISSION_FOUND ||
             emission.rep != XR_C_VALUE_REP_TAGGED ||
-            emission.materialization !=
-                XR_C_VALUE_MATERIALIZATION_CHANNEL_NEW ||
-            !emission.recipe_symbol ||
-            emission.recipe_operand_value != capacity.semantic_value ||
+            emission.materialization != XR_C_VALUE_MATERIALIZATION_CHANNEL_NEW ||
+            !emission.recipe_symbol || emission.recipe_operand_value != capacity.semantic_value ||
             v->nargs != 1) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: immutable coroutine channel recipe is missing\n");
             return;
         }
-        fprintf(out, "    XrValue _chan_%u = %s(ctx, ", v->id,
-                emission.recipe_symbol);
+        fprintf(out, "    XrValue _chan_%u = %s(ctx, ", v->id, emission.recipe_symbol);
         emit_int64_arg(out, v->args[0]);
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(f, v)) {
@@ -3899,8 +3888,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = ");
-            cg_emit_channel_receive_payload_expression(out, &emission,
-                                                       v->id, true);
+            cg_emit_channel_receive_payload_expression(out, &emission, v->id, true);
             fprintf(out, ";\n");
         }
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
@@ -3970,7 +3958,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             return;
         }
         fprintf(out, "    XrValue _tuple_get_%u = xrt_tuple_get(", v->id);
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %u);\n", (unsigned) v->aux_int);
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
@@ -4236,7 +4224,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    bool _wq_push_%u = xr_aot_work_queue_push_bool(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
         if (v->nargs >= 3)
             emit_int64_arg(out, v->args[2]);
@@ -5184,7 +5172,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrAotResult _chan_recv_or_%u = xr_aot_chan_recv_or_slot(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ", _chan_recv_or_slot_%u, ", v->id);
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_chan_recv_or_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
@@ -5398,11 +5386,11 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         const XiValue *try_op = (const XiValue *) v->aux;
         if (try_op->op == XI_TRY && try_op->aux_int == XI_TRY_AUX_CLEANUP_LOCAL_HANDLER) {
             XrCValueEmissionView authority = {0};
-            if (!cg_panic_catch_emission_authority(ctx, f, v,
-                                                   &authority)) {
+            if (!cg_panic_catch_emission_authority(ctx, f, v, &authority)) {
                 ctx->error = true;
-                fprintf(stderr,
-                        "[xi_cgen] ERROR: coroutine panic catch lacks immutable emission authority\n");
+                fprintf(
+                    stderr,
+                    "[xi_cgen] ERROR: coroutine panic catch lacks immutable emission authority\n");
                 emit_codegen_abort_aot_result(out);
                 return;
             }
@@ -5986,14 +5974,12 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     }
     if (ctx->coro_emit_seen_count != plan->nstates) {
         ctx->error = true;
-        fprintf(stderr,
-                "[xi_cgen] ERROR: coroutine '%s' emitted %u of %u frozen states; missing:",
+        fprintf(stderr, "[xi_cgen] ERROR: coroutine '%s' emitted %u of %u frozen states; missing:",
                 f->name ? f->name : "?", ctx->coro_emit_seen_count, plan->nstates);
         for (uint32_t state = 1; state <= plan->nstates; state++) {
             if (!ctx->coro_emit_seen[state])
                 fprintf(stderr, " %u(v%u)", state,
-                        plan->points[state - 1u].op ? plan->points[state - 1u].op->id
-                                                   : UINT32_MAX);
+                        plan->points[state - 1u].op ? plan->points[state - 1u].op->id : UINT32_MAX);
         }
         fprintf(stderr, "\n");
     }
