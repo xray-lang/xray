@@ -76,6 +76,24 @@ static int vm_instance_eq_hook(XrValue a, XrValue b) {
     return XR_IS_BOOL(result) ? (XR_TO_BOOL(result) ? 1 : 0) : 0;
 }
 
+/* Value-struct field data lives in the instance's native body; decode it back
+ * to a tagged value for generic readers (JSON encoding, print/inspect). A
+ * nested struct field decodes to a raw aggregate ref into the body, which no
+ * generic reader understands — materialize it into a boxed instance. */
+static bool vm_instance_struct_field_read_hook(XrVMRuntime *X, XrInstance *inst, int index,
+                                               XrValue *out) {
+    XrVMRuntime *iso = X ? X : xr_exec_context_vm_owner();
+    if (!xr_instance_struct_get_field(iso, inst, index, out))
+        return false;
+    if (XR_IS_AGG_REF(*out) && iso) {
+        XrValue boxed = xr_struct_materialize_instance(iso, *out);
+        if (!XR_IS_NULL(boxed))
+            *out = boxed;
+    }
+    return true;
+}
+
 void xr_value_install_instance_hooks(void) {
     xr_value_set_instance_hooks(vm_instance_hash_hook, vm_instance_eq_hook);
+    xr_instance_set_struct_field_read_hook(vm_instance_struct_field_read_hook);
 }

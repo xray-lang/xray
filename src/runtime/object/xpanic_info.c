@@ -102,8 +102,7 @@ XrValue xr_panic_info_new(XrVMRuntime *X, XrErrorCode code, const char *message)
     if (message) {
         msg = xr_string_intern(X, message, strlen(message), 0);
     }
-    inst->fields[PANIC_INFO_FIELD_MESSAGE] =
-        msg ? xr_string_value(msg) : xr_null();
+    inst->fields[PANIC_INFO_FIELD_MESSAGE] = msg ? xr_string_value(msg) : xr_null();
 
     XrArray *stack = exception_new_stack(X, shared);
     inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
@@ -266,8 +265,7 @@ static XrValue exception_primitive_constructor(XrVMRuntime *X, XrValue self, XrV
     } else {
         msg_str = xr_string_intern(X, "", 0, 0);
     }
-    inst->fields[PANIC_INFO_FIELD_MESSAGE] =
-        msg_str ? xr_string_value(msg_str) : xr_null();
+    inst->fields[PANIC_INFO_FIELD_MESSAGE] = msg_str ? xr_string_value(msg_str) : xr_null();
 
     // stack: Array<string> — fresh empty array per instance
     XrArray *stack = xr_array_new(NULL);
@@ -292,6 +290,19 @@ static XrValue exception_primitive_constructor(XrVMRuntime *X, XrValue self, XrV
         buf[n] = '\0';
         if (n >= 3)
             code = atoi(buf);
+        /* Strip the recognized prefix from the stored message: reporters
+         * re-prefix from the code field, and keeping it here would print
+         * "E0xxx: E0xxx: ...". Mirrors the AOT exception constructor. */
+        if (code > 0) {
+            size_t prefix_len = (size_t) n + 1;
+            if (prefix_len + 2 <= msg_str->length && msg_str->data[prefix_len] == ':' &&
+                msg_str->data[prefix_len + 1] == ' ') {
+                XrString *stripped = xr_string_intern(X, msg_str->data + prefix_len + 2,
+                                                      msg_str->length - prefix_len - 2, 0);
+                if (stripped)
+                    inst->fields[PANIC_INFO_FIELD_MESSAGE] = XR_FROM_PTR(stripped);
+            }
+        }
     }
     inst->fields[PANIC_INFO_FIELD_CODE] = xr_int(code);
 

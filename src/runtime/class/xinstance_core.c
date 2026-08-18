@@ -195,6 +195,23 @@ static bool xr_instance_write_decoded_native_field(uint8_t *dst,
 #undef XR_STORE_NATIVE
 }
 
+/* Installed by the VM; NULL in backends that never materialize struct
+ * instances with native bodies. */
+static XrInstanceStructFieldReadHook g_struct_field_read_hook;
+
+void xr_instance_set_struct_field_read_hook(XrInstanceStructFieldReadHook hook) {
+    g_struct_field_read_hook = hook;
+}
+
+XrValue xr_instance_load_field(struct XrVMRuntime *X, XrInstance *inst, int index) {
+    if (inst && inst->klass && inst->klass->struct_layout && g_struct_field_read_hook) {
+        XrValue out;
+        if (g_struct_field_read_hook(X, inst, index, &out))
+            return out;
+    }
+    return xr_instance_get_field_fast(inst, index);
+}
+
 bool xr_instance_set_decoded_field(XrInstance *inst, int index, XrValue value) {
     if (!inst || !inst->klass || index < 0 || index >= xr_class_instance_field_count(inst->klass))
         return false;

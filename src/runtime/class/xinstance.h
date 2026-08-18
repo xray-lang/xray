@@ -142,6 +142,16 @@ static inline void *xr_instance_native_body(XrInstance *inst) {
 // Handles both in-object and overflow cases transparently.
 XR_FUNC XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index);
 
+/* Value-struct instances keep field data in the native body; the tagged slots
+ * are only ownership anchors. Generic readers (JSON encoding, print/inspect)
+ * must load through this entry so struct fields come back with their values.
+ * The hook is installed by the VM (the only layer that can decode a layout
+ * field back into a tagged value); without it the tagged slot is returned. */
+typedef bool (*XrInstanceStructFieldReadHook)(struct XrVMRuntime *X, XrInstance *inst, int index,
+                                              XrValue *out);
+XR_FUNC void xr_instance_set_struct_field_read_hook(XrInstanceStructFieldReadHook hook);
+XR_FUNC XrValue xr_instance_load_field(struct XrVMRuntime *X, XrInstance *inst, int index);
+
 // Write a logical field on a dynamic-layout instance.
 // Returns false if overflow allocation fails.
 XR_FUNC bool xr_instance_set_dynamic_field_direct(XrInstance *inst, uint16_t index, XrValue value);
