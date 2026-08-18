@@ -450,6 +450,50 @@ static void xa_validate_extern_cfn_callback_param_modes(XaInferContext *ctx, Ast
     }
 }
 
+/* C ABI boundary types: bool, exact integers (including usize/isize), f32 and
+ * f64, Ptr<T>/MutPtr<T>, plus fixed-layout value structs bound through the
+ * native manifest. Every other kind is a managed representation whose pointer
+ * is meaningless to C -- passing one compiles today and then silently reads
+ * object headers on the other side, so the declaration is rejected here. */
+static bool xa_extern_type_is_boundary(const XrType *type) {
+    if (!type)
+        return true; /* unresolved: the type checker owns this case */
+    switch (type->kind) {
+        case XR_KIND_INT: /* every exact width, plus usize/isize */
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_POINTER:
+            return true;
+        case XR_KIND_UNKNOWN:
+        case XR_KIND_ERROR:
+            return true; /* error recovery already diagnosed the cause */
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            return xa_type_has_fixed_layout_data_object(type);
+        default:
+            return false;
+    }
+}
+
+static void xa_report_extern_non_boundary(XaInferContext *ctx, XrLocation *loc, bool is_return,
+                                          const char *name, XrType *type) {
+    char msg[384];
+    const char *site = is_return ? "extern function return type" : "extern function parameter";
+    if (type && type->kind == XR_KIND_STRING) {
+        snprintf(msg, sizeof(msg),
+                 "%s '%s' uses 'string', which is a managed heap object, not a C string; pass an "
+                 "explicit UTF-8 byte view (Ptr<byte>/MutPtr<byte> plus a length) instead",
+                 site, name ? name : "?");
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "%s '%s' uses type '%s', which is not C-ABI-representable; extern boundaries "
+                 "accept bool, exact integers, f32/f64, usize/isize, Ptr<T>/MutPtr<T>, CFn<...> "
+                 "and fixed-layout value structs",
+                 site, name ? name : "?", xr_type_to_string(type));
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg, loc);
+}
+
 static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
                                             const FunctionDeclNode *fn, XrType **param_types,
                                             XrType *return_type) {
@@ -496,6 +540,12 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
                      param && param->name ? param->name : "?");
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                        msg, &loc);
+        } else if (type && !xa_extern_type_is_boundary(type)) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = param ? param->line : (node ? node->line : 0),
+                              .column = param ? param->column : (node ? node->column : 0)};
+            xa_report_extern_non_boundary(ctx, &loc, false,
+                                          param && param->name ? param->name : "?", type);
         }
     }
     if (xr_type_is_enum_metadata(return_type)) {
@@ -519,6 +569,12 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
             "extern function returns Xray function type; use CFn<...> for C function pointers",
             &loc);
+    } else if (return_type && return_type->kind != XR_KIND_UNIT &&
+               !XR_TYPE_IS_C_FUNCTION(return_type) && !xa_extern_type_is_boundary(return_type)) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = node ? node->line : 0,
+                          .column = node ? node->column : 0};
+        xa_report_extern_non_boundary(ctx, &loc, true, fn->name, return_type);
     }
 }
 
@@ -698,8 +754,8 @@ static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNod
                  * at no parameter. Only the one-argument form is that builtin:
                  * copy is not a reserved word, and a user-declared copy of any
                  * other arity may well return one of its arguments. */
-                if (call->arg_count == 1 && call->callee &&
-                    call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
+                if (call->arg_count == 1 && call->callee && call->callee->type == AST_VARIABLE &&
+                    call->callee->as.variable.name &&
                     strcmp(call->callee->as.variable.name, "copy") == 0)
                     return -1;
                 XaSymbolLinks *callee = xa_summary_function_links(summary, call->callee);
@@ -852,8 +908,7 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
      * function that happens to be named copy and must be summarised
      * normally. */
     if (call->arg_count == 1 && call->callee && call->callee->type == AST_VARIABLE &&
-        call->callee->as.variable.name &&
-        strcmp(call->callee->as.variable.name, "copy") == 0)
+        call->callee->as.variable.name && strcmp(call->callee->as.variable.name, "copy") == 0)
         return;
     XaSymbolLinks *fn_links = xa_summary_function_links(summary, call->callee);
     if (fn_links && fn_links->param_effects) {

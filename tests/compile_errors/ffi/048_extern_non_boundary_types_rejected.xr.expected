@@ -1,0 +1,4 @@
+uses 'string', which is a managed heap object
+uses type 'Array<int>', which is not C-ABI-representable
+uses type 'Map<string, int>', which is not C-ABI-representable
+uses type 'Array<int>', which is not C-ABI-representable

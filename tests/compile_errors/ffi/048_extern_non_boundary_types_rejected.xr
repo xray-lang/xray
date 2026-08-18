@@ -1,0 +1,13 @@
+// Managed representations are not C-ABI-representable: their pointers mean
+// nothing to C, and a string argument used to reach libc as an object header.
+extern "C" {
+    fn strlen(s: string) -> usize
+    fn takeArray(a: Array<int>) -> int
+    fn takeMap(m: Map<string, int>) -> int
+    fn makeArray() -> Array<int>
+}
+
+fn main() {
+    print("unreachable")
+}
+main()
