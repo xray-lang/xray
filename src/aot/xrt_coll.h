@@ -43,66 +43,64 @@
 #include <errno.h>
 #include <string.h>
 
-#define xrt_byte_array_copy_semantics(kind, dst_data, dst_length, dst_elem_type, src_data,        \
-                                      src_length, src_elem_type, src_offset, dst_offset, count)   \
-    XR_BYTE_ARRAY_COPY_OWNER_APPLY(                                                              \
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,                                               \
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO, XR_SEM_CONSUMER_AOT_HOSTED,                  \
-        xr_byte_array_copy_core((kind), (dst_data), (dst_length), (dst_elem_type), (src_data),   \
-                                (src_length), (src_elem_type), (src_offset), (dst_offset),       \
+#define xrt_byte_array_copy_semantics(kind, dst_data, dst_length, dst_elem_type, src_data,         \
+                                      src_length, src_elem_type, src_offset, dst_offset, count)    \
+    XR_BYTE_ARRAY_COPY_OWNER_APPLY(                                                                \
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI, XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO,      \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
+        xr_byte_array_copy_core((kind), (dst_data), (dst_length), (dst_elem_type), (src_data),     \
+                                (src_length), (src_elem_type), (src_offset), (dst_offset),         \
                                 (count)))
 
 #define xrt_byte_array_repeat_semantics(view, distance, count, reserve_fn, reserve_ctx)            \
-    XR_BYTE_ARRAY_REPEAT_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_HI,                                             \
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_LO, XR_SEM_CONSUMER_AOT_HOSTED,                \
-        xr_byte_array_repeat_tail_core((view), (distance), (count), (reserve_fn),                \
-                                       (reserve_ctx)))
+    XR_BYTE_ARRAY_REPEAT_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_HI, XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
+        xr_byte_array_repeat_tail_core((view), (distance), (count), (reserve_fn), (reserve_ctx)))
 
-#define xrt_byte_array_append_semantics(view, src_data, src_length, src_elem_type, src_guard,     \
-                                        reserve_fn, reserve_ctx)                                  \
-    XR_BYTE_ARRAY_APPEND_OWNER_APPLY(                                                             \
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI,                                             \
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO, XR_SEM_CONSUMER_AOT_HOSTED,                \
-        xr_byte_array_append_core((view), (src_data), (src_length), (src_elem_type),             \
-                                  (src_guard), (reserve_fn), (reserve_ctx)))
+#define xrt_byte_array_append_semantics(view, src_data, src_length, src_elem_type, src_guard,      \
+                                        reserve_fn, reserve_ctx)                                   \
+    XR_BYTE_ARRAY_APPEND_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI, XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
+        xr_byte_array_append_core((view), (src_data), (src_length), (src_elem_type), (src_guard),  \
+                                  (reserve_fn), (reserve_ctx)))
 
-#define xrt_pod_slice_copy_semantics(dst_data, dst_length, dst_elem_size, src_data, src_length,   \
-                                     src_elem_size)                                               \
-    XR_POD_SLICE_COPY_OWNER_APPLY(                                                               \
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO,     \
-        XR_SEM_CONSUMER_AOT_HOSTED,                                                              \
-        xr_pod_slice_copy_core((dst_data), (dst_length), (dst_elem_size), (src_data),            \
+#define xrt_pod_slice_copy_semantics(dst_data, dst_length, dst_elem_size, src_data, src_length,    \
+                                     src_elem_size)                                                \
+    XR_POD_SLICE_COPY_OWNER_APPLY(                                                                 \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO,        \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
+        xr_pod_slice_copy_core((dst_data), (dst_length), (dst_elem_size), (src_data),              \
                                (src_length), (src_elem_size)))
-#define xrt_pod_slice_fill_semantics(data, length, elem_size, kind, value)                        \
-    XR_POD_SLICE_FILL_OWNER_APPLY(                                                               \
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO,     \
-        XR_SEM_CONSUMER_AOT_HOSTED,                                                             \
+#define xrt_pod_slice_fill_semantics(data, length, elem_size, kind, value)                         \
+    XR_POD_SLICE_FILL_OWNER_APPLY(                                                                 \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO,        \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
         xr_pod_slice_fill_core((data), (length), (elem_size), (kind), (value)))
-#define xrt_pod_slice_compare_semantics(left_data, left_length, left_elem_size, right_data,       \
-                                        right_length, right_elem_size)                            \
-    XR_POD_SLICE_COMPARE_OWNER_APPLY(                                                            \
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,                                             \
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,                \
-        xr_pod_slice_compare_core((left_data), (left_length), (left_elem_size), (right_data),    \
+#define xrt_pod_slice_compare_semantics(left_data, left_length, left_elem_size, right_data,        \
+                                        right_length, right_elem_size)                             \
+    XR_POD_SLICE_COMPARE_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO,  \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
+        xr_pod_slice_compare_core((left_data), (left_length), (left_elem_size), (right_data),      \
                                   (right_length), (right_elem_size)))
-#define xrt_pod_slice_view_semantics(kind, data, length, source_elem_size, source_has_layout,     \
-                                     target_elem_size, target_expected_elem_size,                 \
-                                     target_alignment, target_layout_valid, target_is_aggregate) \
-    XR_POD_SLICE_VIEW_OWNER_APPLY(                                                               \
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO,     \
-        XR_SEM_CONSUMER_AOT_HOSTED,                                                              \
-        xr_pod_slice_view_core((kind), (data), (length), (source_elem_size),                    \
-                               (source_has_layout), (target_elem_size),                          \
-                               (target_expected_elem_size), (target_alignment),                 \
-                               (target_layout_valid), (target_is_aggregate)))
+#define xrt_pod_slice_view_semantics(kind, data, length, source_elem_size, source_has_layout,      \
+                                     target_elem_size, target_expected_elem_size,                  \
+                                     target_alignment, target_layout_valid, target_is_aggregate)   \
+    XR_POD_SLICE_VIEW_OWNER_APPLY(                                                                 \
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO,        \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                                \
+        xr_pod_slice_view_core((kind), (data), (length), (source_elem_size), (source_has_layout),  \
+                               (target_elem_size), (target_expected_elem_size),                    \
+                               (target_alignment), (target_layout_valid), (target_is_aggregate)))
 
 #define xrt_byte_slice_common_prefix_semantics(left_data, left_length, right_data, right_length,   \
-                                               ok)                                                \
-    XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(                                                      \
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,                                       \
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO, XR_SEM_CONSUMER_AOT_HOSTED,           \
-        xr_byte_slice_common_prefix_core((left_data), (left_length), XR_ELEM_U8, (right_data),    \
+                                               ok)                                                 \
+    XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(                                                       \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,                                        \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO, XR_SEM_CONSUMER_AOT_HOSTED,            \
+        xr_byte_slice_common_prefix_core((left_data), (left_length), XR_ELEM_U8, (right_data),     \
                                          (right_length), XR_ELEM_U8, (ok)))
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val);
@@ -911,10 +909,11 @@ static inline xr_span_t xrt_span_from_string_bytes(XrValue str) {
     return out;
 }
 
-static inline xr_span_t xrt_pod_slice_view_checked_raw(
-    xr_span_t span, XrPodSliceViewKind kind, uint16_t source_elem_size, bool source_has_layout,
-    uint16_t target_elem_size, uint16_t target_expected_elem_size, uint16_t target_alignment,
-    bool target_layout_valid, bool target_is_aggregate) {
+static inline xr_span_t
+xrt_pod_slice_view_checked_raw(xr_span_t span, XrPodSliceViewKind kind, uint16_t source_elem_size,
+                               bool source_has_layout, uint16_t target_elem_size,
+                               uint16_t target_expected_elem_size, uint16_t target_alignment,
+                               bool target_layout_valid, bool target_is_aggregate) {
     XrPodSliceViewResult result = xrt_pod_slice_view_semantics(
         kind, span.data, span.length, source_elem_size, source_has_layout, target_elem_size,
         target_expected_elem_size, target_alignment, target_layout_valid, target_is_aggregate);
@@ -943,11 +942,10 @@ static inline xr_span_t xrt_pod_slice_view_checked_raw(
 
 static inline xr_span_t xrt_span_copy_checked_raw(xr_span_t dst, xr_span_t src,
                                                   uint16_t elem_size) {
-    XrPodSliceStatus status = xrt_pod_slice_copy_semantics(
-        dst.data, dst.length, elem_size, src.data, src.length, elem_size);
+    XrPodSliceStatus status = xrt_pod_slice_copy_semantics(dst.data, dst.length, elem_size,
+                                                           src.data, src.length, elem_size);
     if (status == XR_POD_SLICE_INVALID_LAYOUT)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "Slice.copyFrom(src) requires static element layout");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.copyFrom(src) requires static element layout");
     if (status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) byte length overflow");
     if (status != XR_POD_SLICE_OK)
@@ -1699,12 +1697,27 @@ static inline uint64_t xrt_hash_value(XrValue v) {
             uint32_t layout_id = 0;
             if (!xrt_enum_key_parts(v, &enum_name, &member_name, &member_index, &layout_id))
                 return xr_hash_core_mix_u64((uint64_t) (uintptr_t) v.ptr);
-            if (layout_id != 0)
-                return xr_hash_core_mix_u64(((uint64_t) layout_id << 32) | member_index);
-            uint64_t enum_hash = enum_name ? xr_hash_core_bytes(enum_name, strlen(enum_name)) : 0;
-            uint64_t member_hash =
-                member_name ? xr_hash_core_bytes(member_name, strlen(member_name)) : 0;
-            return xr_hash_core_mix_u64(enum_hash ^ (member_hash << 1) ^ member_index);
+            uint64_t nominal;
+            if (layout_id != 0) {
+                nominal = ((uint64_t) layout_id << 32) | member_index;
+            } else {
+                uint64_t enum_hash =
+                    enum_name ? xr_hash_core_bytes(enum_name, strlen(enum_name)) : 0;
+                uint64_t member_hash =
+                    member_name ? xr_hash_core_bytes(member_name, strlen(member_name)) : 0;
+                nominal = enum_hash ^ (member_hash << 1) ^ member_index;
+            }
+            uint64_t hash = xr_hash_core_mix_u64(nominal);
+            /* Fold payloads so content-equal enum values share a bucket; keeps
+             * hashing consistent with the payload-wise xrt_eq relation. */
+            const XrAotEnumBox *box = xrt_enum_payload_box(v);
+            if (box) {
+                for (uint32_t i = 0; i < box->payload_count; i++) {
+                    hash ^= xrt_hash_value(box->payloads[i]) + 0x9e3779b97f4a7c15ull + (hash << 6) +
+                            (hash >> 2);
+                }
+            }
+            return hash;
         }
         case XR_TAG_NULL:
             return xr_hash_core_mix_u64(0x9e3779b97f4a7c15ull);
@@ -7306,27 +7319,23 @@ static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage
         /* Family-private lazy caches become immutable before publication. */
         (void) xr_str_rune_len(value);
         (void) xrt_str_hash(value);
-        uint32_t domain_id = storage_mode == XR_OBJ_STORAGE_SHARED
-                                 ? XR_RUNTIME_STRING_DOMAIN_CONST_SHARED
-                                 : storage_mode == XR_OBJ_STORAGE_TRANSFER
-                                       ? XR_RUNTIME_STRING_DOMAIN_TRANSFERABLE
-                                       : XR_RUNTIME_STRING_DOMAIN_COUNT;
+        uint32_t domain_id =
+            storage_mode == XR_OBJ_STORAGE_SHARED     ? XR_RUNTIME_STRING_DOMAIN_CONST_SHARED
+            : storage_mode == XR_OBJ_STORAGE_TRANSFER ? XR_RUNTIME_STRING_DOMAIN_TRANSFERABLE
+                                                      : XR_RUNTIME_STRING_DOMAIN_COUNT;
         if (XR_UNLIKELY(domain_id == XR_RUNTIME_STRING_DOMAIN_COUNT)) {
             fprintf(stderr, "xrt: invalid canonical string storage domain\n");
             abort();
         }
         XrtExecutionAllocation *node = xrt_execution_node(string);
-        if (XR_UNLIKELY(
-                node->object_format != XRT_EXECUTION_OBJECT_RUNTIME_STRING)) {
+        if (XR_UNLIKELY(node->object_format != XRT_EXECUTION_OBJECT_RUNTIME_STRING)) {
             fprintf(stderr, "xrt: canonical string allocation format mismatch\n");
             abort();
         }
         xrt_execution_unlink_object(string);
         string->header.domain_id = domain_id;
-        atomic_fetch_and_explicit(
-            &string->traits,
-            (uint16_t) ~XR_RUNTIME_STRING_TRAIT_LOCAL,
-            memory_order_relaxed);
+        atomic_fetch_and_explicit(&string->traits, (uint16_t) ~XR_RUNTIME_STRING_TRAIT_LOCAL,
+                                  memory_order_relaxed);
         return value;
     }
     bool embedded = XR_IS_ARRAY(value) || XR_IS_MAP(value) || XR_IS_SET(value) ||

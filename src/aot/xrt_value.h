@@ -40,39 +40,38 @@
 #include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
 #include "../shared/xr_truthy_core.h"
 #include "../shared/xr_compare_core.h" /* canonical equality and order relations */
-#define xrt_compare_route(kind, left_class, right_class)                                          \
-    XR_COMPARE_OWNER_ROUTE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                     \
-                           XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED, (kind), \
-                           (left_class), (right_class))
-#define xrt_compare_i64(kind, a, b)                                                               \
-    XR_COMPARE_OWNER_APPLY_I64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
-                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,     \
+#define xrt_compare_route(kind, left_class, right_class)                                           \
+    XR_COMPARE_OWNER_ROUTE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI, XR_SEM_OWNER_ID_SHARED_COMPARE_LO,   \
+                           XR_SEM_CONSUMER_AOT_HOSTED, (kind), (left_class), (right_class))
+#define xrt_compare_i64(kind, a, b)                                                                \
+    XR_COMPARE_OWNER_APPLY_I64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,      \
                                (kind), (a), (b))
-#define xrt_compare_u64(kind, a, b)                                                               \
-    XR_COMPARE_OWNER_APPLY_U64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
-                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,     \
+#define xrt_compare_u64(kind, a, b)                                                                \
+    XR_COMPARE_OWNER_APPLY_U64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,      \
                                (kind), (a), (b))
-#define xrt_compare_f64(kind, a, b)                                                               \
-    XR_COMPARE_OWNER_APPLY_F64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
-                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,     \
+#define xrt_compare_f64(kind, a, b)                                                                \
+    XR_COMPARE_OWNER_APPLY_F64(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,      \
                                (kind), (a), (b))
-#define xrt_compare_ptr(kind, a, b)                                                               \
-    XR_COMPARE_OWNER_APPLY_PTR(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                 \
-                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,     \
+#define xrt_compare_ptr(kind, a, b)                                                                \
+    XR_COMPARE_OWNER_APPLY_PTR(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                  \
+                               XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,      \
                                (kind), (a), (b))
-#define xrt_compare_ordering(kind, ordering)                                                      \
-    XR_COMPARE_OWNER_APPLY_ORDERING(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                            \
-                                    XR_SEM_OWNER_ID_SHARED_COMPARE_LO,                            \
-                                    XR_SEM_CONSUMER_AOT_HOSTED, (kind), (ordering))
-#define xrt_compare_equal(kind, equal)                                                            \
-    XR_COMPARE_OWNER_APPLY_EQUAL(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                               \
-                                 XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,   \
+#define xrt_compare_ordering(kind, ordering)                                                       \
+    XR_COMPARE_OWNER_APPLY_ORDERING(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                             \
+                                    XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED, \
+                                    (kind), (ordering))
+#define xrt_compare_equal(kind, equal)                                                             \
+    XR_COMPARE_OWNER_APPLY_EQUAL(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                                \
+                                 XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,    \
                                  (kind), (equal))
 /* Spelled into generated C for a proven scalar comparison: the relation comes
  * from the owner while the operand type stays the one the plan chose. */
-#define xrt_compare_native(relation, a, b)                                                        \
-    XR_COMPARE_OWNER_APPLY_NATIVE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                              \
-                                  XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,  \
+#define xrt_compare_native(relation, a, b)                                                         \
+    XR_COMPARE_OWNER_APPLY_NATIVE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                               \
+                                  XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,   \
                                   relation, (a), (b))
 #include "../runtime/abi/xr_runtime_string_object.h"
 
@@ -262,7 +261,7 @@ baseline:
 
 /* AOT extensions — object type encoded in tag (no object header available) */
 #define XR_TAG_STR XR_RUNTIME_STRING_LITERAL_DYNAMIC_TAG
-                              /* static / literal string view */
+/* static / literal string view */
 #define XR_TAG_ARRAY 15        /* AOT array */
 #define XR_TAG_MAP 16          /* AOT map */
 #define XR_TAG_STRBUF 17       /* AOT string builder */
@@ -462,6 +461,17 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
     return xrt_cstr_eq(enum_a, enum_b) && xrt_cstr_eq(member_a, member_b);
 }
 
+/* Payload view of an enum value. Scalar-layout ordinals and ctor views never
+ * carry payloads, so they yield NULL; everything else is an XrAotEnumBox. */
+static inline const XrAotEnumBox *xrt_enum_payload_box(XrValue v) {
+    if (v.tag != XR_TAG_ENUM || !v.ptr)
+        return NULL;
+    const XrObjHeader *hdr = (const XrObjHeader *) v.ptr;
+    if (hdr->type == XR_TENUM_SCALAR_LAYOUT || hdr->type == XR_TENUM_CTOR)
+        return NULL;
+    return (const XrAotEnumBox *) v.ptr;
+}
+
 /* Native field tags mirror XrNativeType for standalone generated C. */
 #define XR_NATIVE_I64 0
 #define XR_NATIVE_F64 1
@@ -519,18 +529,17 @@ static inline xrt_str_t *xr_str_literal_header(XrValue v) {
 
 static inline const char *xr_str_data(XrValue v) {
     return v.tag == XR_TAG_STR_ARC ? ((const XrString *) v.ptr)->data
-                                  : ((const xrt_str_t *) v.ptr)->data;
+                                   : ((const xrt_str_t *) v.ptr)->data;
 }
 
 /* Writable bytes of a freshly allocated (not yet shared) string. */
 static inline char *xr_str_buf(XrValue v) {
-    return v.tag == XR_TAG_STR_ARC ? ((XrString *) v.ptr)->data
-                                  : ((xrt_str_t *) v.ptr)->data;
+    return v.tag == XR_TAG_STR_ARC ? ((XrString *) v.ptr)->data : ((xrt_str_t *) v.ptr)->data;
 }
 
 static inline int64_t xr_str_len(XrValue v) {
     return v.tag == XR_TAG_STR_ARC ? (int64_t) ((const XrString *) v.ptr)->length
-                                  : ((const xrt_str_t *) v.ptr)->len;
+                                   : ((const xrt_str_t *) v.ptr)->len;
 }
 
 static inline void xr_str_set_len(XrValue v, uint32_t length) {
@@ -601,8 +610,7 @@ static inline XrValue xr_str_value_from_ptr(void *ptr) {
     if (!ptr)
         return (XrValue) {.tag = XR_TAG_NULL};
     XrValue r = {0};
-    const XrRuntimeObjectHeader *header =
-        (const XrRuntimeObjectHeader *) ptr;
+    const XrRuntimeObjectHeader *header = (const XrRuntimeObjectHeader *) ptr;
     /* Valid literal views are capped at uint32 length, so bytes 4-5 of their
      * int64 length are zero. A materialized string stores the nonzero canonical
      * object-kind encoding there. Raw frame reconstruction is therefore
@@ -633,8 +641,7 @@ static inline uint32_t xrt_str_hash(XrValue v) {
         uint32_t cached = string->hash;
         if (cached)
             return cached;
-        uint32_t computed =
-            xr_hash_core_str_hash_bytes(string->data, string->length);
+        uint32_t computed = xr_hash_core_str_hash_bytes(string->data, string->length);
 #if defined(_MSC_VER)
         _InterlockedExchange((volatile long *) &string->hash, (long) computed);
 #else
@@ -1274,8 +1281,8 @@ static inline int xr_truthy(XrValue v) {
         floating = XR_TO_FLOAT(v);
     }
     return xr_truthy_core_eval(XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI,
-                               XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO,
-                               XR_SEM_CONSUMER_AOT_HOSTED, kind, integer, floating, 0);
+                               XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,
+                               kind, integer, floating, 0);
 }
 
 /* =========================================================================
