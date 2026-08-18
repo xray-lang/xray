@@ -47,10 +47,14 @@
     (xr_bigint_binary_dispatch(XVM_BIGINT_OPERAND(vb), XVM_BIGINT_OPERAND(vc)) ==                  \
      XR_BIGINT_BINARY_EVALUATE)
 
-#define XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn)                             \
+/* `int_wrap_fn` names the wrapping kernel rather than spelling the unsigned
+ * round trip here: the semantics have one owner (xr_int_arith_core.h) and this
+ * is its VM adapter. Only add, sub and mul reach this path; div and mod have
+ * their own templates. */
+#define XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_wrap_fn, float_op, bigint_fn)                        \
     do {                                                                                           \
         if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
-            XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) int_op(uint64_t) XR_TO_INT(vc))); \
+            XR_SET_INT(R(a), int_wrap_fn(XR_TO_INT(vb), XR_TO_INT(vc)));                           \
             vmbreak;                                                                               \
         }                                                                                          \
         if (XR_IS_FLOAT(vb) && XR_IS_FLOAT(vc)) {                                                  \
@@ -68,20 +72,20 @@
         }                                                                                          \
     } while (0)
 
-#define XVM_TEMPLATE_ARITH_ADD_CASE(op, int_op, float_op, bigint_fn, op_flag, op_symbol, op_name,  \
-                                    error_msg)                                                     \
+#define XVM_TEMPLATE_ARITH_ADD_CASE(op, int_wrap_fn, float_op, bigint_fn, op_flag, op_symbol,      \
+                                    op_name, error_msg)                                            \
     vmcase(op) {                                                                                   \
         int a = GETARG_A(i);                                                                       \
         int b = GETARG_B(i);                                                                       \
         int c = GETARG_C(i);                                                                       \
         XrValue vb = R(b);                                                                         \
         XrValue vc = R(c);                                                                         \
-        XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn);                            \
+        XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_wrap_fn, float_op, bigint_fn);                       \
         VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
         /* `+` joins two strings. A pair where only one side is a string has no                    \
-         * result: the analyzer rejects it whenever both static types are known,                  \
-         * and a dynamically-typed operand that reaches here must fail rather                     \
-         * than silently stringify the other side. */                                             \
+         * result: the analyzer rejects it whenever both static types are known,                   \
+         * and a dynamically-typed operand that reaches here must fail rather                      \
+         * than silently stringify the other side. */                                              \
         if (XR_IS_STRING(vb) && XR_IS_STRING(vc)) {                                                \
             const char *db = xr_value_str_data(&vb);                                               \
             uint32_t lb = xr_value_str_len(&vb);                                                   \
@@ -106,7 +110,7 @@
         vmbreak;                                                                                   \
     }
 
-#define XVM_TEMPLATE_ARITH_NUMERIC_CASE(op, int_op, float_op, bigint_fn, op_flag, op_symbol,       \
+#define XVM_TEMPLATE_ARITH_NUMERIC_CASE(op, int_wrap_fn, float_op, bigint_fn, op_flag, op_symbol,  \
                                         op_name, error_msg)                                        \
     vmcase(op) {                                                                                   \
         int a = GETARG_A(i);                                                                       \
@@ -114,7 +118,7 @@
         int c = GETARG_C(i);                                                                       \
         XrValue vb = R(b);                                                                         \
         XrValue vc = R(c);                                                                         \
-        XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn);                            \
+        XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_wrap_fn, float_op, bigint_fn);                       \
         VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
     }
@@ -122,10 +126,10 @@
 /* `*` has no string form — repetition is s.repeat(n) — so the multiply
  * template is the plain numeric one. It keeps its own name only because
  * xi.mul selects the template by name. */
-#define XVM_TEMPLATE_ARITH_MUL_CASE(op, int_op, float_op, bigint_fn, op_flag, op_symbol, op_name,  \
-                                    error_msg)                                                     \
-    XVM_TEMPLATE_ARITH_NUMERIC_CASE(op, int_op, float_op, bigint_fn, op_flag, op_symbol, op_name,  \
-                                    error_msg)
+#define XVM_TEMPLATE_ARITH_MUL_CASE(op, int_wrap_fn, float_op, bigint_fn, op_flag, op_symbol,      \
+                                    op_name, error_msg)                                            \
+    XVM_TEMPLATE_ARITH_NUMERIC_CASE(op, int_wrap_fn, float_op, bigint_fn, op_flag, op_symbol,      \
+                                    op_name, error_msg)
 
 #define XVM_TEMPLATE_ARITH_DIV_CASE(op, bigint_fn, op_flag, op_symbol, op_name, error_msg)         \
     vmcase(op) {                                                                                   \
@@ -238,7 +242,7 @@ vmcase(OP_ADDI) {
     XrValue vb = R(b);
 
     if (XR_IS_INT(vb)) {
-        XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) + (uint64_t) (int64_t) sc));
+        XR_SET_INT(R(a), xr_i64_add_wrap(XR_TO_INT(vb), (int64_t) sc));
     } else if (XR_IS_FLOAT(vb)) {
         XR_SET_FLOAT(R(a), vb.f + (double) sc);
     } else if (XVM_BIGINT_EVALUATES(vb, xr_int(sc))) {
@@ -268,7 +272,7 @@ vmcase(OP_ADDK) {
     }
 
     if (XR_IS_INT(vb) && XR_IS_INT(kc)) {
-        XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) + (uint64_t) XR_TO_INT(kc)));
+        XR_SET_INT(R(a), xr_i64_add_wrap(XR_TO_INT(vb), XR_TO_INT(kc)));
     } else {
         double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);
         double nc = XR_IS_INT(kc) ? (double) XR_TO_INT(kc) : XR_TO_FLOAT(kc);
@@ -284,7 +288,7 @@ vmcase(OP_SUBI) {
     XrValue vb = R(b);
 
     if (XR_IS_INT(vb)) {
-        XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) - (uint64_t) (int64_t) sc));
+        XR_SET_INT(R(a), xr_i64_sub_wrap(XR_TO_INT(vb), (int64_t) sc));
     } else if (XR_IS_FLOAT(vb)) {
         XR_SET_FLOAT(R(a), vb.f - (double) sc);
     } else if (XVM_BIGINT_EVALUATES(vb, xr_int(sc))) {
@@ -314,7 +318,7 @@ vmcase(OP_SUBK) {
     }
 
     if (XR_IS_INT(vb) && XR_IS_INT(kc)) {
-        XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) - (uint64_t) XR_TO_INT(kc)));
+        XR_SET_INT(R(a), xr_i64_sub_wrap(XR_TO_INT(vb), XR_TO_INT(kc)));
     } else {
         double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);
         double nc = XR_IS_INT(kc) ? (double) XR_TO_INT(kc) : XR_TO_FLOAT(kc);
@@ -331,7 +335,7 @@ vmcase(OP_MULI) {
     XrValue vb = R(b);
 
     if (XR_IS_INT(vb)) {
-        XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) * (uint64_t) (int64_t) sc));
+        XR_SET_INT(R(a), xr_i64_mul_wrap(XR_TO_INT(vb), (int64_t) sc));
         vmbreak;
     }
     if (XR_IS_FLOAT(vb)) {
@@ -370,7 +374,7 @@ vmcase(OP_MULK) {
 
     // Fast path: integer multiplication (wrap on overflow)
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) * (uint64_t) XR_TO_INT(vc)));
+        XR_SET_INT(R(a), xr_i64_mul_wrap(XR_TO_INT(vb), XR_TO_INT(vc)));
         vmbreak;
     }
     // Float/mixed multiplication
@@ -532,16 +536,16 @@ vmcase(OP_MOD_U) {
         int b = GETARG_B(i);                                                                       \
         XrValue vb = R(b);                                                                         \
         if (XR_IS_INT(vb)) {                                                                       \
-            XrNumericNegResult neg = XR_NUMERIC_NEG_OWNER_APPLY(                                  \
-                XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,     \
-                XR_SEM_CONSUMER_VM, XR_NUMERIC_NEG_I64, XR_TO_INT(vb), 0.0);                      \
+            XrNumericNegResult neg = XR_NUMERIC_NEG_OWNER_APPLY(                                   \
+                XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,      \
+                XR_SEM_CONSUMER_VM, XR_NUMERIC_NEG_I64, XR_TO_INT(vb), 0.0);                       \
             XR_SET_INT(R(a), neg.i64);                                                             \
             vmbreak;                                                                               \
         }                                                                                          \
         if (XR_IS_FLOAT(vb)) {                                                                     \
-            XrNumericNegResult neg = XR_NUMERIC_NEG_OWNER_APPLY(                                  \
-                XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,     \
-                XR_SEM_CONSUMER_VM, XR_NUMERIC_NEG_F64, 0, XR_TO_FLOAT(vb));                      \
+            XrNumericNegResult neg = XR_NUMERIC_NEG_OWNER_APPLY(                                   \
+                XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,      \
+                XR_SEM_CONSUMER_VM, XR_NUMERIC_NEG_F64, 0, XR_TO_FLOAT(vb));                       \
             R(a) = xr_float(neg.f64);                                                              \
             vmbreak;                                                                               \
         }                                                                                          \

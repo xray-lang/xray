@@ -59,6 +59,7 @@
 #include "../shared/xr_byte_array_copy_core.h"
 #include "../shared/xr_byte_array_repeat_core.h"
 #include "../shared/xr_bits_core.h"
+#include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_error_core.h"
 #include "../shared/xr_error_messages.h"
 #include "../shared/xr_enum_metadata_core.h"
