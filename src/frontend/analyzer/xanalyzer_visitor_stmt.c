@@ -7027,6 +7027,15 @@ static void xa_update_ownership_from_value(XaInferContext *ctx, XaSymbol *target
     if (!target_links)
         return;
     target_links->binding_use = XA_BINDING_LIVE;
+    if (is_reassignment &&
+        (target_links->final_move.id != 0 || target_links->ownership_candidate.id != 0)) {
+        /* Rebinding after a completed move starts a new ownership generation.
+         * The consumed generation's move evidence must not survive: publication
+         * would otherwise check it against the new allocation plan and reject
+         * the whole unit as inconsistent. */
+        memset(&target_links->final_move, 0, sizeof(target_links->final_move));
+        memset(&target_links->ownership_candidate, 0, sizeof(target_links->ownership_candidate));
+    }
     if (!xa_type_has_movable_root(value_type)) {
         target_links->root_id = 0;
         target_links->root_alias = XA_ROOT_UNIQUE;
@@ -8564,8 +8573,11 @@ static void xa_forward_return_owner_binding(XaInferContext *ctx, AstNode *return
             return;
         }
         if (links->storage_domain == XR_STORAGE_MODULE_STATIC) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "cannot consume a module-static binding in return", &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_CAPABILITY,
+                                       "cannot consume a module-static binding in return "
+                                       "(OWN-E-CAP-MODULE)",
+                                       &loc);
         }
         if (!links->allocation_plan.complete) {
             xa_analyzer_add_diagnostic(
@@ -9273,7 +9285,11 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Analyze body - inline block to match Pass 1 scope structure
+    /* Analyze body. A block body goes through xa_visit_block_stmt so it gets
+     * its own scope keyed on the body node, matching Pass 1 and `while`. The
+     * loop-scope entry point must stay one level above the body scope: the
+     * move-in-loop check distinguishes bindings declared per iteration (in
+     * the body scope) from bindings the backedge would consume again. */
     XaLoopScope loop_scope;
     xa_loop_scope_push(ctx, &loop_scope, for_stmt->label, node);
     XaFlowNode *continue_label = NULL;
@@ -9284,6 +9300,10 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
         loop_scope.continue_flow_target = continue_label;
         loop_scope.break_flow_target = break_label;
     }
+    /* NOT xa_visit_infer_stmt: Pass 1 keys the body's declarations on the for
+     * statement node, not the body node, so routing through the block visitor
+     * opens a scope Pass 1 never filled and the body's own bindings stop
+     * resolving. Giving the body a real scope means changing Pass 1 too. */
     if (for_stmt->body)
         xa_visit_inline_statement_sequence_with_cursor(ctx, for_stmt->body);
     xa_loop_scope_pop(ctx, &loop_scope);
