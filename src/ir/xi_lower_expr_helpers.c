@@ -50,7 +50,7 @@ XR_FUNC struct XrType *xi_lower_infer_binary_type(XiLower *l, AstNodeType ast_ty
         return l->type_int;
     if (left && left->kind == XR_KIND_STRING && right && right->kind == XR_KIND_STRING)
         return l->type_string;
-    return left ? left : l->type_any;
+    return left;
 }
 
 XR_FUNC struct XrType *xi_lower_infer_unary_type(XiLower *l, AstNodeType ast_type,
@@ -63,7 +63,7 @@ XR_FUNC struct XrType *xi_lower_infer_unary_type(XiLower *l, AstNodeType ast_typ
         case AST_UNARY_BNOT:
             return l->type_int;
         default:
-            return operand ? operand : l->type_any;
+            return operand;
     }
 }
 

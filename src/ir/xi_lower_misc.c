@@ -69,8 +69,7 @@ static XiValue *lower_enum_method_closure(XiLower *l, XiFunc *child, uint16_t ch
     if (!l || !child)
         return NULL;
     uint16_t ncap = child->ncaptures;
-    XiValue *closure =
-        xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, fn_type ? fn_type : l->type_any, ncap);
+    XiValue *closure = xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, fn_type, ncap);
     if (!closure)
         return NULL;
     for (uint16_t ci = 0; ci < ncap; ci++) {

@@ -1357,7 +1357,7 @@ static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *
     if (fidx >= 0) {
         struct XrType *ft =
             subject->type->object.field_types ? subject->type->object.field_types[fidx] : NULL;
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_OBJECT_GET_F, ft ? ft : l->type_any, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_OBJECT_GET_F, ft, 1);
         if (v) {
             v->args[0] = subject;
             v->aux_int = fidx;
@@ -1384,7 +1384,7 @@ static XiValue *lower_match_elem_get(XiLower *l, XiValue *subject, int idx) {
             ? subject->type->container.element_type
             : NULL;
     XiValue *iv = xi_const_int(l->func, l->cur_block, idx, l->type_int);
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, et ? et : l->type_any, 2);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, et, 2);
     if (v) {
         v->args[0] = subject;
         v->args[1] = iv;
@@ -1611,8 +1611,7 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
         if (pval && pval->type == AST_VARIABLE) {
             const char *bname = pval->as.variable.name;
             uint32_t bsid = pval->as.variable.symbol_id;
-            int var_id =
-                xi_lower_var_create(l, bsid, bname, subject->type ? subject->type : l->type_any);
+            int var_id = xi_lower_var_create(l, bsid, bname, subject->type);
             xi_lower_braun_write(l, var_id, l->cur_block, subject);
         }
         return;
@@ -1644,8 +1643,7 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
                 continue;
             struct XrType *payload_type =
                 xa_analyzer_resolve_adt_payload_type(l->analyzer, subject->type, ap->variant, i);
-            XiValue *field = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD,
-                                          payload_type ? payload_type : l->type_any, 1);
+            XiValue *field = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, payload_type, 1);
             if (!field)
                 continue;
             field->args[0] = subject;
@@ -1711,8 +1709,7 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
     if (pattern->type == AST_PATTERN_TYPE) {
         PatternTypeNode *tp = &pattern->as.pattern_type;
         if (tp->binding_name) {
-            int var_id = xi_lower_var_create(l, tp->symbol_id, tp->binding_name,
-                                             subject->type ? subject->type : l->type_any);
+            int var_id = xi_lower_var_create(l, tp->symbol_id, tp->binding_name, subject->type);
             xi_lower_braun_write(l, var_id, l->cur_block, subject);
         }
     }
@@ -2221,8 +2218,7 @@ static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiVa
 
     int col_var = -1;
     if (get_item_coll) {
-        col_var = xi_lower_var_create(l, 0, col_name,
-                                      get_item_coll->type ? get_item_coll->type : l->type_any);
+        col_var = xi_lower_var_create(l, 0, col_name, get_item_coll->type);
         xi_lower_braun_write(l, col_var, l->cur_block, get_item_coll);
     }
 
@@ -2598,7 +2594,7 @@ static void lower_for_in_channel_loop(XiLower *l, AstNode *node, XiValue *coll) 
     XR_DCHECK(chan_name != NULL, "arena alloc failed for chan_name");
     memcpy(chan_name, buf, strlen(buf) + 1);
 
-    int chan_var = xi_lower_var_create(l, 0, chan_name, coll->type ? coll->type : l->type_any);
+    int chan_var = xi_lower_var_create(l, 0, chan_name, coll->type);
     xi_lower_braun_write(l, chan_var, l->cur_block, coll);
 
     XiBlock *cond_blk = xi_block_new(l->func);
@@ -2831,8 +2827,7 @@ static void lower_catch_bind_clause(XiLower *l, XrCatchClause *cc, XiValue *valu
     if (!l || !cc || !value)
         return;
     if (cc->var_name) {
-        int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name,
-                                         value->type ? value->type : l->type_any);
+        int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, value->type);
         xi_lower_braun_write(l, var_id, l->cur_block, value);
     }
     if (lower_catch_clause_has_pattern_test(cc))
@@ -2949,8 +2944,8 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
     XiErrorRegion *error_region = NULL;
     XiErrorRegion *parent_error_region = l->active_error_region;
     if (has_err) {
-        error_region = (XiErrorRegion *) xi_func_arena_alloc(
-            l->func, (uint32_t) sizeof(XiErrorRegion));
+        error_region =
+            (XiErrorRegion *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiErrorRegion));
         if (!error_region) {
             l->had_error = true;
             return;
@@ -3035,8 +3030,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
             }
         }
 
-        lower_error_catch_clauses(l, errc, errn, node, normal_target,
-                                  error_region);
+        lower_error_catch_clauses(l, errc, errn, node, normal_target, error_region);
 
         if (l->cur_block)
             xi_block_set_jump(l->cur_block, merge);
@@ -3422,8 +3416,7 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                 if (fidx >= 0) {
                     struct XrType *field_type =
                         src->type->object.field_types ? src->type->object.field_types[fidx] : NULL;
-                    val = xi_value_new(l->func, l->cur_block, XI_OBJECT_GET_F,
-                                       field_type ? field_type : l->type_any, 1);
+                    val = xi_value_new(l->func, l->cur_block, XI_OBJECT_GET_F, field_type, 1);
                     if (val) {
                         val->args[0] = src;
                         val->aux_int = fidx;
@@ -3485,7 +3478,7 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
             /* Fall through: declaration-style binding (create fresh
              * local). Reached for destructure-decl PATTERN_IDENTIFIER
              * because the analyzer has not pre-bound the symbol. */
-            struct XrType *binding_type = src->type ? src->type : l->type_any;
+            struct XrType *binding_type = src->type;
             int new_var = xi_lower_var_create(l, sid, name, binding_type);
             xi_lower_braun_write(l, new_var, l->cur_block, src);
             break;
@@ -3708,9 +3701,8 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
      * annotation on a container literal (e.g. var a: Array<int> = [1,2]).
      * Only the annotation distinguishes typed from untyped containers. */
     if (node->as.var_decl.type_annotation && type) {
-        bool is_array_factory =
-            init_val->op == XI_CALL_BUILTIN &&
-            init_val->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY;
+        bool is_array_factory = init_val->op == XI_CALL_BUILTIN &&
+                                init_val->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY;
         if ((init_val->op == XI_ARRAY_NEW || is_array_factory) &&
             (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type)) && type->container.element_type) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);

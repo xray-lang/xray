@@ -339,7 +339,7 @@ static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
     ref->resolved_shared_slot = -1;
     ref->resolved_export_slot = -1;
 
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type ? type : l->type_any, 0);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type, 0);
     if (!v)
         return NULL;
     v->aux = (void *) ref;
@@ -3643,8 +3643,8 @@ static XiValue *lower_ct_tuple_value(XiLower *l, AstNode *node, const XrCtValue 
             return NULL;
     }
 
-    XiValue *tup_val = xi_value_new(l->func, l->cur_block, XI_TUPLE_NEW,
-                                    target_type ? target_type : l->type_any, (uint16_t) count);
+    XiValue *tup_val =
+        xi_value_new(l->func, l->cur_block, XI_TUPLE_NEW, target_type, (uint16_t) count);
     if (!tup_val)
         return NULL;
     for (uint16_t i = 0; i < (uint16_t) count; i++)
@@ -4062,8 +4062,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     /* copy(x) → XI_CALL_BUILTIN aux="copy" → OP_COPY */
     if (strcmp(fname, "copy") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v =
-            xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, rtype ? rtype : l->type_any, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, rtype, 1);
         if (!v)
             return NULL;
         v->args[0] = arg;
@@ -8739,8 +8738,7 @@ static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiVa
     }
 
     struct XrType *plan_state_type = lower_parallel_plan_state_type(l, plan->type);
-    struct XrType *states_type =
-        xr_type_new_array(l->isolate, plan_state_type ? plan_state_type : l->type_any);
+    struct XrType *states_type = xr_type_new_array(l->isolate, plan_state_type);
     XiValue *states = lower_emit_field_load(l, plan, "_states", states_type, node->line);
     XiValue *workers = lower_emit_len(l, states, node->line);
     if (!states || !workers)
@@ -8748,7 +8746,7 @@ static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiVa
 
     FunctionDeclNode *body_expr = &parallel_call_unwrap_grouping(body_node)->as.function_expr;
     struct XrType *state_type = parallel_call_param_type(l, body_expr->params[0], plan_state_type);
-    struct XrType *abi_types[3] = {state_type ? state_type : l->type_any, l->type_int, l->type_int};
+    struct XrType *abi_types[3] = {state_type, l->type_int, l->type_int};
     ParallelCallParamBinding bindings[2] = {{
                                                 .param = body_expr->params[0],
                                                 .abi_index = 0,
@@ -8835,8 +8833,7 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
     }
 
     struct XrType *plan_state_type = lower_parallel_plan_state_type(l, plan->type);
-    struct XrType *states_type =
-        xr_type_new_array(l->isolate, plan_state_type ? plan_state_type : l->type_any);
+    struct XrType *states_type = xr_type_new_array(l->isolate, plan_state_type);
     XiValue *states = lower_emit_field_load(l, plan, "_states", states_type, node->line);
     XiValue *workers = lower_emit_len(l, states, node->line);
     if (!states || !workers)
@@ -8856,7 +8853,7 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
 
     FunctionDeclNode *body_expr = &parallel_call_unwrap_grouping(body_node)->as.function_expr;
     struct XrType *state_type = parallel_call_param_type(l, body_expr->params[0], plan_state_type);
-    struct XrType *abi_types[3] = {state_type ? state_type : l->type_any, l->type_int, l->type_int};
+    struct XrType *abi_types[3] = {state_type, l->type_int, l->type_int};
     ParallelCallParamBinding bindings[2] = {{
                                                 .param = body_expr->params[0],
                                                 .abi_index = 0,
@@ -8956,8 +8953,7 @@ static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValu
     }
 
     struct XrType *plan_state_type = lower_parallel_plan_state_type(l, plan->type);
-    struct XrType *states_type =
-        xr_type_new_array(l->isolate, plan_state_type ? plan_state_type : l->type_any);
+    struct XrType *states_type = xr_type_new_array(l->isolate, plan_state_type);
     XiValue *states = lower_emit_field_load(l, plan, "_states", states_type, node->line);
     XiValue *workers = lower_emit_len(l, states, node->line);
     if (!states || !workers)
@@ -8977,8 +8973,7 @@ static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValu
 
     FunctionDeclNode *body_expr = &parallel_call_unwrap_grouping(body_node)->as.function_expr;
     struct XrType *state_type = parallel_call_param_type(l, body_expr->params[0], plan_state_type);
-    struct XrType *body_abi_types[3] = {state_type ? state_type : l->type_any, l->type_int,
-                                        l->type_int};
+    struct XrType *body_abi_types[3] = {state_type, l->type_int, l->type_int};
     ParallelCallParamBinding body_bindings[2] = {{
                                                      .param = body_expr->params[0],
                                                      .abi_index = 0,
@@ -10006,8 +10001,7 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             if (!type_val) {
                 int builtin_index = xi_lower_builtin_class_global_index(tref->name);
                 if (builtin_index >= 0) {
-                    type_val = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN,
-                                            target_type ? target_type : l->type_any, 0);
+                    type_val = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, target_type, 0);
                     if (type_val) {
                         type_val->aux_int = builtin_index;
                         type_val->aux = (void *) arena_strdup(l->func, tref->name);

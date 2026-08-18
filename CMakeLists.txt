@@ -2858,8 +2858,8 @@ if(BUILD_TESTS)
                 # representation, closed-world callee diagnostics) added two
                 # measured consumers to each band; re-pin to the current truth
                 # so the gate trips on the next single addition.
-                --max-category TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK=113
-                --max-category IR_UNKNOWN_ERASURE_CONSUMER=127
+                --max-category TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK=90
+                --max-category IR_UNKNOWN_ERASURE_CONSUMER=104
                 --max-category AOT_UNKNOWN_ERASURE_CONSUMER=6
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )

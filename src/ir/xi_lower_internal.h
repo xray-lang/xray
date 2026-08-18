@@ -13,6 +13,8 @@
 #ifndef XI_LOWER_INTERNAL_H
 #define XI_LOWER_INTERNAL_H
 
+#include <stdlib.h>
+#include <stdio.h>
 #include "xi_lower.h"
 #include "xi.h"
 #include "../base/xdefs.h"
@@ -81,8 +83,8 @@ static inline bool xi_lower_mark_storage_allocation(XiValue *v, uint8_t storage_
             if (v->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY ||
                 v->array_intrinsic_kind == XI_ARRAY_INTRINSIC_FILLED_NEW ||
                 (v->aux && (strcmp((const char *) v->aux, "array_copy_new") == 0 ||
-                           strcmp((const char *) v->aux, "StringBuilder") == 0 ||
-                           strcmp((const char *) v->aux, "copy") == 0))) {
+                            strcmp((const char *) v->aux, "StringBuilder") == 0 ||
+                            strcmp((const char *) v->aux, "copy") == 0))) {
                 xi_value_set_allocation_storage_mode(v, storage_mode);
                 return true;
             }
@@ -158,7 +160,7 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, struct XaAnalyzer *a
 XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, const char *context,
                                         int line);
 XR_FUNC struct XrType *xi_lower_type_or_any(XiLower *l, struct XrType *type, const char *context,
-                                             int line);
+                                            int line);
 XR_FUNC XiSourceSpan xi_lower_push_source_span(XiLower *l, const struct AstNode *node);
 XR_FUNC void xi_lower_pop_source_span(XiLower *l, XiSourceSpan previous);
 XR_FUNC uint32_t xi_lower_source_node_id(const XiLower *l, const struct AstNode *node);
