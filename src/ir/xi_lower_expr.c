@@ -3236,9 +3236,13 @@ static XiValue *lower_tuple_literal(XiLower *l, AstNode *node) {
                 return NULL;
             int arity = src->type ? xr_type_tuple_count(src->type) : 0;
             for (int j = 0; j < arity && slot < 64; j++) {
+                /* The loop runs only when src->type is a tuple with j in range,
+                 * so the element type is present. A missing one is an internal
+                 * inconsistency, not a value to erase. */
                 struct XrType *et = xr_type_tuple_get(src->type, j);
-                XiValue *get =
-                    xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et ? et : l->type_any, 1);
+                if (!et)
+                    return NULL;
+                XiValue *get = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et, 1);
                 if (!get)
                     return NULL;
                 get->args[0] = src;
@@ -3293,8 +3297,7 @@ static XiValue *lower_array_literal_spread(XiLower *l, AstNode *node, struct XrT
     if (!arr_val)
         return NULL;
     arr_val->args[0] = cap;
-    arr_val->array_element_storage =
-        xi_array_intrinsic_storage_from_type(result_type);
+    arr_val->array_element_storage = xi_array_intrinsic_storage_from_type(result_type);
     arr_val->line = (uint32_t) node->line;
 
     for (int i = 0; i < count; i++) {
@@ -3574,8 +3577,7 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     if (!arr_val)
         return NULL;
     arr_val->args[0] = cap;
-    arr_val->array_element_storage =
-        xi_array_intrinsic_storage_from_type(result_type);
+    arr_val->array_element_storage = xi_array_intrinsic_storage_from_type(result_type);
     arr_val->line = (uint32_t) node->line;
 
     /* Populate: INDEX_SET for each element */
@@ -4382,9 +4384,13 @@ static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList 
                 return false;
             int arity = src->type ? xr_type_tuple_count(src->type) : 0;
             for (int j = 0; j < arity; j++) {
+                /* The loop runs only when src->type is a tuple with j in range,
+                 * so the element type is present. A missing one is an internal
+                 * inconsistency, not a value to erase. */
                 struct XrType *et = xr_type_tuple_get(src->type, j);
-                XiValue *get =
-                    xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et ? et : l->type_any, 1);
+                if (!et)
+                    return NULL;
+                XiValue *get = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et, 1);
                 if (!get)
                     return false;
                 get->args[0] = src;
@@ -4697,9 +4703,13 @@ static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowe
                 return false;
             int arity = src->type ? xr_type_tuple_count(src->type) : 0;
             for (int j = 0; j < arity; j++) {
+                /* The loop runs only when src->type is a tuple with j in range,
+                 * so the element type is present. A missing one is an internal
+                 * inconsistency, not a value to erase. */
                 struct XrType *et = xr_type_tuple_get(src->type, j);
-                XiValue *get =
-                    xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et ? et : l->type_any, 1);
+                if (!et)
+                    return NULL;
+                XiValue *get = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et, 1);
                 if (!get)
                     return false;
                 get->args[0] = src;
@@ -6557,9 +6567,10 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
             return NULL;
         }
         value->view_evidence.root_value_id = receiver->id;
-        value->view_evidence.element_type_id = result_type->container.element_type
-                                                   ? result_type->container.element_type->semantic_type_id
-                                                   : 0;
+        value->view_evidence.element_type_id =
+            result_type->container.element_type
+                ? result_type->container.element_type->semantic_type_id
+                : 0;
         value->view_evidence.source_operand = 0;
         value->view_evidence.source_param = -1;
         value->view_evidence.origin = XI_VIEW_ORIGIN_RECEIVER;
@@ -6765,12 +6776,11 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     if (!resolved && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &call->callee->as.member_access;
         XrType *receiver_type = lower_known_expr_type(l, member->object);
-        XaIntrinsicId intrinsic_id = xa_intrinsic_compiler_receiver_method(receiver_type,
-                                                                            member->name);
+        XaIntrinsicId intrinsic_id =
+            xa_intrinsic_compiler_receiver_method(receiver_type, member->name);
         if (intrinsic_id == XA_INTRINSIC_NONE &&
-            xi_lower_receiver_method_call_matches(
-                receiver_type, member->name, call->arg_count,
-                XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE))
+            xi_lower_receiver_method_call_matches(receiver_type, member->name, call->arg_count,
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE))
             intrinsic_id = XA_INTRINSIC_ARRAY_RESERVE;
         if (intrinsic_id != XA_INTRINSIC_NONE) {
             lowering_resolved = (XaResolvedCall) {
@@ -7462,35 +7472,29 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
          * selector becomes debug-only metadata. This first authority slice is
          * intentionally the one-argument Array.fill family only. */
         if (n == 1 && xi_lower_receiver_method_call_matches(
-                          recv->type, ma->name, n,
-                          XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILL)) {
+                          recv->type, ma->name, n, XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILL)) {
             v->array_member_kind = XI_ARRAY_MEMBER_FILL;
-            v->array_element_storage =
-                xi_array_intrinsic_storage_from_type(recv->type);
+            v->array_element_storage = xi_array_intrinsic_storage_from_type(recv->type);
         }
-        if (n == 1 && xi_lower_receiver_method_call_matches(
-                          recv->type, ma->name, n,
-                          XA_BUILTIN_RECEIVER_METHOD_ARRAY_MAP)) {
+        if (n == 1 && xi_lower_receiver_method_call_matches(recv->type, ma->name, n,
+                                                            XA_BUILTIN_RECEIVER_METHOD_ARRAY_MAP)) {
             v->array_hof_kind = XI_ARRAY_HOF_MAP;
-        } else if (n == 1 && xi_lower_receiver_method_call_matches(
-                                 recv->type, ma->name, n,
-                                 XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILTER)) {
+        } else if (n == 1 &&
+                   xi_lower_receiver_method_call_matches(recv->type, ma->name, n,
+                                                         XA_BUILTIN_RECEIVER_METHOD_ARRAY_FILTER)) {
             v->array_hof_kind = XI_ARRAY_HOF_FILTER;
-        } else if (n == 2 && xi_lower_receiver_method_call_matches(
-                                 recv->type, ma->name, n,
-                                 XA_BUILTIN_RECEIVER_METHOD_ARRAY_REDUCE)) {
+        } else if (n == 2 &&
+                   xi_lower_receiver_method_call_matches(recv->type, ma->name, n,
+                                                         XA_BUILTIN_RECEIVER_METHOD_ARRAY_REDUCE)) {
             v->array_hof_kind = XI_ARRAY_HOF_REDUCE;
         }
         if (v->array_hof_kind != XI_ARRAY_HOF_NONE) {
-            v->array_element_storage =
-                xi_array_intrinsic_storage_from_type(recv->type);
+            v->array_element_storage = xi_array_intrinsic_storage_from_type(recv->type);
             struct XrType *stored_result =
-                XR_TYPE_IS_ARRAY(result_type) ? result_type->container.element_type
-                                              : result_type;
-            v->array_result_element_storage = stored_result
-                                                  ? (uint8_t) xr_tid_to_elem_type(
-                                                        xr_type_to_tid(stored_result))
-                                                  : XR_ELEM_ANY;
+                XR_TYPE_IS_ARRAY(result_type) ? result_type->container.element_type : result_type;
+            v->array_result_element_storage =
+                stored_result ? (uint8_t) xr_tid_to_elem_type(xr_type_to_tid(stored_result))
+                              : XR_ELEM_ANY;
         }
         if (is_time_sleep)
             v->lowering_flags |= XI_LOWERING_FLAG_TIME_SLEEP;
@@ -9231,8 +9235,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
                 uint8_t tid = xr_type_to_tid(result_type->container.element_type);
                 v->aux_int = (int64_t) (tid << 2);
             }
-            v->array_element_storage =
-                xi_array_intrinsic_storage_from_type(result_type);
+            v->array_element_storage = xi_array_intrinsic_storage_from_type(result_type);
             v->line = (uint32_t) node->line;
             return v;
         }
@@ -9253,8 +9256,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
                 v->aux = (void *) "array_copy_new";
             v->aux_int = xi_array_cfield_from_type(result_type);
             if (!array_copy)
-                v->array_element_storage =
-                    xi_array_intrinsic_storage_from_type(result_type);
+                v->array_element_storage = xi_array_intrinsic_storage_from_type(result_type);
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
             return v;
