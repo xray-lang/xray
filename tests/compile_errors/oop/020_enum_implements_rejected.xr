@@ -1,0 +1,10 @@
+// Enums do not participate in interface dispatch; a declared implements
+// clause would never be checked or usable, so it is rejected outright.
+interface Named { label() -> string }
+
+enum Color implements Named {
+    Red, Green
+}
+
+fn main() { print(Color.Red.name) }
+main()

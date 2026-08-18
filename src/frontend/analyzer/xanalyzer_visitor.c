@@ -3625,6 +3625,23 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     }
                     xa_analyzer_exit_scope(ctx->analyzer);
                 }
+
+                /* No semantic pass consumes an enum's implements clause: the
+                 * contract is never checked and an enum value is never
+                 * assignable to the interface. Accepting the clause would only
+                 * make the declaration look verified, so it is rejected until
+                 * enum interface dispatch actually exists. */
+                if (edecl->interface_count > 0) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    char msg[224];
+                    snprintf(msg, sizeof(msg),
+                             "enum '%s' cannot declare implements: enums do not participate in "
+                             "interface dispatch; drop the clause or model the type as a class",
+                             edecl->name ? edecl->name : "?");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+                }
             }
             break;
         }
