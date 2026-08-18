@@ -19,6 +19,7 @@
                        // definition is provided by xrt_exception.h in the full
                        // xrt.h build and by the host TU in standalone unit tests
 #include "xrt_class.h"
+#include "xrt_method_symbols.h" /* XRT_SYM_TOSTRING for the user-toString hook */
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_type_identity_core.h"
@@ -468,8 +469,7 @@ static inline XrValue xrt_bigint_mod_val(XrValue a, XrValue b) {
 /* Adapt hosted BigInt representation and allocation to shared.bitwise-binary.
  * Two's-complement conversion, operator choice and result sign remain solely
  * in the runtime-neutral owner. */
-static inline XrValue xrt_bigint_bitwise_val(XrValue av, XrValue bv,
-                                             XrBitwiseBinaryKind kind) {
+static inline XrValue xrt_bigint_bitwise_val(XrValue av, XrValue bv, XrBitwiseBinaryKind kind) {
     const xrt_bigint_view_t *a = xrt_bigint_view(av);
     const xrt_bigint_view_t *b = xrt_bigint_view(bv);
     XrValue rv;
@@ -485,8 +485,8 @@ static inline XrValue xrt_bigint_bitwise_val(XrValue av, XrValue bv,
     xrt_bigint_view_t *r = xrt_bigint_new(plan.capacity, &rv);
     r->len = XR_BITWISE_BINARY_BIGINT_OWNER_APPLY(
         XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI, XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,
-        XR_SEM_CONSUMER_AOT_HOSTED, &plan, a->limbs, a->len, a->sign, b->limbs, b->len,
-        b->sign, r->limbs, &r->sign);
+        XR_SEM_CONSUMER_AOT_HOSTED, &plan, a->limbs, a->len, a->sign, b->limbs, b->len, b->sign,
+        r->limbs, &r->sign);
     return rv;
 }
 
@@ -555,8 +555,8 @@ static inline XrValue xrt_add(XrValue a, XrValue b) {
     if (XR_IS_STR(a) && XR_IS_STR(b))
         return xrt_str_concat_value(a, b); /* header lengths, no strlen */
     if (!xrt_is_tagged_number(a) || !xrt_is_tagged_number(b))
-        xrt_throw_exc(xr_box_str(
-            "E0404: operator '+' requires both operands to be numeric or both string"));
+        xrt_throw_exc(
+            xr_box_str("E0404: operator '+' requires both operands to be numeric or both string"));
     double fa = a.tag == XR_TAG_I64 ? (double) a.i : a.f;
     double fb = b.tag == XR_TAG_I64 ? (double) b.i : b.f;
     return XR_FROM_FLOAT(fa + fb);
@@ -591,11 +591,10 @@ static inline XrValue xrt_mul(XrValue a, XrValue b) {
  * divisor; this profile publishes that report as the hosted E0420 / E0421
  * throw. Generated C reaches the proven-divisor forms through the
  * xrt_int_div_mod_eval adapter bound to this profile in xrt.h. */
-#define XRT_HOSTED_INT_DIV_MOD_CHECKED(kind, lhs, rhs)                                            \
-    XR_INT_DIV_MOD_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                             \
-                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO,                             \
-                               XR_SEM_CONSUMER_AOT_HOSTED, (kind),                                \
-                               XR_INT_DIV_MOD_PROOF_NONE, (lhs), (rhs))
+#define XRT_HOSTED_INT_DIV_MOD_CHECKED(kind, lhs, rhs)                                             \
+    XR_INT_DIV_MOD_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_HI,                              \
+                               XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO, XR_SEM_CONSUMER_AOT_HOSTED,  \
+                               (kind), XR_INT_DIV_MOD_PROOF_NONE, (lhs), (rhs))
 
 static inline int64_t xrt_int_div(int64_t a, int64_t b) {
     XrIntDivModResult quotient = XRT_HOSTED_INT_DIV_MOD_CHECKED(XR_INT_DIV_MOD_DIV, a, b);
@@ -978,6 +977,19 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
             }
             if (v.heap_type != XR_TINSTANCE || !v.ptr)
                 break;
+            /* A user-defined toString() wins over the structural formatter,
+             * matching the VM's print dispatch for class instances. */
+            {
+                XrtMethodFn user_ts = xrt_type_find_sym_method(v, XRT_SYM_TOSTRING);
+                if (user_ts) {
+                    XrValue rendered =
+                        ((XrValue (*)(struct xrt_closure *, XrValue)) user_ts)(NULL, v);
+                    if (XR_IS_STR(rendered)) {
+                        xrt_fmt_puts(sb, xr_str_data(rendered), (size_t) xr_str_len(rendered));
+                        return;
+                    }
+                }
+            }
             XrObjHeader *hdr = (XrObjHeader *) v.ptr;
             const XrtTypeInfo *ti = xrt_type_info(xrt_aot_class_type_id(hdr));
             const char *type_name = ti ? xrt_type_display_name(ti->type_id) : "<object>";
@@ -1221,11 +1233,9 @@ static inline void xrt_println(XrValue v) {
  * XR_TID_INT=8, XR_TID_FLOAT=11, XR_TID_BOOL=1, XR_TID_NULL=0,
  * XR_TID_STRING=12, XR_TID_FUNCTION=13, XR_TID_ARRAY=14, XR_TID_SET=15,
  * XR_TID_MAP=16. */
-#define XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(core_id, public_id, numeric_id)         \
-    _Static_assert((unsigned) (core_id) == (numeric_id),                           \
-                   "AOT type identity core id drifted");                          \
-    _Static_assert((unsigned) (public_id) == (numeric_id),                         \
-                   "AOT public type id drifted")
+#define XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(core_id, public_id, numeric_id)                         \
+    _Static_assert((unsigned) (core_id) == (numeric_id), "AOT type identity core id drifted");     \
+    _Static_assert((unsigned) (public_id) == (numeric_id), "AOT public type id drifted")
 
 XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_NULL, XR_TID_NULL, 0u);
 XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_INT, XR_TID_INT, 8u);
@@ -1281,9 +1291,8 @@ static inline XrTypeIdentityCoreKind xrt_type_identity_kind(XrValue v) {
 
 static inline int64_t xrt_typeof_id(XrValue v) {
     return (int64_t) xr_type_identity_core_eval(
-        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
-        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO, XR_SEM_CONSUMER_AOT_HOSTED,
-        xrt_type_identity_kind(v));
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI, XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, xrt_type_identity_kind(v));
 }
 
 /* The `is T` / checked-cast predicate, matching the VM's xr_value_is_type_id.

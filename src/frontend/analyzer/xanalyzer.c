@@ -1299,6 +1299,31 @@ void xa_analyzer_add_diagnostic(XaAnalyzer *analyzer, XrDiagSeverity severity, i
     if (!analyzer)
         return;
 
+    /* Independent check sites can reach the same conclusion about the same
+     * source line (e.g. a declared key type and the literal that fills it).
+     * A record equal in code, line, file and message adds no information for
+     * the user, so it is dropped; the column is ignored on purpose because
+     * the duplicates typically anchor to different spans of one construct. */
+    for (XaDiagnostic *d = analyzer->diagnostics; d; d = d->next) {
+        if (d->severity != severity || d->code != code)
+            continue;
+        if (loc && d->location.line != loc->line)
+            continue;
+        if (!loc && (d->location.line != 0 || d->location.column != 0))
+            continue;
+        const char *have_file = d->location.file;
+        const char *want_file = loc ? loc->file : NULL;
+        if ((have_file == NULL) != (want_file == NULL))
+            continue;
+        if (have_file && want_file && strcmp(have_file, want_file) != 0)
+            continue;
+        if ((d->message == NULL) != (message == NULL))
+            continue;
+        if (d->message && message && strcmp(d->message, message) != 0)
+            continue;
+        return;
+    }
+
     XaDiagnostic *diag = xr_calloc(1, sizeof(XaDiagnostic));
     if (!diag)
         return;
@@ -2731,6 +2756,23 @@ static XrClassInfo *resolve_class_info(XaAnalyzer *analyzer, XrType *type) {
 bool xa_analyzer_is_iterator(XaAnalyzer *analyzer, XrType *type, XrType **out_element_type) {
     if (!analyzer || !type)
         return false;
+
+    // The builtin Iterator<T> type satisfies the protocol by construction;
+    // its type argument is the element type. This is exactly what a
+    // spec-conforming `iterator() -> Iterator<T>` declaration returns, so it
+    // is accepted the same way a concrete iterator class is. The for-in
+    // lowering drives it through the same hasNext/next protocol dispatch.
+    if ((type->kind == XR_KIND_INTERFACE || type->kind == XR_KIND_INSTANCE ||
+         type->kind == XR_KIND_CLASS) &&
+        xr_type_is_builtin_named_type(type, "Iterator")) {
+        if (out_element_type) {
+            *out_element_type = (type->instance.type_arg_count >= 1 && type->instance.type_args &&
+                                 type->instance.type_args[0])
+                                    ? type->instance.type_args[0]
+                                    : xr_type_new_unknown(NULL);
+        }
+        return true;
+    }
 
     // Must be a class or instance type
     if (type->kind != XR_KIND_INSTANCE && type->kind != XR_KIND_CLASS)
