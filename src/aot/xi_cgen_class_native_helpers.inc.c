@@ -4482,13 +4482,7 @@ static const XiClassData *cg_func_param_native_class_data(XiCgenCtx *ctx, const 
 
 static const XiClassData *cg_func_param_native_class_place_data(XiCgenCtx *ctx, const XiFunc *f,
                                                                 uint16_t param_idx) {
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    if (!f || param_idx >= f->nparams || !plan || !plan->abi.params ||
-        param_idx >= plan->abi.nparams)
-        return NULL;
-    const XaotAbiSlot *slot = &plan->abi.params[param_idx];
-    if ((slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0 ||
-        xaot_value_storage_rep(slot->pointee_rep) != XR_REP_PTR)
+    if (!f || param_idx >= f->nparams || !cg_func_param_abi_pointee_is_ptr(ctx, f, param_idx))
         return NULL;
     const XrType *param_type =
         f->params && f->params[param_idx] ? f->params[param_idx]->type : NULL;
