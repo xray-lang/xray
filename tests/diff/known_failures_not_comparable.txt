@@ -552,3 +552,13 @@ tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr
 # it refuses with "call target has no consumable adapter authority". The VM
 # runs it. Listed here rather than as a divergence because AOT never built.
 tests/diff/cases/semantics/closure/call_through_function_parameter.xr
+
+# --- ref-exposed locals and cross-module typed array fill ------------------
+# Two cases written against AOT emitter defects found by running the wasm3
+# port end to end. On this branch neither reaches the emitter: the target plan
+# refuses both first, with "direct-local argument contract needs unsupported
+# storage or ownership". The cases are kept because they pin a gap the corpus
+# had no coverage for; whether the emitter defects they were written for still
+# exist cannot be decided from here while the shallower layer refuses.
+tests/diff/cases/semantics/collections/array_fill_ref_cross_module.xr
+tests/diff/cases/semantics/ownership/ref_param_write_invalidates_prior_copy.xr

@@ -1,0 +1,41 @@
+// A copy taken before a ref call must keep the pre-call value.  The AOT C
+// backend used to coalesce `savedOffset` onto the same C local as `pos`
+// because only the alias side was checked for address exposure, so the
+// callee's write through `&pos` was observed through the earlier copy.
+
+fn readByte(input: const Slice<byte>, pos: ref int) -> int {
+    var value = input[pos] as int
+    pos += 1
+    return value
+}
+
+fn decodeAt(input: const Slice<byte>, start: int) -> int {
+    var pos = start
+    var savedOffset = pos
+    var value = readByte(input, ref pos)
+    if (value == 0) {
+        return savedOffset
+    }
+    return 0 - 1
+}
+
+fn advanceTwice(counter: ref int) -> int {
+    counter += 1
+    counter += 1
+    return counter
+}
+
+fn run() {
+    var image: Array<byte> = [9, 9, 0, 9]
+    print(decodeAt(image[:], 2))
+    print(decodeAt(image[:], 0))
+
+    var cursor = 5
+    var before = cursor
+    var after = advanceTwice(ref cursor)
+    print(before)
+    print(after)
+    print(cursor)
+}
+
+run()

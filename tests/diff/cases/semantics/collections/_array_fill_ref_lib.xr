@@ -1,0 +1,22 @@
+// Imported helper that builds and resizes typed arrays through ref parameters.
+// Cross-module emission is what drove the array element type to the untyped
+// lane, where the fill argument was passed without its tagged representation.
+
+export enum Kind { I32, I64 }
+
+export fn takeBranch(stack: ref Array<i64>, kinds: ref Array<Kind>, keepArity: int, height: int) {
+    var kept = Array<i64>(keepArity, 0)
+    var keptKinds = Array<Kind>(keepArity, Kind.I32)
+    for (var k = 0; k < keepArity; k += 1) {
+        kept[keepArity - 1 - k] = stack.pop()!
+        keptKinds[keepArity - 1 - k] = kinds.pop()!
+    }
+    if (len(stack) > height) {
+        stack = stack.resize(height, 0)
+        kinds = kinds.resize(height, Kind.I32)
+    }
+    for (var p = 0; p < keepArity; p += 1) {
+        stack.push(kept[p])
+        kinds.push(keptKinds[p])
+    }
+}
