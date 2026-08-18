@@ -504,7 +504,9 @@ XR_FUNC void xa_check_move_source_evidence(XaInferContext *ctx, XaSymbol *move_s
         char msg[256];
         snprintf(msg, sizeof(msg),
                  "cannot move '%s': the value was stored into a heap graph and other "
-                 "references to it may still exist (OWN-E-ESCAPED-ROOT); use copy(%s)",
+                 "references to it may still exist (OWN-E-ESCAPED-ROOT); an escaped root "
+                 "never becomes unique again, so reordering later uses cannot help — use "
+                 "copy(%s)",
                  move_name ? move_name : "?", move_name ? move_name : "?");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                                    msg, &loc);
@@ -513,15 +515,16 @@ XR_FUNC void xa_check_move_source_evidence(XaInferContext *ctx, XaSymbol *move_s
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                                    "cannot move value: capability is unknown", &loc);
     } else if (move_links->value_capability == XA_CAP_CONST) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "cannot move const-capability value", &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_CAPABILITY,
+                                   "cannot move const-capability value (OWN-E-CAP-CONST)", &loc);
     } else if (move_links->value_capability == XA_CAP_SYNC_INTERIOR_MUTABLE) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "cannot move synchronization capability", &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_CAPABILITY,
+                                   "cannot move synchronization capability (OWN-E-CAP-SYNC)", &loc);
     }
     if (move_links->storage_domain == XR_STORAGE_MODULE_STATIC) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "cannot consume a module-static binding", &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_CAPABILITY,
+                                   "cannot consume a module-static binding (OWN-E-CAP-MODULE)",
+                                   &loc);
     }
     if (!move_links->allocation_plan.complete) {
         xa_analyzer_add_diagnostic(

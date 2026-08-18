@@ -135,6 +135,14 @@
 /* A cleanup body attempted to transfer control to its owning function or to a
  * loop outside the cleanup body. */
 #define XR_ERR_ANALYZE_DEFER_CONTROL 395
+/* Ownership binding-state axis: a binding read while MOVED / MAYBE_MOVED.
+ * Control-flow facts, not type mismatches — kept apart from E0352 so the
+ * diagnostic names the axis that actually failed. */
+#define XR_ERR_ANALYZE_BINDING_STATE 396
+/* Ownership capability/constraint axis: const or synchronization capability
+ * as a move source, moves a loop backedge would repeat, module-static
+ * consumption. Permissions, not argument-type errors (E0356). */
+#define XR_ERR_ANALYZE_MOVE_CAPABILITY 397
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400
