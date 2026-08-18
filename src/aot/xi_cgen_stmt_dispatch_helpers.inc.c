@@ -223,6 +223,11 @@ static bool xicgen_stmt_err_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     bool aggregate_error = xicgen_value_is_enum_aggregate_error(ctx, v);
     bool freestanding_aggregate = ctx->freestanding_profile && aggregate_error;
+    /* The only site left reading XiValue.rep. It is not unmigrated: an enum
+     * aggregate error is a stated exception. Measured over the whole corpus,
+     * this branch is never taken, so whether the plan would answer the same
+     * cannot be decided here -- which is why it stays rather than being
+     * switched on the assumption that it would. */
     XrRep catch_rep = aggregate_error ? cg_rep(v) : cg_value_plan_storage_rep(ctx, v);
     fprintf(out, "    ");
     if (!ctx->pre_decl_all) {
