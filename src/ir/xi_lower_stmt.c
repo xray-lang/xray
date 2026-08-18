@@ -2333,6 +2333,88 @@ static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiVa
 
 /* ========== For-In Key-Value (iterator protocol) ========== */
 
+/* `for (i, v in fixed)` over [T; N]: an index loop with a compile-time limit.
+ * There is no iterator object to allocate — the key is the index itself and
+ * the value comes back through the same XI_INDEX_GET as subscript reads. */
+static void lower_for_in_keyvalue_fixed_array(XiLower *l, AstNode *node, XiValue *coll,
+                                              struct XrType *coll_type) {
+    ForInStmtNode *s = &node->as.for_in_stmt;
+    struct XrType *elem_type = coll_type->fixed_array.element_type;
+
+    int sid = l->synthetic_id++;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "__kvf_idx_%d", sid);
+    char *idx_name = (char *) xi_func_arena_alloc(l->func, (uint32_t) (strlen(buf) + 1));
+    XR_DCHECK(idx_name != NULL, "arena alloc failed for idx_name");
+    memcpy(idx_name, buf, strlen(buf) + 1);
+    snprintf(buf, sizeof(buf), "__kvf_col_%d", sid);
+    char *col_name = (char *) xi_func_arena_alloc(l->func, (uint32_t) (strlen(buf) + 1));
+    XR_DCHECK(col_name != NULL, "arena alloc failed for col_name");
+    memcpy(col_name, buf, strlen(buf) + 1);
+
+    int idx_var = xi_lower_var_create(l, 0, idx_name, l->type_int);
+    int col_var = xi_lower_var_create(l, 0, col_name, coll->type);
+    XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+    xi_lower_braun_write(l, idx_var, l->cur_block, zero);
+    xi_lower_braun_write(l, col_var, l->cur_block, coll);
+
+    XiBlock *cond_blk = xi_block_new(l->func);
+    XiBlock *body_blk = xi_block_new(l->func);
+    XiBlock *incr_blk = xi_block_new(l->func);
+    XiBlock *exit_blk = xi_block_new(l->func);
+
+    xi_block_set_jump(l->cur_block, cond_blk);
+
+    l->cur_block = cond_blk;
+    XiValue *cur_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
+    XiValue *limit =
+        xi_const_int(l->func, l->cur_block, (int64_t) coll_type->fixed_array.length, l->type_int);
+    XiValue *cond = xi_binary(l->func, l->cur_block, XI_LT, l->type_bool, cur_idx, limit);
+    if (cond)
+        xi_block_set_if(l->cur_block, cond, body_blk, exit_blk);
+
+    xi_lower_braun_seal(l, body_blk);
+
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, incr_blk);
+
+    l->cur_block = body_blk;
+    XiValue *body_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
+    int key_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, l->type_int);
+    xi_lower_braun_write(l, key_var, l->cur_block, body_idx);
+    XiValue *body_col = xi_lower_braun_read(l, col_var, l->cur_block);
+    XiValue *item = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, elem_type, 2);
+    if (item) {
+        item->args[0] = body_col;
+        item->args[1] = body_idx;
+        item->line = (uint32_t) node->line;
+    }
+    int value_var = xi_lower_var_create(l, s->value_symbol_id, s->value_name, elem_type);
+    if (item)
+        xi_lower_braun_write(l, value_var, l->cur_block, item);
+
+    xi_lower_stmt(l, s->body);
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, incr_blk);
+
+    xi_lower_braun_seal(l, incr_blk);
+    l->cur_block = incr_blk;
+    if (incr_blk->npreds > 0) {
+        XiValue *inc_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
+        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+        XiValue *new_idx = xi_binary(l->func, l->cur_block, XI_ADD, l->type_int, inc_idx, one);
+        if (new_idx)
+            xi_lower_braun_write(l, idx_var, l->cur_block, new_idx);
+    }
+    if (l->cur_block && incr_blk->npreds > 0)
+        xi_block_set_jump(l->cur_block, cond_blk);
+
+    xi_lower_braun_seal(l, cond_blk);
+    xi_lower_loop_pop(l, &loop_target);
+    xi_lower_braun_seal(l, exit_blk);
+    l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
+}
+
 static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     ForInStmtNode *s = &node->as.for_in_stmt;
     uint32_t line = (uint32_t) node->line;
@@ -2340,6 +2422,12 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     XiValue *coll = xi_lower_expr(l, s->collection);
     if (!coll || !l->cur_block)
         return;
+
+    struct XrType *kv_coll_type = xi_lower_node_type(l, s->collection);
+    if (kv_coll_type && kv_coll_type->kind == XR_KIND_FIXED_ARRAY) {
+        lower_for_in_keyvalue_fixed_array(l, node, coll, kv_coll_type);
+        return;
+    }
 
     /* Key/value iteration is a compiler-owned Map protocol.  Preserve the
      * sealed Iterator declaration identity in Xi instead of erasing it to
@@ -2705,6 +2793,16 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
     struct XrType *coll_type = xi_lower_node_type(l, s->collection);
     if (coll_type && stmt_type_is_channel(coll_type)) {
         lower_for_in_channel_loop(l, node, coll);
+        return;
+    }
+
+    /* [T; N] iterates by index with its compile-time length; it never has an
+     * iterator() method and XI_INDEX_GET already reads its elements. */
+    if (coll_type && coll_type->kind == XR_KIND_FIXED_ARRAY) {
+        XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+        XiValue *limit = xi_const_int(l->func, l->cur_block,
+                                      (int64_t) coll_type->fixed_array.length, l->type_int);
+        lower_for_in_loop(l, node, zero, limit, coll, false);
         return;
     }
 
