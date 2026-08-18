@@ -2783,7 +2783,7 @@ static bool target_plan_has_call_result_rep(const XrTargetPlan *target_plan, uin
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v24\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v25\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -4749,6 +4749,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     binding ? xr_target_plan_machine_rep(target_plan, binding->memory_rep) : NULL;
                 XrCValueRep rep = XR_C_VALUE_REP_VOID;
                 const char *c_type = NULL;
+                XrCValueRep pointee_rep = XR_C_VALUE_REP_VOID;
+                const char *pointee_c_type = NULL;
                 if (ordinal == 0) {
                     /* A callee's return is not a value inside the callee -- the
                      * target plan freezes a representation per value, and the
@@ -4852,6 +4854,26 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     }
                     register_rep = boundary;
                     memory_rep = xr_target_plan_machine_rep(target_plan, agreed->callee_memory_rep);
+                    /* A place crosses as a pointer, so the callee side of the row
+                     * describes the pointer and cannot say what is pointed at.
+                     * The caller side can: the caller holds the thing and passes
+                     * its address, so its representation IS the pointee's. The
+                     * parameter's own value representation is not a substitute --
+                     * inside the callee a `ref` parameter is held as the pointer
+                     * too, so it answers the same thing the callee side does. */
+                    if (slot_class == XR_C_ABI_SLOT_BORROWED_PLACE) {
+                        const XrTargetMachineRepRecord *pointee =
+                            xr_target_plan_machine_rep(target_plan, agreed->register_rep);
+                        XrCValueRep held_rep = XR_C_VALUE_REP_VOID;
+                        const char *held_c_type = NULL;
+                        if (pointee &&
+                            machine_kind_to_c_rep(target_plan, agreed->semantic_value,
+                                                  pointee->kind, &held_rep, &held_c_type) &&
+                            held_c_type) {
+                            pointee_rep = held_rep;
+                            pointee_c_type = held_c_type;
+                        }
+                    }
                 }
                 /* Which aggregate this is, read from the frozen semantic type
                  * rather than recognised from the C spelling later. */
@@ -4881,12 +4903,10 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     .target_memory_kind = memory_rep ? memory_rep->kind : 0u,
                     .slot_class = slot_class,
                     .rep = (uint8_t) rep,
-                    .pointee_rep = (uint8_t) (slot_class == XR_C_ABI_SLOT_BORROWED_PLACE
-                                                  ? (uint8_t) rep
-                                                  : (uint8_t) XR_C_VALUE_REP_VOID),
+                    .pointee_rep = (uint8_t) pointee_rep,
                     .aggregate_class = aggregate_class,
                     .c_type = c_type,
-                    .pointee_c_type = slot_class == XR_C_ABI_SLOT_BORROWED_PLACE ? c_type : NULL,
+                    .pointee_c_type = pointee_c_type,
                 };
             }
             if (!complete)
