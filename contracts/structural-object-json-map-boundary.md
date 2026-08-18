@@ -100,7 +100,7 @@ anchor-sha256: src/analysis/xglobal_summary.h 738d4a3dc5118ab0f28c597e888c145de2
 anchor-sha256: src/ir/xi.h 86444a22fe2f4cb29b0d49a7bbb246ecaa6b49888331a7241dc960d2dad5bb1d
 anchor-sha256: xisa/xi/ops.def 6632a2d9bff8cf827c51aa905d125f06a3f2e822ed414edad02202cc73191f52
 anchor-sha256: src/aot/xrt_coll.h bd9c91aea11ce6404d343155acff044415f2b98dc4c9b1a234d972843551ced3
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 34717e171d8ebfb55e7493d5bf3f8572c3e1ac5166552e5c8037d40ea7f13901
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 0ee0d1cdd4e71c41331146decf8212ea4f3c4c17bd4625c4f6151f6b1e574abc
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/runtime/class/xclass.h 1442dd4d7e81626acd3c58020e5353511c5c0b0554c9782db49bcf834b906911
 anchor-sha256: src/runtime/class/xinstance.c 6825cc9a5d9db270bd569619a0ca5cf68aaef232e7ddd6bcd83868e991b389d2

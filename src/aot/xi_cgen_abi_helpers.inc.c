@@ -1048,28 +1048,6 @@ static void emit_unit_materialized_as_rep(FILE *out, XrRep target_rep) {
     }
 }
 
-static void emit_value_as_rep(FILE *out, const XiValue *v, XrRep target_rep) {
-    if (cg_is_void_like(v)) {
-        emit_unit_materialized_as_rep(out, target_rep);
-        return;
-    }
-    XrRep from_rep = cg_rep(v);
-    if (target_rep == XR_REP_TAGGED && (from_rep == XR_REP_PTR || from_rep == XR_REP_RAWPTR) && v &&
-        v->type && v->type->kind == XR_KIND_FIXED_ARRAY) {
-        uint8_t native = XR_NATIVE_VALUE;
-        uint32_t count = 0;
-        if (cg_fixed_array_type_info(v->type, &native, &count)) {
-            fprintf(out, "xr_array_ref((void *)(");
-            emit_vref(out, v);
-            fprintf(out, "), %u, %u)", (unsigned) native, (unsigned) count);
-            return;
-        }
-    }
-    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, from_rep, target_rep);
-    emit_vref(out, v);
-    emit_conversion_suffix(out, conv_suffix);
-}
-
 static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, XrRep target_rep) {
     XrRep inner_rep;
     const XiFunc *literal_func = v && v->block ? v->block->func : NULL;
