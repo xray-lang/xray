@@ -983,8 +983,7 @@ static bool cg_value_box_inner_native_rep(XiCgenCtx *ctx, const XiValue *v, XrRe
     if (inner_plan && inner_plan->rep.kind == XAOT_VALUE_AGGREGATE)
         return false;
 
-    XrRep inner_rep = ctx ? cg_value_plan_storage_rep(ctx, inner)
-                          : (inner_plan ? xaot_value_storage_rep(inner_plan->rep) : cg_rep(inner));
+    XrRep inner_rep = cg_value_plan_storage_rep(ctx, inner);
     if (inner_rep == XR_REP_TAGGED || inner_rep == XR_REP_VOID)
         return false;
     if (out_rep)
@@ -1004,10 +1003,8 @@ static bool emit_const_value_as_rep_expr(XiCgenCtx *ctx, FILE *out, const XiValu
     return true;
 }
 
-static XrRep cg_emitted_value_storage_rep(XiCgenCtx *ctx, const XiValue *v,
-                                          const XaotValuePlan *plan) {
-    XrRep rep = ctx ? cg_value_plan_storage_rep(ctx, v)
-                    : (plan ? xaot_value_storage_rep(plan->rep) : cg_rep(v));
+static XrRep cg_emitted_value_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
+    XrRep rep = cg_value_plan_storage_rep(ctx, v);
     const XiFunc *owner = v && v->block ? v->block->func : NULL;
     if (!ctx || !v || v->op != XI_PARAM || !owner || !cg_func_needs_aot_coro_ctx(ctx, owner))
         return rep;
@@ -1026,28 +1023,6 @@ static XrRep cg_emitted_value_storage_rep(XiCgenCtx *ctx, const XiValue *v,
     return rep;
 }
 
-static void emit_unit_materialized_as_rep(FILE *out, XrRep target_rep) {
-    switch (target_rep) {
-        case XR_REP_F64:
-            fprintf(out, "0.0");
-            return;
-        case XR_REP_PTR:
-        case XR_REP_RAWPTR:
-            fprintf(out, "(void*)0");
-            return;
-        case XR_REP_VOID:
-            fprintf(out, "((void)0)");
-            return;
-        case XR_REP_I64:
-            fprintf(out, "INT64_C(0)");
-            return;
-        case XR_REP_TAGGED:
-        default:
-            fprintf(out, "XR_NULL_VAL");
-            return;
-    }
-}
-
 static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, XrRep target_rep) {
     XrRep inner_rep;
     const XiFunc *literal_func = v && v->block ? v->block->func : NULL;
@@ -1061,7 +1036,6 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         (literal->type->kind == XR_KIND_INT || literal->type->kind == XR_KIND_BOOL ||
          literal->type->kind == XR_KIND_RUNE || literal->type->kind == XR_KIND_FLOAT ||
          literal->type->kind == XR_KIND_NULL)) {
-        const XaotValuePlan *literal_plan = cg_value_plan_require_legacy(ctx, literal);
         XrRep from_rep = cg_value_plan_storage_rep(ctx, literal);
         if (emit_const_value_as_rep_expr(ctx, out, literal, from_rep, target_rep))
             return;
@@ -1078,8 +1052,7 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
     }
     const XaotValuePlan *plan = (ctx && v) ? cg_value_plan_require_legacy(ctx, v) : NULL;
     if (v && v->op == XI_CONST) {
-        XrRep from_rep = ctx ? cg_value_plan_storage_rep(ctx, v)
-                             : (plan ? xaot_value_storage_rep(plan->rep) : cg_rep(v));
+        XrRep from_rep = cg_value_plan_storage_rep(ctx, v);
         if (v->type && v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE) {
             const char *conv_suffix =
                 emit_conversion_prefix_ctx(ctx, out, v->type, from_rep, target_rep);
@@ -1125,7 +1098,7 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         emit_codegen_abort_expr(out);
         return;
     }
-    XrRep from_rep = cg_emitted_value_storage_rep(ctx, v, plan);
+    XrRep from_rep = cg_emitted_value_storage_rep(ctx, v);
     if (target_rep == XR_REP_TAGGED && (from_rep == XR_REP_PTR || from_rep == XR_REP_RAWPTR) && v &&
         v->type && v->type->kind == XR_KIND_FIXED_ARRAY) {
         uint8_t native = XR_NATIVE_VALUE;

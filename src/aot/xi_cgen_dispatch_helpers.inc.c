@@ -6347,7 +6347,7 @@ static XrRep xicgen_value_c_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const X
     if (ctx && f && !cg_func_needs_aot_coro_ctx(ctx, f) &&
         cg_array_value_uses_native_local(ctx, f, v))
         return XR_REP_PTR;
-    return cg_emitted_value_storage_rep(ctx, v, cg_value_plan_require_legacy(ctx, v));
+    return cg_emitted_value_storage_rep(ctx, v);
 }
 
 static void xicgen_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
