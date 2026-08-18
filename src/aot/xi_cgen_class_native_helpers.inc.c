@@ -5334,15 +5334,38 @@ static const XiValue *cg_class_native_instance_origin(XiCgenCtx *ctx, const XiFu
     return origin && cg_class_native_ctor_can_inline(ctx, f, origin) ? origin : NULL;
 }
 
+/* Bounds the instance-data / origin / call-result recursion. Nested generic
+ * instances (Box<Box<int>>) can otherwise cycle between the inner and outer
+ * monomorphization while chasing a value's origin; past this depth the value
+ * conservatively resolves to no native identity (the boxed path). */
+static int cg_class_native_instance_data_depth;
+
+static const XiClassData *cg_class_native_instance_data_bounded(XiCgenCtx *ctx, const XiFunc *f,
+                                                                const XiValue *v);
+
 static const XiClassData *cg_class_native_instance_data(XiCgenCtx *ctx, const XiFunc *f,
                                                         const XiValue *v) {
+    if (cg_class_native_instance_data_depth > 64)
+        return NULL;
+    cg_class_native_instance_data_depth++;
+    const XiClassData *bounded_result = NULL;
     if (cg_class_native_receiver_value(ctx, f, v)) {
         CgClassNativeFunc info = cg_class_native_func(ctx, f);
+        cg_class_native_instance_data_depth--;
         return info.class_data;
     }
     const XiClassData *typed_ptr = cg_class_native_value_type_data(ctx, v);
-    if (typed_ptr && cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR)
+    if (typed_ptr && cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR) {
+        cg_class_native_instance_data_depth--;
         return typed_ptr;
+    }
+    bounded_result = cg_class_native_instance_data_bounded(ctx, f, v);
+    cg_class_native_instance_data_depth--;
+    return bounded_result;
+}
+
+static const XiClassData *cg_class_native_instance_data_bounded(XiCgenCtx *ctx, const XiFunc *f,
+                                                                const XiValue *v) {
     const XiClassData *call_ptr = cg_class_native_call_result_data(ctx, f, v);
     if (!call_ptr)
         call_ptr = cg_class_native_imported_class_callee_data(ctx, f, v);

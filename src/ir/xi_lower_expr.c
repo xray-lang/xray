@@ -28,6 +28,7 @@
 #include "../frontend/parser/xtype_ref.h"
 #include "../analysis/xglobal_summary.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xanalyzer_mono.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_parallel_call_plan.h"
 #include "../frontend/analyzer/xa_typed_program.h"
@@ -10020,6 +10021,41 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
                     if (type_val)
                         type_val->aux_int = native_tid;
                 }
+            }
+        }
+    }
+
+    /* A generic instance target lives under its monomorphized binding:
+     * `is Box<int>` tests identity against the Box$i64 class value. The
+     * syntactic name alone ("Box") resolves to nothing at runtime, so retry
+     * the scope chain with the mangled instance name. */
+    if (!type_val && tref && tref->name && tref->nchildren > 0 && tref->children) {
+        char *mangled = xr_mono_mangle(tref->name, tref->children, tref->nchildren);
+        if (mangled) {
+            int var = xi_lower_var_find(l, 0, mangled);
+            if (var >= 0) {
+                if (l->is_program && var < l->var_count && l->shared_map[var] >= 0) {
+                    XiTopBinding b;
+                    b.slot = l->shared_map[var];
+                    b.name = l->vars[var].name;
+                    b.type = l->vars[var].type;
+                    type_val = xi_lower_emit_top_load(l, b, l->type_any);
+                } else {
+                    type_val = xi_lower_braun_read(l, var, l->cur_block);
+                }
+            }
+            if (!type_val) {
+                XiTopBinding tb = xi_lower_find_top_binding(l, 0, mangled);
+                if (xi_top_binding_valid(tb))
+                    type_val = xi_lower_emit_top_load(l, tb, l->type_any);
+            }
+            bool known_generic = type_val == NULL;
+            xr_free(mangled);
+            if (known_generic) {
+                /* The program never instantiates this generic target, so no
+                 * runtime value can carry its nominal identity: the test is
+                 * statically false. */
+                return xi_const_bool(l->func, l->cur_block, false, l->type_bool);
             }
         }
     }
