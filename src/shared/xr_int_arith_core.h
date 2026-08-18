@@ -40,6 +40,34 @@ static inline int64_t xr_i64_mul_wrap(int64_t a, int64_t b) {
     return (int64_t) ((uint64_t) a * (uint64_t) b);
 }
 
+/* Owner guards for xi.add / xi.sub / xi.mul.  The wrapping semantics are stated
+ * once, here; every consumer reaches them through XR_INT_WRAP_OWNER_APPLY and
+ * names both the owner ID and its own consumer bit, so a second implementation
+ * or an undeclared consumer fails to compile rather than diverging quietly. */
+#define XR_INT_WRAP_OWNER_GUARD(owner_hi, owner_lo)                                                \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_primitive_integer_wrapping                                   \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI &&          \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO)            \
+                   ? 1                                                                             \
+                   : -1);                                                                          \
+    }))
+
+#define XR_INT_WRAP_CONSUMER_GUARD(consumer_bit)                                                   \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_primitive_integer_wrapping                      \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                  \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&            \
+                (XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_CONSUMERS &                            \
+                 (uint32_t) (consumer_bit)) != 0)                                                  \
+                   ? 1                                                                             \
+                   : -1);                                                                          \
+    }))
+
+#define XR_INT_WRAP_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, kernel, lhs, rhs)                \
+    (XR_INT_WRAP_OWNER_GUARD((owner_hi), (owner_lo)), XR_INT_WRAP_CONSUMER_GUARD((consumer_bit)),  \
+     (kernel) ((int64_t) (lhs), (int64_t) (rhs)))
+
 /* High half of a full-width unsigned 64 x 64 product.  This is the semantic
  * truth shared by VM and AOT for uint64.mulHigh().  Native AOT compilers lower
  * the int128 expression to UMULH/MULX (or the equivalent target instruction);
@@ -146,8 +174,8 @@ typedef struct XrIntDivModResult {
 } XrIntDivModResult;
 
 /* Value rule for a divisor the caller proved nonzero. */
-static inline int64_t xr_int_div_mod_apply(XrIntDivModKind kind, XrIntDivModProof proof,
-                                           int64_t a, int64_t b) {
+static inline int64_t xr_int_div_mod_apply(XrIntDivModKind kind, XrIntDivModProof proof, int64_t a,
+                                           int64_t b) {
     switch (kind) {
         case XR_INT_DIV_MOD_DIV:
             if (proof != XR_INT_DIV_MOD_PROOF_POSITIVE && b == -1)
@@ -210,8 +238,7 @@ static inline XrIntDivModResult xr_int_div_mod_eval(XrIntDivModKind kind, XrIntD
 #define XR_INT_DIV_MOD_PROOF_GUARD(proof)                                                          \
     ((void) sizeof(struct {                                                                        \
         unsigned int proof_must_be_a_declared_int_div_mod_proof                                    \
-            : (((proof) == XR_INT_DIV_MOD_PROOF_NONE ||                                            \
-                (proof) == XR_INT_DIV_MOD_PROOF_NONZERO ||                                         \
+            : (((proof) == XR_INT_DIV_MOD_PROOF_NONE || (proof) == XR_INT_DIV_MOD_PROOF_NONZERO || \
                 (proof) == XR_INT_DIV_MOD_PROOF_POSITIVE)                                          \
                    ? 1                                                                             \
                    : -1);                                                                          \
@@ -231,16 +258,14 @@ static inline XrIntDivModResult xr_int_div_mod_eval(XrIntDivModKind kind, XrIntD
 
 #define XR_INT_DIV_MOD_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, kind, proof, a, b)            \
     (XR_INT_DIV_MOD_OWNER_GUARD((owner_hi), (owner_lo)),                                           \
-     XR_INT_DIV_MOD_CONSUMER_GUARD((consumer_bit)),                                                \
-     XR_INT_DIV_MOD_KIND_GUARD((kind)),                                                            \
+     XR_INT_DIV_MOD_CONSUMER_GUARD((consumer_bit)), XR_INT_DIV_MOD_KIND_GUARD((kind)),             \
      XR_INT_DIV_MOD_PROOF_GUARD((proof)),                                                          \
      xr_int_div_mod_eval((XrIntDivModKind) (kind), (XrIntDivModProof) (proof), (int64_t) (a),      \
                          (int64_t) (b)))
 
 #define XR_INT_DIV_MOD_OWNER_APPLY_PROVEN(owner_hi, owner_lo, consumer_bit, kind, proof, a, b)     \
     (XR_INT_DIV_MOD_OWNER_GUARD((owner_hi), (owner_lo)),                                           \
-     XR_INT_DIV_MOD_CONSUMER_GUARD((consumer_bit)),                                                \
-     XR_INT_DIV_MOD_KIND_GUARD((kind)),                                                            \
+     XR_INT_DIV_MOD_CONSUMER_GUARD((consumer_bit)), XR_INT_DIV_MOD_KIND_GUARD((kind)),             \
      XR_INT_DIV_MOD_PROVEN_GUARD((proof)),                                                         \
      xr_int_div_mod_apply((XrIntDivModKind) (kind), (XrIntDivModProof) (proof), (int64_t) (a),     \
                           (int64_t) (b)))

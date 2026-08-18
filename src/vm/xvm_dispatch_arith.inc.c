@@ -54,7 +54,10 @@
 #define XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_wrap_fn, float_op, bigint_fn)                        \
     do {                                                                                           \
         if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
-            XR_SET_INT(R(a), int_wrap_fn(XR_TO_INT(vb), XR_TO_INT(vc)));                           \
+            XR_SET_INT(R(a), XR_INT_WRAP_OWNER_APPLY(                                              \
+                                 XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,                    \
+                                 XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO,                    \
+                                 XR_SEM_CONSUMER_VM, int_wrap_fn, XR_TO_INT(vb), XR_TO_INT(vc)));  \
             vmbreak;                                                                               \
         }                                                                                          \
         if (XR_IS_FLOAT(vb) && XR_IS_FLOAT(vc)) {                                                  \
@@ -242,7 +245,10 @@ vmcase(OP_ADDI) {
     XrValue vb = R(b);
 
     if (XR_IS_INT(vb)) {
-        XR_SET_INT(R(a), xr_i64_add_wrap(XR_TO_INT(vb), (int64_t) sc));
+        XR_SET_INT(R(a), XR_INT_WRAP_OWNER_APPLY(XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,
+                                                 XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO,
+                                                 XR_SEM_CONSUMER_VM, xr_i64_add_wrap, XR_TO_INT(vb),
+                                                 (int64_t) sc));
     } else if (XR_IS_FLOAT(vb)) {
         XR_SET_FLOAT(R(a), vb.f + (double) sc);
     } else if (XVM_BIGINT_EVALUATES(vb, xr_int(sc))) {
@@ -272,7 +278,10 @@ vmcase(OP_ADDK) {
     }
 
     if (XR_IS_INT(vb) && XR_IS_INT(kc)) {
-        XR_SET_INT(R(a), xr_i64_add_wrap(XR_TO_INT(vb), XR_TO_INT(kc)));
+        XR_SET_INT(R(a), XR_INT_WRAP_OWNER_APPLY(XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,
+                                                 XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO,
+                                                 XR_SEM_CONSUMER_VM, xr_i64_add_wrap, XR_TO_INT(vb),
+                                                 XR_TO_INT(kc)));
     } else {
         double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);
         double nc = XR_IS_INT(kc) ? (double) XR_TO_INT(kc) : XR_TO_FLOAT(kc);
@@ -288,7 +297,10 @@ vmcase(OP_SUBI) {
     XrValue vb = R(b);
 
     if (XR_IS_INT(vb)) {
-        XR_SET_INT(R(a), xr_i64_sub_wrap(XR_TO_INT(vb), (int64_t) sc));
+        XR_SET_INT(R(a), XR_INT_WRAP_OWNER_APPLY(XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,
+                                                 XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO,
+                                                 XR_SEM_CONSUMER_VM, xr_i64_sub_wrap, XR_TO_INT(vb),
+                                                 (int64_t) sc));
     } else if (XR_IS_FLOAT(vb)) {
         XR_SET_FLOAT(R(a), vb.f - (double) sc);
     } else if (XVM_BIGINT_EVALUATES(vb, xr_int(sc))) {
@@ -318,7 +330,10 @@ vmcase(OP_SUBK) {
     }
 
     if (XR_IS_INT(vb) && XR_IS_INT(kc)) {
-        XR_SET_INT(R(a), xr_i64_sub_wrap(XR_TO_INT(vb), XR_TO_INT(kc)));
+        XR_SET_INT(R(a), XR_INT_WRAP_OWNER_APPLY(XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,
+                                                 XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO,
+                                                 XR_SEM_CONSUMER_VM, xr_i64_sub_wrap, XR_TO_INT(vb),
+                                                 XR_TO_INT(kc)));
     } else {
         double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);
         double nc = XR_IS_INT(kc) ? (double) XR_TO_INT(kc) : XR_TO_FLOAT(kc);
@@ -335,7 +350,10 @@ vmcase(OP_MULI) {
     XrValue vb = R(b);
 
     if (XR_IS_INT(vb)) {
-        XR_SET_INT(R(a), xr_i64_mul_wrap(XR_TO_INT(vb), (int64_t) sc));
+        XR_SET_INT(R(a), XR_INT_WRAP_OWNER_APPLY(XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,
+                                                 XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO,
+                                                 XR_SEM_CONSUMER_VM, xr_i64_mul_wrap, XR_TO_INT(vb),
+                                                 (int64_t) sc));
         vmbreak;
     }
     if (XR_IS_FLOAT(vb)) {
@@ -374,7 +392,10 @@ vmcase(OP_MULK) {
 
     // Fast path: integer multiplication (wrap on overflow)
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        XR_SET_INT(R(a), xr_i64_mul_wrap(XR_TO_INT(vb), XR_TO_INT(vc)));
+        XR_SET_INT(R(a), XR_INT_WRAP_OWNER_APPLY(XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,
+                                                 XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO,
+                                                 XR_SEM_CONSUMER_VM, xr_i64_mul_wrap, XR_TO_INT(vb),
+                                                 XR_TO_INT(vc)));
         vmbreak;
     }
     // Float/mixed multiplication

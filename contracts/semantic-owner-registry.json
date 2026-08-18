@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "fd5776451edffacbaa04a2851dfa1f73e0996735fe9c90ec25ceeb5c998e1453",
+  "canonical_fingerprint": "8ebb60dd465323e459547f7cf84d525c939cc4fe95e94cac7ff675ef6cb764ef",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -11,6 +11,54 @@
     "runtime": "0x00000020"
   },
   "owners": [
+    {
+      "owner": "primitive.integer-wrapping",
+      "owner_id": "a6029eb7111c38e0e04c995a0849a639",
+      "owner_id_hi": "0xa6029eb7111c38e0",
+      "owner_id_lo": "0xe04c995a0849a639",
+      "category": "declarative-primitive",
+      "operations": [
+        "xi.add",
+        "xi.sub",
+        "xi.mul"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
+      ],
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_int_wrap_eval",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_arith.inc.c",
+          "symbol": "XR_INT_WRAP_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_int_wrap_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_int_wrap_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_int_wrap_adapter_name"
+        }
+      ]
+    },
     {
       "owner": "primitive.type-identity",
       "owner_id": "e99ec68201c8d458c8cd54a90f6bdba8",
@@ -1922,28 +1970,6 @@
       ]
     },
     {
-      "owner": "xi.add",
-      "owner_id": "f9cb9a4f3ad2565285aace536d862dd7",
-      "owner_id_hi": "0xf9cb9a4f3ad25652",
-      "owner_id_lo": "0x85aace536d862dd7",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.add"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
       "owner": "xi.agg.get",
       "owner_id": "a45d5b148a71da7fe06a016d5f331795",
       "owner_id_hi": "0xa45d5b148a71da7f",
@@ -3418,28 +3444,6 @@
       ]
     },
     {
-      "owner": "xi.mul",
-      "owner_id": "b9d33db6f06dfdea07b6ec02e579b388",
-      "owner_id_hi": "0xb9d33db6f06dfdea",
-      "owner_id_lo": "0x07b6ec02e579b388",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.mul"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
       "owner": "xi.multi.ret",
       "owner_id": "c20a4c6b08ddf7007a877e69f85d58c0",
       "owner_id_hi": "0xc20a4c6b08ddf700",
@@ -4019,28 +4023,6 @@
       "category": "shared-semantic-kernel",
       "operations": [
         "xi.str.concat"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.sub",
-      "owner_id": "414212de0a2afe0be5107c911ecbcbae",
-      "owner_id_hi": "0x414212de0a2afe0b",
-      "owner_id_lo": "0xe5107c911ecbcbae",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.sub"
       ],
       "consumers": [
         "semantic-plan"
@@ -5075,21 +5057,45 @@
       "operation_id": "f9cb9a4f3ad2565285aace536d862dd7",
       "operation_id_hi": "0xf9cb9a4f3ad25652",
       "operation_id_lo": "0x85aace536d862dd7",
-      "owner": "xi.add",
-      "owner_id": "f9cb9a4f3ad2565285aace536d862dd7",
-      "owner_id_hi": "0xf9cb9a4f3ad25652",
-      "owner_id_lo": "0x85aace536d862dd7",
+      "owner": "primitive.integer-wrapping",
+      "owner_id": "a6029eb7111c38e0e04c995a0849a639",
+      "owner_id_hi": "0xa6029eb7111c38e0",
+      "owner_id_lo": "0xe04c995a0849a639",
       "category": "declarative-primitive",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_int_wrap_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_arith.inc.c",
+          "symbol": "XR_INT_WRAP_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_int_wrap_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_int_wrap_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_int_wrap_adapter_name"
         }
       ]
     },
@@ -5098,21 +5104,45 @@
       "operation_id": "414212de0a2afe0be5107c911ecbcbae",
       "operation_id_hi": "0x414212de0a2afe0b",
       "operation_id_lo": "0xe5107c911ecbcbae",
-      "owner": "xi.sub",
-      "owner_id": "414212de0a2afe0be5107c911ecbcbae",
-      "owner_id_hi": "0x414212de0a2afe0b",
-      "owner_id_lo": "0xe5107c911ecbcbae",
+      "owner": "primitive.integer-wrapping",
+      "owner_id": "a6029eb7111c38e0e04c995a0849a639",
+      "owner_id_hi": "0xa6029eb7111c38e0",
+      "owner_id_lo": "0xe04c995a0849a639",
       "category": "declarative-primitive",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_int_wrap_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_arith.inc.c",
+          "symbol": "XR_INT_WRAP_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_int_wrap_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_int_wrap_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_int_wrap_adapter_name"
         }
       ]
     },
@@ -5121,21 +5151,45 @@
       "operation_id": "b9d33db6f06dfdea07b6ec02e579b388",
       "operation_id_hi": "0xb9d33db6f06dfdea",
       "operation_id_lo": "0x07b6ec02e579b388",
-      "owner": "xi.mul",
-      "owner_id": "b9d33db6f06dfdea07b6ec02e579b388",
-      "owner_id_hi": "0xb9d33db6f06dfdea",
-      "owner_id_lo": "0x07b6ec02e579b388",
+      "owner": "primitive.integer-wrapping",
+      "owner_id": "a6029eb7111c38e0e04c995a0849a639",
+      "owner_id_hi": "0xa6029eb7111c38e0",
+      "owner_id_lo": "0xe04c995a0849a639",
       "category": "declarative-primitive",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_int_wrap_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_arith.inc.c",
+          "symbol": "XR_INT_WRAP_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_int_wrap_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_int_wrap_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_int_wrap_adapter_name"
         }
       ]
     },

@@ -51,6 +51,10 @@
 #define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                         \
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO,      \
                               XR_SEM_CONSUMER_AOT_HOSTED, kernel, lhs, rhs, native_type)
+#define xrt_int_wrap_eval(kernel, lhs, rhs)                                                        \
+    XR_INT_WRAP_OWNER_APPLY(XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,                         \
+                            XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO,                         \
+                            XR_SEM_CONSUMER_AOT_HOSTED, kernel, lhs, rhs)
 #define xrt_bits_not_eval(value)                                                                   \
     XR_BITS_NOT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,                                    \
                             XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO, XR_SEM_CONSUMER_AOT_HOSTED, value)

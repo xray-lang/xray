@@ -235,7 +235,10 @@ static bool emit_native_i64_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, const XiV
             return false;
     }
 
-    fprintf(out, "%s(", fn);
+    const char *adapter = cg_int_wrap_adapter_name(ctx);
+    if (!adapter)
+        return false;
+    fprintf(out, "%s(%s, ", adapter, fn);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);

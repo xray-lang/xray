@@ -527,6 +527,20 @@ fixtures = [
 ]
 
 [[operation]]
+id = "integer-wrapping"
+observable_contract = "src/shared/xr_int_arith_core.h"
+semantic_kernel = "src/shared/xr_int_arith_core.h"
+vm_adapter = "src/vm/xvm_dispatch_arith.inc.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "primitive.integer-wrapping"
+runtime_fallback = "none"
+fixtures = [
+  "tests/regression/03_operators/0300_arithmetic.xr",
+  "tests/regression/03_operators/0301_int64_overflow.xr",
+  "tests/unit/ir/test_xi_cgen.c",
+]
+
+[[operation]]
 id = "bitwise-not"
 observable_contract = "src/shared/xr_bits_core.h"
 semantic_kernel = "src/shared/xr_bits_core.h"

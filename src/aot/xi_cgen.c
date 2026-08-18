@@ -97,6 +97,9 @@ static inline XrRep cg_rep(const XiValue *v) {
  * because the value predicates above it already read the frozen plan. */
 static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v);
 
+/* Defined below; the arithmetic helpers are included before it. */
+static const char *cg_int_wrap_adapter_name(XiCgenCtx *ctx);
+
 static bool cg_func_needs_sync_go_wrapper_ctx(XiCgenCtx *ctx, const XiFunc *f);
 static bool cg_func_needs_sync_backedge_heartbeat_ctx(XiCgenCtx *ctx, const XiFunc *f);
 static bool cg_sync_go_param_needs_release(const XiFunc *f, uint16_t index);
@@ -5375,6 +5378,27 @@ static const char *cg_exact_bits_adapter_name(XiCgenCtx *ctx) {
                                                          XR_SEM_OWNER_ID_SHARED_BITS_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: exact-width bits owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+/* The C name the wrapping-arithmetic owner publishes for generated code. The
+ * owner registry holds it, so the emitter asks rather than spelling it. */
+static const char *cg_int_wrap_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,
+                                        XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: integer wrapping owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter =
+        xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,
+                                       XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: integer wrapping owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
