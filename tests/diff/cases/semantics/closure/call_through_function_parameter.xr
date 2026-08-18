@@ -1,0 +1,20 @@
+// anchor: call-through-function-parameter
+// Calling through a function-typed parameter is the shape every higher-order
+// stdlib entry point is built on: map, filter, forEach and the probe module's
+// permanent gate all reach the callee this way. Naming a function parameter
+// without calling it, and calling a function value held in a local, both take
+// different lowering paths, so neither one covers this.
+
+fn apply(value: int, body: fn(int) -> int) -> int {
+    return body(value)
+}
+
+fn twice(n: int) -> int {
+    return n * 2
+}
+
+fn main() {
+    print(apply(21, twice))
+    print(apply(5, fn(n: int) -> int { return n + 1 }))
+}
+main()
