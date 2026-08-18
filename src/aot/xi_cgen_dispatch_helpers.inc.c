@@ -8310,6 +8310,8 @@ static XgClassId xicgen_class_id_for_data(XiCgenCtx *ctx, const XiClassData *cd)
     return XG_NO_ID;
 }
 
+static bool xicgen_interface_abi_requires_itable(const XaotInterfaceAbiPlan *abi);
+
 static bool xicgen_func_is_boxed_dispatch_target(XiCgenCtx *ctx, const XiFunc *func) {
     const XgGlobalEvidence *ev = xicgen_global_evidence(ctx);
     const XgBodySummary *body = xicgen_evidence_body_for_func(ev, func);
@@ -8332,6 +8334,26 @@ static bool xicgen_func_is_boxed_dispatch_target(XiCgenCtx *ctx, const XiFunc *f
         if (xicgen_evidence_class_implements_interface(ev, method->owner_class_id,
                                                        plan->receiver_static_interface_id))
             return true;
+    }
+    /* itable emission is driven by interface_abi_plans, not dispatch plans:
+     * every slot of an emitted itable references the target's _boxed adapter
+     * unconditionally, so the adapter must exist even when all call sites
+     * were proven DIRECT and no ITABLE/TYPE_SWITCH dispatch plan mentions
+     * this method. */
+    for (uint32_t i = 0; bundle && i < bundle->ninterface_abi_plans; i++) {
+        const XaotInterfaceAbiPlan *abi = &bundle->interface_abi_plans[i];
+        if (!xicgen_interface_abi_requires_itable(abi))
+            continue;
+        if (!xicgen_evidence_class_implements_interface(ev, method->owner_class_id,
+                                                        abi->interface_id))
+            continue;
+        for (uint32_t slot = 0; slot < abi->method_slot_count; slot++) {
+            const XgInterfaceMethodSummary *iface_method =
+                xicgen_evidence_interface_method_for_slot(ev, abi->interface_id, slot);
+            if (iface_method && iface_method->name_id == method->name_id &&
+                iface_method->signature_key == method->signature_key)
+                return true;
+        }
     }
     return false;
 }
@@ -10258,10 +10280,30 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
         bool derived_value_struct = input_class && input_class->struct_layout &&
                                     !input_class->instance_layout &&
                                     (input_class->derive_flags & XR_DERIVE_JSON) != 0;
+        /* Array<value-struct>: the element spec is compile-time knowledge, and
+         * the erased slots (aggregate refs) cannot recover it at run time. */
+        const XrType *input_elem = input && input->type && input->type->kind == XR_KIND_ARRAY
+                                       ? input->type->container.element_type
+                                       : NULL;
+        const XiClassData *elem_class =
+            input_elem ? cg_class_native_data_for_type(ctx, (struct XrType *) input_elem) : NULL;
+        bool derived_struct_array = elem_class && elem_class->struct_layout &&
+                                    !elem_class->instance_layout &&
+                                    (elem_class->derive_flags & XR_DERIVE_JSON) != 0;
         bool static_struct_object = input && xr_type_is_exact_struct_object(input->type) &&
                                     input->type->object.field_count > 0 &&
                                     input->type->object.field_names;
-        if (static_struct_object) {
+        if (derived_struct_array) {
+            fprintf(out, "xrt_json_encode_native_struct_array_consume(");
+            emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+            fprintf(out, ", ");
+            if (!xicgen_emit_json_decode_class_target_spec(ctx, out, (struct XrType *) input_elem,
+                                                           0)) {
+                ctx->error = true;
+                fprintf(out, "NULL");
+            }
+            fprintf(out, ")");
+        } else if (static_struct_object) {
             int shape_id =
                 cg_intern_object_shape_type_domain(ctx, input->type, XR_OBJECT_DOMAIN_STRUCT);
             if (shape_id < 0) {
@@ -11635,6 +11677,55 @@ static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     fprintf(out, "()");
 }
 
+/* Names the runtime dispatches by symbol without a static target: the
+ * iterator protocol driving for-in over an interface-typed iterator, and the
+ * display protocol print falls back to. Everything else resolves statically
+ * (direct call, dispatch plan, or itable), so a wider table would only drag
+ * dead stdlib methods back into the reachable set. */
+static bool cg_sym_table_method_name(const char *name) {
+    return name &&
+           (strcmp(name, "iterator") == 0 || strcmp(name, "hasNext") == 0 ||
+            strcmp(name, "next") == 0 || strcmp(name, "nth") == 0 || strcmp(name, "toString") == 0);
+}
+
+/* One row per dynamic-protocol method whose body was compiled. The table
+ * feeds xrt_type_find_sym_method — the fallback used by call sites the
+ * compiler could not devirtualize (interface-typed locals, protocol loops);
+ * without it those calls silently answer NULL. */
+static void emit_class_native_sym_method_table(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                               const char *prefix) {
+    const XiModule *module = cg_class_native_module_for_data(ctx, cd);
+    if (!ctx || !out || !cd || !module || !module->init || !cd->methods || !cd->child_idx)
+        return;
+    char class_ident[128];
+    sanitize_c_ident_part(class_ident, sizeof(class_ident),
+                          cd->class_name ? cd->class_name : "Class");
+    int rows = 0;
+    for (uint16_t mi = 0; mi < cd->nmethod; mi++) {
+        const XiClassMethod *m = &cd->methods[mi];
+        if (m->is_static || m->is_constructor || m->is_static_constructor || m->symbol_id == 0 ||
+            !cg_sym_table_method_name(m->name))
+            continue;
+        uint16_t ci = cd->child_idx[mi];
+        if (ci >= module->init->nchildren || !module->init->children[ci])
+            continue;
+        const XiFunc *target = module->init->children[ci];
+        if (cg_func_needs_aot_coro_ctx(ctx, target) ||
+            !xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), target))
+            continue;
+        if (rows == 0)
+            fprintf(out, "    static const XrtSymbolMethod _xr_sym_m_%s[] = {", class_ident);
+        fprintf(out, "%s{%d, (XrtMethodFn)", rows > 0 ? ", " : "", (int) m->symbol_id);
+        emit_typed_abi_fname(ctx, out, prefix, target);
+        fprintf(out, "}");
+        rows++;
+    }
+    if (rows > 0) {
+        fprintf(out, "};\n");
+        fprintf(out, "    xrt_type_set_sym_methods(_tid, _xr_sym_m_%s, %du);\n", class_ident, rows);
+    }
+}
+
 static void emit_one_class_native_type_register_helper(XiCgenCtx *ctx, FILE *out,
                                                        const XiClassData *cd, const char *prefix) {
     if (!ctx || !out || !cd)
@@ -11663,6 +11754,7 @@ static void emit_one_class_native_type_register_helper(XiCgenCtx *ctx, FILE *out
     fprintf(out, ";\n    ");
     xicgen_emit_class_itable_init(ctx, out, cd, prefix, "_tid");
     fprintf(out, "\n");
+    emit_class_native_sym_method_table(ctx, out, cd, prefix);
     if (cd->instance_layout) {
         fprintf(out, "    xrt_type_set_runtime_clone(_tid, ");
         emit_class_native_runtime_clone_name(out, prefix, cd);
@@ -12921,8 +13013,10 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
             const char *cname = target->instance.class_name;
             int slot = cg_find_class_slot(ctx, cname);
             if (slot >= 0) {
+                /* The checked value may live in native-pointer rep (a direct
+                 * portable construction); xrt_instanceof takes a tagged value. */
                 fprintf(out, "xrt_instanceof(");
-                emit_vref(out, v->args[0]);
+                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
                 fprintf(out, ", (uint16_t)%s[%d].i)", ctx->shared_name, slot);
                 break;
             }

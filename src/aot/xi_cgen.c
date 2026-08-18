@@ -11762,9 +11762,35 @@ static bool cg_func_has_native_receiver_boxed_use_in_bundle(XiCgenCtx *ctx, cons
     return !scanned_current && cg_func_has_native_receiver_boxed_use(ctx, root, target, prefix);
 }
 
+/* Member of this unit's symbol-method tables: the class register helper
+ * references the method's _boxed adapter unconditionally, so the adapter must
+ * exist whenever the class registers a runtime type. */
+static bool cg_func_is_sym_table_method(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !ctx->module || !ctx->module->init || !f)
+        return false;
+    const XiModule *module = ctx->module;
+    for (uint16_t ci = 0; ci < module->nclasses; ci++) {
+        const XiClassData *cd = module->classes[ci];
+        if (!cd || !cd->needs_runtime_type || !cd->methods || !cd->child_idx)
+            continue;
+        for (uint16_t mi = 0; mi < cd->nmethod; mi++) {
+            const XiClassMethod *m = &cd->methods[mi];
+            if (m->is_static || m->is_constructor || m->is_static_constructor ||
+                m->symbol_id == 0 || !cg_sym_table_method_name(m->name))
+                continue;
+            uint16_t idx = cd->child_idx[mi];
+            if (idx < module->init->nchildren && module->init->children[idx] == f)
+                return true;
+        }
+    }
+    return false;
+}
+
 static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const char *prefix,
                                         bool typed_abi, bool native_receiver) {
     if (xicgen_func_is_boxed_dispatch_target(ctx, f))
+        return true;
+    if (cg_func_is_sym_table_method(ctx, f) && !cg_func_needs_aot_coro_ctx(ctx, f))
         return true;
     if (!typed_abi && !native_receiver)
         return false;
@@ -13959,12 +13985,80 @@ static bool cg_func_reach_mark_dispatch_edges(XiCgenCtx *ctx) {
             const XaotDispatchTargetCase *target =
                 &bundle->dispatch_target_cases[plan->target_start - 1 + ti];
             const XiFunc *target_func = xaot_bundle_find_dispatch_target_func(bundle, target, NULL);
-            if (!target_func)
+            if (!target_func || !xaot_callable_func_has_executable_body_plan(bundle, target_func))
                 continue;
             CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target_func, false);
             if (memo && memo->reachable)
                 continue;
             cg_func_reach_mark_root(ctx, target_func);
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+/* itable emission references every slot target's _boxed adapter regardless of
+ * dispatch plans, so those targets must survive reachability pruning even when
+ * every direct call site was devirtualized. Mirrors the selection logic of
+ * xicgen_emit_class_itable_init. */
+static bool cg_func_reach_mark_itable_edges(XiCgenCtx *ctx) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgGlobalEvidence *ev = xicgen_global_evidence(ctx);
+    bool changed = false;
+    if (!ctx || !bundle || !ev)
+        return false;
+    for (uint32_t i = 0; i < bundle->ninterface_abi_plans; i++) {
+        const XaotInterfaceAbiPlan *abi = &bundle->interface_abi_plans[i];
+        if (!xicgen_interface_abi_requires_itable(abi))
+            continue;
+        for (uint32_t ci = 0; ci < ev->nclasses; ci++) {
+            XgClassId class_id = ev->classes[ci].class_id;
+            if (!xicgen_evidence_class_implements_interface(ev, class_id, abi->interface_id))
+                continue;
+            for (uint32_t slot = 0; slot < abi->method_slot_count; slot++) {
+                const XiFunc *target =
+                    xicgen_find_itable_target_func(ctx, class_id, abi->interface_id, slot, NULL);
+                if (!target ||
+                    !xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), target))
+                    continue;
+                CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target, false);
+                if (memo && memo->reachable)
+                    continue;
+                cg_func_reach_mark_root(ctx, target);
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
+/* Symbol-method tables reference every listed method's _boxed adapter from
+ * the class register helper, so those methods must survive pruning in the
+ * class's own unit even when no static call site remains. */
+static bool cg_func_reach_mark_sym_table_edges(XiCgenCtx *ctx) {
+    bool changed = false;
+    if (!ctx || !ctx->module || !ctx->module->init)
+        return false;
+    const XiModule *module = ctx->module;
+    for (uint16_t ci = 0; ci < module->nclasses; ci++) {
+        const XiClassData *cd = module->classes[ci];
+        if (!cd || !cd->needs_runtime_type || !cd->methods || !cd->child_idx)
+            continue;
+        for (uint16_t mi = 0; mi < cd->nmethod; mi++) {
+            const XiClassMethod *m = &cd->methods[mi];
+            if (m->is_static || m->is_constructor || m->is_static_constructor ||
+                m->symbol_id == 0 || !cg_sym_table_method_name(m->name))
+                continue;
+            uint16_t idx = cd->child_idx[mi];
+            const XiFunc *target =
+                idx < module->init->nchildren ? module->init->children[idx] : NULL;
+            if (!target || cg_func_needs_aot_coro_ctx(ctx, target) ||
+                !xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), target))
+                continue;
+            CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target, false);
+            if (memo && memo->reachable)
+                continue;
+            cg_func_reach_mark_root(ctx, target);
             changed = true;
         }
     }
@@ -14190,6 +14284,8 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
             changed |= cg_func_reach_mark_body_edges_in_owner_module(ctx, source);
         }
         changed |= cg_func_reach_mark_dispatch_edges(ctx);
+        changed |= cg_func_reach_mark_itable_edges(ctx);
+        changed |= cg_func_reach_mark_sym_table_edges(ctx);
     } while (changed);
 
     for (int i = 0; i < ctx->nfunc_reach_memo; i++)
