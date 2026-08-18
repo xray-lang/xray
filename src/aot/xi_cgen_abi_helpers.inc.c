@@ -344,23 +344,6 @@ static bool cg_func_param_abi_is_aggregate(XiCgenCtx *ctx, const XiFunc *f, uint
            view.aggregate_class != XR_C_ABI_AGGREGATE_NONE;
 }
 
-/* A parameter passed as a pointer to a caller-owned place, where the place
- * itself is a by-value struct. The two facts are separate columns on the row:
- * the slot class says a pointer is being passed, the aggregate class says what
- * it points at, and only their conjunction is this shape. */
-static bool cg_func_param_abi_is_borrowed_struct_place(XiCgenCtx *ctx, const XiFunc *f,
-                                                       uint16_t param_idx,
-                                                       const char **pointee_c_type) {
-    XrCFunctionAbiEmissionView view;
-    if (!cg_func_param_abi_emission(ctx, f, param_idx, &view) ||
-        view.slot_class != XR_C_ABI_SLOT_BORROWED_PLACE ||
-        view.aggregate_class != XR_C_ABI_AGGREGATE_STRUCT)
-        return false;
-    if (pointee_c_type)
-        *pointee_c_type = view.pointee_c_type ? view.pointee_c_type : "void";
-    return true;
-}
-
 /* A signature row's storage class. The raw-pointer case is deliberately absent:
  * proving one exact needs the value row's own facts, and a boundary that would
  * be a raw pointer keeps the old answer until those facts are on the signature
@@ -403,18 +386,6 @@ static bool cg_abi_emission_storage_rep(const XrCFunctionAbiEmissionView *view, 
         default:
             return false;
     }
-}
-
-/* A borrowed place whose pointee is itself held as a pointer. */
-static bool cg_func_param_abi_pointee_is_ptr(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx) {
-    XrCFunctionAbiEmissionView view;
-    XrRep pointee = XR_REP_TAGGED;
-    if (!cg_func_param_abi_emission(ctx, f, param_idx, &view) ||
-        view.slot_class != XR_C_ABI_SLOT_BORROWED_PLACE)
-        return false;
-    XrCFunctionAbiEmissionView pointee_view = view;
-    pointee_view.rep = view.pointee_rep;
-    return cg_abi_emission_storage_rep(&pointee_view, &pointee) && pointee == XR_REP_PTR;
 }
 
 /* The signature table's row for a return is ordinal zero. */
@@ -975,9 +946,19 @@ static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, "xrt_span_from_value_ref(%s)", boxed_expr ? boxed_expr : "XR_NULL_VAL");
         return;
     }
-    const char *place_c_type = NULL;
-    if (cg_func_param_abi_is_borrowed_struct_place(ctx, f, param_idx, &place_c_type)) {
-        fprintf(out, "(%s *)(*(XrValue *)(uintptr_t)XR_TO_INT(%s)).ptr", place_c_type,
+    /* Not read from the signature row: its `pointee_rep`/`pointee_c_type` today
+     * mirror the slot's own representation, which for a place is the pointer,
+     * so the row cannot yet say what is pointed at. See task 272. */
+    const XaotFuncPlan *func_plan = cg_func_plan(ctx, f);
+    const XaotAbiSlot *slot =
+        func_plan && func_plan->abi.params && param_idx < func_plan->abi.nparams
+            ? &func_plan->abi.params[param_idx]
+            : NULL;
+    if (slot && (slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) != 0 &&
+        slot->pointee_rep.kind == XAOT_VALUE_AGGREGATE &&
+        cg_value_rep_is_struct_aggregate(slot->pointee_rep)) {
+        fprintf(out, "(%s *)(*(XrValue *)(uintptr_t)XR_TO_INT(%s)).ptr",
+                slot->pointee_rep.c_type ? slot->pointee_rep.c_type : "void",
                 boxed_expr ? boxed_expr : "XR_NULL_VAL");
         return;
     }
