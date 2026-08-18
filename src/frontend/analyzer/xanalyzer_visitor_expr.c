@@ -209,6 +209,31 @@ static void xa_report_view_member_error(XaInferContext *ctx, AstNode *node, XrTy
                                &loc);
 }
 
+/* Prelude ADTs whose declarations live in native type sources the schema
+ * loader does not ingest yet. Their value surface is the closed enum-value
+ * set (name/ordinal/toString + match), so unknown members can be rejected
+ * even without a variant schema. */
+static bool xa_enum_name_is_builtin_adt(const char *name) {
+    return name && (strcmp(name, "Recv") == 0 || strcmp(name, "TaskResult") == 0 ||
+                    strcmp(name, "SendResult") == 0 || strcmp(name, "TaskStatus") == 0);
+}
+
+/* Closed value-side surface for a schema-less builtin ADT. Returns NULL when
+ * `member` is not part of that surface so the caller can diagnose. */
+static XrType *xa_builtin_adt_value_member_type(XaInferContext *ctx, const char *member) {
+    if (!member)
+        return NULL;
+    if (strcmp(member, "name") == 0)
+        return xr_type_new_string(NULL);
+    if (strcmp(member, "ordinal") == 0)
+        return xr_type_new_int(NULL);
+    if (strcmp(member, "toString") == 0) {
+        XrType *ret = xr_type_new_string(NULL);
+        return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, ret, false);
+    }
+    return NULL;
+}
+
 static bool member_object_is_enum_namespace(XaInferContext *ctx, AstNode *object,
                                             const char *enum_name) {
     if (!ctx || !object || !enum_name)
@@ -326,7 +351,8 @@ static XrType *xa_try_expected_enum_member_access(XaInferContext *ctx, AstNode *
         char msg[192];
         snprintf(msg, sizeof(msg),
                  "payload enum variant '%s.%s' is a constructor; call it as '%s.%s(...)' "
-                 "instead of using it as a value",
+                 "without explicit type arguments on the enum — the payload determines the "
+                 "instantiation",
                  enum_sym->name ? enum_sym->name : "?", ma->name,
                  enum_sym->name ? enum_sym->name : "?", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
@@ -1189,12 +1215,14 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
         if (binding_state == XA_BINDING_MOVED)
-            snprintf(msg, sizeof(msg), "Variable '%s' used after move", name);
+            snprintf(msg, sizeof(msg), "Variable '%s' used after move (OWN-E-MOVED)", name);
         else if (binding_state == XA_BINDING_MAYBE_MOVED)
-            snprintf(msg, sizeof(msg), "Variable '%s' may have been moved on another path", name);
+            snprintf(msg, sizeof(msg),
+                     "Variable '%s' may have been moved on another path (OWN-E-MAYBE-MOVED)", name);
         else
-            snprintf(msg, sizeof(msg), "Variable '%s' ownership state is unknown", name);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            snprintf(msg, sizeof(msg), "Variable '%s' ownership state is unknown (OWN-E-UNKNOWN)",
+                     name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BINDING_STATE,
                                    msg, &loc);
     }
 
@@ -1669,8 +1697,8 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
                  * having no way to guess at all. */
                 XaSymbol *method = NULL;
                 XrType *fn_type = NULL;
-                XaOperatorOverloadStatus status = xa_resolve_binary_operator_overload(
-                    ctx, node, left, right, &method, &fn_type);
+                XaOperatorOverloadStatus status =
+                    xa_resolve_binary_operator_overload(ctx, node, left, right, &method, &fn_type);
                 if (status == XA_OPERATOR_OVERLOAD_REJECTED)
                     return xr_type_new_error(ctx->analyzer->isolate);
                 if (status == XA_OPERATOR_OVERLOAD_RESOLVED) {
@@ -1843,6 +1871,24 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
         return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
+    /* Builtin-type static surface (string.fromUtf8, ...). Primitive type
+     * keywords cannot be shadowed, so a keyword receiver is always the native
+     * type object; resolving the declared signature here gives the call site
+     * a real contract — argument types are checked and the return type stays
+     * precise instead of degrading to unknown. Restricted to keyword names so
+     * ordinary identifiers keep their scoped resolution. */
+    if (ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
+        ma->name &&
+        (strcmp(ma->object->as.variable.name, "string") == 0 ||
+         xr_source_type_spelling_lookup(ma->object->as.variable.name,
+                                        strlen(ma->object->as.variable.name)) !=
+             XR_SOURCE_TYPE_NONE)) {
+        XrType *static_member = xa_builtin_static_member_type(
+            ctx->analyzer->isolate, ma->object->as.variable.name, ma->name);
+        if (static_member)
+            return static_member;
     }
 
     if (ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
@@ -2076,10 +2122,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                     .line = node->line,
                                     .column = node->column,
                                 };
-                                char msg[192];
+                                char msg[224];
                                 snprintf(msg, sizeof(msg),
                                          "payload enum variant '%s.%s' is a constructor; call it "
-                                         "as '%s.%s(...)' instead of using it as a value",
+                                         "as '%s.%s(...)' without explicit type arguments on the "
+                                         "enum — the payload determines the instantiation",
                                          obj_type->enum_type.enum_name, ma->name,
                                          obj_type->enum_type.enum_name, ma->name);
                                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -2177,6 +2224,27 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     return xr_type_new_error(ctx->analyzer->isolate);
                 }
             }
+        }
+        /* Schema-less prelude ADT on the value side: the member surface is
+         * still closed, so an unknown field is rejected here instead of
+         * typing as unknown and reading null at runtime. Namespace uses
+         * (TaskStatus.Running) keep the permissive path until the loader
+         * ingests the native enum declarations. */
+        if (xa_enum_name_is_builtin_adt(obj_type->enum_type.enum_name) && ma->name &&
+            !member_object_is_enum_namespace(ctx, ma->object, obj_type->enum_type.enum_name) &&
+            !(ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
+              strcmp(ma->object->as.variable.name, obj_type->enum_type.enum_name) == 0)) {
+            XrType *member_type = xa_builtin_adt_value_member_type(ctx, ma->name);
+            if (member_type)
+                return member_type;
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "enum value has no member '%s'; destructure '%s' payloads with match",
+                     ma->name, obj_type->enum_type.enum_name);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
         return xr_type_new_unknown(NULL);
     }
@@ -2842,6 +2910,23 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         snprintf(msg, sizeof(msg), "type '%s' has no member '%s'",
                  obj_type->instance.class_name ? obj_type->instance.class_name : "?", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNKNOWN_FIELD,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
+    /* Channel results type as a generic instance named after the prelude ADT
+     * with no class_ref; the value-side surface is the same closed enum set. */
+    if (XR_TYPE_IS_INSTANCE(obj_type) && !obj_type->instance.class_ref &&
+        xa_enum_name_is_builtin_adt(obj_type->instance.class_name) && ma->name) {
+        XrType *member_type = xa_builtin_adt_value_member_type(ctx, ma->name);
+        if (member_type)
+            return member_type;
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+                 "enum value has no member '%s'; destructure '%s' payloads with match", ma->name,
+                 obj_type->instance.class_name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
         return xr_type_new_error(ctx->analyzer->isolate);
     }
@@ -3584,6 +3669,13 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
     ctx->expected_type = saved_expected;
     if ((key_type && XR_TYPE_IS_ERROR(key_type)) || (val_type && XR_TYPE_IS_ERROR(val_type)))
         return xr_type_new_error(ctx->analyzer->isolate);
+    /* A literal in JSON.Object position adopts the JSON value type when every
+     * value widens to it (scalar zero-materialization widening). Without this
+     * the literal types as Map<string, int|...> and fails the invariant map
+     * value rule, which would reject `var j: JSON.Object = #{"a": 1}`. */
+    if (target_value_type && XR_TYPE_IS_JSON(target_value_type) && val_type &&
+        !XR_TYPE_IS_JSON(val_type) && xr_type_assignable(target_value_type, val_type))
+        val_type = target_value_type;
     XrType *result = xr_type_new_map(ctx->analyzer->isolate, key_type, val_type);
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     xa_validate_hashable_key_type(ctx, result, NULL, "map literal", &loc);
@@ -4361,6 +4453,23 @@ static void xa_check_aggregate_literal_fields(XaInferContext *ctx, AstNode *node
                      name);
             xa_report_aggregate_literal_error(ctx, node, XR_ERR_ANALYZE_UNKNOWN_FIELD, msg);
         } else {
+            /* The literal is the struct's only construction form. A private
+             * field keeps that form out of foreign modules, while the
+             * declaring module — including sibling value types, e.g. a SIMD
+             * kernel widening into its neighbour — keeps the literal usable. */
+            if (member->is_private) {
+                bool same_type = ctx->current_class_info && class_info &&
+                                 xa_class_info_same_identity(ctx->current_class_info, class_info);
+                bool same_module = class_info && class_info->location.file && ctx->file_path &&
+                                   strcmp(class_info->location.file, ctx->file_path) == 0;
+                if (!same_type && !same_module) {
+                    snprintf(msg, sizeof(msg),
+                             "cannot initialize private field '%s' of '%s' outside its "
+                             "declaring module",
+                             name, label);
+                    xa_report_aggregate_literal_error(ctx, node, XR_ERR_ANALYZE_VISIBILITY, msg);
+                }
+            }
             matched_fields++;
         }
     }
@@ -5806,10 +5915,10 @@ static void xa_consume_unique_task_await(XaInferContext *ctx, AstNode *await_nod
             char msg[192];
             snprintf(msg, sizeof(msg),
                      "cannot await unique Task '%s' in a repeated loop: the next iteration "
-                     "would consume it again",
+                     "would consume it again (OWN-E-CAP-LOOP)",
                      name);
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       msg, &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_CAPABILITY, msg, &loc);
         }
     }
 
@@ -6091,17 +6200,17 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
                                  : "has unknown ownership state";
         char msg[192];
         snprintf(msg, sizeof(msg), "cannot move '%s': binding %s", move_name, reason);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
-                                   &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BINDING_STATE,
+                                   msg, &loc);
     }
 
     // Check: variable must exist and be a movable var binding.
     if (move_sym && move_sym->is_const) {
         const char *name = move_source->as.variable.name;
         char msg[128];
-        snprintf(msg, sizeof(msg), "cannot move const value '%s'", name);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
-                                   &loc);
+        snprintf(msg, sizeof(msg), "cannot move const value '%s' (OWN-E-CAP-CONST)", name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_CAPABILITY,
+                                   msg, &loc);
     }
     if (move_sym && move_sym->kind != XA_SYM_VARIABLE && move_sym->kind != XA_SYM_PARAMETER) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
@@ -6123,8 +6232,8 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     if (handle_label) {
         char msg[128];
         snprintf(msg, sizeof(msg), "cannot move %s (shared concurrency handle)", handle_label);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
-                                   &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_CAPABILITY,
+                                   msg, &loc);
     }
 
     // Check: cannot move value types (no heap object to transfer)
@@ -6148,10 +6257,10 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
             char msg[192];
             snprintf(msg, sizeof(msg),
                      "cannot move '%s' in a repeated loop: the next iteration would consume it "
-                     "again",
+                     "again (OWN-E-CAP-LOOP)",
                      move_name ? move_name : "?");
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       msg, &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_CAPABILITY, msg, &loc);
         }
     }
 
@@ -6187,6 +6296,20 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
             links->final_move.evidence =
                 links->ownership_candidate.evidence | XA_OWNERSHIP_EV_STORAGE;
             links->final_move.complete = links->allocation_plan.complete;
+            /* Snapshot the consumed generation on the node itself. The
+             * per-binding slots above are overwritten if the binding is
+             * rebound (and possibly moved again) later; lowering reads the
+             * snapshot so this consume keeps the evidence it verified. */
+            if (links->final_move.complete) {
+                MoveExprNode *me = &node->as.move_expr;
+                me->move_evidence_id = links->ownership_candidate.id;
+                me->move_root_id = links->root_id;
+                me->move_source_symbol_id = move_sym->id;
+                me->move_storage_plan_id = links->allocation_plan.id;
+                me->move_evidence_bits = links->final_move.evidence;
+                me->move_capability = (uint8_t) links->value_capability;
+                me->move_storage_domain = (uint8_t) links->allocation_plan.domain;
+            }
         }
     }
 

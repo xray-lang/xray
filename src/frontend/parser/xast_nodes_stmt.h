@@ -281,6 +281,18 @@ typedef struct ScopeBlockNode {
 // move expression: move var (explicit ownership transfer)
 typedef struct MoveExprNode {
     AstNode *expr;  // must be a variable reference
+    /* Ownership-evidence snapshot, filled by the analyzer when this consume
+     * verifies. A binding may be rebound and moved again, so per-binding
+     * evidence is generational; the snapshot pins the generation this node
+     * consumed for the lowering that follows. Plain scalars keep this header
+     * free of analyzer types. */
+    uint32_t move_evidence_id;
+    uint32_t move_root_id;
+    uint32_t move_source_symbol_id;
+    uint32_t move_storage_plan_id;
+    uint32_t move_evidence_bits;
+    uint8_t move_capability;
+    uint8_t move_storage_domain;
 } MoveExprNode;
 
 // unsafe expression: unsafe { expr }
