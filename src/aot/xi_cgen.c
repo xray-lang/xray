@@ -14792,7 +14792,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, "%svoid *", cg_linkage(ctx));
         emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
         fprintf(out, "(");
-        emit_aot_frame_new_params(out, f, needs_sync_go, true);
+        emit_aot_frame_new_params(ctx, out, f, needs_sync_go, true);
         fprintf(out, ");\n");
         if (needs_aot_coro) {
             fprintf(out, "%sbool ", cg_linkage(ctx));
@@ -14800,7 +14800,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
             fprintf(out, "(void *raw_frame");
             if (cg_func_frame_needs_cl(f) || cg_coro_param_count(f) > 0)
                 fprintf(out, ", ");
-            emit_aot_frame_new_params(out, f, false, false);
+            emit_aot_frame_new_params(ctx, out, f, false, false);
             fprintf(out, ");\n");
         }
         fprintf(out, "%sXrAotResult ", cg_linkage(ctx));

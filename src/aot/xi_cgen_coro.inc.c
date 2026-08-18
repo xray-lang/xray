@@ -10,16 +10,16 @@
 
 /* ========== AOT Coroutine Frame Emission ========== */
 
-static const XiValue *cg_coro_box_scalar_source(const XiValue *v) {
+static const XiValue *cg_coro_box_scalar_source(XiCgenCtx *ctx, const XiValue *v) {
     if (!v || v->op != XI_BOX || v->nargs < 1)
         return NULL;
-    XrRep rep = cg_rep(v->args[0]);
+    XrRep rep = cg_value_plan_storage_rep(ctx, v->args[0]);
     return (rep == XR_REP_I64 || rep == XR_REP_F64) ? v->args[0] : NULL;
 }
 
-static bool cg_coro_is_typed_send_use(const XiValue *user, const XiValue *target,
+static bool cg_coro_is_typed_send_use(XiCgenCtx *ctx, const XiValue *user, const XiValue *target,
                                       uint16_t arg_idx) {
-    if (!user || !target || !cg_coro_box_scalar_source(target) || arg_idx != 1)
+    if (!user || !target || !cg_coro_box_scalar_source(ctx, target) || arg_idx != 1)
         return false;
     if ((user->op == XI_CHAN_SEND || user->op == XI_CHAN_TRY_SEND) && user->nargs >= 2)
         return true;
@@ -29,8 +29,9 @@ static bool cg_coro_is_typed_send_use(const XiValue *user, const XiValue *target
     return method && (strcmp(method, "send") == 0 || strcmp(method, "trySend") == 0);
 }
 
-static bool cg_coro_box_only_feeds_typed_send(const XiFunc *f, const XiValue *target) {
-    if (!f || !cg_coro_box_scalar_source(target))
+static bool cg_coro_box_only_feeds_typed_send(XiCgenCtx *ctx, const XiFunc *f,
+                                              const XiValue *target) {
+    if (!f || !cg_coro_box_scalar_source(ctx, target))
         return false;
     bool seen_use = false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -52,7 +53,7 @@ static bool cg_coro_box_only_feeds_typed_send(const XiFunc *f, const XiValue *ta
             for (uint16_t a = 0; a < user->nargs; a++) {
                 if (user->args[a] != target)
                     continue;
-                if (!cg_coro_is_typed_send_use(user, target, a))
+                if (!cg_coro_is_typed_send_use(ctx, user, target, a))
                     return false;
                 seen_use = true;
             }
@@ -72,7 +73,7 @@ static bool cg_coro_value_has_storage(XiCgenCtx *ctx, const XiFunc *f, const XiV
         return false;
     if (xi_coro_typed_recv_unbox_user(f, v))
         return false;
-    if (cg_coro_box_only_feeds_typed_send(f, v))
+    if (cg_coro_box_only_feeds_typed_send(ctx, f, v))
         return false;
     if (v->op == XI_YIELD || v->op == XI_GEN_YIELD || v->op == XI_TRY || v->op == XI_END_TRY)
         return false;
@@ -331,24 +332,24 @@ static void emit_coro_transfer_as_rep(XiCgenCtx *ctx, FILE *out, const XiValue *
     emit_value_as_rep_ctx(ctx, out, v, rep);
 }
 
-static const XiValue *cg_coro_unboxed_scalar_value(const XiValue *v) {
+static const XiValue *cg_coro_unboxed_scalar_value(XiCgenCtx *ctx, const XiValue *v) {
     if (!v)
         return NULL;
-    const XiValue *boxed = cg_coro_box_scalar_source(v);
+    const XiValue *boxed = cg_coro_box_scalar_source(ctx, v);
     if (boxed)
         return boxed;
-    XrRep rep = cg_rep(v);
+    XrRep rep = cg_value_plan_storage_rep(ctx, v);
     if (rep == XR_REP_I64 || rep == XR_REP_F64)
         return v;
     return NULL;
 }
 
-static const char *cg_coro_typed_send_helper(const char *base, const XiValue *v,
+static const char *cg_coro_typed_send_helper(XiCgenCtx *ctx, const char *base, const XiValue *v,
                                              const XiValue **send_arg) {
-    const XiValue *arg = cg_coro_unboxed_scalar_value(v);
+    const XiValue *arg = cg_coro_unboxed_scalar_value(ctx, v);
     if (!arg)
         return base;
-    XrRep rep = cg_rep(arg);
+    XrRep rep = cg_value_plan_storage_rep(ctx, arg);
     if (rep == XR_REP_I64) {
         if (send_arg)
             *send_arg = arg;
@@ -404,9 +405,10 @@ static void emit_coro_runtime_channel_bridge_temp(XiCgenCtx *ctx, FILE *out,
     fprintf(out, "    }\n");
 }
 
-static const char *cg_coro_typed_recv_pair_helper(const XiFunc *f, const XiValue *v) {
+static const char *cg_coro_typed_recv_pair_helper(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *v) {
     const XiValue *slot_value = xi_coro_typed_recv_unbox_user(f, v);
-    XrRep rep = cg_rep(slot_value ? slot_value : v);
+    XrRep rep = cg_value_plan_storage_rep(ctx, slot_value ? slot_value : v);
     if (rep == XR_REP_I64)
         return "xr_aot_chan_recv_pair_i64";
     if (rep == XR_REP_F64)
@@ -414,8 +416,8 @@ static const char *cg_coro_typed_recv_pair_helper(const XiFunc *f, const XiValue
     return "xr_aot_chan_recv_pair";
 }
 
-static void emit_int64_arg(FILE *out, const XiValue *v) {
-    XrRep rep = cg_rep(v);
+static void emit_int64_arg(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    XrRep rep = cg_value_plan_storage_rep(ctx, v);
     if (rep == XR_REP_I64) {
         emit_vref(out, v);
     } else if (rep == XR_REP_F64) {
@@ -447,8 +449,9 @@ static void emit_assign_from_xrvalue_temp_rep(FILE *out, const XiValue *dst, con
     fprintf(out, ";\n");
 }
 
-static void emit_assign_from_xrvalue_temp(FILE *out, const XiValue *dst, const char *temp_name) {
-    emit_assign_from_xrvalue_temp_rep(out, dst, temp_name, cg_rep(dst));
+static void emit_assign_from_xrvalue_temp(XiCgenCtx *ctx, FILE *out, const XiValue *dst,
+                                          const char *temp_name) {
+    emit_assign_from_xrvalue_temp_rep(out, dst, temp_name, cg_value_plan_storage_rep(ctx, dst));
 }
 
 /* Suspend-call results cross the runtime boundary as XrValue even when the
@@ -491,22 +494,24 @@ static void emit_assign_from_owned_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, c
     fprintf(out, ";\n");
 }
 
-static void emit_assign_from_bool_temp(FILE *out, const XiValue *dst, const char *temp_name) {
+static void emit_assign_from_bool_temp(XiCgenCtx *ctx, FILE *out, const XiValue *dst,
+                                       const char *temp_name) {
     fprintf(out, "    ");
     emit_vref(out, dst);
     fprintf(out, " = ");
-    if (cg_rep(dst) == XR_REP_TAGGED)
+    if (cg_value_plan_storage_rep(ctx, dst) == XR_REP_TAGGED)
         fprintf(out, "XR_FROM_BOOL(%s)", temp_name);
     else
         fprintf(out, "%s", temp_name);
     fprintf(out, ";\n");
 }
 
-static void emit_assign_from_i64_temp(FILE *out, const XiValue *dst, const char *temp_name) {
+static void emit_assign_from_i64_temp(XiCgenCtx *ctx, FILE *out, const XiValue *dst,
+                                      const char *temp_name) {
     fprintf(out, "    ");
     emit_vref(out, dst);
     fprintf(out, " = ");
-    if (cg_rep(dst) == XR_REP_TAGGED)
+    if (cg_value_plan_storage_rep(ctx, dst) == XR_REP_TAGGED)
         fprintf(out, "XR_FROM_INT(%s)", temp_name);
     else
         fprintf(out, "%s", temp_name);
@@ -572,11 +577,11 @@ static void emit_aot_coro_op_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     fprintf(out, "    XrValue %s = xr_aot_coro_op(ctx, %d, %s, %u);\n", tmp_name, (int) v->aux_int,
             v->nargs > 0 ? args_name : "NULL", (unsigned) v->nargs);
     if (cg_coro_value_has_storage(ctx, f, v))
-        emit_assign_from_xrvalue_temp(out, v, tmp_name);
+        emit_assign_from_xrvalue_temp(ctx, out, v, tmp_name);
 }
 
-static void emit_bridge_stored_tagged_value(FILE *out, const XiValue *value) {
-    if (!value || cg_rep(value) != XR_REP_TAGGED)
+static void emit_bridge_stored_tagged_value(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
+    if (!value || cg_value_plan_storage_rep(ctx, value) != XR_REP_TAGGED)
         return;
     fprintf(out, "    ");
     emit_vref(out, value);
@@ -585,8 +590,8 @@ static void emit_bridge_stored_tagged_value(FILE *out, const XiValue *value) {
     fprintf(out, ");\n");
 }
 
-static void emit_bridge_stored_owned_tagged_value(FILE *out, const XiValue *value) {
-    if (!value || cg_rep(value) != XR_REP_TAGGED)
+static void emit_bridge_stored_owned_tagged_value(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
+    if (!value || cg_value_plan_storage_rep(ctx, value) != XR_REP_TAGGED)
         return;
     fprintf(out, "    ");
     emit_vref(out, value);
@@ -1429,7 +1434,7 @@ static void cg_prepare_sync_go_targets_for_modules(XiCgenCtx *ctx, XiModule **mo
     }
 }
 
-static void emit_aot_frame_new_params(FILE *out, const XiFunc *f, bool typed_params,
+static void emit_aot_frame_new_params(XiCgenCtx *ctx, FILE *out, const XiFunc *f, bool typed_params,
                                       bool empty_as_void) {
     bool need_comma = false;
     uint16_t total_params = (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0));
@@ -1440,15 +1445,17 @@ static void emit_aot_frame_new_params(FILE *out, const XiFunc *f, bool typed_par
     for (uint16_t i = 0; i < total_params; i++) {
         if (need_comma)
             fprintf(out, ", ");
-        fprintf(out, "%s p%u", typed_params ? ctype_str(cg_rep(f->params[i])) : "XrValue", i);
+        fprintf(out, "%s p%u",
+                typed_params ? ctype_str(cg_value_plan_storage_rep(ctx, f->params[i])) : "XrValue",
+                i);
         need_comma = true;
     }
     if (!need_comma && empty_as_void)
         fprintf(out, "void");
 }
 
-static void emit_aot_frame_raw_cl_arg(FILE *out, const XiFunc *current, const XiValue *callee,
-                                      const XiFunc *target) {
+static void emit_aot_frame_raw_cl_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                      const XiValue *callee, const XiFunc *target) {
     if (!cg_func_frame_needs_cl(target))
         return;
 
@@ -1477,7 +1484,7 @@ static void emit_aot_frame_raw_cl_arg(FILE *out, const XiFunc *current, const Xi
     if (callee) {
         fprintf(out, "(xrt_closure_t *)");
         emit_vref(out, callee);
-        if (cg_rep(callee) == XR_REP_TAGGED)
+        if (cg_value_plan_storage_rep(ctx, callee) == XR_REP_TAGGED)
             fprintf(out, ".ptr");
         return;
     }
@@ -1515,7 +1522,7 @@ static bool emit_aot_frame_transfer_cl_arg(XiCgenCtx *ctx, FILE *out, const XiFu
      * _src is read before the switch: it is a plain pointer load out of the
      * parent's own value, and only the copies below may allocate. */
     fprintf(out, "({ xrt_closure_t *_src = ");
-    emit_aot_frame_raw_cl_arg(out, current, callee, target);
+    emit_aot_frame_raw_cl_arg(ctx, out, current, callee, target);
     fprintf(out,
             "; void *_xa_prev = xrt_execution_arena_enter(xrt_execution_root()); "
             "xrt_closure_t *_dst = NULL; if (_src) { XrValue _dstv = "
@@ -1563,7 +1570,7 @@ static void emit_aot_frame_new_call_args(XiCgenCtx *ctx, FILE *out, const XiFunc
     if (cg_func_frame_needs_cl(target)) {
         if (!transfer_owner_has_plans ||
             !emit_aot_frame_transfer_cl_arg(ctx, out, current, callee, target))
-            emit_aot_frame_raw_cl_arg(out, current, callee, target);
+            emit_aot_frame_raw_cl_arg(ctx, out, current, callee, target);
         fprintf(out, ", %s", transfer_owner_has_plans ? "true" : "false");
         need_comma = true;
     }
@@ -1589,7 +1596,7 @@ static void emit_aot_frame_new_call_args(XiCgenCtx *ctx, FILE *out, const XiFunc
         } else {
             XrRep param_rep = cg_value_plan_storage_rep(ctx, target->params[a - arg_start]);
             if (param_rep == XR_REP_I64) {
-                emit_int64_arg(out, args[a]);
+                emit_int64_arg(ctx, out, args[a]);
             } else if (param_rep == XR_REP_F64) {
                 if (cg_value_plan_storage_rep(ctx, args[a]) == XR_REP_F64) {
                     emit_vref(out, args[a]);
@@ -1653,7 +1660,7 @@ static void emit_sync_go_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *
     fprintf(out, "%svoid *", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
     fprintf(out, "(");
-    emit_aot_frame_new_params(out, f, true, true);
+    emit_aot_frame_new_params(ctx, out, f, true, true);
     fprintf(out, ") {\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
@@ -1806,20 +1813,21 @@ static uint32_t count_sync_go_frame_releases(const XiFunc *f) {
     return count;
 }
 
-static size_t estimate_sync_go_frame_size(const XiFunc *f) {
+static size_t estimate_sync_go_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
     size_t size = 0;
     size_t max_align = 1;
     if (cg_func_frame_needs_cl(f))
         cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++)
-        cg_coro_layout_add_rep(&size, &max_align, cg_rep(f->params[i]));
+        cg_coro_layout_add_rep(&size, &max_align, cg_value_plan_storage_rep(ctx, f->params[i]));
     if (size == 0)
         cg_coro_layout_add(&size, &max_align, sizeof(uint8_t), _Alignof(uint8_t));
     return cg_coro_align_up(size, max_align);
 }
 
-static void emit_sync_go_frame_param_as_xrvalue(FILE *out, const XiFunc *f, uint16_t index) {
-    XrRep rep = cg_rep(f->params[index]);
+static void emit_sync_go_frame_param_as_xrvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                uint16_t index) {
+    XrRep rep = cg_value_plan_storage_rep(ctx, f->params[index]);
     if (rep == XR_REP_I64) {
         if (cg_value_type_is_bool(f->params[index]))
             fprintf(out, "XR_FROM_BOOL(f->p%u)", index);
@@ -1847,7 +1855,7 @@ static void emit_sync_go_frame_param_for_func_abi(XiCgenCtx *ctx, FILE *out, con
     XrRep param_rep = cg_func_param_abi_rep(ctx, f, index);
     XrRep frame_rep = cg_value_plan_storage_rep(ctx, f->params[index]);
     if (param_rep == XR_REP_TAGGED) {
-        emit_sync_go_frame_param_as_xrvalue(out, f, index);
+        emit_sync_go_frame_param_as_xrvalue(ctx, out, f, index);
     } else {
         const char *suffix =
             emit_conversion_prefix(out, f->params[index]->type, frame_rep, param_rep);
@@ -1891,7 +1899,7 @@ static bool cg_sync_go_uses_class_param_boxed_adapter(XiCgenCtx *ctx, const XiFu
 static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
     uint32_t root_count = count_sync_go_frame_roots(f);
     uint32_t release_count = count_sync_go_frame_releases(f);
-    record_coro_frame_stats(ctx, estimate_sync_go_frame_size(f), root_count, release_count);
+    record_coro_frame_stats(ctx, estimate_sync_go_frame_size(ctx, f), root_count, release_count);
 
     emit_sync_go_frame_type(ctx, out, f, prefix);
     emit_sync_go_frame_factory(ctx, out, f, prefix);
@@ -1917,7 +1925,7 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "(NULL");
         for (uint16_t i = 0; i < cg_coro_param_count(f); i++) {
             fprintf(out, ", ");
-            emit_sync_go_frame_param_as_xrvalue(out, f, i);
+            emit_sync_go_frame_param_as_xrvalue(ctx, out, f, i);
         }
         fprintf(out, ");\n");
     } else if (result_rep == XR_REP_VOID) {
@@ -1958,7 +1966,7 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (!cg_sync_go_param_needs_release(f, i))
             continue;
         fprintf(out, "    XrValue _pval%u = ", i);
-        emit_sync_go_frame_param_as_xrvalue(out, f, i);
+        emit_sync_go_frame_param_as_xrvalue(ctx, out, f, i);
         fprintf(out, ";\n");
         fprintf(out,
                 "    if (_result.tag == _pval%u.tag && _result.ptr == _pval%u.ptr)\n"
@@ -1981,7 +1989,7 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (!cg_sync_go_param_needs_trace(f, i))
             continue;
         fprintf(out, "    xr_aot_trace_frame_value(visitor, ");
-        emit_sync_go_frame_param_as_xrvalue(out, f, i);
+        emit_sync_go_frame_param_as_xrvalue(ctx, out, f, i);
         fprintf(out, ");\n");
     }
     fprintf(out, "}\n\n");
@@ -1999,7 +2007,7 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++) {
         if (cg_sync_go_param_needs_release(f, i)) {
             fprintf(out, "    xrt_release(");
-            emit_sync_go_frame_param_as_xrvalue(out, f, i);
+            emit_sync_go_frame_param_as_xrvalue(ctx, out, f, i);
             fprintf(out, ");\n");
         }
     }
@@ -2112,7 +2120,7 @@ static void emit_coro_frame_init(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, "(void *raw_frame");
     if (cg_func_frame_needs_cl(f) || cg_coro_param_count(f) > 0)
         fprintf(out, ", ");
-    emit_aot_frame_new_params(out, f, false, false);
+    emit_aot_frame_new_params(ctx, out, f, false, false);
     fprintf(out, ") {\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
@@ -2277,7 +2285,7 @@ static void emit_coro_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     fprintf(out, "%svoid *", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
     fprintf(out, "(");
-    emit_aot_frame_new_params(out, f, false, true);
+    emit_aot_frame_new_params(ctx, out, f, false, true);
     fprintf(out, ") {\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
@@ -2403,10 +2411,10 @@ static bool cg_coro_func_emits_loop_poll(const XiFunc *f) {
     return false;
 }
 
-static void emit_coro_callable_closure_ptr(FILE *out, const XiValue *callee) {
+static void emit_coro_callable_closure_ptr(XiCgenCtx *ctx, FILE *out, const XiValue *callee) {
     fprintf(out, "(xrt_closure_t *)");
     emit_vref(out, callee);
-    if (cg_rep(callee) == XR_REP_TAGGED)
+    if (cg_value_plan_storage_rep(ctx, callee) == XR_REP_TAGGED)
         fprintf(out, ".ptr");
 }
 
@@ -2457,7 +2465,7 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
     fprintf(out, "    XrAotResult _call_%u;\n", v->id);
     fprintf(out, "    XrValue _call_value_%u = XR_NULL_VAL;\n", v->id);
     fprintf(out, "    xrt_closure_t *_call_cl_%u = ", v->id);
-    emit_coro_callable_closure_ptr(out, v->args[0]);
+    emit_coro_callable_closure_ptr(ctx, out, v->args[0]);
     fprintf(out, ";\n");
     fprintf(out,
             "    if (!_call_cl_%u || !_call_cl_%u->callable)\n"
@@ -2894,18 +2902,18 @@ static bool emit_coro_test_yield_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFu
     if (cg_coro_value_has_storage(ctx, f, v) && strcmp(method, "add") == 0) {
         char temp[48];
         snprintf(temp, sizeof(temp), "f->test_yield_value_%u", v->id);
-        emit_assign_from_i64_temp(out, v, temp);
+        emit_assign_from_i64_temp(ctx, out, v, temp);
     } else if (cg_coro_value_has_storage(ctx, f, v) && strcmp(method, "simple") == 0) {
         fprintf(out, "    int64_t _test_yield_value_%u = xr_aot_test_yield_simple();\n", v->id);
         char temp[48];
         snprintf(temp, sizeof(temp), "_test_yield_value_%u", v->id);
-        emit_assign_from_i64_temp(out, v, temp);
+        emit_assign_from_i64_temp(ctx, out, v, temp);
     } else if (cg_coro_value_has_storage(ctx, f, v) && strcmp(method, "counter_inc") == 0) {
         fprintf(out, "    int64_t _test_yield_value_%u = xr_aot_test_yield_counter_get();\n",
                 v->id);
         char temp[48];
         snprintf(temp, sizeof(temp), "_test_yield_value_%u", v->id);
-        emit_assign_from_i64_temp(out, v, temp);
+        emit_assign_from_i64_temp(ctx, out, v, temp);
     }
     emit_coro_debug_result_source_var_sync(ctx, out, f, v);
     return true;
@@ -3102,7 +3110,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
-    if (cg_coro_box_only_feeds_typed_send(f, v))
+    if (cg_coro_box_only_feeds_typed_send(ctx, f, v))
         return;
 
     if (xi_coro_unbox_from_typed_recv(f, v))
@@ -3304,7 +3312,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 emit_vref(out, deferred_task_array);
                 fprintf(out, ", ");
                 if (deferred_task_index)
-                    emit_int64_arg(out, deferred_task_index);
+                    emit_int64_arg(ctx, out, deferred_task_index);
                 else
                     fprintf(out, "-1");
                 fprintf(out, ", ");
@@ -3316,7 +3324,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_coro_await_result_slot(ctx, out, f, prefix, v, await_slot_value);
             fprintf(out, ", ");
             if (v->nargs >= 2)
-                emit_int64_arg(out, v->args[1]);
+                emit_int64_arg(ctx, out, v->args[1]);
             else
                 fprintf(out, "-1");
             fprintf(out, ", false, %s);\n", one_shot_await ? "true" : "false");
@@ -3395,7 +3403,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 emit_vref(out, deferred_task_array);
                 fprintf(out, ", ");
                 if (deferred_task_index)
-                    emit_int64_arg(out, deferred_task_index);
+                    emit_int64_arg(ctx, out, deferred_task_index);
                 else
                     fprintf(out, "-1");
                 fprintf(out, ", ");
@@ -3624,7 +3632,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrAotResult _sleep_%u = xr_aot_sleep(ctx, ", v->id);
-        emit_int64_arg(out, v->args[1]);
+        emit_int64_arg(ctx, out, v->args[1]);
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_sleep_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
@@ -3643,7 +3651,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "    XrValue _sleep_value_%u = XR_NULL_VAL;\n", v->id);
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_sleep_value_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -3664,7 +3672,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_time_method_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -3721,7 +3729,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                     v->id);
             char tmp[48];
             snprintf(tmp, sizeof(tmp), "_scope_exit_value_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
@@ -3735,12 +3743,12 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             return;
         }
         fprintf(out, "    XrValue _timer_ch_%u = xr_aot_time_after(ctx, ", v->id);
-        emit_int64_arg(out, v->args[0]);
+        emit_int64_arg(ctx, out, v->args[0]);
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_timer_ch_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -3825,12 +3833,12 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             return;
         }
         fprintf(out, "    XrValue _chan_%u = %s(ctx, ", v->id, emission.recipe_symbol);
-        emit_int64_arg(out, v->args[0]);
+        emit_int64_arg(ctx, out, v->args[0]);
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -3845,7 +3853,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         const XiValue *send_arg = NULL;
         const char *helper =
-            cg_coro_typed_send_helper("xr_aot_chan_try_send_ready", v->args[1], &send_arg);
+            cg_coro_typed_send_helper(ctx, "xr_aot_chan_try_send_ready", v->args[1], &send_arg);
         bool transfer_helper =
             send_arg == NULL && strcmp(helper, "xr_aot_chan_try_send_ready") == 0;
         if (transfer_helper)
@@ -3874,7 +3882,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_try_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -3956,7 +3964,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_chan_closed_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -3995,7 +4003,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_builtin_field_%u", v->id);
-                emit_assign_from_xrvalue_temp(out, v, tmp);
+                emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
             }
             return;
         }
@@ -4017,7 +4025,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_task_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4038,7 +4046,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4059,7 +4067,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_wq_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4080,7 +4088,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_rg_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4101,7 +4109,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_latch_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4122,7 +4130,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_sem_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4143,7 +4151,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[56];
             snprintf(tmp, sizeof(tmp), "_event_count_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4155,8 +4163,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_task_method_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
-            emit_bridge_stored_tagged_value(out, v);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
+            emit_bridge_stored_tagged_value(ctx, out, v);
         }
         return;
     }
@@ -4168,8 +4176,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_task_method_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
-            emit_bridge_stored_tagged_value(out, v);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
+            emit_bridge_stored_tagged_value(ctx, out, v);
         }
         return;
     }
@@ -4187,7 +4195,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
         fprintf(out, ", ");
         if (timeout_enabled)
-            emit_int64_arg(out, v->args[1]);
+            emit_int64_arg(ctx, out, v->args[1]);
         else
             fprintf(out, "-1");
         fprintf(out, ", %s);\n", timeout_enabled ? "true" : "false");
@@ -4217,7 +4225,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
         if (cg_coro_value_has_storage(ctx, f, v))
-            emit_bridge_stored_tagged_value(out, v);
+            emit_bridge_stored_tagged_value(ctx, out, v);
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
@@ -4238,14 +4246,14 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
         if (v->nargs >= 3)
-            emit_int64_arg(out, v->args[2]);
+            emit_int64_arg(ctx, out, v->args[2]);
         else
             fprintf(out, "-1");
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_wq_push_%u", v->id);
-            emit_assign_from_bool_temp(out, v, tmp);
+            emit_assign_from_bool_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4256,19 +4264,19 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
-        emit_int64_arg(out, v->args[1]);
+        emit_int64_arg(ctx, out, v->args[1]);
         fprintf(out, ", ");
-        emit_int64_arg(out, v->args[2]);
+        emit_int64_arg(ctx, out, v->args[2]);
         fprintf(out, ", ");
         if (v->nargs >= 4)
-            emit_int64_arg(out, v->args[3]);
+            emit_int64_arg(ctx, out, v->args[3]);
         else
             fprintf(out, "-1");
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_wq_push_range_%u", v->id);
-            emit_assign_from_i64_temp(out, v, tmp);
+            emit_assign_from_i64_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4301,7 +4309,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
         if (v->nargs >= 2)
-            emit_int64_arg(out, v->args[1]);
+            emit_int64_arg(ctx, out, v->args[1]);
         else
             fprintf(out, "-1");
         fprintf(out, ", &_wq_try_pop_val_%u);\n", v->id);
@@ -4313,7 +4321,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_wq_try_pop_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4340,7 +4348,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
         if (v->nargs >= 2)
-            emit_int64_arg(out, v->args[1]);
+            emit_int64_arg(ctx, out, v->args[1]);
         else
             fprintf(out, "-1");
         if (direct_i64_optional) {
@@ -4414,12 +4422,12 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    bool _rg_add_%u = xr_aot_result_group_add_bool(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
-        emit_int64_arg(out, v->args[1]);
+        emit_int64_arg(ctx, out, v->args[1]);
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_rg_add_%u", v->id);
-            emit_assign_from_bool_temp(out, v, tmp);
+            emit_assign_from_bool_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4445,12 +4453,12 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    bool _rg_reset_%u = xr_aot_result_group_reset_bool(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
-        emit_int64_arg(out, v->args[1]);
+        emit_int64_arg(ctx, out, v->args[1]);
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_rg_reset_%u", v->id);
-            emit_assign_from_bool_temp(out, v, tmp);
+            emit_assign_from_bool_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4468,7 +4476,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_rg_try_recv_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4583,12 +4591,12 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    bool _latch_reset_%u = xr_aot_countdown_latch_reset_bool(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
-        emit_int64_arg(out, v->args[1]);
+        emit_int64_arg(ctx, out, v->args[1]);
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_latch_reset_%u", v->id);
-            emit_assign_from_bool_temp(out, v, tmp);
+            emit_assign_from_bool_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4599,14 +4607,14 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
         if (v->nargs >= 2)
-            emit_int64_arg(out, v->args[1]);
+            emit_int64_arg(ctx, out, v->args[1]);
         else
             fprintf(out, "1");
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_latch_done_%u", v->id);
-            emit_assign_from_i64_temp(out, v, tmp);
+            emit_assign_from_i64_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4619,7 +4627,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[48];
             snprintf(tmp, sizeof(tmp), "_latch_try_wait_%u", v->id);
-            emit_assign_from_bool_temp(out, v, tmp);
+            emit_assign_from_bool_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4699,14 +4707,14 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
         if (v->nargs >= 2)
-            emit_int64_arg(out, v->args[1]);
+            emit_int64_arg(ctx, out, v->args[1]);
         else
             fprintf(out, "1");
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_sem_release_%u", v->id);
-            emit_assign_from_i64_temp(out, v, tmp);
+            emit_assign_from_i64_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4719,7 +4727,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[48];
             snprintf(tmp, sizeof(tmp), "_sem_try_acquire_%u", v->id);
-            emit_assign_from_bool_temp(out, v, tmp);
+            emit_assign_from_bool_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4800,14 +4808,14 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
         if (v->nargs >= 2)
-            emit_int64_arg(out, v->args[1]);
+            emit_int64_arg(ctx, out, v->args[1]);
         else
             fprintf(out, "1");
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[56];
             snprintf(tmp, sizeof(tmp), "_event_count_advance_%u", v->id);
-            emit_assign_from_i64_temp(out, v, tmp);
+            emit_assign_from_i64_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -4840,10 +4848,10 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrAotResult _event_count_wait_%u = xr_aot_event_count_wait(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
-        emit_int64_arg(out, v->args[1]);
+        emit_int64_arg(ctx, out, v->args[1]);
         fprintf(out, ", ");
         if (v->nargs >= 3)
-            emit_int64_arg(out, v->args[2]);
+            emit_int64_arg(ctx, out, v->args[2]);
         else
             fprintf(out, "-1");
         fprintf(out, ", _event_count_wait_slot_%u);\n", v->id);
@@ -4892,7 +4900,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_value_generated_line_reset(ctx, out, v);
         const XiValue *send_arg = NULL;
         const char *helper =
-            cg_coro_typed_send_helper("xr_aot_chan_send_timeout", v->args[1], &send_arg);
+            cg_coro_typed_send_helper(ctx, "xr_aot_chan_send_timeout", v->args[1], &send_arg);
         bool transfer_helper = send_arg == NULL && strcmp(helper, "xr_aot_chan_send_timeout") == 0;
         if (transfer_helper)
             helper = "xr_aot_chan_send_timeout_transfer";
@@ -4916,7 +4924,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         else
             emit_coro_send_value(ctx, out, v->args[1], send_arg);
         fprintf(out, ", ");
-        emit_int64_arg(out, v->args[2]);
+        emit_int64_arg(ctx, out, v->args[2]);
         fprintf(out, ", ");
         emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
         if (transfer_helper)
@@ -4957,7 +4965,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ", ");
         emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
         fprintf(out, ", ");
-        emit_int64_arg(out, v->args[1]);
+        emit_int64_arg(ctx, out, v->args[1]);
         fprintf(out, ", %s);\n", result_observed ? "true" : "false");
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_chan_recv_timeout_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
@@ -4980,7 +4988,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "        return _chan_recv_timeout_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
         if (result_observed && cg_coro_value_has_storage(ctx, f, v))
-            emit_bridge_stored_owned_tagged_value(out, v);
+            emit_bridge_stored_owned_tagged_value(ctx, out, v);
         if (result_observed)
             emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
@@ -4997,7 +5005,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         const XiValue *channel = v->args[0];
         const XiValue *send_value = v->args[1];
         const XiValue *send_arg = NULL;
-        const char *helper = cg_coro_typed_send_helper("xr_aot_chan_send", send_value, &send_arg);
+        const char *helper =
+            cg_coro_typed_send_helper(ctx, "xr_aot_chan_send", send_value, &send_arg);
         bool transfer_helper = send_arg == NULL && strcmp(helper, "xr_aot_chan_send") == 0;
         if (transfer_helper)
             helper = "xr_aot_chan_send_transfer";
@@ -5048,7 +5057,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "    XrValue _chan_send_value_%u = XR_NULL_VAL;\n", v->id);
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_chan_send_value_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
@@ -5075,7 +5084,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         fprintf(out, ";\n");
         fprintf(out, "    f->state = %d;\n", sid);
-        const char *helper = cg_coro_typed_recv_pair_helper(f, v);
+        const char *helper = cg_coro_typed_recv_pair_helper(ctx, f, v);
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrAotResult _chan_recv_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
@@ -5115,7 +5124,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
         if (cg_coro_value_has_storage(ctx, f, v))
-            emit_bridge_stored_tagged_value(out, v);
+            emit_bridge_stored_tagged_value(ctx, out, v);
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         if (status)
             emit_coro_debug_result_source_var_sync(ctx, out, f, status);
@@ -5160,7 +5169,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
         if (result_observed && cg_coro_value_has_storage(ctx, f, v))
-            emit_bridge_stored_owned_tagged_value(out, v);
+            emit_bridge_stored_owned_tagged_value(ctx, out, v);
         if (result_observed)
             emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
@@ -5210,7 +5219,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "        return _chan_recv_or_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
         if (cg_coro_value_has_storage(ctx, f, v))
-            emit_bridge_stored_tagged_value(out, v);
+            emit_bridge_stored_tagged_value(ctx, out, v);
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
@@ -5220,7 +5229,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_value_generated_line_reset(ctx, out, v);
             const XiValue *send_arg = NULL;
             const char *helper =
-                cg_coro_typed_send_helper("xr_aot_chan_try_send", v->args[1], &send_arg);
+                cg_coro_typed_send_helper(ctx, "xr_aot_chan_try_send", v->args[1], &send_arg);
             bool transfer_helper = send_arg == NULL && strcmp(helper, "xr_aot_chan_try_send") == 0;
             if (transfer_helper)
                 helper = "xr_aot_chan_try_send_transfer";
@@ -5248,7 +5257,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
-                emit_assign_from_xrvalue_temp(out, v, tmp);
+                emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
             }
             return;
         }
@@ -5262,8 +5271,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
-                emit_assign_from_xrvalue_temp(out, v, tmp);
-                emit_bridge_stored_tagged_value(out, v);
+                emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
+                emit_bridge_stored_tagged_value(ctx, out, v);
             }
             emit_coro_debug_result_source_var_sync(ctx, out, f, v);
             return;
@@ -5275,7 +5284,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
-                emit_assign_from_xrvalue_temp(out, v, tmp);
+                emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
             }
             return;
         }
@@ -5286,7 +5295,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             if (cg_coro_value_has_storage(ctx, f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
-                emit_assign_from_xrvalue_temp(out, v, tmp);
+                emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
             }
             return;
         }
@@ -5330,7 +5339,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_err_catch_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -5375,7 +5384,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(ctx, f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_cleanup_catch_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         }
         return;
     }
@@ -5449,7 +5458,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED &&
                 (v->aux_int == XR_GLOBAL_VAR_FILE || v->aux_int == XR_GLOBAL_VAR_DIR))
                 fprintf(out, "    %s = xr_aot_bridge_value_to_xrt(%s);\n", tmp, tmp);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
         } else {
             fprintf(out, "    (void) xr_aot_get_builtin(ctx, %d);\n", (int) v->aux_int);
         }
