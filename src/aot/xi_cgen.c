@@ -10775,6 +10775,13 @@ static bool cg_value_traces_to_explicit_vector(const XiValue *value) {
  *   - the source is not a mutable phi/cell;
  *   - its immutable C-emission row carries no distinct materialization recipe.
  *
+ * That last condition is what covers the address-taken case. A scalar alias
+ * whose storage is addressed gets its own materialization recipe, so its row
+ * differs from the source's and the two cannot share. An earlier fix on
+ * another branch guarded the same hazard with an explicit address-taken
+ * predicate on both the alias and the source; the emission row subsumes it,
+ * and carrying both would leave two answers to one question.
+ *
  * Debug source variables still synchronize at the alias statement.  Only the
  * redundant C declaration/assignment disappears.
  */
