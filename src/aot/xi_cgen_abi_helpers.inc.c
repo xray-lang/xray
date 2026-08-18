@@ -380,6 +380,9 @@ static bool cg_abi_emission_storage_rep(const XrCFunctionAbiEmissionView *view, 
         case XR_C_VALUE_REP_VIEW:
             *out = XR_REP_PTR;
             return true;
+        case XR_C_VALUE_REP_RAW_PTR:
+            *out = XR_REP_RAWPTR;
+            return true;
         default:
             return false;
     }
@@ -395,6 +398,10 @@ static bool cg_func_return_abi_emission(XiCgenCtx *ctx, const XiFunc *f,
                                                 error, sizeof(error));
 }
 
+/* A function's return boundary, read from its own signature row. A native
+ * constructor hands back the instance it allocated, which is a fact about the
+ * construction rather than about any call, so it is stated here. Anything the
+ * plan has no row for is not a boundary this emitter can describe. */
 static XrRep cg_func_return_abi_rep(XiCgenCtx *ctx, const XiFunc *f) {
     if (cg_class_func_is_native_constructor(ctx, f))
         return XR_REP_PTR;
@@ -402,8 +409,7 @@ static XrRep cg_func_return_abi_rep(XiCgenCtx *ctx, const XiFunc *f) {
     XrRep rep = XR_REP_TAGGED;
     if (cg_func_return_abi_emission(ctx, f, &view) && cg_abi_emission_storage_rep(&view, &rep))
         return rep;
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    return plan ? cg_abi_slot_storage_rep(&plan->abi.ret) : XR_REP_TAGGED;
+    return XR_REP_TAGGED;
 }
 
 static bool cg_func_return_abi_is_aggregate(XiCgenCtx *ctx, const XiFunc *f) {
@@ -631,16 +637,15 @@ static void emit_cfn_pointer_type(XiCgenCtx *ctx, FILE *out, const XrType *fn_ty
     fprintf(out, ")");
 }
 
+/* One parameter's boundary, read from the same signature row the declaration
+ * is emitted from, so a call and the callee it reaches cannot disagree. */
 static XrRep cg_func_param_abi_rep(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx) {
     XrCFunctionAbiEmissionView view;
     XrRep rep = XR_REP_TAGGED;
     if (cg_func_param_abi_emission(ctx, f, param_idx, &view) &&
         cg_abi_emission_storage_rep(&view, &rep))
         return rep;
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    if (!plan || param_idx >= plan->abi.nparams || !plan->abi.params)
-        return XR_REP_TAGGED;
-    return cg_abi_slot_storage_rep(&plan->abi.params[param_idx]);
+    return XR_REP_TAGGED;
 }
 
 static const char *cg_func_param_abi_c_type(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx) {
@@ -1439,7 +1444,7 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         return;
     }
     from_rep = cg_value_plan_storage_rep(ctx, arg);
-    to_rep = cg_abi_slot_storage_rep(slot);
+    to_rep = cg_func_param_abi_rep(ctx, target, arg_index);
     if (ctx->error) {
         emit_codegen_abort_expr(out);
         return;

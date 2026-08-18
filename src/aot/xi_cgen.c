@@ -6175,14 +6175,15 @@ static bool cg_direct_call_param_accepts_borrowed_ref(XiCgenCtx *ctx, const XiFu
                                                       uint16_t arg_index) {
     if (!ctx || !target)
         return false;
-    const XaotFuncPlan *target_plan = cg_func_plan(ctx, target);
-    if (!target_plan || arg_index >= target_plan->abi.nparams || !target_plan->abi.params) {
+    XrCFunctionAbiEmissionView slot;
+    XrRep rep = XR_REP_TAGGED;
+    if (!cg_func_param_abi_emission(ctx, target, arg_index, &slot) ||
+        !cg_abi_emission_storage_rep(&slot, &rep)) {
         if (cg_ref_noescape_debug_enabled())
             fprintf(stderr, "[xi_cgen] ref-noescape direct func=%s arg=%u reason=no abi\n",
                     target->name ? target->name : "<null>", arg_index);
         return false;
     }
-    XrRep rep = cg_abi_slot_storage_rep(&target_plan->abi.params[arg_index]);
     if (rep != XR_REP_PTR && rep != XR_REP_RAWPTR) {
         if (cg_ref_noescape_debug_enabled())
             fprintf(stderr, "[xi_cgen] ref-noescape direct func=%s arg=%u reason=abi rep %d\n",
@@ -8005,12 +8006,14 @@ static bool cg_native_box_direct_call_arg_is_native(XiCgenCtx *ctx, const XiFunc
     if (!static_call.func || static_call.is_class_constructor)
         return false;
 
-    const XaotFuncPlan *target_plan = cg_func_plan(ctx, static_call.func);
     uint16_t param_index = (uint16_t) (arg_index - 1);
-    if (!target_plan || param_index >= target_plan->abi.nparams || !target_plan->abi.params)
+    XrCFunctionAbiEmissionView slot;
+    XrRep rep = XR_REP_TAGGED;
+    if (!cg_func_param_abi_emission(ctx, static_call.func, param_index, &slot) ||
+        !cg_abi_emission_storage_rep(&slot, &rep))
         return false;
 
-    return cg_abi_slot_storage_rep(&target_plan->abi.params[param_index]) != XR_REP_TAGGED;
+    return rep != XR_REP_TAGGED;
 }
 
 static bool cg_call_method_is_typed_array_resize_zero_specialization(XiCgenCtx *ctx,

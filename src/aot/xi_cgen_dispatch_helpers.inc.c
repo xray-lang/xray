@@ -5022,13 +5022,14 @@ static void xicgen_emit_direct_call_arg_stack_aware(XiCgenCtx *ctx, FILE *out, c
         return;
     }
 
-    const XaotFuncPlan *target_plan = cg_func_plan(ctx, target);
-    if (!target_plan || arg_index >= target_plan->abi.nparams || !target_plan->abi.params) {
+    XrCFunctionAbiEmissionView slot;
+    XrRep to_rep = XR_REP_TAGGED;
+    if (!cg_func_param_abi_emission(ctx, target, arg_index, &slot) ||
+        !cg_abi_emission_storage_rep(&slot, &to_rep)) {
         ctx->error = true;
         emit_codegen_abort_expr(out);
         return;
     }
-    XrRep to_rep = cg_abi_slot_storage_rep(&target_plan->abi.params[arg_index]);
     const char *conv_suffix =
         emit_conversion_prefix(out, arg ? arg->type : NULL, XR_REP_TAGGED, to_rep);
     xicgen_emit_stack_slice_arg_name(out, call, arg_index);
@@ -5043,11 +5044,10 @@ static bool xicgen_emit_direct_call_with_stack_slice_views(XiCgenCtx *ctx, FILE 
     if (!xicgen_direct_call_has_stack_slice_views(ctx, f, call, target))
         return false;
 
-    const XaotFuncPlan *target_plan = cg_func_plan(ctx, target);
-    if (!target_plan)
-        return false;
-    XrRep ret_rep = cg_abi_slot_storage_rep(&target_plan->abi.ret);
-    if (ret_rep == XR_REP_VOID)
+    XrCFunctionAbiEmissionView return_slot;
+    XrRep ret_rep = XR_REP_TAGGED;
+    if (!cg_func_return_abi_emission(ctx, target, &return_slot) ||
+        !cg_abi_emission_storage_rep(&return_slot, &ret_rep) || ret_rep == XR_REP_VOID)
         return false;
 
     fprintf(out, "({ ");
@@ -5065,8 +5065,7 @@ static bool xicgen_emit_direct_call_with_stack_slice_views(XiCgenCtx *ctx, FILE 
     }
 
     fprintf(out, "%s _xr_call_result_%u = ",
-            target_plan->abi.ret.c_type ? target_plan->abi.ret.c_type : ctype_str(ret_rep),
-            call ? call->id : 0u);
+            return_slot.c_type ? return_slot.c_type : ctype_str(ret_rep), call ? call->id : 0u);
     emit_fname(ctx, out, call_prefix ? call_prefix : prefix, target);
     fprintf(out, "(");
     emit_call_hidden_closure(out, f, target, callee);
