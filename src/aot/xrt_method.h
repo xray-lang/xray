@@ -22,6 +22,7 @@
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
 #include "xrt_arith.h"  // xrt_value_to_string for container/tuple toString
+#include "xrt_class.h"  // xrt_type_find_sym_method: user-method dynamic fallback
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_arith_core.h"  // int.addOverflows/... (task 153)
 #include "../shared/xr_range_core.h"
@@ -150,6 +151,13 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
      * enums), so a fixed-size buffer cannot reproduce the VM output. */
     if (val.tag == XR_TAG_ENUM)
         return xrt_value_to_string(val);
+    /* A user-defined toString() wins over the structural formatter, matching
+     * the VM's dispatch order for class instances. */
+    {
+        XrtMethodFn user_fn = xrt_type_find_sym_method(val, XRT_SYM_TOSTRING);
+        if (user_fn)
+            return ((XrValue (*)(struct xrt_closure *, XrValue)) user_fn)(NULL, val);
+    }
     /* Aggregates render through the shared formatter, which reproduces the VM's
      * xr_value_to_string output. Restricted to the shapes xrt_format_value
      * renders structurally; every other heap tag would fall through to its
@@ -251,10 +259,9 @@ static XrValue xrt_to_bool(XrValue val) {
         kind = XR_TRUTHY_CORE_SIZED;
         size = xrt_set_len((xrt_set_t *) val.ptr);
     }
-    return XR_FROM_BOOL(xr_truthy_core_eval(XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI,
-                                             XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO,
-                                             XR_SEM_CONSUMER_AOT_HOSTED, kind, integer,
-                                             floating, size));
+    return XR_FROM_BOOL(xr_truthy_core_eval(
+        XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI, XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, kind, integer, floating, size));
 }
 
 /* Fixed-arity method dispatch is intentionally inlineable by the C compiler. */
@@ -489,6 +496,14 @@ static inline XrValue xrt_str_to_bytes(XrValue s) {
  * prerequisite for an ARC pass that drops an owned method result at its death
  * point, which is what would close the leak in `var b = a.reverse()`. */
 static inline XrValue xrt_method_0(XrValue recv, int sym) {
+    /* User instances resolve through the symbol-keyed table first: a call
+     * site that could not be devirtualized must still reach the compiled
+     * method instead of silently answering NULL. */
+    {
+        XrtMethodFn user_fn = xrt_type_find_sym_method(recv, sym);
+        if (user_fn)
+            return ((XrValue (*)(struct xrt_closure *, XrValue)) user_fn)(NULL, recv);
+    }
     /* Container/tuple toString renders via the shared value formatter so AOT
      * matches the VM ("[1, 2, 3]", "#{...}", "#[...]"). Simple enums are
      * XR_TAG_ENUM and handled by their own toString case below. */
@@ -694,17 +709,14 @@ static inline XrValue xrt_str_from_core_slice(XrStringCoreSlice slice) {
 /* Dedicated target-plan spelling for the exact rune-indexed range overload.
  * Generated C supplies native bounds from CEmissionPlan and never selects a
  * numeric method symbol. */
-static inline XrValue xrt_string_slice_range(XrValue receiver, int64_t start,
-                                             int64_t end) {
+static inline XrValue xrt_string_slice_range(XrValue receiver, int64_t start, int64_t end) {
     if (!XR_IS_STR(receiver))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "String.slice receiver is not a string");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "String.slice receiver is not a string");
     int64_t count = xr_str_rune_len(receiver);
     if (start < 0 || end < start || end > count)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "string.slice rune range out of bounds");
-    XrStringCoreSlice slice = xr_string_core_range_slice(
-        xr_str_data(receiver), (size_t) xr_str_len(receiver), start, end);
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "string.slice rune range out of bounds");
+    XrStringCoreSlice slice = xr_string_core_range_slice(xr_str_data(receiver),
+                                                         (size_t) xr_str_len(receiver), start, end);
     return xrt_str_from_core_slice(slice);
 }
 
@@ -895,6 +907,12 @@ static inline int64_t xrt_len_i64(XrValue recv) {
 }
 
 static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
+    {
+        XrtMethodFn user_fn = xrt_type_find_sym_method(recv, sym);
+        if (user_fn)
+            return ((XrValue (*)(struct xrt_closure *, XrValue, XrValue)) user_fn)(NULL, recv,
+                                                                                   arg0);
+    }
     /* Static string constructors do not depend on the runtime class value. */
     if (sym == XRT_SYM_FROM_UTF8 || sym == XRT_SYM_FROM_UTF8_LOSSY)
         return xrt_str_method_1("", 0, XR_NULL_VAL, sym, arg0);
@@ -1113,6 +1131,12 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
 }
 
 static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
+    {
+        XrtMethodFn user_fn = xrt_type_find_sym_method(recv, sym);
+        if (user_fn)
+            return ((XrValue (*)(struct xrt_closure *, XrValue, XrValue, XrValue)) user_fn)(
+                NULL, recv, arg0, arg1);
+    }
     if (sym == XRT_SYM_JOIN && XR_IS_ARRAY(arg0) && XR_IS_STR(arg1))
         return xrt_method_1(arg0, XRT_SYM_JOIN, arg1);
     if (XR_IS_STR(recv) && sym == XRT_SYM_INDEXOF && XR_IS_STR(arg0) && arg1.tag == XR_TAG_I64) {
@@ -1199,6 +1223,12 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
 
 static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue arg1,
                                    XrValue arg2) {
+    {
+        XrtMethodFn user_fn = xrt_type_find_sym_method(recv, sym);
+        if (user_fn)
+            return ((XrValue (*)(struct xrt_closure *, XrValue, XrValue, XrValue,
+                                 XrValue)) user_fn)(NULL, recv, arg0, arg1, arg2);
+    }
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL)
         return xrt_method_return_self(xrt_array_fill_value(recv, arg0, arg1, arg2));
     return XR_NULL_VAL;
@@ -1206,6 +1236,12 @@ static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue 
 
 static inline XrValue xrt_method_4(XrValue recv, int sym, XrValue arg0, XrValue arg1, XrValue arg2,
                                    XrValue arg3) {
+    {
+        XrtMethodFn user_fn = xrt_type_find_sym_method(recv, sym);
+        if (user_fn)
+            return ((XrValue (*)(struct xrt_closure *, XrValue, XrValue, XrValue, XrValue,
+                                 XrValue)) user_fn)(NULL, recv, arg0, arg1, arg2, arg3);
+    }
     return XR_NULL_VAL;
 }
 

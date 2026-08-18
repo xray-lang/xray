@@ -77,6 +77,14 @@ typedef struct {
     uint16_t method_count;
 } XrtInterfaceMethodTable;
 
+/* Symbol-keyed dispatch row for the dynamic fallback (xrt_method_N): call
+ * sites the compiler could not devirtualize resolve user methods by runtime
+ * symbol id through this table, walking the parent chain for inheritance. */
+typedef struct {
+    int32_t sym;
+    XrtMethodFn fn;
+} XrtSymbolMethod;
+
 typedef struct {
     const char *name;
     uint16_t offset;
@@ -94,12 +102,14 @@ typedef struct {
     int vtable_size;
     const XrtInterfaceMethodTable *itable;
     uint16_t itable_size;
-    XrtDestructor destructor;           // NULL for classes without custom dtor
-    XrtStoragePromoter promote_storage; /* recursively publishes owned reference fields */
-    XrtRuntimeClone runtime_clone;      /* deep copy for the language-level copy operation */
-    uint32_t instance_size;             // byte size of instance fields
-    XrtUserHashFn hash_fn;              // compiled hash(); NULL unless user-Hashable
-    XrtUserEqFn eq_fn;                  // compiled operator ==; NULL unless user-Hashable
+    XrtDestructor destructor;            // NULL for classes without custom dtor
+    XrtStoragePromoter promote_storage;  /* recursively publishes owned reference fields */
+    XrtRuntimeClone runtime_clone;       /* deep copy for the language-level copy operation */
+    uint32_t instance_size;              // byte size of instance fields
+    XrtUserHashFn hash_fn;               // compiled hash(); NULL unless user-Hashable
+    XrtUserEqFn eq_fn;                   // compiled operator ==; NULL unless user-Hashable
+    const XrtSymbolMethod *sym_methods;  // symbol-keyed dispatch rows (dynamic fallback)
+    uint16_t sym_method_count;
 } XrtTypeInfo;
 
 typedef struct {
@@ -192,6 +202,8 @@ static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vt
     ti->instance_size = inst_size;
     ti->hash_fn = NULL;
     ti->eq_fn = NULL;
+    ti->sym_methods = NULL;
+    ti->sym_method_count = 0;
     ni->name = NULL;
     ni->display_name = NULL;
     ni->mono_type_arg_names = NULL;
@@ -209,6 +221,15 @@ static inline void xrt_type_set_itable(uint16_t type_id, const XrtInterfaceMetho
     XrtTypeInfo *ti = &xrt_type_table[type_id];
     ti->itable = itable;
     ti->itable_size = itable ? itable_size : 0;
+}
+
+static inline void xrt_type_set_sym_methods(uint16_t type_id, const XrtSymbolMethod *methods,
+                                            uint16_t count) {
+    if (type_id == 0 || type_id >= xrt_type_count)
+        return;
+    XrtTypeInfo *ti = &xrt_type_table[type_id];
+    ti->sym_methods = methods;
+    ti->sym_method_count = methods ? count : 0;
 }
 
 static inline void xrt_type_set_runtime_clone(uint16_t type_id, XrtRuntimeClone clone_fn) {
@@ -430,6 +451,24 @@ static inline int xrt_instance_exact_type(XrValue val, uint16_t expected_tid) {
 /* Walk inheritance chain: true if value is an instance of target_tid
  * or any subclass whose parent chain reaches target_tid. Also checks
  * generic_origin at each level for monomorphized classes. */
+/* Resolve a user method by runtime symbol id for the dynamic fallback,
+ * walking the parent chain so inherited methods dispatch. NULL when the
+ * receiver is not a registered instance or no row matches. */
+static inline XrtMethodFn xrt_type_find_sym_method(XrValue recv, int sym) {
+    if (recv.tag != XR_TAG_PTR || recv.heap_type != XR_TINSTANCE || !recv.ptr)
+        return NULL;
+    uint16_t cur = xrt_aot_class_type_id((XrObjHeader *) recv.ptr);
+    while (cur != 0 && cur < xrt_type_count) {
+        const XrtTypeInfo *ti = &xrt_type_table[cur];
+        for (uint16_t i = 0; i < ti->sym_method_count; i++) {
+            if (ti->sym_methods[i].sym == (int32_t) sym)
+                return ti->sym_methods[i].fn;
+        }
+        cur = ti->parent_id;
+    }
+    return NULL;
+}
+
 static inline int xrt_instanceof(XrValue val, uint16_t target_tid) {
     if (val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr)
         return 0;
