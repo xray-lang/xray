@@ -1291,30 +1291,14 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
     int64_t end = XR_TO_INT(end_value);
     if (XR_IS_ARRAY(source))
         return xrt_array_slice_view(source, start, end);
-    if (XR_IS_STR(source)) {
-        const char *s = xr_str_data(source);
-        int64_t len = xr_str_len(source);
-        if (start < 0) {
-            start += len;
-            if (start < 0)
-                start = 0;
-        }
-        if (end < 0) {
-            end += len;
-            if (end < 0)
-                end = 0;
-        }
-        if (start > len)
-            start = len;
-        if (end > len)
-            end = len;
-        if (start >= end)
-            return xrt_str_alloc(0);
-        int64_t rlen = end - start;
-        XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy(xr_str_buf(sv), s + start, (size_t) rlen);
-        return sv;
-    }
+    /* A string never reaches here. The analyzer rejects slice syntax on
+     * string outright (E0354) and points at slice(start, end), which is a
+     * rune-indexed method with its own exact target authority -- and there is
+     * no dynamic carrier a string could arrive through instead. What used to
+     * stand here sliced raw bytes and clamped out-of-range bounds, so it both
+     * split UTF-8 sequences apart and disagreed with the strict rune bounds
+     * every live path enforces. It answered nothing and contradicted the
+     * language, so it is gone rather than kept as a second opinion. */
     return XR_NULL_VAL;
 }
 
