@@ -26,7 +26,12 @@ static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
     }
     if (XR_IS_STR(obj)) {
         if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
-            return XR_FROM_INT(xrt_utf8_scalar_count(xr_str_data(obj), xr_str_len(obj)));
+            /* Code points, not the byte length sitting right there -- the
+             * kernel names which count this is, and the VM reads the same
+             * answer from the same place. */
+            return XR_FROM_INT(xr_length_source_counts_runes_core(XR_LENGTH_SOURCE_STRING_RUNES)
+                                   ? xrt_utf8_scalar_count(xr_str_data(obj), xr_str_len(obj))
+                                   : (int64_t) xr_str_len(obj));
         if (symbol_id == XRT_SYM_IS_EMPTY)
             return XR_FROM_INT(xr_str_len(obj) == 0);
     }

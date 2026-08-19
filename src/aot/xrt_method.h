@@ -23,6 +23,7 @@
 #include "xrt_range.h"
 #include "xrt_arith.h"  // xrt_value_to_string for container/tuple toString
 #include "xrt_class.h"  // xrt_type_find_sym_method: user-method dynamic fallback
+#include "../shared/xr_length_source_core.h"
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_arith_core.h"  // int.addOverflows/... (task 153)
 #include "../shared/xr_range_core.h"

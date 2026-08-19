@@ -294,6 +294,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
+id = "length-source"
+header = "src/shared/xr_length_source_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "string-concat"
 header = "src/shared/xr_string_concat_core.h"
 representation = "native"

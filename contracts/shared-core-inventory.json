@@ -816,6 +816,32 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_length_source_core.h",
+      "id": "length-source",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_core_freestanding.h",
+        "src/aot/xrt_getprop.inc.c",
+        "src/aot/xrt_method.h",
+        "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_collection.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_length_source_counts_runes_core",
+        "xr_length_source_is_defined_core"
+      ],
+      "status": "production",
+      "test_callers": []
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_math_core.h",
       "id": "math",
       "owner": "shared-kernel",

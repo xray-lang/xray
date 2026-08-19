@@ -392,9 +392,9 @@ vmcase(OP_NEWRANGE) {
     int c = GETARG_C(i);
     int64_t start_val = XR_TO_INT(R(b));
     int64_t end_val = XR_TO_INT(R(c));
-    XrRangeCore core = XR_RANGE_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_VM,
-        start_val, end_val, false);
+    XrRangeCore core =
+        XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO,
+                             XR_SEM_CONSUMER_VM, start_val, end_val, false);
     R(a) = xr_range_from_core(isolate, core);
     checkGC(base + a + 1);
     vmbreak;
@@ -409,9 +409,9 @@ vmcase(OP_NEWRANGE_INCLUSIVE) {
     int c = GETARG_C(i);
     int64_t start_val = XR_TO_INT(R(b));
     int64_t end_val = XR_TO_INT(R(c));
-    XrRangeCore core = XR_RANGE_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_VM,
-        start_val, end_val, true);
+    XrRangeCore core =
+        XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO,
+                             XR_SEM_CONSUMER_VM, start_val, end_val, true);
     R(a) = xr_range_from_core(isolate, core);
     checkGC(base + a + 1);
     vmbreak;
@@ -1000,8 +1000,13 @@ vmcase(OP_LEN) {
         vmbreak;
     }
     if (XR_IS_STRING(value)) {
+        /* Code points, not bytes -- the kernel names which count a string's
+         * length is, so the two backends cannot drift to different answers. */
         XrString *string = XR_TO_STRING(value);
-        R(a) = xr_int((xr_Integer) (string ? string->rune_length : 0));
+        R(a) =
+            xr_int((xr_Integer) (xr_length_source_counts_runes_core(XR_LENGTH_SOURCE_STRING_RUNES)
+                                     ? (string ? string->rune_length : 0)
+                                     : (string ? string->length : 0)));
         vmbreak;
     }
     if (xr_value_is_channel(value)) {
@@ -1192,11 +1197,11 @@ vmcase(OP_SLICE_COPY) {
     if (dst_reserved & XR_SLICE_VIEW_READONLY) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Slice");
     }
-    XrPodSliceStatus copy_status = XR_POD_SLICE_COPY_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO,
-        XR_SEM_CONSUMER_VM,
-        xr_pod_slice_copy_core(dst_data, dst_length, dst_elem_size, src_data, src_length,
-                               src_elem_size));
+    XrPodSliceStatus copy_status =
+        XR_POD_SLICE_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
+                                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO, XR_SEM_CONSUMER_VM,
+                                      xr_pod_slice_copy_core(dst_data, dst_length, dst_elem_size,
+                                                             src_data, src_length, src_elem_size));
     if (copy_status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) byte length overflow");
     }
@@ -1310,8 +1315,8 @@ vmcase(OP_SLICE_COMPARE) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) element type mismatch");
     }
     XrPodSliceCompareResult compare_result = XR_POD_SLICE_COMPARE_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
-        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO, XR_SEM_CONSUMER_VM,
+        XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO,
+        XR_SEM_CONSUMER_VM,
         xr_pod_slice_compare_core(left_data, left_length, left_elem_size, right_data, right_length,
                                   right_elem_size));
     if (compare_result.status == XR_POD_SLICE_BYTE_LENGTH_OVERFLOW) {
@@ -1344,8 +1349,8 @@ vmcase(OP_SLICE_REINTERPRET) {
     XrAggregateLayout *target_layout =
         xr_struct_layout_lookup_by_stable_key(&isolate->vm, target_layout_key);
     bool target_is_aggregate = target_elem_type == XR_ELEM_ANY && target_layout != NULL;
-    bool target_layout_valid =
-        target_elem_type < XR_ELEM_COUNT && (target_elem_type != XR_ELEM_ANY || target_is_aggregate);
+    bool target_layout_valid = target_elem_type < XR_ELEM_COUNT &&
+                               (target_elem_type != XR_ELEM_ANY || target_is_aggregate);
     uint16_t target_expected_elem_size =
         target_elem_type < XR_ELEM_COUNT && target_elem_type != XR_ELEM_ANY
             ? XR_ELEM_SIZES[target_elem_type]
@@ -1366,10 +1371,9 @@ vmcase(OP_SLICE_REINTERPRET) {
         XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI, XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO,
         XR_SEM_CONSUMER_VM,
         xr_pod_slice_view_core(
-            XR_POD_SLICE_VIEW_REINTERPRET, data, length,
-            elem_type == XR_ELEM_U8 ? elem_size : 0, elem_type == XR_ELEM_U8 && elem_size == 1,
-            target_elem_size, target_expected_elem_size, target_alignment, target_layout_valid,
-            target_is_aggregate));
+            XR_POD_SLICE_VIEW_REINTERPRET, data, length, elem_type == XR_ELEM_U8 ? elem_size : 0,
+            elem_type == XR_ELEM_U8 && elem_size == 1, target_elem_size, target_expected_elem_size,
+            target_alignment, target_layout_valid, target_is_aggregate));
     if (view_result.status == XR_POD_SLICE_VIEW_INVALID_SOURCE_LAYOUT) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_RECEIVER_MSG);
     }
@@ -1426,8 +1430,8 @@ vmcase(OP_BYTE_ARRAY_APPEND_FROM) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OPERANDS_MSG);
     }
     XrByteArrayAppendResult append_result = XR_BYTE_ARRAY_APPEND_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO, XR_SEM_CONSUMER_VM,
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_HI, XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_APPEND_LO,
+        XR_SEM_CONSUMER_VM,
         xr_byte_array_append_from_span_adapter(dst, src_data, src_length, src_elem_type,
                                                src_guard));
     if (append_result.status != XR_BYTE_ARRAY_APPEND_OK) {
@@ -1546,10 +1550,10 @@ vmcase(OP_ARRAY_RESIZE) {
         VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type, receiver_msg);            \
         (void) _readonly;                                                                          \
         bool _ok = false;                                                                          \
-        uint64_t _value = (uint64_t) XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                            \
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                          \
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                      \
-            load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok));              \
+        uint64_t _value = (uint64_t) XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                             \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                           \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                       \
+            load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok));               \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
@@ -1577,11 +1581,11 @@ vmcase(OP_ARRAY_RESIZE) {
         if (_readonly) {                                                                           \
             VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);      \
         }                                                                                          \
-        bool _ok = XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                                              \
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                          \
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                      \
-            store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                              \
-                     (value_type) XR_TO_INT(_value), _endian));                                   \
+        bool _ok = XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                                               \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                           \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                       \
+            store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                               \
+                     (value_type) XR_TO_INT(_value), _endian));                                    \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
@@ -1607,10 +1611,10 @@ vmcase(OP_ARRAY_RESIZE) {
         VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type, receiver_msg);            \
         (void) _readonly;                                                                          \
         bool _ok = false;                                                                          \
-        double _value = (double) XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                                \
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                          \
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                      \
-            load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok));              \
+        double _value = (double) XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                                 \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                           \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                       \
+            load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok));               \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
@@ -1638,11 +1642,11 @@ vmcase(OP_ARRAY_RESIZE) {
         if (_readonly) {                                                                           \
             VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);      \
         }                                                                                          \
-        bool _ok = XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                                              \
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                          \
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                      \
-            store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                              \
-                     (value_type) XR_TO_FLOAT(_value), _endian));                                 \
+        bool _ok = XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                                               \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                           \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                       \
+            store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                               \
+                     (value_type) XR_TO_FLOAT(_value), _endian));                                  \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
@@ -1701,8 +1705,8 @@ vmcase(OP_BYTE_SLICE_FILL) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_FILL_VALUE_EXPECTS_MSG);
     }
     if (!XR_BYTE_SLICE_FILL_OWNER_APPLY(
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI,
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO, XR_SEM_CONSUMER_VM,
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO,
+            XR_SEM_CONSUMER_VM,
             xr_byte_slice_fill_core(dst_data, dst_length, dst_elem_type, XR_TO_INT(R(a + 1))))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG);
     }
@@ -1728,8 +1732,8 @@ vmcase(OP_BYTE_SLICE_COPY) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     }
     if (!XR_BYTE_SLICE_COPY_OWNER_APPLY(
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
-            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO, XR_SEM_CONSUMER_VM,
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO,
+            XR_SEM_CONSUMER_VM,
             xr_byte_slice_copy_core(dst_data, dst_length, dst_elem_type, src_data, src_length,
                                     src_elem_type))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG);
@@ -1755,10 +1759,10 @@ vmcase(OP_BYTE_SLICE_COMPARE) {
     (void) right_readonly;
     bool ok = false;
     int64_t ordering = XR_BYTE_SLICE_COMPARE_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_VM,
-        xr_byte_slice_compare_core(left_data, left_length, left_elem_type, right_data,
-                                   right_length, right_elem_type, &ok));
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO,
+        XR_SEM_CONSUMER_VM,
+        xr_byte_slice_compare_core(left_data, left_length, left_elem_type, right_data, right_length,
+                                   right_elem_type, &ok));
     if (!ok) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMPARE_NO_DATA_MSG);
     }
@@ -1881,9 +1885,8 @@ vmcase(OP_PTR_COPY_NONOVERLAP) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     (void) XR_RAW_MEMORY_COPY_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
-        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO, XR_SEM_CONSUMER_VM,
-        (void *) (uintptr_t) (intptr_t) XR_TO_INT(R(a)),
+        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI, XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,
+        XR_SEM_CONSUMER_VM, (void *) (uintptr_t) (intptr_t) XR_TO_INT(R(a)),
         (const void *) (uintptr_t) (intptr_t) XR_TO_INT(R(b)), XR_TO_INT(R(c)));
     vmbreak;
 }
@@ -1896,12 +1899,11 @@ vmcase(OP_BYTE_ARRAY_COPY_WITHIN) {
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
     XrByteArrayCopyResult copy_result = XR_BYTE_ARRAY_COPY_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO, XR_SEM_CONSUMER_VM,
-        xr_byte_array_copy_core(XR_BYTE_ARRAY_COPY_WITHIN, arr->data, arr->length,
-                                arr->elem_type, arr->data, arr->length, arr->elem_type,
-                                XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 1)),
-                                XR_TO_INT(R(a + 3))));
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI, XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO,
+        XR_SEM_CONSUMER_VM,
+        xr_byte_array_copy_core(XR_BYTE_ARRAY_COPY_WITHIN, arr->data, arr->length, arr->elem_type,
+                                arr->data, arr->length, arr->elem_type, XR_TO_INT(R(a + 2)),
+                                XR_TO_INT(R(a + 1)), XR_TO_INT(R(a + 3))));
     if (copy_result.status == XR_BYTE_ARRAY_COPY_WRONG_ELEMENT_TYPE)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG);
     if (copy_result.status != XR_BYTE_ARRAY_COPY_OK) {
@@ -1921,8 +1923,8 @@ vmcase(OP_BYTE_ARRAY_COPY_FROM) {
     XrArray *dst = XR_TO_ARRAY(R(a));
     XrArray *src = XR_TO_ARRAY(R(a + 1));
     XrByteArrayCopyResult copy_result = XR_BYTE_ARRAY_COPY_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO, XR_SEM_CONSUMER_VM,
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI, XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO,
+        XR_SEM_CONSUMER_VM,
         xr_byte_array_copy_core(XR_BYTE_ARRAY_COPY_FROM, dst->data, dst->length, dst->elem_type,
                                 src->data, src->length, src->elem_type, XR_TO_INT(R(a + 2)),
                                 XR_TO_INT(R(a + 3)), XR_TO_INT(R(a + 4))));
@@ -1945,10 +1947,9 @@ vmcase(OP_BYTE_ARRAY_REPEAT_FROM) {
     if (arr->elem_type != XR_ELEM_U8)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG);
     XrByteArrayRepeatResult repeat_result = XR_BYTE_ARRAY_REPEAT_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_LO, XR_SEM_CONSUMER_VM,
-        xr_byte_array_repeat_from_tail_adapter(arr, XR_TO_INT(R(a + 1)),
-                                               XR_TO_INT(R(a + 2))));
+        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_HI, XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_REPEAT_LO,
+        XR_SEM_CONSUMER_VM,
+        xr_byte_array_repeat_from_tail_adapter(arr, XR_TO_INT(R(a + 1)), XR_TO_INT(R(a + 2))));
     if (repeat_result.status != XR_BYTE_ARRAY_REPEAT_OK) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG);
     }

@@ -3905,8 +3905,10 @@ def verify(root: Path, write: bool) -> list[str]:
     # live -- so the count is pinned and raising it requires saying why here.
     # 48: xr_string_concat_core.h, added when string concatenation's two passes
     # were lifted out of the AOT runtime so both backends could share them.
-    if len(actual) != 48:
-        errors.append(f"shared-core inventory must contain exactly 48 headers, found {len(actual)}")
+    # 49: xr_length_source_core.h, naming which count len() answers per kind --
+    # code points for a string, not the byte length sitting next to it.
+    if len(actual) != 49:
+        errors.append(f"shared-core inventory must contain exactly 49 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
