@@ -6981,7 +6981,23 @@ static bool xa_call_is_fresh_constructor(XaInferContext *ctx, AstNode *value) {
         callee->as.variable.symbol_id
             ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, callee->as.variable.symbol_id)
             : (name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL);
-    return symbol && symbol->kind == XA_SYM_CLASS;
+    if (symbol)
+        return symbol->kind == XA_SYM_CLASS;
+    /* A builtin class -- Atomic, Semaphore, CountdownLatch -- has no entry in
+     * the scope symbol table, so the lookup above cannot see it and the
+     * absence of a symbol says nothing on its own. What does say something is
+     * the type the call produced: a named instance whose declaration is the
+     * compiler's rather than the program's carries no XrClassInfo, and that is
+     * exactly how xr_type_is_builtin_named_class tells the two apart. A stdlib
+     * class written in xray (sys.Process) is an ordinary user class, has a
+     * symbol, and is answered above.
+     *
+     * Without this, constructing a builtin fell to the incomplete-producer
+     * path, which withholds capability on purpose, and every closure over such
+     * a value was then refused (XR_SEM_0018). */
+    const XrType *produced = xa_analyzer_get_node_type(ctx->analyzer, value);
+    return produced && produced->kind == XR_KIND_INSTANCE && produced->instance.class_name &&
+           produced->instance.class_ref == NULL;
 }
 
 bool xa_expr_creates_fresh_root(XaInferContext *ctx, AstNode *value) {
