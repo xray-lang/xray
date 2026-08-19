@@ -182,7 +182,12 @@ vmcase(OP_STR_CONCAT_N) {
         dst = xr_string_concat_copy_core(dst, &cores[k]);
     *dst = 0;
 
-    XrString *result = xr_string_new(isolate, buf, total);
+    /* Interned, not coroutine-local: a concatenation can be a task's result,
+     * and publishing one across a task boundary requires a shared or
+     * transferable domain. xr_string_new produces an execution-local string,
+     * which the publish check rejects. The builder path this instruction
+     * replaced interned its result for the same reason. */
+    XrString *result = xr_string_intern(isolate, buf, total, 0);
     if (buf != stack_buf)
         xr_free(buf);
 
