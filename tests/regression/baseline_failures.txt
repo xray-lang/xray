@@ -20,20 +20,20 @@
 # at all. A ratchet that neither catches new breakage nor reports its own fixes
 # gates nothing, so the list is re-pinned to measured truth.
 #
-# WHAT THESE 67 ARE: not a backlog of regressions but the work of tasks 269-283
+# WHAT THESE 65 ARE: not a backlog of regressions but the work of tasks 269-283
 # seen from the test corpus. Classified by running each case the way this
 # runner does -- `xray test`, not `xray run`, which does not execute @test
 # files at all and reports them as silently passing.
 #
 #     23  XR_SEM_0019          aggregate field identity / grounded call authority
-#     12  (test assertion)     compiles, runs, gets the wrong answer
+#     10  (test assertion)     compiles, runs, gets the wrong answer
 #      7  XR_SEM_0018          capture with no storage domain (see known_bugs)
 #      6  XR_OWN_3002          null in a nullable reference (see known_bugs)
 #      6  ownership-lowering   coroutine lowering fails closed
 #      3  XR_OWN_3001          ownership balance goes negative (see known_bugs)
 #      3  parse                syntax the front end does not accept
 #      2  error[E0356]         channel transfer of an erased type
-#      4  XR_SEM_0016 / XR_SEM_0009 / XR_OWN_3003 / XR_OWN_3005 / E0352
+#      5  XR_SEM_0016 / XR_SEM_0009 / XR_OWN_3003 / XR_OWN_3005 / E0352
 #
 # So this file doubles as the 269-283 coverage worklist: each construct the plan
 # layer learns to state should delete lines from here, and the list only shrinks.
@@ -46,8 +46,6 @@
 0350_ternary_nullish.xr
 0380_optional_chain.xr
 0381_optional_call.xr
-0413_null_unwrap.xr
-0440_match.xr
 0511_tail_recursion.xr
 0531_bare_lambda.xr
 0610_array_functional.xr

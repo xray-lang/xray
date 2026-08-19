@@ -300,7 +300,7 @@ static XrValue exception_primitive_constructor(XrVMRuntime *X, XrValue self, XrV
                 XrString *stripped = xr_string_intern(X, msg_str->data + prefix_len + 2,
                                                       msg_str->length - prefix_len - 2, 0);
                 if (stripped)
-                    inst->fields[PANIC_INFO_FIELD_MESSAGE] = XR_FROM_PTR(stripped);
+                    inst->fields[PANIC_INFO_FIELD_MESSAGE] = xr_string_value(stripped);
             }
         }
     }

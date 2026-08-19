@@ -10,7 +10,10 @@ fn test_null_unwrap_throws_413() {
     } catch(e) {
         caught = true
         assert_eq(e.code, 413)
-        assert(e.message.contains("E0413"))
+        // The code carries E0413; the message carries what went wrong. The
+        // constructor strips a recognised "E0xxx: " prefix on purpose, so that
+        // reporters can re-prefix from the code field without doubling it.
+        assert(e.message.contains("unwrap"))
     }
     assert_eq(caught, true)
 }

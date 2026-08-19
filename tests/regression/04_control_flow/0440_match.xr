@@ -205,7 +205,10 @@ fn test_match_no_branch_throws() {
         assert_eq(result, "unreachable")
     } catch panic (p) {
         caught = true
-        assert(p.message.contains("E0442"))
+        // p.code is 442; the message states the fault itself. See the note in
+        // 0413_null_unwrap on why the "E0xxx: " prefix is not in the message.
+        assert(p.message.contains("non-exhaustive"))
+        assert_eq(p.code, 442)
     }
     assert_eq(caught, true)
 }
