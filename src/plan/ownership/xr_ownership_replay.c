@@ -79,22 +79,10 @@ static void union_values(XrOwnershipReplay *replay, uint32_t left, uint32_t righ
         replay->rank[a]++;
 }
 
-static bool type_is_root(const XrOwnershipReplay *replay, uint32_t type) {
-    return type < replay->plan->type_count &&
-           (replay->plan->types[type].flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0;
-}
-
-static bool operation_has_root_result(const XrOwnershipReplay *replay,
-                                      const XrSemanticOperationRecord *operation) {
-    return operation && type_is_root(replay, operation->result_type) &&
-           xi_generated_op_result_kind(operation->opcode) != XI_GEN_RESULT_VOID &&
-           operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_NONE;
-}
-
 static bool build_equivalence(XrOwnershipReplay *replay) {
     for (uint32_t i = 0; i < replay->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &replay->plan->operations[i];
-        if (!operation_has_root_result(replay, operation) ||
+        if (!xr_ownership_operation_has_owner(replay->plan, operation) ||
             operation->result_value >= replay->value_count)
             continue;
         if (operation->ownership_use == XI_GEN_OWN_USE_PASS && operation->opcode != XI_PHI) {
@@ -141,7 +129,7 @@ static bool map_certificate_owners(XrOwnershipReplay *replay) {
     }
     for (uint32_t i = 0; i < replay->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &replay->plan->operations[i];
-        if (operation_has_root_result(replay, operation) &&
+        if (xr_ownership_operation_has_owner(replay->plan, operation) &&
             owner_for_value(replay, operation->result_value) == XR_SEMANTIC_INDEX_NONE)
             return fail(replay, "XR_OWN_3002",
                         "reference-capable SSA result has no certificate owner");
