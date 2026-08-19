@@ -7861,12 +7861,13 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 }
                 if (source_storage != XR_REP_I64 || source_kind != XR_MACHINE_REP_I64)
                     return false;
-                /* The frozen semantic CALL_METHOD still carries tagged ABI
-                 * operands.  Refinement therefore owns the two exact scalar
-                 * boxes already present in Xi; the C emission recipe later
-                 * projects their semantic sources back to native i64 for the
-                 * fixed helper without consulting the live adapter nodes. */
-                *out_storage = XR_REP_TAGGED;
+                /* The helper takes both bounds as int64_t, and the emission
+                 * recipe reads their semantic sources directly rather than any
+                 * adapter node. Asking for a tagged carrier here would have
+                 * demanded a box the recipe then discards -- and Xi never built
+                 * one, so the demand could not be met at all. The bound is
+                 * native on both sides, which leaves nothing to adapt. */
+                *out_storage = XR_REP_I64;
                 return true;
             }
             if (operation->opcode == XI_CALL_METHOD &&
