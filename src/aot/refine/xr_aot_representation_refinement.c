@@ -4340,7 +4340,7 @@ static bool oracle_dynamic_heap_literal_storage(const VerifyAuthority *ctx, uint
      * its own exact predicate. */
     if (!operation || operation->result_value != semantic_value ||
         (!xr_semantic_string_literal_is_exact(ctx->semantic, operation) &&
-         !xr_semantic_bigint_literal_is_exact(ctx->semantic, operation)))
+         !xr_semantic_bigint_value_is_exact(ctx->semantic, operation)))
         return false;
     const XrTargetValueRepRecord *binding =
         xr_target_plan_value_rep(ctx->target_plan, semantic_value);
@@ -7239,7 +7239,7 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             return true;
         case XI_CONST:
             if (xr_semantic_string_literal_is_exact(ctx->semantic, operation) ||
-                xr_semantic_bigint_literal_is_exact(ctx->semantic, operation))
+                xr_semantic_bigint_value_is_exact(ctx->semantic, operation))
                 return oracle_dynamic_heap_literal_storage(ctx, semantic_value, out_storage,
                                                            out_machine_kind);
             break;
@@ -7311,6 +7311,13 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 return true;
             if (oracle_dynamic_source_class_instance_storage(ctx, semantic_value, out_storage,
                                                              out_machine_kind))
+                return true;
+            /* An arbitrary-precision result is a heap value however it was
+             * computed: negating or adding BigInts yields another BigInt, not
+             * a machine scalar. The class is read from the frozen builtin id
+             * the plan already stores, not from the type's spelling. */
+            if (oracle_dynamic_heap_literal_storage(ctx, semantic_value, out_storage,
+                                                    out_machine_kind))
                 return true;
             break;
         default:

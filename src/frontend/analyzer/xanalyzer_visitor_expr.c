@@ -1275,6 +1275,21 @@ static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
     if (op == AST_BINARY_MOD && (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_FLOAT(right)))
         return NULL;
 
+    /* `+ - * / %` over two BigInts yields a BigInt, mirroring the VM and the
+     * bitwise rule further down. Without it the pair falls through to the
+     * numeric rule -- which BigInt is not -- and the expression types as
+     * <error>: the VM still runs it by dynamic dispatch, so the disagreement
+     * only surfaces when the AOT backend asks the plan what the result is.
+     *
+     * A mixed BigInt/int pair is deliberately not typed here. The VM widens
+     * the int and runs it, but AOT lowering has no widening node to offer and
+     * refuses the module. Typing it would make the analyzer promise a result
+     * the backend cannot produce, which fails later and less clearly than not
+     * promising it. */
+    if (xr_type_is_builtin_named_class(left, "BigInt") &&
+        xr_type_is_builtin_named_class(right, "BigInt"))
+        return xr_type_new_bigint(NULL);
+
     if (XR_TYPE_IS_NUMERIC(left) && XR_TYPE_IS_NUMERIC(right))
         return xr_type_numeric_common_type(left, right);
 

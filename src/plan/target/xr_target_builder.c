@@ -3430,15 +3430,15 @@ static bool note_string_literal_storage_value(XrTargetPlanBuilder *builder,
                                            error_size);
 }
 
-static bool note_bigint_literal_storage_value(XrTargetPlanBuilder *builder,
-                                              XrTargetValueStorageAnalysis *analysis,
-                                              uint32_t semantic_operation, char *error,
-                                              size_t error_size) {
-    if (!xr_semantic_bigint_literal_is_exact(
+static bool note_bigint_value_storage_value(XrTargetPlanBuilder *builder,
+                                            XrTargetValueStorageAnalysis *analysis,
+                                            uint32_t semantic_operation, char *error,
+                                            size_t error_size) {
+    if (!xr_semantic_bigint_value_is_exact(
             builder->semantic_plan,
             xr_semantic_plan_operation(builder->semantic_plan, semantic_operation)))
         return fail(error, error_size, "XR_TARGET_1001",
-                    "bigint-literal-storage family requires exact literal authority");
+                    "bigint-value-storage family requires exact BigInt authority");
     return note_heap_literal_storage_value(builder, analysis, semantic_operation, error,
                                            error_size);
 }
@@ -5716,7 +5716,7 @@ static bool builder_add_string_literal_storage(XrTargetPlanBuilder *builder, cha
                                                size_t error_size) {
     if (!builder_begin_family(builder,
                               XR_TARGET_FAMILY_STRING_LITERAL_STORAGE |
-                                  XR_TARGET_FAMILY_BIGINT_LITERAL_STORAGE,
+                                  XR_TARGET_FAMILY_BIGINT_VALUE_STORAGE,
                               error, error_size))
         return false;
     XrTargetValueStorageAnalysis analysis = {0};
@@ -5731,8 +5731,8 @@ static bool builder_add_string_literal_storage(XrTargetPlanBuilder *builder, cha
         }
         if (xr_semantic_string_literal_is_exact(builder->semantic_plan, operation))
             valid = note_string_literal_storage_value(builder, &analysis, i, error, error_size);
-        else if (xr_semantic_bigint_literal_is_exact(builder->semantic_plan, operation))
-            valid = note_bigint_literal_storage_value(builder, &analysis, i, error, error_size);
+        else if (xr_semantic_bigint_value_is_exact(builder->semantic_plan, operation))
+            valid = note_bigint_value_storage_value(builder, &analysis, i, error, error_size);
     }
     value_storage_analysis_dispose(&analysis);
     if (!valid) {
@@ -5740,7 +5740,7 @@ static bool builder_add_string_literal_storage(XrTargetPlanBuilder *builder, cha
         return false;
     }
     builder->completed_family_mask |=
-        XR_TARGET_FAMILY_STRING_LITERAL_STORAGE | XR_TARGET_FAMILY_BIGINT_LITERAL_STORAGE;
+        XR_TARGET_FAMILY_STRING_LITERAL_STORAGE | XR_TARGET_FAMILY_BIGINT_VALUE_STORAGE;
     return true;
 }
 

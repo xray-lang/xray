@@ -74,4 +74,53 @@ static inline bool xr_semantic_bigint_literal_is_exact(const XrSemanticPlan *pla
            constant->kind == XR_SEM_CONST_BIGINT && type->kind == XR_KIND_INSTANCE;
 }
 
+/* Arithmetic over BigInts yields another BigInt, which is a heap value like
+ * the literals above and takes the same carrier.
+ *
+ * Which type is BigInt is read from the plan's own constants: a BIGINT
+ * constant's type is the BigInt type, by construction. Going through the
+ * frozen-builtin roster instead would give the class an id, but that id is
+ * also encoded into every canonical type key, so adding one there changes
+ * type identity across the whole plan -- measured, it breaks the literal path
+ * this predicate sits next to.
+ *
+ * The operation is named explicitly rather than inferred from "the result type
+ * is BigInt": that broader reading also matches RELEASE, whose result_type is
+ * the type it frees rather than a value it produces. */
+static inline bool
+xr_semantic_bigint_arithmetic_is_exact(const XrSemanticPlan *plan,
+                                       const XrSemanticOperationRecord *operation) {
+    if (!plan || !operation || operation->result_value == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    switch (operation->opcode) {
+        case XI_ADD:
+        case XI_SUB:
+        case XI_MUL:
+        case XI_DIV:
+        case XI_MOD:
+        case XI_NEG:
+            break;
+        default:
+            return false;
+    }
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, operation->result_type);
+    if (!type || type->kind != XR_KIND_INSTANCE || (type->flags & XR_SEM_TYPE_NULLABLE) != 0)
+        return false;
+    size_t constant_count = xr_semantic_plan_constant_count(plan);
+    for (size_t i = 0; i < constant_count; i++) {
+        const XrSemanticConstantRecord *constant = xr_semantic_plan_constant(plan, (uint32_t) i);
+        if (constant && constant->kind == XR_SEM_CONST_BIGINT &&
+            constant->type == operation->result_type)
+            return true;
+    }
+    return false;
+}
+
+/* Either shape of BigInt value the target plan binds a carrier for. */
+static inline bool xr_semantic_bigint_value_is_exact(const XrSemanticPlan *plan,
+                                                     const XrSemanticOperationRecord *operation) {
+    return xr_semantic_bigint_literal_is_exact(plan, operation) ||
+           xr_semantic_bigint_arithmetic_is_exact(plan, operation);
+}
+
 #endif /* XR_SEMANTIC_HEAP_LITERAL_SHAPE_H */
