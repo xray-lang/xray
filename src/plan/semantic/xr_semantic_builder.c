@@ -1747,6 +1747,7 @@ static bool append_constant(XrSemanticBuildContext *ctx, const XiValue *value,
                 snprintf(ctx->error, ctx->error_size,
                          "XR_SEM_0009: unsupported semantic constant kind %u at value %u",
                          (unsigned) value->type->kind, value->id);
+
             return false;
     }
     operation->constant = ctx->plan->constant_count++;

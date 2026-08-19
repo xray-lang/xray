@@ -8,6 +8,7 @@
  * xr_ownership_check.c - Independent ownership certificate checker
  */
 
+#include "xr_ownership_owner_shape.h"
 #include "xr_ownership_check.h"
 #include "xr_ownership_certificate_internal.h"
 #include "xr_ownership_replay.h"
@@ -47,7 +48,7 @@ static const XrOwnershipEdgeStateRecord *find_edge(const XrOwnershipCertificate 
         return NULL;
     const XrOwnershipEdgeStateRecord *edge = &certificate->edge_states[low];
     return edge->owner == owner && edge->block == block && edge->successor == successor ? edge
-                                                                                           : NULL;
+                                                                                        : NULL;
 }
 
 static bool add_i32_checked(int32_t left, int32_t right, int32_t *out) {
@@ -86,17 +87,16 @@ static bool loop_invariant_id_for(const XrSemanticPlan *plan,
     xr_stable_id_hex(certificate->owners[owner].id, owner_id);
     xr_stable_id_hex(plan->blocks[header].id, header_id);
     xr_stable_id_hex(plan->blocks[backedge].id, backedge_id);
-    int written = snprintf(key, sizeof(key),
-                           "ownership-loop-v1:owner=%s:header=%s:backedge=%s", owner_id,
-                           header_id, backedge_id);
+    int written = snprintf(key, sizeof(key), "ownership-loop-v1:owner=%s:header=%s:backedge=%s",
+                           owner_id, header_id, backedge_id);
     XrFingerprint digest;
     return written >= 0 && (size_t) written < sizeof(key) &&
            xr_stable_id_from_key(key, out, &digest);
 }
 
-static const XrOwnershipLoopInvariantRecord *find_loop_invariant(
-    const XrSemanticPlan *plan, const XrOwnershipCertificate *certificate, uint32_t owner,
-    uint32_t header, uint32_t backedge) {
+static const XrOwnershipLoopInvariantRecord *
+find_loop_invariant(const XrSemanticPlan *plan, const XrOwnershipCertificate *certificate,
+                    uint32_t owner, uint32_t header, uint32_t backedge) {
     XrStableId expected;
     if (!loop_invariant_id_for(plan, certificate, owner, header, backedge, &expected))
         return NULL;
@@ -159,8 +159,7 @@ static uint8_t state_for_balance(const XrOwnershipOwnerRecord *owner, int32_t ba
     if (balance > 0)
         return XR_OWN_OWNED_LOCAL;
     if (owner->initial_state == XR_OWN_BORROWED ||
-        owner->initial_state == XR_OWN_FOREIGN_BORROWED ||
-        owner->initial_state == XR_OWN_IMMORTAL)
+        owner->initial_state == XR_OWN_FOREIGN_BORROWED || owner->initial_state == XR_OWN_IMMORTAL)
         return owner->initial_state;
     return XR_OWN_RELEASED;
 }
@@ -175,9 +174,9 @@ static bool loop_invariant_key_valid(const XrSemanticPlan *plan,
     xr_stable_id_hex(certificate->owners[invariant->owner].id, owner_id);
     xr_stable_id_hex(plan->blocks[invariant->header].id, header_id);
     xr_stable_id_hex(plan->blocks[invariant->backedge].id, backedge_id);
-    int written = snprintf(expected, sizeof(expected),
-                           "ownership-loop-v1:owner=%s:header=%s:backedge=%s", owner_id,
-                           header_id, backedge_id);
+    int written =
+        snprintf(expected, sizeof(expected), "ownership-loop-v1:owner=%s:header=%s:backedge=%s",
+                 owner_id, header_id, backedge_id);
     return written >= 0 && (size_t) written < sizeof(expected) && invariant->canonical_key &&
            strcmp(invariant->canonical_key, expected) == 0;
 }
@@ -283,34 +282,6 @@ static void audit_union_values(XrOwnershipAudit *audit, uint32_t left, uint32_t 
         audit->rank[a]++;
 }
 
-static bool audit_type_is_owner(const XrSemanticPlan *plan, uint32_t type) {
-    return type < plan->type_count &&
-           (plan->types[type].flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0;
-}
-
-static bool audit_operation_has_owner(const XrSemanticPlan *plan,
-                                      const XrSemanticOperationRecord *operation) {
-    return audit_type_is_owner(plan, operation->result_type) &&
-           xi_generated_op_result_kind(operation->opcode) != XI_GEN_RESULT_VOID &&
-           operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_NONE;
-}
-
-static bool audit_operation_defines_owner_identity(
-    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
-    if (!audit_operation_has_owner(plan, operation))
-        return false;
-    if (operation->opcode == XI_PARAM || operation->opcode == XI_CONST ||
-        operation->opcode == XI_STACK_ALLOC || operation->opcode == XI_PHI)
-        return true;
-    if (operation->result_alias_operand >= 0 ||
-        operation->ownership_use == XI_GEN_OWN_USE_PASS ||
-        operation->opcode == XI_RETAIN || operation->opcode == XI_RELEASE)
-        return false;
-    return operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED ||
-           operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED ||
-           operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
-}
-
 static uint32_t audit_owner_for_value(XrOwnershipAudit *audit, uint32_t value) {
     return value < audit->value_count ? audit->owner_by_root[audit_find_root(audit, value)]
                                       : XR_SEMANTIC_INDEX_NONE;
@@ -397,22 +368,18 @@ static bool audit_prepare_equivalence(XrOwnershipAudit *audit, char *error, size
         if (operation->result_value < audit->value_count &&
             xi_generated_op_result_kind(operation->opcode) != XI_GEN_RESULT_VOID)
             audit->producer_by_value[operation->result_value] = i;
-        if (!audit_operation_has_owner(audit->plan, operation) ||
+        if (!xr_ownership_operation_has_owner(audit->plan, operation) ||
             operation->result_value >= audit->value_count)
             continue;
         if (operation->ownership_use == XI_GEN_OWN_USE_PASS && operation->opcode != XI_PHI) {
             for (uint16_t a = 0; a < operation->operand_count; a++) {
-                uint32_t operand =
-                    audit->plan->operands[operation->operand_begin + a].value;
+                uint32_t operand = audit->plan->operands[operation->operand_begin + a].value;
                 if (operand < audit->value_count)
                     audit_union_values(audit, operation->result_value, operand);
             }
         } else if (operation->result_alias_operand >= 0 &&
                    (uint16_t) operation->result_alias_operand < operation->operand_count) {
-            uint32_t operand = audit->plan
-                                   ->operands[operation->operand_begin +
-                                              (uint16_t) operation->result_alias_operand]
-                                   .value;
+            uint32_t operand = xr_ownership_alias_class_operand(audit->plan, operation);
             if (operand < audit->value_count)
                 audit_union_values(audit, operation->result_value, operand);
         }
@@ -424,7 +391,7 @@ static bool audit_canonical_owners(XrOwnershipAudit *audit, char *error, size_t 
     uint32_t expected_count = 0;
     for (uint32_t i = 0; i < audit->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &audit->plan->operations[i];
-        if (!audit_operation_defines_owner_identity(audit->plan, operation) ||
+        if (!xr_ownership_operation_defines_owner(audit->plan, operation) ||
             operation->result_value >= audit->value_count)
             continue;
         uint32_t root = audit_find_root(audit, operation->result_value);
@@ -440,8 +407,8 @@ static bool audit_canonical_owners(XrOwnershipAudit *audit, char *error, size_t 
         xr_stable_id_hex(operation->id, operation_id);
         int written = snprintf(expected_key, sizeof(expected_key), "owner-v2:%s:value=%u",
                                operation_id, root);
-        if (written < 0 || (size_t) written >= sizeof(expected_key) ||
-            !owner->canonical_key || strcmp(owner->canonical_key, expected_key) != 0 ||
+        if (written < 0 || (size_t) written >= sizeof(expected_key) || !owner->canonical_key ||
+            strcmp(owner->canonical_key, expected_key) != 0 ||
             owner->function != operation->function ||
             owner->origin_value != operation->result_value)
             return report(error, error_size, "XR_OWN_3002",
@@ -450,13 +417,17 @@ static bool audit_canonical_owners(XrOwnershipAudit *audit, char *error, size_t 
     }
     for (uint32_t i = 0; i < audit->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &audit->plan->operations[i];
-        if (!audit_operation_has_owner(audit->plan, operation) ||
+        if (!xr_ownership_operation_has_owner(audit->plan, operation) ||
             operation->result_value >= audit->value_count)
             continue;
         uint32_t root = audit_find_root(audit, operation->result_value);
-        if (audit->owner_by_root[root] == XR_SEMANTIC_INDEX_NONE)
+        if (audit->owner_by_root[root] == XR_SEMANTIC_INDEX_NONE) {
+            fprintf(stderr, "OWN3002 op=%u opcode=%u value=%u root=%u type=%u\n", i,
+                    (unsigned) operation->opcode, operation->result_value, root,
+                    operation->result_type);
             return report(error, error_size, "XR_OWN_3002",
                           "owner equivalence class has no ownership-defining operation");
+        }
     }
     if (expected_count != audit->certificate->owner_count)
         return report(error, error_size, "XR_OWN_3002",
@@ -464,17 +435,13 @@ static bool audit_canonical_owners(XrOwnershipAudit *audit, char *error, size_t 
     uint32_t count = expected_count;
     audit->initial_state = (uint8_t *) xr_calloc(count, sizeof(*audit->initial_state));
     audit->exit_state = (uint8_t *) xr_malloc((size_t) count * sizeof(*audit->exit_state));
-    audit->return_provenance =
-        (uint8_t *) xr_calloc(count, sizeof(*audit->return_provenance));
+    audit->return_provenance = (uint8_t *) xr_calloc(count, sizeof(*audit->return_provenance));
     audit->flags = (uint8_t *) xr_calloc(count, sizeof(*audit->flags));
     audit->loan_status = (uint8_t *) xr_calloc(count, sizeof(*audit->loan_status));
-    audit->loan_parameter =
-        (int16_t *) xr_malloc((size_t) count * sizeof(*audit->loan_parameter));
-    if (count && (!audit->initial_state || !audit->exit_state ||
-                  !audit->return_provenance || !audit->flags || !audit->loan_status ||
-                  !audit->loan_parameter))
-        return report(error, error_size, "XR_EXEC_5003",
-                      "ownership owner audit allocation failed");
+    audit->loan_parameter = (int16_t *) xr_malloc((size_t) count * sizeof(*audit->loan_parameter));
+    if (count && (!audit->initial_state || !audit->exit_state || !audit->return_provenance ||
+                  !audit->flags || !audit->loan_status || !audit->loan_parameter))
+        return report(error, error_size, "XR_EXEC_5003", "ownership owner audit allocation failed");
     for (uint32_t owner = 0; owner < count; owner++) {
         audit->exit_state[owner] = XR_OWN_RELEASED;
         audit->loan_parameter[owner] = XR_OWN_LOAN_STATIC;
@@ -485,7 +452,7 @@ static bool audit_canonical_owners(XrOwnershipAudit *audit, char *error, size_t 
 static bool audit_definition_events(XrOwnershipAudit *audit) {
     for (uint32_t i = 0; i < audit->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &audit->plan->operations[i];
-        if (!audit_operation_has_owner(audit->plan, operation))
+        if (!xr_ownership_operation_has_owner(audit->plan, operation))
             continue;
         uint32_t owner = audit_owner_for_value(audit, operation->result_value);
         if (owner == XR_SEMANTIC_INDEX_NONE)
@@ -517,10 +484,9 @@ static bool audit_definition_events(XrOwnershipAudit *audit) {
                 return false;
         } else if (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
                    operation->result_alias_operand < 0) {
-            bool immortal = operation->opcode == XI_GET_SHARED ||
-                            operation->opcode == XI_GET_GLOBAL ||
-                            operation->opcode == XI_GET_BUILTIN ||
-                            operation->opcode == XI_IMPORT_REF;
+            bool immortal =
+                operation->opcode == XI_GET_SHARED || operation->opcode == XI_GET_GLOBAL ||
+                operation->opcode == XI_GET_BUILTIN || operation->opcode == XI_IMPORT_REF;
             if (immortal) {
                 *initial = XR_OWN_IMMORTAL;
                 audit->exit_state[owner] = XR_OWN_IMMORTAL;
@@ -576,8 +542,8 @@ static bool audit_owner_has_function_loan(XrOwnershipAudit *audit, uint32_t owne
     }
     audit->loan_status[owner] = 1;
     uint32_t value = audit->certificate->owners[owner].origin_value;
-    uint32_t origin = value < audit->value_count ? audit->producer_by_value[value]
-                                                 : XR_SEMANTIC_INDEX_NONE;
+    uint32_t origin =
+        value < audit->value_count ? audit->producer_by_value[value] : XR_SEMANTIC_INDEX_NONE;
     if (origin == XR_SEMANTIC_INDEX_NONE) {
         audit->loan_status[owner] = 3;
         return false;
@@ -590,10 +556,8 @@ static bool audit_owner_has_function_loan(XrOwnershipAudit *audit, uint32_t owne
     } else if (audit->initial_state[owner] == XR_OWN_IMMORTAL ||
                operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC) {
         valid = true;
-    } else if (operation->opcode == XI_PARAM &&
-               operation->parameter_ownership == XI_OWN_BORROWED &&
-               operation->semantic_immediate >= 0 &&
-               operation->semantic_immediate <= INT16_MAX) {
+    } else if (operation->opcode == XI_PARAM && operation->parameter_ownership == XI_OWN_BORROWED &&
+               operation->semantic_immediate >= 0 && operation->semantic_immediate <= INT16_MAX) {
         derived = (int16_t) operation->semantic_immediate;
         valid = true;
     } else if (operation->opcode == XI_PHI) {
@@ -628,10 +592,10 @@ static bool audit_owner_has_function_loan(XrOwnershipAudit *audit, uint32_t owne
                operation->result_alias_operand >= 0 &&
                (uint16_t) operation->result_alias_operand < operation->operand_count) {
         uint32_t source = audit_owner_for_value(
-            audit, audit->plan
-                       ->operands[operation->operand_begin +
-                                  (uint16_t) operation->result_alias_operand]
-                       .value);
+            audit,
+            audit->plan
+                ->operands[operation->operand_begin + (uint16_t) operation->result_alias_operand]
+                .value);
         if (source != owner)
             valid = audit_owner_has_function_loan(audit, source, function, &derived);
     }
@@ -673,7 +637,8 @@ static bool audit_owner_is_retained_in_block(XrOwnershipAudit *audit, uint32_t o
 static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t error_size) {
     for (uint32_t i = 0; i < audit->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &audit->plan->operations[i];
-        if (operation->opcode == XI_PHI && audit_type_is_owner(audit->plan, operation->result_type)) {
+        if (operation->opcode == XI_PHI &&
+            xr_ownership_type_is_root(audit->plan, operation->result_type)) {
             const XrSemanticBlockRecord *block = &audit->plan->blocks[operation->block];
             uint32_t result_owner = audit_owner_for_value(audit, operation->result_value);
             if (result_owner == XR_SEMANTIC_INDEX_NONE ||
@@ -690,8 +655,7 @@ static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t er
             uint32_t unpromoted_predecessor = XR_SEMANTIC_INDEX_NONE;
             int16_t unique_parameter = -1;
             for (uint16_t a = 0; a < operation->operand_count; a++) {
-                uint32_t source_value =
-                    audit->plan->operands[operation->operand_begin + a].value;
+                uint32_t source_value = audit->plan->operands[operation->operand_begin + a].value;
                 uint32_t source = audit_owner_for_value(audit, source_value);
                 if (source == result_owner)
                     continue;
@@ -699,17 +663,16 @@ static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t er
                                            ? XR_OWN_IMMORTAL
                                            : audit->initial_state[source];
                 int16_t parameter = XR_OWN_LOAN_STATIC;
-                bool borrowed_source = source_state == XR_OWN_BORROWED ||
-                                       source_state == XR_OWN_FOREIGN_BORROWED;
+                bool borrowed_source =
+                    source_state == XR_OWN_BORROWED || source_state == XR_OWN_FOREIGN_BORROWED;
                 bool function_loan =
-                    borrowed_source && audit_owner_has_function_loan(
-                                           audit, source, operation->function, &parameter);
+                    borrowed_source &&
+                    audit_owner_has_function_loan(audit, source, operation->function, &parameter);
                 if (borrowed_source) {
                     saw_borrowed_source = true;
                     if (!function_loan)
                         borrowed_sources_are_function_loans = false;
-                    uint32_t predecessor =
-                        audit->plan->predecessors[block->predecessor_begin + a];
+                    uint32_t predecessor = audit->plan->predecessors[block->predecessor_begin + a];
                     if (!audit_owner_is_retained_in_block(audit, source, predecessor)) {
                         borrowed_sources_promoted = false;
                         if (!have_unpromoted_source) {
@@ -726,8 +689,7 @@ static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t er
                                       "returned borrowed PHI has multiple loan roots");
                     if (function_loan && parameter >= 0 && unique_parameter < 0)
                         unique_parameter = parameter;
-                    else if (function_loan && parameter >= 0 &&
-                             unique_parameter != parameter &&
+                    else if (function_loan && parameter >= 0 && unique_parameter != parameter &&
                              audit_owner_is_returned(audit, result_owner))
                         return report(error, error_size, "XR_OWN_3004",
                                       "returned borrowed PHI joins different parameter loans");
@@ -735,8 +697,8 @@ static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t er
                     saw_owned_source = true;
                 }
             }
-            bool borrowed_phi = saw_borrowed_source && !saw_owned_source &&
-                                borrowed_sources_are_function_loans;
+            bool borrowed_phi =
+                saw_borrowed_source && !saw_owned_source && borrowed_sources_are_function_loans;
             if (saw_borrowed_source && !borrowed_phi && !borrowed_sources_promoted) {
                 uint32_t origin_value = XR_SEMANTIC_INDEX_NONE;
                 uint32_t origin_operation = XR_SEMANTIC_INDEX_NONE;
@@ -770,10 +732,10 @@ static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t er
                              "result-own=%u alias=%d return-prov=%u return-param=%d "
                              "predecessor=%u matching-retain=none)",
                              audit->plan->functions[operation->function].name, i,
-                             unpromoted_operand, unpromoted_value, unpromoted_owner,
-                             source_state, origin_value, origin_operation, origin_opcode,
-                             origin_result_ownership, origin_alias, origin_return_provenance,
-                             origin_return_parameter, unpromoted_predecessor);
+                             unpromoted_operand, unpromoted_value, unpromoted_owner, source_state,
+                             origin_value, origin_operation, origin_opcode, origin_result_ownership,
+                             origin_alias, origin_return_provenance, origin_return_parameter,
+                             unpromoted_predecessor);
                 return false;
             }
             audit->initial_state[result_owner] =
@@ -781,11 +743,10 @@ static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t er
             for (uint16_t a = 0; a < operation->operand_count; a++) {
                 uint32_t source = audit_owner_for_value(
                     audit, audit->plan->operands[operation->operand_begin + a].value);
-                uint32_t predecessor =
-                    audit->plan->predecessors[block->predecessor_begin + a];
-                uint8_t source_state =
-                    source == XR_SEMANTIC_INDEX_NONE ? XR_OWN_IMMORTAL
-                                                     : audit->initial_state[source];
+                uint32_t predecessor = audit->plan->predecessors[block->predecessor_begin + a];
+                uint8_t source_state = source == XR_SEMANTIC_INDEX_NONE
+                                           ? XR_OWN_IMMORTAL
+                                           : audit->initial_state[source];
                 if (borrowed_phi) {
                     if (!audit_add_event(audit, result_owner, i, predecessor, operation->block,
                                          XR_OWN_EVENT_BORROW, 0, XR_OWN_BORROWED,
@@ -800,8 +761,7 @@ static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t er
                                      XR_OWN_EVENT_MOVE, -1, XR_OWN_MOVED, XR_OWN_POINT_EDGE))
                     return false;
                 if (!audit_add_event(audit, result_owner, i, predecessor, operation->block,
-                                     XR_OWN_EVENT_MOVE, 1, XR_OWN_OWNED_LOCAL,
-                                     XR_OWN_POINT_EDGE))
+                                     XR_OWN_EVENT_MOVE, 1, XR_OWN_OWNED_LOCAL, XR_OWN_POINT_EDGE))
                     return false;
             }
             continue;
@@ -810,8 +770,7 @@ static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t er
             const XrSemanticOperandRecord *operand =
                 &audit->plan->operands[operation->operand_begin + a];
             uint32_t owner = audit_owner_for_value(audit, operand->value);
-            if (owner == XR_SEMANTIC_INDEX_NONE ||
-                audit->initial_state[owner] == XR_OWN_IMMORTAL)
+            if (owner == XR_SEMANTIC_INDEX_NONE || audit->initial_state[owner] == XR_OWN_IMMORTAL)
                 continue;
             uint8_t kind = XR_OWN_EVENT_MOVE;
             int16_t delta = 0;
@@ -826,11 +785,12 @@ static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t er
                 uint32_t producer = operand->value < audit->value_count
                                         ? audit->producer_by_value[operand->value]
                                         : XR_SEMANTIC_INDEX_NONE;
-                kind = producer != XR_SEMANTIC_INDEX_NONE &&
-                               audit->plan->operations[producer].opcode == XI_STACK_ALLOC &&
-                               audit->plan->operations[producer].semantic_immediate == XI_CLOSURE_NEW
-                           ? XR_OWN_EVENT_DESTROY
-                           : XR_OWN_EVENT_RELEASE;
+                kind =
+                    producer != XR_SEMANTIC_INDEX_NONE &&
+                            audit->plan->operations[producer].opcode == XI_STACK_ALLOC &&
+                            audit->plan->operations[producer].semantic_immediate == XI_CLOSURE_NEW
+                        ? XR_OWN_EVENT_DESTROY
+                        : XR_OWN_EVENT_RELEASE;
                 delta = -1;
                 state = XR_OWN_RELEASED;
                 emit = true;
@@ -858,17 +818,15 @@ static bool audit_operand_events(XrOwnershipAudit *audit, char *error, size_t er
                         (operation->opcode == XI_PAR_FOR || operation->opcode == XI_PAR_MAP ||
                          operation->opcode == XI_PAR_REDUCE);
                     kind = published ? XR_OWN_EVENT_PUBLISH
-                                     : (stack_destroy ? XR_OWN_EVENT_DESTROY
-                                                      : XR_OWN_EVENT_MOVE);
+                                     : (stack_destroy ? XR_OWN_EVENT_DESTROY : XR_OWN_EVENT_MOVE);
                     delta = -1;
                     state = published ? XR_OWN_PUBLISHED_SHARED
                                       : (stack_destroy ? XR_OWN_RELEASED : XR_OWN_MOVED);
                     emit = true;
                 }
             }
-            if (emit && !audit_add_event(audit, owner, i, operation->block,
-                                         XR_SEMANTIC_INDEX_NONE, kind, delta, state,
-                                         XR_OWN_POINT_AFTER_OPERATION))
+            if (emit && !audit_add_event(audit, owner, i, operation->block, XR_SEMANTIC_INDEX_NONE,
+                                         kind, delta, state, XR_OWN_POINT_AFTER_OPERATION))
                 return false;
             if ((operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 &&
                 !audit_add_event(audit, owner, i, operation->block, XR_SEMANTIC_INDEX_NONE,
@@ -884,15 +842,15 @@ static bool audit_borrowed_phi_parameter(XrOwnershipAudit *audit, uint32_t owner
                                          int16_t *parameter) {
     *parameter = -1;
     uint32_t value = audit->certificate->owners[owner].origin_value;
-    uint32_t origin = value < audit->value_count ? audit->producer_by_value[value]
-                                                 : XR_SEMANTIC_INDEX_NONE;
+    uint32_t origin =
+        value < audit->value_count ? audit->producer_by_value[value] : XR_SEMANTIC_INDEX_NONE;
     if (origin == XR_SEMANTIC_INDEX_NONE || audit->plan->operations[origin].opcode != XI_PHI)
         return false;
     const XrSemanticOperationRecord *phi = &audit->plan->operations[origin];
     bool saw_parameter = false;
     for (uint16_t a = 0; a < phi->operand_count; a++) {
-        uint32_t source = audit_owner_for_value(
-            audit, audit->plan->operands[phi->operand_begin + a].value);
+        uint32_t source =
+            audit_owner_for_value(audit, audit->plan->operands[phi->operand_begin + a].value);
         if (source == owner || source == XR_SEMANTIC_INDEX_NONE)
             continue;
         int16_t candidate = -1;
@@ -928,9 +886,8 @@ static bool audit_owner_summaries(XrOwnershipAudit *audit, char *error, size_t e
                               "returned borrowed PHI disagrees with its parameter loan");
             audit->flags[owner] |= 2u;
             audit->return_provenance[owner] = function->return_provenance;
-            audit->exit_state[owner] = function->return_provenance == XR_SEM_RETURN_OWNED
-                                           ? XR_OWN_MOVED
-                                           : XR_OWN_BORROWED;
+            audit->exit_state[owner] =
+                function->return_provenance == XR_SEM_RETURN_OWNED ? XR_OWN_MOVED : XR_OWN_BORROWED;
         }
     }
     for (uint32_t owner = 0; owner < audit->certificate->owner_count; owner++) {
@@ -961,8 +918,7 @@ static bool audit_event_is_direct(const XrOwnershipAudit *audit,
            event->successor != audit->plan->operations[producer].block;
 }
 
-static bool audit_direct_event_coverage(XrOwnershipAudit *audit, char *error,
-                                        size_t error_size) {
+static bool audit_direct_event_coverage(XrOwnershipAudit *audit, char *error, size_t error_size) {
     uint32_t actual_count = 0;
     for (uint32_t i = 0; i < audit->certificate->event_count; i++)
         if (audit_event_is_direct(audit, &audit->certificate->events[i]))
@@ -1004,19 +960,19 @@ static bool audit_direct_event_coverage(XrOwnershipAudit *audit, char *error,
 }
 
 static bool check_semantic_ownership_facts(const XrSemanticPlan *plan,
-                                           const XrOwnershipCertificate *certificate,
-                                           char *error, size_t error_size) {
+                                           const XrOwnershipCertificate *certificate, char *error,
+                                           size_t error_size) {
     XrOwnershipAudit audit = {.plan = plan, .certificate = certificate};
-    uint64_t event_capacity = (uint64_t) plan->operation_count +
-                              (uint64_t) plan->operand_count * 2u;
+    uint64_t event_capacity =
+        (uint64_t) plan->operation_count + (uint64_t) plan->operand_count * 2u;
     if (event_capacity > XR_OWNERSHIP_AUDIT_MAX_EVENTS) {
         report(error, error_size, "XR_EXEC_5003",
                "ownership direct-event audit exceeds its hard budget");
         return false;
     }
     audit.event_capacity = (uint32_t) event_capacity;
-    audit.events = (XrOwnershipExpectedEvent *) xr_malloc(
-        (size_t) audit.event_capacity * sizeof(*audit.events));
+    audit.events = (XrOwnershipExpectedEvent *) xr_malloc((size_t) audit.event_capacity *
+                                                          sizeof(*audit.events));
     bool valid = (!audit.event_capacity || audit.events) &&
                  audit_prepare_equivalence(&audit, error, error_size) &&
                  audit_canonical_owners(&audit, error, error_size) &&
@@ -1031,8 +987,7 @@ static bool check_semantic_ownership_facts(const XrSemanticPlan *plan,
     return valid;
 }
 
-static uint32_t edge_owner_lower_bound(const XrOwnershipCertificate *certificate,
-                                       uint32_t owner) {
+static uint32_t edge_owner_lower_bound(const XrOwnershipCertificate *certificate, uint32_t owner) {
     uint32_t low = 0;
     uint32_t high = certificate->edge_state_count;
     while (low < high) {
@@ -1059,8 +1014,7 @@ static uint32_t owner_origin_operation(const XrSemanticPlan *plan,
     return found;
 }
 
-static bool build_owner_scope(const XrSemanticPlan *plan,
-                              const XrOwnershipCertificate *certificate,
+static bool build_owner_scope(const XrSemanticPlan *plan, const XrOwnershipCertificate *certificate,
                               uint32_t owner_index, uint8_t **out_scope, char *error,
                               size_t error_size) {
     *out_scope = NULL;
@@ -1085,8 +1039,7 @@ static bool build_owner_scope(const XrSemanticPlan *plan,
     if (function->block_count && (!scope || !queue)) {
         xr_free(scope);
         xr_free(queue);
-        return report(error, error_size, "XR_EXEC_5003",
-                      "ownership scope budget exhausted");
+        return report(error, error_size, "XR_EXEC_5003", "ownership scope budget exhausted");
     }
     uint32_t head = 0;
     uint32_t tail = 0;
@@ -1095,8 +1048,7 @@ static bool build_owner_scope(const XrSemanticPlan *plan,
     queue[tail++] = origin_local;
     while (head < tail) {
         uint32_t local = queue[head++];
-        const XrSemanticBlockRecord *block =
-            &plan->blocks[function->block_begin + local];
+        const XrSemanticBlockRecord *block = &plan->blocks[function->block_begin + local];
         for (unsigned successor_index = 0; successor_index < 2; successor_index++) {
             uint32_t successor = block->successors[successor_index];
             if (successor == XR_SEMANTIC_INDEX_NONE ||
@@ -1208,17 +1160,16 @@ static bool check_owner_dataflow(const XrSemanticPlan *plan, uint32_t owner_inde
                 find_edge(certificate, owner_index, block_index, successor);
             int32_t expected_delta = 0;
             if (!add_i32_checked(delta[local], terminal ? 0 : edge_delta[local * 2u + s],
-                                  &expected_delta)) {
+                                 &expected_delta)) {
                 xr_free(scope);
                 xr_free(delta);
                 xr_free(edge_delta);
                 return report(error, error_size, "XR_OWN_3001",
                               "ownership edge delta exceeds the checker schema");
             }
-            bool owner_frontier = !scope[local] && !terminal && origin_is_phi &&
-                                  successor == origin_block &&
-                                  expected_delta ==
-                                      (owner->initial_state == XR_OWN_BORROWED ? 0 : 1);
+            bool owner_frontier =
+                !scope[local] && !terminal && origin_is_phi && successor == origin_block &&
+                expected_delta == (owner->initial_state == XR_OWN_BORROWED ? 0 : 1);
             uint16_t expected_flags = owner_frontier
                                           ? XR_OWN_EDGE_OWNER_FRONTIER
                                           : (scope[local] ? 0u : XR_OWN_EDGE_OUT_OF_SCOPE);
@@ -1227,14 +1178,13 @@ static bool check_owner_dataflow(const XrSemanticPlan *plan, uint32_t owner_inde
                 xr_free(delta);
                 xr_free(edge_delta);
                 return report(error, error_size, "XR_OWN_3002",
-                               "certificate edge scope is not exact");
+                              "certificate edge scope is not exact");
             }
-            if (!block_state ||
-                ((edge->flags & XR_OWN_EDGE_OWNER_FRONTIER) == 0 &&
-                 (block_state->flags & XR_OWN_EDGE_OWNER_FRONTIER) == 0 &&
-                 (edge->flags != block_state->flags ||
-                  edge->entry_balance != block_state->entry_balance ||
-                  edge->entry_state != block_state->entry_state))) {
+            if (!block_state || ((edge->flags & XR_OWN_EDGE_OWNER_FRONTIER) == 0 &&
+                                 (block_state->flags & XR_OWN_EDGE_OWNER_FRONTIER) == 0 &&
+                                 (edge->flags != block_state->flags ||
+                                  edge->entry_balance != block_state->entry_balance ||
+                                  edge->entry_state != block_state->entry_state))) {
                 xr_free(scope);
                 xr_free(delta);
                 xr_free(edge_delta);
@@ -1257,12 +1207,11 @@ static bool check_owner_dataflow(const XrSemanticPlan *plan, uint32_t owner_inde
             }
             if (expected_flags == XR_OWN_EDGE_OWNER_FRONTIER &&
                 (edge->entry_balance != 0 ||
-                 edge->exit_balance !=
-                     (owner->initial_state == XR_OWN_BORROWED ? 0 : 1) ||
+                 edge->exit_balance != (owner->initial_state == XR_OWN_BORROWED ? 0 : 1) ||
                  edge->entry_state != XR_OWN_UNINITIALIZED ||
-                 edge->exit_state !=
-                     (owner->initial_state == XR_OWN_BORROWED ? XR_OWN_BORROWED
-                                                              : XR_OWN_OWNED_LOCAL))) {
+                 edge->exit_state != (owner->initial_state == XR_OWN_BORROWED
+                                          ? XR_OWN_BORROWED
+                                          : XR_OWN_OWNED_LOCAL))) {
                 xr_free(scope);
                 xr_free(delta);
                 xr_free(edge_delta);
@@ -1282,8 +1231,7 @@ static bool check_owner_dataflow(const XrSemanticPlan *plan, uint32_t owner_inde
                 }
                 continue;
             }
-            int64_t actual_delta =
-                (int64_t) edge->exit_balance - (int64_t) edge->entry_balance;
+            int64_t actual_delta = (int64_t) edge->exit_balance - (int64_t) edge->entry_balance;
             if (actual_delta != expected_delta ||
                 edge->entry_state != state_for_balance(owner, edge->entry_balance) ||
                 edge->exit_state != state_for_balance(owner, edge->exit_balance)) {
@@ -1355,10 +1303,10 @@ static bool check_loop_invariants(const XrSemanticPlan *plan, const XrSemanticGr
     const XrOwnershipCertificate *certificate = plan->ownership;
     for (uint32_t i = 0; i < certificate->loop_invariant_count; i++) {
         const XrOwnershipLoopInvariantRecord *invariant = &certificate->loop_invariants[i];
-        if (invariant->owner >= certificate->owner_count || invariant->header >= plan->block_count ||
-            invariant->backedge >= plan->block_count || invariant->state > XR_OWN_IMMORTAL ||
-            invariant->reserved[0] != 0 || invariant->reserved[1] != 0 ||
-            invariant->reserved[2] != 0)
+        if (invariant->owner >= certificate->owner_count ||
+            invariant->header >= plan->block_count || invariant->backedge >= plan->block_count ||
+            invariant->state > XR_OWN_IMMORTAL || invariant->reserved[0] != 0 ||
+            invariant->reserved[1] != 0 || invariant->reserved[2] != 0)
             return report(error, error_size, "XR_OWN_3006",
                           "ownership loop invariant contains an invalid index or state");
         const XrOwnershipOwnerRecord *owner = &certificate->owners[invariant->owner];
@@ -1374,8 +1322,8 @@ static bool check_loop_invariants(const XrSemanticPlan *plan, const XrSemanticGr
             !loop_invariant_key_valid(plan, certificate, invariant) ||
             !xr_stable_id_from_key(invariant->canonical_key, &expected_id, &digest) ||
             !xr_stable_id_equal(expected_id, invariant->id) ||
-            (i > 0 && xr_stable_id_compare(certificate->loop_invariants[i - 1].id,
-                                           invariant->id) >= 0))
+            (i > 0 &&
+             xr_stable_id_compare(certificate->loop_invariants[i - 1].id, invariant->id) >= 0))
             return report(error, error_size, "XR_OWN_3006",
                           "ownership loop invariant identity or CFG relation is invalid");
         const XrOwnershipEdgeStateRecord *edge =
@@ -1392,8 +1340,8 @@ static bool check_loop_invariants(const XrSemanticPlan *plan, const XrSemanticGr
 
     XrOwnershipOwnerFunctionRef *owners = NULL;
     if (certificate->owner_count) {
-        owners = (XrOwnershipOwnerFunctionRef *) xr_malloc(
-            (size_t) certificate->owner_count * sizeof(*owners));
+        owners = (XrOwnershipOwnerFunctionRef *) xr_malloc((size_t) certificate->owner_count *
+                                                           sizeof(*owners));
         if (!owners)
             return report(error, error_size, "XR_EXEC_5003",
                           "ownership loop-invariant index allocation failed");
@@ -1416,9 +1364,8 @@ static bool check_loop_invariants(const XrSemanticPlan *plan, const XrSemanticGr
                 (successor_index == 1 && header == block->successors[0]) ||
                 !xr_semantic_graph_dominates(graph, header, backedge))
                 continue;
-            for (uint32_t position = owner_begin;
-                 position < certificate->owner_count &&
-                 owners[position].function == block->function;
+            for (uint32_t position = owner_begin; position < certificate->owner_count &&
+                                                  owners[position].function == block->function;
                  position++) {
                 uint32_t owner = owners[position].owner;
                 const XrOwnershipEdgeStateRecord *edge =

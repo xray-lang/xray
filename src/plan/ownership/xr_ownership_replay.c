@@ -8,6 +8,7 @@
  * xr_ownership_replay.c - Independent ordered ownership/liveness replay
  */
 
+#include "xr_ownership_owner_shape.h"
 #include "xr_ownership_replay.h"
 #include "xr_ownership_certificate_internal.h"
 #include "../semantic/xr_semantic_graph.h"
@@ -38,16 +39,14 @@ static bool fail(XrOwnershipReplay *replay, const char *code, const char *detail
 }
 
 static bool add_i64_checked(int64_t left, int64_t right, int64_t *out) {
-    if ((right > 0 && left > INT64_MAX - right) ||
-        (right < 0 && left < INT64_MIN - right))
+    if ((right > 0 && left > INT64_MAX - right) || (right < 0 && left < INT64_MIN - right))
         return false;
     *out = left + right;
     return true;
 }
 
 static bool subtract_i64_checked(int64_t left, int64_t right, int64_t *out) {
-    if ((right > 0 && left < INT64_MIN + right) ||
-        (right < 0 && left > INT64_MAX + right))
+    if ((right > 0 && left < INT64_MIN + right) || (right < 0 && left > INT64_MAX + right))
         return false;
     *out = left - right;
     return true;
@@ -106,13 +105,7 @@ static bool build_equivalence(XrOwnershipReplay *replay) {
             }
             continue;
         }
-        if (operation->result_alias_operand < 0 ||
-            (uint16_t) operation->result_alias_operand >= operation->operand_count)
-            continue;
-        uint32_t operand =
-            replay->plan
-                ->operands[operation->operand_begin + (uint16_t) operation->result_alias_operand]
-                .value;
+        uint32_t operand = xr_ownership_alias_class_operand(replay->plan, operation);
         if (operand < replay->value_count)
             union_values(replay, operation->result_value, operand);
     }
@@ -229,8 +222,8 @@ static bool verify_operand_uses(XrOwnershipReplay *replay, uint32_t owner_index,
                     (uint32_t) (operation - replay->plan->operations),
                     xi_generated_op_name(operation->opcode), operation->block,
                     operation->source_line, (long long) balance, state, owner->origin_value,
-                    definition,
-                    definition_name, definition_record ? definition_record->source_line : 0,
+                    definition, definition_name,
+                    definition_record ? definition_record->source_line : 0,
                     (long long) (definition_record ? definition_record->semantic_immediate : 0));
             }
             return false;
@@ -284,8 +277,7 @@ static bool apply_events_at_point(XrOwnershipReplay *replay, uint32_t owner_inde
             event->block != block || event->program_point != program_point)
             continue;
         if (!add_i64_checked(*balance, event->logical_delta, balance))
-            return fail(replay, "XR_EXEC_5003",
-                        "ordered ownership balance exceeds replay schema");
+            return fail(replay, "XR_EXEC_5003", "ordered ownership balance exceeds replay schema");
         if (*balance < 0)
             return fail(replay, "XR_OWN_3003", "ordered ownership balance becomes negative");
         if (event->kind != XR_OWN_EVENT_MOVE || event->logical_delta != 0)
@@ -321,8 +313,7 @@ static bool verify_edge_exit(XrOwnershipReplay *replay, uint32_t owner_index,
         if (event->owner == owner_index && event->block == edge->block &&
             event->successor == edge->successor && event->program_point == XR_OWN_POINT_EDGE)
             if (!add_i64_checked(balance, event->logical_delta, &balance))
-                return fail(replay, "XR_EXEC_5003",
-                            "ownership edge replay balance exceeds schema");
+                return fail(replay, "XR_EXEC_5003", "ownership edge replay balance exceeds schema");
     }
     if (balance != edge->exit_balance)
         return fail(replay, "XR_OWN_3003",
