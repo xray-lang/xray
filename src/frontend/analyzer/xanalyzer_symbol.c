@@ -24,8 +24,7 @@ static XR_THREAD_LOCAL uint32_t *g_symbol_id_ptr = NULL;
 // Thread-local symbol registry for O(1) ID lookup (set by analyzer)
 static XR_THREAD_LOCAL XrIntMap *g_symbol_registry = NULL;
 
-XaEnumInfo *xa_enum_info_new(const char *nominal_owner, const char *name,
-                             uint32_t variant_count) {
+XaEnumInfo *xa_enum_info_new(const char *nominal_owner, const char *name, uint32_t variant_count) {
     if (!nominal_owner || !nominal_owner[0] || !name || variant_count == 0)
         return NULL;
     XaEnumInfo *info = (XaEnumInfo *) xr_calloc(1, sizeof(*info));
@@ -207,8 +206,18 @@ XaSymbol *xa_symbol_new(const char *name, XaSymbolKind kind) {
     sym->links.root_id = sym->id;
     sym->links.root_alias = XA_ROOT_UNIQUE;
     sym->links.binding_mutability = sym->is_rebindable ? XA_BINDING_REBINDABLE : XA_BINDING_STABLE;
-    sym->links.value_capability = XA_CAP_UNKNOWN;
-    sym->links.storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
+    /* A variable or parameter is a binding in the frame that declares it, and
+     * it is mutable unless something narrows it. Both facts come from the
+     * declaration itself, not from a guess standing in for analysis: escape,
+     * transfer, shared publication and const narrowing all overwrite them
+     * later when they prove something else. Anything that is not a binding --
+     * a class, a function, a module -- stays unknown until stated.
+     *
+     * Left unknown, a capture of such a variable reaches the semantic plan
+     * with neither fact and the plan refuses every closure over it. */
+    bool binding = kind == XA_SYM_VARIABLE || kind == XA_SYM_PARAMETER;
+    sym->links.value_capability = binding ? XA_CAP_MUTABLE : XA_CAP_UNKNOWN;
+    sym->links.storage_domain = binding ? XR_STORAGE_EXEC_LOCAL : XR_STORAGE_DOMAIN_UNKNOWN;
     sym->links.return_ownership.param_index = -1;
 
     return sym;
