@@ -49,14 +49,13 @@ struct XrRuntimeCore;
 #define XR_SHORT_STR_MAX 64
 
 // Check if long string
-#define XR_STR_IS_LONG(s)                                                               \
-    ((atomic_load_explicit(&(s)->traits, memory_order_relaxed) &                         \
-      XR_RUNTIME_STRING_TRAIT_LONG) != 0)
+#define XR_STR_IS_LONG(s)                                                                          \
+    ((atomic_load_explicit(&(s)->traits, memory_order_relaxed) & XR_RUNTIME_STRING_TRAIT_LONG) != 0)
 #define XR_STR_IS_SHORT(s) (!XR_STR_IS_LONG(s))
 
 // Set long string flag
-#define XR_STR_SET_LONG(s)                                                              \
-    ((void) atomic_fetch_or_explicit(&(s)->traits, XR_RUNTIME_STRING_TRAIT_LONG,         \
+#define XR_STR_SET_LONG(s)                                                                         \
+    ((void) atomic_fetch_or_explicit(&(s)->traits, XR_RUNTIME_STRING_TRAIT_LONG,                   \
                                      memory_order_relaxed))
 
 /* ========== String Interning Pool ========== */
@@ -87,8 +86,7 @@ typedef struct XrStringPool {
  * the ACCESSED bit is set by concurrent lookups holding only the pool read
  * lock (LRU heuristic), so plain |= would be a racy RMW that could drop a
  * concurrent bit update. Same cast-to-_Atomic idiom as task->waiter. */
-#define XR_STR_FLAGS_RELAXED(s)                                                      \
-    atomic_load_explicit(&(s)->traits, memory_order_relaxed)
+#define XR_STR_FLAGS_RELAXED(s) atomic_load_explicit(&(s)->traits, memory_order_relaxed)
 
 // Check macros
 #define XR_STR_IS_INTERNED(s) (XR_STR_FLAGS_RELAXED(s) & STR_FLAG_INTERNED)
@@ -98,16 +96,14 @@ typedef struct XrStringPool {
 #define XR_STR_IS_ACCESSED(s) (XR_STR_FLAGS_RELAXED(s) & STR_FLAG_ACCESSED)
 
 // Set macros
-#define XR_STR_SET_FLAGS_RELAXED(s, bits)                                            \
-    ((void) atomic_fetch_or_explicit(&(s)->traits, (uint16_t) (bits),                 \
-                                     memory_order_relaxed))
+#define XR_STR_SET_FLAGS_RELAXED(s, bits)                                                          \
+    ((void) atomic_fetch_or_explicit(&(s)->traits, (uint16_t) (bits), memory_order_relaxed))
 #define XR_STR_SET_GLOBAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_INTERNED | STR_FLAG_GLOBAL)
 #define XR_STR_SET_LOCAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_LOCAL)
 #define XR_STR_SET_PERMANENT(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_PERMANENT)
 #define XR_STR_SET_ACCESSED(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_ACCESSED)
-#define XR_STR_CLR_ACCESSED(s)                                                      \
-    ((void) atomic_fetch_and_explicit(&(s)->traits,                                 \
-                                      (uint16_t) ~STR_FLAG_ACCESSED,                \
+#define XR_STR_CLR_ACCESSED(s)                                                                     \
+    ((void) atomic_fetch_and_explicit(&(s)->traits, (uint16_t) ~STR_FLAG_ACCESSED,                 \
                                       memory_order_relaxed))
 
 // XrGlobalStringPool - Global string intern pool (thread-safe)
@@ -231,8 +227,6 @@ XR_FUNC size_t xr_string_rune_length(XrString *str);
 
 XR_FUNC int32_t xr_string_rune_code_at(XrString *str, size_t index);
 XR_FUNC XrString *xr_string_rune_at_unicode(XrVMRuntime *iso, XrString *str, size_t index);
-XR_FUNC XrString *xr_string_substring_by_rune(XrVMRuntime *iso, XrString *str, size_t start,
-                                              size_t end);
 XR_FUNC XrString *xr_string_from_codepoint(XrVMRuntime *iso, uint32_t codepoint);
 
 /* ========== Character Classification ========== */
