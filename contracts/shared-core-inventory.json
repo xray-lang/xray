@@ -1445,7 +1445,11 @@
       "id": "string-concat",
       "owner": "shared-kernel",
       "production_callers": [
-        "src/aot/xrt_arith.h"
+        "src/aot/xrt_arith.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/ir/xi_emit_call.c",
+        "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_data.inc.c"
       ],
       "profiles": [
         "vm",

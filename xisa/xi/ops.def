@@ -3163,6 +3163,25 @@
     (cgen "src/aot/xi_cgen.c" "cg_exact_bits_adapter_name")
   ))
 
+(define-xi-observable-owner shared.string-concat
+  :category shared-semantic-kernel
+  :operations (xi.str.concat)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_str_concat_parts
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_data.inc.c" "xr_string_concat_total_core")
+    (aot-hosted "src/aot/xrt_arith.h" "xr_string_concat_copy_core")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xr_string_concat_copy_core")
+    (cgen "src/aot/xi_cgen.c" "cg_string_concat_adapter_name")
+  ))
+
 (define-xi-observable-owner primitive.integer-wrapping
   :category declarative-primitive
   :operations (

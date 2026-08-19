@@ -5386,6 +5386,25 @@ static const char *cg_exact_bits_adapter_name(XiCgenCtx *ctx) {
 
 /* The C name the wrapping-arithmetic owner publishes for generated code. The
  * owner registry holds it, so the emitter asks rather than spelling it. */
+/* The C name the concat owner publishes for generated code. */
+static const char *cg_string_concat_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_HI,
+                                        XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: string concat owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: string concat owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
 static const char *cg_int_wrap_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_HI,
                                         XR_SEM_OWNER_ID_PRIMITIVE_INTEGER_WRAPPING_LO,

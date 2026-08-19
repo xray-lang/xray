@@ -1202,6 +1202,9 @@ static inline size_t xrt_strpart_len(const xrt_strpart_t *part) {
 }
 
 static inline char *xrt_strpart_copy(char *dst, const xrt_strpart_t *part) {
+    XR_STRING_CONCAT_OWNER_GUARD(XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_HI,
+                                 XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_LO);
+    XR_STRING_CONCAT_CONSUMER_GUARD(XR_SEM_CONSUMER_AOT_HOSTED);
     XrStringConcatPartCore core = xrt_strpart_core(part);
     return xr_string_concat_copy_core(dst, &core);
 }

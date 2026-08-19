@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "8ebb60dd465323e459547f7cf84d525c939cc4fe95e94cac7ff675ef6cb764ef",
+  "canonical_fingerprint": "871b39e8344afb9058975e13cfa1acf4017d3895b3c3d5b2a1cc807f9b1bf85a",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -1842,6 +1842,52 @@
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
           "symbol": "cg_static_address_adapter_name"
+        }
+      ]
+    },
+    {
+      "owner": "shared.string-concat",
+      "owner_id": "f7c99946590da93c6c96569cfc17128a",
+      "owner_id_hi": "0xf7c99946590da93c",
+      "owner_id_lo": "0x6c96569cfc17128a",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.str.concat"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
+      ],
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_str_concat_parts",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_data.inc.c",
+          "symbol": "xr_string_concat_total_core"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_arith.h",
+          "symbol": "xr_string_concat_copy_core"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xr_string_concat_copy_core"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_string_concat_adapter_name"
         }
       ]
     },
@@ -4001,28 +4047,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.store.upval"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.str.concat",
-      "owner_id": "715075547e7b0dab2d95e394f0471bab",
-      "owner_id_hi": "0x715075547e7b0dab",
-      "owner_id_lo": "0x2d95e394f0471bab",
-      "category": "shared-semantic-kernel",
-      "operations": [
-        "xi.str.concat"
       ],
       "consumers": [
         "semantic-plan"
@@ -10724,21 +10748,45 @@
       "operation_id": "715075547e7b0dab2d95e394f0471bab",
       "operation_id_hi": "0x715075547e7b0dab",
       "operation_id_lo": "0x2d95e394f0471bab",
-      "owner": "xi.str.concat",
-      "owner_id": "715075547e7b0dab2d95e394f0471bab",
-      "owner_id_hi": "0x715075547e7b0dab",
-      "owner_id_lo": "0x2d95e394f0471bab",
+      "owner": "shared.string-concat",
+      "owner_id": "f7c99946590da93c6c96569cfc17128a",
+      "owner_id_hi": "0xf7c99946590da93c",
+      "owner_id_lo": "0x6c96569cfc17128a",
       "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_str_concat_parts",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_data.inc.c",
+          "symbol": "xr_string_concat_total_core"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_arith.h",
+          "symbol": "xr_string_concat_copy_core"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xr_string_concat_copy_core"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_string_concat_adapter_name"
         }
       ]
     },

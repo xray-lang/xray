@@ -56,6 +56,21 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_error_messages.h"
 #include "../shared/xr_enum_metadata_core.h"
+#include "../shared/xr_string_concat_core.h"
+
+/* Freestanding shares the concat kernel's two passes; the guard names the
+ * owner so a second copy cannot appear here unnoticed. */
+#define xrt_string_concat_measure(parts, count)                                                    \
+    (XR_STRING_CONCAT_OWNER_GUARD(XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_HI,                         \
+                                  XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_LO),                        \
+     XR_STRING_CONCAT_CONSUMER_GUARD(XR_SEM_CONSUMER_AOT_FREESTANDING),                            \
+     xr_string_concat_total_core((parts), (count)))
+
+#define xrt_string_concat_copy(dst, part)                                                          \
+    (XR_STRING_CONCAT_OWNER_GUARD(XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_HI,                         \
+                                  XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_LO),                        \
+     XR_STRING_CONCAT_CONSUMER_GUARD(XR_SEM_CONSUMER_AOT_FREESTANDING),                            \
+     xr_string_concat_copy_core((dst), (part)))
 #include "../shared/xr_int_arith_core.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
 
 #define xrt_int_wrap_eval(kernel, lhs, rhs)                                                        \

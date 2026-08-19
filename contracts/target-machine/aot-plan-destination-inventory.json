@@ -682,6 +682,7 @@
       "c_coupling_fields": [],
       "category": "target",
       "consumers": [
+        "src/aot/xi_cgen.c",
         "src/aot/xi_cgen_dispatch_helpers.inc.c"
       ],
       "current_fallback": "none-declared",
@@ -695,6 +696,7 @@
         "src/aot/xaot_bundle.h",
         "src/aot/xaot_verify.c",
         "src/aot/xi_backend_plan_contract.h",
+        "src/aot/xi_cgen.c",
         "src/aot/xi_cgen_dispatch_helpers.inc.c"
       ],
       "verifier": "src/aot/xaot_verify.c"
@@ -1122,5 +1124,5 @@
     }
   ],
   "schema": 1,
-  "source_tree_fingerprint": "35249153ba43bccf13e04942e80f16885d9df500b1b8f4f659b8bb5cdf75e053"
+  "source_tree_fingerprint": "e2e7830732bab65a4e965acac998d94a727ad6e4a377dea7921eb9c6df7c8d8d"
 }

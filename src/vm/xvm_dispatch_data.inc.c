@@ -137,6 +137,60 @@ vmcase(OP_STRBUF_APPEND) {
     vmbreak;
 }
 
+/* Concatenation in the two passes the shared kernel states: measure every
+ * part, allocate once, copy. Non-string parts render first, since a rendered
+ * length is what the measurement needs; their text is owned until copied. */
+vmcase(OP_STR_CONCAT_N) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int count = GETARG_C(i);
+
+    XrStringConcatPartCore cores[XR_STR_CONCAT_INLINE_PARTS];
+    XrString *rendered[XR_STR_CONCAT_INLINE_PARTS];
+    for (int k = 0; k < count; k++) {
+        XrValue part = R(b + k);
+        if (XR_IS_STRING(part)) {
+            rendered[k] = NULL;
+            cores[k].a = xr_value_str_data(&part);
+            cores[k].alen = xr_value_str_len(&part);
+        } else {
+            XrString *text = xr_value_to_string(isolate, part);
+            rendered[k] = text;
+            cores[k].a = text ? text->data : "";
+            cores[k].alen = text ? (size_t) text->length : 0;
+        }
+        cores[k].b = NULL;
+        cores[k].blen = 0;
+        cores[k].joins_with_dot = 0;
+    }
+
+    XR_STRING_CONCAT_OWNER_GUARD(XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_HI,
+                                 XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_LO);
+    XR_STRING_CONCAT_CONSUMER_GUARD(XR_SEM_CONSUMER_VM);
+    size_t total = xr_string_concat_total_core(cores, (size_t) count);
+    if (total == SIZE_MAX) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "string concatenation length overflow");
+    }
+
+    char stack_buf[XR_STR_CONCAT_INLINE_BYTES];
+    char *buf = total < sizeof(stack_buf) ? stack_buf : (char *) xr_malloc(total + 1u);
+    if (!buf) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "out of memory concatenating strings");
+    }
+    char *dst = buf;
+    for (int k = 0; k < count; k++)
+        dst = xr_string_concat_copy_core(dst, &cores[k]);
+    *dst = 0;
+
+    XrString *result = xr_string_new(isolate, buf, total);
+    if (buf != stack_buf)
+        xr_free(buf);
+
+    R(a) = xr_string_value(result);
+    checkGC(base + a + 1);
+    vmbreak;
+}
+
 vmcase(OP_STRBUF_FINISH) {
     int a = GETARG_A(i);
 

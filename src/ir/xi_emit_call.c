@@ -12,6 +12,7 @@
 #include "xi_emit_internal.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../runtime/mem/xobj_header.h"
+#include "../shared/xr_string_concat_core.h"
 #include "../shared/xr_sync_core.h"
 #include "../shared/xr_target_simd_core.h"
 
@@ -37,11 +38,10 @@ static bool emit_shared_slot_is_function(EmitCtx *ctx, int64_t slot) {
  * The owner macro resolves a constant query kind, so each row below asks for
  * exactly one answer rather than selecting a kind at run time. */
 #define EMIT_TARGET_SIMD_BASELINE_QUERY(kind)                                                      \
-    XR_TARGET_SIMD_QUERY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_HI,                  \
-                                     XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_LO,                  \
-                                     XR_SEM_CONSUMER_VM, (kind),                                   \
-                                     (uint8_t) XR_TARGET_SIMD_BASELINE_SELECTION,                  \
-                                     XR_TARGET_SIMD_BASELINE_FEATURES)
+    XR_TARGET_SIMD_QUERY_OWNER_APPLY(                                                              \
+        XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_HI, XR_SEM_OWNER_ID_SHARED_TARGET_SIMD_QUERY_LO,  \
+        XR_SEM_CONSUMER_VM, (kind), (uint8_t) XR_TARGET_SIMD_BASELINE_SELECTION,                   \
+        XR_TARGET_SIMD_BASELINE_FEATURES)
 
 static bool emit_target_simd_baseline_holds(const XiValue *v) {
     if (!v)
@@ -372,18 +372,18 @@ XR_FUNC void xi_emit_semantic_intrinsic_call(EmitCtx *ctx, XiValue *v, XiEmitReg
         return;
     }
     if (v->op == XI_ATOMIC_LOAD) {
-        XrAtomicLoadPlan plan = XR_ATOMIC_LOAD_OWNER_PLAN(
-            XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_LO,
-            XR_SEM_CONSUMER_VM, 4);
+        XrAtomicLoadPlan plan =
+            XR_ATOMIC_LOAD_OWNER_PLAN(XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_HI,
+                                      XR_SEM_OWNER_ID_SHARED_ATOMIC_LOAD_LO, XR_SEM_CONSUMER_VM, 4);
         if (!xr_atomic_load_plan_is_exact_core(plan)) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
         }
     }
     if (v->op == XI_ATOMIC_STORE) {
-        XrAtomicStorePlan plan = XR_ATOMIC_STORE_OWNER_PLAN(
-            XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI, XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO,
-            XR_SEM_CONSUMER_VM, 4);
+        XrAtomicStorePlan plan = XR_ATOMIC_STORE_OWNER_PLAN(XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_HI,
+                                                            XR_SEM_OWNER_ID_SHARED_ATOMIC_STORE_LO,
+                                                            XR_SEM_CONSUMER_VM, 4);
         if (!xr_atomic_store_plan_is_exact_core(plan)) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
@@ -1248,11 +1248,28 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         parts[a] = tmp;
     }
 
-    emit_inst(ctx, CREATE_ABC(OP_STRBUF_NEW, dst, 0, 0));
-    for (uint16_t a = 0; a < n; a++) {
-        emit_inst(ctx, CREATE_ABC(OP_STRBUF_APPEND, dst, parts[a], 0));
+    /* Two passes -- measure, then copy -- through the shared kernel, which is
+     * what the AOT path does. The instruction reads its parts from one
+     * consecutive run, so they are moved into place first; that costs n moves
+     * and saves the builder's repeated regrowth. Longer concatenations exceed
+     * the instruction's inline capacity and keep the builder. */
+    bool concat_inline =
+        n > 0 && n <= XR_STR_CONCAT_INLINE_PARTS && (size_t) ctx->next_reg + n < MAX_REGS;
+    if (concat_inline) {
+        XiEmitReg run = (XiEmitReg) ctx->next_reg;
+        ctx->next_reg = (uint16_t) (ctx->next_reg + n);
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+        for (uint16_t a = 0; a < n; a++)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (run + a), parts[a], 0));
+        emit_inst(ctx, CREATE_ABC(OP_STR_CONCAT_N, dst, run, n));
+    } else {
+        emit_inst(ctx, CREATE_ABC(OP_STRBUF_NEW, dst, 0, 0));
+        for (uint16_t a = 0; a < n; a++) {
+            emit_inst(ctx, CREATE_ABC(OP_STRBUF_APPEND, dst, parts[a], 0));
+        }
+        emit_inst(ctx, CREATE_ABC(OP_STRBUF_FINISH, dst, 0, 0));
     }
-    emit_inst(ctx, CREATE_ABC(OP_STRBUF_FINISH, dst, 0, 0));
     if (parts != stack_parts)
         xr_free(parts);
 }

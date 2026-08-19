@@ -534,6 +534,19 @@ fixtures = [
 ]
 
 [[operation]]
+id = "string-concat"
+observable_contract = "src/shared/xr_string_concat_core.h"
+semantic_kernel = "src/shared/xr_string_concat_core.h"
+vm_adapter = "src/vm/xvm_dispatch_data.inc.c"
+aot_adapter = "src/aot/xrt_arith.h"
+typed_plan = "shared.string-concat"
+runtime_fallback = "none"
+fixtures = [
+  "tests/diff/cases/semantics/string/string_parts_over_64.xr",
+  "tests/unit/aot/test_xrt_user_hash_eq.c",
+]
+
+[[operation]]
 id = "integer-wrapping"
 observable_contract = "src/shared/xr_int_arith_core.h"
 semantic_kernel = "src/shared/xr_int_arith_core.h"

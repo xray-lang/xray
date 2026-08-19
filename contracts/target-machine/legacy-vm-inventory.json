@@ -18,7 +18,7 @@
   ],
   "generator": "target-machine-phase0/1",
   "legacy_artifact_symbols": [],
-  "opcode_count": 295,
+  "opcode_count": 296,
   "opcodes": [
     {
       "deletion_task": 276,
@@ -364,6 +364,18 @@
       "opcode": "OP_STRBUF_FINISH",
       "operand_format": "FMT_A",
       "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xinstruction-table",
+      "opcode": "OP_STR_CONCAT_N",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_OUT_BASE_LIT",
       "ownership": "implicit-opcode-handler-contract",
       "tag_assumption": "XrValue-register-frame",
       "target_plan_mapping": "map-to-target-plan-op"
@@ -3566,7 +3578,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "8e45c9a8ebd966c69c861841a3b09d63cb4adc197f42814449fe69bda89d10d7",
+  "source_tree_fingerprint": "333429b8a8432d5827912286f1ff0e22deeac6f8725572c7f05c44fd4fe9e855",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xvm.c",
@@ -3733,6 +3745,12 @@
       ]
     },
     {
+      "path": "src/vm/xvm_value_hooks.c",
+      "pointer_names": [
+        "out"
+      ]
+    },
+    {
       "path": "src/api/xrepl.c",
       "pointer_names": [
         "value"
@@ -3818,7 +3836,8 @@
     {
       "path": "src/runtime/class/xinstance.h",
       "pointer_names": [
-        "args"
+        "args",
+        "out"
       ]
     },
     {

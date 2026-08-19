@@ -18,9 +18,15 @@
 #ifndef XR_STRING_CONCAT_CORE_H
 #define XR_STRING_CONCAT_CORE_H
 
+#include "xr_semantic_owner_ids_gen.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+/* Inline capacity: parts beyond this are emitted through the builder path,
+ * and text longer than this allocates a scratch buffer. */
+#define XR_STR_CONCAT_INLINE_PARTS 64
+#define XR_STR_CONCAT_INLINE_BYTES 256
 
 /* One part of a concatenation. An enum member renders as "Type.Member", which
  * is why a part carries two spans and a separator rather than one span. */
@@ -58,7 +64,23 @@ static inline char *xr_string_concat_copy_core(char *dst, const XrStringConcatPa
     return dst;
 }
 
-/* Owner guards land with the observable-owner declaration, once both
- * adapters call through here. */
+#define XR_STRING_CONCAT_OWNER_GUARD(owner_hi, owner_lo)                                           \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_string_concat                                         \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_HI &&                \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_LO)                  \
+                   ? 1                                                                             \
+                   : -1);                                                                          \
+    }))
+
+#define XR_STRING_CONCAT_CONSUMER_GUARD(consumer_bit)                                              \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_string_concat                            \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                  \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&            \
+                (XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_CONSUMERS & (uint32_t) (consumer_bit)) != 0) \
+                   ? 1                                                                             \
+                   : -1);                                                                          \
+    }))
 
 #endif  // XR_STRING_CONCAT_CORE_H

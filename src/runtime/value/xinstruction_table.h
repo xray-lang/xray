@@ -123,6 +123,8 @@
     _(STRBUF_NEW, FMT_A, KOP_A_LOAD, "R[A] = new_strbuf()")                                        \
     _(STRBUF_APPEND, FMT_AB, KOP_AB_INPLACE, "strbuf(R[A]).append(R[B])")                          \
     _(STRBUF_FINISH, FMT_A, KOP_A_INOUT, "R[A] = strbuf(R[A]).to_string()")                        \
+    _(STR_CONCAT_N, FMT_ABC, KOP_ABC_OUT_BASE_LIT,                                                 \
+      "R[A] = concat(R[B]...R[B+C-1]) - one pass to measure, one to copy")                         \
     _(BAND, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B] & R[C]")                                            \
     _(BOR, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B] | R[C]")                                             \
     _(BXOR, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B] ^ R[C]")                                            \
