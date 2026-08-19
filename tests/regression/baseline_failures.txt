@@ -20,20 +20,21 @@
 # at all. A ratchet that neither catches new breakage nor reports its own fixes
 # gates nothing, so the list is re-pinned to measured truth.
 #
-# WHAT THESE 65 ARE: not a backlog of regressions but the work of tasks 269-283
+# WHAT THESE 54 ARE: not a backlog of regressions but the work of tasks 269-283
 # seen from the test corpus. Classified by running each case the way this
 # runner does -- `xray test`, not `xray run`, which does not execute @test
 # files at all and reports them as silently passing.
 #
-#     23  XR_SEM_0019          aggregate field identity / grounded call authority
-#     10  (test assertion)     compiles, runs, gets the wrong answer
+#     18  XR_SEM_0019          12 are coroutine state count (same root as the
+#                              unresolved-import family: stdlib loads from
+#                              bytecode and carries no compile-time IR)
+#     10  (test assertion)     7 of them are network cases whose source is
+#                              stale against the current go-argument rule
 #      7  XR_SEM_0018          capture with no storage domain (see known_bugs)
-#      6  XR_OWN_3002          null in a nullable reference (see known_bugs)
-#      6  ownership-lowering   coroutine lowering fails closed
+#      4  ownership-lowering   coroutine lowering fails closed
 #      3  XR_OWN_3001          ownership balance goes negative (see known_bugs)
 #      3  parse                syntax the front end does not accept
-#      2  error[E0356]         channel transfer of an erased type
-#      5  XR_SEM_0016 / XR_SEM_0009 / XR_OWN_3003 / XR_OWN_3005 / E0352
+#      2  XR_OWN_3002 / 2 error[E0356] / 5 assorted single cases
 #
 # So this file doubles as the 269-283 coverage worklist: each construct the plan
 # layer learns to state should delete lines from here, and the list only shrinks.
@@ -41,19 +42,11 @@
 # One test path per line. Comments and blanks ignored.
 # ----------------------------------------------------------------------------
 0011_zero_value_init.xr
-0130_bool_null.xr
 0140_special_values.xr
-0350_ternary_nullish.xr
-0380_optional_chain.xr
 0381_optional_call.xr
 0511_tail_recursion.xr
-0531_bare_lambda.xr
-0610_array_functional.xr
-0650_nested_higher_order.xr
-0651_nested_higher_order_combo.xr
 0740_context_auto_select.xr
 0741_context_buffer_isolation.xr
-0804_self_returning_method_rc.xr
 0830_getter_setter.xr
 0841_operator_overload_compat.xr
 0881_nested_iterator_combo.xr
@@ -81,13 +74,10 @@
 1172_module_readonly_capture.xr
 1174_channel_tuple_buffer_transfer.xr
 1175_channel_tuple_scalar_transfer.xr
-1202_generic_inference.xr
 1203_nullable_type.xr
 1205_typeof_operator.xr
 1208_tostring.xr
 1224_generic_methods.xr
-1234_generic_type_alias.xr
-1250_nullable_iteration_narrowing.xr
 1302_is_builtin_native_class.xr
 1370_tuple_generic_args.xr
 1410_shared_provenance_rebind_reset.xr
