@@ -1697,6 +1697,19 @@ static bool append_constant(XrSemanticBuildContext *ctx, const XiValue *value,
         operation->constant = ctx->plan->constant_count++;
         return true;
     }
+    if (value->enum_metadata_kind != XR_ENUM_METADATA_NONE) {
+        /* An enum metadata view -- `Color.variants` and its kin -- is a
+         * constant the lowering already marked as such on the value, in the
+         * enum_metadata_* fields rather than in aux_kind. What it carries is
+         * the count the view spans; the descriptors themselves are read from
+         * the owning enum's layout, which the plan states elsewhere. Without
+         * this the constant fell to the type switch, where an enum metadata
+         * type is an ordinary instance and has no case. */
+        constant->kind = XR_SEM_CONST_ENUM_METADATA;
+        constant->integer = value->aux_int;
+        operation->constant = ctx->plan->constant_count++;
+        return true;
+    }
     if (value->aux_kind == XI_AUX_KIND_BIGINT_DIGITS) {
         /* An arbitrary-precision literal has no fixed-width home, so the plan
          * states it the way the front end wrote it: decimal digits. The mark

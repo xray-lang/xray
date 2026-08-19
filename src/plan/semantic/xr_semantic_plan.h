@@ -36,6 +36,7 @@ typedef enum XrSemanticConstantKind {
     XR_SEM_CONST_RUNE,
     XR_SEM_CONST_STRING,
     XR_SEM_CONST_BIGINT,
+    XR_SEM_CONST_ENUM_METADATA,
     XR_SEM_CONST_ENUM_NAMESPACE,
 } XrSemanticConstantKind;
 

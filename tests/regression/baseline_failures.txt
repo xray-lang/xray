@@ -20,8 +20,8 @@
 # at all. A ratchet that neither catches new breakage nor reports its own fixes
 # gates nothing, so the list is re-pinned to measured truth.
 #
-# WHAT THESE 75 ARE: not a backlog of regressions but the work of tasks 269-283
-# seen from the test corpus. 49 of them fail inside the semantic plan, before
+# WHAT THESE 73 ARE: not a backlog of regressions but the work of tasks 269-283
+# seen from the test corpus. 47 of them fail inside the semantic plan, before
 # either backend runs, because the plan layer is fail-closed and does not yet
 # state every construct the corpus uses. The remaining 26 fail earlier or later
 # -- at parse, in the analyzer, or at run time -- and are ordinary defects.
@@ -32,10 +32,12 @@
 #      7  XR_SEM_0018   capture with no storage domain (see known_bugs: the
 #                       analyzer publishes one only for escape, transfer and
 #                       const-shared, so an ordinary local arrives unknown)
-#      6  XR_OWN_3002   owner class with no ownership-defining site
+#      6  XR_OWN_3002   null in a nullable reference; the model asks whether a
+#                       value's TYPE is an ownership root (see known_bugs)
 #      3  XR_OWN_3001   ownership balance goes negative (see known_bugs)
-#      3  XR_SEM_0009   unsupported semantic constant kind
-#      3  XR_SEM_0016 / XR_OWN_3003 / XR_OWN_3005
+#      1  XR_SEM_0009   `t is (int, string)` -- a tuple type test reifies an
+#                       XrClass pointer into a constant, which is VM-only
+#      4  XR_SEM_0016 / XR_OWN_3003 / XR_OWN_3005
 #
 # So this file doubles as the 269-283 coverage worklist: each construct the plan
 # layer learns to state should delete lines from here, and the list only shrinks.
@@ -68,10 +70,8 @@
 0915_shared_for_go.xr
 0940_edge_cases.xr
 0950_exception.xr
-0960_enum_static_iteration_metadata.xr
 0961_enum_static_iteration_control_flow.xr
 1020_math.xr
-1036_cross_module_generic_enum.xr
 1106_select.xr
 1111_comprehensive.xr
 1113_select_send.xr
