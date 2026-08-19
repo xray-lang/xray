@@ -429,8 +429,8 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
 
 static const XiClassData *value_aggregate_class_data(const XrSemanticBuildContext *ctx,
                                                      const XrType *type) {
-    if (!ctx || !type || type->kind != XR_KIND_INSTANCE || !type->is_value_type ||
-        !type->instance.class_ref || !type->instance.class_ref->struct_layout)
+    if (!ctx || !type || type->kind != XR_KIND_INSTANCE || !type->instance.class_ref ||
+        !type->instance.class_ref->struct_layout)
         return NULL;
     const XrAggregateLayout *layout = type->instance.class_ref->struct_layout;
     uint32_t class_id = type->instance.class_ref->xg_class_id;
@@ -612,7 +612,11 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
     record->flags =
         (uint8_t) ((type->is_nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
                    (type->is_const ? XR_SEM_TYPE_CONST : 0u) |
-                   (type->is_value_type ? XR_SEM_TYPE_VALUE : 0u) |
+                   (type->is_value_type ||
+                            (type->kind == XR_KIND_INSTANCE && type->instance.class_ref &&
+                             type->instance.class_ref->struct_layout)
+                        ? XR_SEM_TYPE_VALUE
+                        : 0u) |
                    (type->is_literal ? XR_SEM_TYPE_LITERAL : 0u) |
                    (reference_capable ? XR_SEM_TYPE_REFERENCE_CAPABLE : 0u) |
                    (borrow_view ? XR_SEM_TYPE_BORROW_VIEW : 0u) |
