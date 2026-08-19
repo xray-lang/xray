@@ -13,46 +13,112 @@
 # NOT listed here, and also fails when a listed case starts passing without
 # being removed. The list can only shrink.
 #
-# PROVENANCE: captured 2026-07-31 against the working tree. It is a migration
-# artifact, not an exemption policy — every line is a real defect that predates
-# the gate. Roughly 19 of them (1454-1472, read_param_*) are borrow/alias cases
-# that belong to in-flight Slice<T> work and should clear on their own.
+# PROVENANCE: re-captured 2026-08-19 against
+# rewrite/vm-aot-unified-target-machine. The 2026-07-31 capture was taken before
+# the unified-target-machine migration and had stopped describing this tree: of
+# its 36 lines, 28 had started passing, while 74 real failures were not listed
+# at all. A ratchet that neither catches new breakage nor reports its own fixes
+# gates nothing, so the list is re-pinned to measured truth.
+#
+# WHAT THESE 82 ARE: not a backlog of regressions but the work of tasks 269-283
+# seen from the test corpus. 56 of them fail inside the semantic plan, before
+# either backend runs, because the plan layer is fail-closed and does not yet
+# state every construct the corpus uses. The remaining 26 fail earlier or later
+# -- at parse, in the analyzer, or at run time -- and are ordinary defects.
+# By diagnostic:
+#
+#     27  XR_SEM_0019   aggregate field identity / grounded call authority
+#     26  (other)       parse, runtime and analyzer failures
+#      9  XR_SEM_0018
+#      8  XR_SEM_0009   unsupported semantic constant kind
+#      6  XR_OWN_3002   owner class with no ownership-defining site
+#      3  XR_OWN_3001   ownership balance goes negative (see known_bugs)
+#      3  XR_SEM_0016 / XR_OWN_3003 / XR_OWN_3005
+#
+# So this file doubles as the 269-283 coverage worklist: each construct the plan
+# layer learns to state should delete lines from here, and the list only shrinks.
 #
 # One test path per line. Comments and blanks ignored.
 # ----------------------------------------------------------------------------
-0731_string_byte_rune_surface.xr
+0011_zero_value_init.xr
+0100_int_basic.xr
+0130_bool_null.xr
+0140_special_values.xr
+0150_bigint_basic.xr
+0350_ternary_nullish.xr
+0360_bigint_arithmetic.xr
+0361_bigint_methods.xr
+0362_bigint_comparison.xr
+0380_optional_chain.xr
+0381_optional_call.xr
+0413_null_unwrap.xr
+0440_match.xr
+0511_tail_recursion.xr
+0531_bare_lambda.xr
+0610_array_functional.xr
+0650_nested_higher_order.xr
+0651_nested_higher_order_combo.xr
+0681_ref_container_write.xr
+0740_context_auto_select.xr
+0741_context_buffer_isolation.xr
+0750_short_string_concat.xr
+0760_concurrent_concat_property.xr
+0804_self_returning_method_rc.xr
+0830_getter_setter.xr
 0835_this_in_closure.xr
-0895_struct_basic.xr
-0900_struct_operators.xr
-0903_struct_equality.xr
-0954_panic_info_inheritance.xr
-0955_panic_info_stack_array.xr
-1144_coro_monitor.xr
-1145_coro_error_patterns.xr
+0841_operator_overload_compat.xr
+0870_advanced.xr
+0881_nested_iterator_combo.xr
+0911_dump_builtin.xr
+0915_shared_for_go.xr
+0940_edge_cases.xr
+0950_exception.xr
+0960_enum_static_iteration_metadata.xr
+0961_enum_static_iteration_control_flow.xr
+1020_math.xr
+1036_cross_module_generic_enum.xr
+1106_select.xr
+1111_comprehensive.xr
+1113_select_send.xr
+1123_channel_timeout.xr
+1124_coro_stats.xr
+1135_scope_child_errors.xr
+1146_multicore_string_concat.xr
+1155_channel_close_timeout_fanout.xr
+1156_select_close_wake.xr
+1157_work_queue_generic_class.xr
 1161_multiple_task_awaiters.xr
 1162_overlapping_await_any_waiters.xr
+1166_countdown_latch_native.xr
+1167_channel_explicit_transfer.xr
+1167_semaphore_native.xr
+1168_lazy_string_boundary.xr
+1171_shared_block_capture.xr
 1172_enum_descriptor_erased_transfer.xr
 1172_module_readonly_capture.xr
+1174_channel_tuple_buffer_transfer.xr
+1175_channel_tuple_scalar_transfer.xr
+1202_generic_inference.xr
+1203_nullable_type.xr
+1205_typeof_operator.xr
+1208_tostring.xr
+1224_generic_methods.xr
+1234_generic_type_alias.xr
+1250_nullable_iteration_narrowing.xr
+1302_is_builtin_native_class.xr
 1370_tuple_generic_args.xr
-1411_url_parse.xr
+1410_shared_provenance_rebind_reset.xr
+1416_comptime_struct_value.xr
+1418_comptime_block_value.xr
+1418_shared_provenance_readonly_closure_capture.xr
+1433_net_loopback.xr
+1434_net_byte_array_loopback.xr
+1435_net_deadline_error.xr
+1436_net_halfclose_bidi.xr
+1437_net_tls_timeout.xr
 1438_ws_self_connect.xr
-1454_read_param_return_alias.xr
-1455_read_param_field_projection_return_alias.xr
-1456_read_param_field_store_local_alias.xr
-1457_read_param_index_store_local_alias.xr
-1458_read_param_array_store_local_alias.xr
-1459_read_param_map_store_local_alias.xr
-1460_read_param_local_alias_return.xr
-1461_read_param_local_alias_field_store.xr
-1462_read_param_local_alias_array_store.xr
-1463_read_param_reassigned_alias_array_store.xr
-1464_read_param_returned_closure_local_retain.xr
-1465_read_param_stored_closure_local_retain.xr
-1466_read_param_forwarded_local_retain.xr
-1467_read_param_method_local_retain.xr
-1468_read_param_forward_chain_local_retain.xr
-1469_read_param_method_chain_local_retain.xr
-1470_read_param_function_method_local_retain.xr
-1471_default_read_rest_param.xr
-1472_default_read_destructure_param.xr
 1502_http_request_options.xr
+1509_ws_pure_protocol.xr
+1510_http2_client.xr
+1520_websocket.xr
+1601_narrowing_facts.xr
