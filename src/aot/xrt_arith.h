@@ -20,6 +20,7 @@
                        // xrt.h build and by the host TU in standalone unit tests
 #include "xrt_class.h"
 #include "xrt_method_symbols.h" /* XRT_SYM_TOSTRING for the user-toString hook */
+#include "../shared/xr_string_concat_core.h"
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_type_identity_core.h"
@@ -1184,19 +1185,25 @@ static inline void xrt_strpart_init(xrt_strpart_t *part, XrValue val) {
     }
 }
 
+/* The part's shape, in the terms the shared kernel states them. */
+static inline XrStringConcatPartCore xrt_strpart_core(const xrt_strpart_t *part) {
+    XrStringConcatPartCore core;
+    core.a = part->a;
+    core.b = part->b;
+    core.alen = part->alen;
+    core.blen = part->blen;
+    core.joins_with_dot = (uint8_t) (part->kind == XRT_STRPART_ENUM);
+    return core;
+}
+
 static inline size_t xrt_strpart_len(const xrt_strpart_t *part) {
-    return part->kind == XRT_STRPART_ENUM ? part->alen + 1u + part->blen : part->alen;
+    XrStringConcatPartCore core = xrt_strpart_core(part);
+    return xr_string_concat_total_core(&core, 1);
 }
 
 static inline char *xrt_strpart_copy(char *dst, const xrt_strpart_t *part) {
-    memcpy(dst, part->a, part->alen);
-    dst += part->alen;
-    if (part->kind == XRT_STRPART_ENUM) {
-        *dst++ = '.';
-        memcpy(dst, part->b, part->blen);
-        dst += part->blen;
-    }
-    return dst;
+    XrStringConcatPartCore core = xrt_strpart_core(part);
+    return xr_string_concat_copy_core(dst, &core);
 }
 
 static inline XrValue xrt_str_concat_parts(size_t count, xrt_strpart_t *parts) {
