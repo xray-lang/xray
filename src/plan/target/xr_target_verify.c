@@ -13,6 +13,7 @@
  *   plans fail before any backend can reinterpret missing facts.
  */
 
+#include "../semantic/xr_semantic_heap_literal_shape.h"
 #include "xr_target_verify.h"
 #include "xr_target_instruction_verify.h"
 #include "xr_target_entry_abi.h"
@@ -1770,29 +1771,6 @@ static bool semantic_panic_catch_is_exact(const XrSemanticPlan *semantic,
            type->enum_flags == 0 && type->reserved_enum == 0;
 }
 
-static bool semantic_string_literal_is_exact(const XrSemanticPlan *semantic,
-                                             const XrSemanticOperationRecord *operation) {
-    if (!semantic || !operation || operation->opcode != XI_CONST || operation->operand_count != 0 ||
-        operation->constant >= xr_semantic_plan_constant_count(semantic) ||
-        operation->allocation_key || !stable_id_is_zero(operation->allocation_id) ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
-        operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
-        operation->return_complete != 1)
-        return false;
-    const XrSemanticConstantRecord *constant =
-        xr_semantic_plan_constant(semantic, operation->constant);
-    const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, operation->result_type);
-    if (!constant || constant->kind != XR_SEM_CONST_STRING || !constant->string ||
-        constant->type != operation->result_type || !type || type->kind != XR_KIND_STRING ||
-        type->child_count != 0 || type->scalar_rep != XR_SCALAR_REP_NONE ||
-        type->aggregate_extent != 0 || type->aggregate_align != 0)
-        return false;
-    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
-                        XR_SEM_TYPE_AGGREGATE_EXACT;
-    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
-    return (type->flags & forbidden) == 0 && (type->flags & required) == required;
-}
-
 static const XrSemanticFunctionRecord *
 semantic_direct_local_callee_for_operation(const XrSemanticPlan *semantic,
                                            uint32_t operation_index) {
@@ -3176,7 +3154,8 @@ static bool collect_exact_dynamic_types(
                 operation->function) ||
             xr_semantic_class_object_is_exact(plan->semantic_plan, operation) ||
             xr_semantic_class_instance_value_is_exact(plan->semantic_plan, operation, NULL) ||
-            semantic_string_literal_is_exact(plan->semantic_plan, operation) ||
+            xr_semantic_string_literal_is_exact(plan->semantic_plan, operation) ||
+            xr_semantic_bigint_literal_is_exact(plan->semantic_plan, operation) ||
             xr_semantic_string_concat_is_exact(plan->semantic_plan, operation) ||
             xr_semantic_string_convert_is_exact(plan->semantic_plan, operation) ||
             semantic_direct_local_string_result_is_exact(plan->semantic_plan, i) ||
@@ -3292,7 +3271,8 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         plan->semantic_plan, operation, semantic_value, semantic_type, semantic_function);
     bool exact_array_ref_place_load = semantic_direct_local_array_ref_place_load_is_exact_verify(
         plan, operation, semantic_value, semantic_type, semantic_function);
-    bool exact_string_literal = semantic_string_literal_is_exact(plan->semantic_plan, operation);
+    bool exact_string_literal = xr_semantic_string_literal_is_exact(plan->semantic_plan, operation);
+    bool exact_bigint_literal = xr_semantic_bigint_literal_is_exact(plan->semantic_plan, operation);
     /* Recomputed from the plan through the shared judgement rather than read
      * back from the builder: the String a concatenation allocates is a fresh
      * owner whose only storage fact is the outer tagged value. */
@@ -3464,11 +3444,11 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                 exact_array_allocation || exact_array_intrinsic || exact_array_hof_result ||
                 exact_array_fill || exact_array_shared_read || exact_string_shared_read ||
                 exact_array_ref_place_load || exact_class_object || exact_class_instance ||
-                exact_class_receiver || exact_string_literal || exact_string_concat ||
-                exact_string_convert || exact_direct_string_result || exact_stringbuilder ||
-                exact_stringbuilder_append || exact_stringbuilder_to_string ||
-                exact_stringbuilder_append_string || exact_string_runes ||
-                exact_string_slice_range || exact_json_namespace_value ||
+                exact_class_receiver || exact_string_literal || exact_bigint_literal ||
+                exact_string_concat || exact_string_convert || exact_direct_string_result ||
+                exact_stringbuilder || exact_stringbuilder_append ||
+                exact_stringbuilder_to_string || exact_stringbuilder_append_string ||
+                exact_string_runes || exact_string_slice_range || exact_json_namespace_value ||
                 exact_array_member_result || exact_direct_callee || exact_go_callee ||
                 exact_go_task || exact_channel || exact_source_namespace ||
                 exact_native_module_namespace || exact_string_byte_view || exact_range_slice_view ||
@@ -3505,13 +3485,14 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         exact_array_intrinsic || exact_array_hof_result || exact_array_shared_read ||
         exact_string_shared_read || exact_array_ref_place_load || exact_array_fill ||
         exact_class_instance || exact_class_receiver || exact_string_literal ||
-        exact_string_concat || exact_string_convert || exact_direct_string_result ||
-        exact_stringbuilder || exact_stringbuilder_append || exact_stringbuilder_to_string ||
-        exact_stringbuilder_append_string || exact_string_runes || exact_string_slice_range ||
-        exact_json_namespace_value || exact_array_member_result || exact_direct_callee ||
-        exact_go_callee || exact_go_task || exact_channel || exact_source_namespace ||
-        exact_native_module_namespace || exact_nullable_scalar || exact_adt_enum ||
-        exact_array_value_parameter || exact_string_value_parameter || exact_direct_array_result) {
+        exact_bigint_literal || exact_string_concat || exact_string_convert ||
+        exact_direct_string_result || exact_stringbuilder || exact_stringbuilder_append ||
+        exact_stringbuilder_to_string || exact_stringbuilder_append_string || exact_string_runes ||
+        exact_string_slice_range || exact_json_namespace_value || exact_array_member_result ||
+        exact_direct_callee || exact_go_callee || exact_go_task || exact_channel ||
+        exact_source_namespace || exact_native_module_namespace || exact_nullable_scalar ||
+        exact_adt_enum || exact_array_value_parameter || exact_string_value_parameter ||
+        exact_direct_array_result) {
         expected_kind = XR_MACHINE_REP_DYN_VALUE;
         expected_layout = target_plan_layout_for_type(plan, semantic_type);
         eligibility =

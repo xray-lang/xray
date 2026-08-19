@@ -3907,8 +3907,12 @@ def verify(root: Path, write: bool) -> list[str]:
     # were lifted out of the AOT runtime so both backends could share them.
     # 49: xr_length_source_core.h, naming which count len() answers per kind --
     # code points for a string, not the byte length sitting next to it.
-    if len(actual) != 49:
-        errors.append(f"shared-core inventory must contain exactly 49 headers, found {len(actual)}")
+    # 50: xr_bigint_literal_core.h, stating which base a BigInt literal declared
+    # and where its digits start. The digits travel as text from the front end
+    # to the runtime because no fixed-width slot holds them, and the semantic
+    # plan and the runtime parser both had to answer this on the way.
+    if len(actual) != 50:
+        errors.append(f"shared-core inventory must contain exactly 50 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":

@@ -71,6 +71,7 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_DIRECT_LOCAL_AGGREGATE_RESULT_STORAGE (UINT64_C(1) << 37)
 #define XR_TARGET_FAMILY_STRING_CONVERT_RESULT_STORAGE (UINT64_C(1) << 38)
 #define XR_TARGET_FAMILY_RANGE_SLICE_VIEW_STORAGE (UINT64_C(1) << 39)
+#define XR_TARGET_FAMILY_BIGINT_LITERAL_STORAGE (UINT64_C(1) << 40)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -117,6 +118,7 @@ typedef enum XrTargetExecutionFamily {
     ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                            \
                  XR_TARGET_FAMILY_CALL_ADAPTER | XR_TARGET_FAMILY_CLOSURE_STORAGE |                \
                  XR_TARGET_FAMILY_COROUTINE_STATE_CALL | XR_TARGET_FAMILY_STRING_LITERAL_STORAGE | \
+                 XR_TARGET_FAMILY_BIGINT_LITERAL_STORAGE |                                         \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE |                                    \
                  XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |                                     \
                  XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |                                        \

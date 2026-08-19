@@ -8,6 +8,7 @@
  * xr_semantic_verify.c - Independent SemanticPlan verifier
  */
 
+#include "../../shared/xr_bigint_literal_core.h"
 #include "xr_semantic_verify.h"
 #include "xr_semantic_allocation_shape.h"
 #include "xr_semantic_array_element_storage_shape.h"
@@ -4168,10 +4169,18 @@ static bool verify_constants(const XrSemanticPlan *plan, char *error, size_t err
             constant->kind > XR_SEM_CONST_ENUM_NAMESPACE)
             return report(error, error_size, "XR_SEM_0009",
                           "constant kind or type is not exactly supported");
-        if ((constant->kind == XR_SEM_CONST_STRING ||
+        if ((constant->kind == XR_SEM_CONST_STRING || constant->kind == XR_SEM_CONST_BIGINT ||
              constant->kind == XR_SEM_CONST_ENUM_NAMESPACE) != has_text)
             return report(error, error_size, "XR_SEM_0009",
                           "constant string payload does not match its kind");
+        if (constant->kind == XR_SEM_CONST_BIGINT) {
+            /* The digits are the whole value, so they are checked here rather
+             * than trusted: an optional sign and at least one decimal digit,
+             * nothing else. */
+            if (!xr_bigint_literal_is_wellformed_core(constant->string))
+                return report(error, error_size, "XR_SEM_0009",
+                              "BigInt constant is not a well-formed integer literal");
+        }
         if (constant->kind == XR_SEM_CONST_BOOL && constant->integer != 0 && constant->integer != 1)
             return report(error, error_size, "XR_SEM_0009",
                           "boolean constant is not canonically encoded");

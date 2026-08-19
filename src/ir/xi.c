@@ -371,7 +371,7 @@ void xi_block_add_pred(XiBlock *blk, XiBlock *pred) {
  * variable #0's register in reg_of(), clobbering that live local. The caller
  * assigns args[] (sized differently for phis vs. regular values). */
 static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, struct XrType *type,
-                                         uint16_t nargs, XiBlock *blk, XiSourceSpan source_span) {
+                                        uint16_t nargs, XiBlock *blk, XiSourceSpan source_span) {
     v->id = id;
     v->op = op;
     v->flags = xi_op_default_effects(op);
@@ -579,6 +579,10 @@ XiValue *xi_const_bigint(XiFunc *f, XiBlock *blk, const char *digits, struct XrT
         if (copy)
             memcpy(copy, digits, len + 1);
         v->aux = (void *) copy;
+        /* Say what the payload is, so later layers read the digits by this
+         * mark rather than by recognising the type's name. This is the only
+         * place a BigInt constant is built. */
+        v->aux_kind = XI_AUX_KIND_BIGINT_DIGITS;
     }
     return v;
 }

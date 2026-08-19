@@ -126,6 +126,30 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_bigint_literal_core.h",
+      "id": "bigint-literal",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/plan/semantic/xr_semantic_verify.c",
+        "src/runtime/object/xbigint.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_bigint_literal_digit_value_core",
+        "xr_bigint_literal_is_wellformed_core",
+        "xr_bigint_literal_split_core"
+      ],
+      "status": "production",
+      "test_callers": []
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_bits_core.h",
       "id": "bits",
       "owner": "shared-kernel",

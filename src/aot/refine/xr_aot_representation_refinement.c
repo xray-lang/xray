@@ -8,6 +8,7 @@
  * xr_aot_representation_refinement.c - Immutable representation adapter materialization
  */
 
+#include "../../plan/semantic/xr_semantic_heap_literal_shape.h"
 #include "xr_aot_representation_refinement.h"
 #include "xr_aot_scalar_value.h"
 #include "../../base/xsha256.h"
@@ -761,32 +762,6 @@ static bool semantic_panic_catch_is_exact(const XrSemanticPlan *semantic,
            type->enum_member_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
            type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
            type->enum_flags == 0 && type->reserved_enum == 0;
-}
-
-static bool semantic_string_literal_is_exact(const XrSemanticPlan *semantic,
-                                             const XrSemanticOperationRecord *operation) {
-    if (!semantic || !operation || operation->opcode != XI_CONST || operation->operand_count != 0 ||
-        operation->allocation_key ||
-        operation->constant >= xr_semantic_plan_constant_count(semantic) ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
-        operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
-        operation->return_complete != 1)
-        return false;
-    for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++) {
-        if (operation->allocation_id.bytes[i] != 0)
-            return false;
-    }
-    const XrSemanticConstantRecord *constant =
-        xr_semantic_plan_constant(semantic, operation->constant);
-    const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, operation->result_type);
-    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
-                        XR_SEM_TYPE_AGGREGATE_EXACT;
-    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
-    return constant && constant->kind == XR_SEM_CONST_STRING && constant->string &&
-           constant->type == operation->result_type && type && type->kind == XR_KIND_STRING &&
-           type->child_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           (type->flags & forbidden) == 0 && (type->flags & required) == required;
 }
 
 /* The one integer spelling this container authority admits. Every narrower or
@@ -4350,9 +4325,8 @@ static bool oracle_dynamic_panic_catch_storage(const VerifyAuthority *ctx, uint3
     return true;
 }
 
-static bool oracle_dynamic_string_literal_storage(const VerifyAuthority *ctx,
-                                                  uint32_t semantic_value, XrRep *out_storage,
-                                                  uint16_t *out_machine_kind) {
+static bool oracle_dynamic_heap_literal_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                                XrRep *out_storage, uint16_t *out_machine_kind) {
     if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
         return false;
     uint32_t operation_index = ctx->operation_by_value[semantic_value];
@@ -4360,8 +4334,13 @@ static bool oracle_dynamic_string_literal_storage(const VerifyAuthority *ctx,
         operation_index != XR_SEMANTIC_INDEX_NONE
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
+    /* A String literal and a BigInt literal reach this oracle with the same
+     * answer -- both are heap constants the target plan bound to the dynamic
+     * carrier -- so the storage is read once and each literal is recognised by
+     * its own exact predicate. */
     if (!operation || operation->result_value != semantic_value ||
-        !semantic_string_literal_is_exact(ctx->semantic, operation))
+        (!xr_semantic_string_literal_is_exact(ctx->semantic, operation) &&
+         !xr_semantic_bigint_literal_is_exact(ctx->semantic, operation)))
         return false;
     const XrTargetValueRepRecord *binding =
         xr_target_plan_value_rep(ctx->target_plan, semantic_value);
@@ -4595,8 +4574,7 @@ static bool oracle_string_slice_receiver_storage(const VerifyAuthority *ctx,
                                                  uint16_t *out_machine_kind) {
     return oracle_string_slice_parameter_receiver_storage(ctx, semantic_value, out_storage,
                                                           out_machine_kind) ||
-           oracle_dynamic_string_literal_storage(ctx, semantic_value, out_storage,
-                                                 out_machine_kind);
+           oracle_dynamic_heap_literal_storage(ctx, semantic_value, out_storage, out_machine_kind);
 }
 
 static bool oracle_dynamic_string_slice_range_storage(const VerifyAuthority *ctx,
@@ -7260,9 +7238,10 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
             return true;
         case XI_CONST:
-            if (semantic_string_literal_is_exact(ctx->semantic, operation))
-                return oracle_dynamic_string_literal_storage(ctx, semantic_value, out_storage,
-                                                             out_machine_kind);
+            if (xr_semantic_string_literal_is_exact(ctx->semantic, operation) ||
+                xr_semantic_bigint_literal_is_exact(ctx->semantic, operation))
+                return oracle_dynamic_heap_literal_storage(ctx, semantic_value, out_storage,
+                                                           out_machine_kind);
             break;
         case XI_CALL_METHOD:
             if (operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF)
@@ -8182,6 +8161,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
      * whose representation the plan never froze, or froze as a class this pass
      * names no storage for, is refused here exactly as before; the reference
      * families that carry those answer above. */
+    if (oracle_dynamic_heap_literal_storage(ctx, source_value, out_storage, &ignored_kind))
+        return true;
     return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
 }
 
@@ -8336,8 +8317,8 @@ static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
                                                  uint16_t *out_machine_kind) {
     if (!oracle_resolve_identity_rename(ctx, semantic_value, &semantic_value))
         return false;
-    return oracle_dynamic_string_literal_storage(ctx, semantic_value, out_storage,
-                                                 out_machine_kind) ||
+    return oracle_dynamic_heap_literal_storage(ctx, semantic_value, out_storage,
+                                               out_machine_kind) ||
            oracle_dynamic_string_concat_result_storage(ctx, semantic_value, out_storage,
                                                        out_machine_kind) ||
            oracle_dynamic_string_convert_result_storage(ctx, semantic_value, out_storage,
@@ -8417,7 +8398,7 @@ static bool oracle_return_storage(const VerifyAuthority *ctx, uint32_t value, Xr
            oracle_nullable_scalar_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_closure_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_panic_catch_storage(ctx, value, out_storage, out_machine_kind) ||
-           oracle_dynamic_string_literal_storage(ctx, value, out_storage, out_machine_kind) ||
+           oracle_dynamic_heap_literal_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_string_runes_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_string_slice_range_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_dynamic_string_concat_result_storage(ctx, value, out_storage, out_machine_kind) ||

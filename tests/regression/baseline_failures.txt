@@ -20,8 +20,8 @@
 # at all. A ratchet that neither catches new breakage nor reports its own fixes
 # gates nothing, so the list is re-pinned to measured truth.
 #
-# WHAT THESE 82 ARE: not a backlog of regressions but the work of tasks 269-283
-# seen from the test corpus. 56 of them fail inside the semantic plan, before
+# WHAT THESE 77 ARE: not a backlog of regressions but the work of tasks 269-283
+# seen from the test corpus. 51 of them fail inside the semantic plan, before
 # either backend runs, because the plan layer is fail-closed and does not yet
 # state every construct the corpus uses. The remaining 26 fail earlier or later
 # -- at parse, in the analyzer, or at run time -- and are ordinary defects.
@@ -30,9 +30,9 @@
 #     27  XR_SEM_0019   aggregate field identity / grounded call authority
 #     26  (other)       parse, runtime and analyzer failures
 #      9  XR_SEM_0018
-#      8  XR_SEM_0009   unsupported semantic constant kind
 #      6  XR_OWN_3002   owner class with no ownership-defining site
 #      3  XR_OWN_3001   ownership balance goes negative (see known_bugs)
+#      3  XR_SEM_0009   unsupported semantic constant kind
 #      3  XR_SEM_0016 / XR_OWN_3003 / XR_OWN_3005
 #
 # So this file doubles as the 269-283 coverage worklist: each construct the plan
@@ -41,14 +41,9 @@
 # One test path per line. Comments and blanks ignored.
 # ----------------------------------------------------------------------------
 0011_zero_value_init.xr
-0100_int_basic.xr
 0130_bool_null.xr
 0140_special_values.xr
-0150_bigint_basic.xr
 0350_ternary_nullish.xr
-0360_bigint_arithmetic.xr
-0361_bigint_methods.xr
-0362_bigint_comparison.xr
 0380_optional_chain.xr
 0381_optional_call.xr
 0413_null_unwrap.xr

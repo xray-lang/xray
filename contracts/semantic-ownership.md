@@ -98,9 +98,9 @@ Generated C may not ask the host compiler to rediscover target layout through
 
 ## Digest anchors
 
-anchor-sha256: contracts/semantic-owners.toml 8a99f74ae97b3b6b41643575f77488c46f750bb9c0d896952cdc287af140073f
+anchor-sha256: contracts/semantic-owners.toml 0fe5bbb63e268ad5f28bac216933f15d122a8456d29e15db7393ba9c59f767bb
 anchor-sha256: contracts/semantic-owner-registry.json 1e098ebdba795e659094583d22313330177f556c05b681f1b6bca9ce2c1e92d0
 anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
-anchor-sha256: contracts/shared-core-inventory.json 4ce5399117838bff846bd01171e8af55fe545bc8b5dfa1ed0af956b08c9348ce
+anchor-sha256: contracts/shared-core-inventory.json c7b212ed2905cf932bd9232861462fb195073d38502080d87e6461996178acbc
 anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h fdf67deb4e62a2a71631f828ae64f7f55f8d532c910e948496eb807de6f68e64
-anchor-sha256: scripts/check_semantic_owners.py 920368365225fe59cbf8b1871fdbe5b5e6718118e336dbd9fc703e6b94878c01
+anchor-sha256: scripts/check_semantic_owners.py e2de43f7719a7ff5b1f17ad3406755a780a86b6da79a3421264c339865174405

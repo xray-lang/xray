@@ -13,6 +13,7 @@
  *   the immutable plan, so later families never depend on append order.
  */
 
+#include "../semantic/xr_semantic_heap_literal_shape.h"
 #include "xr_target_builder.h"
 #include "xr_target_instruction_verify.h"
 #include "xr_target_entry_abi.h"
@@ -1120,31 +1121,6 @@ static bool semantic_panic_catch_is_exact(const XrSemanticPlan *plan,
            type->enum_member_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
            type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
            type->enum_flags == 0 && type->reserved_enum == 0;
-}
-
-static bool semantic_string_literal_is_exact(const XrSemanticPlan *plan,
-                                             const XrSemanticOperationRecord *operation) {
-    if (!plan || !operation || operation->opcode != XI_CONST || operation->operand_count != 0 ||
-        operation->constant >= xr_semantic_plan_constant_count(plan) ||
-        operation->allocation_key != NULL ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
-        operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
-        operation->return_complete != 1)
-        return false;
-    for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++) {
-        if (operation->allocation_id.bytes[i] != 0)
-            return false;
-    }
-    const XrSemanticConstantRecord *constant = xr_semantic_plan_constant(plan, operation->constant);
-    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, operation->result_type);
-    return constant && constant->kind == XR_SEM_CONST_STRING && constant->string &&
-           constant->type == operation->result_type && type && type->kind == XR_KIND_STRING &&
-           type->child_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
-                           XR_SEM_TYPE_AGGREGATE_EXACT)) == 0 &&
-           (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) ==
-               (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT);
 }
 
 /* A direct-local call returns an owned String only when the callee, the call
@@ -3377,30 +3353,34 @@ static bool note_string_byte_slice_view_storage_value(XrTargetPlanBuilder *build
            append_value_intent(builder, &value, error, error_size);
 }
 
-static bool note_string_literal_storage_value(XrTargetPlanBuilder *builder,
-                                              XrTargetValueStorageAnalysis *analysis,
-                                              uint32_t semantic_operation, char *error,
-                                              size_t error_size) {
+/* The storage answer for a heap literal, written once for the two families
+ * that reach it. Each caller has already established which literal it holds,
+ * and reports its own family by name on refusal; what remains is the same for
+ * both -- a dynamic value carrier, a temporary slot, a dynamic layout --
+ * because a heap constant is a heap constant however its payload is spelled. */
+static bool note_heap_literal_storage_value(XrTargetPlanBuilder *builder,
+                                            XrTargetValueStorageAnalysis *analysis,
+                                            uint32_t semantic_operation, char *error,
+                                            size_t error_size) {
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
-    if (!semantic_string_literal_is_exact(builder->semantic_plan, operation))
-        return fail(error, error_size, "XR_TARGET_1001",
-                    "string-literal-storage family requires exact literal authority");
+    if (!operation)
+        return fail(error, error_size, "XR_TARGET_1001", "semantic operation is missing");
     if (operation->result_value >= analysis->total_values ||
         operation->result_type >= analysis->type_count ||
         operation->function >= xr_semantic_plan_function_count(builder->semantic_plan))
         return fail(error, error_size, "XR_TARGET_1001",
-                    "semantic string-literal identity is out of range");
+                    "semantic heap-literal identity is out of range");
     XrTargetMachineRepRecord rep;
     if (!make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) ||
         !append_rep_intent(builder, &rep, error, error_size))
         return fail(error, error_size, "XR_TARGET_1001",
-                    "target profile cannot materialize exact String literal storage");
+                    "target profile cannot materialize exact heap literal storage");
     XrStableId slot_identity;
     if (!make_slot_identity(builder->semantic_plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
                             operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
         return fail(error, error_size, "XR_TARGET_1001",
-                    "String literal slot identity is incomplete");
+                    "heap literal slot identity is incomplete");
     XrTargetSlotIntent slot = {
         .identity = slot_identity,
         .function = operation->function,
@@ -3435,6 +3415,32 @@ static bool note_string_literal_storage_value(XrTargetPlanBuilder *builder,
     analysis->type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
     analysis->used_types[operation->result_type] = 1;
     return true;
+}
+
+static bool note_string_literal_storage_value(XrTargetPlanBuilder *builder,
+                                              XrTargetValueStorageAnalysis *analysis,
+                                              uint32_t semantic_operation, char *error,
+                                              size_t error_size) {
+    if (!xr_semantic_string_literal_is_exact(
+            builder->semantic_plan,
+            xr_semantic_plan_operation(builder->semantic_plan, semantic_operation)))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "string-literal-storage family requires exact literal authority");
+    return note_heap_literal_storage_value(builder, analysis, semantic_operation, error,
+                                           error_size);
+}
+
+static bool note_bigint_literal_storage_value(XrTargetPlanBuilder *builder,
+                                              XrTargetValueStorageAnalysis *analysis,
+                                              uint32_t semantic_operation, char *error,
+                                              size_t error_size) {
+    if (!xr_semantic_bigint_literal_is_exact(
+            builder->semantic_plan,
+            xr_semantic_plan_operation(builder->semantic_plan, semantic_operation)))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "bigint-literal-storage family requires exact literal authority");
+    return note_heap_literal_storage_value(builder, analysis, semantic_operation, error,
+                                           error_size);
 }
 
 static bool note_stringbuilder_constructor_storage_value(XrTargetPlanBuilder *builder,
@@ -5708,7 +5714,10 @@ static bool builder_add_panic_catch_storage(XrTargetPlanBuilder *builder, char *
 
 static bool builder_add_string_literal_storage(XrTargetPlanBuilder *builder, char *error,
                                                size_t error_size) {
-    if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRING_LITERAL_STORAGE, error, error_size))
+    if (!builder_begin_family(builder,
+                              XR_TARGET_FAMILY_STRING_LITERAL_STORAGE |
+                                  XR_TARGET_FAMILY_BIGINT_LITERAL_STORAGE,
+                              error, error_size))
         return false;
     XrTargetValueStorageAnalysis analysis = {0};
     bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
@@ -5720,16 +5729,18 @@ static bool builder_add_string_literal_storage(XrTargetPlanBuilder *builder, cha
             valid = fail(error, error_size, "XR_TARGET_1001", "semantic operation is missing");
             break;
         }
-        if (!semantic_string_literal_is_exact(builder->semantic_plan, operation))
-            continue;
-        valid = note_string_literal_storage_value(builder, &analysis, i, error, error_size);
+        if (xr_semantic_string_literal_is_exact(builder->semantic_plan, operation))
+            valid = note_string_literal_storage_value(builder, &analysis, i, error, error_size);
+        else if (xr_semantic_bigint_literal_is_exact(builder->semantic_plan, operation))
+            valid = note_bigint_literal_storage_value(builder, &analysis, i, error, error_size);
     }
     value_storage_analysis_dispose(&analysis);
     if (!valid) {
         builder->poisoned = true;
         return false;
     }
-    builder->completed_family_mask |= XR_TARGET_FAMILY_STRING_LITERAL_STORAGE;
+    builder->completed_family_mask |=
+        XR_TARGET_FAMILY_STRING_LITERAL_STORAGE | XR_TARGET_FAMILY_BIGINT_LITERAL_STORAGE;
     return true;
 }
 

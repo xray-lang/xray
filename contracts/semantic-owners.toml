@@ -28,6 +28,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted"]
 
 [[core]]
+id = "bigint-literal"
+header = "src/shared/xr_bigint_literal_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "bits"
 header = "src/shared/xr_bits_core.h"
 representation = "native"

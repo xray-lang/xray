@@ -1697,6 +1697,20 @@ static bool append_constant(XrSemanticBuildContext *ctx, const XiValue *value,
         operation->constant = ctx->plan->constant_count++;
         return true;
     }
+    if (value->aux_kind == XI_AUX_KIND_BIGINT_DIGITS) {
+        /* An arbitrary-precision literal has no fixed-width home, so the plan
+         * states it the way the front end wrote it: decimal digits. The mark
+         * comes from the single place that builds these, which keeps this off
+         * the type's spelling. */
+        if (!value->aux)
+            return fail(ctx, "XR_SEM_0009", "BigInt constant carries no digits");
+        constant->kind = XR_SEM_CONST_BIGINT;
+        constant->string = xr_semantic_plan_copy_string(ctx->plan, (const char *) value->aux);
+        if (!constant->string)
+            return fail(ctx, "XR_EXEC_5003", "semantic BigInt constant allocation failed");
+        operation->constant = ctx->plan->constant_count++;
+        return true;
+    }
     switch (value->type->kind) {
         case XR_KIND_NULL:
             constant->kind = XR_SEM_CONST_NULL;

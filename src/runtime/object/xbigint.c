@@ -12,6 +12,7 @@
  *   Includes: creation, arithmetic, comparison, conversion.
  */
 
+#include "../../shared/xr_bigint_literal_core.h"
 #include "xbigint.h"
 #include "../../base/xchecks.h"
 #include "../mem/xheap.h"
@@ -141,29 +142,10 @@ XrBigInt *xr_bigint_from_string(struct XrCoroutine *coro, const char *str) {
     if (!str || !*str)
         return NULL;
 
-    // Parse sign
-    int sign = 1;
-    if (*str == '-') {
-        sign = -1;
-        str++;
-    } else if (*str == '+') {
-        str++;
-    }
-
-    // Detect base prefix
-    int base = 10;
-    if (str[0] == '0' && str[1] != '\0') {
-        if (str[1] == 'x' || str[1] == 'X') {
-            base = 16;
-            str += 2;
-        } else if (str[1] == 'b' || str[1] == 'B') {
-            base = 2;
-            str += 2;
-        } else if (str[1] == 'o' || str[1] == 'O') {
-            base = 8;
-            str += 2;
-        }
-    }
+    XrBigIntLiteralCore literal = xr_bigint_literal_split_core(str);
+    int sign = literal.negative ? -1 : 1;
+    int base = literal.base;
+    str = literal.digits;
 
     // Skip leading zeros
     while (*str == '0' && *(str + 1) != '\0') {
@@ -1241,12 +1223,12 @@ XrBigInt *xr_bigint_bitwise(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b,
     return result;
 }
 
-XrBigInt *xr_bigint_shift(struct XrCoroutine *coro, XrBigInt *a, int64_t count,
-                          XrShiftKind kind, XrShiftStatus *status) {
+XrBigInt *xr_bigint_shift(struct XrCoroutine *coro, XrBigInt *a, int64_t count, XrShiftKind kind,
+                          XrShiftStatus *status) {
     XR_DCHECK(a != NULL, "bigint_shift: NULL a");
     XrBigIntShiftPlan plan = XR_SHIFT_BIGINT_OWNER_PLAN(
-        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
-        XR_SEM_CONSUMER_RUNTIME, kind, a->len, xr_bigint_is_zero(a), count);
+        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO, XR_SEM_CONSUMER_RUNTIME,
+        kind, a->len, xr_bigint_is_zero(a), count);
     if (status)
         *status = plan.status;
     if (plan.status != XR_SHIFT_STATUS_OK)
@@ -1256,9 +1238,8 @@ XrBigInt *xr_bigint_shift(struct XrCoroutine *coro, XrBigInt *a, int64_t count,
     if (!result)
         return NULL;
     result->len = XR_SHIFT_BIGINT_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
-        XR_SEM_CONSUMER_RUNTIME, &plan, a->limbs, a->len, a->sign, result->limbs,
-        &result->sign);
+        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO, XR_SEM_CONSUMER_RUNTIME,
+        &plan, a->limbs, a->len, a->sign, result->limbs, &result->sign);
     XR_DCHECK(result->len != 0, "bigint_shift: validated owner plan failed");
     return result;
 }
