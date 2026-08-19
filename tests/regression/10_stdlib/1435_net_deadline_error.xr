@@ -37,9 +37,9 @@ fn acceptAndClose(lst: NetListener) {
 
 @test
 fn test_accept_deadline_timeout() {
-    var maybeLst = tryListen(8)
+    const maybeLst = tryListen(8)
     if (maybeLst == null) { return }
-    var lst = maybeLst!
+    const lst = maybeLst!
     var deadline = time.monotonic() + 20
     assert_true(net.setAcceptDeadline(lst, deadline))
 
@@ -55,9 +55,9 @@ fn test_accept_deadline_timeout() {
 fn test_accept_closed_reports_closed() {
     // The other half of the accept null contract: a closed listener
     // reports NetError.Closed, distinct from a deadline elapse.
-    var maybeLst = tryListen(8)
+    const maybeLst = tryListen(8)
     if (maybeLst == null) { return }
-    var lst = maybeLst!
+    const lst = maybeLst!
     net.close(lst)
 
     var conn = net.accept(lst)
@@ -67,9 +67,9 @@ fn test_accept_closed_reports_closed() {
 
 @test
 fn test_read_deadline_timeout() {
-    var maybeLst = tryListen(8)
+    const maybeLst = tryListen(8)
     if (maybeLst == null) { return }
-    var lst = maybeLst!
+    const lst = maybeLst!
     var port = lst.port()
     go acceptSlowWrite(lst)
 
@@ -89,9 +89,9 @@ fn test_read_deadline_timeout() {
 
 @test
 fn test_closed_handle_error() {
-    var maybeLst = tryListen(8)
+    const maybeLst = tryListen(8)
     if (maybeLst == null) { return }
-    var lst = maybeLst!
+    const lst = maybeLst!
     var port = lst.port()
     go acceptAndClose(lst)
 

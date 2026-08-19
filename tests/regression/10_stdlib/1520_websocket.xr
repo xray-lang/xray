@@ -5,7 +5,8 @@ import ws
 @test
 fn test_ws_apis_exist() {
     assert(typeName(ws.connect) == "function")
-    assert(typeName(ws.send) == "function")
+    assert(typeName(ws.sendText) == "function")
+    assert(typeName(ws.sendBytes) == "function")
     assert(typeName(ws.recv) == "function")
     assert(typeName(ws.close) == "function")
     assert(typeName(ws.ping) == "function")
