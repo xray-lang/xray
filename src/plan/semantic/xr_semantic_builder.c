@@ -8,6 +8,7 @@
  * xr_semantic_builder.c - Xi to immutable SemanticPlan construction
  */
 
+#include "xr_semantic_array_type_shape.h"
 #include "xr_semantic_builder.h"
 #include "xr_semantic_array_element_storage_shape.h"
 #include "xr_semantic_builtin_identity_shape.h"
@@ -3082,26 +3083,6 @@ static bool xi_array_member_scalar_exact(const XiValue *value) {
     }
 }
 
-/* Recomputed from the frozen records: the array header pins every type bit the
- * key carries, and the element clause is proven separately through the child
- * table so the argument contract is checked against the receiver's own
- * element rather than against a spelled type name. */
-static bool semantic_array_member_receiver_type_exact(const XrSemanticTypeRecord *type) {
-    char expected[96];
-    int length = snprintf(expected, sizeof(expected),
-                          "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
-                          (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
-    XrStableId zero = {{0}};
-    return type && length > 0 && (size_t) length < sizeof(expected) &&
-           type->kind == XR_KIND_ARRAY && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 1 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE &&
-           xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
-           strncmp(type->canonical_key, expected, (size_t) length) == 0;
-}
-
 static bool semantic_array_member_unit_type_exact(const XrSemanticTypeRecord *type) {
     char expected[96];
     int length = snprintf(expected, sizeof(expected),
@@ -3145,7 +3126,7 @@ static bool semantic_array_reserve_exact(const XrSemanticBuildContext *ctx,
         receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
     const XrSemanticTypeRecord *capacity_type =
         capacity->type < ctx->plan->type_count ? &ctx->plan->types[capacity->type] : NULL;
-    return semantic_array_member_receiver_type_exact(receiver_type) &&
+    return xr_semantic_array_type_row_is_exact(receiver_type) &&
            semantic_array_member_i64_type_exact(capacity_type) &&
            record->result_type == receiver->type && record->result_alias_operand == 0 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
@@ -3207,7 +3188,7 @@ static bool semantic_array_hof_exact(const XrSemanticBuildContext *ctx, const Xi
     const XrSemanticOperandRecord *operands = &ctx->plan->operands[record->operand_begin];
     const XrSemanticTypeRecord *receiver_type =
         operands[0].type < ctx->plan->type_count ? &ctx->plan->types[operands[0].type] : NULL;
-    if (!semantic_array_member_receiver_type_exact(receiver_type) ||
+    if (!xr_semantic_array_type_row_is_exact(receiver_type) ||
         receiver_type->child_begin >= ctx->plan->type_child_count)
         return false;
     uint32_t receiver_element = ctx->plan->type_children[receiver_type->child_begin];
@@ -3221,7 +3202,7 @@ static bool semantic_array_hof_exact(const XrSemanticBuildContext *ctx, const Xi
         const XrSemanticTypeRecord *result_array = record->result_type < ctx->plan->type_count
                                                        ? &ctx->plan->types[record->result_type]
                                                        : NULL;
-        if (!semantic_array_member_receiver_type_exact(result_array) ||
+        if (!xr_semantic_array_type_row_is_exact(result_array) ||
             result_array->child_begin >= ctx->plan->type_child_count)
             return false;
         result_element = ctx->plan->type_children[result_array->child_begin];
@@ -3328,7 +3309,7 @@ static bool semantic_array_fill_scalar_exact(const XrSemanticBuildContext *ctx,
     const XrSemanticOperandRecord *fill = receiver + 1;
     const XrSemanticTypeRecord *receiver_type =
         receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
-    if (!semantic_array_member_receiver_type_exact(receiver_type) ||
+    if (!xr_semantic_array_type_row_is_exact(receiver_type) ||
         receiver_type->child_begin >= ctx->plan->type_child_count)
         return false;
     uint32_t element_index = ctx->plan->type_children[receiver_type->child_begin];
@@ -3392,7 +3373,7 @@ static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx
         receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
     const XrSemanticTypeRecord *result_type =
         record->result_type < ctx->plan->type_count ? &ctx->plan->types[record->result_type] : NULL;
-    if (!shape || !semantic_array_member_receiver_type_exact(receiver_type) ||
+    if (!shape || !xr_semantic_array_type_row_is_exact(receiver_type) ||
         receiver_type->child_begin >= ctx->plan->type_child_count)
         return false;
     uint32_t element_type_index = ctx->plan->type_children[receiver_type->child_begin];
@@ -3860,23 +3841,21 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR;
     if (value->array_hof_kind != XI_ARRAY_HOF_NONE) {
         uint32_t callback = XR_SEMANTIC_INDEX_NONE;
-        if (!semantic_array_hof_exact(ctx, function, value, record, &callback)) {
-            if (ctx->error && ctx->error_size)
-                snprintf(ctx->error, ctx->error_size,
-                         "XR_SEM_0019: Array higher-order authority is not exact "
-                         "kind=%u source-storage=%u result-storage=%u operands=%u "
-                         "result-type=%u ownership=%u return=%u/%u alias=%d callback=%u",
-                         value->array_hof_kind, value->array_element_storage,
-                         value->array_result_element_storage, record->operand_count,
-                         record->result_type, record->result_ownership, record->return_provenance,
-                         record->return_complete, record->result_alias_operand, callback);
-            return false;
+        /* Lowering marks a higher-order call before captures are computed, so
+         * its mark is a candidate rather than a finding: a callback that later
+         * turns out to capture -- which lowering saw as capture-free -- cannot
+         * carry higher-order authority, because that authority rests on the
+         * callback needing no environment. The plan is the authority, and when
+         * it declines, the call is simply an ordinary method call and records
+         * no higher-order row. Refusing the whole function instead rejected
+         * every `arr.map(fn(x) { ... factor ... })` in the program. */
+        if (semantic_array_hof_exact(ctx, function, value, record, &callback)) {
+            record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_HOF;
+            record->array_hof_kind = semantic_array_hof_kind_from_xi(value->array_hof_kind);
+            record->array_element_storage = value->array_element_storage;
+            record->array_result_element_storage = value->array_result_element_storage;
+            record->callable_function = callback;
         }
-        record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_HOF;
-        record->array_hof_kind = semantic_array_hof_kind_from_xi(value->array_hof_kind);
-        record->array_element_storage = value->array_element_storage;
-        record->array_result_element_storage = value->array_result_element_storage;
-        record->callable_function = callback;
     }
     if (value->array_member_kind == XI_ARRAY_MEMBER_FILL &&
         semantic_array_fill_scalar_exact(ctx, record, value->array_element_storage)) {

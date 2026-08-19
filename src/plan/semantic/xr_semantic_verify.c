@@ -8,6 +8,7 @@
  * xr_semantic_verify.c - Independent SemanticPlan verifier
  */
 
+#include "xr_semantic_array_type_shape.h"
 #include "../../shared/xr_bigint_literal_core.h"
 #include "xr_semantic_verify.h"
 #include "xr_semantic_allocation_shape.h"
@@ -1910,38 +1911,6 @@ static bool verify_json_namespace_value(const XrSemanticPlan *plan,
  * consumes an element or moves elements inside the container, and that traffic
  * must stay free of any reference-count obligation for this authority to be
  * complete. */
-/* Nullability is a fact about the reference, not about what the array holds:
- * a non-null `Array<T>?` lays its elements out exactly as `Array<T>` does, and
- * a null one has no elements at all. Element-storage authority therefore reads
- * the same for both, so the row is accepted with or without the flag -- and
- * the canonical key, which encodes it, is matched in both spellings rather
- * than by skipping the field. */
-static bool semantic_type_is_exact_member_array(const XrSemanticTypeRecord *type) {
-    char expected[96];
-    char expected_nullable[96];
-    int length = snprintf(expected, sizeof(expected),
-                          "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
-                          (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
-    int nullable_length =
-        snprintf(expected_nullable, sizeof(expected_nullable),
-                 "type-v3:%u:0:%u:1:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
-                 (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
-    XrStableId zero = {{0}};
-    const uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
-    if (!type || length <= 0 || (size_t) length >= sizeof(expected) || nullable_length <= 0 ||
-        (size_t) nullable_length >= sizeof(expected_nullable))
-        return false;
-    if (type->kind != XR_KIND_ARRAY || type->builtin_type != XR_TID_NULL ||
-        type->child_count != 1 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
-        type->scalar_rep != XR_SCALAR_REP_NONE ||
-        (type->flags & ~(uint8_t) XR_SEM_TYPE_NULLABLE) != required ||
-        type->source_class != XR_SEMANTIC_INDEX_NONE ||
-        !xr_stable_id_equal(type->source_class_identity, zero) || !type->canonical_key)
-        return false;
-    return (type->flags & XR_SEM_TYPE_NULLABLE)
-               ? strncmp(type->canonical_key, expected_nullable, (size_t) nullable_length) == 0
-               : strncmp(type->canonical_key, expected, (size_t) length) == 0;
-}
 
 static bool semantic_type_is_exact_member_unit(const XrSemanticTypeRecord *type) {
     char expected[96];
@@ -1983,7 +1952,7 @@ static bool verify_array_reserve(const XrSemanticPlan *plan,
         receiver->type < plan->type_count ? &plan->types[receiver->type] : NULL;
     const XrSemanticTypeRecord *capacity_type =
         capacity->type < plan->type_count ? &plan->types[capacity->type] : NULL;
-    return semantic_type_is_exact_member_array(receiver_type) &&
+    return xr_semantic_array_type_row_is_exact(receiver_type) &&
            semantic_type_is_exact_member_i64(capacity_type) &&
            operation->result_type == receiver->type && operation->result_alias_operand == 0 &&
            operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
@@ -2037,7 +2006,7 @@ static bool verify_array_fill_scalar(const XrSemanticPlan *plan,
     uint8_t storage = xr_semantic_array_element_storage(element);
     bool exact =
         operation->opcode == XI_CALL_METHOD && receiver && fill &&
-        semantic_type_is_exact_member_array(receiver_type) && fill->type == element_index &&
+        xr_semantic_array_type_row_is_exact(receiver_type) && fill->type == element_index &&
         storage > XR_ELEM_ANY && storage < XR_ELEM_RAWPTR &&
         operation->array_element_storage == storage && operation->result_type == receiver->type &&
         operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count &&
@@ -2081,7 +2050,7 @@ static bool verify_array_hof(const XrSemanticPlan *plan, const XrSemanticOperati
     const XrSemanticTypeRecord *receiver_type =
         operands && operands[0].type < plan->type_count ? &plan->types[operands[0].type] : NULL;
     uint32_t receiver_element = receiver_type &&
-                                        semantic_type_is_exact_member_array(receiver_type) &&
+                                        xr_semantic_array_type_row_is_exact(receiver_type) &&
                                         receiver_type->child_begin < plan->type_child_count
                                     ? plan->type_children[receiver_type->child_begin]
                                     : XR_SEMANTIC_INDEX_NONE;
@@ -2128,7 +2097,7 @@ static bool verify_array_hof(const XrSemanticPlan *plan, const XrSemanticOperati
     if (exact && operation->array_hof_kind != XR_SEM_ARRAY_HOF_REDUCE) {
         const XrSemanticTypeRecord *result_array =
             operation->result_type < plan->type_count ? &plan->types[operation->result_type] : NULL;
-        exact = semantic_type_is_exact_member_array(result_array) &&
+        exact = xr_semantic_array_type_row_is_exact(result_array) &&
                 result_array->child_begin < plan->type_child_count;
         if (exact)
             result_element = plan->type_children[result_array->child_begin];
@@ -2231,7 +2200,7 @@ static bool verify_array_allocation_storage(const XrSemanticPlan *plan,
                       "non-scalar Array allocation carries element-storage authority");
     bool exact =
         array_type && element && capacity && capacity_type &&
-        semantic_type_is_exact_member_array(array_type) &&
+        xr_semantic_array_type_row_is_exact(array_type) &&
         expected_storage == operation->array_element_storage &&
         operation->array_element_storage > XR_ELEM_ANY &&
         operation->array_element_storage < XR_ELEM_RAWPTR &&
@@ -2295,7 +2264,7 @@ static bool verify_array_intrinsic(const XrSemanticPlan *plan,
         operands && operands[0].type < plan->type_count ? &plan->types[operands[0].type] : NULL;
     bool exact =
         operation->opcode == XI_CALL_BUILTIN && operands &&
-        semantic_type_is_exact_member_array(array_type) && element && count &&
+        xr_semantic_array_type_row_is_exact(array_type) && element && count &&
         xr_semantic_array_element_storage(element) == operation->array_element_storage &&
         operation->array_element_storage > XR_ELEM_ANY &&
         operation->array_element_storage < XR_ELEM_RAWPTR &&
@@ -2384,7 +2353,7 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
     bool exact =
         operation->opcode == XI_CALL_METHOD && operation->semantic_immediate > 0 &&
         (operation->semantic_immediate & 1) == 0 && receiver &&
-        semantic_type_is_exact_member_array(receiver_type) &&
+        xr_semantic_array_type_row_is_exact(receiver_type) &&
         receiver_type->child_begin < plan->type_child_count &&
         semantic_array_member_result_is_exact(operation, shape, result_type, receiver->type) &&
         operation->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
