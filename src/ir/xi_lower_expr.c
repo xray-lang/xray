@@ -8313,6 +8313,7 @@ static XiValue *lower_bound_method_closure(XiLower *l, AstNode *node, MemberAcce
     cap->env_offset = -1;
     cap->is_reassigned = false;
     cap->needs_cell = false;
+    xi_capture_publish_synthetic_semantics(cap);
     child_l.func->ncaptures = 1;
 
     XiValue *captured_recv =

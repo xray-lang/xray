@@ -32,6 +32,8 @@
 
 #include "xi.h"
 #include "xi_module.h"
+#include "../base/xstorage.h"
+#include "../frontend/analyzer/xa_ownership.h"
 
 struct AstNode;
 struct XaAnalyzer;
@@ -55,6 +57,21 @@ struct XrVMRuntime;
 #define XI_LOWER_INIT_VARS 256
 #define XI_LOWER_INIT_BLOCKS 256
 #define XI_LOWER_MAX_INCOMPLETE 256
+
+/* The semantics of a capture this lowering synthesised rather than resolved
+ * from a source symbol -- `this`, a method call's receiver. Such a variable
+ * lives in the frame that created it: not module-static, not const-shared, not
+ * foreign, so its domain is the executing frame. Its capability matches what
+ * the analyzer publishes for an ordinary captured class instance, which is
+ * what these receivers are. Left unstated, the semantic plan refuses every
+ * closure over them (XR_SEM_0018), so the answer is written once here rather
+ * than at each site that builds one. */
+static inline void xi_capture_publish_synthetic_semantics(struct XiCapture *capture) {
+    if (!capture)
+        return;
+    capture->storage_domain = XR_STORAGE_EXEC_LOCAL;
+    capture->value_capability = XA_CAP_MUTABLE;
+}
 
 typedef struct XiVarEntry {
     uint32_t symbol_id;     /* unique ID from analyzer (0 = unresolved / synthetic) */

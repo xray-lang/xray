@@ -44,10 +44,13 @@ static void xi_lower_capture_publish_semantics(XiLower *owner, uint32_t symbol_i
                                                XiCapture *capture) {
     if (!capture)
         return;
-    capture->storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
-    capture->value_capability = XA_CAP_UNKNOWN;
+    /* XiVarEntry documents symbol id 0 as synthetic, and `this` is what
+     * reaches here with one. */
+    xi_capture_publish_synthetic_semantics(capture);
     if (!owner || !owner->analyzer || symbol_id == 0)
         return;
+    capture->storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
+    capture->value_capability = XA_CAP_UNKNOWN;
     XaSymbol *symbol = xa_scope_lookup_by_id(owner->analyzer->global_scope, symbol_id);
     XaSymbolLinks *links = symbol ? xa_analyzer_get_links(owner->analyzer, symbol) : NULL;
     if (!links)

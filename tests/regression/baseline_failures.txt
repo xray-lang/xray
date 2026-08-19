@@ -20,8 +20,8 @@
 # at all. A ratchet that neither catches new breakage nor reports its own fixes
 # gates nothing, so the list is re-pinned to measured truth.
 #
-# WHAT THESE 77 ARE: not a backlog of regressions but the work of tasks 269-283
-# seen from the test corpus. 51 of them fail inside the semantic plan, before
+# WHAT THESE 75 ARE: not a backlog of regressions but the work of tasks 269-283
+# seen from the test corpus. 49 of them fail inside the semantic plan, before
 # either backend runs, because the plan layer is fail-closed and does not yet
 # state every construct the corpus uses. The remaining 26 fail earlier or later
 # -- at parse, in the analyzer, or at run time -- and are ordinary defects.
@@ -29,7 +29,9 @@
 #
 #     27  XR_SEM_0019   aggregate field identity / grounded call authority
 #     26  (other)       parse, runtime and analyzer failures
-#      9  XR_SEM_0018
+#      7  XR_SEM_0018   capture with no storage domain (see known_bugs: the
+#                       analyzer publishes one only for escape, transfer and
+#                       const-shared, so an ordinary local arrives unknown)
 #      6  XR_OWN_3002   owner class with no ownership-defining site
 #      3  XR_OWN_3001   ownership balance goes negative (see known_bugs)
 #      3  XR_SEM_0009   unsupported semantic constant kind
@@ -60,9 +62,7 @@
 0760_concurrent_concat_property.xr
 0804_self_returning_method_rc.xr
 0830_getter_setter.xr
-0835_this_in_closure.xr
 0841_operator_overload_compat.xr
-0870_advanced.xr
 0881_nested_iterator_combo.xr
 0911_dump_builtin.xr
 0915_shared_for_go.xr
