@@ -1910,20 +1910,37 @@ static bool verify_json_namespace_value(const XrSemanticPlan *plan,
  * consumes an element or moves elements inside the container, and that traffic
  * must stay free of any reference-count obligation for this authority to be
  * complete. */
+/* Nullability is a fact about the reference, not about what the array holds:
+ * a non-null `Array<T>?` lays its elements out exactly as `Array<T>` does, and
+ * a null one has no elements at all. Element-storage authority therefore reads
+ * the same for both, so the row is accepted with or without the flag -- and
+ * the canonical key, which encodes it, is matched in both spellings rather
+ * than by skipping the field. */
 static bool semantic_type_is_exact_member_array(const XrSemanticTypeRecord *type) {
     char expected[96];
+    char expected_nullable[96];
     int length = snprintf(expected, sizeof(expected),
                           "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
                           (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
+    int nullable_length =
+        snprintf(expected_nullable, sizeof(expected_nullable),
+                 "type-v3:%u:0:%u:1:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
+                 (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
     XrStableId zero = {{0}};
-    return type && length > 0 && (size_t) length < sizeof(expected) &&
-           type->kind == XR_KIND_ARRAY && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 1 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE &&
-           xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
-           strncmp(type->canonical_key, expected, (size_t) length) == 0;
+    const uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
+    if (!type || length <= 0 || (size_t) length >= sizeof(expected) || nullable_length <= 0 ||
+        (size_t) nullable_length >= sizeof(expected_nullable))
+        return false;
+    if (type->kind != XR_KIND_ARRAY || type->builtin_type != XR_TID_NULL ||
+        type->child_count != 1 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->scalar_rep != XR_SCALAR_REP_NONE ||
+        (type->flags & ~(uint8_t) XR_SEM_TYPE_NULLABLE) != required ||
+        type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(type->source_class_identity, zero) || !type->canonical_key)
+        return false;
+    return (type->flags & XR_SEM_TYPE_NULLABLE)
+               ? strncmp(type->canonical_key, expected_nullable, (size_t) nullable_length) == 0
+               : strncmp(type->canonical_key, expected, (size_t) length) == 0;
 }
 
 static bool semantic_type_is_exact_member_unit(const XrSemanticTypeRecord *type) {
