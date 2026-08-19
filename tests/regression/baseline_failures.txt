@@ -41,7 +41,6 @@
 #
 # One test path per line. Comments and blanks ignored.
 # ----------------------------------------------------------------------------
-0011_zero_value_init.xr
 0140_special_values.xr
 0381_optional_call.xr
 0511_tail_recursion.xr
@@ -49,12 +48,9 @@
 0741_context_buffer_isolation.xr
 0830_getter_setter.xr
 0841_operator_overload_compat.xr
-0881_nested_iterator_combo.xr
 0911_dump_builtin.xr
-0915_shared_for_go.xr
 0940_edge_cases.xr
 0950_exception.xr
-0961_enum_static_iteration_control_flow.xr
 1020_math.xr
 1106_select.xr
 1111_comprehensive.xr
@@ -66,10 +62,7 @@
 1157_work_queue_generic_class.xr
 1161_multiple_task_awaiters.xr
 1162_overlapping_await_any_waiters.xr
-1166_countdown_latch_native.xr
 1167_channel_explicit_transfer.xr
-1167_semaphore_native.xr
-1171_shared_block_capture.xr
 1172_enum_descriptor_erased_transfer.xr
 1172_module_readonly_capture.xr
 1174_channel_tuple_buffer_transfer.xr
@@ -81,8 +74,6 @@
 1302_is_builtin_native_class.xr
 1370_tuple_generic_args.xr
 1410_shared_provenance_rebind_reset.xr
-1416_comptime_struct_value.xr
-1418_comptime_block_value.xr
 1418_shared_provenance_readonly_closure_capture.xr
 1433_net_loopback.xr
 1434_net_byte_array_loopback.xr
