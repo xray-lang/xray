@@ -294,6 +294,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
+id = "string-concat"
+header = "src/shared/xr_string_concat_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "target-simd"
 header = "src/shared/xr_target_simd_core.h"
 representation = "native"

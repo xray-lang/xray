@@ -3901,8 +3901,12 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 47:
-        errors.append(f"shared-core inventory must contain exactly 47 headers, found {len(actual)}")
+    # Adding a shared kernel is a deliberate act -- one more place semantics can
+    # live -- so the count is pinned and raising it requires saying why here.
+    # 48: xr_string_concat_core.h, added when string concatenation's two passes
+    # were lifted out of the AOT runtime so both backends could share them.
+    if len(actual) != 48:
+        errors.append(f"shared-core inventory must contain exactly 48 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":

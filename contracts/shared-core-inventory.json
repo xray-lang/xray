@@ -1441,6 +1441,28 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_string_concat_core.h",
+      "id": "string-concat",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_arith.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_string_concat_copy_core",
+        "xr_string_concat_total_core"
+      ],
+      "status": "production",
+      "test_callers": []
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_string_core.h",
       "id": "string",
       "owner": "shared-kernel",
