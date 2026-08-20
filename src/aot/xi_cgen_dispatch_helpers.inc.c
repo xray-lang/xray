@@ -15600,10 +15600,15 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_codegen_abort_expr(out);
         return;
     }
-    const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v);
+    XrRep adapter_rep = XR_REP_VOID;
+    bool adapter_states_rep = cg_rep_adapter_storage_rep(v, &adapter_rep);
+    const XaotValuePlan *value_plan =
+        adapter_states_rep ? NULL : cg_value_plan_require_legacy(ctx, v);
     XrCValueEmissionView emission;
     CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, f, v, &emission);
-    XrRep result_rep = value_plan ? xaot_value_storage_rep(value_plan->rep) : XR_REP_RAWPTR;
+    XrRep result_rep = adapter_states_rep ? adapter_rep
+                       : value_plan       ? xaot_value_storage_rep(value_plan->rep)
+                                          : XR_REP_RAWPTR;
     const char *result_c_type = emission_status == CG_VALUE_EMISSION_FOUND &&
                                         emission.rep == XR_C_VALUE_REP_RAW_PTR && emission.c_type
                                     ? emission.c_type

@@ -85,6 +85,13 @@ static bool cg_rep_adapter_storage_rep(const XiValue *v, XrRep *out) {
         *out = xaot_value_storage_rep(xaot_value_rep_for_type(v->type));
         return true;
     }
+    /* Taking an address yields a raw pointer whatever the local holds. The
+     * emitter already fell back to exactly this when no row existed, and the
+     * rows that did exist all said the same. */
+    if (v->op == XI_LOCAL_ADDR) {
+        *out = XR_REP_RAWPTR;
+        return true;
+    }
     return false;
 }
 
