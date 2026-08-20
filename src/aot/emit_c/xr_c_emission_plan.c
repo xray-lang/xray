@@ -189,6 +189,103 @@ static bool exact_direct_local_array_ref_parameter_recipe(const XrTargetPlan *ta
                                                           const XrTargetValueRepRecord *binding,
                                                           uint8_t *out_storage);
 
+/* The C boundary a function states for itself, used only where no call in this
+ * plan states one for it.
+ *
+ * A boundary representation is normally a fact about the call rather than about
+ * the declared type: measured over the whole corpus, 6 of 125 comparable
+ * returns cross tagged while their declaration names a scalar. So a declaration
+ * never overrides a call that names a representation -- this is the answer of
+ * last resort, for a function no call in this module reaches.
+ *
+ * Only non-nullable scalars answer. An aggregate's or a reference's boundary
+ * genuinely depends on the convention its caller uses and cannot be read off
+ * the declaration, so those keep the fail-closed refusal. */
+static bool declared_scalar_c_rep(const XrSemanticTypeRecord *type, XrCValueRep *out,
+                                  const char **c_type) {
+    if (!type || !out || !c_type || (type->flags & XR_SEM_TYPE_NULLABLE) != 0)
+        return false;
+    uint8_t native = type->scalar_rep;
+    if (native == XR_SCALAR_REP_NONE) {
+        switch (type->kind) {
+            case XR_KIND_INT:
+                native = XR_NATIVE_I64;
+                break;
+            case XR_KIND_FLOAT:
+                native = XR_NATIVE_F64;
+                break;
+            case XR_KIND_BOOL:
+                native = XR_NATIVE_BOOL;
+                break;
+            default:
+                return false;
+        }
+    }
+    switch ((XrNativeType) native) {
+        case XR_NATIVE_I8:
+            *out = XR_C_VALUE_REP_I8;
+            *c_type = "int8_t";
+            return true;
+        case XR_NATIVE_U8:
+            *out = XR_C_VALUE_REP_U8;
+            *c_type = "uint8_t";
+            return true;
+        case XR_NATIVE_I16:
+            *out = XR_C_VALUE_REP_I16;
+            *c_type = "int16_t";
+            return true;
+        case XR_NATIVE_U16:
+            *out = XR_C_VALUE_REP_U16;
+            *c_type = "uint16_t";
+            return true;
+        case XR_NATIVE_I32:
+            *out = XR_C_VALUE_REP_I32;
+            *c_type = "int32_t";
+            return true;
+        case XR_NATIVE_U32:
+            *out = XR_C_VALUE_REP_U32;
+            *c_type = "uint32_t";
+            return true;
+        case XR_NATIVE_I64:
+            *out = XR_C_VALUE_REP_I64;
+            *c_type = "int64_t";
+            return true;
+        case XR_NATIVE_U64:
+            *out = XR_C_VALUE_REP_U64;
+            *c_type = "uint64_t";
+            return true;
+        case XR_NATIVE_ISIZE:
+            *out = XR_C_VALUE_REP_ISIZE;
+            *c_type = "ptrdiff_t";
+            return true;
+        case XR_NATIVE_USIZE:
+            *out = XR_C_VALUE_REP_USIZE;
+            *c_type = "size_t";
+            return true;
+        case XR_NATIVE_F32:
+            *out = XR_C_VALUE_REP_F32;
+            *c_type = "float";
+            return true;
+        case XR_NATIVE_F64:
+            *out = XR_C_VALUE_REP_F64;
+            *c_type = "double";
+            return true;
+        case XR_NATIVE_BOOL:
+            *out = XR_C_VALUE_REP_BOOL;
+            *c_type = "uint8_t";
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* Whether this function's boundary may be stated by its own declaration.
+ * An extern's convention comes from the foreign contract it binds to, never
+ * from the Xray types written for it, so it is excluded. */
+static bool function_states_own_boundary(const XrSemanticFunctionRecord *function) {
+    return function && (function->flags & XR_SEM_FUNCTION_EXTERN) == 0;
+}
+
 static bool machine_kind_to_c_rep(const XrTargetPlan *target_plan, uint32_t semantic_value,
                                   uint16_t kind, XrCValueRep *out, const char **c_type) {
     if (!out || !c_type)
@@ -4703,6 +4800,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             for (uint16_t ordinal = 0; complete && ordinal <= function->parameter_count;
                  ordinal++) {
                 uint32_t subject = XR_SEMANTIC_INDEX_NONE;
+                uint32_t declared_type = XR_SEMANTIC_INDEX_NONE;
                 uint8_t slot_class = XR_C_ABI_SLOT_VALUE;
                 if (ordinal > 0) {
                     const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(
@@ -4712,6 +4810,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                         break;
                     }
                     subject = parameter->value;
+                    declared_type = parameter->type;
                     slot_class = parameter->mode == XR_PARAM_REF ? XR_C_ABI_SLOT_BORROWED_PLACE
                                                                  : XR_C_ABI_SLOT_VALUE;
                 }
@@ -4780,10 +4879,16 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                             agreed ? xr_target_plan_machine_rep(target_plan,
                                                                 agreed->result_register_rep)
                                    : NULL;
-                        if (!return_rep ||
-                            !machine_kind_to_c_rep(target_plan, agreed->result_value,
-                                                   return_rep->kind, &rep, &c_type) ||
-                            !c_type) {
+                        if (!agreed && function_states_own_boundary(function) &&
+                            declared_scalar_c_rep(
+                                xr_semantic_plan_type(semantic, function->return_type), &rep,
+                                &c_type)) {
+                            /* Stated by the function, not inferred from callers
+                             * it does not have. */
+                        } else if (!return_rep ||
+                                   !machine_kind_to_c_rep(target_plan, agreed->result_value,
+                                                          return_rep->kind, &rep, &c_type) ||
+                                   !c_type) {
                             complete = false;
                             break;
                         }
@@ -4821,33 +4926,42 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                         agreed
                             ? xr_target_plan_machine_rep(target_plan, agreed->callee_register_rep)
                             : NULL;
-                    if (!boundary ||
-                        !machine_kind_to_c_rep(target_plan, subject, boundary->kind, &rep,
-                                               &c_type) ||
-                        !c_type) {
+                    if (!agreed && slot_class == XR_C_ABI_SLOT_VALUE &&
+                        function_states_own_boundary(function) &&
+                        declared_scalar_c_rep(xr_semantic_plan_type(semantic, declared_type), &rep,
+                                              &c_type)) {
+                        /* Same reason as the return row. A borrowed place is
+                         * excluded: how a place crosses is a property of the
+                         * call, never of the declared type. */
+                    } else if (!boundary ||
+                               !machine_kind_to_c_rep(target_plan, subject, boundary->kind, &rep,
+                                                      &c_type) ||
+                               !c_type) {
                         complete = false;
                         break;
-                    }
-                    register_rep = boundary;
-                    memory_rep = xr_target_plan_machine_rep(target_plan, agreed->callee_memory_rep);
-                    /* A place crosses as a pointer, so the callee side of the row
-                     * describes the pointer and cannot say what is pointed at.
-                     * The caller side can: the caller holds the thing and passes
-                     * its address, so its representation IS the pointee's. The
-                     * parameter's own value representation is not a substitute --
-                     * inside the callee a `ref` parameter is held as the pointer
-                     * too, so it answers the same thing the callee side does. */
-                    if (slot_class == XR_C_ABI_SLOT_BORROWED_PLACE) {
-                        const XrTargetMachineRepRecord *pointee =
-                            xr_target_plan_machine_rep(target_plan, agreed->register_rep);
-                        XrCValueRep held_rep = XR_C_VALUE_REP_VOID;
-                        const char *held_c_type = NULL;
-                        if (pointee &&
-                            machine_kind_to_c_rep(target_plan, agreed->semantic_value,
-                                                  pointee->kind, &held_rep, &held_c_type) &&
-                            held_c_type) {
-                            pointee_rep = held_rep;
-                            pointee_c_type = held_c_type;
+                    } else {
+                        register_rep = boundary;
+                        memory_rep =
+                            xr_target_plan_machine_rep(target_plan, agreed->callee_memory_rep);
+                        /* A place crosses as a pointer, so the callee side of the row
+                         * describes the pointer and cannot say what is pointed at.
+                         * The caller side can: the caller holds the thing and passes
+                         * its address, so its representation IS the pointee's. The
+                         * parameter's own value representation is not a substitute --
+                         * inside the callee a `ref` parameter is held as the pointer
+                         * too, so it answers the same thing the callee side does. */
+                        if (slot_class == XR_C_ABI_SLOT_BORROWED_PLACE) {
+                            const XrTargetMachineRepRecord *pointee =
+                                xr_target_plan_machine_rep(target_plan, agreed->register_rep);
+                            XrCValueRep held_rep = XR_C_VALUE_REP_VOID;
+                            const char *held_c_type = NULL;
+                            if (pointee &&
+                                machine_kind_to_c_rep(target_plan, agreed->semantic_value,
+                                                      pointee->kind, &held_rep, &held_c_type) &&
+                                held_c_type) {
+                                pointee_rep = held_rep;
+                                pointee_c_type = held_c_type;
+                            }
                         }
                     }
                 }

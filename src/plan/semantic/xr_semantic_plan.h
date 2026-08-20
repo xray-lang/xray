@@ -120,6 +120,15 @@ typedef enum XrSemanticSourceClassFlag {
     XR_SEM_SOURCE_CLASS_GENERIC = 1u << 2,
 } XrSemanticSourceClassFlag;
 
+/* Bits of XrSemanticFunctionRecord.flags, named here rather than spelled as
+ * numbers at the places that read and write them. */
+typedef enum XrSemanticFunctionFlag {
+    XR_SEM_FUNCTION_NOTHROW = 1u << 0,
+    XR_SEM_FUNCTION_CONTAINS_UNSAFE = 1u << 1,
+    XR_SEM_FUNCTION_GENERATOR = 1u << 2,
+    XR_SEM_FUNCTION_EXTERN = 1u << 3,
+} XrSemanticFunctionFlag;
+
 typedef enum XrSemanticSourceFunctionKind {
     XR_SEM_SOURCE_FUNCTION_NONE = 0,
     XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD,

@@ -1316,9 +1316,10 @@ static bool build_function_records(XrSemanticBuildContext *ctx) {
         record->semantic_effects = source->semantic_effects;
         record->capability_mask = source->requires_unsafe_at_call ? 1u : 0u;
         record->flags =
-            (uint8_t) ((source->error_effect_nothrow ? 1u : 0u) |
-                       (source->contains_unsafe_op ? 2u : 0u) |
-                       (source->entry_type == 2 ? 4u : 0u) | (source->is_extern ? 8u : 0u));
+            (uint8_t) ((source->error_effect_nothrow ? XR_SEM_FUNCTION_NOTHROW : 0u) |
+                       (source->contains_unsafe_op ? XR_SEM_FUNCTION_CONTAINS_UNSAFE : 0u) |
+                       (source->entry_type == 2 ? XR_SEM_FUNCTION_GENERATOR : 0u) |
+                       (source->is_extern ? XR_SEM_FUNCTION_EXTERN : 0u));
         if (!build_function_identity(ctx, i, source, record))
             return false;
         record->parameter_begin = ctx->plan->parameter_count;
