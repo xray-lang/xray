@@ -315,6 +315,14 @@ static XrRep cg_type_aot_storage_rep(const XrType *type) {
     return info ? info->storage_rep : XR_REP_TAGGED;
 }
 
+/* Whether this function's boundary reaches C natively.
+ *
+ * This is a function-level fact, not a consequence of the per-slot rows: a
+ * module initializer takes the tagged boundary however its slots are shaped,
+ * and so do a capturing function and a coroutine. Deriving it from the rows
+ * was measured against this answer over the corpus and disagreed 318 times in
+ * 582 -- every disagreement a module initializer. Until the emission plan
+ * carries the fact itself, it is read from the older per-function record. */
 static bool cg_func_uses_typed_abi(XiCgenCtx *ctx, const XiFunc *f) {
     const XaotFuncPlan *plan = cg_func_plan(ctx, f);
     return plan && plan->abi.kind == XAOT_ABI_NATIVE;
