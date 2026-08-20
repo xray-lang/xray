@@ -80,4 +80,3 @@
 # or the case's premise about the VM has expired. Neither is settled here, and
 # no line was deleted to reach this state -- the entry records a divergence that
 # was already there.
-tests/diff/cases/semantics/functions/unproven_callee_targets.xr

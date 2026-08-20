@@ -59,6 +59,14 @@ static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
                                                                            : XR_REP_VOID;
     if (emission_status == CG_VALUE_EMISSION_ERROR)
         return XR_REP_VOID;
+    /* A box states its own storage: the operation exists to produce the tagged
+     * carrier, so the answer is the opcode, not a row. Measured over the AOT
+     * corpus, every one of the 455 boxes the legacy plan answered for carried
+     * exactly this representation, which is why asking the old model here was
+     * only ever a lookup of a constant. Unbox is deliberately not folded in --
+     * its representation is the scalar it produces and genuinely varies. */
+    if (v && v->op == XI_BOX)
+        return XR_REP_TAGGED;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
