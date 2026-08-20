@@ -7099,6 +7099,9 @@ static XrRep cg_debug_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, co
                                                                            : XR_REP_VOID;
     if (emission_status == CG_VALUE_EMISSION_ERROR)
         return XR_REP_VOID;
+    XrRep adapter_rep = XR_REP_VOID;
+    if (cg_rep_adapter_storage_rep(v, &adapter_rep))
+        return adapter_rep;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }

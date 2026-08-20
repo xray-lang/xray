@@ -50,6 +50,26 @@ static const XaotValuePlan *cg_value_plan_require_legacy(XiCgenCtx *ctx, const X
     return plan;
 }
 
+/* The storage a representation adapter states for itself.
+ *
+ * A box produces the tagged carrier, so the opcode is the answer. An unbox
+ * produces its own type, so the type is. Measured over the AOT corpus, all
+ * 455 boxes and all 138 unboxes the legacy value plan answered for agreed
+ * exactly. Stated once here because three sites ask it. */
+static bool cg_rep_adapter_storage_rep(const XiValue *v, XrRep *out) {
+    if (!v || !out)
+        return false;
+    if (v->op == XI_BOX) {
+        *out = XR_REP_TAGGED;
+        return true;
+    }
+    if (v->op == XI_UNBOX) {
+        *out = xaot_value_storage_rep(xaot_value_rep_for_type(v->type));
+        return true;
+    }
+    return false;
+}
+
 static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
     XrCValueEmissionView emission = {0};
     CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, NULL, v, &emission);
@@ -59,20 +79,9 @@ static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
                                                                            : XR_REP_VOID;
     if (emission_status == CG_VALUE_EMISSION_ERROR)
         return XR_REP_VOID;
-    /* A box states its own storage: the operation exists to produce the tagged
-     * carrier, so the answer is the opcode, not a row. Measured over the AOT
-     * corpus, every one of the 455 boxes the legacy plan answered for carried
-     * exactly this representation, which is why asking the old model here was
-     * only ever a lookup of a constant. Unbox is deliberately not folded in --
-     * its representation is the scalar it produces and genuinely varies. */
-    if (v && v->op == XI_BOX)
-        return XR_REP_TAGGED;
-    /* An unbox produces its own type: the operation exists to take the value
-     * back out of the carrier, so the answer is the type's representation.
-     * Computed both ways over the AOT corpus, all 138 unboxes the legacy plan
-     * answered for agreed exactly, spelling included. */
-    if (v && v->op == XI_UNBOX)
-        return xaot_value_storage_rep(xaot_value_rep_for_type(v->type));
+    XrRep adapter_rep = XR_REP_VOID;
+    if (cg_rep_adapter_storage_rep(v, &adapter_rep))
+        return adapter_rep;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
