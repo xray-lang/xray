@@ -323,6 +323,13 @@ typedef struct XrSemanticFunctionRecord {
      * which is why the fact is frozen on the function instead of inferred from
      * the calls that reach it. */
     uint8_t is_module_initializer;
+    /* Whether this function's own body carries a coroutine operation.
+     *
+     * Distinct from being able to suspend and from having coroutine state
+     * entities: a function that only *calls* a coroutine has both of those and
+     * is still not one itself. This says the body contains the operations, and
+     * it is what decides the shape of the function's own C boundary. */
+    uint8_t carries_coroutine_ops;
 } XrSemanticFunctionRecord;
 
 typedef struct XrSemanticParameterRecord {

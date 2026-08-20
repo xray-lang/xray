@@ -205,14 +205,21 @@ static bool semantic_source_enum_identity_exact(const XrSemanticTypeRecord *type
         return xr_stable_id_equal(type->source_enum_identity, zero) && type->enum_layout_id == 0 &&
                type->enum_member_count == 0 && type->enum_flags == 0 && type->reserved_enum == 0;
     const char *cursor = type->source_enum_key;
-    static const char prefix[] = "source-enum-v1:schema=34:owner=";
-    if (!cursor || strncmp(cursor, prefix, sizeof(prefix) - 1u) != 0 ||
+    /* Built from the schema macro rather than written out, so the prefix
+     * cannot drift from the key the builder emits when the schema moves. */
+    char prefix[64];
+    int prefix_len =
+        snprintf(prefix, sizeof(prefix),
+                 "source-enum-v1:schema=%u:owner=", (unsigned) XR_SEMANTIC_SCHEMA_VERSION);
+    if (prefix_len <= 0 || (size_t) prefix_len >= sizeof(prefix))
+        return false;
+    if (!cursor || strncmp(cursor, prefix, (size_t) prefix_len) != 0 ||
         !verify_id(cursor, type->source_enum_identity) || type->enum_member_count == 0 ||
         type->enum_layout_id == 0 || type->reserved_enum != 0 ||
         (type->enum_flags & (uint8_t) ~(XR_SEM_ENUM_DECLARATION_EXACT | XR_SEM_ENUM_UNIT)) != 0 ||
         (type->enum_flags & XR_SEM_ENUM_DECLARATION_EXACT) == 0)
         return false;
-    cursor += sizeof(prefix) - 1u;
+    cursor += (size_t) prefix_len;
     const char *owner = NULL, *name = NULL;
     size_t owner_length = 0, name_length = 0;
     if (!verifier_take_component(&cursor, &owner, &owner_length) || owner_length == 0 ||

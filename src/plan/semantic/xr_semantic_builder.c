@@ -1217,6 +1217,22 @@ static bool build_source_methods(XrSemanticBuildContext *ctx) {
 static void set_function_return_contract(const XiFunc *source, XrSemanticFunctionRecord *record) {
     record->return_parameter = source->arc_return_ownership.param_index;
     record->is_module_initializer = source->is_module_initializer ? 1u : 0u;
+    /* Walks the body once: a function carries coroutine operations when any of
+     * its own values is one. Only the body counts -- a call to a coroutine is
+     * an ordinary call here. */
+    record->carries_coroutine_ops = 0u;
+    for (uint32_t cb = 0; !record->carries_coroutine_ops && cb < source->nblocks; cb++) {
+        const XiBlock *block = source->blocks[cb];
+        if (!block)
+            continue;
+        for (uint32_t cv = 0; cv < block->nvalues; cv++) {
+            const XiValue *candidate = block->values[cv];
+            if (candidate && xi_generated_op_class(candidate->op) == XI_GEN_CLASS_COROUTINE) {
+                record->carries_coroutine_ops = 1u;
+                break;
+            }
+        }
+    }
     record->return_provenance = source->arc_return_ownership.kind;
     if (source->return_type && source->return_type->kind == XR_KIND_SLICE) {
         record->return_parameter = -1;

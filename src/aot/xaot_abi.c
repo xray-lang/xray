@@ -9,6 +9,7 @@
  */
 
 #include "xaot_abi.h"
+#include "../plan/semantic/xr_semantic_plan.h"
 #include "xaot_bundle.h"
 #include "xaot_class_native.h"
 #include "xaot_abi_gen.h"
@@ -658,8 +659,8 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
                   type_can_use_native_return_boundary(bundle, func, func->return_type));
 
     if (!native_abi) {
-        abi->kind =
-            func_has_op_class(func, XI_GEN_CLASS_COROUTINE) ? XAOT_ABI_CORO : XAOT_ABI_TAGGED;
+        bool xi_coro = func_has_op_class(func, XI_GEN_CLASS_COROUTINE);
+        abi->kind = xi_coro ? XAOT_ABI_CORO : XAOT_ABI_TAGGED;
         abi->boundary_reason = tagged_reason_for_func(func, is_module_init);
         abi->ret = tagged_slot(func->return_type);
         /* A tagged return says nothing about how a parameter travels. Boxing an

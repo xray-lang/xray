@@ -214,11 +214,18 @@ static inline bool
 xr_semantic_enum_source_key_matches(const XrSemanticTypeRecord *type, const char *enum_name,
                                     const char *const *metadata, uint32_t metadata_count,
                                     uint32_t member_metadata_begin, uint32_t member_count) {
-    static const char prefix[] = "source-enum-v1:schema=34:owner=";
-    if (!type || !type->source_enum_key || !enum_name || !metadata ||
-        strncmp(type->source_enum_key, prefix, sizeof(prefix) - 1u) != 0)
+    /* Built from the schema macro rather than written out, so the prefix
+     * cannot drift from the key the builder emits when the schema moves. */
+    char prefix[64];
+    int prefix_len =
+        snprintf(prefix, sizeof(prefix),
+                 "source-enum-v1:schema=%u:owner=", (unsigned) XR_SEMANTIC_SCHEMA_VERSION);
+    if (prefix_len <= 0 || (size_t) prefix_len >= sizeof(prefix))
         return false;
-    const char *cursor = type->source_enum_key + sizeof(prefix) - 1u;
+    if (!type || !type->source_enum_key || !enum_name || !metadata ||
+        strncmp(type->source_enum_key, prefix, (size_t) prefix_len) != 0)
+        return false;
+    const char *cursor = type->source_enum_key + (size_t) prefix_len;
     const char *component = NULL;
     size_t component_length = 0;
     if (!xr_semantic_enum_key_take_component(&cursor, &component, &component_length) ||
