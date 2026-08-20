@@ -3343,7 +3343,9 @@ static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx
     uint32_t element_type_index = ctx->plan->type_children[receiver_type->child_begin];
     const XrSemanticTypeRecord *element_type =
         element_type_index < ctx->plan->type_count ? &ctx->plan->types[element_type_index] : NULL;
-    if (!element_type || (element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 ||
+    if (!element_type ||
+        ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 &&
+         !shape->permits_reference_elements) ||
         !xr_semantic_array_member_result_is_exact(record, shape, result_type, receiver->type) ||
         record->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
         receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||

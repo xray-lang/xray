@@ -47,18 +47,24 @@ typedef struct XrArrayMemberShape {
     uint16_t max_operands;
     uint8_t result_shape;
     uint16_t element_operand;
+    /* Whether the member may operate on a container of reference-capable
+     * elements. A member that only permutes what is already there neither
+     * retains nor releases anything, so the element's ownership contract is
+     * untouched. One that stores an element into the container does change it,
+     * and those stay restricted to elements that own nothing. */
+    uint8_t permits_reference_elements;
 } XrArrayMemberShape;
 
 /* Operand 0 is always the receiver, so element_operand 0 means the member
  * takes no element of its own. */
 static const XrArrayMemberShape xr_array_member_shapes[] = {
-    {"push", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1},
-    {"unshift", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1},
-    {"indexOf", 2, 2, XR_ARRAY_MEMBER_RESULT_INT, 1},
-    {"contains", 2, 2, XR_ARRAY_MEMBER_RESULT_BOOL, 1},
-    {"fill", 2, 4, XR_ARRAY_MEMBER_RESULT_RECEIVER, 1},
-    {"reverse", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0},
-    {"sort", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0},
+    {"push", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1, 0},
+    {"unshift", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1, 0},
+    {"indexOf", 2, 2, XR_ARRAY_MEMBER_RESULT_INT, 1, 0},
+    {"contains", 2, 2, XR_ARRAY_MEMBER_RESULT_BOOL, 1, 0},
+    {"fill", 2, 4, XR_ARRAY_MEMBER_RESULT_RECEIVER, 1, 0},
+    {"reverse", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0, 1},
+    {"sort", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0, 1},
 };
 
 static inline const XrArrayMemberShape *xr_array_member_shape(const char *selector,

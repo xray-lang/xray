@@ -2320,7 +2320,9 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
         exact ? plan->type_children[receiver_type->child_begin] : XR_SEMANTIC_INDEX_NONE;
     const XrSemanticTypeRecord *element_type =
         exact && element_type_index < plan->type_count ? &plan->types[element_type_index] : NULL;
-    exact = exact && element_type && (element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0;
+    exact = exact && element_type &&
+            ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 ||
+             shape->permits_reference_elements);
     for (uint16_t i = 1; exact && i < operation->operand_count; i++) {
         const XrSemanticOperandRecord *argument = receiver + i;
         const XrSemanticTypeRecord *argument_type =

@@ -1388,7 +1388,8 @@ static bool semantic_array_member_scalar_is_exact(const XrSemanticPlan *plan,
         return false;
     uint32_t element_type_index = children[receiver_type->child_begin];
     const XrSemanticTypeRecord *element_type = xr_semantic_plan_type(plan, element_type_index);
-    if (!element_type || (element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0)
+    if (!element_type || ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 &&
+                          !shape->permits_reference_elements))
         return false;
     uint32_t element = XR_SEMANTIC_INDEX_NONE;
     for (uint16_t i = 1; i < operation->operand_count; i++) {
