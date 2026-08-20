@@ -956,9 +956,13 @@ static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, "xrt_span_from_value_ref(%s)", boxed_expr ? boxed_expr : "XR_NULL_VAL");
         return;
     }
-    /* Not read from the signature row: its `pointee_rep`/`pointee_c_type` today
-     * mirror the slot's own representation, which for a place is the pointer,
-     * so the row cannot yet say what is pointed at. See task 272.
+    /* Not read from the signature row, but not for the reason once given here:
+     * an earlier note claimed the row's pointee fields merely mirror the slot's
+     * own representation. That is wrong -- the plan builder fills `pointee_rep`
+     * from the caller-side register rep, because the caller holds the thing and
+     * passes its address, while the slot's own `rep` comes from the callee side.
+     * The real gap is narrower: this test needs the *pointee's* aggregate class
+     * and the row carries only the slot's own, so it cannot be asked here.
      *
      * Measured 2026-08-20: this whole function belongs to the boxed-adapter
      * emission path, and no case in the corpus reaches it -- the entry probe

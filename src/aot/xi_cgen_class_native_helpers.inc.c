@@ -4536,8 +4536,18 @@ static const XiClassData *cg_func_param_native_class_place_data(XiCgenCtx *ctx, 
     if (!f || param_idx >= f->nparams || !plan || !plan->abi.params ||
         param_idx >= plan->abi.nparams)
         return NULL;
-    /* Same reason as the boxed-parameter path: the signature row cannot yet
-     * state a pointee's representation. See task 272. */
+    /* The signature row can answer this one. It states the pointee's
+     * representation, filled from the caller-side register rep. Measured by
+     * computing both answers side by side over the whole corpus: of 19
+     * borrowed-place reads, 17 agreed exactly and the other 2 had no signature
+     * row at all rather than a differing one.
+     *
+     * Still read from the old model because of that second group. A signature
+     * is written whole or not at all, and 13.2% of function plans get no row
+     * because the machine-rep to C-rep mapping has no aggregate, vector,
+     * object-ref, or code-ref case. Switching now would answer those from the
+     * type-based fallback instead, which is a different answer, so this moves
+     * once that mapping is complete. */
     const XaotAbiSlot *slot = &plan->abi.params[param_idx];
     if ((slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0 ||
         xaot_value_storage_rep(slot->pointee_rep) != XR_REP_PTR)
