@@ -958,7 +958,13 @@ static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const 
     }
     /* Not read from the signature row: its `pointee_rep`/`pointee_c_type` today
      * mirror the slot's own representation, which for a place is the pointer,
-     * so the row cannot yet say what is pointed at. See task 272. */
+     * so the row cannot yet say what is pointed at. See task 272.
+     *
+     * Measured 2026-08-20: this whole function belongs to the boxed-adapter
+     * emission path, and no case in the corpus reaches it -- the entry probe
+     * fired zero times over every differential and AOT case. So the gap above
+     * is real but currently unexercised; a `ref struct` does not even reach the
+     * target layer yet. */
     const XaotFuncPlan *func_plan = cg_func_plan(ctx, f);
     const XaotAbiSlot *slot =
         func_plan && func_plan->abi.params && param_idx < func_plan->abi.nparams
