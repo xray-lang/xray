@@ -24,6 +24,7 @@
 #include "../../plan/semantic/xr_semantic_range_slice_shape.h"
 #include "../../plan/semantic/xr_semantic_graph.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
+#include "../../plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../plan/semantic/xr_semantic_class_shape.h"
 #include "../../plan/semantic/xr_semantic_cleanup_shape.h"
 #include "../../plan/semantic/xr_semantic_string_shape.h"
@@ -647,46 +648,6 @@ static bool verify_bounded_string_length(VerifyAuthority *ctx, const char *text,
     return true;
 }
 
-static bool verify_scalar_type_authority(VerifyAuthority *ctx, uint32_t type_index,
-                                         const XrType *live) {
-    const XrSemanticTypeRecord *type =
-        xr_semantic_plan_type(ctx ? ctx->semantic : NULL, type_index);
-    if (!ctx || !live || !type || !type->canonical_key || !source_type_matches(live, type) ||
-        type->child_count != 0 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
-        (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0)
-        return false;
-    switch (live->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_NULL:
-        case XR_KIND_NEVER:
-        case XR_KIND_UNIT:
-        case XR_KIND_POINTER:
-        case XR_KIND_RUNE:
-            break;
-        default:
-            return false;
-    }
-    const char *alias = live->alias_name ? live->alias_name : "";
-    size_t alias_length = 0;
-    size_t canonical_length = 0;
-    if (!verify_bounded_string_length(ctx, alias, &alias_length) ||
-        !verify_bounded_string_length(ctx, type->canonical_key, &canonical_length))
-        return false;
-    char prefix[256];
-    int prefix_length = snprintf(
-        prefix, sizeof(prefix), "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:", (unsigned) live->kind,
-        live->semantic_type_id, live_builtin_type(live), live->is_nullable ? 1u : 0u,
-        live->is_const ? 1u : 0u, live->is_value_type ? 1u : 0u, live->is_literal ? 1u : 0u,
-        live->is_cycle_candidate ? 1u : 0u, live->ptr_is_mut ? 1u : 0u, (unsigned) live->scalar_rep,
-        alias_length);
-    return prefix_length > 0 && (size_t) prefix_length < sizeof(prefix) &&
-           canonical_length == (size_t) prefix_length + alias_length &&
-           memcmp(type->canonical_key, prefix, (size_t) prefix_length) == 0 &&
-           memcmp(type->canonical_key + prefix_length, alias, alias_length) == 0;
-}
-
 static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
                                            const XrSemanticOperationRecord *operation) {
     if (!semantic || !operation || operation->opcode != XI_CLOSURE_NEW ||
@@ -750,18 +711,12 @@ static bool aot_array_type_is_exact(const XrSemanticPlan *semantic, uint32_t typ
 static bool aot_array_allocation_is_exact(const XrSemanticPlan *semantic,
                                           const XrSemanticOperationRecord *operation,
                                           uint8_t *out_storage) {
-    char expected_type_key[96];
-    int written = snprintf(expected_type_key, sizeof(expected_type_key),
-                           "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
-                           (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
     uint32_t operand_count = 0, child_count = 0;
     const XrSemanticOperandRecord *operands =
         semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
     const uint32_t *children =
         semantic ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
-    XrStableId zero = {{0}};
-    if (!semantic || !operation || !operands || !children || written <= 0 ||
-        (size_t) written >= sizeof(expected_type_key) || operation->opcode != XI_ARRAY_NEW ||
+    if (!semantic || !operation || !operands || !children || operation->opcode != XI_ARRAY_NEW ||
         operation->operand_count != 1 || operation->operand_begin >= operand_count ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE || operation->metadata_count != 0 ||
@@ -772,15 +727,10 @@ static bool aot_array_allocation_is_exact(const XrSemanticPlan *semantic,
         operation->return_parameter != -1 || operation->result_alias_operand != -1 ||
         !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
+    /* The row is judged by the one function both plan layers ask, so an Array
+     * this pass will not name cannot be one they bound. */
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, operation->result_type);
-    if (!type || type->kind != XR_KIND_ARRAY || type->builtin_type != XR_TID_NULL ||
-        type->child_count != 1 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
-        type->scalar_rep != XR_SCALAR_REP_NONE ||
-        type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
-        type->source_class != XR_SEMANTIC_INDEX_NONE ||
-        !xr_stable_id_equal(type->source_class_identity, zero) || !type->canonical_key ||
-        strncmp(type->canonical_key, expected_type_key, (size_t) written) != 0 ||
-        type->child_begin >= child_count)
+    if (!xr_semantic_array_type_row_is_exact(type) || type->child_begin >= child_count)
         return false;
     const XrSemanticTypeRecord *element =
         xr_semantic_plan_type(semantic, children[type->child_begin]);
