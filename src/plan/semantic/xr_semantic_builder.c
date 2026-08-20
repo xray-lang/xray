@@ -40,6 +40,7 @@
 #include "../../runtime/class/xclass_info.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "xr_semantic_array_member_shape.h"
+#include "xr_semantic_panic_info_shape.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -2380,9 +2381,11 @@ static bool append_native_namespace_call_target(XrSemanticBuildContext *ctx, con
  * name and therefore no call target. */
 static const char *builtin_instance_yieldable_name(const XrType *type, const char *selector,
                                                    uint16_t argument_count) {
-    uint32_t builtin_type = xr_semantic_frozen_builtin_type(type);
+    uint32_t builtin_type =
+        xr_semantic_yieldable_builtin_id(type ? (unsigned) type->kind : (unsigned) XR_KIND_COUNT,
+                                         xr_semantic_frozen_builtin_type(type));
     return xr_semantic_builtin_instance_yieldable(builtin_type, selector, argument_count)
-               ? xr_semantic_frozen_builtin_name(builtin_type)
+               ? xr_semantic_yieldable_builtin_name(builtin_type)
                : NULL;
 }
 
@@ -3087,30 +3090,6 @@ static bool xi_array_member_scalar_exact(const XiValue *value) {
     }
 }
 
-static bool semantic_array_member_unit_type_exact(const XrSemanticTypeRecord *type) {
-    char expected[96];
-    int length = snprintf(expected, sizeof(expected),
-                          "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:", (unsigned) XR_KIND_UNIT,
-                          (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
-    return type && length > 0 && (size_t) length < sizeof(expected) && type->kind == XR_KIND_UNIT &&
-           type->builtin_type == XR_TID_NULL && type->child_count == 0 &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0 && type->canonical_key &&
-           strcmp(type->canonical_key, expected) == 0;
-}
-
-static bool semantic_array_member_i64_type_exact(const XrSemanticTypeRecord *type) {
-    return type && type->kind == XR_KIND_INT && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_NATIVE_I64 && type->flags == 0;
-}
-
-static bool semantic_array_member_bool_type_exact(const XrSemanticTypeRecord *type) {
-    return type && type->kind == XR_KIND_BOOL && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0;
-}
-
 /* Array.reserve is admitted by the analyzer's stable intrinsic id. The
  * frozen operation then proves the complete receiver/capacity/result shape;
  * no selector or live Xi type participates in the classification. */
@@ -3131,7 +3110,7 @@ static bool semantic_array_reserve_exact(const XrSemanticBuildContext *ctx,
     const XrSemanticTypeRecord *capacity_type =
         capacity->type < ctx->plan->type_count ? &ctx->plan->types[capacity->type] : NULL;
     return xr_semantic_array_type_row_is_exact(receiver_type) &&
-           semantic_array_member_i64_type_exact(capacity_type) &&
+           xr_semantic_array_member_i64_type_is_exact(capacity_type) &&
            record->result_type == receiver->type && record->result_alias_operand == 0 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
            record->return_provenance == XR_SEM_RETURN_OWNED && record->return_parameter == -1 &&
@@ -3223,7 +3202,7 @@ static bool semantic_array_hof_exact(const XrSemanticBuildContext *ctx, const Xi
         return false;
     if (kind == XR_SEM_ARRAY_HOF_FILTER) {
         if (callee->return_type >= ctx->plan->type_count ||
-            !semantic_array_member_bool_type_exact(&ctx->plan->types[callee->return_type]))
+            !xr_semantic_array_member_bool_type_is_exact(&ctx->plan->types[callee->return_type]))
             return false;
     } else if (callee->return_type != result_element) {
         return false;
@@ -3344,25 +3323,6 @@ static bool semantic_array_fill_scalar_exact(const XrSemanticBuildContext *ctx,
  * fresh value the call owns outright; a receiver result is the receiver's own
  * reference handed straight back, which the operation records as an alias of
  * operand 0 with a complete owned return provenance. */
-static bool semantic_array_member_result_exact(const XrSemanticOperationRecord *record,
-                                               const XrArrayMemberShape *shape,
-                                               const XrSemanticTypeRecord *result_type,
-                                               uint32_t receiver_type_index) {
-    if (shape->result_shape == XR_ARRAY_MEMBER_RESULT_RECEIVER)
-        return record->result_type == receiver_type_index && record->result_alias_operand == 0 &&
-               record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-               record->return_provenance == XR_SEM_RETURN_OWNED && record->return_parameter == -1 &&
-               record->return_complete == 1;
-    bool typed = shape->result_shape == XR_ARRAY_MEMBER_RESULT_UNIT
-                     ? semantic_array_member_unit_type_exact(result_type)
-                 : shape->result_shape == XR_ARRAY_MEMBER_RESULT_INT
-                     ? semantic_array_member_i64_type_exact(result_type)
-                     : semantic_array_member_bool_type_exact(result_type);
-    return typed && record->result_alias_operand == -1 &&
-           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
-           record->return_provenance == XR_SEM_RETURN_NONE && record->return_parameter == -1 &&
-           record->return_complete == 0;
-}
 
 static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx,
                                                const XrSemanticOperationRecord *record) {
@@ -3384,7 +3344,7 @@ static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx
     const XrSemanticTypeRecord *element_type =
         element_type_index < ctx->plan->type_count ? &ctx->plan->types[element_type_index] : NULL;
     if (!element_type || (element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 ||
-        !semantic_array_member_result_exact(record, shape, result_type, receiver->type) ||
+        !xr_semantic_array_member_result_is_exact(record, shape, result_type, receiver->type) ||
         record->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
         receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
         receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
@@ -3403,7 +3363,7 @@ static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx
             argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
             argument->ownership_action != XR_SEM_OPERAND_CONSUME ||
             (element ? argument->type != element_type_index
-                     : !semantic_array_member_i64_type_exact(argument_type)))
+                     : !xr_semantic_array_member_i64_type_is_exact(argument_type)))
             return false;
     }
     return true;
@@ -3579,6 +3539,15 @@ static bool semantic_native_module_scalar_call_exact(const XrSemanticBuildContex
  * record because a user class always carries its own class reference.  The
  * namespace plus the frozen selector names exactly one implementation, so a
  * `JSON.value(x)` callsite has a single dispatch target with no open domain. */
+/* A PanicInfo construction, recognised here only well enough to ask the shared
+ * judgement. That judgement re-proves every term and the caller withdraws the
+ * mark when it says no, so this states the call shape and nothing more. */
+static bool xi_panic_info_constructor_exact(const XiValue *value) {
+    return value && value->op == XI_CALL_METHOD && value->nargs == 2 && value->aux &&
+           value->aux_kind == XI_AUX_KIND_NONE &&
+           strcmp((const char *) value->aux, "constructor") == 0;
+}
+
 static bool xi_json_namespace_value_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 2 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->args[1] && value->aux &&
@@ -3840,6 +3809,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING;
     if (xi_json_namespace_value_exact(value) && semantic_json_namespace_value_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE;
+    if (xi_panic_info_constructor_exact(value)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_PANIC_INFO_CONSTRUCTOR;
+        if (!xr_semantic_panic_info_constructor_is_exact(ctx->plan, record, NULL))
+            record->intrinsic_kind = XR_SEM_INTRINSIC_NONE;
+    }
     if (value->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE &&
         semantic_array_reserve_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR;

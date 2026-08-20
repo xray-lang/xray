@@ -216,6 +216,10 @@ XR_FUNC bool xi_value_is_event_count_method_call(const XiValue *v, const char *m
     return nargs < 0 || (int) v->nargs - 1 == nargs;
 }
 
+/* The seven blocking builtin families below are restated for the semantic plan
+ * in xr_semantic_builtin_yieldable_methods: same selectors, same arities. A
+ * selector added here without adding it there makes the plan reject the very
+ * coroutine state this analysis just created. */
 static bool xi_value_is_blocking_channel_method_call(const XiValue *v) {
     return xi_value_is_channel_method_call(v, "send", 1) ||
            xi_value_is_channel_method_call(v, "sendTimeout", 2) ||

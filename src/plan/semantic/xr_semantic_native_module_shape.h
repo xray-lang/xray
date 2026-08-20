@@ -21,29 +21,55 @@
  * is invisible to the collector, so it carries no reference obligation across
  * any boundary. The canonical key stays the authority for the Ptr/MutPtr
  * distinction, and no Xi type is consulted once the plan is frozen. */
-static inline bool xr_semantic_raw_pointer_type_is_exact(const XrSemanticTypeRecord *type) {
+static inline bool xr_semantic_raw_pointer_type_mutability(const XrSemanticTypeRecord *type,
+                                                           unsigned *out_mutable) {
     unsigned kind = 0, semantic_type = 0, builtin_type = 0;
     unsigned nullable = 0, is_const = 0, is_value = 0, is_literal = 0;
     unsigned cycle_candidate = 0, pointer_mutable = 0, scalar_rep = 0;
     size_t alias_length = 0;
     int consumed = 0;
     XrStableId zero = {{0}};
-    return type && type->canonical_key &&
-           sscanf(type->canonical_key, "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:%n", &kind,
-                  &semantic_type, &builtin_type, &nullable, &is_const, &is_value, &is_literal,
-                  &cycle_candidate, &pointer_mutable, &scalar_rep, &alias_length,
-                  &consumed) == 11 &&
-           consumed > 0 && (size_t) consumed == strlen(type->canonical_key) &&
-           kind == XR_KIND_POINTER && semantic_type == 0 && builtin_type == XR_TID_NULL &&
-           nullable == 0 && is_const == 0 && is_value == 0 && is_literal == 0 &&
-           cycle_candidate == 0 && pointer_mutable <= 1 && scalar_rep == XR_SCALAR_REP_NONE &&
-           alias_length == 0 && type->kind == XR_KIND_POINTER &&
-           type->builtin_type == XR_TID_NULL && type->source_class == XR_SEMANTIC_INDEX_NONE &&
-           xr_stable_id_equal(type->source_class_identity, zero) && type->child_count == 0 &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 && type->enum_layout_id == 0 &&
-           type->enum_member_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->flags == 0 && type->enum_flags == 0 && type->reserved_enum == 0 &&
-           !type->source_enum_key && xr_stable_id_equal(type->source_enum_identity, zero);
+    if (type && type->canonical_key &&
+        sscanf(type->canonical_key, "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:%n", &kind,
+               &semantic_type, &builtin_type, &nullable, &is_const, &is_value, &is_literal,
+               &cycle_candidate, &pointer_mutable, &scalar_rep, &alias_length, &consumed) == 11 &&
+        consumed > 0 && (size_t) consumed == strlen(type->canonical_key) &&
+        kind == XR_KIND_POINTER && semantic_type == 0 && builtin_type == XR_TID_NULL &&
+        nullable == 0 && is_const == 0 && is_value == 0 && is_literal == 0 &&
+        cycle_candidate == 0 && pointer_mutable <= 1 && scalar_rep == XR_SCALAR_REP_NONE &&
+        alias_length == 0 && type->kind == XR_KIND_POINTER && type->builtin_type == XR_TID_NULL &&
+        type->source_class == XR_SEMANTIC_INDEX_NONE &&
+        xr_stable_id_equal(type->source_class_identity, zero) && type->child_count == 0 &&
+        type->aggregate_extent == 0 && type->aggregate_align == 0 && type->enum_layout_id == 0 &&
+        type->enum_member_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
+        type->flags == 0 && type->enum_flags == 0 && type->reserved_enum == 0 &&
+        !type->source_enum_key && xr_stable_id_equal(type->source_enum_identity, zero)) {
+        if (out_mutable)
+            *out_mutable = pointer_mutable;
+        return true;
+    }
+    return false;
+}
+
+static inline bool xr_semantic_raw_pointer_type_is_exact(const XrSemanticTypeRecord *type) {
+    return xr_semantic_raw_pointer_type_mutability(type, NULL);
+}
+
+/* A `MutPtr<T>` argument reaching a `Ptr<T>` parameter.
+ *
+ * A raw pointer states an address and nothing else here: the record carries no
+ * element type at all, so `Ptr<byte>` and `Ptr<int>` are already one
+ * representation at this layer and the only fact the two records can disagree
+ * about is mutability. Handing a mutable address to a parameter that promises
+ * not to write through it drops a permission the callee never asked for; the
+ * reverse would invent one the caller never granted, so it stays refused. */
+static inline bool
+xr_semantic_raw_pointer_argument_satisfies_parameter(const XrSemanticTypeRecord *argument,
+                                                     const XrSemanticTypeRecord *parameter) {
+    unsigned argument_mutable = 0, parameter_mutable = 1;
+    return xr_semantic_raw_pointer_type_mutability(argument, &argument_mutable) &&
+           xr_semantic_raw_pointer_type_mutability(parameter, &parameter_mutable) &&
+           argument_mutable == 1 && parameter_mutable == 0;
 }
 
 /* One value crossing the boundary of a native stdlib module member.

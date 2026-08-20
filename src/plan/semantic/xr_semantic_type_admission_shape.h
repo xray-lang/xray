@@ -94,4 +94,42 @@ xr_semantic_type_is_nullable_widening(const XrSemanticTypeRecord *value_type,
            strcmp(value_tail, parameter_tail) == 0;
 }
 
+/* What a declared parameter admits at a callsite that crosses a module edge.
+ *
+ * The three layers that check this -- the semantic module-set verifier, the
+ * target builder, and the target verifier -- must ask one question, because a
+ * call the semantic layer admits and the target layer refuses is reported as a
+ * missing target authority, which points at the wrong thing entirely.  The two
+ * widenings below are the language's own rules, not this pass's inventions:
+ * a value already widens into a nullable reference, and a union parameter
+ * admits each of its members. */
+static inline bool
+xr_semantic_parameter_type_admits_argument(const XrSemanticPlan *callee,
+                                           const XrSemanticTypeRecord *parameter_type,
+                                           const XrSemanticTypeRecord *operand_type) {
+    if (!callee || !parameter_type || !operand_type)
+        return false;
+    if (xr_stable_id_equal(operand_type->id, parameter_type->id))
+        return true;
+    if (xr_semantic_type_is_nullable_widening(operand_type, parameter_type))
+        return true;
+    if (parameter_type->kind != (uint32_t) XR_KIND_UNION)
+        return false;
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(callee, &child_count);
+    uint32_t type_count = (uint32_t) xr_semantic_plan_type_count(callee);
+    for (uint16_t member = 0; member < parameter_type->child_count; member++) {
+        uint32_t child = parameter_type->child_begin + member;
+        if (!children || child >= child_count)
+            return false;
+        uint32_t member_type = children[child];
+        if (member_type >= type_count)
+            return false;
+        const XrSemanticTypeRecord *record = xr_semantic_plan_type(callee, member_type);
+        if (record && xr_stable_id_equal(operand_type->id, record->id))
+            return true;
+    }
+    return false;
+}
+
 #endif  // XR_SEMANTIC_TYPE_ADMISSION_SHAPE_H

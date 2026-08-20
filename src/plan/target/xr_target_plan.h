@@ -72,6 +72,9 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_STRING_CONVERT_RESULT_STORAGE (UINT64_C(1) << 38)
 #define XR_TARGET_FAMILY_RANGE_SLICE_VIEW_STORAGE (UINT64_C(1) << 39)
 #define XR_TARGET_FAMILY_BIGINT_VALUE_STORAGE (UINT64_C(1) << 40)
+#define XR_TARGET_FAMILY_PANIC_INFO_CONSTRUCTOR_STORAGE (UINT64_C(1) << 41)
+#define XR_TARGET_FAMILY_DYNAMIC_PHI_STORAGE (UINT64_C(1) << 42)
+#define XR_TARGET_FAMILY_CONTAINER_COPY_RESULT_STORAGE (UINT64_C(1) << 43)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -151,7 +154,10 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE |                                       \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_AGGREGATE_RESULT_STORAGE |                          \
                  XR_TARGET_FAMILY_STRING_CONVERT_RESULT_STORAGE |                                  \
-                 XR_TARGET_FAMILY_RANGE_SLICE_VIEW_STORAGE))
+                 XR_TARGET_FAMILY_RANGE_SLICE_VIEW_STORAGE |                                       \
+                 XR_TARGET_FAMILY_PANIC_INFO_CONSTRUCTOR_STORAGE |                                 \
+                 XR_TARGET_FAMILY_DYNAMIC_PHI_STORAGE |                                            \
+                 XR_TARGET_FAMILY_CONTAINER_COPY_RESULT_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -287,6 +293,9 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_ARRAY_FILL_SCALAR,
     XR_TARGET_CALL_CONVENTION_ARRAY_HOF,
     XR_TARGET_CALL_CONVENTION_BUILTIN_INSTANCE_YIELDABLE,
+    XR_TARGET_CALL_CONVENTION_PANIC_INFO_CONSTRUCTOR,
+    XR_TARGET_CALL_CONVENTION_SCALAR_COPY,
+    XR_TARGET_CALL_CONVENTION_CONTAINER_COPY,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -316,7 +325,19 @@ typedef enum XrTargetCallConvention {
  * receiver's frozen builtin id and the selector's arity select the roster entry,
  * so the row names no callee function and no provider spelling; it always
  * suspends, and its result is the tagged value the runtime hands back on
- * resume. */
+ * resume.
+ * PANIC_INFO_CONSTRUCTOR names the construction of the compiler-owned panic
+ * record.  Source can neither declare this class nor name it, so every
+ * callsite is one lowering synthesised -- a force-unwrap failure, a
+ * non-exhaustive match, or an explicit throw -- against the reserved class
+ * token.  The one message argument is not a callee parameter, because the
+ * class has no callee function whose parameter records an argument row could
+ * be paired with, so the row carries no argument intent and the emission
+ * recipe reads the semantic operand directly.
+ * SCALAR_COPY names `copy(x)` over a scalar.  The result is a second
+ * scalar of the argument's own type holding the bits it held, so the row
+ * transfers no ownership and claims no storage family of its own: the
+ * scalar family that binds every other scalar binds this result too. */
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
@@ -343,6 +364,9 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR,
     XR_TARGET_CALL_TARGET_ARRAY_HOF,
     XR_TARGET_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE,
+    XR_TARGET_CALL_TARGET_PANIC_INFO_CONSTRUCTOR,
+    XR_TARGET_CALL_TARGET_SCALAR_COPY,
+    XR_TARGET_CALL_TARGET_CONTAINER_COPY,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetArrayHofKind {

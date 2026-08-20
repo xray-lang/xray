@@ -143,7 +143,13 @@ static inline XrValue xrt_exception_from_message_value(XrValue message) {
         const char *data = xr_str_data(message);
         size_t len = (size_t) xr_str_len(message);
         XrErrorCoreMessageView view = xr_error_core_parse_prefixed(data, len);
-        return xrt_exception_new_value(view.has_code ? view.code : 0, data, len);
+        /* The stored message is the bare fault text: the code moves into its
+         * own field and every reporter re-prefixes from there, so keeping the
+         * prefix in the message too prints "E0442: E0442: ...".  This is the
+         * same normalisation xrt_exception_normalize applies below and the VM's
+         * own PanicInfo constructor applies on its side. */
+        return xrt_exception_new_value(view.has_code ? view.code : 0, view.message,
+                                       view.message_len);
     }
     return xrt_exception_new_value(0, NULL, 0);
 }
@@ -275,8 +281,7 @@ XRT_COLD _Noreturn void xrt_throw_type_mismatch(int64_t expected_tid, int64_t ac
 static inline XrValue xrt_check_type_borrowed(XrValue value, int64_t expected_tid,
                                               bool allow_null) {
     int64_t actual_tid = xrt_typeof_id(value);
-    if (xrt_value_is_type_id(value, expected_tid) ||
-        (allow_null && actual_tid == XR_TID_NULL))
+    if (xrt_value_is_type_id(value, expected_tid) || (allow_null && actual_tid == XR_TID_NULL))
         return value;
     xrt_throw_type_mismatch(expected_tid, actual_tid);
     return XR_NULL_VAL;

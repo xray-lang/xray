@@ -1912,30 +1912,6 @@ static bool verify_json_namespace_value(const XrSemanticPlan *plan,
  * must stay free of any reference-count obligation for this authority to be
  * complete. */
 
-static bool semantic_type_is_exact_member_unit(const XrSemanticTypeRecord *type) {
-    char expected[96];
-    int length = snprintf(expected, sizeof(expected),
-                          "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:", (unsigned) XR_KIND_UNIT,
-                          (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
-    return type && length > 0 && (size_t) length < sizeof(expected) && type->kind == XR_KIND_UNIT &&
-           type->builtin_type == XR_TID_NULL && type->child_count == 0 &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0 && type->canonical_key &&
-           strcmp(type->canonical_key, expected) == 0;
-}
-
-static bool semantic_type_is_exact_member_i64(const XrSemanticTypeRecord *type) {
-    return type && type->kind == XR_KIND_INT && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_NATIVE_I64 && type->flags == 0;
-}
-
-static bool semantic_type_is_exact_member_bool(const XrSemanticTypeRecord *type) {
-    return type && type->kind == XR_KIND_BOOL && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0;
-}
-
 static bool verify_array_reserve(const XrSemanticPlan *plan,
                                  const XrSemanticOperationRecord *operation) {
     if (!plan || !operation || operation->evidence[1] != XA_INTRINSIC_ARRAY_RESERVE ||
@@ -1953,7 +1929,7 @@ static bool verify_array_reserve(const XrSemanticPlan *plan,
     const XrSemanticTypeRecord *capacity_type =
         capacity->type < plan->type_count ? &plan->types[capacity->type] : NULL;
     return xr_semantic_array_type_row_is_exact(receiver_type) &&
-           semantic_type_is_exact_member_i64(capacity_type) &&
+           xr_semantic_array_member_i64_type_is_exact(capacity_type) &&
            operation->result_type == receiver->type && operation->result_alias_operand == 0 &&
            operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
            operation->return_provenance == XR_SEM_RETURN_OWNED &&
@@ -2116,7 +2092,7 @@ static bool verify_array_hof(const XrSemanticPlan *plan, const XrSemanticOperati
                                            operation->array_result_element_storage;
     if (exact && operation->array_hof_kind == XR_SEM_ARRAY_HOF_FILTER)
         exact = callee->return_type < plan->type_count &&
-                semantic_type_is_exact_member_bool(&plan->types[callee->return_type]);
+                xr_semantic_array_member_bool_type_is_exact(&plan->types[callee->return_type]);
     else if (exact)
         exact = callee->return_type == result_element;
     const XrSemanticParameterRecord *parameters =
@@ -2204,7 +2180,7 @@ static bool verify_array_allocation_storage(const XrSemanticPlan *plan,
         expected_storage == operation->array_element_storage &&
         operation->array_element_storage > XR_ELEM_ANY &&
         operation->array_element_storage < XR_ELEM_RAWPTR &&
-        semantic_type_is_exact_member_i64(capacity_type) &&
+        xr_semantic_array_member_i64_type_is_exact(capacity_type) &&
         capacity->role == XR_SEM_OPERAND_VALUE && capacity->parameter == -1 &&
         capacity->flags == 0 && capacity->ownership_action == XR_SEM_OPERAND_CONSUME &&
         operation->intrinsic_kind == XR_SEM_INTRINSIC_NONE && operation->metadata_count == 0 &&
@@ -2268,7 +2244,7 @@ static bool verify_array_intrinsic(const XrSemanticPlan *plan,
         xr_semantic_array_element_storage(element) == operation->array_element_storage &&
         operation->array_element_storage > XR_ELEM_ANY &&
         operation->array_element_storage < XR_ELEM_RAWPTR &&
-        semantic_type_is_exact_member_i64(count) && operation->metadata_count == 0 &&
+        xr_semantic_array_member_i64_type_is_exact(count) && operation->metadata_count == 0 &&
         operation->auxiliary_kind == XI_AUX_KIND_NONE && operation->semantic_immediate == 0 &&
         operation->constant == XR_SEMANTIC_INDEX_NONE &&
         operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
@@ -2307,26 +2283,6 @@ static bool verify_array_intrinsic(const XrSemanticPlan *plan,
  * receiver result is the receiver's own reference handed straight back, which
  * the operation records as an alias of operand 0 with a complete owned return
  * provenance and no storage of its own. */
-static bool semantic_array_member_result_is_exact(const XrSemanticOperationRecord *operation,
-                                                  const XrArrayMemberShape *shape,
-                                                  const XrSemanticTypeRecord *result_type,
-                                                  uint32_t receiver_type_index) {
-    if (shape->result_shape == XR_ARRAY_MEMBER_RESULT_RECEIVER)
-        return operation->result_type == receiver_type_index &&
-               operation->result_alias_operand == 0 &&
-               operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-               operation->return_provenance == XR_SEM_RETURN_OWNED &&
-               operation->return_parameter == -1 && operation->return_complete == 1;
-    bool typed = shape->result_shape == XR_ARRAY_MEMBER_RESULT_UNIT
-                     ? semantic_type_is_exact_member_unit(result_type)
-                 : shape->result_shape == XR_ARRAY_MEMBER_RESULT_INT
-                     ? semantic_type_is_exact_member_i64(result_type)
-                     : semantic_type_is_exact_member_bool(result_type);
-    return typed && operation->result_alias_operand == -1 &&
-           operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
-           operation->return_provenance == XR_SEM_RETURN_NONE &&
-           operation->return_parameter == -1 && operation->return_complete == 0;
-}
 
 static bool verify_array_member_scalar(const XrSemanticPlan *plan,
                                        const XrSemanticOperationRecord *operation, char *error,
@@ -2355,7 +2311,7 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
         (operation->semantic_immediate & 1) == 0 && receiver &&
         xr_semantic_array_type_row_is_exact(receiver_type) &&
         receiver_type->child_begin < plan->type_child_count &&
-        semantic_array_member_result_is_exact(operation, shape, result_type, receiver->type) &&
+        xr_semantic_array_member_result_is_exact(operation, shape, result_type, receiver->type) &&
         operation->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
         receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
         receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
@@ -2373,8 +2329,9 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
                 argument->parameter == (int16_t) (i - 1) &&
                 argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
                 argument->ownership_action == XR_SEM_OPERAND_CONSUME &&
-                (i == shape->element_operand ? argument->type == element_type_index
-                                             : semantic_type_is_exact_member_i64(argument_type));
+                (i == shape->element_operand
+                     ? argument->type == element_type_index
+                     : xr_semantic_array_member_i64_type_is_exact(argument_type));
     }
     return exact ||
            report(error, error_size, "XR_SEM_0019", "Array member scalar authority is not exact");
@@ -3270,23 +3227,16 @@ static const char *resolve_frozen_builtin_instance_yieldable_target(const XrSema
         return NULL;
     const char *selector = plan->metadata[call->metadata_begin];
     uint16_t argument_count = (uint16_t) (call->operand_count - 1u);
-    bool exact = (type->builtin_type == XR_TID_COROUTINE &&
-                  ((strcmp(selector, "awaitResult") == 0 && argument_count == 0) ||
-                   (strcmp(selector, "awaitTimeout") == 0 && argument_count == 1))) ||
-                 (type->builtin_type == XR_TID_WORKQUEUE && strcmp(selector, "pop") == 0 &&
-                  argument_count <= 1) ||
-                 (type->builtin_type == XR_TID_RESULTGROUP && strcmp(selector, "recv") == 0 &&
-                  argument_count == 0) ||
-                 (type->builtin_type == XR_TID_COUNTDOWNLATCH && strcmp(selector, "wait") == 0 &&
-                  argument_count == 0) ||
-                 (type->builtin_type == XR_TID_SEMAPHORE && strcmp(selector, "acquire") == 0 &&
-                  argument_count == 0) ||
-                 (type->builtin_type == XR_TID_EVENTCOUNT && strcmp(selector, "wait") == 0 &&
-                  argument_count >= 1 && argument_count <= 2);
-    if (!exact)
+    /* One table answers this, shared with the builder that wrote the row and
+     * restated in the Xi coroutine analysis that decided the operation
+     * suspends. Spelling the selectors again here is what let the three drift
+     * apart in the first place. */
+    uint32_t builtin_type =
+        xr_semantic_yieldable_builtin_id((unsigned) type->kind, type->builtin_type);
+    if (!xr_semantic_builtin_instance_yieldable(builtin_type, selector, argument_count))
         return NULL;
     *receiver_type = receiver->type;
-    return xr_semantic_frozen_builtin_name(type->builtin_type);
+    return xr_semantic_yieldable_builtin_name(builtin_type);
 }
 
 static bool stable_id_zero(XrStableId id) {
@@ -3866,7 +3816,9 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
             const XrSemanticOperationRecord *operation = &plan->operations[target->operation];
             if (target->function != XR_SEMANTIC_INDEX_NONE ||
                 target->callable_type >= plan->type_count ||
-                plan->types[target->callable_type].builtin_type == XR_TID_NULL ||
+                xr_semantic_yieldable_builtin_id((unsigned) plan->types[target->callable_type].kind,
+                                                 plan->types[target->callable_type].builtin_type) ==
+                    XR_TID_NULL ||
                 operation->opcode != XI_CALL_METHOD ||
                 operation->function >= plan->function_count) {
                 coroutine_authority_work_dispose(&work);

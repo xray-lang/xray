@@ -207,8 +207,17 @@ static inline uint32_t xr_semantic_class_declared_receiver_source_class(const Xr
         function->parameter_begin != parameter_index ||
         !xr_semantic_class_declaration_is_frozen(plan, function->source_class))
         return XR_SEMANTIC_INDEX_NONE;
-    if (!xr_semantic_class_anonymous_instance_type_is_exact(
-            xr_semantic_plan_type(plan, parameter->type)))
+    /* A receiver row may name its own declaration, and when it does that is a
+     * stronger statement than the anonymous shape, not a weaker one: the type
+     * table and the function identity then agree about which declaration is
+     * being received.  Requiring anonymity alone refused every declared member,
+     * because the front end does name `this` -- the row carries the class and
+     * its source-class identity.  A receiver naming some *other* declaration is
+     * still refused, which is the case the anonymous requirement was guarding
+     * against. */
+    const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(plan, parameter->type);
+    if (!xr_semantic_class_anonymous_instance_type_is_exact(receiver_type) &&
+        xr_semantic_class_instance_type_source_class(plan, receiver_type) != function->source_class)
         return XR_SEMANTIC_INDEX_NONE;
     return function->source_class;
 }
@@ -657,7 +666,8 @@ xr_semantic_class_construction_source_class(const XrSemanticPlan *plan,
             xr_semantic_plan_parameter(plan, function->parameter_begin + 1u + i);
         if (!parameter || parameter->value == XR_SEMANTIC_INDEX_NONE ||
             parameter->function != constructor || parameter->ordinal != i + 1u ||
-            parameter->mode != XR_PARAM_READ || parameter->ownership != XI_OWN_NONE ||
+            parameter->mode != XR_PARAM_READ ||
+            (parameter->ownership != XI_OWN_NONE && parameter->ownership != XI_OWN_BORROWED) ||
             parameter->reserved != 0 || (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
             argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) i ||
             argument->type != parameter->type || argument->parameter_mode != parameter->mode ||

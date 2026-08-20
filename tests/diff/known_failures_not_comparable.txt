@@ -87,10 +87,8 @@ tests/diff/cases/semantics/collections/range_iterator_shared_core.xr
 tests/diff/cases/semantics/collections/range_to_array_too_large_shared_core.xr
 tests/diff/cases/semantics/collections/slice_int_arg_shared_core.xr
 tests/diff/cases/semantics/collections/slice_window_shared_core.xr
-tests/diff/cases/semantics/collections/span_active_borrow_branch_nll_shared_core.xr
 tests/diff/cases/semantics/collections/span_active_borrow_disjoint_owner_shared_core.xr
 tests/diff/cases/semantics/collections/span_active_borrow_nested_owner_shared_core.xr
-tests/diff/cases/semantics/collections/span_active_borrow_scope_shared_core.xr
 tests/diff/cases/semantics/collections/span_compare_pod_shared_core.xr
 tests/diff/cases/semantics/collections/span_copyfrom_pod_shared_core.xr
 tests/diff/cases/semantics/collections/span_fill_pod_shared_core.xr
@@ -146,12 +144,10 @@ tests/diff/cases/semantics/evaluation_order/e4_short_circuit_points.xr
 tests/diff/cases/semantics/evaluation_order/e5_e6_assignment_order.xr
 tests/diff/cases/semantics/evaluation_order/e7_literal_element_order.xr
 tests/diff/cases/semantics/evaluation_order/e8_interpolation_order.xr
-tests/diff/cases/semantics/evaluation_order/e9_e10_match_slice_range.xr
 tests/diff/cases/semantics/exception/array_class_throw_cleanup_lifetime.xr
 tests/diff/cases/semantics/exception/defer_nested_function_call.xr
 tests/diff/cases/semantics/exception/fixed_array_index_oob_panic_shape.xr
 tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr
-tests/diff/cases/semantics/exception/match_non_exhaustive_panic_shape.xr
 tests/diff/cases/semantics/exception/nested_defer.xr
 tests/diff/cases/semantics/exception/panic_exception_shape.xr
 tests/diff/cases/semantics/exception/pattern_catch.xr
@@ -176,7 +172,6 @@ tests/diff/cases/semantics/ffi/mem_view_imported_layout_native_size.xr
 tests/diff/cases/semantics/ffi/mem_view_packed_nested_native_size.xr
 tests/diff/cases/semantics/ffi/mem_with_slice_mut_exception_loan_end.xr
 tests/diff/cases/semantics/ffi/mem_with_slice_mut_extern_layout.xr
-tests/diff/cases/semantics/ffi/ptr_memory.xr
 tests/diff/cases/semantics/float_fmt/ieee_arithmetic.xr
 tests/diff/cases/semantics/float_fmt/rounding_boundary.xr
 tests/diff/cases/semantics/function_value_to_string.xr
@@ -290,8 +285,6 @@ tests/diff/cases/semantics/oop/typename_class_instance.xr
 tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr
 tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr
 tests/diff/cases/semantics/oop/visibility_const.xr
-tests/diff/cases/semantics/optimizer/break_inside_match_arm.xr
-tests/diff/cases/semantics/optimizer/continue_inside_match_arm.xr
 tests/diff/cases/semantics/optimizer/known_empty_call_result_is_null.xr
 tests/diff/cases/semantics/optimizer/known_nullable_never_assigned_keeps_type.xr
 tests/diff/cases/semantics/optimizer/known_struct_copy_is_not_an_alias.xr
@@ -330,9 +323,6 @@ tests/diff/cases/semantics/ownership/value_struct_alias_copy_param.xr
 tests/diff/cases/semantics/range_inclusive.xr
 tests/diff/cases/semantics/range_value_for_in.xr
 tests/diff/cases/semantics/slice/array_expression_view.xr
-tests/diff/cases/semantics/slice/array_negative_both.xr
-tests/diff/cases/semantics/slice/array_negative_end.xr
-tests/diff/cases/semantics/slice/array_negative_start.xr
 tests/diff/cases/semantics/slice/ref_range_place.xr
 tests/diff/cases/semantics/slice/slice_arg_to_tagged_factory.xr
 tests/diff/cases/semantics/slice/slice_borrow_return_contracts.xr

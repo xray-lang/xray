@@ -1,0 +1,39 @@
+// VM/AOT differential coverage for `string(c)` on a rune, and for the sibling
+// scalar conversions that share its lowering.
+//
+// A rune constant is emitted in the storage representation its plan assigns.
+// The constant emitter used to ignore that and always emit the tagged
+// `XR_FROM_RUNE(...)` form, so a use site that boxed an unboxed rune tagged an
+// already-tagged value and produced C that does not compile. Nothing here is
+// exotic -- a rune local, a rune literal, a rune parameter, a rune array
+// element -- but every one of those constants reaches C through that emitter.
+
+fn takes(c: rune) -> string {
+    return string(c)
+}
+
+fn main() {
+    var c: rune = 'a'
+    print(string(c))
+    print(string('b'))
+    print(string('\u{1F600}'))
+    print(string('\n') == "\n")
+    print(takes('p'))
+    print(c == 'a')
+    print(c != 'z')
+
+    var arr: Array<rune> = ['x', 'y']
+    arr[0] = 'z'
+    print(string(arr[0]))
+    print(string(arr[1]))
+
+    var i: int = 42
+    var b: bool = true
+    var f: float = 2.5
+    print(string(i))
+    print(string(b))
+    print(string(false))
+    print(string(f))
+}
+
+main()

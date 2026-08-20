@@ -88,14 +88,44 @@ typedef struct XrSemanticBuiltinYieldableMethod {
 /* The frozen builtin instance methods that can park the calling coroutine. The
  * argument counts are part of the identity: an arity outside the declared range
  * is a different method, and no overload of these names suspends. Argument
- * counts exclude the receiver. A frozen builtin absent from this table — such
- * as StringBuilder — has no suspending method at all. */
+ * counts exclude the receiver. A frozen builtin absent from this table -- such
+ * as StringBuilder -- has no suspending method at all.
+ *
+ * This table states the same fact the Xi coroutine analysis states in
+ * xi_value_is_blocking_*_method_call: the two must name the same selectors at
+ * the same arities, because Xi decides which operations become coroutine states
+ * and this table decides which ones a plan is allowed to carry. A selector in
+ * one and not the other makes a function that Xi lowers as suspending look like
+ * one this layer says cannot suspend. */
 static const XrSemanticBuiltinYieldableMethod xr_semantic_builtin_yieldable_methods[] = {
-    {XR_TID_COROUTINE, "awaitResult", 0, 0}, {XR_TID_COROUTINE, "awaitTimeout", 1, 1},
-    {XR_TID_WORKQUEUE, "pop", 0, 1},         {XR_TID_RESULTGROUP, "recv", 0, 0},
-    {XR_TID_COUNTDOWNLATCH, "wait", 0, 0},   {XR_TID_SEMAPHORE, "acquire", 0, 0},
-    {XR_TID_EVENTCOUNT, "wait", 1, 2},
+    {XR_TID_CHANNEL, "send", 1, 1},           {XR_TID_CHANNEL, "sendTimeout", 2, 2},
+    {XR_TID_CHANNEL, "recv", 0, 0},           {XR_TID_CHANNEL, "recvOr", 1, 1},
+    {XR_TID_CHANNEL, "recvTimeout", 1, 1},    {XR_TID_COROUTINE, "awaitResult", 0, 0},
+    {XR_TID_COROUTINE, "awaitTimeout", 1, 1}, {XR_TID_WORKQUEUE, "pop", 0, 1},
+    {XR_TID_RESULTGROUP, "recv", 0, 0},       {XR_TID_COUNTDOWNLATCH, "wait", 0, 0},
+    {XR_TID_SEMAPHORE, "acquire", 0, 0},      {XR_TID_EVENTCOUNT, "wait", 1, 2},
 };
+
+/* The builtin id whose suspension rules a receiver follows.
+ *
+ * Channel is a frozen builtin the type system spells with its own kind instead
+ * of a class name, so it carries no stored builtin id and the roster cannot see
+ * it. The suspension question still has to name it, and this is the one place
+ * that translation lives -- type identity elsewhere keeps treating a Channel as
+ * carrying no builtin id at all. */
+static inline uint32_t xr_semantic_yieldable_builtin_id(unsigned type_kind,
+                                                        uint32_t stored_builtin_type) {
+    return type_kind == (unsigned) XR_KIND_CHANNEL ? (uint32_t) XR_TID_CHANNEL
+                                                   : stored_builtin_type;
+}
+
+/* The class spelling for a yieldable builtin id, including the one the roster
+ * does not carry. */
+static inline const char *xr_semantic_yieldable_builtin_name(uint32_t builtin_type) {
+    return builtin_type == (uint32_t) XR_TID_CHANNEL
+               ? "Channel"
+               : xr_semantic_frozen_builtin_name(builtin_type);
+}
 
 /* Whether a receiver of this frozen builtin class suspends when the named
  * selector is called with this many arguments. */

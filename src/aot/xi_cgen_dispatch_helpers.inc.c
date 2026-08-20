@@ -200,7 +200,11 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         if (boxed)
             fprintf(out, ")");
     } else if (v->type->kind == XR_KIND_RUNE) {
-        fprintf(out, "XR_FROM_RUNE((uint32_t)0x%X)", (unsigned) (uint32_t) v->aux_int);
+        if (boxed)
+            fprintf(out, "XR_FROM_RUNE((uint32_t)");
+        fprintf(out, "0x%X", (unsigned) (uint32_t) v->aux_int);
+        if (boxed)
+            fprintf(out, ")");
     } else if (v->type->kind == XR_KIND_NULL)
         fprintf(out, "XR_NULL_VAL");
     else if (v->type->kind == XR_KIND_STRING) {

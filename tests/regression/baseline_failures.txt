@@ -77,12 +77,10 @@
 1418_shared_provenance_readonly_closure_capture.xr
 1433_net_loopback.xr
 1434_net_byte_array_loopback.xr
-1435_net_deadline_error.xr
 1436_net_halfclose_bidi.xr
 1437_net_tls_timeout.xr
 1438_ws_self_connect.xr
 1502_http_request_options.xr
 1509_ws_pure_protocol.xr
 1510_http2_client.xr
-1520_websocket.xr
 1601_narrowing_facts.xr

@@ -193,14 +193,14 @@ static inline bool xr_semantic_builtin_instance_yieldable_call_is_exact(
     const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, operation->function);
     if (!record || !function || receiver->type != target->callable_type ||
         receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
-        record->kind != XR_KIND_INSTANCE || record->source_class != XR_SEMANTIC_INDEX_NONE ||
-        receiver->value < function->value_begin ||
+        (record->kind != XR_KIND_INSTANCE && record->kind != XR_KIND_CHANNEL) ||
+        record->source_class != XR_SEMANTIC_INDEX_NONE || receiver->value < function->value_begin ||
         receiver->value >= function->value_begin + function->value_count ||
         operation->result_value < function->value_begin ||
         operation->result_value >= function->value_begin + function->value_count ||
-        !xr_semantic_builtin_instance_yieldable(record->builtin_type,
-                                                metadata[operation->metadata_begin],
-                                                (uint16_t) (operation->operand_count - 1u)))
+        !xr_semantic_builtin_instance_yieldable(
+            xr_semantic_yieldable_builtin_id((unsigned) record->kind, record->builtin_type),
+            metadata[operation->metadata_begin], (uint16_t) (operation->operand_count - 1u)))
         return false;
     if (receiver_type)
         *receiver_type = receiver->type;

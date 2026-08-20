@@ -56,32 +56,28 @@ static bool copy_table(void **out, const void *source, uint32_t count, size_t it
 }
 
 static bool draft_within_budget(const XrTargetPlanDraft *draft) {
-    if (!(draft->semantic_dependency_count <= 1024u &&
-           draft->machine_reps_count <= 256u && draft->value_reps_count <= 40000000u &&
-           draft->extents_count <= 1000000u &&
-           draft->layouts_count <= 1000000u && draft->fields_count <= 16000000u &&
-           draft->storage_count <= 4000000u && draft->allocations_count <= 10000000u &&
-           draft->extent_operands_count <= 40000000u && draft->functions_count <= 100000u &&
-           draft->slots_count <= 16000000u && draft->instructions_count <= 40000000u &&
-           draft->calls_count <= 10000000u &&
-           draft->call_arguments_count <= 40000000u && draft->root_maps_count <= 10000000u &&
-           draft->root_slots_count <= 40000000u && draft->cleanups_count <= 40000000u &&
-           draft->adapters_count <= 1000000u && draft->capabilities_count <= 65536u &&
-           draft->coroutines_count <= 10000000u &&
-           draft->entry_expectations_count <= 10000000u &&
-           draft->debug_facts_count <= 40000000u))
+    if (!(draft->semantic_dependency_count <= 1024u && draft->machine_reps_count <= 256u &&
+          draft->value_reps_count <= 40000000u && draft->extents_count <= 1000000u &&
+          draft->layouts_count <= 1000000u && draft->fields_count <= 16000000u &&
+          draft->storage_count <= 4000000u && draft->allocations_count <= 10000000u &&
+          draft->extent_operands_count <= 40000000u && draft->functions_count <= 100000u &&
+          draft->slots_count <= 16000000u && draft->instructions_count <= 40000000u &&
+          draft->calls_count <= 10000000u && draft->call_arguments_count <= 40000000u &&
+          draft->root_maps_count <= 10000000u && draft->root_slots_count <= 40000000u &&
+          draft->cleanups_count <= 40000000u && draft->adapters_count <= 1000000u &&
+          draft->capabilities_count <= 65536u && draft->coroutines_count <= 10000000u &&
+          draft->entry_expectations_count <= 10000000u && draft->debug_facts_count <= 40000000u))
         return false;
     size_t total = sizeof(XrTargetPlan);
     if (draft->semantic_dependency_count >
         (SIZE_MAX - total) / sizeof(*draft->semantic_dependencies))
         return false;
-    total += (size_t) draft->semantic_dependency_count *
-             sizeof(*draft->semantic_dependencies);
-#define XR_ADD_DRAFT_BYTES(name)                                                                  \
-    do {                                                                                          \
-        if (draft->name##_count > (SIZE_MAX - total) / sizeof(*draft->name))                      \
-            return false;                                                                         \
-        total += (size_t) draft->name##_count * sizeof(*draft->name);                             \
+    total += (size_t) draft->semantic_dependency_count * sizeof(*draft->semantic_dependencies);
+#define XR_ADD_DRAFT_BYTES(name)                                                                   \
+    do {                                                                                           \
+        if (draft->name##_count > (SIZE_MAX - total) / sizeof(*draft->name))                       \
+            return false;                                                                          \
+        total += (size_t) draft->name##_count * sizeof(*draft->name);                              \
     } while (0)
     XR_ADD_DRAFT_BYTES(machine_reps);
     XR_ADD_DRAFT_BYTES(value_reps);
@@ -199,8 +195,7 @@ static void hash_allocation(XrSHA256Context *ctx, const XrTargetAllocationRecord
     hash_u64(ctx, record->flags);
 }
 
-static void hash_extent_operand(XrSHA256Context *ctx,
-                                const XrTargetExtentOperandRecord *record) {
+static void hash_extent_operand(XrSHA256Context *ctx, const XrTargetExtentOperandRecord *record) {
     hash_u64(ctx, record->allocation);
     hash_u64(ctx, record->semantic_value);
     hash_u64(ctx, record->ordinal);
@@ -243,8 +238,7 @@ static void hash_slot(XrSHA256Context *ctx, const XrTargetSlotRecord *record) {
     hash_u64(ctx, record->debug_variable);
 }
 
-static void hash_instruction(XrSHA256Context *ctx,
-                             const XrTargetInstructionRecord *record) {
+static void hash_instruction(XrSHA256Context *ctx, const XrTargetInstructionRecord *record) {
     hash_u64(ctx, record->id);
     hash_u64(ctx, record->function);
     hash_u64(ctx, record->result_slot);
@@ -256,8 +250,7 @@ static void hash_instruction(XrSHA256Context *ctx,
     hash_u64(ctx, record->reserved);
 }
 
-static void hash_call_argument(XrSHA256Context *ctx,
-                               const XrTargetCallArgumentRecord *record) {
+static void hash_call_argument(XrSHA256Context *ctx, const XrTargetCallArgumentRecord *record) {
     hash_id(ctx, record->identity);
     hash_u64(ctx, record->call);
     hash_u64(ctx, record->semantic_operand);
@@ -359,8 +352,7 @@ static void hash_capability(XrSHA256Context *ctx, const XrTargetCapabilityRecord
     hash_u64(ctx, record->flags);
 }
 
-static void hash_coroutine(XrSHA256Context *ctx,
-                           const XrTargetCoroutineStateRecord *record) {
+static void hash_coroutine(XrSHA256Context *ctx, const XrTargetCoroutineStateRecord *record) {
     hash_u64(ctx, record->id);
     hash_u64(ctx, record->function);
     hash_u64(ctx, record->semantic_entity);
@@ -376,8 +368,8 @@ static void hash_coroutine(XrSHA256Context *ctx,
     hash_u64(ctx, record->flags);
 }
 
-static void hash_entry_expectation(
-    XrSHA256Context *ctx, const XrTargetEntryExpectationRecord *record) {
+static void hash_entry_expectation(XrSHA256Context *ctx,
+                                   const XrTargetEntryExpectationRecord *record) {
     hash_id(ctx, record->identity);
     hash_u64(ctx, record->id);
     hash_u64(ctx, record->call);
@@ -394,8 +386,7 @@ static void hash_entry_expectation(
     hash_fingerprint(ctx, record->adapter_fingerprint);
 }
 
-static void hash_debug_fact(XrSHA256Context *ctx,
-                            const XrTargetDebugFactRecord *record) {
+static void hash_debug_fact(XrSHA256Context *ctx, const XrTargetDebugFactRecord *record) {
     hash_u64(ctx, record->id);
     hash_u64(ctx, record->instruction);
     hash_u64(ctx, record->function);
@@ -454,8 +445,8 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
     hash_id(&ctx, semantic_operation->id);
     hash_u64(&ctx, semantic_operation->function);
     if (semantic_operation->function < xr_semantic_plan_function_count(plan->semantic_plan))
-        hash_id(&ctx, xr_semantic_plan_function(plan->semantic_plan,
-                                                semantic_operation->function)->id);
+        hash_id(&ctx,
+                xr_semantic_plan_function(plan->semantic_plan, semantic_operation->function)->id);
     if (semantic_operation->result_type < xr_semantic_plan_type_count(plan->semantic_plan))
         hash_id(&ctx,
                 xr_semantic_plan_type(plan->semantic_plan, semantic_operation->result_type)->id);
@@ -570,15 +561,12 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         return false;
     }
     char semantic_error[512] = {0};
-    bool semantic_verified = draft->semantic_dependency_count == 0
-                                 ? xr_semantic_plan_verify(
-                                       draft->semantic_plan, semantic_error,
-                                       sizeof(semantic_error))
-                                 : xr_semantic_plan_verify_module_set(
-                                       draft->semantic_plan,
-                                       draft->semantic_dependencies,
-                                       draft->semantic_dependency_count,
-                                       semantic_error, sizeof(semantic_error));
+    bool semantic_verified =
+        draft->semantic_dependency_count == 0
+            ? xr_semantic_plan_verify(draft->semantic_plan, semantic_error, sizeof(semantic_error))
+            : xr_semantic_plan_verify_module_set(draft->semantic_plan, draft->semantic_dependencies,
+                                                 draft->semantic_dependency_count, semantic_error,
+                                                 sizeof(semantic_error));
     if (!semantic_verified) {
         set_error(error, error_size, "XR_TARGET_1000", "semantic plan is not exactly verified");
         return false;
@@ -598,16 +586,15 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
     plan->semantic_dependency_count = draft->semantic_dependency_count;
     if (plan->semantic_dependency_count) {
         if (!draft->semantic_dependencies ||
-            plan->semantic_dependency_count >
-                SIZE_MAX / sizeof(*plan->semantic_dependencies))
+            plan->semantic_dependency_count > SIZE_MAX / sizeof(*plan->semantic_dependencies))
             goto fail;
         plan->semantic_dependencies = (XrSemanticPlan **) xr_calloc(
             plan->semantic_dependency_count, sizeof(*plan->semantic_dependencies));
         if (!plan->semantic_dependencies)
             goto fail;
         for (uint32_t i = 0; i < plan->semantic_dependency_count; i++) {
-            plan->semantic_dependencies[i] = xr_semantic_plan_retain(
-                (XrSemanticPlan *) draft->semantic_dependencies[i]);
+            plan->semantic_dependencies[i] =
+                xr_semantic_plan_retain((XrSemanticPlan *) draft->semantic_dependencies[i]);
             if (!plan->semantic_dependencies[i])
                 goto fail;
         }
@@ -639,8 +626,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         if (plan->layouts[i].extent >= plan->extents_count ||
             plan->layouts[i].semantic_type >= xr_semantic_plan_type_count(plan->semantic_plan) ||
             !((plan->layouts[i].field_begin <= plan->fields_count) &&
-              (plan->layouts[i].field_count <=
-               plan->fields_count - plan->layouts[i].field_begin)))
+              (plan->layouts[i].field_count <= plan->fields_count - plan->layouts[i].field_begin)))
             goto invalid;
         for (uint32_t f = 0; f < plan->layouts[i].field_count; f++)
             if (plan->fields[plan->layouts[i].field_begin + f].memory_rep >=
@@ -652,8 +638,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         XrTargetDebugFactRecord *fact = &plan->debug_facts[i];
         if (fact->semantic_operation == XR_SEMANTIC_INDEX_NONE)
             continue;
-        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(
-            plan->semantic_plan, fact->semantic_operation);
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan->semantic_plan, fact->semantic_operation);
         if (!operation)
             goto invalid;
         bool found = false;
@@ -667,38 +653,29 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         }
     }
     for (uint32_t i = 0; i < plan->calls_count; i++) {
-        bool direct_local =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
-        bool channel_close =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
-        bool source_export =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
+        bool direct_local = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
+        bool channel_close = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
+        bool source_export = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
         bool stringbuilder_constructor =
-            plan->calls[i].target_kind ==
-            XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR;
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR;
         bool string_byte_slice_view =
-            plan->calls[i].target_kind ==
-            XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW;
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW;
         bool stringbuilder_append_rune =
-            plan->calls[i].target_kind ==
-            XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE;
-        bool string_runes =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRING_RUNES;
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE;
+        bool string_runes = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRING_RUNES;
         bool iterator_rune_has_next =
-            plan->calls[i].target_kind ==
-            XR_TARGET_CALL_TARGET_ITERATOR_RUNE_HAS_NEXT;
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ITERATOR_RUNE_HAS_NEXT;
         bool iterator_rune_next =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NEXT;
-        bool rune_to_uint32 =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_RUNE_TO_UINT32;
+        bool rune_to_uint32 = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_RUNE_TO_UINT32;
         bool rune_is_whitespace =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_RUNE_IS_WHITESPACE;
         bool string_slice_range =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRING_SLICE_RANGE;
         bool stringbuilder_to_string =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING;
-        bool stringbuilder_append_string = plan->calls[i].target_kind ==
-            XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING;
+        bool stringbuilder_append_string =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING;
         bool json_namespace_value =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE;
         bool array_member_scalar =
@@ -706,8 +683,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         bool native_module_scalar =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR;
         bool native_namespace_yieldable =
-            plan->calls[i].target_kind ==
-            XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         /* The construction is one of the rows that names a SemanticPlan call
          * target rather than a sealed builtin, so its target index must index
          * that table. */
@@ -715,22 +691,21 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
         bool adt_enum_constructor =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ADT_ENUM_CONSTRUCTOR;
-        bool array_intrinsic =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_INTRINSIC;
-        bool array_fill =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR;
-        bool array_hof =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_HOF;
-        if ((!direct_local && !channel_close && !source_export &&
-             !stringbuilder_constructor && !string_byte_slice_view &&
-             !stringbuilder_append_rune && !string_runes && !iterator_rune_has_next &&
-             !iterator_rune_next && !rune_to_uint32 && !rune_is_whitespace &&
-             !string_slice_range &&
-             !stringbuilder_to_string &&
-             !stringbuilder_append_string &&
-             !json_namespace_value && !array_member_scalar && !native_module_scalar &&
-             !native_namespace_yieldable && !source_class_constructor &&
-             !adt_enum_constructor && !array_intrinsic && !array_fill && !array_hof) ||
+        bool array_intrinsic = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_INTRINSIC;
+        bool array_fill = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR;
+        bool array_hof = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_HOF;
+        bool panic_info_constructor =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_PANIC_INFO_CONSTRUCTOR;
+        bool container_copy = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_CONTAINER_COPY;
+        bool scalar_copy = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SCALAR_COPY;
+        if ((!direct_local && !channel_close && !source_export && !stringbuilder_constructor &&
+             !string_byte_slice_view && !stringbuilder_append_rune && !string_runes &&
+             !iterator_rune_has_next && !iterator_rune_next && !rune_to_uint32 &&
+             !rune_is_whitespace && !string_slice_range && !stringbuilder_to_string &&
+             !stringbuilder_append_string && !json_namespace_value && !array_member_scalar &&
+             !native_module_scalar && !native_namespace_yieldable && !source_class_constructor &&
+             !adt_enum_constructor && !array_intrinsic && !array_fill && !array_hof &&
+             !panic_info_constructor && !scalar_copy && !container_copy) ||
             plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
             ((direct_local || source_export || native_namespace_yieldable ||
@@ -739,10 +714,11 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
                  xr_semantic_plan_call_target_count(plan->semantic_plan)) ||
             ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
               stringbuilder_append_rune || stringbuilder_to_string || stringbuilder_append_string ||
-              string_runes || iterator_rune_has_next || iterator_rune_next ||
-              rune_to_uint32 || rune_is_whitespace || string_slice_range ||
-              json_namespace_value || array_member_scalar || native_module_scalar ||
-              adt_enum_constructor || array_intrinsic || array_fill || array_hof) &&
+              string_runes || iterator_rune_has_next || iterator_rune_next || rune_to_uint32 ||
+              rune_is_whitespace || string_slice_range || json_namespace_value ||
+              array_member_scalar || native_module_scalar || adt_enum_constructor ||
+              array_intrinsic || array_fill || array_hof || panic_info_constructor || scalar_copy ||
+              container_copy) &&
              plan->calls[i].semantic_call_target != XR_SEMANTIC_INDEX_NONE) ||
             plan->calls[i].result_register_rep >= plan->machine_reps_count ||
             plan->calls[i].result_memory_rep >= plan->machine_reps_count ||
@@ -869,15 +845,14 @@ const XrTargetProfile *xr_target_plan_profile(const XrTargetPlan *plan) {
     return plan ? plan->profile : NULL;
 }
 
-const XrTargetMachineRepRecord *xr_target_plan_machine_rep(const XrTargetPlan *plan,
-                                                            uint16_t rep) {
+const XrTargetMachineRepRecord *xr_target_plan_machine_rep(const XrTargetPlan *plan, uint16_t rep) {
     if (!plan || rep >= plan->machine_reps_count)
         return NULL;
     return &plan->machine_reps[rep];
 }
 
 const XrTargetValueRepRecord *xr_target_plan_value_rep(const XrTargetPlan *plan,
-                                                        uint32_t semantic_value) {
+                                                       uint32_t semantic_value) {
     if (!plan)
         return NULL;
     uint32_t begin = 0;
@@ -895,19 +870,17 @@ const XrTargetValueRepRecord *xr_target_plan_value_rep(const XrTargetPlan *plan,
     return NULL;
 }
 
-const XrTargetInstructionRecord *xr_target_plan_function_instructions(
-    const XrTargetPlan *plan, uint32_t function, uint32_t *count) {
+const XrTargetInstructionRecord *
+xr_target_plan_function_instructions(const XrTargetPlan *plan, uint32_t function, uint32_t *count) {
     if (count)
         *count = 0;
     if (!xr_target_plan_is_verified(plan) || function >= plan->functions_count)
         return NULL;
     uint32_t begin = 0;
-    while (begin < plan->instructions_count &&
-           plan->instructions[begin].function < function)
+    while (begin < plan->instructions_count && plan->instructions[begin].function < function)
         begin++;
     uint32_t end = begin;
-    while (end < plan->instructions_count &&
-           plan->instructions[end].function == function)
+    while (end < plan->instructions_count && plan->instructions[end].function == function)
         end++;
     if (begin == end)
         return NULL;
@@ -928,19 +901,15 @@ uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
         suspends |= rows[i].opcode == XR_TARGET_INSTRUCTION_SUSPEND;
     for (uint32_t i = 0; i < plan->entry_expectations_count; i++) {
         uint32_t call = plan->entry_expectations[i].call;
-        if (call < plan->calls_count &&
-            plan->calls[call].caller_function == function)
-            return suspends
-                       ? 0
-                       : (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC;
+        if (call < plan->calls_count && plan->calls[call].caller_function == function)
+            return suspends ? 0 : (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC;
     }
-    return suspends
-               ? (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_COROUTINE
-               : (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_CLOSED;
+    return suspends ? (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_COROUTINE
+                    : (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_CLOSED;
 }
 
 #define XR_TARGET_TABLE_ACCESSOR(name, type)                                                       \
-    const type *xr_target_plan_##name(const XrTargetPlan *plan, uint32_t *count) {                  \
+    const type *xr_target_plan_##name(const XrTargetPlan *plan, uint32_t *count) {                 \
         if (count)                                                                                 \
             *count = plan ? plan->name##_count : 0;                                                \
         return plan ? plan->name : NULL;                                                           \

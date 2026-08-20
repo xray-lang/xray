@@ -1891,6 +1891,34 @@ static XrRep sr_type_call_place_pointee_rep(const struct XrType *type) {
  * scalar operands in their native representation during refresh; otherwise a
  * selector-generic CALL_BUILTIN rule would synthesize a BOX that has no
  * representation obligation in the frozen Array-intrinsic family. */
+/* `copy(x)` over a scalar.  The argument and the result are one scalar type, so
+ * the copy reads its argument in the storage that argument already occupies --
+ * the tagged default this builtin's operands otherwise take would ask for a box
+ * the copy immediately discards.  The refinement layer states the same fact for
+ * the same shape (xr_semantic_scalar_copy_shape.h); the two must agree, because
+ * a value one side boxes and the other does not is an adapter with no owner. */
+static bool sr_scalar_copy_operand_rep(const XiValue *value, uint16_t argument_index, XrRep *out) {
+    if (!value || !out || value->op != XI_CALL_BUILTIN || value->nargs != 1 ||
+        argument_index != 0 || !value->aux || value->aux_kind != XI_AUX_KIND_NONE ||
+        strcmp((const char *) value->aux, "copy") != 0 || !value->args[0] ||
+        !value->args[0]->type || !value->type)
+        return false;
+    /* Compared by the storage fact rather than by type identity: the two sides
+     * are the same type, but Xi does not intern its type records, so pointer
+     * equality would refuse the very shape it is meant to name.
+     *
+     * The boundary answer is tagged for every reference-capable or nullable
+     * type, so a non-tagged answer is itself the proof that this is the plain
+     * scalar case the shape above describes. */
+    XrRep result_rep = sr_type_native_boundary_rep(value->type);
+    XrRep argument_rep = sr_type_native_boundary_rep(value->args[0]->type);
+    if (result_rep == XR_REP_TAGGED || result_rep != argument_rep ||
+        value->type->kind != value->args[0]->type->kind)
+        return false;
+    *out = argument_rep;
+    return true;
+}
+
 static bool sr_array_intrinsic_operand_rep(const XiValue *value, uint16_t argument_index,
                                            XrRep *out) {
     if (!value || !out || value->op != XI_CALL_BUILTIN || argument_index >= value->nargs ||
@@ -2890,6 +2918,13 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
                 return sr_type_native_boundary_rep(v->type);
             if (v->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE)
                 return XR_REP_TAGGED;
+            /* A scalar copy hands back the storage its argument occupies, so
+             * the same judgement answers both sides of it: the definition here
+             * and the operand in sr_use_rep.  Answering only one of them leaves
+             * an adapter that one side builds and the other never claims. */
+            XrRep scalar_copy_rep = XR_REP_TAGGED;
+            if (sr_scalar_copy_operand_rep(v, 0, &scalar_copy_rep))
+                return scalar_copy_rep;
             return XR_REP_TAGGED;
         }
         case XI_LEN:
@@ -3308,6 +3343,18 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             return arg_idx == 0 && user->args[0]
                        ? sr_type_call_place_pointee_rep(user->args[0]->type)
                        : XR_REP_TAGGED;
+        case XI_SLICE:
+            /* A range slice borrows its container and hands back a window over
+             * the same elements: the container arrives in whatever carrier its
+             * own definition named, and the two bounds are ordinary native
+             * integers.  The refinement layer states exactly this, so leaving
+             * the bounds on the tagged default here built a box that layer
+             * never asked for and could not account for. */
+            if (arg_idx == 0)
+                return user->args[0] ? sr_def_rep(user->args[0], policy) : XR_REP_TAGGED;
+            if (arg_idx <= 2u && user->args[arg_idx])
+                return sr_type_scalar_rep(user->args[arg_idx]->type);
+            return XR_REP_TAGGED;
         case XI_PLACE_LOAD:
             return arg_idx == 0 ? XR_REP_RAWPTR : XR_REP_TAGGED;
         case XI_PLACE_STORE:
@@ -3320,6 +3367,9 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             XrRep array_intrinsic_rep = XR_REP_TAGGED;
             if (sr_array_intrinsic_operand_rep(user, arg_idx, &array_intrinsic_rep))
                 return array_intrinsic_rep;
+            XrRep scalar_copy_rep = XR_REP_TAGGED;
+            if (sr_scalar_copy_operand_rep(user, arg_idx, &scalar_copy_rep))
+                return scalar_copy_rep;
             if (user->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
                 if (arg_idx == 0)
