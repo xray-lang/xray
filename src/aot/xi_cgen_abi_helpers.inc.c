@@ -19,10 +19,6 @@ static const XaotFuncPlan *cg_func_plan(XiCgenCtx *ctx, const XiFunc *f) {
     return plan;
 }
 
-static XrRep cg_abi_slot_storage_rep(const XaotAbiSlot *slot) {
-    return xaot_value_storage_rep(xaot_abi_slot_value_rep(slot));
-}
-
 static const XaotValuePlan *cg_value_plan_optional(XiCgenCtx *ctx, const XiValue *v) {
     if (!ctx || !v)
         return NULL;
@@ -1204,7 +1200,10 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
         }
         return NULL;
     }
-    actual_rep = cg_abi_slot_storage_rep(&target_plan->abi.ret);
+    /* The callee's own signature row, the same source every other boundary in
+     * this emitter reads. The old per-function ABI model answered here only
+     * because this site was migrated last. */
+    actual_rep = cg_func_return_abi_rep(ctx, target);
     result_rep = cg_value_plan_storage_rep(ctx, call);
     if (ctx->error)
         return NULL;

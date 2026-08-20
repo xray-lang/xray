@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 273,
+  "operation_count": 275,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -111,6 +111,34 @@
       "observable_contract": "src/shared/xr_assert_condition_core.h",
       "observable_edges": [],
       "operation_id": "shared.assert-condition",
+      "ownership": "native",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/bigint-literal",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_bigint_literal_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/bigint-literal",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_bigint_literal_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.bigint-literal",
       "ownership": "native",
       "targets": [
         "vm",
@@ -609,6 +637,34 @@
         "vm",
         "aot",
         "hosted"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/length-source",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_length_source_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/length-source",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_length_source_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.length-source",
+      "ownership": "native",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
       ]
     },
     {
@@ -7054,5 +7110,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "2245d9c3e7cc932ddc240bb0080fbc2bae094632cd7ac5b8d8e13b61acd7121f"
+  "source_tree_fingerprint": "ef6f2e4fcab3f05167edaaf39f46cb0f380671f27d4007ded286dfa6f895e4dc"
 }
