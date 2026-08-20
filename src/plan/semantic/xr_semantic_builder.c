@@ -474,8 +474,15 @@ static const XiClassData *value_aggregate_class_data(const XrSemanticBuildContex
             }
         }
     }
+    /* A packed struct differs from an ordinary one only in that the layout
+     * leaves out the padding: the fields are the same fields, in the same
+     * order, with the same names and types, so every answer this record
+     * carries reads the same. A union is not admitted -- its fields overlap,
+     * so a field index does not name a distinct place the way the rest of
+     * this judgement assumes. */
     if (!match || match->needs_runtime_type || !match->struct_layout ||
-        match->struct_layout->kind != XR_AGG_LAYOUT_STRUCT ||
+        (match->struct_layout->kind != XR_AGG_LAYOUT_STRUCT &&
+         match->struct_layout->kind != XR_AGG_LAYOUT_PACKED_STRUCT) ||
         match->instance_field_count != match->struct_layout->field_count ||
         (match->instance_field_count &&
          (!match->instance_field_types || !match->instance_field_names)))
