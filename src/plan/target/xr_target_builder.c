@@ -1911,6 +1911,28 @@ static bool semantic_direct_local_array_value_parameter_is_exact(
     return semantic_direct_local_array_parameter_is_exact(plan, parameter, XR_PARAM_READ, storage);
 }
 
+/* A direct-local call that returns `T?`.
+ *
+ * The nullable carrier is one tagged word holding either the null tag or a
+ * scalar payload, and it owns no reference either way -- which is exactly why
+ * the family that binds nullable scalars elsewhere can bind this result too.
+ * The return still has to be a whole, fresh answer: a parameter-forwarded or
+ * aliased return would hand back something whose extent this plan cannot
+ * state, so those stay refused. */
+static bool
+semantic_direct_local_nullable_scalar_result_is_exact(const XrSemanticPlan *plan,
+                                                      const XrSemanticOperationRecord *operation,
+                                                      const XrSemanticFunctionRecord *callee) {
+    return plan && operation && callee &&
+           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
+           operation->result_type == callee->return_type &&
+           operation->result_value != XR_SEMANTIC_INDEX_NONE &&
+           operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
+           callee->return_parameter == -1 &&
+           semantic_nullable_scalar_type_is_exact(
+               xr_semantic_plan_type(plan, operation->result_type));
+}
+
 /* A direct-local call that returns a freshly owned `Array<T>`.
  *
  * The container is a dynamic value, not an aggregate slot the caller owns, so
@@ -8823,6 +8845,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             xr_semantic_plan_parameter_count(plan) - callee->parameter_begin ||
         operation->result_type != callee->return_type ||
         (!call_type_is_exact_scalar(plan, operation->result_type) &&
+         !semantic_direct_local_nullable_scalar_result_is_exact(plan, operation, callee) &&
          !semantic_direct_local_string_result_is_exact(plan, operation, callee) &&
          !xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee) &&
          !semantic_direct_local_array_result_is_exact(plan, operation, callee) &&
@@ -8849,6 +8872,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                               operation->result_type);
             target_trace_judgement("result is an exact scalar",
                                    call_type_is_exact_scalar(plan, operation->result_type));
+            target_trace_judgement(
+                "result is an exact nullable scalar",
+                semantic_direct_local_nullable_scalar_result_is_exact(plan, operation, callee));
             target_trace_judgement(
                 "result is an exact String",
                 semantic_direct_local_string_result_is_exact(plan, operation, callee));
