@@ -1145,9 +1145,10 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
      * adapter is never an aggregate -- a box is the tagged carrier and an
      * unbox is the scalar it produces. Skipping the lookup for them keeps the
      * legacy plan out of a path whose answer it cannot change. */
-    const XaotValuePlan *plan = (ctx && v && v->op != XI_BOX && v->op != XI_UNBOX)
-                                    ? cg_value_plan_require_legacy(ctx, v)
-                                    : NULL;
+    const XaotValuePlan *plan =
+        (ctx && v && v->op != XI_BOX && v->op != XI_UNBOX && v->op != XI_LOCAL_ADDR)
+            ? cg_value_plan_require_legacy(ctx, v)
+            : NULL;
     if (v && v->op == XI_CONST) {
         XrRep from_rep = cg_value_plan_storage_rep(ctx, v);
         if (v->type && v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE) {
