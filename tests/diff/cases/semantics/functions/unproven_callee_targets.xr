@@ -1,10 +1,14 @@
 // anchor: unproven-callee-targets
 // diff-backends: vm
-// diff-aot-reject: native compilation cannot prove the target of an indirect call
-// Task 264 D9. AOT native plans every indirect call by proving a finite set of
-// target functions for it. When the callee's provenance is opaque the plan is
-// rejected and the build fails with an internal dump:
-//   AOT verifier failed: open AOT callable target set ... callee-op=LOAD_UPVAL
+// diff-aot-reject: call target has no consumable adapter authority
+// AOT native plans every indirect call by proving a finite set of target
+// functions for it. The proof itself moved: the semantic plan now states a
+// call target for these shapes, and the target layer refuses because it
+// consumes only some target kinds (DIRECT_LOCAL, SOURCE_EXPORT,
+// NATIVE_NAMESPACE_YIELDABLE, BUILTIN_INSTANCE_YIELDABLE and
+// SOURCE_CLASS_CONSTRUCTOR). So the refusal no longer says the target could
+// not be proven -- it says nothing consumes the kind that was proven:
+//   XR_TARGET_1003: call target has no consumable adapter authority
 // The VM runs all of it.
 //
 // Three provenances reach the same wall, and assigning to a local first does
@@ -16,6 +20,12 @@
 // These shapes are proven and do compile, which is what makes the boundary
 // worth pinning: a callback parameter, a local initialised from a lambda, a
 // class field, a returned lambda, and an array whose elements are literals.
+//
+// The actionable diagnostic this contract exists to protect -- the one naming
+// the provenance and suggesting a rewrite -- lives in the AOT callable layer
+// and is no longer reached, because the target layer refuses first. Restoring
+// it means carrying provenance into the target layer's refusal, not restoring
+// the old wording here.
 //
 // The closed-world planner is deliberate, so the resolution is a real user
 // diagnostic plus a spec statement of the limit, not making these compile: the
