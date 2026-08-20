@@ -48,6 +48,7 @@
 #include "../../runtime/value/xtype.h"
 #include "../semantic/xr_semantic_array_member_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
+#include "../semantic/xr_semantic_identity_copy_shape.h"
 #include "../semantic/xr_semantic_dynamic_phi_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -3310,6 +3311,12 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         operation_is_exact_stringbuilder_to_string(plan->semantic_plan, operation, NULL);
     bool exact_stringbuilder_append_string =
         operation_is_exact_stringbuilder_append_string(plan->semantic_plan, operation, NULL);
+    /* A copy that only renames its operand carries the source's binding, so the
+     * result having one is expected rather than unexplained. Same statement of
+     * the shape the builder used to give it that binding. */
+    uint32_t identity_copy_source = XR_SEMANTIC_INDEX_NONE;
+    bool exact_identity_copy =
+        xr_semantic_identity_copy_is_exact(plan->semantic_plan, operation, &identity_copy_source);
     bool exact_string_runes =
         xr_semantic_string_runes_is_exact(plan->semantic_plan, operation, NULL);
     bool exact_string_slice_range =
@@ -3444,9 +3451,10 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                 exact_bigint_value || exact_string_concat || exact_string_convert ||
                 exact_direct_string_result || exact_stringbuilder || exact_stringbuilder_append ||
                 exact_stringbuilder_to_string || exact_stringbuilder_append_string ||
-                exact_string_runes || exact_string_slice_range || exact_json_namespace_value ||
-                exact_panic_info_constructor || exact_array_member_result || exact_direct_callee ||
-                exact_go_callee || exact_go_task || exact_channel || exact_source_namespace ||
+                exact_identity_copy || exact_string_runes || exact_string_slice_range ||
+                exact_json_namespace_value || exact_panic_info_constructor ||
+                exact_array_member_result || exact_direct_callee || exact_go_callee ||
+                exact_go_task || exact_channel || exact_source_namespace ||
                 exact_native_module_namespace || exact_string_byte_view || exact_range_slice_view ||
                 exact_string_byte_parameter || exact_unit_enum || exact_nullable_scalar ||
                 exact_adt_enum || exact_array_ref_parameter || exact_array_value_parameter ||
@@ -3496,6 +3504,26 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
             expected_layout >= 0 && plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_DYNAMIC
                 ? 1
                 : -1;
+    } else if (exact_identity_copy) {
+        /* A rename holds what its source holds, so the expected kind is the
+         * source's rather than one derived from this value's type. A source
+         * with no binding leaves the copy ineligible, which is the same
+         * fail-closed answer the builder gives by not claiming it. */
+        const XrTargetValueRepRecord *identity_source =
+            identity_copy_source != XR_SEMANTIC_INDEX_NONE
+                ? xr_target_plan_value_rep(plan, identity_copy_source)
+                : NULL;
+        if (identity_source) {
+            expected_kind = plan->machine_reps[identity_source->register_rep].kind;
+            expected_layout = target_plan_layout_for_type(plan, semantic_type);
+            eligibility = 1;
+        } else {
+            /* Not ineligible, just unclaimed: a copy whose source no family
+             * bound has nothing to inherit, and the builder declines to claim
+             * it for the same reason. Requiring a binding here would demand one
+             * the builder never produces. */
+            eligibility = 0;
+        }
     } else if (exact_array_ref_parameter) {
         expected_kind = XR_MACHINE_REP_RAW_PTR;
         eligibility = 1;
@@ -3527,8 +3555,9 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     if (operation_result_void)
         expected_kind = XR_MACHINE_REP_VOID;
     const XrTargetValueRepRecord *record = xr_target_plan_value_rep(plan, semantic_value);
-    if (eligibility < 0)
+    if (eligibility < 0) {
         XR_VALUE_BINDING_FAIL(2);
+    }
     if (eligibility == 0) {
         if (record != NULL)
             XR_VALUE_BINDING_FAIL(7);
