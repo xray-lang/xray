@@ -2040,6 +2040,13 @@ static bool target_array_fill_type_is_exact(const XrSemanticTypeRecord *type,
     uint8_t ignored_storage = XR_TARGET_ARRAY_STORAGE_NONE;
     if (!type)
         return false;
+    /* The same shape gate the semantic layer applies before reading the
+     * storage: a row carrying a builtin id, children, an aggregate extent or
+     * any flag at all is not the bare scalar a fill element must be, whatever
+     * storage it would map to. */
+    if (type->builtin_type != XR_TID_NULL || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 || type->flags != 0)
+        return false;
     if (element_storage == XR_TARGET_ARRAY_STORAGE_RUNE)
         return type->kind == XR_KIND_RUNE &&
                xr_target_array_storage_from_type(type, &ignored_storage);
@@ -3155,6 +3162,8 @@ static bool note_closure_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
+static bool semantic_u8_slice_type_is_exact(const XrSemanticPlan *plan, uint32_t type_index);
+
 static bool semantic_string_byte_slice_view_is_exact(const XrSemanticPlan *plan,
                                                      const XrSemanticOperationRecord *operation) {
     uint32_t operand_count = 0;
@@ -3179,12 +3188,14 @@ static bool semantic_string_byte_slice_view_is_exact(const XrSemanticPlan *plan,
            source->role == XR_SEM_OPERAND_ARGUMENT &&
            (source->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 && source_type &&
            source_type->kind == XR_KIND_STRING && source_type->scalar_rep == XR_SCALAR_REP_NONE &&
-           result_type && result_type->kind == XR_KIND_SLICE && result_type->child_count == 1 &&
+           /* The row itself is judged by the one function that answers this
+            * question, so the carrier a view produces here can never be one a
+            * use site refuses. Only the tie between the row's element and the
+            * operation's own record is checked separately. */
+           semantic_u8_slice_type_is_exact(plan, operation->result_type) && result_type &&
            result_type->child_begin < child_count &&
            children[result_type->child_begin] == operation->view_element_type &&
-           result_type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW) &&
-           element_type && element_type->kind == XR_KIND_INT &&
-           element_type->scalar_rep == XR_NATIVE_U8;
+           element_type != NULL;
 }
 
 static bool semantic_u8_slice_type_is_exact(const XrSemanticPlan *plan, uint32_t type_index) {
