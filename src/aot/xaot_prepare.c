@@ -4363,36 +4363,6 @@ static bool prepare_func_enum_domain_plan(XaotBundle *bundle, const XiFunc *func
     return true;
 }
 
-static bool prepare_apply_param_abi_value_plan(XaotBundle *bundle, const XiFunc *func,
-                                               XaotValuePlan *vp) {
-    const XaotFuncPlan *func_plan;
-    const XiValue *value;
-    uint16_t param_idx;
-
-    if (!bundle || !func || !vp)
-        return false;
-    value = vp->value;
-    if (!value || value->op != XI_PARAM || value->aux_int < 0)
-        return true;
-    param_idx = (uint16_t) value->aux_int;
-    func_plan = xaot_bundle_find_func_plan(bundle, func);
-    /* The per-function ABI is not built until much later in this pass, so
-     * nparams is still zero here and every parameter takes this exit. Measured
-     * over the corpus: the body below never ran once in 804 cases. */
-    if (!func_plan || param_idx >= func_plan->abi.nparams)
-        return true;
-    const XaotAbiSlot *slot = &func_plan->abi.params[param_idx];
-    /* Ordinary tagged-boundary parameters are immediately projected into the
-     * type's native local representation.  Only a borrowed-place slot must
-     * retain the ABI representation itself: its local value is the address
-     * supplied by the caller, even when the surrounding function keeps a
-     * tagged/closure-object ABI. */
-    if (func_plan->abi.kind != XAOT_ABI_NATIVE && (slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0)
-        return true;
-    prepare_value_plan_set_rep(vp, xaot_abi_slot_value_rep(slot));
-    return true;
-}
-
 static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
     uint32_t bi;
     if (!bundle || !func)
@@ -4468,8 +4438,6 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                 bundle->error_msg = "failed to allocate AOT value plan";
                 return false;
             }
-            if (!prepare_apply_param_abi_value_plan(bundle, func, vp))
-                return false;
             /* A local value-struct constructor is concrete even when it does
              * not reach a native function boundary.  Seed its POD aggregate
              * representation here so a semantic XI_COPY can become an
