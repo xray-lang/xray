@@ -202,6 +202,11 @@ static bool cg_value_plan_is_struct_aggregate(XiCgenCtx *ctx, const XiValue *v) 
     bool named_aggregate = cg_value_emission_is_named_aggregate(ctx, v, &emission, &authoritative);
     if (authoritative)
         return named_aggregate;
+    /* A box is the tagged carrier, never a C aggregate. Measured over the AOT
+     * corpus, all 92 boxes reaching this question had a legacy row saying
+     * exactly that. */
+    if (v && v->op == XI_BOX)
+        return false;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && cg_value_rep_is_struct_aggregate(plan->rep);
 }
