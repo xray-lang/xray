@@ -4532,25 +4532,25 @@ static const XiClassData *cg_func_param_native_class_data(XiCgenCtx *ctx, const 
 
 static const XiClassData *cg_func_param_native_class_place_data(XiCgenCtx *ctx, const XiFunc *f,
                                                                 uint16_t param_idx) {
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    if (!f || param_idx >= f->nparams || !plan || !plan->abi.params ||
-        param_idx >= plan->abi.nparams)
+    if (!f || param_idx >= f->nparams)
         return NULL;
-    /* The signature row can answer this one. It states the pointee's
-     * representation, filled from the caller-side register rep. Measured by
-     * computing both answers side by side over the whole corpus: of 19
-     * borrowed-place reads, 17 agreed exactly and the other 2 had no signature
-     * row at all rather than a differing one.
+    /* Read from the signature row: it states the pointee's representation,
+     * filled from the caller-side register rep because the caller holds the
+     * thing and passes its address.
      *
-     * Still read from the old model because of that second group. A signature
-     * is written whole or not at all, and 13.2% of function plans get no row
-     * because the machine-rep to C-rep mapping has no aggregate, vector,
-     * object-ref, or code-ref case. Switching now would answer those from the
-     * type-based fallback instead, which is a different answer, so this moves
-     * once that mapping is complete. */
-    const XaotAbiSlot *slot = &plan->abi.params[param_idx];
-    if ((slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0 ||
-        xaot_value_storage_rep(slot->pointee_rep) != XR_REP_PTR)
+     * Measured by computing both answers side by side over the whole corpus:
+     * of 19 borrowed-place reads, 17 agreed exactly and the other 2 had no row
+     * at all. Both groups answer NULL here either way -- the agreeing 17 point
+     * at a tagged carrier and the other 2 at a raw pointer, and neither is the
+     * plain pointer this asks for. A function whose row is absent is not a
+     * native-class place, which is the fail-closed answer rather than a guess.
+     *
+     * VIEW is the row's spelling for a pointer; RAW_PTR is a different storage
+     * class and deliberately does not qualify, matching what the old model
+     * answered here. */
+    XrCFunctionAbiEmissionView view;
+    if (!cg_func_param_abi_emission(ctx, f, param_idx, &view) ||
+        view.slot_class != XR_C_ABI_SLOT_BORROWED_PLACE || view.pointee_rep != XR_C_VALUE_REP_VIEW)
         return NULL;
     const XrType *param_type =
         f->params && f->params[param_idx] ? f->params[param_idx]->type : NULL;
