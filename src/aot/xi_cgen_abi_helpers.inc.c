@@ -56,6 +56,24 @@ static const XaotValuePlan *cg_value_plan_require_legacy(XiCgenCtx *ctx, const X
  * produces its own type, so the type is. Measured over the AOT corpus, all
  * 455 boxes and all 138 unboxes the legacy value plan answered for agreed
  * exactly. Stated once here because three sites ask it. */
+/* The fine-grained XaotRep an adapter states for itself, for the callers that
+ * need the exact integer width rather than the storage class. Same two facts
+ * as the storage answer below: a box is tagged, an unbox is its own type. All
+ * 10 unboxes reaching the narrow-integer question agreed with the row. */
+static bool cg_rep_adapter_xaot_rep(const XiValue *v, XaotRep *out) {
+    if (!v || !out)
+        return false;
+    if (v->op == XI_BOX) {
+        *out = XAOT_REP_TAGGED;
+        return true;
+    }
+    if (v->op == XI_UNBOX) {
+        *out = xaot_value_rep_for_type(v->type).rep;
+        return true;
+    }
+    return false;
+}
+
 static bool cg_rep_adapter_storage_rep(const XiValue *v, XrRep *out) {
     if (!v || !out)
         return false;

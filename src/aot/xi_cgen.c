@@ -4927,10 +4927,12 @@ static bool cg_value_narrow_int_rep(XiCgenCtx *ctx, const XiFunc *f, const XiVal
                emission_status == CG_VALUE_EMISSION_NOT_CONFIGURED) {
         return false;
     } else {
-        const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
-        if (!plan)
-            return false;
-        rep = plan->rep.rep;
+        if (!cg_rep_adapter_xaot_rep(v, &rep)) {
+            const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
+            if (!plan)
+                return false;
+            rep = plan->rep.rep;
+        }
     }
     const XaotRepInfo *info = xaot_rep_info(rep);
     if (!info || !info->is_integer)
