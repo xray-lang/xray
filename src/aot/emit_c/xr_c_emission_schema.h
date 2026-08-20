@@ -215,6 +215,15 @@ typedef enum XrCAbiSlotClass {
  * initializer takes the tagged boundary however its slots are shaped, and so
  * do a capturing function and a coroutine. Deriving it from the slot rows was
  * measured and disagreed on 318 of 582 functions, every one an initializer. */
+/* Verification status, stated because the three cases are not equally proven:
+ * only NATIVE has been measured against the older per-function record (582
+ * comparisons, zero disagreements). TAGGED and COROUTINE are *not* drop-in
+ * replacements for that record's XAOT_ABI_TAGGED / XAOT_ABI_CORO -- this
+ * enum separates them by whether the function can suspend, while the older
+ * record separates them by whether the function carries coroutine operations.
+ * A module initializer that can suspend lands in COROUTINE here and in TAGGED
+ * there. Ask `!= NATIVE` when that is the question; do not read COROUTINE as
+ * "the older model would have said CORO" until that case is measured too. */
 typedef enum XrCAbiBoundaryKind {
     XR_C_ABI_BOUNDARY_INVALID = 0,
     /* Every slot travels in the carrier its own type admits. */
