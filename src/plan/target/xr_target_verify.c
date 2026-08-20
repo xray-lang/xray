@@ -26,6 +26,7 @@
 #include "../semantic/xr_semantic_verify.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_semantic_allocation_shape.h"
+#include "../semantic/xr_semantic_array_type_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_coroutine_lifecycle_shape.h"
 #include "../semantic/xr_semantic_enum_shape.h"
@@ -787,21 +788,6 @@ static int semantic_type_expected_rep(const XrSemanticTypeRecord *type, uint16_t
  * geometry, and the reference-capable ownership root a container carries. What
  * the element is stays a separate question, asked by whichever carrier needs
  * the answer. */
-static bool semantic_array_allocation_type_is_exact(const XrSemanticTypeRecord *type) {
-    char expected_type_key[96];
-    int written = snprintf(expected_type_key, sizeof(expected_type_key),
-                           "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
-                           (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
-    XrStableId zero = {{0}};
-    return type && written > 0 && (size_t) written < sizeof(expected_type_key) &&
-           type->kind == XR_KIND_ARRAY && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 1 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE &&
-           xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
-           strncmp(type->canonical_key, expected_type_key, (size_t) written) == 0;
-}
 
 static bool semantic_direct_local_array_type_is_exact_verify(const XrSemanticPlan *plan,
                                                              uint32_t type_index,
@@ -830,7 +816,7 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *semantic,
         !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, operation->result_type);
-    if (!semantic_array_allocation_type_is_exact(type) || type->child_begin >= child_count)
+    if (!xr_semantic_array_type_row_is_exact(type) || type->child_begin >= child_count)
         return false;
     const XrSemanticTypeRecord *element =
         xr_semantic_plan_type(semantic, children[type->child_begin]);
@@ -883,7 +869,7 @@ static bool semantic_direct_local_array_type_is_exact_verify_ex(const XrSemantic
             *storage = XR_TARGET_ARRAY_STORAGE_NONE;
         return true;
     }
-    if (!semantic || !children || !semantic_array_allocation_type_is_exact(array) ||
+    if (!semantic || !children || !xr_semantic_array_type_row_is_exact(array) ||
         array->child_begin >= child_count)
         return false;
     if (!xr_target_array_storage_from_type(
@@ -1206,7 +1192,7 @@ static bool semantic_array_intrinsic_is_exact_verify(const XrSemanticPlan *seman
         operation->return_complete != 1 || !xr_semantic_allocation_identity_is_canonical(operation))
         return false;
     const XrSemanticTypeRecord *array = xr_semantic_plan_type(semantic, operation->result_type);
-    if (!semantic_array_allocation_type_is_exact(array) || array->child_begin >= child_count)
+    if (!xr_semantic_array_type_row_is_exact(array) || array->child_begin >= child_count)
         return false;
     uint32_t element = children[array->child_begin];
     const XrSemanticTypeRecord *element_type = xr_semantic_plan_type(semantic, element);
@@ -1274,7 +1260,7 @@ static bool semantic_array_fill_scalar_is_exact_verify(const XrSemanticPlan *sem
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     const XrSemanticOperandRecord *fill = receiver + 1;
     const XrSemanticTypeRecord *array = xr_semantic_plan_type(semantic, receiver->type);
-    if (!semantic_array_allocation_type_is_exact(array) || array->child_begin >= child_count)
+    if (!xr_semantic_array_type_row_is_exact(array) || array->child_begin >= child_count)
         return false;
     uint32_t element_index = children[array->child_begin];
     const XrSemanticTypeRecord *element = xr_semantic_plan_type(semantic, element_index);
@@ -1338,7 +1324,7 @@ static bool semantic_array_hof_is_exact_verify(const XrSemanticPlan *semantic,
         return false;
     const XrSemanticOperandRecord *rows = &operands[operation->operand_begin];
     const XrSemanticTypeRecord *array = xr_semantic_plan_type(semantic, rows[0].type);
-    if (!semantic_array_allocation_type_is_exact(array) || array->child_begin >= child_count)
+    if (!xr_semantic_array_type_row_is_exact(array) || array->child_begin >= child_count)
         return false;
     uint32_t source_element = children[array->child_begin];
     const XrSemanticTypeRecord *source_type = xr_semantic_plan_type(semantic, source_element);
@@ -1352,7 +1338,7 @@ static bool semantic_array_hof_is_exact_verify(const XrSemanticPlan *semantic,
     if (kind != XR_TARGET_ARRAY_HOF_REDUCE) {
         const XrSemanticTypeRecord *result_array =
             xr_semantic_plan_type(semantic, operation->result_type);
-        if (!semantic_array_allocation_type_is_exact(result_array) ||
+        if (!xr_semantic_array_type_row_is_exact(result_array) ||
             result_array->child_begin >= child_count)
             return false;
         result_element = children[result_array->child_begin];
@@ -4333,21 +4319,6 @@ static bool operation_is_exact_json_namespace_value(const XrSemanticPlan *semant
  * the result is.  The element clause is matched against the receiver's own
  * element entry and refused when that element is reference capable, so the
  * traffic this authority admits is always a plain copy. */
-static bool semantic_array_member_receiver_type_is_exact(const XrSemanticTypeRecord *type) {
-    char expected_type_key[96];
-    int written = snprintf(expected_type_key, sizeof(expected_type_key),
-                           "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
-                           (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
-    XrStableId zero = {{0}};
-    return type && written > 0 && (size_t) written < sizeof(expected_type_key) &&
-           type->kind == XR_KIND_ARRAY && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 1 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE &&
-           xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
-           strncmp(type->canonical_key, expected_type_key, (size_t) written) == 0;
-}
 
 static bool operation_is_exact_array_reserve(const XrSemanticPlan *semantic,
                                              const XrSemanticOperationRecord *operation,
@@ -4371,7 +4342,7 @@ static bool operation_is_exact_array_reserve(const XrSemanticPlan *semantic,
     const XrSemanticTypeRecord *capacity_type = xr_semantic_plan_type(semantic, capacity->type);
     const XrSemanticFunctionRecord *function =
         xr_semantic_plan_function(semantic, operation->function);
-    if (!function || !semantic_array_member_receiver_type_is_exact(receiver_type) ||
+    if (!function || !xr_semantic_array_type_row_is_exact(receiver_type) ||
         !xr_semantic_array_member_i64_type_is_exact(capacity_type) ||
         operation->result_type != receiver->type || operation->result_alias_operand != 0 ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
@@ -4429,7 +4400,7 @@ static bool operation_is_exact_array_member_scalar(const XrSemanticPlan *semanti
         xr_array_member_shape(metadata[operation->metadata_begin], operation->operand_count);
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(semantic, receiver->type);
-    if (!shape || !semantic_array_member_receiver_type_is_exact(receiver_type) ||
+    if (!shape || !xr_semantic_array_type_row_is_exact(receiver_type) ||
         receiver_type->child_begin >= child_count ||
         !xr_semantic_array_member_result_is_exact(
             operation, shape, xr_semantic_plan_type(semantic, operation->result_type),
