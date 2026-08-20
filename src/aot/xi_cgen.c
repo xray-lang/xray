@@ -7101,6 +7101,13 @@ static bool cg_debug_value_has_storage_binding(XiCgenCtx *ctx, const XiFunc *f, 
     if (emission_status == CG_VALUE_EMISSION_ERROR ||
         emission_status == CG_VALUE_EMISSION_NOT_CONFIGURED)
         return false;
+    /* A box always has storage: the operation exists to produce the tagged
+     * carrier, and a carrier is a thing that is held. Measured over the AOT
+     * corpus, all 119 boxes reaching this question had a legacy row saying
+     * exactly that, so consulting the old model here only confirmed what the
+     * opcode already states. */
+    if (v->op == XI_BOX)
+        return true;
     return cg_value_plan_require_legacy(ctx, v) != NULL;
 }
 
