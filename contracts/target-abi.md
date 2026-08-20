@@ -633,9 +633,9 @@ the compiler core does not download a provider.
 
 anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de082761402165a3c36919
 anchor-sha256: src/aot/xaot_callable.c 13d17addb6fe4492d78a2b010bc8329c2bc2bc912a9cd7e7cd8be59269c56d6a
-anchor-sha256: src/aot/xaot_prepare.c 77d5bce886e498b736557e06ef6e9916e54b27d42cb169bda1e2b840cc7c96bf
+anchor-sha256: src/aot/xaot_prepare.c a2f8b95daa309854304c3c28c03ad01f3ce6446bf5cd1b9ceed384f004eaa744
 anchor-sha256: src/aot/xaot_prepare.h 3ffab2bce95306292132ed27fd9191670f6ca6a0d4ef1c25f08aca4e74fe6d10
-anchor-sha256: src/aot/xaot_bundle.c 49fbc31f90e10925df1386c42c23ec76923257cc2c08c30fdca651dafb49fc54
+anchor-sha256: src/aot/xaot_bundle.c 358a08942c2d8e2ccd23f18f650f08d9b58133346719237ca8dc351a38a51a44
 anchor-sha256: src/aot/xaot_verify.c acfaab5bc395daa34507f2a61fe6fbcaf0f7d989abc2e18b39b2760e49c4c034
 anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 2a50faa7749f66e618da6153d7f3289db990efc518ad4343d3be9788c378871f
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 092c181dd8674dc8ca75f8328f4e457d1c20a1fb2aa713ad685c428838e49e2d

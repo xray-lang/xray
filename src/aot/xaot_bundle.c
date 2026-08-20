@@ -406,6 +406,13 @@ static void dump_slot(FILE *out, const char *prefix, const XaotAbiSlot *slot) {
             xaot_value_kind_name(slot->rep.kind), rep_name(slot->rep.rep), safe_str(slot->c_type));
 }
 
+XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_module(const XaotBundle *bundle,
+                                                                    uint32_t module_index) {
+    if (!bundle || !bundle->module_emission_plans || module_index >= bundle->nmodules)
+        return NULL;
+    return bundle->module_emission_plans[module_index];
+}
+
 XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t nmodules,
                               uint32_t entry_module) {
     if (!bundle || !modules || nmodules == 0 || entry_module >= nmodules)
@@ -419,15 +426,19 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
     bundle->target_plans = (XrTargetPlan **) xr_calloc(nmodules, sizeof(*bundle->target_plans));
     bundle->representation_refinements =
         (XrAotRefinementPlan **) xr_calloc(nmodules, sizeof(*bundle->representation_refinements));
+    bundle->module_emission_plans =
+        (const XrCEmissionPlan **) xr_calloc(nmodules, sizeof(*bundle->module_emission_plans));
     bundle->representation_policy_fingerprints =
         (XrFingerprint *) xr_calloc(nmodules, sizeof(*bundle->representation_policy_fingerprints));
     if (!bundle->target_plans || !bundle->representation_refinements ||
-        !bundle->representation_policy_fingerprints) {
+        !bundle->module_emission_plans || !bundle->representation_policy_fingerprints) {
         xr_free(bundle->target_plans);
         xr_free(bundle->representation_refinements);
+        xr_free((void *) bundle->module_emission_plans);
         xr_free(bundle->representation_policy_fingerprints);
         bundle->target_plans = NULL;
         bundle->representation_refinements = NULL;
+        bundle->module_emission_plans = NULL;
         bundle->representation_policy_fingerprints = NULL;
         return false;
     }
@@ -3936,6 +3947,8 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     for (i = 0; i < bundle->nmodules; i++)
         xr_aot_refinement_plan_free(
             bundle->representation_refinements ? bundle->representation_refinements[i] : NULL);
+    xr_free((void *) bundle->module_emission_plans);
+    bundle->module_emission_plans = NULL;
     xr_free(bundle->representation_refinements);
     xr_free(bundle->representation_policy_fingerprints);
     for (i = 0; i < bundle->nfunc_plans; i++)

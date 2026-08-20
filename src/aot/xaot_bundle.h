@@ -12,6 +12,7 @@
 #define XAOT_BUNDLE_H
 
 #include "xaot_abi.h"
+#include "emit_c/xr_c_emission_plan.h"
 #include "xaot_artifact.h"
 #include "xaot_class_layout.h"
 #include "xaot_container.h"
@@ -1610,6 +1611,11 @@ typedef struct XaotBundle {
     /* One owned immutable representation-refinement authority per module,
      * fingerprint-bound to its exact retained TargetPlan and target policy. */
     XrAotRefinementPlan **representation_refinements;
+    /* One borrowed verified C emission plan per module, installed once the
+     * plans are built and before prepare runs. Borrowed, not owned: the driver
+     * that built them outlives this bundle. Present so the passes after that
+     * point read one ABI model instead of a second per-function one. */
+    const XrCEmissionPlan **module_emission_plans;
     XrFingerprint *representation_policy_fingerprints;
     bool representation_refinements_required;
     XaotArtifactKind artifact_kind;
@@ -1790,6 +1796,11 @@ typedef struct XaotBundle {
     const char *error_msg;
 } XaotBundle;
 
+/* The verified C emission plan for one module, once installed. NULL before
+ * the driver installs them, and for any module whose plan failed to build. */
+XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_module(const XaotBundle *bundle,
+                                                                    uint32_t module_index);
+
 XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t nmodules,
                               uint32_t entry_module);
 XR_FUNC void xaot_bundle_free(XaotBundle *bundle);
@@ -1800,18 +1811,16 @@ XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_module(const XaotBundle 
 XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_func(const XaotBundle *bundle,
                                                              const XiFunc *func);
 /* Ownership transfers to the bundle only when installation succeeds. */
-XR_FUNC bool xaot_bundle_install_representation_refinement(
-    XaotBundle *bundle, uint32_t module_index,
-    XrAotRefinementPlan *refinement,
-    const struct XiRepPolicy *policy);
+XR_FUNC bool xaot_bundle_install_representation_refinement(XaotBundle *bundle,
+                                                           uint32_t module_index,
+                                                           XrAotRefinementPlan *refinement,
+                                                           const struct XiRepPolicy *policy);
 XR_FUNC const XrAotRefinementPlan *
-xaot_bundle_representation_refinement_for_module(const XaotBundle *bundle,
-                                                  uint32_t module_index);
-XR_FUNC bool xaot_bundle_representation_policy_matches(
-    const XaotBundle *bundle, uint32_t module_index,
-    const struct XiRepPolicy *policy);
-XR_FUNC bool xaot_bundle_require_representation_refinements(
-    XaotBundle *bundle);
+xaot_bundle_representation_refinement_for_module(const XaotBundle *bundle, uint32_t module_index);
+XR_FUNC bool xaot_bundle_representation_policy_matches(const XaotBundle *bundle,
+                                                       uint32_t module_index,
+                                                       const struct XiRepPolicy *policy);
+XR_FUNC bool xaot_bundle_require_representation_refinements(XaotBundle *bundle);
 XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
                                                 const XrTargetDataLayout *target_layout);
 XR_FUNC bool xaot_bundle_set_target_simd_features(XaotBundle *bundle, uint32_t features);
@@ -1925,10 +1934,10 @@ XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan(const XaotBundle *bundle,
                                                        const XiEnumData *enum_data);
 XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan_for_type(const XaotBundle *bundle,
                                                                 const XrType *type);
-XR_FUNC bool xaot_value_plan_is_exact_enum_ordinal_family(
-    const XaotBundle *bundle, const XaotValuePlan *plan);
-XR_FUNC bool xaot_value_plan_is_exact_rep_adapter(
-    const XaotBundle *bundle, const XaotValuePlan *plan);
+XR_FUNC bool xaot_value_plan_is_exact_enum_ordinal_family(const XaotBundle *bundle,
+                                                          const XaotValuePlan *plan);
+XR_FUNC bool xaot_value_plan_is_exact_rep_adapter(const XaotBundle *bundle,
+                                                  const XaotValuePlan *plan);
 XR_FUNC bool xaot_bundle_prepare_enum_plan_for_type(XaotBundle *bundle, const XrType *type);
 XR_FUNC XaotArrayStoragePlan *
 xaot_bundle_add_array_storage_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,

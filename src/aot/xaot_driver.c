@@ -2507,6 +2507,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
      * second per-function one. */
     if (!xaot_build_module_emission_plans(&aot_bundle, options->target_profile, &emission_plans))
         goto fail_free_ir;
+    for (uint32_t mi = 0; mi < aot_bundle.nmodules; mi++)
+        aot_bundle.module_emission_plans[mi] = emission_plans[mi];
     if (!xaot_prepare_bundle(&aot_bundle, &prepare_stats)) {
         if (emit_global_evidence_dump && global_evidence_dump)
             fputs(global_evidence_dump, stdout);

@@ -125,7 +125,7 @@ anchor-sha256: src/incremental/xr_module_summary_build.c 2c117922f4e35c735446080
 anchor-sha256: src/aot/xaot_module_summary.h 356f61d193ecfb05a15c0d4ad14a36df8c540b49f841d09bb4375562f9c5d88f
 anchor-sha256: src/aot/xaot_module_summary.c fb55e5df4fbaeef41931bcc863f3dd36c4e2bc1344d30acac8435a699a4800ba
 anchor-sha256: src/aot/xaot_driver.h 01f022c354d4cfa051fe0feba5fc2f21642e4e102bc7ec7c2a5729d3f6bf26cc
-anchor-sha256: src/aot/xaot_driver.c c4bb003a5d532dbec210f2804d275ab70e313e082792f7681d67484a2f7080dc
+anchor-sha256: src/aot/xaot_driver.c 62579f48701e1a7ded9d6f1d1d82a33270f04cb10f246cc2eb0d35f536a55203
 anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
