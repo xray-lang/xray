@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(31)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(32)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -4693,6 +4693,13 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                 continue;
             uint32_t written = abi_index;
             bool complete = true;
+            /* One answer for the whole signature, settled after the rows are
+             * written because it reads one of them. Three facts belong to the
+             * function itself -- a module initializer, a capturing function and
+             * a coroutine each take the tagged boundary however their slots are
+             * shaped -- and the fourth is the return row: a return that reaches
+             * C tagged makes the whole boundary tagged. */
+            uint32_t signature_begin = abi_index;
             for (uint16_t ordinal = 0; complete && ordinal <= function->parameter_count;
                  ordinal++) {
                 uint32_t subject = XR_SEMANTIC_INDEX_NONE;
@@ -4878,8 +4885,22 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     .pointee_c_type = pointee_c_type,
                 };
             }
-            if (!complete)
+            if (!complete) {
                 abi_index = written;
+            } else {
+                uint8_t boundary_kind =
+                    (function->semantic_effects & XI_EFFECT_MAY_SUSPEND) != 0
+                        ? (uint8_t) XR_C_ABI_BOUNDARY_COROUTINE
+                    : (function->is_module_initializer || function->capture_count != 0 ||
+                       (function->semantic_effects & XI_EFFECT_MAY_THROW) != 0 ||
+                       (signature_begin < abi_index &&
+                        plan->function_abis[signature_begin].c_type &&
+                        strcmp(plan->function_abis[signature_begin].c_type, "XrValue") == 0))
+                        ? (uint8_t) XR_C_ABI_BOUNDARY_TAGGED
+                        : (uint8_t) XR_C_ABI_BOUNDARY_NATIVE;
+                for (uint32_t row = signature_begin; row < abi_index; row++)
+                    plan->function_abis[row].boundary_kind = boundary_kind;
+            }
         }
         plan->function_abi_count = abi_index;
     }

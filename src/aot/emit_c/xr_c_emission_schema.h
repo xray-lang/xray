@@ -209,6 +209,22 @@ typedef enum XrCAbiSlotClass {
  * `c_type` is present for the same reason it is on the value row: this plan is
  * the C-specific projection, and a text emitter must not have to reach for the
  * old representation model to spell a parameter. */
+/* How a function's boundary reaches C.
+ *
+ * A property of the function, not a consequence of its slots: a module
+ * initializer takes the tagged boundary however its slots are shaped, and so
+ * do a capturing function and a coroutine. Deriving it from the slot rows was
+ * measured and disagreed on 318 of 582 functions, every one an initializer. */
+typedef enum XrCAbiBoundaryKind {
+    XR_C_ABI_BOUNDARY_INVALID = 0,
+    /* Every slot travels in the carrier its own type admits. */
+    XR_C_ABI_BOUNDARY_NATIVE = 1,
+    /* The whole signature travels tagged. */
+    XR_C_ABI_BOUNDARY_TAGGED = 2,
+    /* A coroutine: tagged, and the frame is entered through a resume. */
+    XR_C_ABI_BOUNDARY_COROUTINE = 3,
+} XrCAbiBoundaryKind;
+
 typedef struct XrCFunctionAbiEmissionView {
     uint32_t semantic_function;
     uint32_t semantic_value;
@@ -217,6 +233,8 @@ typedef struct XrCFunctionAbiEmissionView {
     uint16_t target_register_kind;
     uint16_t target_memory_kind;
     uint8_t slot_class;
+    /* Same on every row of one signature; see XrCAbiBoundaryKind. */
+    uint8_t boundary_kind;
     uint8_t rep;
     uint8_t pointee_rep;
     uint8_t aggregate_class;

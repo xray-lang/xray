@@ -315,17 +315,23 @@ static XrRep cg_type_aot_storage_rep(const XrType *type) {
     return info ? info->storage_rep : XR_REP_TAGGED;
 }
 
+static bool cg_func_return_abi_emission(XiCgenCtx *ctx, const XiFunc *f,
+                                        XrCFunctionAbiEmissionView *out);
+
 /* Whether this function's boundary reaches C natively.
  *
- * This is a function-level fact, not a consequence of the per-slot rows: a
- * module initializer takes the tagged boundary however its slots are shaped,
- * and so do a capturing function and a coroutine. Deriving it from the rows
- * was measured against this answer over the corpus and disagreed 318 times in
- * 582 -- every disagreement a module initializer. Until the emission plan
- * carries the fact itself, it is read from the older per-function record. */
+ * Read from the signature rows, which carry the answer for the whole
+ * signature. It is a property of the function rather than of its slots -- a
+ * module initializer, a capturing function, one that can throw, and a
+ * coroutine each take the tagged boundary however their slots are shaped, and
+ * so does a function whose return reaches C as an XrValue. Deriving it from
+ * the slot representations alone was measured against the older per-function
+ * record and disagreed on 318 of 582 functions; stating those facts in the
+ * plan brought the two to exact agreement over the same corpus. */
 static bool cg_func_uses_typed_abi(XiCgenCtx *ctx, const XiFunc *f) {
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    return plan && plan->abi.kind == XAOT_ABI_NATIVE;
+    XrCFunctionAbiEmissionView view;
+    return cg_func_return_abi_emission(ctx, f, &view) &&
+           view.boundary_kind == (uint8_t) XR_C_ABI_BOUNDARY_NATIVE;
 }
 
 /* The signature table's answer for one parameter, when it has one. Ordinal
