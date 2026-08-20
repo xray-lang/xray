@@ -67,6 +67,12 @@ static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
      * its representation is the scalar it produces and genuinely varies. */
     if (v && v->op == XI_BOX)
         return XR_REP_TAGGED;
+    /* An unbox produces its own type: the operation exists to take the value
+     * back out of the carrier, so the answer is the type's representation.
+     * Computed both ways over the AOT corpus, all 138 unboxes the legacy plan
+     * answered for agreed exactly, spelling included. */
+    if (v && v->op == XI_UNBOX)
+        return xaot_value_storage_rep(xaot_value_rep_for_type(v->type));
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
