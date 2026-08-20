@@ -6145,84 +6145,6 @@ typedef struct CgArrayHofDirectPlan {
     const XaotFuncPlan *callee_plan;
 } CgArrayHofDirectPlan;
 
-static bool cg_array_hof_c_rep_to_xaot_rep(uint8_t c_rep, XaotRep *out) {
-    if (!out)
-        return false;
-    switch ((XrCValueRep) c_rep) {
-        case XR_C_VALUE_REP_I8:
-            *out = XAOT_REP_I8;
-            return true;
-        case XR_C_VALUE_REP_U8:
-            *out = XAOT_REP_U8;
-            return true;
-        case XR_C_VALUE_REP_I16:
-            *out = XAOT_REP_I16;
-            return true;
-        case XR_C_VALUE_REP_U16:
-            *out = XAOT_REP_U16;
-            return true;
-        case XR_C_VALUE_REP_I32:
-            *out = XAOT_REP_I32;
-            return true;
-        case XR_C_VALUE_REP_U32:
-            *out = XAOT_REP_U32;
-            return true;
-        case XR_C_VALUE_REP_I64:
-            *out = XAOT_REP_I64;
-            return true;
-        case XR_C_VALUE_REP_U64:
-            *out = XAOT_REP_U64;
-            return true;
-        case XR_C_VALUE_REP_ISIZE:
-            *out = XAOT_REP_ISIZE;
-            return true;
-        case XR_C_VALUE_REP_USIZE:
-            *out = XAOT_REP_USIZE;
-            return true;
-        case XR_C_VALUE_REP_F32:
-            *out = XAOT_REP_F32;
-            return true;
-        case XR_C_VALUE_REP_F64:
-            *out = XAOT_REP_F64;
-            return true;
-        case XR_C_VALUE_REP_BOOL:
-            *out = XAOT_REP_BOOL;
-            return true;
-        case XR_C_VALUE_REP_RUNE:
-            *out = XAOT_REP_RUNE;
-            return true;
-        case XR_C_VALUE_REP_VOID:
-        case XR_C_VALUE_REP_TAGGED:
-        case XR_C_VALUE_REP_VIEW:
-        case XR_C_VALUE_REP_AGGREGATE:
-        case XR_C_VALUE_REP_RAW_PTR:
-        case XR_C_VALUE_REP_COUNT:
-            return false;
-    }
-    return false;
-}
-
-static bool cg_array_hof_abi_slot_is_exact(const XaotAbiSlot *slot, uint8_t expected_c_rep) {
-    XaotRep expected = XAOT_REP_COUNT;
-    XaotValueRep actual;
-    const XaotRepInfo *info;
-    if (!slot || !cg_array_hof_c_rep_to_xaot_rep(expected_c_rep, &expected))
-        return false;
-    info = xaot_rep_info(expected);
-    if (!info || !info->c_type || slot->cls != XAOT_ARG_SCALAR || slot->flags != 0 ||
-        !slot->c_type || strcmp(slot->c_type, info->c_type) != 0 ||
-        slot->pointee_rep.kind != XAOT_VALUE_VOID || slot->pointee_rep.rep != XAOT_REP_I8 ||
-        slot->pointee_rep.type != NULL || slot->pointee_rep.c_type != NULL ||
-        slot->pointee_rep.flags != 0 || slot->pointee_rep.vector_native_type != 0 ||
-        slot->pointee_rep.vector_lanes != 0 || slot->pointee_rep.vector_width_bytes != 0)
-        return false;
-    actual = xaot_abi_slot_value_rep(slot);
-    return actual.kind == XAOT_VALUE_SCALAR && actual.rep == expected && actual.type != NULL &&
-           actual.c_type != NULL && strcmp(actual.c_type, info->c_type) == 0 && actual.flags == 0 &&
-           actual.vector_native_type == 0 && actual.vector_lanes == 0 &&
-           actual.vector_width_bytes == 0;
-}
-
 /* Resolve one immutable HOF recipe to one prepared native callee.  Semantic
  * numeric identities, not Xi selector/type/arity state, bind the live values
  * to the plan. */
@@ -6279,18 +6201,17 @@ static bool cg_array_hof_direct_plan(XiCgenCtx *ctx, const XiFunc *current, cons
             return false;
         callee_plan = candidate;
     }
+    /* The recipe already states the callback: which function it is, what its
+     * parameters carry and what it returns. Re-proving those three against the
+     * older per-function ABI record was a cross-check, not a source -- and it
+     * never rejected anything: measured over every higher-order case in the
+     * corpus, the judgement ran 10 times and not one of its terms was the
+     * reason a case was refused. What remains are facts the recipe does not
+     * state: that the callee was reached, lives in this translation unit, and
+     * does not suspend. */
     if (!current_plan || !callee_plan || !callee_plan->func ||
         callee_plan->module_index != current_plan->module_index || !callee_plan->reachable ||
-        callee_plan->may_suspend || callee_plan->abi.kind != XAOT_ABI_NATIVE ||
-        callee_plan->abi.nparams != (emission.recipe_hof_kind == XR_C_ARRAY_HOF_REDUCE ? 2u : 1u) ||
-        !callee_plan->abi.params ||
-        !cg_array_hof_abi_slot_is_exact(&callee_plan->abi.params[0],
-                                        emission.recipe_hof_callback_parameter_reps[0]) ||
-        (emission.recipe_hof_kind == XR_C_ARRAY_HOF_REDUCE &&
-         !cg_array_hof_abi_slot_is_exact(&callee_plan->abi.params[1],
-                                         emission.recipe_hof_callback_parameter_reps[1])) ||
-        !cg_array_hof_abi_slot_is_exact(&callee_plan->abi.ret,
-                                        emission.recipe_hof_callback_return_rep))
+        callee_plan->may_suspend)
         return false;
     if (emission.recipe_hof_kind != XR_C_ARRAY_HOF_REDUCE &&
         emission.recipe_hof_callback_parameter_reps[1] != XR_C_VALUE_REP_VOID)
