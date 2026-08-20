@@ -235,6 +235,23 @@ static const char *copy_canonical_source_file(XrSemanticBuildContext *ctx, const
     return result;
 }
 
+/* Whether a type carries the VALUE flag.
+ *
+ * A declared struct is a value aggregate wherever it is named. The front end
+ * sets `is_value_type` on the construction site and leaves it clear where the
+ * type is merely referenced -- as a parameter type, a field type, an element
+ * type -- so that bit describes the position, not the type. Reading it raw
+ * interns one declaration as two semantic types whose records agree about
+ * everything else, and only the construction site's copy ever gets an
+ * allocation bound to it; the other copy then looks like an aggregate whose
+ * fields nothing declares. Everything asking "is this a value aggregate" asks
+ * here, so the key and the record flag can no longer disagree. */
+static bool semantic_type_is_value(const XrType *type) {
+    return type &&
+           (type->is_value_type || (type->kind == XR_KIND_INSTANCE && type->instance.class_ref &&
+                                    type->instance.class_ref->struct_layout));
+}
+
 static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stack, uint32_t depth,
                      XrSemanticBuildContext *ctx);
 static uint32_t source_class_for_type(const XrSemanticBuildContext *ctx, const XrType *type);
@@ -343,7 +360,7 @@ static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stac
     if (!text_append_format(key, "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:", (unsigned) type->kind,
                             type->semantic_type_id, xr_semantic_frozen_builtin_type(type),
                             type->is_nullable ? 1u : 0u, type->is_const ? 1u : 0u,
-                            type->is_value_type ? 1u : 0u, type->is_literal ? 1u : 0u,
+                            semantic_type_is_value(type) ? 1u : 0u, type->is_literal ? 1u : 0u,
                             type->is_cycle_candidate ? 1u : 0u, type->ptr_is_mut ? 1u : 0u,
                             (unsigned) type->scalar_rep) ||
         !text_append_component(key, type->alias_name))
@@ -499,6 +516,11 @@ static bool refine_value_aggregate_types(XrSemanticBuildContext *ctx) {
         bool declared_aggregate = false;
         for (uint32_t i = 0; i < ctx->type_count; i++) {
             const XrType *source = ctx->types[i].source;
+            /* The raw bit, deliberately: this asks whether *this* module declares
+             * the aggregate, and the front end sets it exactly where the
+             * declaration is used to build one. Asking the shared judgement here
+             * would count a type merely imported and referenced as declared, and
+             * then demand declaration facts no module in this plan holds. */
             if (ctx->types[i].index == semantic_type && source &&
                 source->kind == XR_KIND_INSTANCE && source->is_value_type &&
                 source->instance.class_ref && source->instance.class_ref->struct_layout) {
@@ -613,11 +635,7 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
     record->flags =
         (uint8_t) ((type->is_nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
                    (type->is_const ? XR_SEM_TYPE_CONST : 0u) |
-                   (type->is_value_type ||
-                            (type->kind == XR_KIND_INSTANCE && type->instance.class_ref &&
-                             type->instance.class_ref->struct_layout)
-                        ? XR_SEM_TYPE_VALUE
-                        : 0u) |
+                   (semantic_type_is_value(type) ? XR_SEM_TYPE_VALUE : 0u) |
                    (type->is_literal ? XR_SEM_TYPE_LITERAL : 0u) |
                    (reference_capable ? XR_SEM_TYPE_REFERENCE_CAPABLE : 0u) |
                    (borrow_view ? XR_SEM_TYPE_BORROW_VIEW : 0u) |
