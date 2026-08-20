@@ -507,6 +507,7 @@
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
         "src/ir/xi.h",
         "src/ir/xi_emit.c",
+        "src/plan/semantic/xr_semantic_identity_copy_shape.h",
         "src/shared/xr_semantic_owner_ids_gen.h"
       ],
       "profiles": [
