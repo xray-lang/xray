@@ -3327,10 +3327,20 @@ static bool semantic_array_fill_scalar_exact(const XrSemanticBuildContext *ctx,
            record->ownership_use == xi_generated_op_own_use(XI_CALL_METHOD) &&
            record->flags == xi_generated_op_default_flags(XI_CALL_METHOD) &&
            record->result_alias_operand == 0 &&
-           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-           record->return_provenance == XR_SEM_RETURN_OWNED && record->return_parameter == -1 &&
-           record->return_complete == 1 && receiver->role == XR_SEM_OPERAND_RECEIVER &&
-           receiver->parameter == -1 && receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           /* The receiver comes back as itself, and lowering words that as an
+            * owner when the caller already holds it outright and as a borrow
+            * when it reads the container through a shared root. Demanding the
+            * owner pairing made `fill` unusable on a module-level array while
+            * the three-argument spelling of the same member worked. Both
+            * pairings say the same thing about the same value; the mixtures do
+            * not, and stay refused. */
+           ((record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+             record->return_provenance == XR_SEM_RETURN_OWNED) ||
+            (record->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+             record->return_provenance == XR_SEM_RETURN_BORROWED_STATIC)) &&
+           record->return_parameter == -1 && record->return_complete == 1 &&
+           receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
            fill->role == XR_SEM_OPERAND_ARGUMENT && fill->parameter == 0 &&
            fill->flags == XR_SEM_OPERAND_CALL_CONTRACT &&

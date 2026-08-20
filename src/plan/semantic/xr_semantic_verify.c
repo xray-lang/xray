@@ -1994,10 +1994,14 @@ static bool verify_array_fill_scalar(const XrSemanticPlan *plan,
         operation->ownership_use == xi_generated_op_own_use(XI_CALL_METHOD) &&
         operation->flags == xi_generated_op_default_flags(XI_CALL_METHOD) &&
         operation->result_alias_operand == 0 &&
-        operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-        operation->return_provenance == XR_SEM_RETURN_OWNED && operation->return_parameter == -1 &&
-        operation->return_complete == 1 && receiver->role == XR_SEM_OPERAND_RECEIVER &&
-        receiver->parameter == -1 && receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+        /* Both pairings the builder admits, for the reason stated there. */
+        ((operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+          operation->return_provenance == XR_SEM_RETURN_OWNED) ||
+         (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+          operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC)) &&
+        operation->return_parameter == -1 && operation->return_complete == 1 &&
+        receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+        receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
         receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
         fill->role == XR_SEM_OPERAND_ARGUMENT && fill->parameter == 0 &&
         fill->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
